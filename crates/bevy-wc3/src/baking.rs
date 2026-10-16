@@ -9,6 +9,7 @@ use crate::error::ModelError;
 use bevy::camera::primitives::{Aabb, MeshAabb};
 use bevy::mesh::{skinning::SkinnedMeshInverseBindposes, VertexAttributeValues};
 use bevy::prelude::*;
+use std::collections::HashMap;
 use wc3::model::{profiles::Universal, Transform as ModelTransform};
 
 /// Borrowed geometry-pass inputs retained by a prepared model.
@@ -52,6 +53,11 @@ pub enum BakeSpace {
 pub struct PoseOptions<'a> {
     /// Playback clocks and selected clip/controllers; absent samples rest clocks.
     pub playback: Option<&'a Playback>,
+    /// Explicit clocks for independently mounted parts, keyed by their zero-based
+    /// ordinal path through `PreparedModel::mounts`. Without an entry, synchronized
+    /// parts follow their clip mapping; independent parts use host elapsed seconds.
+    /// Supply live child playback here after independent seeks or clock edits.
+    pub mounted_playback: Option<&'a HashMap<Vec<usize>, Playback>>,
     /// Application local-pose overrides, applied after authored animation.
     pub overrides: Option<&'a PoseOverrides>,
     /// Driving camera in authored model coordinates. Required for camera-sensitive nodes.
@@ -117,6 +123,16 @@ impl PoseBaker {
         meshes: &Assets<Mesh>,
         binds: &Assets<SkinnedMeshInverseBindposes>,
         options: PoseOptions<'_>,
+    ) -> Result<BakedPose, ModelError> {
+        self.bake_at(prepared, meshes, binds, options, &[])
+    }
+    fn bake_at(
+        &mut self,
+        prepared: &PreparedModel,
+        meshes: &Assets<Mesh>,
+        binds: &Assets<SkinnedMeshInverseBindposes>,
+        options: PoseOptions<'_>,
+        path: &[usize],
     ) -> Result<BakedPose, ModelError> {
         let default_playback = Playback::default();
         let playback = options.playback.unwrap_or(&default_playback);
@@ -289,6 +305,49 @@ impl PoseBaker {
                 visible,
                 bounds,
             });
+        }
+        for (ordinal, mount) in prepared.mounts.iter().enumerate() {
+            let mut child_path = path.to_vec();
+            child_path.push(ordinal);
+            let frame = self.poses[mount.parent].matrix * mount.transform.to_matrix();
+            let mut child_playback = playback.clone();
+            child_playback.controllers = Default::default();
+            child_playback.clip = playback
+                .clip
+                .and_then(|clip| mount.clips.get(&clip).copied())
+                .or_else(|| mount.model.clips.first().map(|(clip, _)| *clip));
+            if let Some(explicit) = options
+                .mounted_playback
+                .and_then(|values| values.get(&child_path))
+            {
+                child_playback.clone_from(explicit);
+            }
+            let mut child = PoseBaker::default().bake_at(
+                &mount.model,
+                meshes,
+                binds,
+                PoseOptions {
+                    playback: Some(&child_playback),
+                    camera: options
+                        .camera
+                        .map(|camera| Transform::from_matrix(frame.inverse() * camera.to_matrix())),
+                    space: BakeSpace::Authored,
+                    lod: options.lod,
+                    mounted_playback: options.mounted_playback,
+                    ..Default::default()
+                },
+                &child_path,
+            )?;
+            for mut part in child.parts.drain(..) {
+                part.mesh = bake_mesh(&part.mesh, &[], basis * frame, &mut self.transforms)?;
+                part.visible &= self.visible[mount.parent]
+                    && mount
+                        .point
+                        .is_none_or(|point| prepared.features.attachment_active(point, &sample));
+                part.bounds = part.mesh.compute_aabb();
+                include_bounds(&mut result.bounds, part.bounds.filter(|_| part.visible));
+                result.parts.push(part);
+            }
         }
         Ok(result)
     }

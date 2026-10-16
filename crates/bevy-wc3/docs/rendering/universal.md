@@ -56,7 +56,8 @@ billboards and camera anchoring is explicitly selected on `Playback`.
 Playback uses seconds. `wc3` evaluates typed curves, while `AnimationProgram`
 indexes compiled channels by property destination. Clip aliases resolve their
 programmes without losing the selected clip's loop or clamp policy. Independent
-shared clocks wrap by their authored periods. Warcraft III and M3 clip metadata
+repeating shared clocks wrap by their authored periods; frozen shared clocks
+retain time zero without event traversal. Warcraft III and M3 clip metadata
 select the corresponding authoring timeline interval, preventing interpolation
 through unrelated sequence keys. Playback uses the selected M3 clip’s authored controller list by default. Applications
 can replace it with an explicit list, including an empty list; priority orders
@@ -182,6 +183,13 @@ semantic identity, source-list index, and sample role; `texture_candidates`
 customizes lookup. `compile_options` selects authored material appearances. Required
 companion failures stop loading; missing optional images remain inspectable on
 `ModelAsset`.
+
+M2 bundles resolve bone animations and attachment tables through their external
+skeleton chain. Attachment activation uses the owning skeleton's animation stream;
+ordinary root tracks use the inherited sequence-storage flags. Nonempty deferred
+tracks require that context before validation or writing. Empty equipment
+sequences do not manufacture sibling animation-file dependencies, while explicit
+animation-file declarations remain required.
 
 `ResourceResolver::import_options` selects native conversion policy.
 Its default is strict preservation; accepting loss is an explicit provider choice,

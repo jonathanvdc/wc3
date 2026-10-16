@@ -760,7 +760,7 @@ fn local_effect_transforms_drive_the_effects_emitted_bone() {
         .node;
     asset
         .edit(|draft| {
-            let clock = draft.add_clock(sm::SharedClock {
+            let clock = draft.add_clock(sm::SharedClock::Repeating {
                 period: sm::Time::seconds(1.)?,
             })?;
             let curve = sm::Curve::step(
@@ -964,4 +964,79 @@ fn native_alias_keeps_light_programme_on_its_referenced_clip() {
         panic!("light intensity must remain a typed scalar channel")
     };
     assert_eq!(sample.property(&track.target), Some(4.));
+}
+
+#[test]
+fn zero_duration_global_tracks_are_typed_frozen_clocks_and_roundtrip_without_retiming() {
+    let mut invalid = sm::ModelBuilder::new("zero repeating period");
+    invalid
+        .add_clock(sm::SharedClock::Repeating {
+            period: sm::Time::default(),
+        })
+        .unwrap();
+    assert!(invalid.finish().is_err());
+    let mut source = native_triangle();
+    source.model.core_mut().global_sequences = ZeroVec::alloc_from_slice(&[0, 1000]);
+    source.model.core_mut().bones[0].translation = constant([2., 3., 4.]);
+    let mut scale = constant([1., 2., 3.]);
+    scale.base.global_sequence = 1;
+    source.model.core_mut().bones[0].scale = scale;
+    let imported = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let clocks: Vec<_> = imported.clocks().map(|(_, clock)| *clock).collect();
+    assert_eq!(
+        clocks,
+        vec![
+            sm::SharedClock::Frozen,
+            sm::SharedClock::Repeating {
+                period: sm::Time::seconds(1.).unwrap()
+            }
+        ]
+    );
+    let node = imported.nodes().next().unwrap().0;
+    let program = sm::AnimationProgram::compile(&imported);
+    for seconds in [-1., 0., 0.5, 100.] {
+        let sample = program
+            .sample(sm::AnimationSample {
+                shared_time: sm::Time::seconds(seconds).unwrap(),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(
+            sample.property(&node.translation::<sm::profiles::M2>()),
+            Some([2., 3., 4.])
+        );
+        assert_eq!(
+            sample.property(&node.scale::<sm::profiles::M2>()),
+            Some([1., 2., 3.])
+        );
+    }
+    let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert_eq!(
+        exported.model.core().global_sequences.to_vec(),
+        vec![0, 1000]
+    );
+    assert_eq!(
+        exported.model.core().bones[0]
+            .translation
+            .base
+            .global_sequence,
+        0
+    );
+    assert_eq!(exported.model.core().bones[0].scale.base.global_sequence, 1);
+    assert_eq!(
+        exported.model.core().bones[0]
+            .translation
+            .sequence(0)
+            .unwrap()
+            .timestamps
+            .iter()
+            .collect::<Vec<_>>(),
+        vec![0]
+    );
 }

@@ -90,6 +90,28 @@ fn scalar(value: &ParticleScalar) -> Option<Animated<f32>> {
     }
 }
 impl RuntimeAtlasParticles {
+    pub(super) fn append_remapped(
+        &mut self,
+        source: &Self,
+        indices: &[usize],
+        nodes: &HashMap<NodeId, NodeId>,
+        clips: &HashMap<ClipId, ClipId>,
+    ) {
+        self.emitters
+            .extend(source.emitters.iter().cloned().map(|mut value| {
+                value.node = nodes[&value.node];
+                value.anchor = indices[value.anchor];
+
+                value
+            }));
+        self.diagnostics.extend(source.diagnostics.iter().cloned());
+        for (&host, &part) in clips {
+            if let Some(&policy) = source.clips.get(&part) {
+                self.clips.entry(host).or_insert(policy);
+            }
+        }
+    }
+
     pub(super) fn is_empty(&self) -> bool {
         self.emitters.is_empty()
     }
@@ -742,7 +764,7 @@ mod tests {
         model
             .edit(|builder| {
                 builder.set_feature(feature, payload)?;
-                let clock = builder.add_clock(SharedClock { period: time(1.) })?;
+                let clock = builder.add_clock(SharedClock::Repeating { period: time(1.) })?;
                 builder.add_shared_channel(Channel::Scalar(Track {
                     target: property.widen(),
                     curve: Curve::step(

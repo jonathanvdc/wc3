@@ -155,8 +155,12 @@ where
     let tables = sequence_tables(source, owner)?;
     let mut clocks = Vec::new();
     for duration in tables.globals.iter() {
-        clocks.push(builder.add_clock(SharedClock {
-            period: Time::seconds(f64::from(duration) / 1000.)?,
+        clocks.push(builder.add_clock(if duration == 0 {
+            SharedClock::Frozen
+        } else {
+            SharedClock::Repeating {
+                period: Time::seconds(f64::from(duration) / 1000.)?,
+            }
         })?)
     }
     let mut clips = Vec::new();

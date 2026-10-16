@@ -3,7 +3,9 @@
 Render `wc3::model::Model<Universal>` in Bevy 0.19 through Bevy's PBR, lighting,
 skinning, and render phases. Native adapters load Warcraft III MDX/MDL, World of
 Warcraft M2/WMO, StarCraft II M3, and Diablo model families into the same semantic
-compiler. Geometry support is broader than native shader and effect coverage; the
+compiler. Character composition supports shared-skeleton equipment, rigid mounted
+parts and table-selected body textures; see [characters and equipment](docs/rendering/characters.md).
+Geometry support is broader than native shader and effect coverage; the
 [renderer guide](docs/rendering/renderer.md) describes those limits.
 
 ## Get started

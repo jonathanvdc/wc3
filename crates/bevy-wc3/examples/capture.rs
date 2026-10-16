@@ -18,8 +18,8 @@ use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 use bevy_wc3::{
     spawn_model, AssetSettings, BakeSpace, CameraBinding, Lod, LodOverride, LodSettings,
-    ModelAsset, ModelInstance, ModelInstanceError, ModelMaterial, ModelRig, Playback,
-    PlaybackError, PoseBaker, PoseOptions, PreparedModel, Wc3BevyPlugin, WorldSelection,
+    ModelAsset, ModelInstance, ModelInstanceError, ModelMaterial, ModelRig, PhysicsSimulation,
+    Playback, PlaybackError, PoseBaker, PoseOptions, PreparedModel, Wc3BevyPlugin, WorldSelection,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::env::args;
@@ -31,6 +31,8 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use wc3::model::formats::wmo::Profile as WmoProfile;
+#[path = "support/character.rs"]
+mod character;
 #[path = "support/resolver.rs"]
 mod resolver;
 use resolver::{parse_wmo_profile, ModelResolver};
@@ -40,6 +42,8 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 const HELP: &str = "Usage: capture MODEL OUTPUT_DIR [options]
 
 Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
+  --character-recipe PATH  Assemble a resolved modern M2 character recipe (JSON)
+  --physics             Enable authored rigid-body secondary motion
   --allow-loss          Explicitly discard unsupported native data, retaining diagnostics
   --wmo-profile NAME    classic, legion, bfa, shadowlands-pre92, shadowlands, dragonflight, warwithin
   --file-id ID=PATH     Map a native file-data identity to an asset-root-relative file
@@ -82,6 +86,8 @@ struct PlaybackChange {
 }
 
 struct Options {
+    character_recipe: Option<PathBuf>,
+    physics: bool,
     allow_loss: bool,
     wmo_profile: Option<WmoProfile>,
     file_ids: HashMap<u32, String>,
@@ -123,6 +129,8 @@ impl Options {
             .next()
             .ok_or("pass an output directory after the model path")?;
         let mut options = Self {
+            character_recipe: None,
+            physics: false,
             allow_loss: false,
             wmo_profile: None,
             file_ids: HashMap::new(),
@@ -154,6 +162,10 @@ impl Options {
             if option == "--help" || option == "-h" {
                 return Ok(None);
             }
+            if option == "--physics" {
+                options.physics = true;
+                continue;
+            }
             if option == "--no-default-light" {
                 options.no_default_light = true;
                 continue;
@@ -178,6 +190,7 @@ impl Options {
                 .next()
                 .ok_or_else(|| format!("missing value for {option}"))?;
             match option.as_str() {
+                "--character-recipe" => options.character_recipe = Some(value.into()),
                 "--wmo-profile" => {
                     options.wmo_profile = Some(parse_wmo_profile(&value)?);
                 }
@@ -266,6 +279,12 @@ impl Options {
                 _ => return Err(format!("unknown option: {option}").into()),
             }
         }
+        if options.bake_pose && options.physics {
+            return Err("bake-pose cannot capture live physics".into());
+        }
+        if options.character_recipe.is_some() && !options.textures.is_empty() {
+            return Err("character recipes define their own texture replacements".into());
+        }
         if options.bake_pose && !options.plays.is_empty() {
             return Err("bake-pose does not support pose transitions (--play)".into());
         }
@@ -333,6 +352,19 @@ impl Options {
         };
         Ok(Transform::from_translation(eye).looking_at(target, up))
     }
+}
+
+fn physics_counts(model: &PreparedModel) -> (usize, usize) {
+    model.mounts().fold(
+        (
+            model.physics_bodies().count(),
+            model.physics_joints().count(),
+        ),
+        |(bodies, joints), mount| {
+            let (child_bodies, child_joints) = physics_counts(mount.model);
+            (bodies + child_bodies, joints + child_joints)
+        },
+    )
 }
 
 fn parse_vector(value: &str) -> CaptureResult<Vec3> {
@@ -471,39 +503,62 @@ fn capture(options: Options) -> CaptureResult<()> {
         .resource_mut::<Time<Virtual>>()
         .set_max_delta(Duration::from_secs(1));
     let assets = app.world().resource::<AssetServer>().clone();
-    let handle: Handle<ModelAsset> = assets.load(path);
-    let deadline = Instant::now() + TIMEOUT;
-    loop {
-        step(&mut app, Duration::ZERO)?;
-        check_asset(&assets, &handle)?;
-        if assets.is_loaded_with_dependencies(&handle) {
-            break;
+    let prepared = if let Some(recipe) = &options.character_recipe {
+        let compiled = {
+            let mut images = app.world_mut().resource_mut::<Assets<Image>>();
+            character::load(recipe, &asset_root, &model, options.allow_loss, &mut images)?
+        };
+        for diagnostic in compiled.diagnostics() {
+            eprintln!("Character rendering: {}", diagnostic.message);
         }
-        check_deadline(deadline, "loading Universal model and textures")?;
-        sleep(Duration::from_millis(5));
-    }
-    let prepared = app
-        .world_mut()
-        .resource_scope(|world, mut meshes: Mut<Assets<Mesh>>| {
-            world.resource_scope(
-                |world, mut binds: Mut<Assets<SkinnedMeshInverseBindposes>>| {
-                    let models = world.resource::<Assets<ModelAsset>>();
-                    let asset = models.get(&handle).unwrap();
-                    let mut diagnostics = BTreeMap::new();
-                    for diagnostic in asset.compiled.diagnostics() {
-                        *diagnostics.entry(&diagnostic.message).or_insert(0usize) += 1;
-                    }
-                    for (message, count) in diagnostics {
-                        eprintln!("Universal rendering ({count} occurrences): {message}");
-                    }
-                    for resource in &asset.unresolved_images {
-                        eprintln!("Unresolved image: {resource:?}");
-                    }
-                    asset.compiled.prepare(&mut meshes, &mut binds)
-                },
-            )
-        });
+        app.world_mut()
+            .resource_scope(|world, mut meshes: Mut<Assets<Mesh>>| {
+                let mut binds = world.resource_mut::<Assets<SkinnedMeshInverseBindposes>>();
+                compiled.prepare(&mut meshes, &mut binds)
+            })
+    } else {
+        let handle: Handle<ModelAsset> = assets.load(path);
+        let deadline = Instant::now() + TIMEOUT;
+        loop {
+            step(&mut app, Duration::ZERO)?;
+            check_asset(&assets, &handle)?;
+            if assets.is_loaded_with_dependencies(&handle) {
+                break;
+            }
+            check_deadline(deadline, "loading Universal model and textures")?;
+            sleep(Duration::from_millis(5));
+        }
+        app.world_mut()
+            .resource_scope(|world, mut meshes: Mut<Assets<Mesh>>| {
+                world.resource_scope(
+                    |world, mut binds: Mut<Assets<SkinnedMeshInverseBindposes>>| {
+                        let models = world.resource::<Assets<ModelAsset>>();
+                        let asset = models.get(&handle).unwrap();
+                        let mut diagnostics = BTreeMap::new();
+                        for diagnostic in asset.compiled.diagnostics() {
+                            *diagnostics.entry(&diagnostic.message).or_insert(0usize) += 1;
+                        }
+                        for (message, count) in diagnostics {
+                            eprintln!("Universal rendering ({count} occurrences): {message}");
+                        }
+                        for resource in &asset.unresolved_images {
+                            eprintln!("Unresolved image: {resource:?}");
+                        }
+                        asset.compiled.prepare(&mut meshes, &mut binds)
+                    },
+                )
+            })
+    };
     let clips = prepared.clips();
+    if options.character_recipe.is_some() {
+        eprintln!(
+            "Character clips: {}; selected: {:?}",
+            clips.len(),
+            clips.get(options.sequence)
+        );
+        let (bodies, joints) = physics_counts(&prepared);
+        eprintln!("Character physics: {bodies} bodies, {joints} joints");
+    }
     if options.sequence >= clips.len() && !(clips.is_empty() && options.sequence == 0) {
         return Err("Universal sequence index is out of range".into());
     }
@@ -587,6 +642,11 @@ fn capture(options: Options) -> CaptureResult<()> {
     app.world_mut()
         .entity_mut(root)
         .insert((options.lod, LodOverride(options.lod_settings.clone())));
+    if options.physics {
+        app.world_mut()
+            .entity_mut(root)
+            .insert(PhysicsSimulation::default());
+    }
     if let Some(index) = options.model_camera {
         let feature = prepared
             .cameras()
@@ -893,6 +953,26 @@ mod tests {
                 .chain(options.iter().copied())
                 .map(str::to_owned),
         )
+    }
+
+    #[test]
+    fn character_recipe_and_physics_options() {
+        let options = parse(&["--character-recipe", "character.json", "--physics"])
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            options.character_recipe,
+            Some(PathBuf::from("character.json"))
+        );
+        assert!(options.physics);
+        assert!(parse(&["--physics", "--bake-pose"]).is_err());
+        assert!(parse(&[
+            "--character-recipe",
+            "character.json",
+            "--replaceable",
+            "1=skin.blp"
+        ])
+        .is_err());
     }
 
     #[test]

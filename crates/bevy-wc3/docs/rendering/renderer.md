@@ -54,6 +54,10 @@ material/tint alpha. Native lighting fidelity remains unverified.
 
 ## Scene features and effects
 
+[Character composition](characters.md) combines shared-skeleton armor, rigid
+mounted parts, geometry choices and composed body textures. Authored rigid-body
+secondary motion is optional; native solver response remains approximate.
+
 Attachment mounts retain source identities, resources, activation, and complete
 placement appearance. Common [lights](lights.md) become Bevy scene lights;
 [cameras](cameras.md) bind opt-in to application-owned views. [Events](events.md)

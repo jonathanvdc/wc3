@@ -32,7 +32,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     for (id, clock) in model.clocks() {
         globals.insert(id, periods.len() as u32);
         periods.push(unsigned_frame(
-            clock.period.as_seconds(),
+            clock.period().as_seconds(),
             &mut context,
             "clock.period",
         )?);

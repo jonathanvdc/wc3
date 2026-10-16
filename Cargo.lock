@@ -460,6 +460,7 @@ dependencies = [
  "criterion",
  "naga",
  "serde",
+ "serde_json",
  "wc3",
 ]
 

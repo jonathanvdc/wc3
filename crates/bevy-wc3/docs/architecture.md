@@ -24,6 +24,11 @@ Unsupported semantics produce source-associated diagnostics or fail where no val
 geometry interpretation exists.
 
 `compiled.rs` owns the compiled definitions and shared asset preparation.
+`composition.rs` validates rest-space joint bindings and combines skinned equipment
+with the host rig. Rigid component definitions retain independent animation and
+physics state. Shared preparation interns mesh and inverse-bind handles across the
+whole composition. `wow/` resolves database-selected geometry and texture recipes
+before invoking this same compiler and composition path.
 `CompiledModel::prepare` inserts unique meshes and inverse bind palettes
 into asset stores and returns `PreparedModel`. Source bytes and the graph
 may be released before preparation. Mesh, bind, animation, and definition buffers
@@ -42,8 +47,12 @@ parent-first affine hierarchy while retaining signed rotation and scale factors,
 including collapsed axes. Ordinary hierarchy preserves shear; exception nodes
 requiring inheritance or camera compensation use finite factor-based transforms.
 Live poses, effect births, camera sampling, event occurrence poses, and `baking.rs`
-share the evaluator. `transition.rs` retains a frozen authored local source pose and
-blends it into the advancing destination. Completed fades retain that source for
+share the evaluator. Optional authored secondary motion in `physics.rs` runs after
+sampled local poses and before final ECS transforms are published. The default
+path does not allocate physics buffers. Mounted models evaluate parent-first, and
+inherited forces use the current carrier pose in the same frame.
+
+`transition.rs` retains a frozen authored local source pose and blends it into the advancing destination. Completed fades retain that source for
 occurrence-time rewinds and skip live interpolation.
 
 Live instances retain a complete model-space pose cache for scene features and
@@ -88,9 +97,9 @@ applies within the schedule containing that set. The main stages are:
 | Schedule | Set | Contract |
 | --- | --- | --- |
 | `Update` | `SpawnInstances` | Populate ready requests and replace invalidated source definitions. |
-| `Update` | `AdvanceAnimation` | Advance clocks and synchronize existing model-particle child playback. |
+| `Update` | `AdvanceAnimation` | Synchronize composed mount controls, advance clocks, and synchronize existing model-particle child playback. |
 | `PostUpdate` | `AnimateCameras` | Sample bound views before Bevy projection updates and node poses. |
-| `PostUpdate` | `EvaluateNodePoses` | Apply attachment restarts, poses, material animation, and scene-feature state before propagation. |
+| `PostUpdate` | `EvaluateNodePoses` | Apply attachment restarts, authored poses, optional secondary motion, material animation, and scene features before propagation. |
 | `PostUpdate` | `SelectLod` | Select geometry after camera updates and transform propagation, before visibility. |
 | `PostUpdate` | `SimulateEffects` | Sample births and advance effects after propagation. |
 | `PostUpdate` | `DispatchEvents` | Emit crossed events with occurrence poses after propagation. |

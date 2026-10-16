@@ -51,9 +51,12 @@ controls, and lenses sample destination values directly rather than crossfading.
 
 Visible nodes, effect births, and event occurrence poses use the same
 transition-aware sampler. Within-update sampling rewinds destination time and fade
-progress to the occurrence. Only destination programmes emit events; shared clocks
-follow their own authored periods. Playback methods reset the shared clock along
+progress to the occurrence. Only destination programmes emit events. Repeating
+shared clocks follow their own authored periods. Playback methods reset the shared clock along
 with other clocks, while direct fields can sample them independently.
+
+Frozen shared clocks retain their authored time-zero values and do not traverse
+event windows. Native zero-duration M2 clocks use this explicit semantic state.
 
 Effects retain their own lifetime policies across changes. Model particles may
 survive blended transitions, atlas particles retain live births, and ribbons break

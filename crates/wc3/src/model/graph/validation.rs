@@ -2,7 +2,8 @@
 use crate::model::profiles::{FeaturePayload, Profile};
 use crate::model::{
     AppearanceSchema, BindingSchema as _, Clock, Error, GeometrySchema, Link, Model,
-    PropertyIdentity, PropertyTarget, Resources, SystemPayload, ValidateLinks, VertexInfluences,
+    PropertyIdentity, PropertyTarget, Resources, SharedClock, SystemPayload, ValidateLinks,
+    VertexInfluences,
 };
 use std::collections::{BTreeSet, HashMap, HashSet};
 impl<P: Profile> Model<'_, P> {
@@ -42,8 +43,11 @@ impl<P: Profile> Model<'_, P> {
             }
         }
         for clock in self.clocks.values() {
-            if clock.period.as_seconds() <= 0. {
-                return Err(Error::new("clock.period", "period must be positive"));
+            if matches!(clock, SharedClock::Repeating { period } if period.as_seconds() <= 0.) {
+                return Err(Error::new(
+                    "clock.period",
+                    "repeating period must be positive",
+                ));
             }
         }
         for skin in self.skins.values() {

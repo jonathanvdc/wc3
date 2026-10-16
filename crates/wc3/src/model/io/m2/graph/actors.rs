@@ -58,7 +58,9 @@ where
             }
         }};
     }
-    for (index, value) in core.attachments.iter().enumerate() {
+    let (attachment_owner, attachments) = source.attachments().map_err(failure)?;
+    let attachment_tables = sequence_tables(source, attachment_owner)?;
+    for (index, value) in attachments.iter().enumerate() {
         let node = placement(
             builder,
             nodes,
@@ -72,15 +74,33 @@ where
             control: (),
             activation: Animated::constant(initial(&value.animate).unwrap_or(1) != 0),
         };
-        bind_field!(
-            feature,
-            attachment,
-            attachment.activation,
-            ENABLED,
-            &value.animate,
-            Boolean,
-            |v| v != 0
-        );
+        let property = profile::properties::attachment::ENABLED.bind(feature);
+        attachment.activation.property = Some(property.clone().widen());
+        for (sequence, clip) in animation::sequences(clips) {
+            let (start, _) = attachment_tables
+                .sequences
+                .get(sequence)
+                .map_or((0, 0), |sequence| sequence.timing.window());
+            if let Some((curve, global)) = animation::curve_in_stream(
+                source,
+                &value.animate,
+                attachment_owner,
+                if attachment_owner == &source.key {
+                    *b"AFM2"
+                } else {
+                    *b"AFSA"
+                },
+                sequence,
+                start,
+                |value| value != 0,
+            )? {
+                animation::insert(
+                    builder,
+                    clip,
+                    Channel::Boolean(bind(curve, global, property.clone(), clocks)?),
+                )?;
+            }
+        }
         builder.set_feature(feature, profile::ActorKind::Attachment(attachment))?;
     }
     for (index, value) in core.lights.iter().enumerate() {

@@ -8,6 +8,7 @@ use super::super::transition::TransitionState;
 use super::super::{DrawSource, ModelMaterial, PreparedModel, SampledCamera};
 use super::evaluation::EvaluationState;
 use super::Playback;
+use crate::physics::PhysicsState;
 use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -59,6 +60,7 @@ pub struct ModelRig {
     pub(super) event_scratch: Vec<usize>,
     pub(super) model: PreparedModel,
     pub(super) nodes: Vec<Entity>,
+    pub(super) mounts: Vec<Entity>,
     pub(super) poses: Vec<Mat4>,
     pub(super) evaluated: Vec<EvaluatedPose>,
     pub(super) visible: Vec<bool>,
@@ -70,6 +72,8 @@ pub struct ModelRig {
     pub(super) pose_initialized: bool,
     pub(super) transition: TransitionState,
     pub(super) evaluation: EvaluationState,
+    pub(super) physics: PhysicsState,
+    pub(super) physics_locals: Vec<ModelTransform>,
 }
 impl ModelRig {
     pub(crate) fn feature_instances(&self) -> &RuntimeFeatureInstances {
@@ -145,6 +149,13 @@ impl ModelRig {
 
     pub(crate) fn despawn_owned_subtree(&self, commands: &mut Commands) {
         commands.entity(self.basis_entity).despawn();
+    }
+    /// Composed rigid equipment roots, ordered like [`PreparedModel::mounts`].
+    ///
+    /// Each root has an independent [`ModelRig`] and [`Playback`]. This list does
+    /// not include automatically loaded attachment-point or particle children.
+    pub fn mounts(&self) -> &[Entity] {
+        &self.mounts
     }
     /// Resolve a semantic node to its Bevy entity for attachments and inspection.
     pub fn node(&self, id: NodeId) -> Option<Entity> {

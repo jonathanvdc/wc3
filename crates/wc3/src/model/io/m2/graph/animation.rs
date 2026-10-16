@@ -18,6 +18,36 @@ where
     T::ULE: Send + Sync,
     <[T; 3] as zerovec::ule::AsULE>::ULE: Send + Sync,
 {
+    curve_in_stream(
+        source,
+        track,
+        owner,
+        if *owner == source.key {
+            *b"AFM2"
+        } else {
+            *b"AFSB"
+        },
+        sequence,
+        start,
+        map,
+    )
+}
+
+pub(super) fn curve_in_stream<'a, 'data: 'a, D: Dialect, T, U: CurveValue + 'a>(
+    source: &'a Bundle<'data, D>,
+    track: &'a Track<'data, T, D::Layout>,
+    owner: &native::FileKey,
+    stream: [u8; 4],
+    sequence: usize,
+    start: u32,
+    map: impl Fn(T) -> U + Clone + Send + Sync + 'a,
+) -> Result<Option<(Curve<'a, U>, u16)>, Error>
+where
+    [T; 3]: Value,
+    T: Value + Send + Sync + 'a,
+    T::ULE: Send + Sync,
+    <[T; 3] as zerovec::ule::AsULE>::ULE: Send + Sync,
+{
     if (0..track.base.timeline.len()).all(|i| match track.base.timeline.leaf(i) {
         Some(Array::Inline(v)) => v.is_empty(),
         Some(Array::External(r)) => r.count == 0,
@@ -26,16 +56,7 @@ where
         return Ok(None);
     }
     let resolved = source
-        .resolve_track(
-            track,
-            owner,
-            if *owner == source.key {
-                *b"AFM2"
-            } else {
-                *b"AFSB"
-            },
-            sequence,
-        )
+        .resolve_track(track, owner, stream, sequence)
         .map_err(failure)?;
     if resolved.timestamps.is_empty() {
         return Ok(None);
@@ -219,7 +240,7 @@ where
                 model
                     .clock(id)
                     .ok_or_else(|| Error::new("m2.animation.clock", "missing clock"))?
-                    .period,
+                    .period(),
                 context,
             )?;
             let i = globals
@@ -270,7 +291,7 @@ where
                     ));
                 }
                 Clock::Clip => model.clips().nth(index).unwrap().1.duration(),
-                Clock::Shared(id) => model.clock(id).unwrap().period,
+                Clock::Shared(id) => model.clock(id).unwrap().period(),
             };
             let clipped = U::restrict(track, Time::default(), period)?;
             let track = &clipped;

@@ -156,6 +156,38 @@ longer useful. `CompileOptions` selects typed material appearances and
 external child handles. Ambiguous slot-based appearances require an explicit
 selection rather than choosing an arbitrary first material.
 
+## Compose characters and equipment
+
+`CompiledModel::compose` combines independently compiled components into a reusable
+character definition. A `PartBinding::Skinned` supplies an explicit `JointMap` and
+part-to-host rest transform. Mapped joints reuse the host skeleton; inverse binds
+retain the equipment's authored rest space. Unmatched weighted joints must descend
+from a mapped joint, so extra chains can animate without silently creating another
+character skeleton. `PartBinding::Rigid` retains an independent child model beneath
+a selected host node and can instantiate the same source asset more than once.
+`PartBinding::Attachment` addresses a typed attachment feature and also follows
+its authored activation gate; use this binding for equipment on attachment points.
+
+Prepare and spawn the combined definition through the ordinary APIs. Meshes and
+bind palettes are shared across rigid occurrences. `PreparedModel::mounts()` and
+`ModelRig::mounts()` expose matching ordered definitions and live child roots.
+Explicit clip mappings synchronize a child's clip to host seconds; independent
+rigid clips retain their own clocks while following host pause and playback rate.
+Controller-driven skinned parts require matching authored timeline origins.
+
+For WoW, `wow::CharacterRecipe` resolves through a build-specific database adapter
+into `CharacterDefinition`. `wow::compile_character` applies body/equipment geoset
+choices, texture replacements and atlas layers, native joint matching, and rigid
+attachment roles. `DrawSelection` also lets generic applications select authored
+geometry before material and texture resolution. The [character guide](rendering/characters.md)
+describes table adapters, explicit overrides and matching failures.
+
+Add `PhysicsSimulation` to the root to enable authored secondary motion. Rigid
+components inherit simulation settings unless the application overrides them.
+`PreparedModel::physics_bodies()` and `physics_joints()` retain owned authored
+inputs for external solvers. Application `PoseOverrides` retain authority over
+simulated bones; unsupported native controls remain diagnostic.
+
 ## Bake a static pose
 
 `PoseBaker` freezes geometry and materials without an ECS world or GPU. It
@@ -177,8 +209,13 @@ Camera-sensitive nodes require an explicit camera in authored coordinates.
 
 `PoseOptions::world_selection` intersects authored visibility with world
 group/portal selection; absence uses the runtime default. Baking does not simulate
-transitions, events, effects, or external children. Invalid clocks, missing assets, and malformed skin streams return errors.
-`PreparedModel::parts()` exposes the undeformed shared mesh, material
+transitions, events, effects, physics, or automatically resolved attachment children.
+Composed rigid mounts are included recursively. Their default snapshot clocks use
+host elapsed seconds and any explicit clip mapping; `PoseOptions::mounted_playback`
+accepts live child clock snapshots, keyed by ordinal mount paths, after independent
+seeks or clock edits. Invalid clocks, missing assets and malformed skin streams
+return errors.
+`PreparedModel::parts()` exposes this rig's undeformed shared mesh, material
 defaults, and the same `ModelDraw` provenance used by live passes.
 
 ## Integrate with application systems

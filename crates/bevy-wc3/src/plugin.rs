@@ -3,6 +3,7 @@ use crate::assets::BlpImageLoader;
 use crate::effects::render::configure_effect_views;
 use crate::effects::sprites::ParticleRenderPlugin;
 use crate::effects::trails::RibbonRenderPlugin;
+use crate::runtime::synchronize_mounted_models;
 use crate::schedule::{configure, Wc3Systems};
 use crate::{
     advance_animation, animate_cameras, animate_instances, apply_lod_visibility,
@@ -51,7 +52,11 @@ impl Plugin for Wc3BevyPlugin {
         );
         app.add_systems(
             Update,
-            (advance_animation, synchronize_model_particles)
+            (
+                synchronize_mounted_models,
+                advance_animation,
+                synchronize_model_particles,
+            )
                 .chain()
                 .in_set(Wc3Systems::AdvanceAnimation),
         );

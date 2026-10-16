@@ -10,7 +10,15 @@ impl<D: Dialect> Document<'_, D> {
     ///
     /// Binary decoding already checks local byte bounds. This validates animation
     /// aliases, skeleton topology, collision indices, and local lookup tables.
+    /// Nonempty SKID animation descriptors must first resolve sequence storage;
+    /// dependency enumeration remains available before that context is loaded.
     pub fn validate(&self) -> Result<(), ReadError> {
+        if self.requires_sequence_context() {
+            return Err(ReadError::invalid(
+                0,
+                "unresolved skeleton sequence storage",
+            ));
+        }
         if self.cores().count() != 1 {
             return Err(ReadError::invalid(0, "multiple MD21 cores"));
         }

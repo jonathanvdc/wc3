@@ -189,6 +189,7 @@ pub struct ChunkContext<V: ModelLayout> {
     pub light_count: Option<usize>,
     /// One entry per owning sequence: true when its animation leaves belong to an external file.
     pub external_sequences: Arc<[bool]>,
+    pub(crate) unresolved_sequences: bool,
     layout: PhantomData<V>,
 }
 impl<V: ModelLayout> ChunkContext<V> {
@@ -202,6 +203,7 @@ impl<V: ModelLayout> ChunkContext<V> {
             flags,
             light_count,
             external_sequences,
+            unresolved_sequences: false,
             layout: PhantomData,
         }
     }
@@ -306,6 +308,7 @@ impl<'data, V: ModelLayout> Chunk<'data, V> {
     ) -> Result<Self, ReadError> {
         let mut d = Decoder::new(data, V::VERSION, context.flags);
         d.external_sequences = context.external_sequences.clone();
+        d.unresolved_sequences = context.unresolved_sequences;
         Ok(match &tag {
             b"MD21" => Self::Core(Cow::Borrowed(data)),
             b"PFID" => Self::PhysicsId(read_id(&mut d, data.len())?),

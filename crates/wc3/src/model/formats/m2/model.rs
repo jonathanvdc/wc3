@@ -133,6 +133,14 @@ impl<'data, V: ModelLayout> Core<'data, V> {
     }
     /// Decodes a core address space, including its MD20 magic and version.
     pub fn decode(data: &'data [u8], origin: usize) -> Result<Self, ReadError> {
+        Self::decode_context(data, origin, None, false)
+    }
+    pub(crate) fn decode_context(
+        data: &'data [u8],
+        origin: usize,
+        inherited: Option<&[bool]>,
+        defer_sequences: bool,
+    ) -> Result<Self, ReadError> {
         let expected_version = V::VERSION;
         let mut input =
             Decoder::new(data, expected_version, ModelFlags::default()).with_origin(origin);
@@ -183,10 +191,15 @@ impl<'data, V: ModelLayout> Core<'data, V> {
         let classic_header_tail = V::ClassicTail::read_header(&mut input)?;
         let texture_combiner_combos = V::Combiner::read_header(&mut input)?;
         let sequences: Vec<Sequence<V>> = input.records(sequences)?;
-        input.external_sequences = sequences
-            .iter()
-            .map(|sequence| sequence.flags.external_animation())
-            .collect();
+        input.external_sequences = if sequences.is_empty() {
+            inherited.unwrap_or_default().into()
+        } else {
+            sequences
+                .iter()
+                .map(|sequence| sequence.flags.external_animation())
+                .collect()
+        };
+        input.unresolved_sequences = sequences.is_empty() && inherited.is_none() && defer_sequences;
         Ok(Self {
             name: input.array(name)?,
             flags: ModelFlags::from_bits_retain(flags),

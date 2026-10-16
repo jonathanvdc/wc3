@@ -52,7 +52,8 @@ pub use io::{from_reader, from_reader_dynamic, to_writer, Read, RecordLayout, Wr
 mod bundle;
 pub mod resources;
 pub use bundle::{
-    BoneTable, Bundle, EncodedBundle, File, ProfileRef, ResolvedTrack, ResolvedValues,
+    AttachmentTable, BoneTable, Bundle, EncodedBundle, File, ProfileRef, ResolvedTrack,
+    ResolvedValues,
 };
 
 mod validation;

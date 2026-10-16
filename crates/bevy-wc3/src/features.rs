@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
+use wc3::model::profiles::Universal;
 use wc3::model::scene::world::LightKind as WorldLightKind;
 use wc3::model::scene::{Camera as PortableCamera, LightKind};
 use wc3::model::values::programmed::LightKind as ProgrammedLightKind;
@@ -125,6 +126,21 @@ struct AttachmentDefinition {
     appearance: SemanticPlacementAppearance,
     model: Option<Handle<ModelAsset>>,
     placement: ChildModelPlacement,
+}
+impl AttachmentDefinition {
+    fn activation(&self, sample: &SampledAnimation<'_, '_, Universal>) -> f32 {
+        match self.point.as_ref().map(|point| &point.activation) {
+            Some(AttachmentActivation::Enabled(value)) => {
+                if sample.animated(value) {
+                    1.
+                } else {
+                    0.
+                }
+            }
+            Some(AttachmentActivation::Visibility(value)) => sample.animated(value).clamp(0., 1.),
+            _ => 1.,
+        }
+    }
 }
 #[derive(Clone, Default)]
 pub(super) struct RuntimeFeatures {
@@ -251,6 +267,61 @@ impl RuntimeFeatures {
             }
         }
         result
+    }
+    pub(crate) fn append_remapped(&mut self, source: &Self, nodes: &HashMap<NodeId, NodeId>) {
+        let remap = |mut feature: ModelFeature| {
+            feature.node = nodes[&feature.node];
+            feature
+        };
+        self.lights.extend(
+            source
+                .lights
+                .iter()
+                .map(|(feature, light)| (remap(*feature), light.clone())),
+        );
+        self.cameras.extend(
+            source
+                .cameras
+                .iter()
+                .map(|(feature, camera)| (remap(*feature), camera.clone())),
+        );
+        self.attachments
+            .extend(source.attachments.iter().cloned().map(|mut attachment| {
+                attachment.feature = remap(attachment.feature);
+                attachment
+            }));
+        self.hooks.extend(
+            source
+                .hooks
+                .iter()
+                .map(|(feature, kind)| (remap(*feature), *kind)),
+        );
+    }
+    pub(crate) fn attachment_node(&self, id: FeatureId) -> Option<NodeId> {
+        self.attachments
+            .iter()
+            .find(|definition| definition.feature.id == id)
+            .map(|definition| definition.feature.node)
+    }
+    pub(crate) fn attachment_entity(
+        &self,
+        id: FeatureId,
+        instances: &RuntimeFeatureInstances,
+    ) -> Option<Entity> {
+        self.attachments
+            .iter()
+            .position(|definition| definition.feature.id == id)
+            .and_then(|index| instances.attachments.get(index).copied())
+    }
+    pub(crate) fn attachment_active(
+        &self,
+        id: FeatureId,
+        sample: &SampledAnimation<'_, '_, Universal>,
+    ) -> bool {
+        self.attachments
+            .iter()
+            .find(|definition| definition.feature.id == id)
+            .is_some_and(|definition| definition.activation(sample) > 0.)
     }
     /// All authored integration identities, including collision and controllers.
     pub fn hooks(&self) -> &[(ModelFeature, FeatureKind)] {
@@ -543,17 +614,7 @@ impl RuntimeFeatures {
         }
         for (definition, &entity) in self.attachments.iter().zip(&instances.attachments) {
             if let Ok((mut point, mut visibility)) = attachments.get_mut(entity) {
-                let activation = match definition.point.as_ref().map(|p| &p.activation) {
-                    Some(AttachmentActivation::Enabled(v)) => {
-                        if sample.animated(v) {
-                            1.
-                        } else {
-                            0.
-                        }
-                    }
-                    Some(AttachmentActivation::Visibility(v)) => sample.animated(v).clamp(0., 1.),
-                    _ => 1.,
-                };
+                let activation = definition.activation(sample);
                 set_if_changed!(point.activation, activation);
                 set_if_changed!(
                     *visibility,
@@ -825,19 +886,7 @@ pub(crate) fn restart_attachments(
             .iter()
             .zip(&instance.feature_instances().attachments)
         {
-            let activation = match definition.point.as_ref().map(|point| &point.activation) {
-                Some(AttachmentActivation::Enabled(value)) => {
-                    if sample.animated(value) {
-                        1.
-                    } else {
-                        0.
-                    }
-                }
-                Some(AttachmentActivation::Visibility(value)) => {
-                    sample.animated(value).clamp(0., 1.)
-                }
-                _ => 1.,
-            };
+            let activation = definition.activation(&sample);
             pending.push((
                 *entity,
                 activation,

@@ -31,7 +31,8 @@ pub type TextureUnit<T = TextureTransform> = TextureBinding<
 pub struct ShaderPass<'a, I = TextureUnit> {
     /// Shader family identifier interpreted by the game shader implementation.
     pub shader: u16,
-    /// Geometry classification used by this draw.
+    /// Native batch auxiliary geoset word, distinct from the skin section identity.
+    /// Character section selection uses `MeshInstance::selection_group`.
     pub geoset: u16,
     /// Layer order of this pass within its geometry section.
     pub layer: u16,

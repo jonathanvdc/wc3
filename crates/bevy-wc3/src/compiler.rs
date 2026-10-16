@@ -19,17 +19,21 @@ use super::{
     CompiledModel, DrawSource, ModelAsset, ModelMaterial, RenderDiagnostic, TextureRequest,
 };
 use crate::compiled::{ClipTiming, RuntimeDraw, RuntimeLiquid, RuntimeNode, RuntimeSkin};
+use crate::composition::DrawSelection;
+use crate::physics::PhysicsDefinition;
 use crate::ModelError;
 use bevy::prelude::*;
-use std::collections::HashMap;
+use std::any::TypeId;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use wc3::model::profiles::Universal;
 use wc3::model::systems::ModelMetadata;
 use wc3::model::systems::System;
 use wc3::model::{
     AnimationProgram, Attachment, Billboard, Camera as ModelCamera, ClipControls, FeatureId,
-    Light as SemanticLight, MaterialSelection, MeshControls, Model, NodeControls, NodeFeature,
-    ParticleDetails, ParticleEmitter, PropertyTarget, RibbonEmitter, SkinId,
+    Light as SemanticLight, Link, MaterialId, MaterialSelection, MeshControls, Model, NodeControls,
+    NodeFeature, ParticleDetails, ParticleEmitter, PropertyTarget, RibbonEmitter, SkinId,
+    TextureId, ValidateLinks,
 };
 
 fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
@@ -65,7 +69,7 @@ fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
     }
 }
 
-fn node_order(nodes: &[RuntimeNode]) -> Result<Vec<usize>, ModelError> {
+pub(crate) fn node_order(nodes: &[RuntimeNode]) -> Result<Vec<usize>, ModelError> {
     let mut order = Vec::with_capacity(nodes.len());
     let mut children = vec![Vec::new(); nodes.len()];
     for (index, node) in nodes.iter().enumerate() {
@@ -92,6 +96,8 @@ fn node_order(nodes: &[RuntimeNode]) -> Result<Vec<usize>, ModelError> {
 pub struct CompileOptions {
     /// Material appearance. Ambiguous defaults require an explicit selection.
     pub material: MaterialSelection,
+    /// Authored geometry selection, independent of automatic LOD.
+    pub draws: DrawSelection,
     /// Resolved optional child models, keyed by the authored attachment or emitter.
     pub child_models: HashMap<FeatureId, Handle<ModelAsset>>,
     /// External child coordinate-space overrides; omitted features use authored space.
@@ -175,9 +181,92 @@ pub fn compile_model_with_options(
         }
     }
 
-    let images = Arc::new(TextureImages::resolve(model, &mut resolve_image));
+    let selected_materials =
+        if options.draws.draws.is_some() || !options.draws.hidden_instances.is_empty() {
+            let mut selected = HashSet::new();
+            for (id, instance) in model.instances() {
+                if options.draws.hidden_instances.contains(&id) {
+                    continue;
+                }
+                if instance.draws.is_empty() {
+                    if let Ok(material) = model.resolve_instance_material(id, options.material) {
+                        selected.insert(material);
+                    }
+                }
+                for draw in instance
+                    .draws
+                    .iter()
+                    .filter(|draw| options.draws.includes(draw.id()))
+                {
+                    selected.insert(
+                        model
+                            .resolve_material(id, draw.id(), options.material)
+                            .map_err(|e| ModelError(e.to_string()))?,
+                    );
+                }
+            }
+            for (_, feature) in model.features() {
+                feature.payload.visit_links(&mut |link| {
+                    if let Link::Material(id) = link {
+                        selected.insert(id);
+                    }
+                });
+            }
+            for (_, system) in model.systems() {
+                system.visit_links(&mut |link| {
+                    if let Link::Material(id) = link {
+                        selected.insert(id);
+                    }
+                });
+            }
+            Some(selected)
+        } else {
+            None
+        };
+    let selected_textures = selected_materials
+        .as_ref()
+        .map(|materials: &HashSet<MaterialId>| {
+            let mut selected = HashSet::<TextureId>::new();
+            let mut animated = false;
+            let mut visit = |link| match link {
+                Link::Texture(id) => {
+                    selected.insert(id);
+                }
+                Link::Property { value_type, .. } if value_type == TypeId::of::<TextureId>() => {
+                    animated = true;
+                }
+                _ => {}
+            };
+            for (_, feature) in model.features() {
+                feature.payload.visit_links(&mut visit);
+            }
+            for (_, system) in model.systems() {
+                system.visit_links(&mut visit);
+            }
+            for (id, material) in model.materials() {
+                if materials.contains(&id) {
+                    material.surface.visit_links(&mut visit);
+                }
+            }
+            if animated {
+                selected.extend(model.textures().map(|(id, _)| id));
+            }
+            selected
+        });
+    let images = Arc::new(match selected_textures.as_ref() {
+        Some(selected) => {
+            TextureImages::resolve_selected(model, Some(selected), &mut resolve_image)
+        }
+        None => TextureImages::resolve(model, &mut resolve_image),
+    });
     let mut materials = HashMap::new();
     for (id, _) in model.materials() {
+        if selected_materials
+            .as_ref()
+            .is_some_and(|selected| !selected.contains(&id))
+        {
+            continue;
+        }
         let passes = compile_material_with_images(model, id, images.clone())?;
         for pass in &passes {
             diagnostics.extend(
@@ -198,6 +287,9 @@ pub fn compile_model_with_options(
     let mut mesh_interner = MeshInterner::default();
     let mut draws = Vec::new();
     for (instance_id, instance) in model.instances() {
+        if options.draws.hidden_instances.contains(&instance_id) {
+            continue;
+        }
         let source = model
             .mesh(instance.mesh)
             .ok_or_else(|| ModelError("instance geometry is absent".into()))?;
@@ -221,6 +313,7 @@ pub fn compile_model_with_options(
             instance
                 .draws
                 .iter()
+                .filter(|draw| options.draws.includes(draw.id()))
                 .map(|draw| {
                     let material = model
                         .resolve_material(instance_id, draw.id(), options.material)
@@ -381,6 +474,9 @@ pub fn compile_model_with_options(
     );
     let mut liquids = Vec::new();
     for liquid in world.liquids {
+        if options.draws.hidden_instances.contains(&liquid.instance) {
+            continue;
+        }
         let mesh = mesh_interner.intern(liquid.mesh);
         let surfaces = liquid.material.and_then(|id| materials.get(&id));
         for pass in 0..surfaces.map_or(1, Vec::len) {
@@ -407,7 +503,7 @@ pub fn compile_model_with_options(
         }
     }
     for (id, system) in model.systems() {
-        if matches!(system, System::Wmo(_)) {
+        if matches!(system, System::Wmo(_) | System::Physics(_)) {
             continue;
         }
         diagnostics.push(RenderDiagnostic { feature: None, material: None, message: format!("system {id:?} remains in its authored/default state; application simulation is not active") });
@@ -445,7 +541,10 @@ pub fn compile_model_with_options(
                 Billboard::None | Billboard::Locked { enabled: false, .. }
             )
     });
+    let physics = Arc::new(PhysicsDefinition::compile(model, &nodes, &mut diagnostics));
     let mut compiled = CompiledModel {
+        mounts: Vec::new(),
+        physics,
         nodes: nodes.into(),
         blend_time: match model.metadata() {
             Some(ModelMetadata::Mdlx(metadata)) => metadata.blend_time,

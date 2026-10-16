@@ -6,12 +6,16 @@ use super::super::skin_bounds::SkinBounds;
 use super::super::transition::TransitionState;
 use super::super::{ModelMaterial, PreparedModel, WorldLiquidSurface};
 use super::evaluation::EvaluationState;
+use super::mounts::MountedModel;
 use super::{ModelDraw, ModelNode, ModelRig, Playback, PlaybackError, PoseOverrides};
+use crate::bounds::transform_bounds;
+use crate::physics::PhysicsState;
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
 use std::collections::HashMap;
+use std::sync::Arc;
 
-/// Spawn a directly compiled Universal model beneath an application-owned root.
+/// Spawn a directly compiled semantic model beneath an application-owned root.
 ///
 /// Register [`crate::Wc3BevyPlugin`] to advance playback. The root owns its rig and
 /// draws through Bevy hierarchy lifetime; meshes and inverse binds are shared.
@@ -23,11 +27,7 @@ pub fn spawn_model(
     transform: Transform,
 ) -> Entity {
     let root = commands
-        .spawn((
-            Name::new("Universal model"),
-            transform,
-            Visibility::default(),
-        ))
+        .spawn((Name::new("Model"), transform, Visibility::default()))
         .id();
     populate_model(commands, meshes, materials, model, root);
     root
@@ -217,12 +217,43 @@ pub(crate) fn populate_model(
             draw_entities.push((entity.id(), None, material));
         }
     }
+    let mut mounted_roots = Vec::with_capacity(model.mounts.len());
+    for mount in model.mounts.iter() {
+        let mut child_model = mount.model.clone();
+        // The mount transform is already authored in the host model frame.
+        // Bounds compiled in application coordinates must return to the child
+        // authored frame along with the removed basis conversion.
+        let inverse_basis = child_model.basis.to_matrix().inverse();
+        child_model.rest_bounds = child_model
+            .rest_bounds
+            .map(|bounds| transform_bounds(bounds, inverse_basis));
+        child_model.basis = Transform::IDENTITY;
+        let child = spawn_model(commands, meshes, materials, &child_model, mount.transform);
+        mounted_roots.push(child);
+        let parent = mount
+            .point
+            .and_then(|point| model.features.attachment_entity(point, &feature_instances))
+            .unwrap_or(nodes[mount.parent]);
+        commands.entity(child).insert((
+            ChildOf(parent),
+            MountedModel {
+                parent: root,
+                clips: Arc::new(mount.clips.clone()),
+                inherited_physics: None,
+                inherited_from: None,
+            },
+        ));
+        if let Some((clip, _)) = child_model.clips.first() {
+            commands.entity(child).insert(Playback::for_clip(*clip));
+        }
+    }
     commands.entity(root).insert((
         ModelRig {
             events: EventState::default(),
             event_scratch: Vec::new(),
             model: model.clone(),
             nodes,
+            mounts: mounted_roots,
             poses,
             evaluated,
             visible,
@@ -234,6 +265,8 @@ pub(crate) fn populate_model(
             pose_initialized: false,
             transition: TransitionState::default(),
             evaluation: EvaluationState::default(),
+            physics: PhysicsState::default(),
+            physics_locals: Vec::new(),
         },
         Playback {
             lod,

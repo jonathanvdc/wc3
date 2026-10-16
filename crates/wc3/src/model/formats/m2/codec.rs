@@ -22,12 +22,14 @@ pub struct ArrayRef {
 pub trait Value: AsULE + Debug + PartialEq + 'static {}
 impl<T: AsULE + Debug + PartialEq + 'static> Value for T {}
 
-/// A leaf array stored in this document or in an external animation stream.
+/// A resolved leaf array or a descriptor awaiting its owning sequence storage.
 #[derive(Clone, Debug, PartialEq, Ownership)]
 pub enum Array<'data, T: Value> {
     /// Resolved values borrowing their source or holding edited values.
     Inline(ZeroVec<'data, T>),
-    /// An unresolved descriptor into another document.
+    /// A deferred descriptor, normally into an external animation stream.
+    /// SKID models decoded without their skeleton's sequence flags also retain
+    /// ordinary inline descriptors here until `Bundle::decode` resolves storage.
     External(ArrayRef),
 }
 impl<T: Value> Default for Array<'_, T> {

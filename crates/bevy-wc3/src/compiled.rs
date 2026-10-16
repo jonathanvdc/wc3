@@ -5,6 +5,7 @@ use crate::features::RuntimeFeatures;
 use crate::lod::LodDefinition;
 use crate::material::SurfaceAnimation;
 use crate::mesh_animation::MeshMaterialState;
+use crate::physics::{PhysicsBodyInfo, PhysicsDefinition};
 use crate::pose::BillboardConvention;
 use crate::world::WorldRuntime;
 use crate::{
@@ -16,6 +17,7 @@ use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use wc3::model::systems::model_physics::Joint;
 use wc3::model::{
     AnimationProgram, Billboard, ClipId, ControllerId, DrawId, FeatureId, FeatureKind, Inheritance,
     InstanceId, MaterialId, MeshId, NodeId, Transform as ModelTransform,
@@ -99,6 +101,15 @@ pub(crate) struct ClipTiming {
     pub(crate) blend_duration: Option<f64>,
 }
 
+#[derive(Clone)]
+pub(crate) struct RuntimeMount<M> {
+    pub(crate) parent: usize,
+    pub(crate) point: Option<FeatureId>,
+    pub(crate) transform: Transform,
+    pub(crate) model: M,
+    pub(crate) clips: HashMap<ClipId, ClipId>,
+}
+
 /// Owned render data compiled directly from a Universal graph.
 ///
 /// Compilation does not export through a native format, retain the source graph,
@@ -106,6 +117,8 @@ pub(crate) struct ClipTiming {
 /// outlive borrowed source bytes. [`Self::prepare`] inserts shared GPU assets.
 #[derive(Clone)]
 pub struct CompiledModel {
+    pub(crate) mounts: Vec<RuntimeMount<Arc<CompiledModel>>>,
+    pub(crate) physics: Arc<PhysicsDefinition>,
     pub(crate) events: Arc<RuntimeEvents>,
     pub(crate) nodes: Arc<[RuntimeNode]>,
     pub(crate) order: Arc<[usize]>,
@@ -129,9 +142,23 @@ pub struct CompiledModel {
     pub(crate) liquids: Vec<RuntimeLiquid<Arc<Mesh>>>,
 }
 
+/// Borrowed independent model mounted at one node of a prepared rig.
+pub struct PreparedMount<'a> {
+    /// Destination authored node identity.
+    pub parent: NodeId,
+    /// Attachment activation gate, when mounted through a feature.
+    pub point: Option<FeatureId>,
+    /// Child authored coordinates into the carrying node's frame.
+    pub transform: Transform,
+    /// Prepared child definitions; geometry is shared with other occurrences.
+    pub model: &'a PreparedModel,
+}
+
 /// Shared Bevy meshes and immutable definitions ready for repeated instantiation.
 #[derive(Clone)]
 pub struct PreparedModel {
+    pub(crate) mounts: Arc<[RuntimeMount<PreparedModel>]>,
+    pub(crate) physics: Arc<PhysicsDefinition>,
     pub(crate) events: Arc<RuntimeEvents>,
     pub(crate) nodes: Arc<[RuntimeNode]>,
     pub(crate) order: Arc<[usize]>,
@@ -180,8 +207,31 @@ impl CompiledModel {
         meshes: &mut Assets<Mesh>,
         binds: &mut Assets<SkinnedMeshInverseBindposes>,
     ) -> PreparedModel {
-        let mut variants = HashMap::new();
+        self.prepare_shared(meshes, binds, &mut HashMap::new(), &mut HashMap::new())
+    }
+    fn prepare_shared(
+        &self,
+        meshes: &mut Assets<Mesh>,
+        binds: &mut Assets<SkinnedMeshInverseBindposes>,
+        variants: &mut HashMap<*const Mesh, Handle<Mesh>>,
+        palettes: &mut HashMap<(*const Mat4, usize), Handle<SkinnedMeshInverseBindposes>>,
+    ) -> PreparedModel {
         PreparedModel {
+            mounts: self
+                .mounts
+                .iter()
+                .map(|mount| RuntimeMount {
+                    parent: mount.parent,
+                    point: mount.point,
+                    transform: mount.transform,
+                    model: mount
+                        .model
+                        .prepare_shared(meshes, binds, variants, palettes),
+                    clips: mount.clips.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into(),
+            physics: self.physics.clone(),
             events: self.events.clone(),
             nodes: self.nodes.clone(),
             order: self.order.clone(),
@@ -224,7 +274,10 @@ impl CompiledModel {
                 .iter()
                 .map(|skin| RuntimeSkin {
                     joints: skin.joints.clone(),
-                    binds: binds.add(skin.binds.to_vec()),
+                    binds: palettes
+                        .entry((skin.binds.as_ptr(), skin.binds.len()))
+                        .or_insert_with(|| binds.add(skin.binds.to_vec()))
+                        .clone(),
                 })
                 .collect::<Vec<_>>()
                 .into(),
@@ -255,6 +308,29 @@ impl CompiledModel {
 }
 
 impl PreparedModel {
+    /// Owned authored physics bodies available for optional secondary motion.
+    pub fn physics_bodies(&self) -> impl Iterator<Item = &PhysicsBodyInfo> {
+        self.physics.bodies()
+    }
+
+    /// Authored constraints available to external physics adapters.
+    pub fn physics_joints(&self) -> impl Iterator<Item = &Joint> {
+        self.physics.joints()
+    }
+    /// Inspect rigid component definitions without exposing runtime storage.
+    pub fn mounts(&self) -> impl ExactSizeIterator<Item = PreparedMount<'_>> {
+        self.mounts.iter().map(|mount| PreparedMount {
+            parent: self.nodes[mount.parent].id,
+            point: mount.point,
+            transform: mount.transform,
+            model: &mount.model,
+        })
+    }
+    /// Number of rigid component models mounted beneath this rig.
+    pub fn mounted_models(&self) -> usize {
+        self.mounts.len()
+    }
+
     /// Authored coordinate frame and units mapped into the application's Bevy frame.
     pub fn model_to_bevy(&self) -> Transform {
         self.basis

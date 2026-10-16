@@ -7,8 +7,8 @@ use super::companions::{
     SupportsExternalSkins,
 };
 use super::records::{
-    ArrayVisitor, Bone, Sequence, SplineStorage, SplineTrack, TimelineStorage, Track, ValuesLeaf,
-    ValuesStorage, VisitArrays,
+    ArrayVisitor, Attachment, Bone, Sequence, SplineStorage, SplineTrack, TimelineStorage, Track,
+    ValuesLeaf, ValuesStorage, VisitArrays,
 };
 use super::records::{Interpolation, ModelFlags, SequenceFlags};
 use super::resources::{Dependency, DependencyKind, FileKey};
@@ -38,6 +38,9 @@ pub enum File<'data> {
 }
 /// A native bone table together with the identity of its owning document.
 pub type BoneTable<'view, 'data, V> = (&'view FileKey, &'view [Bone<'data, V>]);
+
+/// Native attachment records together with the identity of their owning document.
+pub type AttachmentTable<'view, 'data, V> = (&'view FileKey, &'view [Attachment<'data, V>]);
 
 /// A native geometry profile, whether embedded or stored in a supporting file.
 #[derive(Clone, Copy, Debug)]
@@ -145,6 +148,7 @@ impl<'data, D: Dialect> Bundle<'data, D> {
     ) -> Result<Self, ReadError> {
         let mut bundle = Self::from_model(Document::decode_m2(data)?).with_key(key);
         let mut attempted = BTreeSet::new();
+        let mut document_sources = BTreeMap::new();
         loop {
             let dependencies = bundle.dependencies();
             let pending: Vec<_> = dependencies
@@ -200,12 +204,42 @@ impl<'data, D: Dialect> Bundle<'data, D> {
                     DependencyKind::Bone => File::Bone(BoneFile::read(data)?),
                     DependencyKind::Physics => File::Physics(PhysicsFile::read(data)?),
                     DependencyKind::Document => {
+                        document_sources.insert(dependency.key.clone(), data);
                         File::Document(Box::new(DynamicDocument::decode_m2(data)?))
                     }
                     DependencyKind::Texture => unreachable!(),
                 };
                 bundle.files.insert(dependency.key, file);
             }
+        }
+        if bundle.model.core().sequences.is_empty() {
+            let external: Vec<_> = bundle
+                .sequences_for(&bundle.key)
+                .iter()
+                .map(|sequence| sequence.flags.external_animation())
+                .collect();
+            if !external.is_empty() {
+                bundle.model = Document::decode_m2_with_sequences(data, &external)?;
+            }
+        }
+        for (owner, data) in document_sources {
+            let external: Vec<_> = bundle
+                .sequences_for(&owner)
+                .iter()
+                .map(|sequence| sequence.flags.external_animation())
+                .collect();
+            if external.is_empty() {
+                continue;
+            }
+            let Some(File::Document(model)) = bundle.files.get_mut(&owner) else {
+                continue;
+            };
+            crate::visit_m2_model!(&mut **model, |typed| {
+                if typed.core().sequences.is_empty() {
+                    *typed = Document::decode_m2_with_sequences(data, &external)?;
+                }
+                Ok::<_, ReadError>(())
+            })?;
         }
         bundle.validate_complete()?;
         Ok(bundle)
@@ -541,12 +575,36 @@ impl<'data, D: Dialect> Bundle<'data, D> {
         }
     }
     fn sequences_for(&self, owner: &FileKey) -> Vec<SequenceKey> {
-        if let Some(File::Document(model)) = self.files.get(owner) {
-            return crate::visit_m2_model!(&**model, |typed| sequence_keys(
-                &typed.core().sequences
-            ));
-        }
-        let mut current = self.files.get_key_value(owner);
+        let skeleton = if owner == &self.key {
+            let core = &self.model.core().sequences;
+            if !core.is_empty() {
+                return sequence_keys(core);
+            }
+            self.model.extensions().find_map(|chunk| match chunk {
+                Chunk::SkeletonId(id) if *id != 0 => Some(FileKey::FileId(*id)),
+                _ => None,
+            })
+        } else if let Some(File::Document(model)) = self.files.get(owner) {
+            let core =
+                crate::visit_m2_model!(&**model, |typed| sequence_keys(&typed.core().sequences));
+            if !core.is_empty() {
+                return core;
+            }
+            let skeleton =
+                crate::visit_m2_model!(&**model, |typed| typed.extensions().find_map(|chunk| {
+                    match chunk {
+                        Chunk::SkeletonId(id) if *id != 0 => Some(FileKey::FileId(*id)),
+                        _ => None,
+                    }
+                }));
+            if skeleton.is_none() {
+                return Vec::new();
+            }
+            skeleton
+        } else {
+            None
+        };
+        let mut current = self.files.get_key_value(skeleton.as_ref().unwrap_or(owner));
         let mut visited = BTreeSet::new();
         while let Some((key, File::Skeleton(skeleton))) = current {
             if !visited.insert(key) {
@@ -592,6 +650,40 @@ impl<'data, D: Dialect> Bundle<'data, D> {
             return Err(ReadError::invalid(0, "unloaded skeleton bones"));
         }
         Ok((&self.key, &self.model.core().bones))
+    }
+    /// Returns the nearest SKA1 attachment table, falling back to core attachments.
+    /// The returned owner selects the attachment animation stream and inherited sequences.
+    pub fn attachments(&self) -> Result<AttachmentTable<'_, 'data, D::Layout>, ReadError> {
+        let key = self.model.extensions().find_map(|chunk| match chunk {
+            Chunk::SkeletonId(id) if *id != 0 => Some(FileKey::FileId(*id)),
+            _ => None,
+        });
+        let mut current = key.as_ref().and_then(|key| self.files.get_key_value(key));
+        if key.is_some() && current.is_none() {
+            return Err(ReadError::invalid(0, "unloaded attachment skeleton"));
+        }
+        let mut visited = BTreeSet::new();
+        while let Some((key, file)) = current {
+            if !visited.insert(key.clone()) {
+                return Err(ReadError::invalid(0, "skeleton parent cycle"));
+            }
+            let skeleton = match file {
+                File::Skeleton(skeleton) => skeleton,
+                _ => return Err(ReadError::invalid(0, "skeleton document kind")),
+            };
+            let native = skeleton
+                .as_typed::<D::Layout>()
+                .ok_or_else(|| ReadError::invalid(0, "skeleton owner layout"))?;
+            if let Some(attachments) = native.chunks.iter().find_map(|chunk| match chunk {
+                SkeletonChunk::Attachments { attachments, .. } => Some(attachments.as_slice()),
+                _ => None,
+            }) {
+                return Ok((key, attachments));
+            }
+            current = skeleton_parent(skeleton)
+                .and_then(|id| self.files.get_key_value(&FileKey::FileId(id)));
+        }
+        Ok((&self.key, &self.model.core().attachments))
     }
     /// Resolves one bone translation track using its owning animation stream.
     pub fn bone_translation(
@@ -728,7 +820,7 @@ impl<'data, D: Dialect> Bundle<'data, D> {
         let dependencies = self.dependencies();
         let mut streams = BTreeMap::new();
         {
-            let sequences = sequence_keys(&self.model.core().sequences);
+            let sequences = self.sequences_for(&self.key);
             let mut relocate = ExternalRelocator {
                 owner: &self.key,
                 sequences: &sequences,
@@ -899,7 +991,13 @@ fn animation_key(
         }
         current = match files.get(&current) {
             Some(File::Skeleton(skeleton)) => FileKey::FileId(skeleton_parent(skeleton)?),
-            _ => return None,
+            _ => dependencies
+                .iter()
+                .find(|dependency| {
+                    dependency.owner == current && dependency.kind == DependencyKind::Skeleton
+                })?
+                .key
+                .clone(),
         };
     }
 }
@@ -976,7 +1074,7 @@ impl<'data, 'target> ArrayVisitor<'target> for ExternalRelocator<'_, 'data> {
         Ok(())
     }
 }
-fn visit_core<'data, L: ModelLayout, V: ArrayVisitor<'data>>(
+pub(crate) fn visit_core<'data, L: ModelLayout, V: ArrayVisitor<'data>>(
     core: &mut Core<'data, L>,
     visitor: &mut V,
 ) -> Result<(), V::Error> {

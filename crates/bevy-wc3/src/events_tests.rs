@@ -83,7 +83,7 @@ fn definition(clock: Clock, time: f64) -> EventDefinition {
 fn many_looping_definitions_generate_only_seeds_plus_global_dispatch_budget() {
     let mut builder = ModelBuilder::new("many event streams");
     let clock = builder
-        .add_clock(wc3::model::SharedClock {
+        .add_clock(wc3::model::SharedClock::Repeating {
             period: Time::seconds(1.).unwrap(),
         })
         .unwrap();
@@ -230,7 +230,7 @@ fn paused_start_keys_wait_and_reverse_traversal_does_not_dispatch() {
 fn inclusive_loop_end_and_next_start_are_distinct_and_large_jumps_are_bounded() {
     let mut builder = ModelBuilder::new("event clock");
     let id = builder
-        .add_clock(wc3::model::SharedClock {
+        .add_clock(wc3::model::SharedClock::Repeating {
             period: Time::seconds(1.).unwrap(),
         })
         .unwrap();
@@ -435,4 +435,21 @@ fn interval_clip_index_limits_global_timeline_scans_to_its_authored_window() {
     assert_eq!(state.scanned, 1);
     assert_eq!(state.occurrences.len(), 1);
     assert_eq!(state.occurrences[0].definition, 5000);
+}
+
+#[test]
+fn frozen_shared_clock_does_not_traverse_event_windows() {
+    let mut builder = ModelBuilder::new("frozen clock events");
+    let clock = builder.add_clock(wc3::model::SharedClock::Frozen).unwrap();
+    let events = RuntimeEvents {
+        definitions: vec![definition(Clock::Shared(clock), 0.)],
+        clocks: [(clock, 0.)].into(),
+        ..Default::default()
+    }
+    .indexed();
+    let mut state = EventState::default();
+    for time in [0., 0.5, 100.] {
+        collect(&mut state, &events, time, 32);
+        assert!(state.occurrences.is_empty());
+    }
 }

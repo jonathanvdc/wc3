@@ -1,4 +1,4 @@
-//! Current ordinary transform chains for pre-propagation camera inputs.
+//! Current transform chains for camera and model inputs before propagation.
 use super::{CameraBinding, ModelNode};
 use bevy::prelude::*;
 
@@ -16,6 +16,26 @@ pub(super) fn current_world(
     scratch: &mut Vec<(Entity, Transform)>,
     allow_bound_leaf: bool,
 ) -> Result<GlobalTransform, &'static str> {
+    current_world_with_nodes(leaf, hierarchy, scratch, allow_bound_leaf, false)
+}
+
+/// Current scene frame for physics after carrying model ancestors were evaluated.
+/// Camera traversals retain the stricter policy above to reject dependency cycles.
+pub(super) fn model_world(
+    leaf: Entity,
+    hierarchy: &Query<HierarchyData>,
+    scratch: &mut Vec<(Entity, Transform)>,
+) -> Result<GlobalTransform, &'static str> {
+    current_world_with_nodes(leaf, hierarchy, scratch, false, true)
+}
+
+fn current_world_with_nodes(
+    leaf: Entity,
+    hierarchy: &Query<HierarchyData>,
+    scratch: &mut Vec<(Entity, Transform)>,
+    allow_bound_leaf: bool,
+    allow_model_nodes: bool,
+) -> Result<GlobalTransform, &'static str> {
     scratch.clear();
     let mut next = Some(leaf);
     while let Some(entity) = next {
@@ -25,7 +45,7 @@ pub(super) fn current_world(
         let (transform, parent, animated, bound) = hierarchy
             .get(entity)
             .map_err(|_| "missing hierarchy transform")?;
-        if animated || (bound && !(allow_bound_leaf && entity == leaf)) {
+        if (animated && !allow_model_nodes) || (bound && !(allow_bound_leaf && entity == leaf)) {
             return Err("hierarchy depends on an animated node or another bound camera");
         }
         scratch.push((entity, *transform));

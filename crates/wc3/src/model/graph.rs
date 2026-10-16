@@ -11,11 +11,25 @@ use crate::model::{
 use crate::model::{Resources, ResourcesBuilder, Texture, TextureId};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-/// A repeating clock shared by animation channels.
-#[derive(Clone, Debug)]
-pub struct SharedClock {
-    /// Positive duration of one clock cycle.
-    pub period: Time,
+/// A repeating or frozen clock shared by animation channels.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SharedClock {
+    /// Samples time zero and has no traversed event interval.
+    Frozen,
+    /// Repeats over a strictly positive period.
+    Repeating {
+        /// Positive duration of one clock cycle.
+        period: Time,
+    },
+}
+impl SharedClock {
+    /// Native duration; a frozen clock returns zero without inventing a cycle.
+    pub fn period(self) -> Time {
+        match self {
+            Self::Frozen => Time::default(),
+            Self::Repeating { period } => period,
+        }
+    }
 }
 /// An encoding-independent model. All public access is immutable; edits are checked before publication.
 #[derive(Clone, Debug)]
@@ -283,11 +297,11 @@ impl<'a, P: Profile> Model<'a, P> {
     pub fn instance(&self, id: InstanceId) -> Option<&MeshInstance<'a, P>> {
         self.instances.get(&id)
     }
-    /// Iterates repeating animation clock definitions in stable graph identity order.
+    /// Iterates shared animation clock definitions in stable graph identity order.
     pub fn clocks(&self) -> impl ExactSizeIterator<Item = (ClockId, &SharedClock)> {
         self.clocks.iter().map(|(id, value)| (*id, value))
     }
-    /// Resolves a repeating animation clock; returns `None` when the identity is absent from this graph.
+    /// Resolves a shared animation clock; returns `None` when the identity is absent from this graph.
     pub fn clock(&self, id: ClockId) -> Option<&SharedClock> {
         self.clocks.get(&id)
     }

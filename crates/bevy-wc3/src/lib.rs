@@ -32,6 +32,7 @@ mod bounds;
 mod camera;
 mod compiled;
 mod compiler;
+mod composition;
 mod coordinates;
 mod effects;
 mod error;
@@ -45,6 +46,7 @@ mod material;
 mod mesh_animation;
 pub(crate) mod mesh_attributes;
 mod mesh_interner;
+mod physics;
 mod placements;
 mod plugin;
 mod pose;
@@ -54,6 +56,8 @@ mod skin_bounds;
 mod textures;
 mod transition;
 mod world;
+/// World of Warcraft character and equipment assembly.
+pub mod wow;
 
 pub use assets::{
     AssetSettings, BlpImageLoader, ModelAsset, ModelLoader, ModelLoaderSettings, PathResolver,
@@ -63,8 +67,9 @@ pub use baking::{
     BakeSpace, BakedPart, BakedPose, BakedSource, PoseBaker, PoseOptions, PreparedPart,
 };
 pub use camera::CameraBinding;
-pub use compiled::{CompiledModel, DrawSource, PreparedModel, RenderDiagnostic};
+pub use compiled::{CompiledModel, DrawSource, PreparedModel, PreparedMount, RenderDiagnostic};
 pub use compiler::{compile_model, compile_model_with_options, CompileOptions};
+pub use composition::{DrawSelection, JointMap, ModelPart, PartBinding};
 pub use effects::{ModelEmitter, RibbonEmitter, SpriteEmitter};
 pub use error::ModelError;
 pub use events::{EventDispatchStats, EventProgram, EventSource, ModelEvent};
@@ -75,6 +80,7 @@ pub use features::{
 pub use instances::{ModelInstance, ModelInstanceError, ModelRebind, ModelSource};
 pub use lod::{Lod, LodOverride, LodSettings, LodState};
 pub use material::{ModelMaterial, ModelMaterialExtension};
+pub use physics::{PhysicsBodyInfo, PhysicsFrame, PhysicsSimulation};
 pub use placements::PlacementSpace;
 pub use plugin::Wc3BevyPlugin;
 pub use runtime::{

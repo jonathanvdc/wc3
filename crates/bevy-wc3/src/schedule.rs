@@ -20,13 +20,13 @@ pub enum Wc3Systems {
     SpawnInstances,
     /// Applies changed quad-particle texture bindings in `Update`.
     BindTextures,
-    /// Advances instance playback clocks and pose transitions in `Update`.
+    /// Synchronizes mounted equipment and advances playback clocks in `Update`.
     AdvanceAnimation,
     /// Samples materials, lights, attachments, and child-particle animation in `Update`.
     AnimateInstances,
     /// Plays authored views on bound application cameras in `PostUpdate`.
     AnimateCameras,
-    /// Evaluates animated node transforms before propagation in `PostUpdate`.
+    /// Evaluates animation and optional secondary motion before propagation.
     EvaluateNodePoses,
     /// Spawns and advances Classic model particles before transform propagation.
     SimulateModelParticles,

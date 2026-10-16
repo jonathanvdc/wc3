@@ -142,8 +142,12 @@ where
         .global_sequences()
         .iter()
         .map(|duration| {
-            builder.add_clock(SharedClock {
-                period: Time::seconds(f64::from(*duration) / 1000.)?,
+            builder.add_clock(if *duration == 0 {
+                SharedClock::Frozen
+            } else {
+                SharedClock::Repeating {
+                    period: Time::seconds(f64::from(*duration) / 1000.)?,
+                }
             })
         })
         .collect::<Result<_, _>>()?;

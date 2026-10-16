@@ -4,11 +4,15 @@
 //! names require that context. File IDs and arbitrary filename bytes are preserved
 //! without assigning them to any particular filesystem or archive provider.
 use super::chunks::{AnimationFileId, Chunk};
+use super::codec::{Array, Value};
 use super::companions::{DynamicSkeleton, Skeleton, SkeletonChunk};
-use super::records::Sequence;
 use super::records::TextureSource;
+use super::records::{ArrayVisitor, Sequence, VisitArrays};
+use super::Core;
 use super::{Dialect, Document, ModelLayout};
 use crate::visit_m2_skeleton;
+use std::collections::BTreeSet;
+use std::convert::Infallible;
 
 pub use crate::model::common::FileKey;
 
@@ -108,6 +112,7 @@ impl<'data, D: Dialect> Document<'data, D> {
             animation_dependency(&mut result, owner, entry);
         }
         if D::VERSION >= 264 {
+            let mut referenced = None;
             for (index, sequence) in core.sequences.iter().enumerate() {
                 if !sequence.flags.external_animation() {
                     continue;
@@ -122,6 +127,12 @@ impl<'data, D: Dialect> Document<'data, D> {
                 if animation_ids.iter().any(|entry| {
                     entry.animation_id == source.id && entry.variation_id == source.variation_index
                 }) {
+                    continue;
+                }
+                if !referenced
+                    .get_or_insert_with(|| referenced_sequences(core))
+                    .contains(&index)
+                {
                     continue;
                 }
                 push(
@@ -321,5 +332,133 @@ impl DynamicSkeleton<'_> {
     /// Enumerates native resource references using the retained skeleton layout.
     pub fn dependencies(&self, owner: &FileKey) -> Vec<Dependency> {
         visit_m2_skeleton!(self, |file| file.dependencies(owner))
+    }
+}
+
+// Some equipment keeps an animation lookup copied from a humanoid skeleton,
+// while all of its own keys are inline or absent. A metadata-only sequence does
+// not imply that a generated sibling animation file exists.
+fn referenced_sequences<L: ModelLayout>(core: &Core<'_, L>) -> BTreeSet<usize> {
+    struct References(BTreeSet<usize>);
+    impl<'data> ArrayVisitor<'data> for References {
+        type Error = Infallible;
+        fn visit<T: Value>(
+            &mut self,
+            sequence: usize,
+            global_sequence: u16,
+            values: &mut Array<'data, T>,
+        ) -> Result<(), Infallible> {
+            let nonempty = match values {
+                Array::Inline(values) => !values.is_empty(),
+                Array::External(reference) => reference.count != 0,
+            };
+            if global_sequence == u16::MAX && nonempty {
+                self.0.insert(sequence);
+            }
+            Ok(())
+        }
+    }
+    // This view borrows encoded leaves even when the caller owns them. Traversal
+    // mutates only temporary metadata, never cloning animation payload buffers.
+    let mut view = core.as_borrowed();
+    let mut references = References(BTreeSet::new());
+    macro_rules! visit {
+        ($($field:ident),* $(,)?) => { $(
+            for record in &mut view.$field {
+                match record.visit_arrays(&mut references) {
+                    Ok(()) => {},
+                    Err(error) => match error {},
+                }
+            }
+        )* };
+    }
+    visit!(
+        bones,
+        colors,
+        texture_weights,
+        texture_transforms,
+        attachments,
+        events,
+        lights,
+        cameras,
+        ribbons,
+        particles
+    );
+    match view.texture_flipbooks.visit_arrays(&mut references) {
+        Ok(()) => {}
+        Err(error) => match error {},
+    }
+    references.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::formats::m2::codec::ArrayRef;
+    use crate::model::formats::m2::records::{Event, SequenceFlags};
+    use crate::model::formats::m2::{Chunked, V274};
+
+    fn equipment() -> Document<'static, Chunked<V274>> {
+        let mut model = Document::new();
+        model.core_mut().sequences.push(Sequence {
+            id: 66,
+            flags: SequenceFlags::default(),
+            ..Default::default()
+        });
+        model
+    }
+    fn event(global: u16, count: u32) -> Event<'static, V274> {
+        let mut event: Event<'static, V274> = Event::default();
+        event.enabled.global_sequence = global;
+        event
+            .enabled
+            .timeline
+            .timestamps
+            .push(Array::External(ArrayRef { count, offset: 0 }));
+        event
+    }
+    #[test]
+    fn empty_equipment_sequences_do_not_require_nonexistent_sibling_files() {
+        let mut model = equipment();
+        model.core_mut().events.push(event(u16::MAX, 0));
+        assert!(model
+            .dependencies(&FileKey::Path("belt.m2".into()))
+            .is_empty());
+    }
+    #[test]
+    fn timestamp_only_external_events_require_their_animation_file() {
+        let mut model = equipment();
+        model.core_mut().events.push(event(u16::MAX, 2));
+        let dependencies = model.dependencies(&FileKey::Path("belt.m2".into()));
+        assert_eq!(dependencies.len(), 1);
+        assert_eq!(
+            dependencies[0].key,
+            FileKey::Path("belt0066-00.anim".into())
+        );
+    }
+    #[test]
+    fn global_tracks_do_not_require_an_ordinary_animation_file() {
+        let mut model = equipment();
+        model.core_mut().events.push(event(0, 2));
+        assert!(model
+            .dependencies(&FileKey::Path("belt.m2".into()))
+            .is_empty());
+    }
+    #[test]
+    fn explicit_animation_ids_remain_declared_without_local_tracks() {
+        let mut model = equipment();
+        model
+            .insert_extension(
+                0,
+                Chunk::AnimationIds(vec![AnimationFileId {
+                    animation_id: 66,
+                    variation_id: 0,
+                    file_id: 900,
+                }]),
+            )
+            .unwrap();
+        let dependencies = model.dependencies(&FileKey::Root);
+        assert_eq!(dependencies.len(), 1);
+        assert_eq!(dependencies[0].key, FileKey::FileId(900));
     }
 }

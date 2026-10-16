@@ -57,6 +57,25 @@ impl ParticleInstances {
     }
 }
 impl RuntimeParticles {
+    pub(crate) fn append_remapped(
+        &mut self,
+        source: &Self,
+        indices: &[usize],
+        nodes: &HashMap<NodeId, NodeId>,
+        clips: &HashMap<ClipId, ClipId>,
+    ) {
+        self.age.append_remapped(&source.age, indices, nodes, clips);
+        self.atlas
+            .append_remapped(&source.atlas, indices, nodes, clips);
+        self.ribbons
+            .append_remapped(&source.ribbons, indices, nodes, clips);
+        self.models
+            .append_remapped(&source.models, indices, nodes, clips);
+        self.beams
+            .append_remapped(&source.beams, indices, nodes, clips);
+        self.diagnostics.extend(source.diagnostics.iter().cloned());
+    }
+
     pub(super) fn is_empty(&self) -> bool {
         self.age.is_empty()
             && self.atlas.is_empty()

@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::values::programmed::{RibbonKind, Smoothing};
 use wc3::model::{
-    Animated, FeatureId, MaterialId, Model, NodeFeature, NodeId, ProgrammedAge,
+    Animated, ClipId, FeatureId, MaterialId, Model, NodeFeature, NodeId, ProgrammedAge,
     RibbonEmitter as SemanticRibbonEmitter,
 };
 
@@ -55,6 +55,26 @@ pub(super) struct ProgrammedRibbonInstances {
     states: Vec<State>,
 }
 impl RuntimeProgrammedRibbons {
+    pub(super) fn append_remapped(
+        &mut self,
+        source: &Self,
+        indices: &[usize],
+        nodes: &HashMap<NodeId, NodeId>,
+        clips: &HashMap<ClipId, ClipId>,
+    ) {
+        self.definitions
+            .extend(source.definitions.iter().cloned().map(|mut value| {
+                value.node = nodes[&value.node];
+                value.anchor = indices[value.anchor];
+                for point in &mut value.points {
+                    point.0 = indices[point.0];
+                }
+                value
+            }));
+        self.diagnostics.extend(source.diagnostics.iter().cloned());
+        let _ = clips;
+    }
+
     pub fn is_empty(&self) -> bool {
         self.definitions.is_empty()
     }

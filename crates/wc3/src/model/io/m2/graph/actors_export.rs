@@ -307,7 +307,7 @@ where
                             "shared event requires shared clock",
                         ));
                     };
-                    let duration = time_ms(model.clock(clock).unwrap().period, context)?;
+                    let duration = time_ms(model.clock(clock).unwrap().period(), context)?;
                     let i = globals
                         .iter()
                         .position(|d| *d == duration)

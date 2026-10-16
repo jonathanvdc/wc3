@@ -27,6 +27,8 @@ then choose a topic:
 
 - [Semantic compiler and native resources](rendering/universal.md): Universal compilation,
   native resource providers, semantic animation, and family-specific interpretation limits.
+- [Characters and equipment](rendering/characters.md): race and equipment recipes,
+  geoset selection, clothing atlases, shared skeletons and optional secondary motion.
 - [Animation blending](rendering/animation-blending.md): typed clip controls,
   local-pose transitions, interruption, and effect/event sampling.
 - [Node transforms and flags](rendering/node-flags.md): inheritance,

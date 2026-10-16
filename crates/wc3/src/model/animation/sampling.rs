@@ -6,14 +6,15 @@ use crate::model::{
     PropertyTarget, Quaternion, TextureId, Time, Track,
 };
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::iter::once;
 
 /// Clock values and explicitly selected programmes for one evaluation.
 ///
 /// The caller supplies authoring timeline time independently of local clip time,
 /// and chooses controllers according to its gameplay policy. Shared clocks wrap
-/// `shared_time` by their authored periods. This operation does not dispatch events.
+/// `shared_time` by their authored periods; frozen clocks retain time zero.
+/// This operation does not dispatch events.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AnimationSample<'a> {
     /// Selected playback clip, including aliases.
@@ -167,7 +168,7 @@ impl<'data, P: Profile> Model<'data, P> {
         Ok(SampledAnimation {
             clocks: Cow::Owned(
                 self.clocks()
-                    .map(|(id, clock)| (id, clock.period))
+                    .map(|(id, clock)| (id, clock.period()))
                     .collect(),
             ),
             clip_time,
@@ -226,13 +227,14 @@ impl<'view, 'data, P: Profile> SampledAnimation<'view, 'data, P> {
                 match track.clock {
                     Clock::Clip => times.clip,
                     Clock::Timeline => times.timeline,
-                    Clock::Shared(id) => Time::seconds(
-                        times
-                            .shared
-                            .as_seconds()
-                            .rem_euclid(self.clocks.get(&id)?.as_seconds()),
-                    )
-                    .ok()?,
+                    Clock::Shared(id) => {
+                        let period = self.clocks.get(&id)?.as_seconds();
+                        if period > 0. {
+                            Time::seconds(times.shared.as_seconds().rem_euclid(period)).ok()?
+                        } else {
+                            Time::default()
+                        }
+                    }
                 }
             };
         if let (Clock::Timeline, Some((start, end))) = (track.clock, self.timeline_interval) {
@@ -313,9 +315,13 @@ impl<'view, 'data, P: Profile> SampledAnimation<'view, 'data, P> {
                 Clock::Shared(id) => {
                     let period = *self.clocks.get(&id)?;
                     (
-                        Time::seconds(times.shared.as_seconds().rem_euclid(period.as_seconds()))
-                            .ok()?,
-                        Some(period),
+                        if period.as_seconds() > 0. {
+                            Time::seconds(times.shared.as_seconds().rem_euclid(period.as_seconds()))
+                                .ok()?
+                        } else {
+                            Time::default()
+                        },
+                        (period.as_seconds() > 0.).then_some(period),
                         Time::default(),
                         None,
                     )
@@ -495,7 +501,7 @@ impl<P: Profile> AnimationProgram<P> {
         Self {
             clocks: model
                 .clocks()
-                .map(|(id, clock)| (id, clock.period))
+                .map(|(id, clock)| (id, clock.period()))
                 .collect(),
             global: IndexedChannels::new(
                 model
@@ -535,6 +541,108 @@ impl<P: Profile> AnimationProgram<P> {
                 })
                 .collect(),
         }
+    }
+    /// Combines disjoint property owners on the receiver's playback clocks.
+    ///
+    /// `clips` pairs destination clip identities with source clips. Both use the
+    /// destination's time in seconds; curves are not stretched. Source global and
+    /// shared-clock channels remain active. `include` can exclude properties whose
+    /// ownership is supplied by another rig. No source clip becomes independently
+    /// selectable, and a failed combination leaves both inputs unchanged.
+    pub fn compose(
+        &self,
+        source: &Self,
+        clips: &[(ClipId, ClipId)],
+        mut include: impl FnMut(&Channel<'static, P>) -> bool,
+    ) -> Result<Self, Error> {
+        let mut result = self.clone();
+        let mut destinations = HashSet::new();
+        for &(destination, source_clip) in clips {
+            if !destinations.insert(destination) {
+                return Err(Error::new(
+                    "animation.compose.clips",
+                    "destination clip is mapped more than once",
+                ));
+            }
+            if !self.clips.contains_key(&destination) || !source.clips.contains_key(&source_clip) {
+                return Err(Error::new(
+                    "animation.compose.clips",
+                    "unknown destination or source clip",
+                ));
+            }
+        }
+        for (&id, &period) in &source.clocks {
+            if result
+                .clocks
+                .get(&id)
+                .is_some_and(|existing| *existing != period)
+            {
+                return Err(Error::new(
+                    "animation.compose.clocks",
+                    "shared clock identity has conflicting periods",
+                ));
+            }
+            result.clocks.insert(id, period);
+        }
+        let owned: HashSet<_> = self
+            .global
+            .index
+            .keys()
+            .chain(
+                self.clips
+                    .values()
+                    .flat_map(|clip| clip.channels.index.keys()),
+            )
+            .chain(
+                self.controllers
+                    .values()
+                    .flat_map(|controller| controller.channels.index.keys()),
+            )
+            .collect();
+        let mut append = |target: &mut Vec<Channel<'static, P>>,
+                          channels: &IndexedChannels<P>|
+         -> Result<(), Error> {
+            for channel in &channels.channels {
+                if !include(channel) {
+                    continue;
+                }
+                if owned.contains(channel.target()) {
+                    return Err(Error::new(
+                        "animation.compose.properties",
+                        "property owners overlap",
+                    ));
+                }
+                target.push(channel.clone());
+            }
+            Ok(())
+        };
+        let mut global = result.global.channels.clone();
+        append(&mut global, &source.global)?;
+        result.global = IndexedChannels::new(global);
+        for &(destination, source_clip) in clips {
+            let destination = result.clips.get_mut(&destination).unwrap();
+            let mut channels = destination.channels.channels.clone();
+            append(&mut channels, &source.clips[&source_clip].channels)?;
+            destination.channels = IndexedChannels::new(channels);
+        }
+        for (&id, controller) in &source.controllers {
+            if result.controllers.contains_key(&id) {
+                return Err(Error::new(
+                    "animation.compose.controllers",
+                    "controller identities overlap",
+                ));
+            }
+            let mut channels = Vec::new();
+            append(&mut channels, &controller.channels)?;
+            result.controllers.insert(
+                id,
+                ControllerProgram {
+                    priority: controller.priority,
+                    channels: IndexedChannels::new(channels),
+                },
+            );
+        }
+        Ok(result)
     }
     /// Selects clocks and programmes using the same precedence as `Model::animation_sample`.
     pub fn sample(
@@ -621,10 +729,87 @@ mod tests {
         })
     }
     #[test]
+    fn frozen_shared_clock_keeps_authored_origin_without_a_loop_period() {
+        let mut builder = ModelBuilder::new("frozen ornament");
+        let node = builder.add_node(Node::named("ornament")).unwrap();
+        let clock = builder.add_clock(SharedClock::Frozen).unwrap();
+        builder
+            .add_shared_channel(Channel::Vector3(Track {
+                target: node.translation(),
+                curve: Curve::linear([time(0.), time(2.)], [[3.; 3], [9.; 3]]).unwrap(),
+                clock: Clock::Shared(clock),
+            }))
+            .unwrap();
+        let model = builder.finish().unwrap();
+        let program = AnimationProgram::compile(&model);
+        for elapsed in [0., 1., 100.] {
+            let sampled = program
+                .sample(AnimationSample {
+                    shared_time: time(elapsed),
+                    ..Default::default()
+                })
+                .unwrap();
+            assert_eq!(sampled.property(&node.translation()), Some([3.; 3]));
+            let track = sampled.track(&node.translation()).unwrap();
+            assert_eq!(track.time, time(0.));
+            assert_eq!(track.period, None);
+        }
+    }
+    #[test]
+    fn composed_programs_share_clocks_and_keep_property_owners_disjoint() {
+        let mut host = ModelBuilder::new("host");
+        let node = host.add_node(Node::named("host bone")).unwrap();
+        let clip = host
+            .add_clip(Clip::named("host clip").with_duration(time(2.)))
+            .unwrap();
+        host.add_channel(clip, channel(node.translation(), Clock::Clip, 2.))
+            .unwrap();
+        let host = AnimationProgram::compile(&host.finish().unwrap());
+        let mut part = ModelBuilder::new("part");
+        let extra = part.add_node(Node::named("part bone")).unwrap();
+        let part_clip = part
+            .add_clip(Clip::named("part clip").with_duration(time(2.)))
+            .unwrap();
+        part.add_channel(part_clip, channel(extra.translation(), Clock::Clip, 4.))
+            .unwrap();
+        part.add_timeline_channel(channel(extra.scale(), Clock::Timeline, 6.))
+            .unwrap();
+        let part = AnimationProgram::compile(&part.finish().unwrap());
+        let combined = host.compose(&part, &[(clip, part_clip)], |_| true).unwrap();
+        let sampled = combined
+            .sample(AnimationSample {
+                clip: Some(clip),
+                clip_time: time(1.),
+                timeline_time: time(1.),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(sampled.property(&node.translation()), Some([1.; 3]));
+        assert_eq!(sampled.property(&extra.translation()), Some([2.; 3]));
+        assert_eq!(sampled.property(&extra.scale()), Some([3.; 3]));
+        assert!(host
+            .compose(&part, &[(clip, part_clip), (clip, part_clip)], |_| true)
+            .is_err());
+        assert!(host
+            .compose(&part, &[(part_clip, part_clip)], |_| true)
+            .is_err());
+        assert!(host.compose(&host, &[(clip, clip)], |_| true).is_err());
+        assert!(host
+            .sample(AnimationSample {
+                clip: Some(clip),
+                ..Default::default()
+            })
+            .unwrap()
+            .property(&extra.translation())
+            .is_none());
+    }
+    #[test]
     fn event_boundary_override_keeps_own_clock_end_and_other_clock_start() {
         let mut builder = ModelBuilder::new("occurrence");
         let node = builder.add_node(Node::named("bone")).unwrap();
-        let clock = builder.add_clock(SharedClock { period: time(2.) }).unwrap();
+        let clock = builder
+            .add_clock(SharedClock::Repeating { period: time(2.) })
+            .unwrap();
         let clip = builder
             .add_clip(Clip::named("loop").with_duration(time(2.)))
             .unwrap();
@@ -698,7 +883,9 @@ mod tests {
         let node = builder.add_node(Node::named("bone")).unwrap();
         let translation = node.translation();
         let scale = node.scale();
-        let clock = builder.add_clock(SharedClock { period: time(2.) }).unwrap();
+        let clock = builder
+            .add_clock(SharedClock::Repeating { period: time(2.) })
+            .unwrap();
         builder
             .add_timeline_channel(channel(translation.clone(), Clock::Timeline, 4.))
             .unwrap();
@@ -834,7 +1021,9 @@ mod tests {
         let node = builder.add_node(Node::named("node")).unwrap();
         let translation = node.translation();
         let scale = node.scale();
-        let period = builder.add_clock(SharedClock { period: time(2.) }).unwrap();
+        let period = builder
+            .add_clock(SharedClock::Repeating { period: time(2.) })
+            .unwrap();
         builder
             .add_timeline_channel(Channel::Vector3(Track {
                 target: translation.clone(),

@@ -78,6 +78,45 @@ live GPU skinning with CPU-baked geometry. This mode excludes the live hierarchy
 and its effects from rendering and rejects scheduled `--play` transitions. See
 [static pose baking](usage.md) for the snapshot's scope.
 
+## Capture an equipped character
+
+`--character-recipe PATH` assembles a resolved WoW appearance before entering the
+same capture loop. This tool branch accepts modern chunked M2 version 274 and
+FileDataID resources under `ASSET_ROOT/filedata/`; ordinary native model loading
+retains its existing dialect support. The positional model must match the recipe's
+body identity. Add `--physics` for authored secondary motion, or `--bake-pose` for
+static composition snapshots; these modes cannot be combined.
+
+A resolved JSON recipe names the body, visible native geosets, texture replacement
+categories and model parts. A part with `attachment` uses that native M2 role;
+without one it uses checked shared-skeleton matching. Texture values are either
+image FileDataIDs or atlas objects with explicit dimensions and ordered layers:
+
+```json
+{
+  "body": 921844,
+  "geosets": [0],
+  "textures": {
+    "1": {
+      "width": 1024,
+      "height": 512,
+      "layers": [{"image": 997259, "destination": [0, 0, 1024, 512]}]
+    }
+  },
+  "parts": [
+    {"model": 1551025, "slot": "chest", "geosets": [401, 2201], "textures": {"2": 1550866}},
+    {"model": 1533273, "slot": "head", "attachment": 11, "textures": {"2": 1550871}}
+  ]
+}
+```
+
+The example uses external asset identities; game assets are not distributed with
+the crate. Atlas layers may specify a `source` crop and byte `opacity` as well as
+the destination `[x, y, width, height]`. The recipe is a resolved rendering input,
+not an item database. Applications can use `CharacterTables` or their own
+`CharacterDatabase` to produce the equivalent typed definition; see
+[characters and equipment](rendering/characters.md).
+
 ## Compare rendering behavior
 
 Use identical simulation FPS, times, and camera settings when comparing model

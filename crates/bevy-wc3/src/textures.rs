@@ -191,10 +191,18 @@ pub(crate) struct TextureImages {
 impl TextureImages {
     pub(crate) fn resolve(
         model: &Model<'_>,
+        resolver: impl FnMut(TextureRequest<'_, '_>) -> Option<Handle<Image>>,
+    ) -> Self {
+        Self::resolve_selected(model, None, resolver)
+    }
+    pub(crate) fn resolve_selected(
+        model: &Model<'_>,
+        selected: Option<&HashSet<TextureId>>,
         mut resolver: impl FnMut(TextureRequest<'_, '_>) -> Option<Handle<Image>>,
     ) -> Self {
         let variants = texture_requests(model)
             .into_iter()
+            .filter(|request| selected.is_none_or(|selected| selected.contains(&request.id)))
             .filter_map(|request| {
                 let key = request.key();
                 resolver(request).map(|image| (key, image))

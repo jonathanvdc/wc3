@@ -6,6 +6,13 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 #[derive(Debug)]
 pub struct ModelError(pub(crate) String);
 
+impl ModelError {
+    /// Construct a model error from an application resource provider or compiler.
+    pub fn new(message: impl Into<String>) -> Self {
+        Self(message.into())
+    }
+}
+
 impl Display for ModelError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.write_str(&self.0)

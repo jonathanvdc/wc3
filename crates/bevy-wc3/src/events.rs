@@ -146,6 +146,35 @@ impl RuntimeEvents {
         }
         self
     }
+    pub(crate) fn append_remapped(
+        &mut self,
+        source: &Self,
+        indices: &[usize],
+        nodes: &HashMap<NodeId, NodeId>,
+        clips: &HashMap<ClipId, ClipId>,
+    ) {
+        for definition in &source.definitions {
+            let destinations: Vec<_> = match definition.program {
+                EventProgram::Clip(source) => clips
+                    .iter()
+                    .filter_map(|(&host, &part)| {
+                        (source == part).then_some(EventProgram::Clip(host))
+                    })
+                    .collect(),
+                program => vec![program],
+            };
+            for program in destinations {
+                let mut definition = definition.clone();
+                definition.program = program;
+                definition.node = definition.node.map(|id| nodes[&id]);
+                definition.node_index = definition.node_index.map(|i| indices[i]);
+                self.definitions.push(definition);
+            }
+        }
+        self.clocks
+            .extend(source.clocks.iter().map(|(&id, &period)| (id, period)));
+        *self = self.clone().indexed();
+    }
     pub fn compile(model: &Model<'_>) -> Self {
         let node_indices: HashMap<_, _> = model
             .nodes()
@@ -181,7 +210,7 @@ impl RuntimeEvents {
             programs: HashMap::new(),
             clocks: model
                 .clocks()
-                .map(|(id, value)| (id, value.period.as_seconds()))
+                .map(|(id, value)| (id, value.period().as_seconds()))
                 .collect(),
             clips: model
                 .clips()
@@ -520,7 +549,7 @@ impl EventState {
                             let Some(period) = events.clocks.get(&id).copied() else {
                                 continue;
                             };
-                            if definition.time > period {
+                            if period <= 0. || definition.time > period {
                                 continue;
                             }
                             (

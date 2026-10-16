@@ -634,3 +634,251 @@ fn cached_skin_cannot_be_reused_by_an_owner_with_a_different_layout() {
         "supporting document owner layout"
     );
 }
+
+#[test]
+fn model_event_leaves_inherit_skeleton_storage_flags_and_animation_ids() {
+    use wc3::model::formats::m2::records::Event;
+    let mut model = skeleton_model();
+    let mut event = Event::<V272>::default();
+    event.identifier = *b"$FR0";
+    // Reading this external offset as an inline core address would see MD20's
+    // magic followed by its version: decreasing, meaningless timestamps.
+    event
+        .enabled
+        .timeline
+        .replace(
+            0,
+            Array::External(ArrayRef {
+                count: 2,
+                offset: 0,
+            }),
+        )
+        .unwrap();
+    event
+        .enabled
+        .timeline
+        .replace(1, Array::Inline([300_u32, 400].into_iter().collect()))
+        .unwrap();
+    model.core_mut().events.push(event);
+    let root = model.encode_m2().unwrap();
+    let unresolved = Document::<Chunked<V272>>::decode_m2(&root).unwrap();
+    assert!(unresolved.requires_sequence_context());
+    assert!(unresolved.validate().is_err());
+    assert!(unresolved
+        .dependencies(&path())
+        .iter()
+        .any(|dependency| dependency.kind == DependencyKind::Skeleton));
+    assert!(unresolved.encode_m2().is_err());
+    let manual = Bundle::from_model(unresolved.clone()).with_key(path());
+    assert_eq!(
+        manual.validate_complete().unwrap_err().field,
+        "unresolved skeleton sequence storage"
+    );
+    let mut unframed = unresolved.clone();
+    unframed.remove_extensions(*b"SKID");
+    assert!(unframed.into_flat().is_err());
+    let contextual =
+        Document::<Chunked<V272>>::decode_m2_with_sequences(&root, &[true, false]).unwrap();
+    assert!(!contextual.requires_sequence_context());
+    let contextual_bytes = contextual.encode_m2().unwrap();
+    let contextual =
+        Document::<Chunked<V272>>::decode_m2_with_sequences(&contextual_bytes, &[true, false])
+            .unwrap();
+    assert_eq!(
+        contextual.core().events[0]
+            .enabled
+            .timeline
+            .inline(1)
+            .unwrap()
+            .iter()
+            .collect::<Vec<_>>(),
+        vec![300, 400]
+    );
+    let skeleton = skeleton(vec![
+        SkeletonChunk::Bones {
+            bones: vec![Bone::<V272>::new()],
+            lookup: ZeroVec::new(),
+        },
+        SkeletonChunk::Sequences {
+            global_loops: ZeroVec::new(),
+            sequences: vec![
+                sequence::<V272>(7, 0, 0, 0),
+                sequence::<V272>(8, 0, 0x20, 0),
+            ],
+            lookup: ZeroVec::new(),
+            reserved: [0; 8],
+        },
+        SkeletonChunk::AnimationIds(vec![AnimationFileId {
+            animation_id: 7,
+            variation_id: 0,
+            file_id: 99,
+        }]),
+    ])
+    .write()
+    .unwrap();
+    let animation = AnimationFile::Chunked(vec![AnimationStream {
+        tag: *b"AFM2",
+        data: Cow::Owned(animation_bytes()),
+    }])
+    .write()
+    .unwrap();
+    let bundle = Bundle::<Chunked<V272>>::decode(&root, path(), |dependency| {
+        Ok(match dependency.key {
+            FileKey::FileId(10) => Some(skeleton.as_slice()),
+            FileKey::FileId(99) => Some(animation.as_slice()),
+            _ => None,
+        })
+    })
+    .unwrap();
+    let timeline = &bundle.model.core().events[0].enabled.timeline;
+    assert!(matches!(timeline.leaf(0), Some(Array::External(_))));
+    assert!(matches!(timeline.leaf(1), Some(Array::Inline(_))));
+    for (sequence, expected) in [(0, vec![100, 200]), (1, vec![300, 400])] {
+        let times = bundle
+            .resolve_animation_array(
+                timeline.leaf(sequence).unwrap(),
+                &path(),
+                *b"AFM2",
+                sequence,
+            )
+            .unwrap();
+        assert_eq!(times.to_vec(), expected);
+    }
+    let encoded = bundle.encode().unwrap();
+    let restored = Bundle::<Chunked<V272>>::decode(&encoded.model, path(), |dependency| {
+        Ok(encoded.files.get(&dependency.key).map(Vec::as_slice))
+    })
+    .unwrap();
+    let times = restored
+        .resolve_animation_array(
+            restored.model.core().events[0]
+                .enabled
+                .timeline
+                .leaf(0)
+                .unwrap(),
+            &path(),
+            *b"AFM2",
+            0,
+        )
+        .unwrap();
+    assert_eq!(times.to_vec(), vec![100, 200]);
+    let inline = restored.model.core().events[0]
+        .enabled
+        .timeline
+        .inline(1)
+        .unwrap();
+    assert_eq!(inline.iter().collect::<Vec<_>>(), vec![300, 400]);
+}
+
+#[test]
+fn skeleton_attachments_keep_parent_bones_and_use_the_afsa_activation_stream() {
+    use wc3::model::formats::m2::records::Attachment;
+    use wc3::model::{self as semantic, io};
+    let root = skeleton_model().encode_m2().unwrap();
+    let mut attachment = Attachment::<V272> {
+        id: 6,
+        bone_id: 0,
+        position: [1., 2., 3.],
+        ..Default::default()
+    };
+    attachment
+        .animate
+        .base
+        .timeline
+        .replace(
+            0,
+            Array::External(ArrayRef {
+                count: 2,
+                offset: 0,
+            }),
+        )
+        .unwrap();
+    attachment
+        .animate
+        .values
+        .replace(
+            0,
+            ValuesLeaf::Values(Array::External(ArrayRef {
+                count: 2,
+                offset: 16,
+            })),
+        )
+        .unwrap();
+    let child = skeleton(vec![
+        parent_chunk(11),
+        SkeletonChunk::Attachments {
+            attachments: vec![attachment],
+            lookup: ZeroVec::new(),
+        },
+    ])
+    .write()
+    .unwrap();
+    let parent = skeleton(vec![
+        SkeletonChunk::Bones {
+            bones: vec![Bone::<V272>::new()],
+            lookup: ZeroVec::new(),
+        },
+        SkeletonChunk::Sequences {
+            global_loops: ZeroVec::new(),
+            sequences: vec![sequence::<V272>(7, 0, 0, 0)],
+            lookup: ZeroVec::new(),
+            reserved: [0; 8],
+        },
+        SkeletonChunk::AnimationIds(vec![AnimationFileId {
+            animation_id: 7,
+            variation_id: 0,
+            file_id: 99,
+        }]),
+    ])
+    .write()
+    .unwrap();
+    let mut activation = vec![0; 18];
+    activation[4..8].copy_from_slice(&500_u32.to_le_bytes());
+    activation[16..18].copy_from_slice(&[1, 0]);
+    let mut wrong_stream = activation.clone();
+    wrong_stream[16..18].copy_from_slice(&[0, 1]);
+    let animation = AnimationFile::Chunked(vec![
+        AnimationStream {
+            tag: *b"AFSA",
+            data: Cow::Owned(activation),
+        },
+        AnimationStream {
+            tag: *b"AFSB",
+            data: Cow::Owned(wrong_stream),
+        },
+    ])
+    .write()
+    .unwrap();
+    let bundle = Bundle::<Chunked<V272>>::decode(&root, path(), |dependency| {
+        Ok(match dependency.key {
+            FileKey::FileId(10) => Some(child.as_slice()),
+            FileKey::FileId(11) => Some(parent.as_slice()),
+            FileKey::FileId(99) => Some(animation.as_slice()),
+            _ => None,
+        })
+    })
+    .unwrap();
+    let (owner, attachments) = bundle.attachments().unwrap();
+    assert_eq!(*owner, FileKey::FileId(10));
+    assert_eq!(attachments[0].id, 6);
+    let imported = io::m2::import(&bundle, &semantic::conversion::ImportOptions::default())
+        .unwrap()
+        .value;
+    let (feature_id, feature) = imported.features().find(|(_,feature)| matches!(&feature.payload,semantic::profiles::m2::ActorKind::Attachment(value) if value.identity == 6)).unwrap();
+    let node = imported.node(feature.node).unwrap();
+    assert_eq!(node.transform.translation, [1., 2., 3.]);
+    assert_eq!(node.parent, Some(imported.nodes().next().unwrap().0));
+    let clip = imported.clips().next().unwrap().0;
+    let property = semantic::profiles::m2::properties::attachment::ENABLED.bind(feature_id);
+    let program = semantic::AnimationProgram::compile(&imported);
+    for (seconds, expected) in [(0.25, true), (0.75, false)] {
+        let sample = program
+            .sample(semantic::AnimationSample {
+                clip: Some(clip),
+                clip_time: semantic::Time::seconds(seconds).unwrap(),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(sample.property(&property), Some(expected));
+    }
+}
