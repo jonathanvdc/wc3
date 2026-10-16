@@ -393,6 +393,36 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
     assert_eq!(core.particles[0].drag, 0.25);
     assert_eq!(core.ribbons[0].edges_per_second, 12.5);
     assert_eq!(core.ribbons[0].edge_lifetime, 1.5);
+    let (ribbon_id, ribbon) = imported
+        .value
+        .features()
+        .find(|(_, feature)| matches!(feature.payload, mp::ActorKind::Ribbon(_)))
+        .unwrap();
+    let mp::ActorKind::Ribbon(definition) = &ribbon.payload else {
+        unreachable!()
+    };
+    assert_eq!(definition.geometry.axis, sm::Axis::PositiveZ);
+    let roundtrip = io::m2::import(&exported, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (_, ribbon) = roundtrip
+        .features()
+        .find(|(_, feature)| matches!(feature.payload, mp::ActorKind::Ribbon(_)))
+        .unwrap();
+    let mp::ActorKind::Ribbon(definition) = &ribbon.payload else {
+        unreachable!()
+    };
+    assert_eq!(definition.geometry.axis, sm::Axis::PositiveZ);
+    let mut changed = imported.value.feature(ribbon_id).unwrap().payload.clone();
+    let mp::ActorKind::Ribbon(definition) = &mut changed else {
+        unreachable!()
+    };
+    definition.geometry.axis = sm::Axis::PositiveY;
+    let mut edited = imported.value.clone();
+    edited
+        .edit(|builder| builder.set_feature(ribbon_id, changed))
+        .unwrap();
+    assert!(io::m2::plan::<m2::Flat<m2::V256>>(&edited, &ExportOptions::default()).is_err());
     assert_eq!(core.collision_indices.get(2), Some(2));
     assert_eq!(core.collision_normals.get(0), Some([0., 0., 1.]));
 }

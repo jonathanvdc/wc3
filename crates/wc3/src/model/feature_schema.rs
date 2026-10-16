@@ -7,7 +7,7 @@ use crate::model::{
     scene, AimedCamera, AmbientDiffuseLight, Animated, Attachment, Camera, CameraConvention, Light,
     NodeFeature, ParticleEmitter, Resource, RibbonEmitter,
 };
-use crate::model::{AttachmentPoint, EventSource, ExternalAttachment};
+use crate::model::{AttachmentPoint, Axis, EventSource, ExternalAttachment};
 use crate::model::{
     ParticleDefinition, ParticleScalar, ParticleTrigger, ProgrammedRibbon, TrailAtlasSlot,
     TrailEmitter,
@@ -643,6 +643,8 @@ pub enum AtlasCellRef<'view> {
 /// Shared section-based ribbon controls, borrowing complete model-clock animations.
 #[derive(Clone, Copy, Debug)]
 pub struct EdgeStripRef<'view> {
+    /// Emitter-local direction of positive cross-section extent.
+    pub axis: &'view Axis,
     /// RGB tint of emitted trail geometry.
     pub color: &'view Animated<[f32; 3]>,
     /// Fractional opacity.
@@ -662,6 +664,7 @@ impl<'view, 'data> RibbonView<'view, 'data> {
     pub fn edge_strip(self) -> Option<EdgeStripRef<'view>> {
         match self {
             Self::Trail(v) => Some(EdgeStripRef {
+                axis: &v.geometry.axis,
                 color: &v.appearance.color,
                 opacity: &v.appearance.opacity,
                 height: [&v.geometry.height_above, &v.geometry.height_below],
@@ -673,6 +676,7 @@ impl<'view, 'data> RibbonView<'view, 'data> {
                 },
             }),
             Self::Segmented(v) => Some(EdgeStripRef {
+                axis: &v.geometry.axis,
                 color: &v.appearance.color,
                 opacity: &v.appearance.opacity,
                 height: [&v.geometry.height_above, &v.geometry.height_below],
@@ -681,6 +685,7 @@ impl<'view, 'data> RibbonView<'view, 'data> {
                 atlas_cell: AtlasCellRef::U32(&v.appearance.texture_slot),
             }),
             Self::Edge(v) => Some(EdgeStripRef {
+                axis: &v.geometry.axis,
                 color: &v.appearance.color,
                 opacity: &v.appearance.opacity,
                 height: [&v.geometry.height_above, &v.geometry.height_below],

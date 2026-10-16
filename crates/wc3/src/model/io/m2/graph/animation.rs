@@ -3,7 +3,6 @@ use super::*;
 use crate::model::io::materialize;
 use semantic::profiles::M2;
 use semantic::{Clock, Curve, CurveValue, Property, Time};
-use zerovec::ZeroVec;
 
 pub(super) fn curve<'a, 'data: 'a, D: Dialect, T, U: CurveValue + 'a>(
     source: &'a Bundle<'data, D>,
@@ -325,37 +324,6 @@ pub(super) fn time_ms(time: Time, context: &mut Context) -> Result<u32, Error> {
     Ok(rounded as u32)
 }
 
-pub(super) fn resolve<'a, 'data: 'a, D: Dialect, T: Value>(
-    source: &'a Bundle<'data, D>,
-    array: Array<'a, T>,
-    sequence: usize,
-) -> Result<ZeroVec<'a, T>, Error> {
-    match array {
-        Array::Inline(v) => Ok(v),
-        Array::External(reference) if reference.count == 0 => Ok(ZeroVec::new()),
-        Array::External(reference) => {
-            let seq = source
-                .model
-                .core()
-                .sequences
-                .get(sequence)
-                .ok_or_else(|| Error::new("m2.camera.sequence", "missing sequence"))?;
-            let key=source.model.dependencies(&source.key).into_iter().find(|d|matches!(d.kind,native::DependencyKind::Animation{animation_id,variation_id}if animation_id==seq.id&&variation_id==seq.variation_index)).ok_or_else(||Error::new("m2.camera.animation","missing external animation identity"))?.key;
-            let Some(File::Animation(animation)) = source.file(&key) else {
-                return Err(Error::new(
-                    "m2.camera.animation",
-                    "missing external animation file",
-                ));
-            };
-            let data = animation
-                .stream(*b"AFM2")
-                .ok_or_else(|| Error::new("m2.camera.animation", "missing model stream"))?;
-            Ok(Decoder::new(data, D::VERSION, ModelFlags::default())
-                .array::<T>(reference)
-                .map_err(failure)?)
-        }
-    }
-}
 pub(in super::super) fn spline_curve<'a, 'data: 'a, D: Dialect, T: Value + CurveValue + 'a>(
     source: &'a Bundle<'data, D>,
     track: &'a native::records::SplineTrack<'data, T, D::Layout>,
@@ -367,28 +335,17 @@ where
     T::ULE: Send + Sync,
     <[T; 3] as zerovec::ule::AsULE>::ULE: Send + Sync,
 {
-    use native::records::SplineStorage as _;
-    let global = track.base.global_sequence;
-    let leaf = if global != u16::MAX || D::VERSION < 264 {
-        0
-    } else {
-        sequence
-    };
-    let Some(times) = track.base.timeline.leaf(leaf) else {
-        return Ok(None);
-    };
-    let times = resolve(source, times, sequence)?;
+    let resolved = source
+        .resolve_spline_track(track, &source.key, *b"AFM2", sequence)
+        .map_err(failure)?;
+    let global = resolved.global_sequence;
+    let times = resolved.timestamps;
     if times.is_empty() {
         return Ok(None);
     }
-    let values = resolve(
-        source,
-        track
-            .values
-            .leaf(leaf)
-            .ok_or_else(|| Error::new("m2.camera.spline", "missing value leaf"))?,
-        sequence,
-    )?;
+    let ResolvedValues::Splines(values) = resolved.values else {
+        unreachable!("camera spline resolver returns tangent triplets")
+    };
     let range = if global == u16::MAX {
         track
             .base
@@ -401,6 +358,12 @@ where
     };
     let first = range.as_ref().map_or(0, |r| r.start);
     let len = range.map_or(times.len(), |r| r.end - r.start);
+    if first.checked_add(len).is_none_or(|end| end > times.len()) {
+        return Err(Error::new(
+            "m2.camera.spline",
+            "timestamp range exceeds array",
+        ));
+    }
     let timestamps = materialize(len, move |i| {
         Time::seconds(
             (f64::from(times.get(first + i).unwrap())

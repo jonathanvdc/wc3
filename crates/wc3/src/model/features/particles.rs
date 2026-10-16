@@ -128,7 +128,7 @@ pub type ParticleDefinition<'a> = ParticleComposition<
 /// Distinct simulation and appearance rules after common controls are extracted.
 #[derive(Clone, Debug)]
 pub enum ParticleDetails<'a> {
-    /// External-resource particles with degree-based emission angles.
+    /// External-resource particles retaining their source emission-angle convention.
     Model(ModelParticle<'a>),
     /// Sprite particles with staged appearance and an atlas.
     Atlas(Box<AtlasParticle>),
@@ -142,9 +142,9 @@ pub enum ParticleDetails<'a> {
 pub struct ModelParticle<'a> {
     /// Model or image resource instantiated per particle.
     pub resource: Cow<'a, str>,
-    /// Emission-cone longitude in degrees.
+    /// Source longitude control, retained even when the renderer does not consume it.
     pub longitude: Animated<f32>,
-    /// Emission-cone latitude in degrees.
+    /// Emission-cone latitude in radians for Warcraft III model particles.
     pub latitude: Animated<f32>,
     /// Interpret the resource as a model.
     pub model_resource: bool,

@@ -3,7 +3,9 @@ use super::*;
 use crate::model::materials::model_shader::rasterization;
 use crate::model::materials::state::PassState;
 use crate::model::LightEmission;
-use crate::model::{AngleTrailControls, SurfaceTrailRendering, TrailAppearance, TrailGeometry};
+use crate::model::{
+    AngleTrailControls, Axis, SurfaceTrailRendering, TrailAppearance, TrailGeometry,
+};
 use zerovec::ZeroVec;
 fn placement<'a>(
     builder: &mut GraphBuilder<'a>,
@@ -232,6 +234,7 @@ where
                 texture_slot: Animated::constant(initial(&value.texture_slot).unwrap_or(0)),
             },
             geometry: TrailGeometry {
+                axis: Axis::PositiveZ,
                 height_above: Animated::constant(initial(&value.height_above).unwrap_or(0.)),
                 height_below: Animated::constant(initial(&value.height_below).unwrap_or(0.)),
             },
@@ -483,7 +486,9 @@ where
             let Some(times) = value.enabled.timeline.leaf(leaf) else {
                 continue;
             };
-            let times = animation::resolve(source, times, seq)?;
+            let times = source
+                .resolve_animation_array(times, &source.key, *b"AFM2", seq)
+                .map_err(failure)?;
             let range = if global == u16::MAX {
                 value
                     .enabled

@@ -156,12 +156,21 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
         node.flags.set_camera_anchored(source.camera_anchored);
         match source.billboard {
             Billboard::None => {}
-            Billboard::Spherical => node.flags.set_billboarded(true),
+            Billboard::Spherical => {
+                node.flags.set_billboarded(true);
+                let locks = source.controls.spherical_axis_locks;
+                node.flags.set_billboard_lock_x(locks.x);
+                node.flags.set_billboard_lock_y(locks.y);
+                node.flags.set_billboard_lock_z(locks.z);
+            }
             Billboard::Locked { enabled, x, y, z } => {
-                node.flags.set_billboarded(enabled);
-                node.flags.set_billboard_lock_x(x);
-                node.flags.set_billboard_lock_y(y);
-                node.flags.set_billboard_lock_z(z);
+                if enabled && (x || y || z) {
+                    node.flags.set_billboard_lock_x(x);
+                    node.flags.set_billboard_lock_y(y);
+                    node.flags.set_billboard_lock_z(z);
+                } else if x || y || z || enabled {
+                    encoder.context.unsupported("node.billboard", "Warcraft III cannot encode inactive axis declarations or an active lock without an axis")?;
+                }
             }
         }
         if !source.visible {

@@ -7,11 +7,11 @@ use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::materials::layered::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
-use crate::model::AttachmentPointDefinition;
 use crate::model::{
     AtlasParticle, AtlasParticleRendering, AtlasParticleShape, ModelParticle, ParticleEmission,
     ParticleLifetime, ParticleMotion, StagedParticleAppearance,
 };
+use crate::model::{AttachmentPointDefinition, Axis};
 use crate::model::{Clock, ClockId, Event, MaterialId, ModelBuilder, NodeId, TextureId, Time};
 use crate::model::{GravityTrailControls, LayeredTrailRendering, TrailAppearance, TrailGeometry};
 use std::collections::BTreeMap;
@@ -199,6 +199,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         {
             let payload = profile::Node::Ribbon(profile::Ribbon {
                 geometry: TrailGeometry {
+                    axis: Axis::PositiveY,
                     height_above: a!(height_above, HEIGHT_ABOVE),
                     height_below: a!(height_below, HEIGHT_BELOW),
                 },

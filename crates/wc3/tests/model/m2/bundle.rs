@@ -7,7 +7,10 @@ use wc3::model::formats::m2::{
     chunks::{AnimationFileId, Chunk},
     codec::{Array, ArrayRef},
     companions::{AnimationFile, AnimationStream, Skeleton, SkeletonChunk},
-    records::{Bone, Sequence, TimelineStorage, TrackValues, ValuesLeaf, ValuesStorage},
+    records::{
+        Bone, Sequence, SplineStorage, SplineTrack, TimelineStorage, TrackValues, ValuesLeaf,
+        ValuesStorage,
+    },
     Bundle, Chunked, DependencyKind, Document, File, FileKey, Flat, ModelLayout, ResolvedValues,
     ZeroVec, V264, V272,
 };
@@ -181,6 +184,55 @@ fn aliases_select_terminal_identity_but_requested_leaf_offsets() {
     };
     assert_eq!(alias.get(0), Some([11.0, 12.0, 13.0]));
     assert_eq!(terminal.get(0), Some([21.0, 22.0, 23.0]));
+}
+
+#[test]
+fn camera_splines_follow_terminal_animation_identity_with_requested_alias_leaf() {
+    let mut model = raw_model();
+    model.core_mut().sequences = vec![
+        sequence::<V264>(5, 3, 0x40, 1),
+        sequence::<V264>(7, 0, 0, 0),
+    ];
+    let mut spline = SplineTrack::<f32, V264>::default();
+    spline.base.interpolation = Interpolation::Hermite;
+    for (index, time_offset, value_offset) in [(0, 0, 16), (1, 4, 32)] {
+        spline
+            .base
+            .timeline
+            .replace(
+                index,
+                Array::External(ArrayRef {
+                    count: 1,
+                    offset: time_offset,
+                }),
+            )
+            .unwrap();
+        spline
+            .values
+            .replace(
+                index,
+                Array::External(ArrayRef {
+                    count: 1,
+                    offset: value_offset,
+                }),
+            )
+            .unwrap();
+    }
+    let mut bundle = Bundle::from_model(model).with_key(path());
+    bundle.insert(
+        root_animation_key(),
+        File::Animation(AnimationFile::Raw(Cow::Owned(animation_bytes()))),
+    );
+    for (sequence, time, triplet) in [(0, 100, [11., 12., 13.]), (1, 200, [21., 22., 23.])] {
+        let resolved = bundle
+            .resolve_spline_track(&spline, &path(), *b"AFM2", sequence)
+            .unwrap();
+        assert_eq!(resolved.timestamps.get(0), Some(time));
+        let ResolvedValues::Splines(values) = resolved.values else {
+            panic!("spline triplets lost")
+        };
+        assert_eq!(values.get(0), Some(triplet));
+    }
 }
 
 #[test]

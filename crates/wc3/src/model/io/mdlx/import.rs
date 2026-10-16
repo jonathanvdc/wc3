@@ -76,18 +76,18 @@ where
             rotation: !node.flags.dont_inherit_rotation(),
             scale: !node.flags.dont_inherit_scaling(),
         };
-        value.billboard = if node.flags.billboard_lock_x()
+        value.billboard = if node.flags.billboarded() {
+            Billboard::Spherical
+        } else if node.flags.billboard_lock_x()
             || node.flags.billboard_lock_y()
             || node.flags.billboard_lock_z()
         {
             Billboard::Locked {
-                enabled: node.flags.billboarded(),
+                enabled: true,
                 x: node.flags.billboard_lock_x(),
                 y: node.flags.billboard_lock_y(),
                 z: node.flags.billboard_lock_z(),
             }
-        } else if node.flags.billboarded() {
-            Billboard::Spherical
         } else {
             Billboard::None
         };
@@ -343,8 +343,17 @@ where
         mesh.controls = controls;
         builder.set_mesh(id, mesh)?;
     }
-    for id in ids {
+    for (id, source_node) in ids.into_iter().zip(source_nodes.iter()) {
         let controls = profile::NodeControls {
+            spherical_axis_locks: if source_node.flags.billboarded() {
+                profile::BillboardAxisLocks {
+                    x: source_node.flags.billboard_lock_x(),
+                    y: source_node.flags.billboard_lock_y(),
+                    z: source_node.flags.billboard_lock_z(),
+                }
+            } else {
+                Default::default()
+            },
             unmapped_flags: native_profile
                 .node_controls
                 .iter()

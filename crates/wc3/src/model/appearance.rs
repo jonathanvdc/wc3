@@ -3,6 +3,8 @@
 pub mod diablo3;
 /// Diablo IV indexed appearance variants.
 pub mod diablo4;
+mod resolution;
+pub use resolution::MaterialSelection;
 
 use crate::model::profiles::Either;
 use crate::model::{Error, Link, Look, LookId, MaterialSlotId, Scope, ValidateLinks};

@@ -1,7 +1,7 @@
 use super::{CameraView, FeatureSchema, FeatureView, LightView, ParticlesView};
 use crate::model::profiles::{m2, mdlx, Either};
 use crate::model::LightEmission;
-use crate::model::{scene, Animated, NodeFeature};
+use crate::model::{scene, Animated, Axis, NodeFeature};
 use crate::model::{AngleTrailControls, SurfaceTrailRendering, TrailAppearance, TrailGeometry};
 use crate::model::{ParticleEmission, ParticleLifetime, ParticleMotion};
 use std::ptr;
@@ -97,6 +97,7 @@ fn ribbon_components_preserve_distinct_rate_and_atlas_integer_domains() {
         .edge_strip()
         .unwrap();
     assert!(ptr::eq(view.color, &segmented.appearance.color));
+    assert_eq!(*view.axis, Axis::PositiveY);
     assert!(ptr::eq(view.opacity, &segmented.appearance.opacity));
     assert_eq!(view.height[0].default, 3.5);
     assert_eq!(*view.lifetime_seconds, 2.5);
@@ -133,6 +134,7 @@ fn ribbon_components_preserve_distinct_rate_and_atlas_integer_domains() {
         geometry: TrailGeometry {
             height_above: Animated::constant(6.),
             height_below: Animated::constant(2.),
+            axis: Axis::PositiveZ,
         },
         emission_rate: 12.5,
         lifetime: 3.25,

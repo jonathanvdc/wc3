@@ -2,6 +2,7 @@
 use super::animation::{animated, animated_spline, fixed_alpha, time_ms};
 use super::*;
 use crate::model::materials::model_shader::material_flags;
+use crate::model::Axis;
 use zerovec::ZeroVec;
 fn anchor(
     model: &Graph<'_>,
@@ -143,6 +144,12 @@ where
                 })
             }
             profile::ActorKind::Ribbon(value) => {
+                if value.geometry.axis != Axis::PositiveZ {
+                    context.unsupported(
+                        "m2.ribbon.geometry.axis",
+                        "M2 ribbon cross-sections require the native local positive Z axis",
+                    )?;
+                }
                 let (bone, position) = anchor(model, attached.node, nodes)?;
                 let texture_indices = value
                     .rendering

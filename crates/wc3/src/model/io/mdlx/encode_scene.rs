@@ -4,7 +4,7 @@ use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::materials::layered::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
-use crate::model::{FeatureId, MaterialId, MeshId, NodeId, TextureId};
+use crate::model::{Axis, FeatureId, MaterialId, MeshId, NodeId, TextureId};
 use native::scene::Node;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -207,6 +207,12 @@ pub(super) fn write<'a, T: Dialect>(
                 particles2.push(record);
             }
             profile::Node::Ribbon(source) => {
+                if source.geometry.axis != Axis::PositiveY {
+                    encoder.context.unsupported(
+                        "ribbon.geometry.axis",
+                        "Warcraft III ribbon cross-sections extend along local positive Y",
+                    )?;
+                }
                 let mut record = native::RibbonEmitter::new(node);
                 record.height_above =
                     encoder.value(&source.geometry.height_above, Ok, "ribbon.height_above")?;

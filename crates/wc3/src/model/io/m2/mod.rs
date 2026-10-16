@@ -7,7 +7,7 @@ use crate::model::formats::m2::{
 };
 use crate::model::Model;
 use native::chunks::Chunk;
-use native::codec::{Array, Decoder, Value};
+use native::codec::{Array, Value};
 use native::records::{
     BatchFlags, BlendMode, Bone, BoneFlags, CameraKind, Interpolation as NativeInterpolation,
     LegacyTiming, LightKind, MaterialFlags, ModelFlags, PackedParticleBlend,

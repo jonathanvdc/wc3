@@ -66,7 +66,7 @@ mod resources;
 pub use resources::*;
 pub mod appearance;
 pub use appearance::{
-    AppearanceSchema, DrawAppearanceSchema, DrawLooks, SingleLook, UniversalAppearance,
+    AppearanceSchema, DrawAppearanceSchema, DrawLooks, MaterialSelection, SingleLook, UniversalAppearance,
 };
 mod binding;
 pub use binding::*;

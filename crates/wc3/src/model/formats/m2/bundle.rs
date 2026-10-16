@@ -7,7 +7,8 @@ use super::companions::{
     SupportsExternalSkins,
 };
 use super::records::{
-    ArrayVisitor, Bone, Sequence, TimelineStorage, Track, ValuesLeaf, ValuesStorage, VisitArrays,
+    ArrayVisitor, Bone, Sequence, SplineStorage, SplineTrack, TimelineStorage, Track, ValuesLeaf,
+    ValuesStorage, VisitArrays,
 };
 use super::records::{Interpolation, ModelFlags, SequenceFlags};
 use super::resources::{Dependency, DependencyKind, FileKey};
@@ -452,6 +453,63 @@ impl<'data, D: Dialect> Bundle<'data, D> {
             values,
         })
     }
+    /// Resolves a camera spline using the same owner, sequence aliases and
+    /// external-animation streams as ordinary animation tracks.
+    pub fn resolve_spline_track<'view, T: Value, L: ModelLayout>(
+        &'view self,
+        track: &'view SplineTrack<'data, T, L>,
+        owner: &FileKey,
+        stream: [u8; 4],
+        sequence: usize,
+    ) -> Result<ResolvedTrack<'view, T>, ReadError>
+    where
+        [T; 3]: Value,
+    {
+        if self.owner_context(owner).0 != L::KIND {
+            return Err(ReadError::invalid(0, "track owner layout"));
+        }
+        if L::KIND.version() >= 264
+            && track.base.global_sequence == u16::MAX
+            && sequence >= self.sequences_for(owner).len()
+        {
+            return Err(ReadError::invalid(0, "animation sequence index"));
+        }
+        let index = if L::KIND.version() < 264 || track.base.global_sequence != u16::MAX {
+            0
+        } else {
+            sequence
+        };
+        let timestamps = match track.base.timeline.leaf(index) {
+            Some(values) => self.resolve_leaf(values, owner, stream, sequence)?,
+            None => ZeroVec::new(),
+        };
+        let values = match track.values.leaf(index) {
+            Some(values) => self.resolve_leaf(values, owner, stream, sequence)?,
+            None => ZeroVec::new(),
+        };
+        if timestamps.len() != values.len() {
+            return Err(ReadError::invalid(0, "timestamp/value count mismatch"));
+        }
+        Ok(ResolvedTrack {
+            interpolation: track.base.interpolation,
+            global_sequence: track.base.global_sequence,
+            timestamps,
+            values: ResolvedValues::Splines(values),
+        })
+    }
+
+    /// Resolves a timestamp or value leaf using the owning document's terminal
+    /// animation identity, while retaining the requested leaf's encoded offsets.
+    pub fn resolve_animation_array<'view, T: Value>(
+        &'view self,
+        values: Array<'view, T>,
+        owner: &FileKey,
+        stream: [u8; 4],
+        sequence: usize,
+    ) -> Result<ZeroVec<'view, T>, ReadError> {
+        self.resolve_leaf(values, owner, stream, sequence)
+    }
+
     fn resolve_leaf<'view, T: Value>(
         &'view self,
         values: Array<'view, T>,

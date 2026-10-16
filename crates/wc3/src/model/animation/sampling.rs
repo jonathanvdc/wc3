@@ -201,17 +201,22 @@ impl<'view, 'data, P: Profile> SampledAnimation<'view, 'data, P> {
         if track.target != *property {
             return None;
         }
-        let time = match track.clock {
-            Clock::Clip => times.clip,
-            Clock::Timeline => times.timeline,
-            Clock::Shared(id) => Time::seconds(
-                times
-                    .shared
-                    .as_seconds()
-                    .rem_euclid(self.clocks.get(&id)?.as_seconds()),
-            )
-            .ok()?,
-        };
+        let time =
+            if let Some((_, time)) = times.occurrence.filter(|(clock, _)| *clock == track.clock) {
+                time
+            } else {
+                match track.clock {
+                    Clock::Clip => times.clip,
+                    Clock::Timeline => times.timeline,
+                    Clock::Shared(id) => Time::seconds(
+                        times
+                            .shared
+                            .as_seconds()
+                            .rem_euclid(self.clocks.get(&id)?.as_seconds()),
+                    )
+                    .ok()?,
+                }
+            };
         if let (Clock::Timeline, Some((start, end))) = (track.clock, self.timeline_interval) {
             track.curve.sample_in(time, start..=end)
         } else {
@@ -224,6 +229,7 @@ impl<'view, 'data, P: Profile> SampledAnimation<'view, 'data, P> {
             clip: self.clip_time,
             timeline: self.timeline_time,
             shared: self.shared_time,
+            occurrence: None,
         }
     }
     /// Borrows this programme selection at different clock values, without allocating.
@@ -246,6 +252,7 @@ impl<'view, 'data, P: Profile> SampledAnimation<'view, 'data, P> {
                 clip,
                 timeline: timeline_time,
                 shared: shared_time,
+                occurrence: None,
             },
         }
     }
@@ -298,7 +305,10 @@ impl<'view, 'data, P: Profile> SampledAnimation<'view, 'data, P> {
             };
             Some(SampledTrack {
                 track,
-                time,
+                time: times
+                    .occurrence
+                    .filter(|(clock, _)| *clock == track.clock)
+                    .map_or(time, |(_, time)| time),
                 period,
                 origin,
                 interval,
@@ -335,6 +345,7 @@ struct SampleTimes {
     clip: Time,
     timeline: Time,
     shared: Time,
+    occurrence: Option<(Clock, Time)>,
 }
 fn normalize_clip(time: Time, policy: Option<(Time, bool)>) -> Time {
     let Some((duration, looping)) = policy else {
@@ -357,6 +368,12 @@ pub struct RetimedAnimation<'sample, 'view, 'data, P: Profile = Universal> {
     times: SampleTimes,
 }
 impl<P: Profile> RetimedAnimation<'_, '_, '_, P> {
+    /// Samples an occurrence's own clock at its exact authored key, including
+    /// inclusive loop-end keys. Other clocks keep their normal wrapped times.
+    pub fn at_occurrence(mut self, clock: Clock, time: Time) -> Self {
+        self.times.occurrence = Some((clock, time));
+        self
+    }
     /// Evaluates the same selected programmes at the overridden clocks.
     pub fn property<T: ChannelValue>(&self, property: &Property<T, P>) -> Option<T> {
         self.selection.property_at(property, self.times)
@@ -583,6 +600,39 @@ mod tests {
             curve: Curve::linear([time(0.), time(2.)], [[0.; 3], [end; 3]]).unwrap(),
             clock,
         })
+    }
+    #[test]
+    fn event_boundary_override_keeps_own_clock_end_and_other_clock_start() {
+        let mut builder = ModelBuilder::new("occurrence");
+        let node = builder.add_node(Node::named("bone")).unwrap();
+        let clock = builder.add_clock(SharedClock { period: time(2.) }).unwrap();
+        let clip = builder
+            .add_clip(Clip::named("loop").with_duration(time(2.)))
+            .unwrap();
+        builder
+            .add_channel(clip, channel(node.translation(), Clock::Clip, 4.))
+            .unwrap();
+        builder
+            .add_shared_channel(channel(node.scale(), Clock::Shared(clock), 8.))
+            .unwrap();
+        let model = builder.finish().unwrap();
+        let sampled = model
+            .animation_sample(AnimationSample {
+                clip: Some(clip),
+                ..Default::default()
+            })
+            .unwrap();
+        let end = sampled
+            .at_times(time(2.), time(2.), time(2.))
+            .at_occurrence(Clock::Clip, time(2.));
+        assert_eq!(end.property(&node.translation()), Some([4.; 3]));
+        assert_eq!(end.property(&node.scale()), Some([0.; 3]));
+        assert_eq!(end.track(&node.translation()).unwrap().time, time(2.));
+        let shared_end = sampled
+            .at_times(time(2.), time(2.), time(2.))
+            .at_occurrence(Clock::Shared(clock), time(2.));
+        assert_eq!(shared_end.property(&node.translation()), Some([0.; 3]));
+        assert_eq!(shared_end.property(&node.scale()), Some([8.; 3]));
     }
     #[test]
     fn alias_local_clock_and_owned_program_survive_source_drop() {

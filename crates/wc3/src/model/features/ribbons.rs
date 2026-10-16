@@ -1,6 +1,6 @@
 //! Composed ribbon emission, geometry, appearance, and rendering programs.
 use crate::model::profiles::{m2, m3, mdlx};
-use crate::model::{Animated, MaterialId, TextureId};
+use crate::model::{Animated, Axis, MaterialId, TextureId};
 
 /// A persistent trail assembled from successive cross sections.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -21,12 +21,24 @@ pub struct TrailComposition<R, S, A, B, C> {
 /// Broad trail composition selected by the Universal profile.
 pub type TrailEmitter = TrailComposition<f64, TrailAtlasSlot, u32, TrailRendering, TrailControls>;
 /// Animated upper and lower extent of a generated trail.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TrailGeometry {
+    /// Signed emitter-local direction of positive cross-section extent.
+    /// This is independent of the model's up axis and world gravity.
+    pub axis: Axis,
     /// Extent above the center line.
     pub height_above: Animated<f32>,
     /// Extent below the center line.
     pub height_below: Animated<f32>,
+}
+impl Default for TrailGeometry {
+    fn default() -> Self {
+        Self {
+            axis: Axis::PositiveY,
+            height_above: Default::default(),
+            height_below: Default::default(),
+        }
+    }
 }
 /// Animated trail appearance and atlas layout.
 #[derive(Clone, Debug, Default, PartialEq)]
