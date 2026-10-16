@@ -117,7 +117,12 @@ pub(crate) fn populate_model(
     let mut draw_entities = Vec::new();
     for draw in model.draws.iter() {
         let material = material_cache
-            .entry((draw.material_id, draw.pass, draw.mesh_state))
+            .entry((
+                draw.material_id,
+                draw.pass,
+                draw.mesh_state,
+                draw.world_state,
+            ))
             .or_insert_with(|| {
                 if draw.animation.is_animated() {
                     let handle = materials.add(draw.material.clone());
@@ -128,7 +133,12 @@ pub(crate) fn populate_model(
                         .material_cache
                         .lock()
                         .unwrap_or_else(|poisoned| poisoned.into_inner())
-                        .entry((draw.material_id, draw.pass, draw.mesh_state))
+                        .entry((
+                            draw.material_id,
+                            draw.pass,
+                            draw.mesh_state,
+                            draw.world_state,
+                        ))
                         .or_insert_with(|| materials.add(draw.material.clone()))
                         .clone()
                 }
@@ -194,7 +204,7 @@ pub(crate) fn populate_model(
             let id = liquid
                 .material_id
                 .expect("compiled liquid surface has material identity");
-            let key = (id, liquid.pass, MeshMaterialState::Plain);
+            let key = (id, liquid.pass, MeshMaterialState::Plain, [0; 4]);
             let material = material_cache
                 .entry(key)
                 .or_insert_with(|| {

@@ -124,6 +124,12 @@ pub(crate) fn mesh_alpha_mode(authored: AlphaMode, opacity: f32) -> AlphaMode {
 }
 
 impl SurfaceAnimation {
+    /// Procedural material motion needs clock updates even without any channels.
+    pub(crate) fn uses_shared_time(&self) -> bool {
+        self.uv_scroll.iter().flatten().any(|v| *v != 0.)
+            || self.third_uv_scroll.iter().any(|v| *v != 0.)
+    }
+
     pub(crate) fn with_mesh(
         mut self,
         untinted: Color,
@@ -149,7 +155,7 @@ impl SurfaceAnimation {
                         || t.rotation.property.is_some()
                         || t.scale.property.is_some()
                 })
-            || self.uv_scroll.iter().flatten().any(|v| *v != 0.)
+            || self.uses_shared_time()
             || self.hd.as_ref().is_some_and(HdAnimation::is_animated)
             || self.mesh.as_ref().is_some_and(MeshAnimation::is_animated)
             || self
@@ -224,10 +230,20 @@ impl SurfaceAnimation {
             ));
             changed |= replace(&mut material.extension.combiner.uv_transform, next);
         }
-        if let Some(transform) = &self.third_transform {
+        if self.third_transform.is_some() || self.third_uv_scroll != [0.; 2] {
+            let base = self
+                .third_transform
+                .as_ref()
+                .map_or(Affine2::IDENTITY, |transform| {
+                    sampled_transform(sample, transform)
+                });
             changed |= replace(
                 &mut material.extension.combiner.third_transform,
-                Mat3::from(sampled_transform(sample, transform)),
+                Mat3::from(scrolling_transform(
+                    base,
+                    self.third_uv_scroll,
+                    sample.shared_time().as_seconds() as f32,
+                )),
             );
         }
         if let Some(transform) = &self.fourth_transform {

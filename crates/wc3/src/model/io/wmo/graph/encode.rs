@@ -36,9 +36,9 @@ fn write_model<'a, D: Dialect>(
     let controls = model.metadata();
     let mut flags = RootFlags(controls.options.unclassified.bits());
     flags.set_no_vertex_attenuation(controls.options.no_vertex_attenuation);
-    flags.set_unified_render_path(controls.options.unified_rendering);
+    flags.set_unified_render_path(controls.options.skip_ambient_in_vertex_color);
     flags.set_liquid_type_database_id(controls.options.database_liquids);
-    flags.set_preserve_vertex_alpha(controls.options.preserve_vertex_alpha);
+    flags.set_vertex_color_alpha_only(controls.options.vertex_color_alpha_only);
     flags.set_default_max_lod(controls.options.default_max_lod);
     root.header_mut().wmo_id = controls.id;
     root.header_mut().ambient_color = super::rgba(controls.ambient);

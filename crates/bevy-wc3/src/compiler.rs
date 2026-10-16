@@ -4,7 +4,7 @@ use super::coordinates::{axis, basis};
 use super::effects::RuntimeParticles;
 use super::events::RuntimeEvents;
 use super::features::RuntimeFeatures;
-use super::geometry::{apply_skin, compile_geometry_with_uvs, whole_geometry};
+use super::geometry::{apply_skin, compile_geometry_with_color, whole_geometry};
 use super::lod::LodDefinition;
 use super::material::compile_material_with_images;
 use super::material::mesh_alpha_mode;
@@ -15,6 +15,7 @@ use super::pose::BillboardConvention;
 use super::skin_bounds::compile_skin_bounds;
 use super::textures::TextureImages;
 use super::world::WorldRuntime;
+use super::world_lighting::{illumination, ColorAdjustment};
 use super::{
     CompiledModel, DrawSource, ModelAsset, ModelMaterial, RenderDiagnostic, TextureRequest,
 };
@@ -305,6 +306,17 @@ pub fn compile_model_with_options(
             .mesh(instance.mesh)
             .ok_or_else(|| ModelError("instance geometry is absent".into()))?;
         let skin_id = instance.skin.or(source.skin());
+        let color_adjustment = ColorAdjustment::new(model, instance);
+        if let Some(message) = color_adjustment
+            .as_ref()
+            .and_then(ColorAdjustment::diagnostic)
+        {
+            diagnostics.push(RenderDiagnostic {
+                feature: None,
+                material: None,
+                message: format!("world region {instance_id:?}: {message}"),
+            });
+        }
         let implicit = instance.draws.is_empty()
             && match source.controls.as_ref() {
                 Some(MeshControls::D3(value)) => value.material_slot.is_some(),
@@ -319,6 +331,7 @@ pub fn compile_model_with_options(
                     .resolve_instance_material(instance_id, options.material)
                     .map_err(|error| ModelError(error.to_string()))?,
                 whole_geometry(source)?,
+                None,
             )]
         } else {
             instance
@@ -338,11 +351,12 @@ pub fn compile_model_with_options(
                         Some(draw.subset),
                         material,
                         subset,
+                        draw.controls.as_ref(),
                     ))
                 })
                 .collect::<Result<Vec<_>, ModelError>>()?
         };
-        for (draw_source, subset_id, material_id, subset) in selections {
+        for (draw_source, subset_id, material_id, subset, draw_controls) in selections {
             for (pass, surface) in materials[&material_id].iter().enumerate() {
                 let key = (
                     instance.mesh,
@@ -351,16 +365,22 @@ pub fn compile_model_with_options(
                     surface.secondary_coordinate,
                     surface.third_coordinate,
                     skin_id,
+                    color_adjustment.as_ref().map(|_| instance_id),
                 );
                 let meshes = if let Some(meshes) = geometry_cache.get(&key) {
                     meshes
                 } else {
-                    let mut parts = compile_geometry_with_uvs(
+                    let mut parts = compile_geometry_with_color(
                         source,
                         &subset,
                         surface.coordinate,
                         surface.secondary_coordinate,
                         surface.third_coordinate,
+                        |vertex, color| {
+                            color_adjustment
+                                .as_ref()
+                                .map_or(color, |adjustment| adjustment.color(vertex, color))
+                        },
                     )?;
                     if let Some(id) = skin_id {
                         let skin = model
@@ -382,12 +402,16 @@ pub fn compile_model_with_options(
                         .collect::<Result<Vec<_>, ModelError>>()?;
                     geometry_cache.entry(key).or_insert(parts)
                 };
+                let mut extension = surface.state.clone();
+                let (ambient, lighting) = illumination(model, instance, draw_controls, material_id);
+                let world_state = extension.set_world_illumination(ambient, lighting);
                 for mesh in meshes {
                     draws.push(RuntimeDraw {
                         instance: instance_id,
                         source: draw_source,
                         mesh_id: instance.mesh,
                         material_id,
+                        world_state,
                         mesh_state: mesh_animation
                             .get(&instance.mesh)
                             .map_or(MeshMaterialState::Plain, |value| value.state(instance.mesh)),
@@ -408,7 +432,7 @@ pub fn compile_model_with_options(
                                 }
                                 material
                             },
-                            extension: surface.state.clone(),
+                            extension: extension.clone(),
                         },
                         animation: Arc::new(surface.animation.clone().with_mesh(
                             surface.material.base_color,
@@ -522,7 +546,14 @@ pub fn compile_model_with_options(
         diagnostics.push(RenderDiagnostic { feature: None, material: None, message: format!("system {id:?} remains in its authored/default state; application simulation is not active") });
     }
     let lod = Arc::new(LodDefinition::compile(&draws, world.runtime.lod_levels()));
-    let has_animation = !model.timeline_channels().is_empty()
+    let has_animation = draws.iter().any(|draw| draw.animation.uses_shared_time())
+        || liquids.iter().any(|liquid| {
+            liquid
+                .surface
+                .as_ref()
+                .is_some_and(|(_, animation)| animation.uses_shared_time())
+        })
+        || !model.timeline_channels().is_empty()
         || !model.shared_channels().is_empty()
         || model.clips().any(|(_, clip)| !clip.channels().is_empty())
         || model

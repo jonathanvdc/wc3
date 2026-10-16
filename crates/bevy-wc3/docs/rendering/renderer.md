@@ -35,7 +35,7 @@ guide](../usage.md#bake-a-static-pose).
 
 `ModelMaterial` extends Bevy `StandardMaterial` with authored blend/depth states
 and supported native combiners. Classic layered surfaces, [M2 texture combinations](m2-materials.md),
-basic WMO surfaces, [M3 common layers](m3-materials.md), and known Diablo roles map into that pipeline.
+[WMO surfaces](wmo-materials.md), [M3 common layers](m3-materials.md), and known Diablo roles map into that pipeline.
 Unsupported combinations remain diagnostic fallbacks. Unlit and unfogged controls use
 Bevy's corresponding behavior; mesh priority is a sort/depth bias, not a complete
 game-specific pass ordering scheme.
@@ -46,13 +46,13 @@ samplers and color-space distinctions without changing shared source images.
 Resource replacement belongs to the application resolver; there is no implicit game
 database or team-selection policy.
 
-Basic WMO shaders 0, 4, and 16 preserve diffuse interpretation and treat MOCV RGB as
-baked illumination instead of an albedo multiplier. The baked contribution adds to
-PBR illumination; Bevy dynamic lights remain active. Primary diffuse UV scrolling
-uses the instance shared clock. Secondary scroll controls are retained for shaders
-whose additional texture layers remain unsupported. Interior/exterior transition
-alpha is not interpreted. Shader 4 ignores texture alpha while retaining
-material/tint alpha. Native lighting fidelity remains unverified.
+WMO surfaces support established layered diffuse/emissive programmes, independent
+UV streams and scroll clocks, and generated reflection coordinates. Separate
+vertex-color streams control texture mixtures and indoor/outdoor lighting.
+Native color preparation and regional ambient contributions feed the composed
+surface through Bevy's emissive input, alongside ordinary scene lighting. Complex
+terrain, window, LOD and modern extended paths remain partial or unsupported; see
+[WMO materials](wmo-materials.md) for the bounded inventory and lighting limits.
 
 ## Scene features and effects
 
@@ -85,7 +85,7 @@ coverage; focused guides state the implemented behavior and remaining limits.
 | Area | Current boundary |
 | --- | --- |
 | Geometry | More than eight skin influences fails; skinned bounds update conservatively from contributing joints. No generated simplification or per-view skeletal pose. |
-| Surfaces | M2 illumination/constant programmes and the modern six-binding guild layout, complex WMO combinations, many programmed M3 surfaces, and external Diablo shaders need additional interpretation. |
+| Surfaces | M2 illumination/constant programmes and the modern six-binding guild layout, specialized WMO terrain/window/LOD and extended combinations, many programmed M3 surfaces, and external Diablo shaders need additional interpretation. |
 | Scene features | Bevy lighting differs from native falloff and regional illumination. Unsupported feature hooks expose IDs/kinds, not complete owned definitions. |
 | Effects | Spline/bone generators, advanced M2 texture programmes and modulation-gain controls, and several programmed simulations remain unsupported; external effects need providers. |
 | Fidelity | Implemented motion, material, billboard, and native shader behavior is not a promise of exact game rendering. |

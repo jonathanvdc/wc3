@@ -33,7 +33,7 @@ pub struct RenderDiagnostic {
     pub message: String,
 }
 
-pub(crate) type MaterialCacheKey = (MaterialId, usize, MeshMaterialState);
+pub(crate) type MaterialCacheKey = (MaterialId, usize, MeshMaterialState, [u32; 4]);
 pub(crate) type MaterialCache = HashMap<MaterialCacheKey, Handle<ModelMaterial>>;
 
 #[derive(Clone)]
@@ -71,6 +71,7 @@ pub(crate) struct RuntimeDraw<M> {
     pub(crate) mesh_id: MeshId,
     pub(crate) material_id: MaterialId,
     pub(crate) mesh_state: MeshMaterialState,
+    pub(crate) world_state: [u32; 4],
     pub(crate) pass: usize,
     pub(crate) node: usize,
     pub(crate) skin: Option<usize>,
@@ -290,6 +291,7 @@ impl CompiledModel {
                     mesh_id: draw.mesh_id,
                     material_id: draw.material_id,
                     mesh_state: draw.mesh_state,
+                    world_state: draw.world_state,
                     pass: draw.pass,
                     node: draw.node,
                     skin: draw.skin,

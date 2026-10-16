@@ -91,8 +91,8 @@ variant.
 Portable, ambient/diffuse, WMO, and M3 lights expose ordinary Bevy scene lights and
 `ModelLight` metadata. Root `ModelLightSettings` controls conversion scales
 and suppression. Common diffuse color, intensity, range, and supported shadow flags
-animate with the instance. Authored ambient terms remain metadata; the renderer does
-not overwrite scene ambient lighting. Native WMO cone and orientation conventions,
+animate with the instance. Ambient terms authored on individual light features
+remain metadata; the renderer does not overwrite scene ambient lighting. Native WMO cone and orientation conventions,
 cookies, flicker, and regional light-set activation remain uninterpreted. M3's
 separate specular response, decay law, and light LOD controls also remain available
 without an exact lighting equivalent.
@@ -186,7 +186,9 @@ authored material is interpreted through the standard material compiler. A liqui
 without a resolved material exposes its mesh and `WorldLiquidSurface`
 identity for an application material provider; the renderer does not infer a shader
 from an external liquid-type database. Environment sampling exposes regional fog and
-ambient weights without changing global Bevy lighting or fog. Native regional
+ambient weights without changing global Bevy lighting or fog. [WMO surfaces](wmo-materials.md)
+interpret baked vertex lighting, draw lighting classes and root/region ambient
+contributions independently of those application-owned scene resources. Native regional
 lighting fidelity remains unverified.
 
 ## Native resources
@@ -224,10 +226,10 @@ and runtime as application loading.
 
 Native loading preserves native-family vocabulary rather than promising the same
 shader coverage for every family. MDLX common layers and effects, M2 common surfaces
-and age-driven sprites, WMO groups/basic surfaces/liquid grids, M3 common
+and age-driven sprites, WMO groups/layered surfaces/vertex lighting/liquid grids, M3 common
 surfaces (including packed normals and constrained AO/specular), lights and selected programmes, and known Diablo roles each have separate
 interpretation limits. Native loading, generic geometry, and basic surface
-interpretation are separate capabilities from full game-specific rendering. M2 illumination/constant programmes and the modern six-binding guild layout, complex WMO
+interpretation are separate capabilities from full game-specific rendering. M2 illumination/constant programmes and the modern six-binding guild layout, specialized WMO terrain/window/LOD and extended
 combiners, programmed M3 surfaces, external
 Diablo shaders, and external effect programmes require additional interpreters.
 These gaps appear in model diagnostics.

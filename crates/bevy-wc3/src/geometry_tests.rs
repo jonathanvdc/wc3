@@ -356,3 +356,45 @@ fn third_texture_route_preserves_corner_domain_and_omits_unused_streams() {
         .unwrap();
     assert!(error.0.contains("texture coordinate set 3 is absent"));
 }
+
+#[test]
+fn second_color_projects_corner_values_independently_of_primary_illumination() {
+    let mut source = mesh(
+        &[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
+        Topology::Triangles([[0, 1, 2]].into_iter().collect()),
+    );
+    for (set, domain, values) in [
+        (0, AttributeDomain::Mesh, vec![[0.1, 0.2, 0.3, 0.4]]),
+        (
+            1,
+            AttributeDomain::Corner,
+            vec![[0., 0., 0., 0.], [1., 0., 0., 0.5], [0., 1., 0., 1.]],
+        ),
+    ] {
+        source
+            .geometry
+            .attributes
+            .insert(Attribute {
+                semantic: AttributeSemantic::Color(set),
+                domain,
+                values: AttributeValues::Vector4(values.into_iter().collect()),
+            })
+            .unwrap();
+    }
+    let parts = compile_geometry(&source, &whole_geometry(&source).unwrap(), 0).unwrap();
+    assert_eq!(
+        parts[0].mesh.attribute(Mesh::ATTRIBUTE_COLOR),
+        Some(&VertexAttributeValues::Float32x4(vec![
+            [0.1, 0.2, 0.3, 0.4];
+            3
+        ]))
+    );
+    assert_eq!(
+        parts[0].mesh.attribute(SECOND_COLOR),
+        Some(&VertexAttributeValues::Float32x4(vec![
+            [0., 0., 0., 0.],
+            [1., 0., 0., 0.5],
+            [0., 1., 0., 1.]
+        ]))
+    );
+}

@@ -131,7 +131,7 @@ pub(super) fn beta<'a>(
     unknown.set_no_vertex_attenuation(false);
     unknown.set_unified_render_path(false);
     unknown.set_liquid_type_database_id(false);
-    unknown.set_preserve_vertex_alpha(false);
+    unknown.set_vertex_color_alpha_only(false);
     unknown.set_default_max_lod(false);
     unknown.set_has_group_lods(false);
     builder.set_bounds(Some(super::bounds(header.bounds)));
@@ -142,9 +142,9 @@ pub(super) fn beta<'a>(
         options: WorldOptions {
             default_max_lod: flags.default_max_lod(),
             no_vertex_attenuation: flags.no_vertex_attenuation(),
-            unified_rendering: flags.unified_render_path(),
+            skip_ambient_in_vertex_color: flags.unified_render_path(),
             database_liquids: flags.liquid_type_database_id(),
-            preserve_vertex_alpha: flags.preserve_vertex_alpha(),
+            vertex_color_alpha_only: flags.vertex_color_alpha_only(),
             unclassified: unknown.bits().into(),
         },
     });

@@ -24,14 +24,20 @@
 #endif  // BINDLESS
 
 #import "embedded://bevy_wc3/shaders/combiner.wgsl"::{combiner,secondary,secondary_sampler,tertiary,tertiary_sampler,fourth,fourth_sampler,compose}
-struct World { flags: vec4<u32>, };
-@group(#{MATERIAL_BIND_GROUP}) @binding(110) var<uniform> world: World;
+#import "embedded://bevy_wc3/shaders/world_composition.wgsl"::{world,world_color}
 
 struct HdUniform { fresnel_color: vec4<f32>, fresnel: vec4<f32>, maps: vec4<u32>, };
 @group(#{MATERIAL_BIND_GROUP}) @binding(103) var<uniform> hd: HdUniform;
 
 // Share composition with the color pass, including masks that are not opacity.
 fn composed_alpha(in:VertexOutput)->f32 {
+    if world.composition.x!=0u {
+        var layer_alpha=1.0;
+#ifdef WORLD_LAYER_ALPHA
+        layer_alpha=in.world_layer_alpha;
+#endif
+        return world_color(in,layer_alpha).color.a;
+    }
     var uv0=vec2(0.0); var uv1=vec2(0.0); var uv2=vec2(0.0);
 #ifdef VERTEX_UVS_A
     uv0=(pbr_bindings::material.uv_transform*vec3(in.uv,1.0)).xy;
@@ -134,7 +140,7 @@ fn fragment(
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK
             && pbr_bindings::material.base_color.a < pbr_bindings::material.alpha_cutoff { discard; }
-    } else if combiner.mode.x == 0u && particle.mode.x == 0u {
+    } else if combiner.mode.x == 0u && particle.mode.x == 0u && world.composition.x == 0u {
         pbr_prepass_functions::prepass_alpha_discard(to_bevy(in));
     } else {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
@@ -253,7 +259,7 @@ fn fragment(vertex_output: VertexOutput) {
     if world.flags.x != 0u && world.flags.y != 0u {
         let alpha_mode=flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode==pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK && pbr_bindings::material.base_color.a < pbr_bindings::material.alpha_cutoff {discard;}
-    } else if combiner.mode.x == 0u && particle.mode.x == 0u {
+    } else if combiner.mode.x == 0u && particle.mode.x == 0u && world.composition.x == 0u {
         pbr_prepass_functions::prepass_alpha_discard(to_bevy(in));
     } else {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;

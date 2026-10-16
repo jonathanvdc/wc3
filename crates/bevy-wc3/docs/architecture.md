@@ -70,7 +70,9 @@ interval traversal. `lod.rs` selects authored geometry from projected rest bound
 `skin_bounds.rs` refreshes joint-contribution bounds only for changed input
 transforms or matching mesh/bind asset events, deferring hidden work until reveal;
 `world.rs` retains groups, placement sets, portals, liquid grids, and environmental
-integration data.
+integration data. `world_lighting.rs` prepares static vertex illumination and
+portal-distance transitions before geometry projection; draw-local regional lighting
+participates in material sharing without taking ownership of Bevy scene lighting.
 
 Generic feature hooks preserve source identities and kinds. Unsupported complete
 payloads are not retained on spawned entities; applications needing them must

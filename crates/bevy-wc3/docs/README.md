@@ -45,6 +45,8 @@ then choose a topic:
   coverage, texture and palette requirements, and bounded unresolved families.
 - [Reforged materials](rendering/reforged-materials.md): texture roles,
   surface animation, UV sets, and Bevy shading integration.
+- [WMO materials](rendering/wmo-materials.md): layered texture programmes, native
+  vertex-light preparation, regional ambient contributions and scene limits.
 - [M3 materials](rendering/m3-materials.md): packed normals, basic occlusion,
   constant specular approximations and remaining layer programmes.
 - [Model lights](rendering/lights.md): animated scene lights, conversion

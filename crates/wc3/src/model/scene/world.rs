@@ -15,12 +15,12 @@ pub struct WorldOptions {
     pub default_max_lod: bool,
     /// Disable distance attenuation of vertex colors.
     pub no_vertex_attenuation: bool,
-    /// Use unified rendering behavior.
-    pub unified_rendering: bool,
+    /// Authored vertex RGB excludes the root ambient colour.
+    pub skip_ambient_in_vertex_color: bool,
     /// Interpret liquid selectors as database identifiers.
     pub database_liquids: bool,
-    /// Preserve authored vertex opacity.
-    pub preserve_vertex_alpha: bool,
+    /// Preserve authored vertex RGB while fixing non-transition lighting alpha.
+    pub vertex_color_alpha_only: bool,
     /// Root controls with unresolved meanings.
     pub unclassified: WorldFlags,
 }

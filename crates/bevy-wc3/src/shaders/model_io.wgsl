@@ -48,6 +48,9 @@ struct VertexOutput {
 #ifdef MODEL_EDGE_FADE
     @location(11) edge_opacity: f32,
 #endif
+#ifdef WORLD_LAYER_ALPHA
+    @location(12) world_layer_alpha: f32,
+#endif
 }
 #else
 #import bevy_pbr::forward_io
@@ -80,6 +83,9 @@ struct VertexOutput {
 #endif
 #ifdef MODEL_EDGE_FADE
     @location(11) edge_opacity: f32,
+#endif
+#ifdef WORLD_LAYER_ALPHA
+    @location(12) world_layer_alpha: f32,
 #endif
 }
 #endif
@@ -154,6 +160,9 @@ fn from_bevy(in: prepass_io::VertexOutput) -> VertexOutput {
 #ifdef MODEL_EDGE_FADE
     out.edge_opacity=1.0;
 #endif
+#ifdef WORLD_LAYER_ALPHA
+    out.world_layer_alpha=1.0;
+#endif
     return out;
 }
 #endif
@@ -211,6 +220,9 @@ fn from_bevy(in: forward_io::VertexOutput) -> VertexOutput {
 #endif
 #ifdef MODEL_EDGE_FADE
     out.edge_opacity=1.0;
+#endif
+#ifdef WORLD_LAYER_ALPHA
+    out.world_layer_alpha=1.0;
 #endif
     return out;
 }

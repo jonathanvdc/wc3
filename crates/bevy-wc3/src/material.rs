@@ -65,6 +65,8 @@ pub(crate) enum Blend {
     AdditiveAlpha,
     Modulate,
     Modulate2x,
+    ModulateAdd,
+    InverseSourceAlphaAdd,
     Premultiplied,
 }
 
@@ -104,6 +106,20 @@ pub struct ModelMaterialExtension {
 }
 
 impl ModelMaterialExtension {
+    pub(crate) fn set_world_illumination(&mut self, ambient: Vec3, lighting: u32) -> [u32; 4] {
+        if self.world.flags.x == 0 {
+            return [0; 4];
+        }
+        self.world.ambient = ambient.extend(0.);
+        self.world.flags.z = lighting;
+        [
+            ambient.x.to_bits(),
+            ambient.y.to_bits(),
+            ambient.z.to_bits(),
+            lighting,
+        ]
+    }
+
     /// Current application palette for a guild programme, or `None` for other surfaces.
     pub fn guild_palette(&self) -> Option<GuildPalette> {
         matches!(self.combiner.mode.x, 24..=26).then(|| GuildPalette {
@@ -133,8 +149,11 @@ impl ModelMaterialExtension {
 
 #[derive(Clone, Copy, Debug, Default, ShaderType)]
 struct WorldUniform {
-    // x = world vertex illumination, y = ignore diffuse-map alpha.
+    // x: diffuse composition programme, y: sampled image count.
+    composition: UVec4,
+    // x = world vertex illumination, y = ignore diffuse-map alpha, z = lighting class (transition/interior/exterior).
     flags: UVec4,
+    ambient: Vec4,
 }
 
 #[derive(Clone, Copy, Debug, ShaderType)]
@@ -279,16 +298,22 @@ pub struct ModelMaterialKey {
     depth_write: Option<bool>,
     generated_coordinates: bool,
     third_uv: bool,
+    world_layer_alpha: bool,
     edge_fade: bool,
 }
 
 impl From<&ModelMaterialExtension> for ModelMaterialKey {
     fn from(state: &ModelMaterialExtension) -> Self {
         Self {
+            world_layer_alpha: matches!(
+                state.world.composition.x,
+                7 | 10 | 12 | 13 | 14 | 16 | 18 | 19 | 20
+            ),
             edge_fade: state.combiner.clip.y != 0.0,
             third_uv: state.particle.mode.x != 0
                 || (matches!(state.combiner.coordinates.w, 1 | 3)
-                    || state.combiner.additional_coordinates.x == 3),
+                    || state.combiner.additional_coordinates.x == 3
+                    || state.world.composition.y > 2),
             generated_coordinates: state.combiner.coordinates.x != 0
                 || state.combiner.coordinates.y != 0
                 || state.combiner.coordinates.w == 1,
@@ -311,6 +336,8 @@ impl ModelMaterialKey {
             Blend::AdditiveAlpha => Some((BlendFactor::SrcAlpha, BlendFactor::One)),
             Blend::Modulate => Some((BlendFactor::Zero, BlendFactor::Src)),
             Blend::Modulate2x => Some((BlendFactor::Dst, BlendFactor::Src)),
+            Blend::ModulateAdd => Some((BlendFactor::Dst, BlendFactor::One)),
+            Blend::InverseSourceAlphaAdd => Some((BlendFactor::OneMinusSrcAlpha, BlendFactor::One)),
             Blend::Premultiplied => Some((BlendFactor::One, BlendFactor::OneMinusSrcAlpha)),
         };
         *target = factors.map(|(src_factor, dst_factor)| BlendState {
@@ -319,7 +346,19 @@ impl ModelMaterialKey {
                 dst_factor,
                 operation: BlendOperation::Add,
             },
-            alpha: BlendComponent::OVER,
+            alpha: match self.blend {
+                Some(Blend::ModulateAdd) => BlendComponent {
+                    src_factor: BlendFactor::DstAlpha,
+                    dst_factor: BlendFactor::One,
+                    operation: BlendOperation::Add,
+                },
+                Some(Blend::InverseSourceAlphaAdd) => BlendComponent {
+                    src_factor: BlendFactor::OneMinusSrcAlpha,
+                    dst_factor: BlendFactor::One,
+                    operation: BlendOperation::Add,
+                },
+                _ => BlendComponent::OVER,
+            },
         });
     }
 }
@@ -354,6 +393,7 @@ impl MaterialExtension for ModelMaterialExtension {
             layout,
             key.bind_group_data.generated_coordinates || key.bind_group_data.edge_fade,
             key.bind_group_data.third_uv,
+            key.bind_group_data.world_layer_alpha,
         )?;
         if key.bind_group_data.edge_fade {
             descriptor.vertex.shader_defs.push("MODEL_EDGE_FADE".into());
@@ -397,6 +437,7 @@ pub(crate) struct SurfaceAnimation {
     secondary_transform: Option<TextureTransform>,
     uv_scroll: [[f32; 2]; 2],
     third_transform: Option<TextureTransform>,
+    third_uv_scroll: [f32; 2],
     fourth_transform: Option<TextureTransform>,
     input_weights: [Option<Animated<f32>>; 4],
     emissive_gain: Option<Animated<f32>>,

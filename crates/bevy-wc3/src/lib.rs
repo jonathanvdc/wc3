@@ -58,6 +58,7 @@ mod skin_bounds;
 mod textures;
 mod transition;
 mod world;
+mod world_lighting;
 /// World of Warcraft character and equipment assembly.
 pub mod wow;
 

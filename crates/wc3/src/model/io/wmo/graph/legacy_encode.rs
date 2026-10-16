@@ -182,9 +182,9 @@ fn beta_model<'a>(
     }
     let mut flags = RootFlags(controls.options.unclassified.bits());
     flags.set_no_vertex_attenuation(controls.options.no_vertex_attenuation);
-    flags.set_unified_render_path(controls.options.unified_rendering);
+    flags.set_unified_render_path(controls.options.skip_ambient_in_vertex_color);
     flags.set_liquid_type_database_id(controls.options.database_liquids);
-    flags.set_preserve_vertex_alpha(controls.options.preserve_vertex_alpha);
+    flags.set_vertex_color_alpha_only(controls.options.vertex_color_alpha_only);
     flags.set_default_max_lod(controls.options.default_max_lod);
     root.header_mut().tail.set_flags(flags);
     skybox(controls, &mut root, &mut context)?;

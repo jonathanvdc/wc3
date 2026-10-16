@@ -1,5 +1,5 @@
 //! Direct mesh projection, preserving face and corner attribute correspondence.
-use super::mesh_attributes::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT, EXTRA_TEXCOORD};
+use super::mesh_attributes::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT, EXTRA_TEXCOORD, SECOND_COLOR};
 use crate::ModelError;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{PrimitiveTopology, VertexAttributeValues};
@@ -265,12 +265,26 @@ pub(super) fn compile_geometry(
     compile_geometry_with_uvs(mesh, subset, coordinate, None, None)
 }
 
+#[cfg(test)]
 pub(super) fn compile_geometry_with_uvs(
     mesh: &ModelMesh<'_>,
     subset: &DrawSubset,
     coordinate: u32,
     secondary: Option<u32>,
     third: Option<u32>,
+) -> Result<Vec<GeometryPart>, ModelError> {
+    compile_geometry_with_color(mesh, subset, coordinate, secondary, third, |_, color| color)
+}
+
+/// Apply instance-specific color interpretation while original vertex identity
+/// is still available, before projection and complete-record interning.
+pub(super) fn compile_geometry_with_color(
+    mesh: &ModelMesh<'_>,
+    subset: &DrawSubset,
+    coordinate: u32,
+    secondary: Option<u32>,
+    third: Option<u32>,
+    color: impl Fn(usize, [f32; 4]) -> [f32; 4],
 ) -> Result<Vec<GeometryPart>, ModelError> {
     let topology = mesh
         .connectivity(subset.selection.connectivity)
@@ -332,6 +346,7 @@ pub(super) fn compile_geometry_with_uvs(
             let mut secondary_uvs = Vec::new();
             let mut third_uvs = Vec::new();
             let mut colors = Vec::new();
+            let mut second_colors = Vec::new();
             let mut tangents = Vec::new();
             for &c in &corners {
                 if let Some((AttributeValues::Vector3(values), index)) =
@@ -362,7 +377,12 @@ pub(super) fn compile_geometry_with_uvs(
                 if let Some((AttributeValues::Vector4(values), index)) =
                     attribute(mesh, subset, &AttributeSemantic::Color(0), c)?
                 {
-                    colors.push(values.get(index).unwrap());
+                    colors.push(color(c.vertex, values.get(index).unwrap()));
+                }
+                if let Some((AttributeValues::Vector4(values), index)) =
+                    attribute(mesh, subset, &AttributeSemantic::Color(1), c)?
+                {
+                    second_colors.push(values.get(index).unwrap());
                 }
                 if coordinate == 0 {
                     if let Some(binding) = subset.tangents {
@@ -395,6 +415,9 @@ pub(super) fn compile_geometry_with_uvs(
             }
             if !colors.is_empty() {
                 output.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
+            }
+            if !second_colors.is_empty() {
+                output.insert_attribute(SECOND_COLOR, second_colors);
             }
             if secondary.is_some() {
                 output.insert_attribute(Mesh::ATTRIBUTE_UV_1, secondary_uvs);

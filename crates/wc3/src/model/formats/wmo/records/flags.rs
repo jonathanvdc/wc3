@@ -15,8 +15,8 @@ bitfield! {
     pub unified_render_path, set_unified_render_path: 1;
     /// Returns or changes the liquid type database id bit.
     pub liquid_type_database_id, set_liquid_type_database_id: 2;
-    /// Returns or changes the has group lods bit.
-    pub preserve_vertex_alpha, set_preserve_vertex_alpha: 3;
+    /// Preserve vertex RGB while correcting non-transition lighting alpha.
+    pub vertex_color_alpha_only, set_vertex_color_alpha_only: 3;
     /// Returns or changes authored group LOD availability.
     pub has_group_lods, set_has_group_lods: 4;
     /// Returns or changes default maximum LOD selection.

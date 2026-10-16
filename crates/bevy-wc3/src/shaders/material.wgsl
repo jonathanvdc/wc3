@@ -38,8 +38,7 @@
 #endif
 
 #import "embedded://bevy_wc3/shaders/combiner.wgsl"::{combiner,secondary,secondary_sampler,tertiary,tertiary_sampler,fourth,fourth_sampler,compose}
-struct World { flags: vec4<u32>, };
-@group(#{MATERIAL_BIND_GROUP}) @binding(110) var<uniform> world: World;
+#import "embedded://bevy_wc3/shaders/world_composition.wgsl"::{world,world_color}
 #import bevy_pbr::pbr_bindings
 #import "embedded://bevy_wc3/shaders/hd.wgsl"::apply_hd
 
@@ -74,9 +73,11 @@ fn fragment(
     // World colors encode irradiance and a lighting transition, not albedo or
     // opacity. Keep the authored source intact in the mesh for other consumers.
     var baked_diffuse = vec3(0.0);
+    var world_vertex_alpha = 1.0;
 #ifdef VERTEX_COLORS
     if world.flags.x != 0u {
         baked_diffuse = in.color.rgb;
+        world_vertex_alpha = in.color.a;
         in.color = vec4(1.0);
     }
 #endif
@@ -84,14 +85,31 @@ fn fragment(
     // generate a PbrInput struct from the StandardMaterial bindings
     var pbr_input = pbr_input_from_standard_material(to_bevy(in), is_front);
 
-    if world.flags.x != 0u {
-        if world.flags.y != 0u {
-            // Shader 4 ignores sampled map alpha. Explicit material opacity and
-            // instance geometry tint remain authored StandardMaterial inputs.
-            pbr_input.material.base_color.a = pbr_bindings::material.base_color.a;
+    if world.flags.x != 0u && world.flags.y != 0u {
+        pbr_input.material.base_color.a = pbr_bindings::material.base_color.a;
+    }
+
+    if world.composition.x != 0u {
+        var layer_alpha=1.0;
+#ifdef WORLD_LAYER_ALPHA
+        layer_alpha=in.world_layer_alpha;
+#endif
+        let composed = world_color(in, layer_alpha);
+        pbr_input.material.base_color = composed.color;
+        if (pbr_input.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_UNLIT_BIT)!=0u {
+            pbr_input.material.base_color=vec4(composed.color.rgb+composed.emission,composed.color.a);
+        } else {
+            pbr_input.material.emissive = vec4(pbr_input.material.emissive.rgb+composed.emission,pbr_input.material.emissive.a);
         }
+    }
+
+    if world.flags.x != 0u {
+        var transition=world_vertex_alpha;
+        if world.flags.z==1u {transition=0.0;}
+        if world.flags.z==2u {transition=1.0;}
+        let illumination=2.0*baked_diffuse+world.ambient.rgb*(1.0-transition);
         pbr_input.material.emissive = vec4(pbr_input.material.emissive.rgb
-            + pbr_input.material.base_color.rgb * baked_diffuse,
+            + pbr_input.material.base_color.rgb * illumination,
             pbr_input.material.emissive.a);
     }
 

@@ -48,17 +48,14 @@ fn basic_world_shaders_keep_black_baked_light_separate_from_surface_albedo() {
             pass.state.world.flags,
             UVec4::new(1, (shader == 4) as u32, 0, 0)
         );
-        assert!(pass
-            .diagnostics
-            .iter()
-            .any(|value| value.contains("vertex RGB supplies additive baked")));
+        assert_eq!(pass.state.world.composition, UVec4::ZERO);
         assert!(!pass
             .diagnostics
             .iter()
             .any(|value| value.contains("needs its authored texture/specular combiner")));
     }
     let unsupported = world_surface::Material {
-        shader: Some(6),
+        shader: Some(8),
         ..Default::default()
     };
     let pass = compile_world(&model, &unsupported, &TextureImages::default()).unwrap();

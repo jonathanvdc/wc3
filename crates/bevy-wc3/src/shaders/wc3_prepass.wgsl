@@ -59,6 +59,9 @@ struct Vertex {
 #ifdef VERTEX_UVS_C
     @location(10) uv_c: vec2<f32>,
 #endif
+#ifdef WORLD_LAYER_ALPHA
+    @location(11) second_color: vec4<f32>,
+#endif
 };
 // WC3 END: vertex input.
 
@@ -177,6 +180,9 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 #endif
 #ifdef VERTEX_UVS_C
     out.uv_c = vertex.uv_c;
+#endif
+#ifdef WORLD_LAYER_ALPHA
+    out.world_layer_alpha = vertex.second_color.a;
 #endif // VERTEX_UVS_B
 
 #ifdef MODEL_GENERATED_COORDS
@@ -200,6 +206,7 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 #endif
 #ifdef VERTEX_UVS_B
     if combiner.coordinates.y!=0u {out.uv_b=generated;}
+    if combiner.coordinates.y==2u {out.uv_b=reflect(normalize(view_position),view_normal).xy;}
 #endif
 #ifdef VERTEX_UVS_C
     if combiner.coordinates.w==1u {out.uv_c=generated;}

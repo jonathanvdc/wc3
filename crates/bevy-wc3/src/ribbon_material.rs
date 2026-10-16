@@ -28,7 +28,7 @@ pub(crate) fn effect_state(material: &ModelMaterial) -> Option<EffectState> {
         Blend::AdditiveAlpha => EffectBlend::AdditiveAlpha,
         Blend::Modulate => EffectBlend::Modulate,
         Blend::Modulate2x => EffectBlend::Modulate2x,
-        Blend::Premultiplied => return None,
+        Blend::Premultiplied | Blend::ModulateAdd | Blend::InverseSourceAlphaAdd => return None,
     };
     if state.combiner.clip.x > 0. && !matches!(blend, EffectBlend::Opaque | EffectBlend::Cutout) {
         return None;
