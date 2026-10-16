@@ -4,7 +4,7 @@
 use bevy::asset::{io::AssetSourceBuilder, AssetApp};
 use bevy::prelude::*;
 use bevy_mpq::{MpqAssetReader, OverlayAssetReader, OverlayMount};
-use bevy_wc3::{Wc3BevyPlugin, Wc3ModelAsset, Wc3ModelInstance};
+use bevy_wc3::{UniversalModelAsset, UniversalModelInstance, Wc3BevyPlugin};
 use std::env::args;
 use std::fs::File;
 use wc3::mpq::{ReadOptions, SharedArchive};
@@ -51,17 +51,17 @@ fn main() {
 }
 
 fn setup(mut commands: Commands, assets: Res<AssetServer>, path: Res<ModelPath>) {
-    let model: Handle<Wc3ModelAsset> = assets.load(path.0.clone());
-    commands.spawn((Wc3ModelInstance::new(model), Transform::default()));
+    let model: Handle<UniversalModelAsset> = assets.load(path.0.clone());
+    commands.spawn((UniversalModelInstance::new(model), Transform::default()));
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(300.0, -500.0, 250.0).looking_at(Vec3::new(0.0, 0.0, 60.0), Vec3::Z),
+        Transform::from_xyz(300.0, 250.0, 500.0).looking_at(Vec3::new(0.0, 60.0, 0.0), Vec3::Y),
     ));
     commands.spawn((
         DirectionalLight {
             illuminance: 5_000.0,
             ..default()
         },
-        Transform::from_xyz(100.0, -100.0, 200.0).looking_at(Vec3::ZERO, Vec3::Z),
+        Transform::from_xyz(100.0, 200.0, 100.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 }

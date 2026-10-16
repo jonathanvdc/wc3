@@ -1,84 +1,51 @@
-# Model cameras
+# Authored cameras
 
-Warcraft III models can contain authored cameras with animated eye, target,
-roll, and lens properties. The renderer exposes these views and can play them
-on an application-owned Bevy camera. This guide covers binding a view, evaluating
-its tracks, and coordinating camera playback with the rest of the scene.
+Authored views can be sampled through `UniversalInstance` or bound to an
+application-owned perspective `Camera3d`. Loading a model never creates or activates
+a view. Camera feature IDs come from the prepared model's `cameras()` iterator and
+belong to that decoded model identity.
 
-## Integration
+## Bind a view
 
-Spawned animation roots expose `Wc3ModelCameras`. Its `definitions()` accessor
-returns authored records in source order, including names and unmapped tracks.
-`sample(index, animation)` evaluates a model-local `Wc3CameraSample` using the
-instance's sequence and global-sequence clocks. Loading a model does not spawn
-or activate views.
+`UniversalCameraBinding::new(model_root, camera_feature)` selects a root and typed
+camera feature. Its public `fov_multiplier` scales the authored vertical FOV; use
+0.75 explicitly for a portrait-style interpretation. Independently set
+`UniversalPlayback::driving_camera` to choose the view used by billboards and
+camera-anchored nodes.
 
-Bind an application-owned perspective camera explicitly:
+The binding owns camera transform and supported perspective lens fields. Activation,
+render target, viewport, exposure, and camera lifetime remain application-owned.
+Removing the binding stops updates. Replacing or reloading a model creates new
+feature IDs: retarget the binding explicitly. An invalid ID retains the previous
+view and produces a deduplicated warning.
 
-```rust
-use bevy::prelude::*;
-use bevy_wc3::{Wc3CameraBinding, Wc3NodeCamera};
+## Sampling and scheduling
 
-let view = commands.spawn((
-    Camera3d::default(),
-    Wc3CameraBinding::new(model_root, 0),
-)).id();
-commands.entity(model_root).insert(Wc3NodeCamera(view));
-```
+`UniversalInstance::sample_camera` returns `SampledUniversalCamera` at current
+playback clocks. `world_transform` maps its authored eye/target/up through the root,
+and `perspective_projection` interprets the lens. The live binding samples current
+animation and overrides directly rather than reading last frame's rig. Ordinary
+application transform chains are composed before propagation.
 
-`Wc3CameraBinding` drives the view; `Wc3NodeCamera` separately selects it for
-billboards and camera-anchored nodes. The binding owns `Transform`, perspective
-FOV, near/far distances, and the standard near clip plane. The application owns
-activation, render target, viewport, aspect ratio, exposure, and other render
-settings. Removing the binding stops playback. The plugin does not despawn views
-when the source root is removed; application hierarchy/ownership relationships
-still control camera lifetime. An unparented view retains its previous pose.
-
-`new(root, index)` uses authored vertical FOV radians directly. `portrait(root,
-index)` uses a 0.75 multiplier. The public `fov_multiplier` can be changed at
-runtime.
-
-## Evaluation and scheduling
-
-Eye and target tracks are additive offsets from their authored base positions;
-missing samples default to zero. Both points and the Z-up direction pass through
-the current model-root transform. Scalar rotation applies a right-handed roll
-about the world eye-to-target direction. When up is parallel to the view,
-transformed Y, then X, supplies a deterministic fallback. Root scale affects
-positions and the initial up direction, but not clip distances. Camera world
-scale is one.
+Native aimed cameras retain authored base positions and animated offsets, roll, and
+lens values. Portable cameras retain their semantic conventions. Degenerate up
+directions have deterministic orthogonal fallbacks. Nonfinite views, invalid lens
+ranges, nonperspective projections, missing roots, and unsupported parents retain
+the previous view instead of writing invalid transforms.
 
 `Wc3Systems::AnimateCameras` runs in `PostUpdate`, before Bevy camera projection
-updates, `EvaluateNodePoses`, and transform propagation. Current local hierarchy
-transforms are used, avoiding stale `GlobalTransform` values. Application systems
-moving source roots or camera parents in `PostUpdate` should run before this set.
+updates and node evaluation. Move source roots and camera parents before this set.
+Animated rig nodes and other bound cameras in those chains are rejected to avoid
+circular or stale dependencies. Parents requiring a sheared camera-local transform
+are unsupported; ordinary rigid/uniformly scaled parents are supported.
 
-The source-root and camera-parent hierarchies must contain ordinary transforms;
-animated WC3 nodes and other bound cameras are rejected to avoid stale poses and
-circular camera dependencies. Rigid and uniform-scale camera parents are
-supported. Parent transforms requiring shear in the camera's local transform are
-rejected; an unparented camera avoids this limitation.
+## Lens and multi-view limits
 
-Invalid indices, missing roots, nonperspective projections, invalid lens values,
-and nonfinite/degenerate views retain the previous transform and projection and
-warn once per camera/failure reason, recovering when the inputs become valid.
-FOV must be finite and in (0, pi); near must be positive and far greater than near.
+The application controls camera switching and activation. Visibility and modern
+focus/focal-length/f-stop tracks do not enable views or configure depth of field.
+Projection follows Bevy's infinite reverse-depth perspective convention; authored
+far distance informs culling rather than imposing a finite fragment plane.
 
-## Projection and application controls
-
-Visibility tracks do not change camera activation or select another view.
-Modern focus distance, focal length, and f-stop tracks remain available in source
-records but are not mapped to depth of field. Camera switching/blending is left
-to applications. Camera-dependent nodes still have one driving view per model
-instance, rather than a separate skeleton pose for each rendering view.
-
-Projection uses Bevy's standard infinite reverse-depth perspective matrix. The
-authored far distance feeds Bevy's frustum/culling behavior; it is not a finite
-fragment clipping plane, particularly for geometry exempt from frustum culling.
-
-## Offscreen captures
-
-The shared capture example accepts `--model-camera INDEX` and
-`--camera-fov-multiplier NUMBER`. Selecting a model camera excludes `--eye` and
-`--target`. Invalid indices or lens values fail before GPU initialization;
-invalid sampled views fail before writing a capture.
+One driving camera produces one skeleton pose per model instance. Multiple views,
+including shadow views, share that pose. Use independent model instances when
+portrait and scene billboards must face different cameras.

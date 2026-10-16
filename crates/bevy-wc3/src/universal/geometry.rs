@@ -6,7 +6,7 @@ use bevy::mesh::{PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::{Mesh, Vec2, Vec3};
 use wc3::model::{
     AttributeDomain, AttributeSemantic, AttributeValues, DrawSubset, GeometrySchema as _,
-    Mesh as ModelMesh, NodeId, PrimitiveRange, Topology, VertexInfluences,
+    Mesh as ModelMesh, NodeId, PrimitiveRange, PrimitiveSelection, Topology, VertexInfluences,
 };
 
 #[derive(Clone, Copy)]
@@ -239,6 +239,20 @@ fn attribute<'m, 'a>(
 pub(super) struct GeometryPart {
     pub mesh: Mesh,
     pub vertices: Vec<usize>,
+}
+
+/// Select the full primary topology without inventing a draw or subset identity.
+pub(super) fn whole_geometry(mesh: &ModelMesh<'_>) -> Result<DrawSubset, ModelError> {
+    let connectivity = mesh.subsets.primary();
+    let topology = mesh
+        .connectivity(connectivity)
+        .ok_or_else(|| ModelError("primary connectivity is absent".into()))?;
+    let count = u32::try_from(topology.primitive_count())
+        .map_err(|_| ModelError("whole geometry exceeds u32 primitive range".into()))?;
+    Ok(DrawSubset::new(PrimitiveSelection {
+        connectivity,
+        range: PrimitiveRange::Primitives { first: 0, count },
+    }))
 }
 
 /// Split mixed topology into Bevy-compatible draws while preserving authored order.

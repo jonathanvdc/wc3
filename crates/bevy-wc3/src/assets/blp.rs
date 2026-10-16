@@ -1,4 +1,4 @@
-use crate::assets::model::ModelError;
+use crate::error::ModelError;
 use bevy::asset::{io::Reader, AssetLoader, AssetPath, LoadContext, RenderAssetUsages};
 use bevy::image::ImageLoaderSettings;
 use bevy::prelude::*;

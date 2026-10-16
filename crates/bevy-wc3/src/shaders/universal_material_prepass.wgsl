@@ -25,6 +25,11 @@ struct UniversalCombiner { uv_transform: mat3x3<f32>, mode: vec4<u32>, clip: vec
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> combiner: UniversalCombiner;
 @group(#{MATERIAL_BIND_GROUP}) @binding(101) var secondary: texture_2d<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(102) var secondary_sampler: sampler;
+struct UniversalWorld { flags: vec4<u32>, };
+@group(#{MATERIAL_BIND_GROUP}) @binding(110) var<uniform> world: UniversalWorld;
+
+struct UniversalHdUniform { fresnel_color: vec4<f32>, fresnel: vec4<f32>, maps: vec4<u32>, };
+@group(#{MATERIAL_BIND_GROUP}) @binding(103) var<uniform> hd: UniversalHdUniform;
 
 #ifdef PREPASS_FRAGMENT
 @fragment
@@ -32,14 +37,18 @@ fn fragment(
 #ifdef MESHLET_MESH_MATERIAL_PASS
     @builtin(position) frag_coord: vec4<f32>,
 #else
-    in: prepass_io::VertexOutput,
+    vertex_output: prepass_io::VertexOutput,
     @builtin(front_facing) is_front: bool,
 #endif
 ) -> prepass_io::FragmentOutput {
 #ifdef MESHLET_MESH_MATERIAL_PASS
-    let in = resolve_vertex_output(frag_coord);
+    var in = resolve_vertex_output(frag_coord);
     let is_front = true;
 #else   // MESHLET_MESH_MATERIAL_PASS
+    var in = vertex_output;
+#ifdef VERTEX_COLORS
+    if world.flags.x != 0u { in.color = vec4(1.0); }
+#endif
 
 #ifdef BINDLESS
     let slot = mesh[in.instance_index].material_and_lightmap_bind_group_slot & 0xffffu;
@@ -57,7 +66,11 @@ fn fragment(
     pbr_functions::visibility_range_dither(in.position, in.visibility_range_dither);
 #endif  // VISIBILITY_RANGE_DITHER
 
-    if combiner.mode.x == 0u {
+    if world.flags.x != 0u && world.flags.y != 0u {
+        let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
+        if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK
+            && pbr_bindings::material.base_color.a < pbr_bindings::material.alpha_cutoff { discard; }
+    } else if combiner.mode.x == 0u {
         pbr_prepass_functions::prepass_alpha_discard(in);
     } else {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
@@ -143,6 +156,11 @@ fn fragment(
                 bias.mip_bias,
 #endif  // MESHLET_MESH_MATERIAL_PASS
             ).rgb;
+        if hd.maps.x != 0u {
+            let xy = Nt.rg * 2.0 - 1.0;
+            Nt = vec3(xy, sqrt(max(0.0, 1.0 - dot(xy, xy)))) * 0.5 + vec3(0.5);
+            flags &= ~pbr_types::STANDARD_MATERIAL_FLAGS_TWO_COMPONENT_NORMAL_MAP;
+        }
         let TBN = pbr_functions::calculate_tbn_mikktspace(normal, in.world_tangent);
 
         normal = pbr_functions::apply_normal_mapping(

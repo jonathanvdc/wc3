@@ -1,4 +1,4 @@
-//! Extra joint streams shared by semantic and legacy preparation paths.
+//! Extra joint streams for eight-influence Universal skinning.
 use bevy::mesh::{MeshVertexAttribute, MeshVertexBufferLayoutRef};
 use bevy::prelude::Mesh;
 use bevy::render::render_resource::{

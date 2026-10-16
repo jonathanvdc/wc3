@@ -1,123 +1,61 @@
-//! Load, animate, and render Warcraft III MDX and MDL models in Bevy.
+//! Render Universal semantic models through Bevy PBR.
 //!
-//! # Load a model
-//!
-//! Register [`Wc3BevyPlugin`] alongside Bevy's default plugins, then attach
-//! [`Wc3ModelInstance`] to each desired root. Instances are populated after their
-//! assets load. Geometry, bind poses, and constant material states are shared;
-//! animation clocks and changing material states remain private to each instance. [`Wc3Animation`] appears on the root after spawning;
-//! query it to operate only on ready instances. Replacing a populated root's
-//! model handle does not rebuild its hierarchy; spawn a new root for a new model.
+//! Add [`Wc3BevyPlugin`] beside Bevy's default plugins, then spawn
+//! [`UniversalModelInstance`] with a model asset handle. Native asset loading
+//! imports MDX/MDL, M2, WMO, M3 and Diablo sources into the same semantic renderer.
+//! Applications provide archive identities, external companions and image choices
+//! through [`UniversalResourceResolver`].
 //!
 //! ```no_run
 //! use bevy::prelude::*;
-//! use bevy_wc3::{Wc3BevyPlugin, Wc3ModelInstance};
-//!
-//! fn spawn_model(mut commands: Commands, assets: Res<AssetServer>) {
-//!     commands.spawn((
-//!         Wc3ModelInstance::new(assets.load("units/footman.mdx")),
-//!         Transform::default(),
-//!     ));
+//! use bevy_wc3::{UniversalModelInstance, Wc3BevyPlugin};
+//! fn setup(mut commands: Commands, assets: Res<AssetServer>) {
+//!     commands.spawn(UniversalModelInstance::new(assets.load("units/footman.mdx")));
+//!     commands.spawn((Camera3d::default(),
+//!         Transform::from_xyz(0., 350., 650.).looking_at(Vec3::ZERO, Vec3::Y)));
+//!     commands.spawn(DirectionalLight::default());
 //! }
-//!
-//! App::new()
-//!     .add_plugins((DefaultPlugins, Wc3BevyPlugin))
-//!     .add_systems(Startup, spawn_model);
+//! App::new().add_plugins((DefaultPlugins, Wc3BevyPlugin))
+//!     .add_systems(Startup, setup);
 //! ```
 //!
-//! Supply a Bevy camera and scene lighting to render the model. Bitmap paths
-//! resolve beside the model first, then from the asset root, trying the literal
-//! filename and then BLP, DDS, PNG, and TGA extensions at each location. BLP decoding is
-//! included. [`Wc3TextureBindings`] supplies replaceable images and slot overrides.
-//!
-//! # Work with an instance
-//!
-//! Query [`Wc3Animation`] on the root to select sequences, blend poses, pause,
-//! change speed, or seek. [`Wc3Attachments`] exposes attachment mounts;
-//! [`Wc3ModelOwner`] ties detached child lifetimes to their owner. Model particles,
-//! quad particles, and ribbons follow instance playback and ownership.
-//!
-//! [`Wc3Lod`] selects authored geometry levels. [`Wc3LodSettings`] provides global
-//! quality presets and automatic selection controls; [`Wc3LodOverride`] supplies
-//! instance overrides and [`Wc3LodState`] exposes the selected level.
-//!
-//! [`Wc3LightSettings`] configures imported scene lights. [`Wc3ModelCameras`]
-//! exposes authored views, and [`Wc3CameraBinding`] plays them on an existing
-//! camera. Read [`Wc3ModelEvent`] messages to interpret model event names in your
-//! application. Use [`Wc3Systems`] to order application systems around these stages.
-//!
-//! # Custom sources
-//!
-//! Decode bytes with [`Wc3Model::decode`], prepare shared assets with
-//! [`prepare_model`] or [`prepare_model_with_resources`], and spawn instances with
-//! [`spawn_prepared_model`] or [`spawn_prepared_model_with_bindings`]. Resolvers
-//! supply image and child-model handles without requiring file-backed sources.
-//! [`PreparedModel::parts`] and [`Wc3PartId`] expose stable normalized source indices.
-//! [`Wc3PoseBaker`] freezes geometry and materials at explicit sequence/global clocks
-//! without an ECS world or renderer, preserving original texture provenance.
-//!
-//! # Rendering semantics
-//!
-//! Meshes integrate with Bevy PBR and WC3 layer blend/depth states. Reforged
-//! DefaultUnit texture roles, geoset tint/alpha, UV animation, and node flags are
-//! evaluated by the renderer. Game-specific texture selection belongs to the
-//! application. Lighting and pass ordering use Bevy semantics; exact Warcraft III
-//! appearance is unverified. The repository's `docs/` guides explain the renderer
-//! and feature-specific limits.
-
+//! For in-memory graphs, use [`compile_universal_model`], prepare shared assets,
+//! and call [`spawn_universal_model`]. Each instance owns its playback, rig and
+//! changing material state. The compiler reports unsupported interpretations
+//! through [`RenderDiagnostic`]; implemented behavior and fidelity limits are
+//! described in the repository's rendering guides.
 #![deny(missing_docs)]
 
-mod animation;
 mod assets;
-mod attachment;
-mod camera;
 mod effects;
-mod event;
-mod instance;
-mod light;
-mod lod;
-mod materials;
+mod error;
 mod plugin;
-mod preparation;
 mod schedule;
 mod universal;
 
 pub use universal::{
-    compile_universal_model, spawn_universal_model, texture_requests, CompiledUniversalModel,
+    compile_universal_model, compile_universal_model_with_options, spawn_universal_model,
+    texture_requests, world_volume_weight, CompiledUniversalModel, ModelPlacementSpace,
     PreparedUniversalModel, RenderDiagnostic, SampledUniversalCamera, TextureColorSpace,
     TextureImageKey, TextureRequest, TextureRole, UniversalAnimationError, UniversalAssetSettings,
-    UniversalAttachmentPoint, UniversalDraw, UniversalFeature, UniversalInstance, UniversalLight,
-    UniversalMaterial, UniversalMaterialExtension, UniversalModelAsset, UniversalModelInstance,
-    UniversalModelLoader, UniversalModelSource, UniversalNode, UniversalParticleEmitter,
-    UniversalPathResolver, UniversalPlayback, UniversalPoseOverrides, UniversalResourceResolver,
+    UniversalAttachmentPoint, UniversalBakeSpace, UniversalBakedPart, UniversalBakedPose,
+    UniversalBakedSource, UniversalCameraBinding, UniversalCompileOptions,
+    UniversalControllerSelection, UniversalDoodadSet, UniversalDraw, UniversalDrawSource,
+    UniversalEventDispatchStats, UniversalEventProgram, UniversalEventSource, UniversalFeature,
+    UniversalInstance, UniversalLight, UniversalLightSettings, UniversalLod, UniversalLodOverride,
+    UniversalLodSettings, UniversalLodState, UniversalMaterial, UniversalMaterialExtension,
+    UniversalModelAsset, UniversalModelEvent, UniversalModelInstance, UniversalModelInstanceError,
+    UniversalModelLoader, UniversalModelLoaderSettings, UniversalModelParticleEmitter,
+    UniversalModelRebind, UniversalModelResourcePurpose, UniversalModelSource, UniversalNode,
+    UniversalParticleEmitter, UniversalPathResolver, UniversalPlacementAppearance,
+    UniversalPlayback, UniversalPoseBaker, UniversalPoseOptions, UniversalPoseOverrides,
+    UniversalPreparedPart, UniversalResourceResolver, UniversalRibbonEmitter,
+    UniversalWorldEnvironment, UniversalWorldEnvironmentSample, UniversalWorldGroup,
+    UniversalWorldLiquid, UniversalWorldLiquidSurface, UniversalWorldPortal, UniversalWorldRegion,
+    UniversalWorldSelection, WorldPortalPolicy,
 };
 
-pub use animation::pose::{Wc3DefaultNodeCamera, Wc3NodeCamera};
-pub use animation::Wc3Animation;
-pub use assets::{
-    BlpImageLoader, DecodedModel, ModelError, Wc3Model, Wc3ModelAsset, Wc3ModelLoader,
-    Wc3ModelResources,
-};
-pub use attachment::{Wc3AttachmentPoint, Wc3Attachments};
-pub use camera::{Wc3CameraBinding, Wc3CameraSample, Wc3ModelCameras};
-pub use event::Wc3ModelEvent;
-pub use instance::spawn::{
-    spawn_model, spawn_prepared_model, spawn_prepared_model_with_bindings, Wc3NodeEntities,
-};
-pub use instance::{ModelSource, Wc3ModelInstance, Wc3ModelOwner, Wc3OwnedModels};
-pub use light::{Wc3Light, Wc3LightSettings};
-pub use lod::{Wc3Lod, Wc3LodOverride, Wc3LodSettings, Wc3LodState};
-pub use materials::runtime::Wc3IndependentMaterial;
-pub use materials::textures::{Wc3TextureBindings, Wc3TextureSlot};
-pub use materials::{Wc3LayerMaterial, Wc3LayerState};
+pub use assets::BlpImageLoader;
+pub use error::ModelError;
 pub use plugin::Wc3BevyPlugin;
-pub use preparation::{
-    compile_model, prepare_model, prepare_model_asset, prepare_model_with_resources,
-    BakedModelPart, BakedModelPose, CompiledModel, PreparedModel, PreparedPart,
-    Wc3MaterialSnapshot, Wc3PartId, Wc3PoseBaker, Wc3PoseOptions, Wc3TextureColorSpace,
-    Wc3TextureReference, Wc3TextureRole,
-};
 pub use schedule::Wc3Systems;
-
-/// A shared runtime definition with independent ownership on edits.
-pub use preparation::shared::Shared as SharedDefinition;

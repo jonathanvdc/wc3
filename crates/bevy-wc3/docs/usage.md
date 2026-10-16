@@ -1,314 +1,190 @@
 # Using bevy-wc3
 
-Register `Wc3BevyPlugin` alongside Bevy’s `DefaultPlugins`. Each model root
-has its own animation, materials, and texture choices; geometry is shared.
-This guide covers loading models, configuring their appearance and playback,
-resolving child models, and integrating the renderer with application systems.
+All rendering starts from the Universal semantic graph. The asset loader supplies
+native adapters and resource lookup; applications can also compile graphs they
+construct or import themselves. Register `Wc3BevyPlugin` alongside `DefaultPlugins`
+to install the renderer and its scheduling contract.
 
 ## Load and spawn models
 
-For repeated instances, put the MDX or MDL and its textures under Bevy's `assets/`
-directory and let `Wc3BevyPlugin` load and prepare the model:
+Place a model under a registered Bevy asset source and spawn its typed request:
 
 ```rust
-let model = asset_server.load("units/footman.mdx");
-commands.spawn((Wc3ModelInstance::new(model.clone()), Transform::default()));
-commands.spawn((Wc3ModelInstance::new(model), Transform::from_xyz(150.0, 0.0, 0.0)));
+use bevy::prelude::*;
+use bevy_wc3::UniversalModelInstance;
+
+commands.spawn((UniversalModelInstance(asset_server.load("units/footman.mdx")),
+    Transform::default()));
 ```
 
-The request component is present immediately; `Wc3Animation` and the other
-instance components appear after preparation and spawning. Systems that control
-playback can query for `Wc3Animation` and run after `Wc3Systems::SpawnInstances`
-in `Update`. Decoding, dependency, and geometry compilation failures are reported
-by Bevy and leave the root unpopulated.
+The request is replaced with `UniversalInstance` and `UniversalModelSource` after
+required dependencies load and geometry compiles. Querying `UniversalInstance`
+therefore distinguishes ready models. Optional missing images and unsupported
+rendering behavior remain inspectable on the asset and compiled diagnostics.
+Required companion failures stop loading.
 
-Prepared assets are cached per model asset. Source asset changes invalidate the
-cache for future instances. Existing spawned instances retain their prepared
-geometry and definitions. Successful spawning removes the `Wc3ModelInstance`
-loading request and inserts `ModelSource`, which records the source asset ID
-without keeping it loaded. Keep a model handle in application state when you
-want subsequent instances to reuse the cached preparation. Inserting another
-request on an animated root does not rebuild it; spawn a new root to replace it.
+Inspect Bevy's `AssetServer` load and recursive-dependency states for loader
+failures; `UniversalModelInstanceError` reports rejected instance requests such as
+cyclic dependencies, rather than duplicating asset-loader errors.
 
-Bitmap paths are checked beside the model first, then at the asset root.
-At each location, the literal filename is tried first, followed by the same path
-with `.blp`, `.dds`, `.png`, and `.tga` extensions, in that order. This allows
-references such as `Textures\Body.tif` to resolve to `Textures/Body.blp`.
-Missing files advance to the next candidate; other read failures stop model
-loading. Decoder failures do not try another candidate.
-File contents must match the selected filename’s format, and explicit texture
-overrides remain exact.
+Instances share prepared assets. Inserting another `UniversalModelInstance` on a
+populated root replaces its renderer-owned subtree while preserving application
+children, numeric playback clocks, and compatible overrides. Asset changes rebuild
+instances. Typed identities belong to one decoded graph: clip and node selections
+migrate only through unique nonempty names, and `UniversalModelRebind` reports reset
+or migrated selections. Camera feature IDs need explicit application retargeting
+after replacement.
 
-The plugin decodes mipmap level zero from BLP0, BLP1, and BLP2 textures.
-For BLP0, place the base payload beside the root file: `Textures/Body.blp`
-requires `Textures/Body.b00` in the same Bevy asset source. The loader tracks
-that payload as a loader dependency and fails with its path if it cannot be
-read. It does not fetch `.b01` or other authored levels or upload authored BLP
-mip chains. Compatibility with real beta-game BLP0 assets remains unverified.
+Authored axes and meters-per-unit are converted beneath the application root.
+Application transforms use Bevy's Y-up coordinate frame. External children default
+to `ModelPlacementSpace::Authored`, cancelling their standalone frame conversion;
+select `Physical` explicitly when a child should retain its own units and frame.
 
-Replaceable IDs remain unresolved until a consumer supplies an image handle.
-Meshes and bind poses are shared; materials belong to each instance so texture
-changes remain local.
+## Resolve resources and textures
 
-## Load from named sources and MPQs
+`UniversalResourceResolver` maps paths, namespaced resources, and file-data IDs to
+registered asset sources. Insert `UniversalAssetSettings` with the resolver before
+adding the plugin; `UniversalModelLoaderSettings` carries loader-managed dependency
+ancestry. The default path resolver checks beside the model before its
+asset root, trying the literal texture filename and BLP, DDS, PNG, and TGA
+candidates. Named sources remain intact. Applications can register MPQ sources
+through the separate [bevy-mpq crate](../../bevy-mpq/README.md); archive mounting is
+outside this renderer.
 
-The model loader preserves the model's Bevy asset source for bitmap textures,
-attachments, and Classic PREM child models, including recursive dependencies.
-For example, a model loaded as `warcraft://units/footman.mdx` searches beside
-that model and at the root of the `warcraft` source. It does not fall back to
-Bevy's default source. Each candidate is looked up through the source before
-trying the next location or extension, so candidate order takes precedence over
-any mount order inside that source.
+The resolver's `texture_resource` and `texture_candidates` hooks select replacement
+images and lookup policy. Requests retain `TextureId`, the semantic texture/resource,
+role, effective color space, and effective `request.sampler`; provider callbacks receive
+the source-list index separately. Surface-local WMO clamp controls can therefore
+request multiple samplers for one TextureId without editing its declaration.
+An unspecified color space
+follows the role: color uses sRGB, normal and numeric maps use linear sampling.
+Distinct interpretations receive distinct handles without mutating shared images.
+Explicit semantic color-space declarations take precedence.
 
-Applications register sources before adding `DefaultPlugins`. The separate
-[`bevy-mpq` crate](../../bevy-mpq/README.md) provides `MpqAssetReader` and a
-caller-ordered `OverlayAssetReader`; `bevy-wc3` itself has no MPQ dependency.
-An application can combine loose overrides, a map archive, and base archives
-under one source name, or give different maps separate source names to isolate
-identical asset paths. Archive order, locales, and parsing limits belong to the
-application. Replacement texture handles can use any source explicitly.
+BLP0/1/2 decoding is included. BLP0 requires its sibling `.b00` payload in the same
+asset source. Only base-level pixels are uploaded; authored BLP mip chains are not.
+Compatibility with real beta-game BLP0 assets remains unverified.
 
-Run the archive-backed example with an internal model path followed by archives
-in highest-to-lowest priority order:
+Native imports preserve unsupported data strictly by default. Providers can
+override `UniversalResourceResolver::import_options` for an explicit loss policy.
+Accepted dropped or approximated native interpretations remain compiled
+diagnostics; permissive policy does not repair malformed references or resolve
+missing required companion files.
 
-```sh
-cargo run -p bevy-wc3 --example mpq -- \
-  units/human/footman/footman.mdx map.w3x base.mpq
-```
-
-This example loads complete archive entries; MPQ patch deltas, archive watching,
-and directory enumeration are unsupported. See the adapter README for setup
-with loose-file overrides and the reader's memory and concurrency behavior.
-
-## Choose textures
-
-A viewer or game can choose textures using the compiled asset's
-`compiled().texture_definitions()` and its own state, including model type,
-team, and blight. Semantic inspection is available through
-`Wc3Model::decode`; exact native records are available through the core
-`wc3::model::formats::mdlx` codecs. Loaded rendering assets do not retain decoded
-models. Bind by replaceable ID or by exact bitmap/PRE2 slot. Slot bindings take precedence:
-
-```rust
-let mut textures = Wc3TextureBindings::default();
-textures.set_replaceable(31, healthy_tree);
-textures.set_slot(Wc3TextureSlot::Bitmap(2), blighted_tree);
-commands.spawn((Wc3ModelInstance::new(model), textures));
-```
-
-Change `Wc3TextureBindings` on that root entity later to hot swap images. A PRE2
-emitter with `ReplaceableId == 0` uses its `TextureID` bitmap slot, including
-bitmap overrides. `prepare_model` and `spawn_prepared_model_with_bindings` offer
-the same behavior for custom model sources.
+Native M2 skins and external animation data, WMO groups, and external model
+references use the same resolver boundary. WMO dialect/layout provenance and Diablo
+IV layout/payload identities require provider knowledge. The [semantic rendering
+guide](rendering/universal.md) explains native adapter limits.
 
 ## Control animation
 
-Query `Wc3Animation` on a spawned root. `sequences()` lists the available
-sequences; `play(index)` starts or restarts one using the model’s BlendTime.
-Call it when the desired animation changes. Use `play_immediately(index)` for
-an immediate switch or `play_with_blend(index, Duration)` for a custom fade.
-Invalid sequence indices leave playback unchanged. Set `playing` to pause/resume
-and `speed` to change playback speed. `play` also resumes playback and restarts
-the shared global-track clock. Repeatedly calling it each update prevents the
-sequence from progressing.
-`seek(milliseconds)` changes the sampling clock without replaying skipped
-particle births or events. See [animation blending](rendering/animation-blending.md).
+`UniversalPlayback` uses seconds and typed `ClipId`/`ControllerId` selections.
+Obtain available clips from `UniversalInstance::model().clips()` and call `play`
+when the desired clip changes. `play` restarts the destination and uses the model's
+transition duration; `play_immediately` switches directly, and `play_with_blend`
+accepts an explicit `Duration`. A default standalone root samples authored rest
+state and shared programmes until a clip is selected.
 
-## Choose geometry quality
+Set `paused` or `speed` to control advancement. `clip_time`, `timeline_time`, and
+`shared_time` can be independent. `seek(seconds)` skips events over the seek
+interval, while direct clock edits retain normal forward event traversal. `restart`
+resets clocks and includes start events again. Invalid typed selections produce
+`UniversalAnimationError` on evaluation. See [animation
+blending](rendering/animation-blending.md) and [events](rendering/events.md).
 
-Models initially select authored level zero, resolving to the next coarser level
-if zero is absent. Enable automatic LOD globally with a quality preset, then
-adjust individual roots when needed:
+`UniversalPoseOverrides` maps source `NodeId` to authored local transforms after
+animation sampling. Remove an override to resume authored animation. This is the
+integration boundary for gameplay, physics, and procedural solvers.
 
-```rust
-app.insert_resource(Wc3LodSettings::medium());
-commands.entity(root).insert(Wc3LodOverride(Wc3LodSettings::high()));
-commands.entity(other_root).insert(Wc3Lod::Fixed(2));
-```
+## Choose geometry quality and scene features
 
-The presets use projected screen size, so camera zoom and viewport resolution
-influence selection. Larger quality bias keeps more detailed geometry visible;
-`minimum_level` caps detail for weaker machines. Settings also expose descending
-pixel thresholds and hysteresis to stabilize transitions. Put
-`Wc3Lod::Automatic` on a root to opt in without changing the global default.
-Query `Wc3LodState` after loading to inspect available and selected levels.
-See [geometry LOD](rendering/lod.md) for override precedence, camera selection,
-and limits. Models need authored levels to benefit from switching.
+`UniversalLod::Fixed` or `Automatic` selects authored geometry. Configure global
+`UniversalLodSettings`, or a root `UniversalLodOverride`, and inspect
+`UniversalLodState`. Automatic selection uses projected rest bounds, pixel
+thresholds, quality bias, and hysteresis. It does not simplify geometry or reduce
+effect budgets. See [geometry LOD](rendering/lod.md).
 
-## Configure model lights
+`UniversalLightSettings` on a root controls imported light power, range conversion,
+and shadow permission. Imported lights remain ordinary Bevy lights and illuminate
+other assets. `UniversalLight` retains authored definitions and per-light
+suppression; scene ambient resources remain application-owned. See
+[lights](rendering/lights.md).
 
-Model point and directional lights spawn as ordinary Bevy scene lights, illuminating
-both WC3 and Bevy materials. Their transforms, colors, intensities, ranges, and
-visibility animate; authored ShadowCasting flags enable Bevy shadows. Supply
-`Wc3LightSettings` on the instance root to tune power/range conversion or disable
-imported lights and shadows:
-
-```rust
-commands.spawn((
-    Wc3ModelInstance::new(model),
-    Wc3LightSettings {
-        point_intensity_scale: 2_000.0,
-        shadows_enabled: false,
-        ..default()
-    },
-));
-```
-
-Query `Wc3Light` to inspect the source record or disable a particular light with
-its `enabled` field. Ambient contributions and custom Reforged falloff/shadow
-ranges have no native mapping; scene ambient lighting remains application-owned.
-See [model lights](rendering/lights.md) for conversion defaults,
-customization, and rendering semantics.
-
-## Resolve child models
-
-Attachment paths and model-based Classic PREM paths are also resolved beside the
-parent model, then at the asset root. Backslashes are normalized. At each location,
-a real `.mdl` is preferred, with `.mdx` as its fallback. Empty and missing paths
-keep their record slots; PREM image resources are excluded. Read handles through
-`Wc3ModelAsset::model_resources()`, `PreparedModel::model_resources()`, or the
-`Wc3ModelResources` component on a spawned instance. `attachment(index)` and
-`particle(index)` use source record indices, not attachment IDs or node object IDs.
-Custom sources use `prepare_model_with_resources` with texture and model
-resolver callbacks. Use `prepare_model` when child-model resources can remain
-unresolved.
+`PreparedUniversalModel::features()` exposes typed feature/node identities and
+kinds, including unsupported interpreters. Complete unsupported payloads are not
+retained as owned hook components; inspect the graph or provider compile-options
+callback when an application needs those definitions.
 
 ## Mount models on attachment points
 
-Resolved attachment paths automatically spawn child model instances. Query
-`Wc3Attachments` on the parent root to find points by record index (`get`),
-attachment ID (`by_id`), or full name (`by_name`, ignoring ASCII case). Empty or
-missing paths still expose points for consumer-supplied models:
+`UniversalAttachmentPoint` exposes identity, resource, and current activation on an
+animated mount. Resolved external model references load automatically. Child
+instances start their first clip and restart when the mount activates, the parent
+changes clip, or parent time moves backwards. Their rigs and clocks remain
+independent. Hierarchy visibility gates rendered content; hidden parents do not
+implicitly pause every child animation clock.
 
-```rust
-let point = attachments.by_name("Weapon Ref").unwrap();
-let child = point.spawn_model(&mut commands, child_model);
-commands.entity(child).insert(child_texture_bindings);
-```
+`UniversalPlacementAppearance` retains the complete authored placement appearance.
+WMO placement RGB is interior illumination, not a generic albedo tint; the renderer
+does not multiply it into child color or overwrite scene lighting. Applications
+interpreting it also need interior/exterior region membership, ambient lighting,
+interior light direction, and any linked world-light definition. Uninterpreted
+illumination and controls produce diagnostics.
 
-The returned entity is the child model's transform and animation root. The
-point's `node` is the original animated MDX node; its separate `mount` follows
-that node and gates attached content with the attachment visibility track.
-Mounts inherit translation, rotation, and scale. Visibility uses the parent
-sequence/global-sequence clock and is shown above `0.1`, with missing keys
-falling back to visible. Attached models loop sequence zero, pause while their
-mount is hidden, and restart when shown again, when the parent changes sequence,
-or when the parent animation seeks backward. Each child has its own rig,
-materials, texture bindings, and animation clock. Nested attachments are updated
-from outer to inner models; recursive model paths are blocked during spawning.
-
-## Manage instance lifetime
-
-Each instance root owns its rig, geometry, and PRE2/ribbon render entities through the
-Bevy hierarchy. Hiding the root hides its geometry and effects; despawning it
-cleans them up, including its attachment models. `Wc3ModelOwner` also supports
-detached child instances: omit `ChildOf` to keep world-space transforms and
-visibility independent while retaining cleanup when the owner despawns.
-Model-based PREM particles use this ownership relationship for their world-space
-child models. Their playback and cleanup rules are described in
-[Classic model particles](rendering/prem.md).
+Applications may spawn their own children beneath mount entities. The Bevy hierarchy
+owns their lifetime. Cyclic automatic model dependencies are rejected. World-space
+model particles maintain explicit owner cleanup despite their detached motion; see
+[model particles](rendering/prem.md).
 
 ## Prepare custom model sources
 
-For custom sources, decode an owned semantic Warcraft III graph, compile it,
-then insert the resulting geometry into Bevy's asset stores. Decoding releases
-the graph from the encoded input; compilation consumes the graph and strictly
-lowers it into the renderer's current WC3 runtime vocabulary:
+Import through `wc3::model::io::{mdlx,m2,wmo,m3,diablo}` as appropriate, widen to
+`Universal`, or author a Universal graph directly. `compile_universal_model` borrows
+the model and resolves image requests into owned runtime definitions. It does not
+export through a native model version.
 
 ```rust
-let decoded = DecodedModel::decode(&bytes)?;
-let compiled = compile_model(
-    decoded.model,
-    |path| Some(asset_server.load(path.to_owned())),
-    |path| Some(asset_server.load(path.to_owned())),
-)?;
-drop(bytes);
+let compiled = compile_universal_model(&model, |request| resolve_image(request))?;
 let prepared = compiled.prepare(&mut meshes, &mut inverse_bindposes);
-let root = spawn_prepared_model(
-    &mut commands,
-    &mut meshes,
-    &mut materials,
-    &prepared,
-);
+let root = spawn_universal_model(&mut commands, &mut meshes, &mut materials,
+    &prepared, Transform::default());
 ```
 
-Keep the prepared value to spawn repeatedly. Compilation needs no asset stores;
-preparation needs meshes and inverse bind poses; spawning also needs materials.
-`CompiledModel` retains CPU meshes, so drop it after insertion when they are no
-longer needed. Prepared runtime definitions remain shared and alive.
-
-Use `Wc3Model` with `prepare_model` or `prepare_model_with_resources` to
-retain a semantic graph for inspection and editing. Tools that edit native
-MDX/MDL documents use the core `wc3::model::formats::mdlx` codecs and import the
-result through `wc3::model::io::mdlx` before calling Bevy preparation APIs.
-For an already loaded rendering asset, `prepare_model_asset` performs only Bevy
-asset insertion and is infallible;
-geometry validation has already happened during loading. Use
-`spawn_prepared_model_with_bindings` for per-instance texture choices.
+The source graph and bytes may be released after compilation. Keep the prepared
+value to spawn repeatedly; drop the compiled value when its CPU mesh copies are no
+longer useful. `UniversalCompileOptions` selects typed material appearances and
+external child handles. Ambiguous slot-based appearances require an explicit
+selection rather than choosing an arbitrary first material.
 
 ## Bake a static pose
 
-Offline tools can decode and prepare a model using ordinary `Assets` stores, then
-freeze its geometry and materials without creating an `App`, loading through an
-`AssetServer`, or initializing a renderer. Keep a `Wc3PoseBaker` when sampling
-multiple times so normal and ORM image variants can be reused:
+`UniversalPoseBaker` freezes geometry and materials without an ECS world or GPU. It
+borrows prepared mesh and inverse-bind assets, samples the same signed pose
+evaluator, and deforms up to eight influences. Resolved image handles remain
+unchanged; the baker does not rewrite images.
 
 ```rust
-let mut baker = Wc3PoseBaker::default();
-let pose = baker.bake(
-    &prepared,
-    &meshes,
-    &mut images,
-    &texture_bindings,
-    Wc3PoseOptions {
-        sequence: Some(stand_sequence),
-        elapsed_ms: 0.0,
-        global_elapsed_ms: 250.0,
-        camera: None,
-    },
-)?;
-for part in pose.parts.into_iter().filter(|part| part.visible) {
-    // The posed mesh has no joint attributes and is already in model space.
-    let mesh = meshes.add(part.mesh);
-    let material = materials.add(part.material.material);
-    commands.spawn((Mesh3d(mesh), MeshMaterial3d(material), Transform::default()));
-}
+let mut baker = UniversalPoseBaker::default();
+let pose = baker.bake(&prepared, &meshes, &inverse_bindposes,
+    UniversalPoseOptions { playback: Some(&playback), ..default() })?;
 ```
 
-The sequence and global clocks are independent elapsed milliseconds. Sequence
-tracks retain their authored looping or clamping behavior; `sequence: None`
-samples static properties and global tracks only. The default options use no
-sequence and both clocks at zero. Camera-dependent nodes require an explicit
-camera transform in model space. The baker rejects invalid sequence indices,
-nonfinite clocks, and cyclic or missing node parents rather than relying on ECS
-update order. It does not blend transitions, dispatch events, simulate effects,
-or recursively bake attachments. Explicit model bind-pose records remain outside
-the renderer's supported skinning path.
+Output includes every prepared geometry pass and generated liquid grid, with typed
+source identity, material snapshot, visibility, clocks, optional LOD selection, and
+posed bounds. Aggregate bounds cover visible surfaces. Default output includes the
+Bevy frame conversion; `UniversalBakeSpace::Authored` retains authored units.
+Camera-sensitive nodes require an explicit camera in authored coordinates.
 
-A pose includes every prepared geoset and authored LOD. Each pass reports its
-opacity visibility and posed bounds; the aggregate bounds cover visible passes
-across all levels. Consumers choose their LOD and omit hidden passes explicitly.
-`PreparedModel::parts()` and the `Wc3PartId` component on spawned mesh passes
-expose the same geoset, material, and layer indices. These indices refer to the
-normalized model, so skipped empty geosets and shared meshes do not renumber them.
-Use the owning model/root together with the indices when distinguishing instances.
-
-Each `Wc3MaterialSnapshot` includes the evaluated Bevy material, blend/depth
-settings, Fresnel controls, and six normalized texture roles. Texture references
-retain the authored path, bitmap index, replaceable ID, original resolved or
-overridden image handle, sampler, authored wrap flags, and expected color space.
-A literal path is provenance, not a resolved filesystem path; applications choose
-lookup policy and can associate their own paths with the original image handles.
-The material may bind a private linear variant while the reference still identifies
-its source image. Unresolved roles retain their source information without an
-image handle. Original images must stay available in `Assets<Image>`; call
-`clear_image_cache()` on the baker after editing their contents or samplers.
+`UniversalPoseOptions::world_selection` intersects authored visibility with world
+group/portal selection; absence uses the runtime default. Baking does not simulate
+transitions, events, effects, or external children. Invalid clocks, missing assets, and malformed skin streams return errors.
+`PreparedUniversalModel::parts()` exposes the undeformed shared mesh, material
+defaults, and the same `UniversalDraw` provenance used by live passes.
 
 ## Integrate with application systems
 
-Use `Wc3Systems` to order application systems around loading, animation, and
-effect simulation. See the [scheduling contract](architecture.md#scheduling-contract).
-[Model cameras](rendering/cameras.md) explains opt-in camera playback;
-[model events](rendering/events.md) explains reading animation notifications.
-For interactive inspection and controlled PNG output, see
-[viewer and captures](tools.md).
+Use `Wc3Systems` in the same schedule as the renderer stage being targeted.
+[Architecture](architecture.md#scheduling-contract) explains ordering around camera
+updates, pose evaluation, propagation, effects, and dispatch. Camera bindings and
+event consumers are described in their focused guides; the [tool guide](tools.md)
+covers viewer and capture commands.

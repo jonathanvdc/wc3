@@ -51,6 +51,7 @@ struct Vertex {
 // WC3 END: vertex input.
 
 #ifdef SKINNED
+#import "embedded://bevy_wc3/shaders/extra_skinning.wgsl"::{skin_normal_finite, skin_tangent_finite}
 #ifdef EXTRA_SKIN_INFLUENCES
 #import "embedded://bevy_wc3/shaders/extra_skinning.wgsl"::{extra_skin_model, extra_skin_prev_model}
 #endif
@@ -118,7 +119,7 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 
 #ifdef VERTEX_NORMALS
 #ifdef SKINNED
-    out.world_normal = skinning::skin_normals(world_from_local, vertex.normal);
+    out.world_normal = skin_normal_finite(world_from_local, vertex.normal);
 #else
     out.world_normal = mesh_functions::mesh_normal_local_to_world(
         vertex.normal,
@@ -142,6 +143,9 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 #endif
 
 #ifdef VERTEX_TANGENTS
+#ifdef SKINNED
+    out.world_tangent = skin_tangent_finite(world_from_local, vertex.tangent);
+#else
     out.world_tangent = mesh_functions::mesh_tangent_local_to_world(
         world_from_local,
         vertex.tangent,
@@ -149,6 +153,7 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
         // See https://github.com/gfx-rs/naga/issues/2416
         vertex_no_morph.instance_index
     );
+#endif
 #endif
 
 #ifdef VERTEX_COLORS

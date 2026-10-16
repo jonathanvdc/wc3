@@ -1,14 +1,15 @@
 use bevy::asset::{AssetApp, AssetPlugin, LoadState};
 use bevy::camera::visibility::VisibilityPlugin;
 use bevy::ecs::world::CommandQueue;
-use bevy::image::ImagePlugin;
+use bevy::image::{CompressedImageFormats, ImageLoader, ImagePlugin};
 use bevy::mesh::{skinning::SkinnedMeshInverseBindposes, MeshPlugin};
 use bevy::prelude::*;
 use bevy::shader::Shader;
 use bevy::time::TimeUpdateStrategy;
 use bevy_wc3::{
-    prepare_model_with_resources, spawn_prepared_model, PreparedModel, Wc3Animation, Wc3BevyPlugin,
-    Wc3LayerMaterial, Wc3Model, Wc3ModelAsset,
+    compile_universal_model_with_options, spawn_universal_model, PreparedUniversalModel,
+    UniversalCompileOptions, UniversalMaterial, UniversalModelAsset, UniversalPlayback,
+    Wc3BevyPlugin,
 };
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
 use mdx::Write as _;
@@ -19,18 +20,22 @@ use std::{
     time::{Duration, Instant},
 };
 use wc3::model::formats::mdlx::mdx;
+use wc3::model::{Model, NodeFeature, ParticleDetails, ParticleEmitter};
+
+#[path = "../examples/support/model.rs"]
+mod semantic;
 
 #[path = "../../../benchmarks/support/model.rs"]
 mod fixtures;
 
 struct Harness {
     app: App,
-    prepared: PreparedModel,
+    prepared: PreparedUniversalModel,
     roots: Vec<Entity>,
 }
 
 impl Harness {
-    fn new(source: &Wc3Model, count: usize, child: bool) -> Self {
+    fn new(source: &Model<'_>, count: usize, child: bool) -> Self {
         let mut app = App::new();
         app.add_plugins((
             MinimalPlugins,
@@ -44,6 +49,7 @@ impl Harness {
             ImagePlugin::default(),
         ));
         app.init_asset::<Shader>();
+        app.register_asset_loader(ImageLoader::new(CompressedImageFormats::NONE));
         app.add_plugins(Wc3BevyPlugin);
         app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::ZERO));
         app.finish();
@@ -51,7 +57,7 @@ impl Harness {
         let child_handle = child.then(|| {
             app.world()
                 .resource::<AssetServer>()
-                .load::<Wc3ModelAsset>("attachment_capture_child.mdl")
+                .load::<UniversalModelAsset>("attachment_capture_child.mdl")
         });
         if let Some(handle) = &child_handle {
             let deadline = Instant::now() + Duration::from_secs(30);
@@ -73,16 +79,19 @@ impl Harness {
         }
         let mut meshes = Assets::<Mesh>::default();
         let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-        let prepared = prepare_model_with_resources(
-            &mut meshes,
-            &mut bindposes,
-            source,
-            |_| None,
-            |_| child_handle.clone(),
-        )
-        .unwrap();
+        let mut options = UniversalCompileOptions::default();
+        if let Some(handle) = child_handle {
+            for (id, feature) in source.features() {
+                if matches!(&feature.payload, NodeFeature::Particle(ParticleEmitter::Simulated(value)) if matches!(value.details, ParticleDetails::Model(_)))
+                {
+                    options.child_models.insert(id, handle.clone());
+                }
+            }
+        }
+        let compiled = compile_universal_model_with_options(source, options, |_| None).unwrap();
+        let prepared = compiled.prepare(&mut meshes, &mut bindposes);
         app.insert_resource(meshes);
-        app.insert_resource(Assets::<Wc3LayerMaterial>::default());
+        app.insert_resource(Assets::<UniversalMaterial>::default());
         app.insert_resource(bindposes);
         let mut harness = Self {
             app,
@@ -95,7 +104,7 @@ impl Harness {
             harness
                 .roots
                 .iter()
-                .filter(|&&root| harness.app.world().get::<Wc3Animation>(root).is_some())
+                .filter(|&&root| harness.app.world().get::<UniversalPlayback>(root).is_some())
                 .count(),
             count
         );
@@ -106,18 +115,27 @@ impl Harness {
         self.app
             .world_mut()
             .resource_scope(|world, mut meshes: Mut<Assets<Mesh>>| {
-                world.resource_scope(|world, mut materials: Mut<Assets<Wc3LayerMaterial>>| {
+                world.resource_scope(|world, mut materials: Mut<Assets<UniversalMaterial>>| {
                     let mut queue = CommandQueue::default();
                     let mut commands = Commands::new(&mut queue, world);
                     for _ in 0..count {
-                        self.roots.push(spawn_prepared_model(
+                        self.roots.push(spawn_universal_model(
                             &mut commands,
                             &mut meshes,
                             &mut materials,
                             &self.prepared,
+                            Transform::IDENTITY,
                         ));
                     }
                     queue.apply(world);
+                    if let Some((clip, _)) = self.prepared.clips().first() {
+                        for &root in &self.roots {
+                            world
+                                .get_mut::<UniversalPlayback>(root)
+                                .unwrap()
+                                .play_immediately(*clip);
+                        }
+                    }
                 });
             });
     }
@@ -130,8 +148,7 @@ impl Harness {
 
 fn runtime(c: &mut Criterion) {
     for profile in fixtures::profiles() {
-        let source =
-            Wc3Model::decode_mdx(&fixtures::modern(profile).encode_mdx().unwrap()).unwrap();
+        let source = semantic::decode(&fixtures::modern(profile).encode_mdx().unwrap()).unwrap();
         let mut group = c.benchmark_group(format!("runtime/{}", profile.name));
         let counts = if env::var_os("WC3_BENCH_QUICK").is_some() {
             vec![32]
@@ -174,6 +191,30 @@ fn runtime(c: &mut Criterion) {
             group.bench_function(BenchmarkId::new("update/frame-60hz", count), |b| {
                 b.iter(|| harness.step())
             });
+            for &root in &harness.roots {
+                let mut playback = harness
+                    .app
+                    .world_mut()
+                    .get_mut::<UniversalPlayback>(root)
+                    .unwrap();
+                playback.seek(0.5).unwrap();
+                playback.paused = true;
+            }
+            harness.step();
+            group.bench_function(BenchmarkId::new("update/paused", count), |b| {
+                b.iter(|| harness.step())
+            });
+            if let Some(&root) = harness.roots.first() {
+                harness
+                    .app
+                    .world_mut()
+                    .get_mut::<UniversalPlayback>(root)
+                    .unwrap()
+                    .paused = false;
+            }
+            group.bench_function(BenchmarkId::new("update/one-animated", count), |b| {
+                b.iter(|| harness.step())
+            });
         }
         group.finish();
     }
@@ -195,7 +236,7 @@ fn runtime(c: &mut Criterion) {
             false,
         ),
     ] {
-        let source = Wc3Model::decode_mdl(source).unwrap();
+        let source = semantic::decode(source.as_bytes()).unwrap();
         let counts = if env::var_os("WC3_BENCH_QUICK").is_some() {
             vec![32]
         } else if env::var_os("WC3_BENCH_LARGE").is_some() {
@@ -215,7 +256,7 @@ fn runtime(c: &mut Criterion) {
             }
             let baseline = harness.app.world().entities().len();
             if child {
-                let mut animations = harness.app.world_mut().query::<&Wc3Animation>();
+                let mut animations = harness.app.world_mut().query::<&UniversalPlayback>();
                 assert!(
                     animations.iter(harness.app.world()).count() > count,
                     "PREM child models must spawn"

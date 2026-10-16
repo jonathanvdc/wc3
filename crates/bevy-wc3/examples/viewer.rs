@@ -6,16 +6,20 @@ use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
 use bevy_wc3::{
-    Wc3Animation, Wc3BevyPlugin, Wc3Lod, Wc3LodSettings, Wc3ModelAsset, Wc3ModelInstance,
-    Wc3TextureBindings, Wc3TextureSlot,
+    UniversalAssetSettings, UniversalInstance, UniversalLod, UniversalLodSettings,
+    UniversalModelAsset, UniversalModelInstance, UniversalPlayback, Wc3BevyPlugin,
 };
+use std::sync::Arc;
+#[path = "support/resolver.rs"]
+mod resolver;
+use resolver::{parse_wmo_profile, ModelResolver};
 use std::f32::consts::FRAC_PI_2;
 use std::path::PathBuf;
 
 #[derive(Resource)]
 struct Source {
     path: PathBuf,
-    handle: Handle<Wc3ModelAsset>,
+    handle: Handle<UniversalModelAsset>,
     tonemapping: Tonemapping,
 }
 
@@ -33,9 +37,9 @@ fn main() {
     let path = PathBuf::from(arguments.next().expect("pass an MDX or MDL path"))
         .canonicalize()
         .expect("find model file");
-    let mut choices = Vec::new();
-    let mut lod = Wc3Lod::default();
-    let mut lod_settings = Wc3LodSettings::default();
+    let mut resolver = ModelResolver::default();
+    let mut lod = UniversalLod::Fixed(0);
+    let mut lod_settings = UniversalLodSettings::default();
     let mut tonemapping = Tonemapping::None;
     let mut illuminance = 5_000.0;
     while let Some(option) = arguments.next() {
@@ -44,9 +48,11 @@ fn main() {
             match option.as_str() {
                 "--lod" => {
                     lod = if value == "auto" {
-                        Wc3Lod::Automatic
+                        UniversalLod::Automatic
                     } else {
-                        Wc3Lod::Fixed(value.parse().expect("LOD must be auto or a level number"))
+                        UniversalLod::Fixed(
+                            value.parse().expect("LOD must be auto or a level number"),
+                        )
                     }
                 }
                 "--lod-bias" => {
@@ -67,6 +73,17 @@ fn main() {
                 }
                 _ => panic!("unknown option {option}"),
             }
+            continue;
+        }
+        if option == "--allow-loss" {
+            resolver.allow_loss = true;
+            continue;
+        }
+        if option == "--wmo-profile" {
+            resolver.wmo_profile = Some(
+                parse_wmo_profile(&arguments.next().expect("pass WMO profile"))
+                    .expect("valid WMO profile"),
+            );
             continue;
         }
         if option == "--tonemapping" {
@@ -92,13 +109,22 @@ fn main() {
         let choice = arguments.next().expect("pass ID=path after texture option");
         let (index, texture_path) = choice.split_once('=').expect("expected ID=path");
         let index: usize = index.parse().expect("expected numeric texture ID or slot");
-        let slot = match option.as_str() {
-            "--replaceable" => None,
-            "--bitmap" => Some(Wc3TextureSlot::Bitmap(index)),
-            "--particle2" => Some(Wc3TextureSlot::Particle2(index)),
+        match option.as_str() {
+            "--replaceable" => {
+                resolver
+                    .replaceables
+                    .insert(index as u32, texture_path.to_owned());
+            }
+            "--bitmap" => {
+                resolver.bitmaps.insert(index, texture_path.to_owned());
+            }
+            "--file-id" => {
+                resolver
+                    .file_ids
+                    .insert(index as u32, texture_path.to_owned());
+            }
             _ => panic!("unknown option {option}"),
-        };
-        choices.push((index, slot, texture_path.to_owned()));
+        }
     }
     lod_settings.validate().expect("valid LOD quality settings");
     let directory = path.parent().expect("model parent directory");
@@ -109,6 +135,9 @@ fn main() {
         .into_owned();
     App::new()
         .insert_resource(lod_settings)
+        .insert_resource(UniversalAssetSettings {
+            resolver: Arc::new(resolver),
+        })
         .add_plugins((
             DefaultPlugins.set(AssetPlugin {
                 file_path: directory.to_string_lossy().into_owned(),
@@ -120,16 +149,7 @@ fn main() {
             Startup,
             move |mut commands: Commands, assets: Res<AssetServer>| {
                 let handle = assets.load(filename.clone());
-                let mut bindings = Wc3TextureBindings::default();
-                for (index, slot, texture_path) in &choices {
-                    let image = assets.load(texture_path.clone());
-                    if let Some(slot) = slot {
-                        bindings.set_slot(*slot, image);
-                    } else {
-                        bindings.set_replaceable(*index as u32, image);
-                    }
-                }
-                commands.spawn((Wc3ModelInstance::new(handle.clone()), bindings, lod));
+                commands.spawn((UniversalModelInstance::new(handle.clone()), lod));
                 commands.insert_resource(Source {
                     path: path.clone(),
                     handle,
@@ -140,7 +160,7 @@ fn main() {
                         illuminance,
                         ..default()
                     },
-                    Transform::from_xyz(1.0, -1.0, 2.0).looking_at(Vec3::ZERO, Vec3::Z),
+                    Transform::from_xyz(1.0, 2.0, 1.0).looking_at(Vec3::ZERO, Vec3::Y),
                 ));
             },
         )
@@ -151,7 +171,7 @@ fn main() {
 fn frame_model(
     mut commands: Commands,
     source: Res<Source>,
-    models: Res<Assets<Wc3ModelAsset>>,
+    models: Res<Assets<UniversalModelAsset>>,
     cameras: Query<Entity, With<OrbitCamera>>,
 ) {
     if !cameras.is_empty() {
@@ -160,26 +180,28 @@ fn frame_model(
     let Some(asset) = models.get(&source.handle) else {
         return;
     };
-    let (center, radius) = asset.compiled().bounds();
-    let radius = radius.max(10.0);
-    let offset = Vec3::new(0.7, -1.5, 0.55).normalize();
+    let bounds = asset.compiled.rest_bounds();
+    let center = bounds.map_or(Vec3::ZERO, |bounds| bounds.center.into());
+    let radius = bounds.map_or(1., |bounds| bounds.half_extents.length());
+    let radius = radius.max(0.1);
+    let offset = Vec3::new(0.7, 0.55, 1.5).normalize();
     let distance = radius * 4.0;
     commands.spawn((
         Camera3d::default(),
         source.tonemapping,
         Msaa::Sample4,
-        Transform::from_translation(center + offset * distance).looking_at(center, Vec3::Z),
+        Transform::from_translation(center + offset * distance).looking_at(center, Vec3::Y),
         OrbitCamera {
             target: center,
             distance,
-            yaw: offset.x.atan2(-offset.y),
-            pitch: offset.z.asin(),
+            yaw: offset.x.atan2(offset.z),
+            pitch: offset.y.asin(),
             min_distance: radius * 0.1,
         },
     ));
     info!(
-        "loaded {:?}, source version {}; left drag rotates, right drag pans, scroll zooms, Space changes sequence",
-        source.path, asset.source_version
+        "loaded {:?}, {} authored clips; left drag rotates, right drag pans, scroll zooms, Space changes sequence",
+        source.path, asset.compiled.clips().len()
     );
 }
 
@@ -208,18 +230,29 @@ fn orbit_camera(
         .clamp(orbit.min_distance, orbit.min_distance * 500.0);
     let (sin_yaw, cos_yaw) = orbit.yaw.sin_cos();
     let (sin_pitch, cos_pitch) = orbit.pitch.sin_cos();
-    let offset = Vec3::new(sin_yaw * cos_pitch, -cos_yaw * cos_pitch, sin_pitch);
+    let offset = Vec3::new(sin_yaw * cos_pitch, sin_pitch, cos_yaw * cos_pitch);
     transform.translation = orbit.target + offset * orbit.distance;
-    transform.look_at(orbit.target, Vec3::Z);
+    transform.look_at(orbit.target, Vec3::Y);
 }
 
-fn controls(keys: Res<ButtonInput<KeyCode>>, mut animations: Query<&mut Wc3Animation>) {
+fn controls(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut animations: Query<(&UniversalInstance, &mut UniversalPlayback)>,
+) {
     if !keys.just_pressed(KeyCode::Space) {
         return;
     }
-    for mut animation in &mut animations {
-        let next = (animation.sequence() + 1) % animation.sequences().len().max(1);
-        animation.play(next);
+    for (instance, mut animation) in &mut animations {
+        let clips = instance.model().clips();
+        if clips.is_empty() {
+            continue;
+        }
+        let current = clips
+            .iter()
+            .position(|(id, _)| Some(*id) == animation.clip)
+            .unwrap_or(0);
+        let next = (current + 1) % clips.len();
+        animation.play(clips[next].0);
         info!("sequence {}", next);
     }
 }

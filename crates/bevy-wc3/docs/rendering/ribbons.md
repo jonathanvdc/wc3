@@ -1,58 +1,56 @@
-# Ribbon trails (RIBB)
+# Ribbon trails
 
-RIBB emitters render for both MDX and MDL model instances. The CPU schedules
-births at the fixed emission rate, samples the animated node hierarchy and
-HeightAbove/HeightBelow at each birth, and retains world-space cross-sections.
-Height extends along local Y; the Bevy node transform already incorporates its
-pivot. Moving or rotating the emitter later does not move existing sections.
+Semantic trails retain birth-time cross sections and build connected geometry on the
+GPU. Material passes share immutable section records while retaining distinct
+blend/depth and texture state. `UniversalRibbonEmitter` exposes source identity and
+bounded simulation statistics.
 
-## Trail geometry and motion
+## Cross sections and motion
 
-Each quad connects two adjacent live cross-sections. The vertex shader evaluates
-ballistic motion independently at each endpoint, derives its normal, and maps
-one atlas cell across each connected live chain using floating-point UVs.
-Gravity produces world -Z displacement `0.5 * gravity * age²`, with zero initial
-falling velocity and no additional emitter-scale multiplier. Subframe births
-avoid coincident sections after a slow update.
+`TrailGeometry.axis` explicitly selects the local section direction. MDLX ribbons
+use local +Y. M2 imports currently use explicit +Z; that native convention remains
+unverified rather than being inferred from the model's up axis. Strict native export
+rejects an incompatible authored axis. Gravity independently follows model up and
+produces ballistic displacement without moving the retained birth origin.
 
-Material layers share section records and a GPU buffer, with separate uniforms
-and texture bindings. The renderer generates geometry in the shader without
-compute simulation or per-frame CPU mesh rebuilding. Contributor-level storage
-and upload mechanics are described in
-[architecture](../architecture.md#effect-record-storage).
+Births sample animated hierarchy, section heights, activation, and appearance at
+occurrence times. Existing world-space sections do not follow later emitter motion.
+Retired/omitted sections and sampled visibility gaps break connectivity, preventing
+joins between unrelated spans. Atlas cells map over connected chains.
 
-## Materials and atlas animation
+## Materials and playback
 
-Color, Alpha, TextureSlot, layer alpha, and layer texture selection update across
-the live trail using the current sequence/global-sequence time. Layer texture
-translation, rotation, and scaling are applied to atlas UVs, around UV (0.5, 0.5).
-Bitmap and replaceable bindings use the existing per-instance texture API.
+Every supported compiled material pass receives shared trail geometry. Primary
+texture/color/opacity and UV transforms sample the semantic animation programme.
+Authored alpha testing, additive/modulate factors, culling, depth controls, unlit
+state, priority bias, and supported segment sorting remain explicit. HD normal, ORM,
+reflection, secondary compositing, and effect fog do not have full ribbon transport
+equivalents and produce limitations.
 
-Every referenced material layer receives a pass in source order. Blend modes,
-alpha testing, TwoSided, Unshaded/Unlit, NoDepthTest, and NoDepthSet are respected.
-Material PriorityPlane is a signed bias in Bevy's transparent phase. Material
-SortPrimsFarZ/SortPrimsNearZ sorts segment centers per view without changing their
-endpoint pairs or UV ranks; NearZ takes precedence if both flags are set.
+Pause and speed control effect age. Programme changes and backwards traversal break
+connectivity; living sections retain their lifetime policy. Root hierarchy
+visibility gates rendering, and despawn removes emitter/render state. Simulation
+bounds living records and within-update births rather than retaining an unbounded
+backlog.
 
-## Playback and lifetime
+## Limits
 
-Pause and playback speed control the effect clock. Visibility stops new births
-but lets existing sections age. Sequence changes, backward seeks, and sampled
-visibility gaps break connectivity; old sections remain until their lifetime
-expires. Non-looping sequences stop emission at their end but existing sections
-continue aging. Root visibility hides the effect, and root despawn removes all
-emitter state and render entities. As with PRE2, hiding the root does not pause
-the simulation. Capacity is limited to 8,192 live sections per emitter; excessive
-births or large time steps retain only the newest live capacity.
+The trail transport uses Bevy's transparent phase even for cutout or depth-writing
+passes. Dedicated native ordering across meshes and effects is absent. Shaded trails
+use Bevy scene lighting. Native M2 ribbon texture/material conventions are not
+implied by support for ordinary trails. Hidden intervals entirely between sampled
+occurrences can remain undetected.
 
-## Sampling and render-pass limits
+## M3 endpoint beams
 
-Visibility is sampled at births and update endpoints, so a hidden interval
-entirely between those samples can go undetected. Animated node flags use the
-shared CPU evaluator and one driving camera per instance. Subframe births sample
-authored tracks with the current camera pose; see [node flags](node-flags.md).
+A narrow programmed-ribbon subset constructs billboard or planar beams between
+authored endpoint anchors. Animated pivot-local anchor offsets and emission offsets
+shape a linearly subdivided path, bounded to 256 anchors/segments. Normalized
+distance controls width, RGBA, and rotation; explicit maximum length limits the
+beam. The primary animated PBR material and source-anchor visibility are retained,
+with reusable CPU mesh buffers.
 
-All ribbon passes use Bevy's transparent phase, including opaque/alpha-tested
-layers with depth writes. Dedicated WC3 ordering across meshes and effects is
-absent. Shaded ribbons use Bevy scene lighting rather than Classic lighting;
-fog, environment mapping, and Reforged normal/ORM material slots are not implemented.
+This is distinct from emitted lifetime trails. Programmes without endpoint
+anchors, cylinder/star geometry, and Bezier/hold interpolation are unsupported.
+Tangent/velocity variations and noise are not evaluated. Native beam orientation
+and motion fidelity remain unverified.

@@ -1,68 +1,41 @@
-# Model lights
+# Imported lights
 
-Authored point and directional lights become animated Bevy scene lights that
-illuminate WC3 models and other scene geometry. This guide explains their conversion, how to
-configure imported lights and shadows, and which Warcraft III lighting properties
-have a native Bevy mapping.
+Common authored diffuse lights become ordinary Bevy lights and illuminate other Bevy
+assets as well as imported models. `UniversalLight` retains the complete supported
+light definition, application enablement, and sampled ambient metadata. The model's
+node hierarchy controls placement and cleanup.
 
-## Bevy integration
+## Mapping and controls
 
-Model omnidirectional and directional records create ordinary Bevy `PointLight`
-and `DirectionalLight` entities. They illuminate ordinary Bevy materials as well
-as WC3 materials and shaded effects. No global shader or scene-lighting resource
-is replaced. Bevy controls light accumulation, PBR response, shadows, exposure,
-and tonemapping.
+Portable and MDLX ambient/diffuse lights, WMO world lights, M3 specular/diffuse
+lights, and region point lights map supported color, intensity, range, activation,
+and shadow flags to Bevy point, directional, or spot components. Unknown kinds
+remain inspectable without an arbitrary substitute. M3 spot hot-spot/falloff
+controls map to bounded Bevy cone angles; exact native calibration is unverified.
 
-Each imported record has a public `Wc3Light` component, with its animation root,
-an `enabled` switch, and a read-only `definition()` accessor. The light entity is
-a child of its animated node, so pivots, parent transforms, inherited visibility,
-attachments, and recursive cleanup use the existing hierarchy. Directional light
-local +Z is the surface-to-light direction; Bevy emits along local -Z. Full
-parent rotation is inherited. General node-flag limitations still apply.
+`UniversalLightSettings` on a model root configures power/range conversion and
+suppression. Defaults are 1,000 lumens per point intensity unit, 10,000 lux per
+directional unit, range scale 1, fallback range 1,000, and shadows permitted. These
+are integration defaults, not calibrated physical conversions. Each child model has
+its own settings. Configure range conversion explicitly when model units differ from
+scene units; Bevy light range does not scale with Transform.
 
-Color, intensity, attenuation end, and visibility sample the existing
-sequence/global clocks, including pause and seeking. Visibility is an on/off
-gate (`> 0`), not an intensity multiplier. Authored RGB values are treated as
-linear, consistent with the other model color controls.
+The animation system writes supported light color, power, range, cone, and shadow
+permission. Application-specific light radii, biases, render layers, and cascade
+settings remain available. Disable `UniversalLight.enabled` to suppress an
+individual imported light. Removing the interpreter component leaves the ordinary
+Bevy light under application control, with hierarchy lifetime unchanged.
 
-`Wc3LightSettings` on an animation root controls that instance's imported lights.
-It can be supplied before asynchronous spawning or changed at runtime. Absence
-uses these defaults:
+## Ambient and native limits
 
-| Setting | Default and behavior |
-| --- | --- |
-| `enabled` | `true`; combines with each light's enabled switch and visibility track. |
-| `point_intensity_scale` | 1,000 lumens per authored intensity unit. |
-| `directional_intensity_scale` | 10,000 lux per authored intensity unit. |
-| `range_scale` | 1 world unit per positive attenuation-end unit. |
-| `fallback_range` | 1,000 world units when attenuation end is nonpositive/nonfinite. |
-| `shadows_enabled` | `true`; allows Bevy shadow maps only when the source ShadowCasting flag is set. |
+Ambient terms remain metadata; importing a model does not overwrite
+`GlobalAmbientLight`. Bevy's distance falloff, PBR response, shadows, exposure, and
+tonemapping remain authoritative. Attenuation start is not interpreted as source
+radius, and custom falloff/shadow-range controls are not reproduced.
 
-These are configurable integration defaults, not calibrated physical conversions.
-Range does not automatically scale with node/root transforms, matching Bevy
-light range behavior. For a model scaled into a different world-unit convention,
-set `range_scale` accordingly and tune power for the scene's exposure. Child
-model instances have their own animation roots and settings.
-
-The animation system owns light visibility, Bevy light color, power, point range,
-and the shadow-map enable flag. Consumer settings such as point radius, shadow biases, contact
-shadows, directional cascades, and RenderLayers are preserved. Applications can
-find a light by `definition().node.object_id` or node name and disable it with
-`Wc3Light::enabled`. Removing `Wc3Light` hands ongoing control of the ordinary
-Bevy light to the application; hierarchy-based lifetime remains unchanged.
-Directional lights affect the whole scene unless the application scopes them.
-Negative/nonfinite colors, powers, and scales are sanitized; point range has a
-small positive floor to avoid degenerate Bevy light projections.
-
-## Source fields and scene lighting
-
-Ambient records remain inspectable `Wc3Light` entities without a Bevy light.
-They log an unsupported-mapping warning. Direct lights' ambient contribution is
-also not applied. Importing an asset never modifies `GlobalAmbientLight`, nor
-does it convert ambient illumination into emissive material color.
-
-Attenuation start, Reforged quadratic/linear/damping falloff, shadow intensity,
-and shadow-casting start/end are retained in the source definition but are not
-mapped. Bevy uses its own distance falloff and shadow projections. An authored
-attenuation-start distance is not a physical source radius. Unknown light types
-remain inspectable and warn without creating an arbitrary Bevy light.
+WMO Euler/cone calibration, cookies, flicker, and regional light-set activation
+remain uninterpreted. M3 separate specular response, decay law, and light LOD gates
+are not reproduced. WMO placement appearance retains interior illumination and
+linked-light information on `UniversalPlacementAppearance`; it is not multiplied
+into child albedo. Applications need region ambient/interior direction policy to
+interpret those controls without double-counting Bevy scene lights.

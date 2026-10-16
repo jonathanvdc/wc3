@@ -47,7 +47,7 @@ scope; its benchmark IDs distinguish the individual operations and input sizes.
 | `wc3/blp` | Container read/write, base-level and full-chain pixel decoding, caller-provided output buffers, and encoding with generated or supplied mipmaps. Indexed alpha, JPEG, BGRA, and DXT1/3/5 are covered. |
 | `wc3/mpq` | Archive creation/opening, lookup, serial/shared extraction, compression, encryption, sector framing, and all four header versions. Synthetic streams cover decode-only codecs and chains. |
 | `bevy-mpq/assets` | Direct extraction versus async reads, concurrent batches at different semaphore limits, and overlay hits/misses at different depths. |
-| `bevy-wc3/preparation` | Normalized decoding, shared mesh/material/rig preparation, and CPU pose baking. |
+| `bevy-wc3/preparation` | Universal import and compilation, and shared GPU asset preparation. |
 | `bevy-wc3/runtime` | Instance spawn/despawn and headless updates, including animation, materials, transforms, PREM model particles, PRE2 quad particles, and ribbons. |
 
 Choose the target that matches the changed code. These commands run optimized
@@ -98,7 +98,9 @@ reads include consumption of the returned reader, and batch requests are polled
 concurrently. Validation warms the blocking workers before timing.
 
 Runtime updates advance a manual 1/60-second clock after warmup. Animation keeps
-looping between iterations, and effects maintain bounded live populations. PREM
+looping between iterations, and effects maintain bounded live populations. Paused
+cases seek every instance to 0.5 seconds before freezing; the one-animated case
+keeps the remaining instances at that pose. PREM
 loads its checked-in child model and texture before measurement. Synthetic
 geometry preparation resolves no images, and headless runtime updates have no
 GPU renderer. Use the capture measurements below to investigate rendering costs.

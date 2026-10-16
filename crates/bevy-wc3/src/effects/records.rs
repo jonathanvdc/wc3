@@ -36,9 +36,11 @@ impl<T> Default for RecordRing<T> {
 }
 
 impl<T> RecordRing<T> {
+    #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.len
     }
+    #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
         self.len == 0
     }

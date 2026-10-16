@@ -1,79 +1,54 @@
-# Model event objects
+# Semantic model events
 
-Model event objects mark animation times at which an application may play
-sounds, spawn effects, or perform other game actions. The renderer publishes
-these occurrences as `Wc3ModelEvent` messages with sampled poses. This guide
-explains how to consume them and how playback, loops, and seeking affect dispatch.
+`UniversalModelEvent` messages expose authored animation occurrences for gameplay.
+The renderer does not execute commands, resolve sound tables, or spawn gameplay
+effects. `UniversalEventSource` retains named actions, four-byte identifiers with
+data IDs, and typed engine commands as distinct payloads.
 
-## Dispatch and application integration
+## Consume occurrences
 
-Event objects dispatch `Wc3ModelEvent` messages during forward playback. The
-renderer preserves their names without interpreting prefixes, resolving game
-tables, loading sounds, spawning effects, or projecting footprints onto terrain.
-Those behaviors belong to the application.
-
-Messages identify the instance root, rig node, object ID, event-record index,
-sorted key index, selected sequence, optional global-sequence ID, authored frame,
-unwrapped occurrence time, and sampled world transform. Definitions are shared
-by prepared-model instances; each instance owns its dispatch cursor.
-
-Read messages in `PostUpdate` after `Wc3Systems::DispatchEvents`, or during the
-next `Update`. Ordering within each instance is by occurrence time, event-record
-index, then sorted key index. Ordering between instances is unspecified. As with
-other buffered Bevy messages, consumers must read regularly before messages age
-out; entity IDs can become invalid if their instance is despawned.
+Read messages in `PostUpdate` after `Wc3Systems::DispatchEvents`, or in the next
+`Update`. Each notification identifies its root, optional source feature/node, name,
+payload bytes, owning clip/controller/global programme, clock, exact key, unwrapped
+occurrence time, and occurrence-time world transform.
 
 ```rust
 use bevy::prelude::*;
-use bevy_wc3::{Wc3ModelEvent, Wc3Systems};
-
-fn handle_model_events(mut events: MessageReader<Wc3ModelEvent>) {
+use bevy_wc3::UniversalModelEvent;
+fn handle(mut events: MessageReader<UniversalModelEvent>) {
     for event in events.read() {
-        // Interpret event.name and use event.transform in application code.
+        // Interpret event.source and event.payload in application code.
     }
 }
-
-// Add this alongside Wc3BevyPlugin:
-// app.add_systems(PostUpdate,
-//     handle_model_events.after(Wc3Systems::DispatchEvents));
 ```
 
-## Timing contract
+Definitions are shared; dispatch cursors are private to instances. Ordering within
+one instance follows occurrence time and deterministic definition/key order.
+Ordering between instances is unspecified. Consume buffered messages regularly;
+entity IDs can become stale after despawn.
 
-Dispatch follows forward clock traversal rather than sampling only the current
-frame. Every key crossed in `(previous, current]` is emitted, including multiple
-keys or loops in one update. Model keys use the selected sequence's inclusive
-interval; global keys use `0..=duration`. Constructors, MDX/MDL readers, and
-`set_frames` sort timestamps, and `frames()` borrows the encoded ZeroVec array.
-Use `get()` or `iter()` to read ordinary integer values. Duplicate
-keys remain separate events and serialization emits them in sorted order.
+## Traversal and budgets
 
-Initial playback and `Wc3Animation::play` include start-time events once.
-Playing the current sequence explicitly restarts it; invalid indices leave
-playback unchanged. `restart()` restarts the current clock, including global
-tracks in models without animation sequences. A zero-duration clock fires its
-zero-offset keys once at playback start. Invalid global IDs and reversed sequence
-intervals dispatch nothing.
+Forward advancement emits crossed keys in `(previous, current]`, including loops and
+duplicate keys. Inclusive loop-end and next-loop-start keys remain distinct and
+sample their own endpoint poses. Initial playback, `play`, and `restart` include
+start keys once. `seek(seconds)` skips its interval and destination keys; subsequent
+advancement still dispatches normally. Direct clock edits retain ordinary traversal.
+Paused or reversed intervals emit no forward occurrences.
 
-Use `sequence()` and `elapsed_ms()` to inspect playback state. `seek(ms)` moves
-the clock without emitting skipped keys or keys at the destination. Later forward
-advancement still emits crossed keys, including advancement before the next
-dispatch. Nonfinite seeks are rejected. Paused and reverse playback emit no events;
-resuming forward playback traverses from the most recently observed position.
-Start events remain pending while paused at their initial position.
+Clip, authoring-timeline, and shared clocks retain their distinct semantics.
+Controller selection changes begin newly enabled programmes at current traversal
+state rather than replaying unrelated global history. Shared clocks can continue
+while a non-looping clip is clamped at its end.
 
-Non-looping model keys fire once per playback. Global tracks share elapsed time
-with the instance, pause and reverse with it, and reset when `play` restarts it.
-They continue looping after a non-looping model sequence ends and work without
-a model sequence. A loop-end key and the next loop-start key are distinct
-notifications at the same elapsed time. Their own clocks sample their respective
-authored end/start frames, preserving distinct poses at the boundary; other clocks
-sample the occurrence's elapsed time normally.
+Each update emits at most 4,096 earliest occurrences per instance. A bounded
+chronological merge seeds one occurrence per active stream and only advances streams
+that are consumed. `UniversalEventDispatchStats` reports emitted and omitted counts
+without enumerating every key in a long jump.
 
 ## Occurrence poses
 
-Occurrence poses reuse CPU node evaluation, including hierarchy, pivots,
-inheritance flags, and the currently selected driving camera. Model animation is
-sampled at each key rather than at the update endpoint. Application-owned root
-and ancestor transforms and driving-camera inputs use current update values;
-their movement history is not reconstructed.
+The shared pose evaluator samples hierarchy, pivots, inheritance, billboards,
+anchors, overrides, and transition progress at the occurrence. Application root and
+camera transforms use current update values; their historical motion is not
+reconstructed. Commands without a hierarchy anchor retain no node identity.

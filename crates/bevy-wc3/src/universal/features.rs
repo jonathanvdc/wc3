@@ -1,17 +1,52 @@
 //! Authored scene features evaluated without taking ownership of application cameras.
+use super::placements::{ChildModelPlacement, ModelPlacementSpace};
 use super::runtime::{UniversalDraw, UniversalNode};
-use crate::light::Wc3LightSettings;
+use super::world::UniversalWorldLiquidSurface;
+use super::{UniversalInstance, UniversalModelAsset, UniversalModelInstance, UniversalPlayback};
 use bevy::prelude::*;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
+use wc3::model::scene::world::LightKind as WorldLightKind;
 use wc3::model::scene::{Camera as PortableCamera, LightKind};
+use wc3::model::values::programmed::LightKind as ProgrammedLightKind;
 use wc3::model::{
     AimedCamera, Attachment, AttachmentActivation, AttachmentIdentity, AttachmentPoint,
-    Camera as ModelCamera, CameraConvention, FeatureId, FeatureKind, IlluminationKind,
-    Light as ModelLight, LightActivation, Model, NodeFeature, NodeId, Resource as ModelResource,
-    SampledAnimation,
+    Camera as ModelCamera, CameraConvention, ClipId, FeatureId, FeatureKind, IlluminationKind,
+    Light as ModelLight, LightActivation, Model, NodeFeature, NodeId, PlacementAppearance,
+    Resource as ModelResource, SampledAnimation,
 };
+
+/// Conversion controls on a model's animation root. Absence uses the defaults.
+/// These are integration scales, not calibrated game-to-physical conversions.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct UniversalLightSettings {
+    /// Disable all imported lights without removing their entities.
+    pub enabled: bool,
+    /// Lumens per authored point-light intensity unit.
+    pub point_intensity_scale: f32,
+    /// Lux per authored directional-light intensity unit.
+    pub directional_intensity_scale: f32,
+    /// World units per authored attenuation-end unit. Node scale is not applied.
+    pub range_scale: f32,
+    /// World-space range when attenuation end is nonpositive or nonfinite.
+    pub fallback_range: f32,
+    /// Allow shadow maps for lights whose source has ShadowCasting enabled.
+    pub shadows_enabled: bool,
+}
+
+impl Default for UniversalLightSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            point_intensity_scale: 1_000.0,
+            directional_intensity_scale: 10_000.0,
+            range_scale: 1.0,
+            fallback_range: 1_000.0,
+            shadows_enabled: true,
+        }
+    }
+}
 
 /// Semantic provenance of an application integration point.
 #[derive(Component, Clone, Copy, Debug)]
@@ -20,6 +55,17 @@ pub struct UniversalFeature {
     pub id: FeatureId,
     /// Hierarchy node carrying the feature.
     pub node: NodeId,
+}
+
+/// Complete authored external-placement appearance, independent of interpretation.
+/// WMO colors describe illumination and are not blindly multiplied into albedo.
+#[derive(Component, Clone, Debug)]
+pub struct UniversalPlacementAppearance(pub PlacementAppearance);
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct AttachmentClock {
+    clip: Option<ClipId>,
+    time: f64,
 }
 
 /// Authored attachment identity and its current activation.
@@ -31,6 +77,7 @@ pub struct UniversalAttachmentPoint {
     pub resource: Option<ModelResource<'static>>,
     /// Current fractional visibility, or zero/one for boolean activation.
     pub activation: f32,
+    clock: Option<AttachmentClock>,
 }
 
 /// Authored illumination and application-controlled per-light suppression.
@@ -74,6 +121,9 @@ struct AttachmentDefinition {
     feature: UniversalFeature,
     point: Option<AttachmentPoint<'static>>,
     resource: Option<ModelResource<'static>>,
+    appearance: PlacementAppearance,
+    model: Option<Handle<UniversalModelAsset>>,
+    placement: ChildModelPlacement,
 }
 #[derive(Clone, Default)]
 pub(super) struct RuntimeFeatures {
@@ -86,6 +136,15 @@ pub(super) struct RuntimeFeatures {
 pub(super) struct RuntimeFeatureInstances {
     lights: Vec<Entity>,
     attachments: Vec<Entity>,
+}
+impl RuntimeFeatureInstances {
+    pub(super) fn has_changed_light_input(&self, lights: &mut LightQuery<'_, '_>) -> bool {
+        self.lights.iter().any(|entity| {
+            lights
+                .get_mut(*entity)
+                .is_ok_and(|(state, ..)| state.is_changed())
+        })
+    }
 }
 
 fn owned_point(point: &AttachmentPoint<'_>) -> AttachmentPoint<'static> {
@@ -118,7 +177,11 @@ pub(super) type AttachmentQuery<'world, 'state> = Query<
         &'static mut UniversalAttachmentPoint,
         &'static mut Visibility,
     ),
-    (Without<UniversalNode>, Without<UniversalDraw>),
+    (
+        Without<UniversalNode>,
+        Without<UniversalDraw>,
+        Without<UniversalWorldLiquidSurface>,
+    ),
 >;
 
 macro_rules! set_if_changed {
@@ -130,7 +193,22 @@ macro_rules! set_if_changed {
     }};
 }
 impl RuntimeFeatures {
-    pub fn compile(model: &Model<'_>) -> Self {
+    pub(super) fn light_diagnostics(&self) -> impl Iterator<Item = (FeatureId, &'static str)> + '_ {
+        self.lights.iter().filter_map(|(feature,light)|match light {
+            ModelLight::World(_)=>Some((feature.id,"WMO common diffuse lights use Bevy intensity/range conversion; native cone calibration, Euler orientation, color blending, cookies, flicker, and per-region light-set activation remain uninterpreted")),
+            ModelLight::Specular(_)=>Some((feature.id,"M3 diffuse light animation, range and shadow flags use Bevy lights; independent specular response, distance-decay law, LOD gates and native cone calibration remain uninterpreted")),
+            ModelLight::Point(_)=>Some((feature.id,"Region point-light color, intensity and range use Bevy lights; native attenuation-start and unresolved controls remain uninterpreted")),
+            _=>None,
+        }).chain(self.attachments.iter().filter_map(|definition| match &definition.appearance {
+            PlacementAppearance::World { .. } => Some((definition.feature.id, "WMO placement appearance is retained on UniversalPlacementAppearance; interior direct illumination, region-derived ambient lighting, linked lights and placement controls require application interpretation, without changing child albedo or scene lighting")),
+            PlacementAppearance::Unmodified => None,
+        }))
+    }
+    pub fn compile(
+        model: &Model<'_>,
+        children: &HashMap<FeatureId, Handle<UniversalModelAsset>>,
+        placements: &HashMap<FeatureId, ModelPlacementSpace>,
+    ) -> Self {
         let mut result = Self::default();
         for (id, value) in model.features() {
             let feature = UniversalFeature {
@@ -153,6 +231,12 @@ impl RuntimeFeatures {
                         feature,
                         point: Some(owned_point(point)),
                         resource: None,
+                        appearance: PlacementAppearance::Unmodified,
+                        model: None,
+                        placement: ChildModelPlacement::from_model(
+                            model,
+                            ModelPlacementSpace::Authored,
+                        ),
                     })
                 }
                 NodeFeature::Attachment(Attachment::External(value)) => {
@@ -160,6 +244,12 @@ impl RuntimeFeatures {
                         feature,
                         point: value.point.as_ref().map(owned_point),
                         resource: Some(value.resource.clone().into_owned()),
+                        appearance: value.appearance.clone(),
+                        model: children.get(&id).cloned(),
+                        placement: ChildModelPlacement::from_model(
+                            model,
+                            placements.get(&id).copied().unwrap_or_default(),
+                        ),
                     })
                 }
                 _ => {}
@@ -178,10 +268,14 @@ impl RuntimeFeatures {
         &self,
         commands: &mut Commands,
         nodes: &HashMap<NodeId, Entity>,
+        parents: &HashMap<FeatureId, Entity>,
     ) -> RuntimeFeatureInstances {
         let mut instances = RuntimeFeatureInstances::default();
         for (feature, definition) in &self.lights {
-            let Some(&parent) = nodes.get(&feature.node) else {
+            let Some(&parent) = parents
+                .get(&feature.id)
+                .or_else(|| nodes.get(&feature.node))
+            else {
                 continue;
             };
             let mut entity = commands.spawn((
@@ -203,7 +297,19 @@ impl RuntimeFeatures {
                     IlluminationKind::Directional => LightKind::Directional,
                     _ => LightKind::Ambient,
                 },
-                _ => LightKind::Ambient,
+                ModelLight::World(light) => match light.kind {
+                    WorldLightKind::Point => LightKind::Point,
+                    WorldLightKind::Spot => LightKind::Spot,
+                    WorldLightKind::Directional => LightKind::Directional,
+                    _ => LightKind::Ambient,
+                },
+                ModelLight::Point(_) => LightKind::Point,
+                ModelLight::Specular(light) => match light.light_type {
+                    ProgrammedLightKind::Point => LightKind::Point,
+                    ProgrammedLightKind::Directional => LightKind::Directional,
+                    ProgrammedLightKind::Spot => LightKind::Spot,
+                    _ => LightKind::Ambient,
+                },
             };
             match kind {
                 LightKind::Point => {
@@ -229,25 +335,30 @@ impl RuntimeFeatures {
             instances.lights.push(entity.id());
         }
         for definition in &self.attachments {
-            let Some(&parent) = nodes.get(&definition.feature.node) else {
+            let Some(&parent) = parents
+                .get(&definition.feature.id)
+                .or_else(|| nodes.get(&definition.feature.node))
+            else {
                 continue;
             };
             let identity = definition.point.as_ref().map(|p| p.identity.clone());
-            instances.attachments.push(
-                commands
-                    .spawn((
-                        definition.feature,
-                        UniversalAttachmentPoint {
-                            identity,
-                            resource: definition.resource.clone(),
-                            activation: 1.,
-                        },
-                        Transform::default(),
-                        Visibility::default(),
-                        ChildOf(parent),
-                    ))
-                    .id(),
-            );
+            let mut entity = commands.spawn((
+                definition.feature,
+                UniversalAttachmentPoint {
+                    identity,
+                    resource: definition.resource.clone(),
+                    activation: 1.,
+                    clock: None,
+                },
+                UniversalPlacementAppearance(definition.appearance.clone()),
+                Transform::default(),
+                Visibility::default(),
+                ChildOf(parent),
+            ));
+            if let Some(model) = &definition.model {
+                entity.insert((UniversalModelInstance(model.clone()), definition.placement));
+            }
+            instances.attachments.push(entity.id());
         }
         instances
     }
@@ -255,7 +366,7 @@ impl RuntimeFeatures {
         &self,
         sample: &SampledAnimation<'_, '_>,
         instances: &RuntimeFeatureInstances,
-        settings: &Wc3LightSettings,
+        settings: &UniversalLightSettings,
         lights: &mut LightQuery<'_, '_>,
         attachments: &mut AttachmentQuery<'_, '_>,
     ) {
@@ -304,7 +415,84 @@ impl RuntimeFeatures {
                             [0., 0.],
                         )
                     }
-                    _ => continue,
+                    ModelLight::World(light) => {
+                        let color = sample.animated(&light.color);
+                        let modern = light.modern.as_ref();
+                        let multiplier = modern.map_or(1., |value| {
+                            if value.intensity_multiplier == 0. {
+                                1.
+                            } else {
+                                value.intensity_multiplier
+                            }
+                        });
+                        let intensity = sample.animated(&light.intensity) * multiplier;
+                        let ambient = light.kind == WorldLightKind::Ambient;
+                        (
+                            [color[0], color[1], color[2]],
+                            if ambient { 0. } else { intensity },
+                            if light.use_attenuation {
+                                light.attenuation[1]
+                            } else {
+                                0.
+                            },
+                            1.,
+                            modern.is_some_and(|value| value.shadows),
+                            if ambient {
+                                [color[0], color[1], color[2]]
+                            } else {
+                                [0.; 3]
+                            },
+                            if ambient { intensity } else { 0. },
+                            light.cone,
+                        )
+                    }
+                    ModelLight::Point(light) => (
+                        [
+                            light.color[0] as f32 / 255.,
+                            light.color[1] as f32 / 255.,
+                            light.color[2] as f32 / 255.,
+                        ],
+                        light.intensity,
+                        light.attenuation[1],
+                        1.,
+                        false,
+                        [0.; 3],
+                        0.,
+                        [0.; 2],
+                    ),
+                    ModelLight::Specular(light) => (
+                        light
+                            .diffuse_color
+                            .binding
+                            .as_ref()
+                            .and_then(|property| sample.property(property))
+                            .unwrap_or(light.diffuse_color.initial),
+                        light
+                            .intensity_multiplier
+                            .binding
+                            .as_ref()
+                            .and_then(|property| sample.property(property))
+                            .unwrap_or(light.intensity_multiplier.initial),
+                        light.attenuation_end,
+                        1.,
+                        light.flags.shadows(),
+                        [0.; 3],
+                        0.,
+                        [
+                            light
+                                .hot_spot
+                                .binding
+                                .as_ref()
+                                .and_then(|property| sample.property(property))
+                                .unwrap_or(light.hot_spot.initial),
+                            light
+                                .falloff
+                                .binding
+                                .as_ref()
+                                .and_then(|property| sample.property(property))
+                                .unwrap_or(light.falloff.initial),
+                        ],
+                    ),
                 };
             let activation = if state.enabled && settings.enabled {
                 activation.clamp(0., 1.)
@@ -353,8 +541,9 @@ impl RuntimeFeatures {
                     light.shadow_maps_enabled,
                     shadows && settings.shadows_enabled
                 );
-                set_if_changed!(light.inner_angle, cone[0].max(0.).min(cone[1]));
-                set_if_changed!(light.outer_angle, cone[1].clamp(0.001, FRAC_PI_2));
+                let outer = cone[1].clamp(0.001, FRAC_PI_2);
+                set_if_changed!(light.inner_angle, cone[0].clamp(0., outer));
+                set_if_changed!(light.outer_angle, outer);
             }
         }
         for (definition, &entity) in self.attachments.iter().zip(&instances.attachments) {
@@ -476,7 +665,7 @@ mod tests {
             )
             .unwrap();
         let model = builder.finish().unwrap();
-        let features = RuntimeFeatures::compile(&model);
+        let features = RuntimeFeatures::compile(&model, &HashMap::new(), &HashMap::new());
         let program = AnimationProgram::compile(&model);
         let sample = program.sample(AnimationSample::default()).unwrap();
         let camera = features
@@ -516,5 +705,221 @@ mod tests {
             point.identity,
             AttachmentIdentity::Named(Cow::Owned(_))
         ));
+    }
+}
+
+#[cfg(test)]
+mod imported_light_tests {
+    use super::*;
+    use bevy::ecs::world::CommandQueue;
+    use wc3::model::animation::programmed::Property;
+    use wc3::model::scene::{programmed, world};
+    use wc3::model::values::programmed::LightFlags;
+    use wc3::model::{Animated, AnimationProgram, AnimationSample, Node};
+    #[test]
+    fn world_and_programmed_diffuse_lights_use_bevy_components_without_global_ambient() {
+        let mut builder = Model::builder("imported lights");
+        let node = builder.add_node(Node::named("anchor")).unwrap();
+        builder
+            .add_feature(
+                node,
+                NodeFeature::Light(ModelLight::World(Box::new(world::Light {
+                    kind: WorldLightKind::Point,
+                    color: Animated::constant([0.2, 0.4, 0.8, 0.]),
+                    intensity: Animated::constant(2.),
+                    use_attenuation: true,
+                    attenuation: [1., 8.],
+                    ..Default::default()
+                }))),
+            )
+            .unwrap();
+        builder
+            .add_feature(
+                node,
+                NodeFeature::Light(ModelLight::Specular(Box::new(programmed::Light {
+                    light_type: ProgrammedLightKind::Point,
+                    flags: LightFlags::from(1),
+                    lod_cut: 0,
+                    shadow_lod_cut: 0,
+                    diffuse_color: Property {
+                        initial: [0.3, 0.5, 0.7],
+                        ..Default::default()
+                    },
+                    intensity_multiplier: Property {
+                        initial: 3.,
+                        ..Default::default()
+                    },
+                    specular_color: Default::default(),
+                    specular_multiplier: Default::default(),
+                    decay: Default::default(),
+                    attenuation_end: 12.,
+                    attenuation_start: Default::default(),
+                    hot_spot: Default::default(),
+                    falloff: Default::default(),
+                }))),
+            )
+            .unwrap();
+        let model = builder.finish().unwrap();
+        let features = RuntimeFeatures::compile(&model, &HashMap::new(), &HashMap::new());
+        let animation = AnimationProgram::compile(&model);
+        let mut app = App::new();
+        let root = app
+            .world_mut()
+            .spawn((Transform::default(), Visibility::default()))
+            .id();
+        let mut queue = CommandQueue::default();
+        let instances = features.spawn(
+            &mut Commands::new(&mut queue, app.world()),
+            &HashMap::from([(node, root)]),
+            &HashMap::new(),
+        );
+        queue.apply(app.world_mut());
+        app.add_systems(
+            Update,
+            move |mut lights: LightQuery, mut attachments: AttachmentQuery| {
+                let sample = animation.sample(AnimationSample::default()).unwrap();
+                features.animate(
+                    &sample,
+                    &instances,
+                    &UniversalLightSettings::default(),
+                    &mut lights,
+                    &mut attachments,
+                );
+            },
+        );
+        app.update();
+        let mut lights = app.world_mut().query::<(&UniversalLight, &PointLight)>();
+        let values = lights.iter(app.world()).collect::<Vec<_>>();
+        assert_eq!(values.len(), 2);
+        assert!(values
+            .iter()
+            .any(|(_, light)| light.intensity == 2000. && light.range == 8.));
+        assert!(values.iter().any(|(_, light)| light.intensity == 3000.
+            && light.range == 12.
+            && light.shadow_maps_enabled));
+    }
+}
+
+type AttachmentParentData = (&'static UniversalInstance, &'static UniversalPlayback);
+type AttachmentChildData = (
+    &'static mut UniversalAttachmentPoint,
+    &'static mut UniversalPlayback,
+    &'static mut Visibility,
+);
+
+/// Sample parent activation before child pose evaluation, then apply restarts.
+pub(crate) fn restart_universal_attachments(
+    mut queries: ParamSet<(Query<AttachmentParentData>, Query<AttachmentChildData>)>,
+    mut pending: Local<Vec<(Entity, f32, AttachmentClock)>>,
+) {
+    pending.clear();
+    for (instance, playback) in &queries.p0() {
+        let model = instance.model();
+        if model.features.attachments.is_empty() {
+            continue;
+        }
+        let Ok(selection) = playback.selection(model) else {
+            continue;
+        };
+        let Ok(sample) = model.animation.sample(selection) else {
+            continue;
+        };
+        for (definition, entity) in model
+            .features
+            .attachments
+            .iter()
+            .zip(&instance.feature_instances().attachments)
+        {
+            let activation = match definition.point.as_ref().map(|point| &point.activation) {
+                Some(AttachmentActivation::Enabled(value)) => {
+                    if sample.animated(value) {
+                        1.
+                    } else {
+                        0.
+                    }
+                }
+                Some(AttachmentActivation::Visibility(value)) => {
+                    sample.animated(value).clamp(0., 1.)
+                }
+                _ => 1.,
+            };
+            pending.push((
+                *entity,
+                activation,
+                AttachmentClock {
+                    clip: playback.clip,
+                    time: playback.clip_time,
+                },
+            ));
+        }
+    }
+    let mut attachments = queries.p1();
+    for &(entity, activation, clock) in pending.iter() {
+        let Ok((mut point, mut playback, mut visibility)) = attachments.get_mut(entity) else {
+            continue;
+        };
+        observe_attachment_clock(&mut point, &mut playback, activation, clock);
+        let next_visibility = if activation > 0. {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *visibility != next_visibility {
+            *visibility = next_visibility;
+        }
+    }
+}
+
+fn observe_attachment_clock(
+    point: &mut UniversalAttachmentPoint,
+    playback: &mut UniversalPlayback,
+    activation: f32,
+    clock: AttachmentClock,
+) {
+    let changed_clock = point
+        .clock
+        .is_some_and(|previous| previous.clip != clock.clip || clock.time < previous.time);
+    if activation > 0. && (point.activation <= 0. || changed_clock) {
+        playback.restart();
+    }
+    point.clock = Some(clock);
+    point.activation = activation;
+}
+#[cfg(test)]
+mod attachment_lifecycle_tests {
+    use super::*;
+    #[test]
+    fn inactive_mounts_restart_only_on_activation_or_parent_backwards_traversal() {
+        let mut point = UniversalAttachmentPoint {
+            identity: None,
+            resource: None,
+            activation: 0.,
+            clock: None,
+        };
+        let mut playback = UniversalPlayback::new();
+        playback.clip_time = 3.;
+        let clock = AttachmentClock {
+            clip: None,
+            time: 2.,
+        };
+        observe_attachment_clock(&mut point, &mut playback, 0., clock);
+        assert_eq!(playback.clip_time, 3.);
+        observe_attachment_clock(&mut point, &mut playback, 1., clock);
+        assert_eq!(playback.clip_time, 0.);
+        playback.clip_time = 4.;
+        observe_attachment_clock(
+            &mut point,
+            &mut playback,
+            1.,
+            AttachmentClock { time: 3., ..clock },
+        );
+        assert_eq!(playback.clip_time, 4.);
+        observe_attachment_clock(
+            &mut point,
+            &mut playback,
+            1.,
+            AttachmentClock { time: 1., ..clock },
+        );
+        assert_eq!(playback.clip_time, 0.);
     }
 }

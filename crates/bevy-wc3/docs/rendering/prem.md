@@ -1,47 +1,40 @@
-# Classic model particles (PREM)
+# External-model particles
 
-Classic PREM emitters create particles from animated child models. Each
-particle has its own playback and world-space motion while sharing prepared
-assets with other instances. This guide explains emission, birth transforms,
-visibility, lifetime ownership, and the supported resource types.
+Model-particle emitters instantiate independent child models at sampled birth poses.
+MDLX model-based PREM imports use this path; image-based PREM and external
+effect-only resources require other interpreters. Child meshes and bind palettes
+share prepared assets while playback and changing materials remain independent.
 
-## Emission and child animation
+## Emission and motion
 
-Model-based (`EmitterUsesMdl`) PREM emitters spawn independent child model
-instances. Emission rate and visibility control births. Lifetime, speed, gravity,
-latitude, and the animated node transform are sampled at each subframe birth.
-Particles retain world-space origins, velocities, model scale, and random Z
-headings, with analytic constant-gravity motion. Children animate sequence zero
-using particle age; sequence looping follows the child model's sequence flags.
-Pausing or changing the parent playback speed also changes particle time.
-Immediate sequence changes or backward seeks clear particles and emission phase.
-Blended changes retain live model particles; see [animation blending](animation-blending.md).
+Continuous rates integrate in bounded 60 Hz intervals. The shared occurrence sampler
+evaluates activation, parameters, and hierarchy at subframe births. Children retain
+world-space origins, velocities, sampled scale, and random headings. Analytic
+constant-gravity motion advances by effect age, with gravity following the authored
+model-up axis after coordinate conversion.
 
-## Visibility and ownership
+The current MDLX PREM interpretation retains its established latitude direction
+behavior; native latitude/longitude fidelity remains unverified. Unsupported
+controls produce diagnostics rather than implying an exact directional model.
+Application root motion interpolates observed update endpoints.
 
-Root visibility hides existing particles and stops new births; emitter visibility
-only stops births. Despawning the owner removes all particle models. Recursive
-child model paths are blocked. Child meshes and bind poses share the existing
-prepared-model cache; materials and animation belong to each instance.
+## Playback and ownership
 
-## Birth transforms and motion
+Children start their first clip and sample it by particle age, following the child's
+authored looping/clamping policy. Parent pause and playback speed control effect
+age. Immediate programme changes and backwards traversal clear particles; blended
+changes can retain live particles. Each child retains its own animation root and
+authored-coordinate placement policy.
 
-PREM latitude is interpreted directly in radians; longitude is ignored. Local
-emission direction combines a random Z heading with a Y tilt within the latitude
-range. World rotation is applied before componentwise world scale to
-velocity. Gravity is multiplied by world Z scale, and each child receives a
-random world Z heading. Position is evaluated analytically from age, initial
-velocity, and constant gravity.
+Root hierarchy visibility hides living particles and suppresses new births. Emitter
+activation stops births without destroying existing particles. Owner despawn removes
+detached world-space children, and cyclic model dependencies are rejected. Native
+resources must resolve through the application provider.
 
-## Resource support and emission limits
+## Limits
 
-Only model-based PREM resources are rendered; `EmitterUsesTga` image particles
-are unsupported. Child models use the
-[mesh material pipeline](renderer.md#materials-and-textures), and their node
-billboards use the configured [driving camera](node-flags.md).
-
-Emission rate and visibility use the update endpoint. Updates crossing keys or
-sequence boundaries can miss births because emission is not integrated across
-the interval. Each emitter is capped at 1,024 live model particles and 1,024
-attempted births per update. Excess births are discarded rather than queued
-after a stall.
+Each emitter is limited to 1,024 live child models and a bounded per-update birth
+budget. `UniversalModelParticleEmitter` exposes population, omitted births, and
+skipped simulation time. Excess work is discarded rather than queued after a stall.
+This is a CPU hierarchy/model simulation and can cost substantially more than sprite
+particles at comparable populations.

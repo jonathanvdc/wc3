@@ -39,7 +39,10 @@ struct UniversalCombiner { uv_transform: mat3x3<f32>, mode: vec4<u32>, clip: vec
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> combiner: UniversalCombiner;
 @group(#{MATERIAL_BIND_GROUP}) @binding(101) var secondary: texture_2d<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(102) var secondary_sampler: sampler;
+struct UniversalWorld { flags: vec4<u32>, };
+@group(#{MATERIAL_BIND_GROUP}) @binding(110) var<uniform> world: UniversalWorld;
 #import bevy_pbr::pbr_bindings
+#import "embedded://bevy_wc3/shaders/universal_hd.wgsl"::apply_hd
 
 @fragment
 fn fragment(
@@ -69,8 +72,31 @@ fn fragment(
     in.uv = forward_decal_info.uv;
 #endif
 
+    // World colors encode irradiance and a lighting transition, not albedo or
+    // opacity. Keep the authored source intact in the mesh for other consumers.
+    var baked_diffuse = vec3(0.0);
+#ifdef VERTEX_COLORS
+    if world.flags.x != 0u {
+        baked_diffuse = in.color.rgb;
+        in.color = vec4(1.0);
+    }
+#endif
+
     // generate a PbrInput struct from the StandardMaterial bindings
     var pbr_input = pbr_input_from_standard_material(in, is_front);
+
+    if world.flags.x != 0u {
+        if world.flags.y != 0u {
+            // Shader 4 ignores sampled map alpha. Explicit material opacity and
+            // instance geometry tint remain authored StandardMaterial inputs.
+            pbr_input.material.base_color.a = pbr_bindings::material.base_color.a;
+        }
+        pbr_input.material.emissive = vec4(pbr_input.material.emissive.rgb
+            + pbr_input.material.base_color.rgb * baked_diffuse,
+            pbr_input.material.emissive.a);
+    }
+
+    pbr_input = apply_hd(in, is_front, pbr_input);
 
     // Authored M2 legacy texture composition precedes Bevy illumination.
     if combiner.mode.x != 0u {

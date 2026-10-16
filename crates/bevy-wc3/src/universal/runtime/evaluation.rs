@@ -1,0 +1,315 @@
+use super::super::features::{AttachmentQuery, LightQuery, UniversalLightSettings};
+use super::super::hierarchy::{current_world, HierarchyData};
+use super::super::pose::{evaluate_pose, hierarchical, local_transform, EvaluatedPose};
+use super::super::{UniversalMaterial, UniversalWorldLiquidSurface};
+use super::{
+    UniversalAnimationError, UniversalControllerSelection, UniversalDraw, UniversalInstance,
+    UniversalNode, UniversalPlayback, UniversalPoseOverrides,
+};
+use bevy::math::Affine3A;
+use bevy::prelude::*;
+use wc3::model::profiles::Universal;
+use wc3::model::{ClipId, Transform as ModelTransform};
+
+#[derive(Default)]
+pub(super) struct EvaluationState {
+    pub(super) initialized: bool,
+    pub(super) clip: Option<ClipId>,
+    pub(super) controllers: UniversalControllerSelection,
+    pub(super) clocks: [f64; 3],
+    pub(super) lod: u32,
+    pub(super) driving_camera: Option<Entity>,
+    pub(super) has_settings: bool,
+    camera_frame: Option<Affine3A>,
+    camera_failure: Option<&'static str>,
+    #[cfg(test)]
+    pub(super) samples: usize,
+}
+impl EvaluationState {
+    pub(super) fn animation_changed(&self, playback: &UniversalPlayback, animated: bool) -> bool {
+        !self.initialized
+            || self.clip != playback.clip
+            || self.controllers != playback.controllers
+            || (animated
+                && self.clocks
+                    != [
+                        playback.clip_time,
+                        playback.timeline_time,
+                        playback.shared_time,
+                    ])
+    }
+    pub(super) fn remember(
+        &mut self,
+        playback: &UniversalPlayback,
+        has_settings: bool,
+        camera: Option<Affine3A>,
+    ) {
+        self.initialized = true;
+        self.clip = playback.clip;
+        self.controllers.clone_from(&playback.controllers);
+        self.clocks = [
+            playback.clip_time,
+            playback.timeline_time,
+            playback.shared_time,
+        ];
+        self.lod = playback.lod;
+        self.driving_camera = playback.driving_camera;
+        self.has_settings = has_settings;
+        self.camera_frame = camera;
+        #[cfg(test)]
+        {
+            self.samples += 1;
+        }
+    }
+}
+
+type AnimatedInstances<'world, 'state> = Query<
+    'world,
+    'state,
+    (
+        &'static mut UniversalInstance,
+        Ref<'static, UniversalPlayback>,
+        Ref<'static, UniversalPoseOverrides>,
+        &'static mut UniversalAnimationError,
+        Option<Ref<'static, UniversalLightSettings>>,
+    ),
+>;
+
+type DrawVisibility<'w, 's> = Query<
+    'w,
+    's,
+    &'static mut Visibility,
+    (
+        Or<(With<UniversalDraw>, With<UniversalWorldLiquidSurface>)>,
+        Without<UniversalNode>,
+    ),
+>;
+
+fn update_draw_visibility(
+    draws: &[(Entity, Option<u32>, Handle<UniversalMaterial>)],
+    lod: u32,
+    materials: &Assets<UniversalMaterial>,
+    visibility: &mut DrawVisibility<'_, '_>,
+) {
+    for (entity, level, material) in draws {
+        if let Ok(mut current) = visibility.get_mut(*entity) {
+            let has_opacity = materials
+                .get(material)
+                .is_some_and(|material| material.base.base_color.alpha() > 0.);
+            let next = if has_opacity && level.is_none_or(|level| level == lod) {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+            if *current != next {
+                *current = next;
+            }
+        }
+    }
+}
+
+pub(crate) fn apply_universal_lod_visibility(
+    mut instances: Query<(&mut UniversalInstance, &UniversalPlayback)>,
+    materials: Res<Assets<UniversalMaterial>>,
+    mut draws: DrawVisibility<'_, '_>,
+) {
+    for (mut instance, playback) in &mut instances {
+        if instance.evaluation.lod != playback.lod {
+            update_draw_visibility(&instance.draws, playback.lod, &materials, &mut draws);
+            instance.evaluation.lod = playback.lod;
+        }
+    }
+}
+
+type NodeTransformData = (&'static mut Transform, &'static mut Visibility);
+type NodeOutputs<'w, 's> = Query<'w, 's, NodeTransformData, With<UniversalNode>>;
+
+pub(crate) fn animate_universal_instances(
+    mut instances: AnimatedInstances<'_, '_>,
+    mut transforms: ParamSet<(Query<HierarchyData>, NodeOutputs)>,
+    mut hierarchy_scratch: Local<Vec<(Entity, Transform)>>,
+    mut draws: DrawVisibility<'_, '_>,
+    mut materials: ResMut<Assets<UniversalMaterial>>,
+    mut lights: LightQuery<'_, '_>,
+    mut attachments: AttachmentQuery<'_, '_>,
+) {
+    let material_changed = materials.is_changed();
+    for (mut instance, playback, overrides, mut error, settings) in &mut instances {
+        let has_settings = settings.is_some();
+        let settings_changed = settings.as_ref().is_some_and(|value| value.is_changed())
+            || has_settings != instance.evaluation.has_settings;
+        let settings = settings.as_deref().copied().unwrap_or_default();
+        let animation_changed = instance
+            .evaluation
+            .animation_changed(&playback, instance.model.has_animation);
+        let camera_result = if instance.model.camera_sensitive {
+            playback.driving_camera.map_or(Ok(None), |driver| {
+                let hierarchy = transforms.p0();
+                let camera = current_world(driver, &hierarchy, &mut hierarchy_scratch, true)?;
+                let root = current_world(
+                    instance.basis_entity,
+                    &hierarchy,
+                    &mut hierarchy_scratch,
+                    false,
+                )?;
+                if root.affine().matrix3.determinant().abs() <= 1e-12 {
+                    return Err("singular model frame for driving camera");
+                }
+                Ok(Some(root.affine().inverse() * camera.affine()))
+            })
+        } else {
+            Ok(None)
+        };
+        let failure = camera_result.as_ref().err().copied();
+        if failure != instance.evaluation.camera_failure {
+            if let Some(message) = failure {
+                warn!("Universal driving camera: {message}");
+            }
+            instance.evaluation.camera_failure = failure;
+        }
+        let camera = camera_result.unwrap_or(None);
+        let camera_changed = instance.model.camera_sensitive
+            && (instance.evaluation.camera_frame != camera
+                || instance.evaluation.driving_camera != playback.driving_camera);
+        let transition_dirty = instance
+            .transition
+            .needs_update(playback.transition_request, playback.transition_clock);
+        let pose_dirty = transition_dirty
+            || !instance.pose_initialized
+            || overrides.is_changed()
+            || (instance.model.pose_animated && animation_changed)
+            || camera_changed;
+        let light_input_changed = instance.features.has_changed_light_input(&mut lights);
+        let evaluation_dirty = !instance.evaluation.initialized
+            || animation_changed
+            || pose_dirty
+            || settings_changed
+            || light_input_changed;
+        let draws_dirty =
+            evaluation_dirty || material_changed || instance.evaluation.lod != playback.lod;
+        if !evaluation_dirty {
+            if draws_dirty {
+                update_draw_visibility(&instance.draws, playback.lod, &materials, &mut draws);
+            }
+            instance.evaluation.lod = playback.lod;
+            continue;
+        }
+        let timing = instance.model.timing.clone();
+        let selection = playback.selection_from_timing(&timing);
+        let animation = instance.model.animation.clone();
+        let sample = match selection.and_then(|selection| animation.sample(selection)) {
+            Ok(sample) => {
+                if error.0.is_some() {
+                    error.0 = None;
+                }
+                sample
+            }
+            Err(failure) => {
+                let message = failure.to_string();
+                if error.0.as_ref() != Some(&message) {
+                    error.0 = Some(message);
+                }
+                continue;
+            }
+        };
+        let blend_time = playback.blend_duration(&instance.model);
+        let node_count = instance.model.nodes.len();
+        instance.transition.prepare(
+            playback.transition_request,
+            playback.transition_clock,
+            blend_time,
+            node_count,
+        );
+        instance
+            .evaluation
+            .remember(&playback, has_settings, camera);
+        let UniversalInstance {
+            model,
+            poses,
+            evaluated,
+            visible,
+            nodes,
+            draws: draw_entities,
+            materials: material_bindings,
+            features: feature_instances,
+            pose_initialized,
+            transition,
+            ..
+        } = &mut *instance;
+        if pose_dirty {
+            let mut output = transforms.p1();
+            for &index in model.order.iter() {
+                let node = &model.nodes[index];
+                let pose = overrides
+                    .0
+                    .get(&node.id)
+                    .copied()
+                    .unwrap_or_else(|| ModelTransform {
+                        translation: sample
+                            .property(&node.id.translation::<Universal>())
+                            .unwrap_or(node.rest.translation),
+                        rotation: sample
+                            .property(&node.id.rotation::<Universal>())
+                            .unwrap_or(node.rest.rotation),
+                        scale: sample
+                            .property(&node.id.scale::<Universal>())
+                            .unwrap_or(node.rest.scale),
+                        pivot: node.rest.pivot,
+                    });
+                let pose = if overrides.0.contains_key(&node.id) {
+                    pose
+                } else {
+                    transition.blend(index, pose)
+                };
+                transition.record(index, pose);
+                evaluated[index] = evaluate_pose(
+                    node,
+                    pose,
+                    node.parent
+                        .map_or_else(EvaluatedPose::default, |parent| evaluated[parent]),
+                    camera,
+                );
+                let matrix = evaluated[index].matrix;
+                poses[index] = matrix;
+                let node_visible = sample
+                    .property(&node.id.visibility::<Universal>())
+                    .unwrap_or(node.visible)
+                    && node.parent.is_none_or(|parent| visible[parent]);
+                visible[index] = node_visible;
+                if let Ok((mut transform, mut visibility)) = output.get_mut(nodes[index]) {
+                    let value = if hierarchical(node) {
+                        local_transform(pose)
+                    } else {
+                        evaluated[index].as_transform()
+                    };
+                    if *transform != value {
+                        *transform = value;
+                    }
+                    let value = if node_visible {
+                        Visibility::Inherited
+                    } else {
+                        Visibility::Hidden
+                    };
+                    if *visibility != value {
+                        *visibility = value;
+                    }
+                }
+            }
+            *pose_initialized = true;
+            transition.finish();
+        }
+        for (handle, binding) in material_bindings.iter() {
+            binding.apply_to_assets(&sample, handle, materials.bypass_change_detection());
+        }
+        if draws_dirty {
+            update_draw_visibility(draw_entities, playback.lod, &materials, &mut draws);
+        }
+        model.features.animate(
+            &sample,
+            feature_instances,
+            &settings,
+            &mut lights,
+            &mut attachments,
+        );
+    }
+}

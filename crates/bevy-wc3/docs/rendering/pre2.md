@@ -1,47 +1,65 @@
-# Quad particles (PRE2)
+# Sprite particles
 
-PRE2 emitters render textured, GPU-instanced head and tail quads for each model
-instance. CPU simulation schedules births and stores immutable spawn records;
-the vertex shader evaluates motion, lifetime color/alpha/size curves, atlas UVs,
-and geometry independently for each view.
+Staged atlas particles, including MDLX PRE2, use immutable GPU birth records. M2
+normalized-age particles use reusable CPU mesh buffers. Both paths retain semantic
+emitter identities, bounded populations, authored motion, and independent instance
+clocks; they have different geometry and material capabilities.
 
-## Emission and motion
+## Births and motion
 
-Continuous emission distributes births within each update. Spawn parameters and
-node transforms are sampled at those subframe times, while emission rate and
-visibility use the update endpoint. Squirt emission observes the current emission
-key. Playback pause and speed control the emitter simulation clock.
+Continuous emission uses bounded 60 Hz midpoint integration. Keyed bursts follow
+crossed keys and cycles instead of observing only the update endpoint. Birth
+parameters and hierarchy transforms sample occurrence times, including transitions
+and nonlinear parent motion. Application root movement interpolates observed frame
+endpoints. This integration approximates continuously changing rates.
 
-World-space velocity uses the emitter’s full affine transform, with multiplicative
-speed variation. Gravity is scaled by the emitter’s Z-axis length at birth.
-ModelSpace transforms live local motion through the current node transform.
+World particles retain their birth frame; local particles follow the current
+emitter. Gravity and fixed-plane geometry follow authored model axes after frame
+conversion. M2 motion additionally evaluates supported wind and linear drag
+analytically. Packed gravity and spline/bone generators need dedicated
+interpretation and produce diagnostics instead of a guessed scalar substitute.
 
-## Geometry, textures, and lighting
+## Geometry and appearance
 
-Billboard heads face the current view; tails follow particle velocity. Head sizes
-and tail widths retain XYZ scale sampled at birth and apply it componentwise in
-world space after orientation. Tail velocity already contains emitter scale.
-ModelSpace retains birth scale for quad dimensions while moving centers and tails
-with the current node. XYQuad heads stay in world XY, retaining an initial
-XY-velocity facing angle; stationary and vertical particles still form full quads.
+Staged particles support view-facing heads, velocity tails, fixed-plane heads,
+normalized lifetime size/color/alpha stages, and atlas frames. Shaded sprites use
+Bevy lighting; unlit sprites retain texture/color directly. Authored blend and depth
+states remain separate from lighting. Per-view particle ordering changes draw
+indices rather than birth records.
 
-Unshaded particles use texture and segment color directly. Shaded particles use
-Bevy scene lighting with a matte, zero-reflectance material. Billboard heads and
-tails use a camera-facing normal; XYQuad heads use world +Z. Lighting preserves
-alpha. Bitmap and replaceable textures use per-instance bindings; a zero
-replaceable ID resolves TextureID through the bitmap slot.
+M2 age-driven particles sample independent color, opacity, scale, and cell curves.
+Reusable meshes upload when population, appearance, or view changes; paused,
+unchanged frames avoid uploads. Native tail time-versus-distance interpretation
+remains unverified. Secondary texture/composition, texture scroll/rotation,
+follow/twinkle controls, external child effects, and several native generators
+remain incomplete and produce diagnostics.
 
-PriorityPlane biases Bevy transparent sorting. SortPrimsFarZ orders particles
-by analytic center depth along each camera’s forward axis.
+## Budgets and limits
 
-## Implementation limits
+Each sprite emitter is bounded to 8,192 living particles. The CPU age path also
+bounds births and long-update integration intervals, reporting omitted births and
+skipped time through `UniversalParticleEmitter`. Budgets discard work rather than
+creating an unbounded catch-up queue. Root despawn removes simulation and render
+state. Hierarchy visibility gates rendering; effect activation controls births.
 
-Each emitter is limited to 8,192 live spawn records. Storage grows with the
-population; [architecture](../architecture.md#effect-record-storage) describes
-record extraction and GPU uploads for contributors.
+Fog and game-specific ordering across effect and mesh families are not reproduced by
+the shared effect transport. M3 programmed particles use the same bounded CPU
+transport with a separate interpreter, described below.
 
-The shader applies no fog. Replaceable IDs require application-supplied textures.
-Endpoint emission-rate/visibility sampling can miss changes within an update;
-squirt updates crossing multiple keys or loops can miss bursts. A dedicated WC3
-ordering scheme across model materials and effects is not implemented.
-Quad size uses transformed axis lengths, so mirrored scale signs are discarded.
+## M3 standard billboard subset
+
+Standard billboards support point, plane, box, and sphere distributions with
+constant, Z-axis, radial, or random velocity selection. Continuous emission samples
+authored occurrence poses. Optional speed/lifespan ranges randomize at birth; color,
+alpha, size, and rotation freeze their start/middle/end controls at birth, with
+independent normalized midpoints. Linear and smooth interpolation and two-phase
+flipbooks are implemented. The primary compiled PBR material pass animates on the
+model clocks; supplementary passes are not instantiated.
+
+Authored maximum population tightens the shared 8,192 cap. Unsupported geometry,
+shape cutouts, encoded XY gravity, and Bezier/hold or unknown interpolation
+selectors reject that particle interpretation with diagnostics. Forces, noise,
+collision, secondary effects, squirt, specialized time controls, and kill-radius
+rules remain incomplete and are diagnosed. Endpoint-anchored programmed beams use
+a separate partial [ribbon interpreter](ribbons.md#m3-endpoint-beams). This subset's
+exact native motion and lighting fidelity is unverified.

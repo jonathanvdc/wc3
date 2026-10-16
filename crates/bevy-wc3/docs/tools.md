@@ -2,8 +2,8 @@
 
 The examples let you inspect a model interactively, validate its preparation,
 or render PNGs at repeatable animation times. The viewer and capture tools load
-both MDX and MDL through `Wc3BevyPlugin`, using the same renderer as an
-application. Run the commands below from the repository root. For application
+native model assets through `Wc3BevyPlugin`, using the same Universal pipeline
+as applications. Run the commands below from the repository root. For application
 setup, see [Using bevy-wc3](usage.md).
 
 ## Explore a model
@@ -17,10 +17,11 @@ cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx
 Left drag rotates the camera, right drag pans, the scroll wheel zooms, and Space
 cycles sequences. The model's directory is the default asset root. Texture paths
 resolve beside the model first, then from that root, using the loader's
-[extension fallbacks](usage.md#load-and-spawn-models).
+[resource provider](usage.md).
 
-Use `--replaceable ID=PATH`, `--bitmap INDEX=PATH`, or `--particle2 INDEX=PATH`
-to override textures relative to the asset root. For example:
+Use `--replaceable ID=PATH` or `--bitmap INDEX=PATH` to override textures
+relative to the asset root. Bitmap indices enumerate semantic textures, including
+effect textures; there is no separate native particle texture namespace. For example:
 
 ```sh
 cargo run -p bevy-wc3 --example viewer -- path/to/tree.mdx \
@@ -32,6 +33,14 @@ among authored levels while zooming. `--lod-bias`, `--lod-thresholds`,
 `--lod-hysteresis`, and `--lod-minimum` tune the same quality policy used by the
 capture tool; see [geometry LOD](rendering/lod.md).
 
+For M2 companions and archive texture identities, use repeated `--file-id ID=PATH`
+arguments. WMO loading also requires an explicit `--wmo-profile` matching the
+source build, such as `warwithin`; the renderer does not guess the build layout.
+The capture tool accepts the same provider choices. Native import is strict by
+default. `--allow-loss` explicitly accepts conversion loss for unsupported native
+records, with each dropped interpretation reported as a rendering diagnostic.
+It does not repair malformed models or supply missing required companions.
+
 ## Capture animation frames
 
 The offscreen capture example produces PNGs at increasing simulation times.
@@ -41,14 +50,14 @@ This attachment fixture provides a small starting point with an explicit camera:
 cargo run -p bevy-wc3 --example capture -- \
   crates/bevy-wc3/tests/fixtures/attachment_capture.mdl /tmp/wc3-attachments \
   --times 0,0.25,0.75,1.25 --fps 60 --size 640x480 \
-  --eye 0,-18,12 --target 0,0,0
+  --eye 0,12,18 --target 0,0,0
 ```
 
 The default is one capture at 1 second, 60 simulation steps per second, and
-640x480 pixels. Without camera options, the camera frames model bounds with Z up.
+640x480 pixels. Without camera options, the camera frames rest-pose model bounds with Bevy Y up.
 Use `--asset-root PATH` for textures shared across model directories; the same
 texture override options as the viewer are available. An authored model camera
-can replace the explicit eye/target; see [model cameras](rendering/cameras.md#offscreen-captures).
+can replace the explicit eye/target; see [model cameras](rendering/cameras.md).
 
 Capture times are nonnegative, strictly increasing seconds from the initial
 sequence start. Select a sequence with `--sequence INDEX`; indices start at zero.
@@ -67,7 +76,7 @@ baker at each capture time. The same camera, textures, authored LOD selection,
 lighting, and prepass options apply, making paired captures useful for comparing
 live GPU skinning with CPU-baked geometry. This mode excludes the live hierarchy
 and its effects from rendering and rejects scheduled `--play` transitions. See
-[static pose baking](usage.md#bake-a-static-pose) for the snapshot's scope.
+[static pose baking](usage.md) for the snapshot's scope.
 
 ## Compare rendering behavior
 
@@ -84,8 +93,8 @@ sequence intervals, materials, and textures. Start from a fixture under
 camera and unrelated scene inputs fixed. Model bounds must encompass the content,
 or the capture must use an explicit camera.
 
-[Animation blending](rendering/animation-blending.md#scheduled-playback-in-captures)
-shows scheduled sequence switches, and [LOD captures](rendering/lod.md#capture-levels)
+[Animation blending](rendering/animation-blending.md)
+shows scheduled sequence switches, and [LOD captures](rendering/lod.md)
 shows fixed and automatic geometry selection. Run `capture --help` through Cargo
 for the complete set of options.
 
@@ -110,6 +119,6 @@ without opening a GPU window. For a preparation check, run:
 cargo run -p bevy-wc3 --example compile -- path/to/model.mdx
 ```
 
-Both examples decode the model directly, and `compile` prepares geometry without
+Both examples directly import MDX or MDL into a Universal graph, and `compile` prepares geometry without
 resolving texture images. These checks help diagnose decoding and preparation
 problems; use the viewer or captures to verify texture loading and appearance.

@@ -2,8 +2,8 @@
 use bevy::prelude::{Handle, Image};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use wc3::model::materials::{programmed, SurfaceSet};
-use wc3::model::{ColorSpace, Model, Texture, TextureId};
+use wc3::model::materials::{layered, programmed, world, SurfaceSet};
+use wc3::model::{AddressMode, ColorSpace, Model, Sampler, Texture, TextureId};
 
 /// Purpose of one sampled image, independent of its resource identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -41,13 +41,15 @@ impl TextureColorSpace {
     }
 }
 
-/// Identity of one texture's effective transfer-function variant.
+/// Identity of one texture's effective transfer function and addressing variant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TextureImageKey {
     /// Source semantic texture identity, retaining sampler/producer declarations.
     pub id: TextureId,
     /// Effective transfer function for this use.
     pub color_space: TextureColorSpace,
+    /// Effective addressing selected by this surface use.
+    pub sampler: Sampler,
 }
 
 /// A semantic texture request with independently selected role and interpretation.
@@ -60,6 +62,8 @@ pub struct TextureRequest<'view, 'data> {
     pub role: TextureRole,
     /// Effective transfer function; established explicit declarations take precedence.
     pub color_space: TextureColorSpace,
+    /// Effective addressing selected by this surface use.
+    pub sampler: Sampler,
 }
 impl TextureRequest<'_, '_> {
     /// Cache identity for the resolved interpretation.
@@ -67,6 +71,7 @@ impl TextureRequest<'_, '_> {
         TextureImageKey {
             id: self.id,
             color_space: self.color_space,
+            sampler: self.sampler,
         }
     }
 }
@@ -78,13 +83,14 @@ pub fn texture_requests<'view, 'data>(
 ) -> Vec<TextureRequest<'view, 'data>> {
     let mut requests = Vec::new();
     let mut seen = HashSet::new();
-    let mut add = |id: TextureId, role: TextureRole| {
+    let mut add = |id: TextureId, role: TextureRole, sampler: Option<Sampler>| {
         if let Some(texture) = model.texture(id) {
             let request = TextureRequest {
                 id,
                 texture,
                 role,
                 color_space: TextureColorSpace::selected(texture.color_space, role),
+                sampler: sampler.unwrap_or(texture.sampler),
             };
             if seen.insert(request.key()) {
                 requests.push(request);
@@ -93,12 +99,15 @@ pub fn texture_requests<'view, 'data>(
     };
     // Every image remains available for animated diffuse/replaceable selection.
     for (id, _) in model.textures() {
-        add(id, TextureRole::Color);
+        add(id, TextureRole::Color, None);
     }
     for (_, material) in model.materials() {
         match &material.surface {
             SurfaceSet::Layered(surface) => {
                 for layer in &surface.layers {
+                    if !is_default_unit(surface, layer) {
+                        continue;
+                    }
                     for slot in &layer.textures {
                         let role = match slot.slot {
                             1 => TextureRole::Normal,
@@ -106,8 +115,29 @@ pub fn texture_requests<'view, 'data>(
                             _ => TextureRole::Color,
                         };
                         if let Some(id) = slot.binding.image.default {
-                            add(id, role);
+                            add(id, role, None);
                         }
+                        // Texture tracks may select any model-owned image. Their data
+                        // interpretations must already exist before animation runs.
+                        if slot.binding.image.property.is_some() {
+                            for (id, _) in model.textures() {
+                                add(id, role, None);
+                            }
+                        }
+                    }
+                }
+            }
+            SurfaceSet::World(surface) => {
+                for slot in &surface.textures {
+                    if let Some((id, texture)) = slot
+                        .image
+                        .and_then(|id| model.texture(id).map(|texture| (id, texture)))
+                    {
+                        add(
+                            id,
+                            TextureRole::Color,
+                            Some(world_sampler(surface, texture.sampler)),
+                        );
                     }
                 }
             }
@@ -122,7 +152,7 @@ pub fn texture_requests<'view, 'data>(
                     .flatten()
                     {
                         if let Some(id) = layer.binding.image {
-                            add(id, TextureRole::Normal);
+                            add(id, TextureRole::Normal, None);
                         }
                     }
                     for layer in [
@@ -139,7 +169,7 @@ pub fn texture_requests<'view, 'data>(
                     .flatten()
                     {
                         if let Some(id) = layer.binding.image {
-                            add(id, TextureRole::Data);
+                            add(id, TextureRole::Data, None);
                         }
                     }
                 }
@@ -150,11 +180,13 @@ pub fn texture_requests<'view, 'data>(
     requests
 }
 
-/// Shared resolved images; source IDs and transfer functions remain distinct.
+/// Shared resolved images; source IDs, transfer functions, and samplers stay distinct.
 #[derive(Clone, Default)]
 pub(crate) struct TextureImages {
     variants: HashMap<TextureImageKey, Handle<Image>>,
     colors: Arc<HashMap<TextureId, Handle<Image>>>,
+    declared: HashMap<TextureId, ColorSpace>,
+    samplers: HashMap<TextureId, Sampler>,
 }
 impl TextureImages {
     pub(crate) fn resolve(
@@ -177,6 +209,7 @@ impl TextureImages {
                         texture.color_space,
                         TextureRole::Color,
                     ),
+                    sampler: texture.sampler,
                 };
                 variants.get(&key).map(|image| (id, image.clone()))
             })
@@ -184,6 +217,14 @@ impl TextureImages {
         Self {
             variants,
             colors: Arc::new(colors),
+            samplers: model
+                .textures()
+                .map(|(id, texture)| (id, texture.sampler))
+                .collect(),
+            declared: model
+                .textures()
+                .map(|(id, texture)| (id, texture.color_space))
+                .collect(),
         }
     }
     pub(crate) fn color_images(&self) -> &Arc<HashMap<TextureId, Handle<Image>>> {
@@ -195,10 +236,23 @@ impl TextureImages {
         declared: ColorSpace,
         role: TextureRole,
     ) -> Option<&Handle<Image>> {
+        self.get_with_sampler(id, declared, role, *self.samplers.get(&id)?)
+    }
+    pub(crate) fn get_with_sampler(
+        &self,
+        id: TextureId,
+        declared: ColorSpace,
+        role: TextureRole,
+        sampler: Sampler,
+    ) -> Option<&Handle<Image>> {
         self.variants.get(&TextureImageKey {
             id,
             color_space: TextureColorSpace::selected(declared, role),
+            sampler,
         })
+    }
+    pub(crate) fn for_role(&self, id: TextureId, role: TextureRole) -> Option<&Handle<Image>> {
+        self.get(id, *self.declared.get(&id)?, role)
     }
     #[cfg(test)]
     pub(crate) fn from_colors(
@@ -208,3 +262,30 @@ impl TextureImages {
         Self::resolve(model, |request| images.get(&request.id).cloned())
     }
 }
+
+pub(crate) fn is_default_unit(
+    surface: &layered::LayeredSurface<'_>,
+    layer: &layered::Layer,
+) -> bool {
+    // The per-layer shader selector takes precedence in normalized newer files.
+    match layer.shader {
+        Some(1) => true,
+        Some(_) => false,
+        None => surface.shader == "Shader_HD_DefaultUnit",
+    }
+}
+
+/// WMO addressing is surface authority; texture definitions remain unchanged.
+pub(crate) fn world_sampler(surface: &world::Material<'_>, mut sampler: Sampler) -> Sampler {
+    let controls = surface.state.rasterization.controls;
+    if controls.clamp_u {
+        sampler.u = AddressMode::Clamp;
+    }
+    if controls.clamp_v {
+        sampler.v = AddressMode::Clamp;
+    }
+    sampler
+}
+#[cfg(test)]
+#[path = "textures_tests.rs"]
+mod tests;

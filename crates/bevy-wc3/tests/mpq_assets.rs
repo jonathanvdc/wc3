@@ -3,9 +3,10 @@ use bevy::image::ImageLoader;
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool, TaskPoolBuilder};
 use bevy_mpq::{MpqAssetReader, OverlayAssetReader, OverlayMount};
-use bevy_wc3::{Wc3ModelAsset, Wc3ModelLoader};
+use bevy_wc3::{UniversalModelAsset, UniversalModelLoader, UniversalPathResolver};
 use std::borrow::Cow;
 use std::io::Cursor;
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use wc3::mpq::{Archive, ArchiveWriter, FileOptions, SeekSource, WriteOptions};
@@ -78,9 +79,9 @@ fn named_source_loads_recursive_models_and_images_across_archives() {
     app.add_plugins(AssetPlugin::default());
     app.init_asset::<Image>()
         .register_asset_loader(ImageLoader::new(default()));
-    app.init_asset::<Wc3ModelAsset>()
-        .init_asset_loader::<Wc3ModelLoader>();
-    let handle: Handle<Wc3ModelAsset> = app
+    app.init_asset::<UniversalModelAsset>()
+        .register_asset_loader(UniversalModelLoader::new(Arc::new(UniversalPathResolver)));
+    let handle: Handle<UniversalModelAsset> = app
         .world()
         .resource::<AssetServer>()
         .load("map://units/parent.mdl");
@@ -100,32 +101,15 @@ fn named_source_loads_recursive_models_and_images_across_archives() {
         );
         sleep(Duration::from_millis(5));
     }
-    let models = app.world().resource::<Assets<Wc3ModelAsset>>();
-    let particle = models
-        .get(&handle)
-        .unwrap()
-        .model_resources()
-        .particle(0)
-        .unwrap();
-    assert_eq!(
-        particle.path().unwrap().to_string(),
-        "map://units/child.mdl"
-    );
-    let child = models
-        .get(&handle)
-        .unwrap()
-        .model_resources()
-        .attachment(0)
-        .unwrap();
-    assert_eq!(child.path().unwrap().to_string(), "map://units/child.mdl");
-    let leaf = models
-        .get(&child)
-        .unwrap()
-        .model_resources()
-        .attachment(0)
-        .unwrap();
-    assert_eq!(leaf.path().unwrap().to_string(), "map://units/leaf.mdl");
-    assert!(models.get(&leaf).is_some());
+    let models = app.world().resource::<Assets<UniversalModelAsset>>();
+    assert!(models.get(&handle).is_some());
+    let server = app.world().resource::<AssetServer>();
+    for path in ["map://units/child.mdl", "map://units/leaf.mdl"] {
+        let child = server
+            .get_handle::<UniversalModelAsset>(path)
+            .expect("child preserves named source");
+        assert!(models.get(&child).is_some());
+    }
     assert_eq!(app.world().resource::<Assets<Image>>().len(), 1);
 }
 

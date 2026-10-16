@@ -334,7 +334,11 @@ fn asset_population_retains_existing_root_controls_and_source_identity() {
     assert!(app.world().get::<UniversalModelInstance>(root).is_none());
     assert!(app.world().get::<UniversalInstance>(root).is_some());
     assert_eq!(
-        app.world().get::<UniversalModelSource>(root).unwrap().0,
+        app.world()
+            .get::<UniversalModelSource>(root)
+            .unwrap()
+            .0
+            .id(),
         source_id
     );
     assert_eq!(*app.world().get::<Transform>(root).unwrap(), transform);
@@ -574,4 +578,325 @@ fn animated_materials_are_isolated_between_playback_clocks() {
             .abs()
             < 1e-5
     );
+}
+
+#[test]
+fn unchanged_static_instances_skip_sampling_but_external_alpha_still_updates_visibility() {
+    let (source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
+    let (mut app, first, _, node) = spawn_pair(&source);
+    app.update();
+    let handle = material_handle(&mut app, first, node);
+    let initial = app
+        .world()
+        .get::<UniversalInstance>(first)
+        .unwrap()
+        .evaluation_count();
+    for time in [1., 2., 3.] {
+        {
+            let mut playback = app.world_mut().get_mut::<UniversalPlayback>(first).unwrap();
+            playback.shared_time = time;
+            playback.clip_time = time;
+            playback.timeline_time = time;
+        }
+        app.update();
+    }
+    assert_eq!(
+        app.world()
+            .get::<UniversalInstance>(first)
+            .unwrap()
+            .evaluation_count(),
+        initial
+    );
+    app.world_mut()
+        .resource_mut::<Assets<UniversalMaterial>>()
+        .get_mut(&handle)
+        .unwrap()
+        .base
+        .base_color = Color::srgba(1., 1., 1., 0.);
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<UniversalInstance>(first)
+            .unwrap()
+            .evaluation_count(),
+        initial
+    );
+    let draw_visibility = app
+        .world_mut()
+        .query::<(&MeshMaterial3d<UniversalMaterial>, &Visibility)>()
+        .iter(app.world())
+        .find(|(material, _)| material.0 == handle)
+        .unwrap()
+        .1;
+    assert_eq!(*draw_visibility, Visibility::Hidden);
+}
+
+#[test]
+fn light_settings_insertion_and_removal_invalidate_static_evaluation() {
+    let (source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
+    let (mut app, first, _, _) = spawn_pair(&source);
+    app.update();
+    let initial = app
+        .world()
+        .get::<UniversalInstance>(first)
+        .unwrap()
+        .evaluation_count();
+    app.world_mut()
+        .entity_mut(first)
+        .insert(UniversalLightSettings::default());
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<UniversalInstance>(first)
+            .unwrap()
+            .evaluation_count(),
+        initial + 1
+    );
+    app.world_mut()
+        .entity_mut(first)
+        .remove::<UniversalLightSettings>();
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<UniversalInstance>(first)
+            .unwrap()
+            .evaluation_count(),
+        initial + 2
+    );
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<UniversalInstance>(first)
+            .unwrap()
+            .evaluation_count(),
+        initial + 2
+    );
+}
+
+#[test]
+fn public_rest_bounds_use_joint_rest_pose_instead_of_mesh_placement() {
+    let (source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
+    let compiled = compile_universal_model(&source, |_| None).unwrap();
+    let bounds = compiled.rest_bounds().unwrap();
+    let basis = compiled.basis.to_matrix();
+    let points = [[3., 0., 0.], [4., 0., 0.], [3., 1., 0.]]
+        .map(|point| basis.transform_point3(Vec3::from_array(point)));
+    let min = points
+        .into_iter()
+        .fold(Vec3::splat(f32::INFINITY), Vec3::min);
+    let max = points
+        .into_iter()
+        .fold(Vec3::splat(f32::NEG_INFINITY), Vec3::max);
+    assert!((Vec3::from(bounds.center) - (min + max) * 0.5).length() < 1e-5);
+    assert!((Vec3::from(bounds.half_extents) - (max - min) * 0.5).length() < 1e-5);
+    let mut meshes = Assets::default();
+    let mut binds = Assets::default();
+    let prepared = compiled.prepare(&mut meshes, &mut binds);
+    assert_eq!(prepared.rest_bounds().unwrap().center, bounds.center);
+}
+
+#[test]
+fn driving_camera_and_root_local_changes_update_billboards_before_propagation() {
+    let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
+    let mount = source.instances().next().unwrap().1.node;
+    let mut node = source.node(mount).unwrap().clone();
+    node.billboard = Billboard::Spherical;
+    source
+        .edit(|builder| builder.set_node(mount, node))
+        .unwrap();
+    // spawn_pair evaluates during Update; propagation occurs later in PostUpdate.
+    let (mut app, root, _, _) = spawn_pair(&source);
+    let driver = app.world_mut().spawn(Transform::default()).id();
+    app.world_mut()
+        .get_mut::<UniversalPlayback>(root)
+        .unwrap()
+        .driving_camera = Some(driver);
+    app.update();
+    let rig = app
+        .world()
+        .get::<UniversalInstance>(root)
+        .unwrap()
+        .node(mount)
+        .unwrap();
+    let initial = *app.world().get::<Transform>(rig).unwrap();
+    let count = app
+        .world()
+        .get::<UniversalInstance>(root)
+        .unwrap()
+        .evaluation_count();
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<UniversalInstance>(root)
+            .unwrap()
+            .evaluation_count(),
+        count
+    );
+    // No propagation occurs between these local edits and Update evaluation.
+    app.world_mut()
+        .get_mut::<Transform>(driver)
+        .unwrap()
+        .rotation = Quat::from_rotation_y(0.7);
+    app.world_mut().get_mut::<Transform>(root).unwrap().rotation = Quat::from_rotation_y(0.2);
+    app.update();
+    let next = *app.world().get::<Transform>(rig).unwrap();
+    assert_ne!(initial.rotation, next.rotation);
+    let basis = app
+        .world()
+        .get::<UniversalInstance>(root)
+        .unwrap()
+        .model()
+        .model_to_bevy()
+        .to_matrix();
+    let root_matrix = app.world().get::<Transform>(root).unwrap().to_matrix();
+    let camera_matrix = app.world().get::<Transform>(driver).unwrap().to_matrix();
+    let relative = (root_matrix * basis).inverse() * camera_matrix;
+    let expected = Quat::from_mat3(&Mat3::from_mat4(relative)).normalize();
+    assert!(next.rotation.abs_diff_eq(expected, 1e-5));
+    let count = app
+        .world()
+        .get::<UniversalInstance>(root)
+        .unwrap()
+        .evaluation_count();
+    app.update();
+    assert_eq!(
+        app.world()
+            .get::<UniversalInstance>(root)
+            .unwrap()
+            .evaluation_count(),
+        count
+    );
+}
+
+#[test]
+fn m3_authored_controller_selection_drives_live_and_baked_pose_with_explicit_empty_override() {
+    use wc3::model::controls::playback::{ControllerSelection, SequenceControls};
+    use wc3::model::Time as ModelTime;
+    use wc3::model::{Channel, Clip, ClipControls, Clock, Controller, Curve, Track};
+
+    let (mut source, joint) = fixture(UniversalBinding::Identity(IdentityBinding));
+    let clip = source
+        .edit(|builder| {
+            let controller = builder.add_controller(Controller::default())?;
+            builder.add_controller_channel(
+                controller,
+                Channel::Vector3(Track {
+                    target: joint.translation(),
+                    curve: Curve::linear(
+                        [ModelTime::seconds(1.)?, ModelTime::seconds(2.)?],
+                        [[4., 0., 0.], [6., 0., 0.]],
+                    )?,
+                    clock: Clock::Timeline,
+                }),
+            )?;
+            let mut clip =
+                Clip::named("M3 selected programme").with_duration(ModelTime::seconds(1.)?);
+            clip.controls = Some(ClipControls::M3(SequenceControls {
+                timeline_origin: ModelTime::seconds(1.)?,
+                blend_duration: ModelTime::seconds(0.3)?,
+                selection: Some(ControllerSelection {
+                    name: "authored STG".into(),
+                    controllers: vec![controller],
+                }),
+                ..Default::default()
+            }));
+            builder.add_clip(clip)
+        })
+        .unwrap();
+    let compiled = compile_universal_model(&source, |_| None).unwrap();
+    let mut meshes = Assets::default();
+    let mut binds = Assets::default();
+    let prepared = compiled.prepare(&mut meshes, &mut binds);
+    let mut playback = UniversalPlayback::for_clip(clip);
+    playback.clip_time = 0.5;
+    assert_eq!(playback.blend_duration(&prepared), 0.3);
+    let baked = UniversalPoseBaker::default()
+        .bake(
+            &prepared,
+            &meshes,
+            &binds,
+            UniversalPoseOptions {
+                playback: Some(&playback),
+                space: UniversalBakeSpace::Authored,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let VertexAttributeValues::Float32x3(positions) = baked.parts[0]
+        .mesh
+        .attribute(Mesh::ATTRIBUTE_POSITION)
+        .unwrap()
+    else {
+        panic!("positions")
+    };
+    assert_eq!(positions[0], [5., 0., 0.]);
+    let (mut app, root, _, _) = spawn_pair(&source);
+    app.world_mut().entity_mut(root).insert(playback.clone());
+    app.update();
+    let entity = app
+        .world()
+        .get::<UniversalInstance>(root)
+        .unwrap()
+        .node(joint)
+        .unwrap();
+    assert_eq!(
+        app.world().get::<Transform>(entity).unwrap().translation.x,
+        5.
+    );
+    let expected = prepared.basis.transform_point(Vec3::new(5., 0., 0.));
+    assert!(app
+        .world()
+        .get::<GlobalTransform>(entity)
+        .unwrap()
+        .translation()
+        .abs_diff_eq(expected, 1e-5));
+    playback.controllers = UniversalControllerSelection::Explicit(vec![]);
+    app.world_mut().entity_mut(root).insert(playback.clone());
+    app.update();
+    assert_eq!(
+        app.world().get::<Transform>(entity).unwrap().translation.x,
+        3.
+    );
+    let baked = UniversalPoseBaker::default()
+        .bake(
+            &prepared,
+            &meshes,
+            &binds,
+            UniversalPoseOptions {
+                playback: Some(&playback),
+                space: UniversalBakeSpace::Authored,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let VertexAttributeValues::Float32x3(positions) = baked.parts[0]
+        .mesh
+        .attribute(Mesh::ATTRIBUTE_POSITION)
+        .unwrap()
+    else {
+        panic!("positions")
+    };
+    assert_eq!(positions[0], [3., 0., 0.]);
+}
+
+#[test]
+fn m2_nonzero_transition_pairs_require_explicit_application_duration() {
+    use wc3::model::controls::model::SequenceControls;
+    use wc3::model::{Clip, ClipControls};
+    let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
+    source
+        .edit(|builder| {
+            let mut clip = Clip::named("M2 authored transition");
+            clip.controls = Some(ClipControls::M2(SequenceControls {
+                blend_time: [150, 300],
+                ..Default::default()
+            }));
+            builder.add_clip(clip)
+        })
+        .unwrap();
+    let compiled = compile_universal_model(&source, |_| None).unwrap();
+    assert!(compiled.diagnostics().iter().any(|diagnostic| {
+        diagnostic.message.contains("[150, 300] milliseconds")
+            && diagnostic.message.contains("play_with_blend")
+    }));
 }

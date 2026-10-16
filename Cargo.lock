@@ -459,6 +459,7 @@ dependencies = [
  "bytemuck",
  "criterion",
  "naga",
+ "serde",
  "wc3",
 ]
 

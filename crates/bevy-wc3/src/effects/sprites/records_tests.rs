@@ -1,0 +1,88 @@
+use super::*;
+
+fn emitter() -> StagedSpriteParameters {
+    StagedSpriteParameters {
+        colors: [[1.; 4]; 3],
+        scales: [1.; 3],
+        middle: 0.5,
+        intervals: [[0, 0, 1]; 4],
+        atlas: [1, 1],
+        model_space: false,
+        xy_quad: false,
+        tail_length: 0.,
+        unlit: false,
+        plane_axes: [Vec3::X, Vec3::Y],
+    }
+}
+
+#[test]
+fn xy_facing_survives_gravity_and_tail_conversion() {
+    let record = ParticleInstance::new(
+        Vec3::ZERO,
+        Vec3::new(0.0, 2.0, 3.0),
+        20.0,
+        0.0,
+        4.0,
+        Vec3::new(2.0, 0.5, 3.0),
+        false,
+    );
+    let facing = record.scale_facing[3];
+    assert!((facing - (-PI * 0.5 + FRAC_PI_8)).abs() < 0.00001);
+    let uniform = ParticleEmitterUniform::from_staged(&emitter(), Mat4::IDENTITY, 1.0);
+    assert!(record.center(&uniform).z < 0.0);
+    assert_eq!(record.as_tail().scale_facing, record.scale_facing);
+    for velocity in [Vec3::ZERO, Vec3::Z, -Vec3::Z] {
+        let stationary =
+            ParticleInstance::new(Vec3::ZERO, velocity, 0.0, 0.0, 4.0, Vec3::ONE, false);
+        assert!(stationary.scale_facing[3].is_finite());
+    }
+}
+
+#[test]
+fn unshaded_is_a_render_flag_independent_of_clock_and_tail_length() {
+    let mut definition = emitter();
+    let shaded = ParticleEmitterUniform::from_staged(&definition, Mat4::IDENTITY, 12.0);
+    definition.unlit = true;
+    let unshaded = ParticleEmitterUniform::from_staged(&definition, Mat4::IDENTITY, 12.0);
+    assert_eq!(shaded.render_flags[0], 0);
+    assert_eq!(unshaded.render_flags[0], 1);
+    assert_eq!(shaded.clock_tail, unshaded.clock_tail);
+}
+
+#[test]
+fn analytic_motion_and_model_space_follow_current_transform() {
+    let record = ParticleInstance::new(
+        Vec3::new(1.0, 2.0, 3.0),
+        Vec3::new(4.0, 5.0, 6.0),
+        2.0,
+        10.0,
+        5.0,
+        Vec3::ONE,
+        false,
+    );
+    let mut definition = emitter();
+    let transform = GlobalTransform::from_translation(Vec3::new(100.0, 200.0, 300.0));
+    let uniform = ParticleEmitterUniform::from_staged(&definition, transform.to_matrix(), 12.0);
+    assert_eq!(record.center(&uniform), Vec3::new(9.0, 12.0, 11.0));
+    definition.model_space = true;
+    let uniform = ParticleEmitterUniform::from_staged(&definition, transform.to_matrix(), 12.0);
+    assert_eq!(record.center(&uniform), Vec3::new(109.0, 212.0, 311.0));
+}
+
+#[test]
+fn split_clock_preserves_short_ages_after_long_runtime() {
+    let birth = 1_000_000_000.0;
+    let record = ParticleInstance::new(Vec3::ZERO, Vec3::X, 0.0, birth, 1.0, Vec3::ONE, false);
+    let uniform = ParticleEmitterUniform::from_staged(&emitter(), Mat4::IDENTITY, birth + 0.125);
+    assert_eq!(record.center(&uniform), Vec3::new(0.125, 0.0, 0.0));
+}
+
+#[test]
+fn vector_acceleration_and_drag_match_transport_sorting_motion() {
+    let record = ParticleInstance::new(Vec3::ZERO, Vec3::X * 10., 0., 0., 4., Vec3::ONE, false)
+        .with_acceleration(Vec3::Y * 2., 2.);
+    let uniform = ParticleEmitterUniform::from_staged(&emitter(), Mat4::IDENTITY, 1.);
+    let response = (1. - (-2.0f32).exp()) / 2.;
+    let expected = Vec3::X * (10. * response) + Vec3::Y * (1. - response);
+    assert!((record.center(&uniform) - expected).length() < 1e-5);
+}

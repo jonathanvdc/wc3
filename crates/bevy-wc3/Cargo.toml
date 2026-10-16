@@ -15,6 +15,7 @@ categories = ["game-development", "rendering"]
 bevy = { version = "0.19.1", features = ["dds", "png", "tga"] }
 wc3 = { workspace = true, features = ["blp-decode"] }
 bytemuck = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 criterion = { workspace = true }

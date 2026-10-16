@@ -4,16 +4,20 @@ use crate::universal::{
     compile_universal_model, spawn_universal_model, UniversalInstance, UniversalMaterial,
     UniversalPlayback,
 };
-use crate::DecodedModel;
 use bevy::ecs::world::CommandQueue;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
+use wc3::model::conversion::ImportOptions;
+use wc3::model::io::mdlx;
 use wc3::model::{AnimationSample, Channel, Clock, Curve, Time as ModelTime, Track};
 
 fn source() -> Model<'static> {
-    DecodedModel::decode(include_bytes!("../../tests/fixtures/geoset_capture.mdl"))
-        .unwrap()
-        .model
-        .widen()
+    mdlx::decode_mdl(
+        include_str!("../../tests/fixtures/geoset_capture.mdl"),
+        &ImportOptions::default(),
+    )
+    .unwrap()
+    .value
+    .widen()
 }
 fn time(value: f64) -> ModelTime {
     ModelTime::seconds(value).unwrap()

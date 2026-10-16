@@ -1,71 +1,93 @@
-//! Asset, material, renderer, and main-world system registration.
-use crate::instance::bounds::update_skin_bounds;
-use crate::materials::runtime::share_constant_materials;
+//! Registration and scheduling for the Universal renderer.
+use crate::assets::BlpImageLoader;
+use crate::effects::render::configure_effect_views;
+use crate::effects::sprites::ParticleRenderPlugin;
+use crate::effects::trails::RibbonRenderPlugin;
+use crate::schedule::{configure, Wc3Systems};
+use crate::universal::{
+    advance_universal_animation, animate_universal_cameras, animate_universal_instances,
+    apply_universal_lod_visibility, apply_universal_world_selection, dispatch_universal_events,
+    invalidate_universal_models, restart_universal_attachments, simulate_universal_particles,
+    spawn_loaded_universal_models, synchronize_model_particles, update_skin_bounds,
+    update_universal_lod, UniversalAssetSettings, UniversalLodSettings, UniversalMaterial,
+    UniversalModelAsset, UniversalModelEvent, UniversalModelLoader, UniversalPreparedCache,
+};
 use bevy::asset::embedded_asset;
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::prelude::*;
 
-use crate::animation::advance_animation;
-use crate::animation::pose::animate_nodes;
-use crate::assets::{BlpImageLoader, Wc3ModelAsset, Wc3ModelLoader};
-use crate::attachment::animate_attachments;
-use crate::camera::animate_cameras;
-use crate::effects::particle_emitter::{
-    animate_particle_models, update_particles as update_model_particles,
-};
-use crate::effects::particle_emitter2::textures::update_particle_textures;
-use crate::effects::particle_emitter2::{
-    update_particles as update_quad_particles, ParticleRenderPlugin,
-};
-use crate::effects::render::configure_effect_views;
-use crate::effects::ribbon_emitter::{update_ribbons, RibbonRenderPlugin};
-use crate::event::{dispatch_events, Wc3ModelEvent};
-use crate::instance::{invalidate_prepared_models, spawn_loaded_instances, PreparedModelCache};
-use crate::light::animate_lights;
-use crate::lod::{update_lod, Wc3LodSettings};
-use crate::materials::animation::animate_surface;
-use crate::materials::layers::animate_layers;
-use crate::materials::Wc3LayerMaterial;
-use crate::schedule::{configure, Wc3Systems};
-use crate::universal::{
-    advance_universal_animation, animate_universal_instances, UniversalMaterial,
-    UniversalModelAsset, UniversalModelLoader, UniversalAssetSettings,
-};
-use crate::universal::{UniversalPreparedCache, invalidate_universal_models, spawn_loaded_universal_models};
-
-/// Registers model/BLP loaders, WC3 materials, animation, and effect rendering.
-///
-/// Add alongside Bevy's `DefaultPlugins`. Applications supply cameras, scene
-/// lighting, and replaceable textures. Use [`crate::Wc3Systems`] to order systems
-/// around the plugin's loading, animation, and simulation stages.
+/// Registers native model and BLP loaders, Universal PBR materials and effects.
+/// Add beside Bevy's `DefaultPlugins`; applications supply cameras and lighting.
+/// [`Wc3Systems`] exposes scheduling boundaries for application integration.
 pub struct Wc3BevyPlugin;
-
 impl Plugin for Wc3BevyPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "shaders/wc3_mesh.wgsl");
         embedded_asset!(app, "shaders/extra_skinning.wgsl");
-        embedded_asset!(app, "shaders/wc3_material.wgsl");
-        embedded_asset!(app, "shaders/wc3_material_prepass.wgsl");
         embedded_asset!(app, "shaders/wc3_prepass.wgsl");
         embedded_asset!(app, "shaders/universal_material.wgsl");
+        embedded_asset!(app, "shaders/universal_hd.wgsl");
         embedded_asset!(app, "shaders/universal_material_prepass.wgsl");
         embedded_asset!(app, "shaders/wc3_particle.wgsl");
         embedded_asset!(app, "shaders/wc3_ribbon.wgsl");
-        app.init_asset::<Wc3ModelAsset>();
         app.init_asset::<UniversalModelAsset>();
         app.init_resource::<UniversalAssetSettings>();
-        let resolver = app.world().resource::<UniversalAssetSettings>().resolver.clone();
+        let resolver = app
+            .world()
+            .resource::<UniversalAssetSettings>()
+            .resolver
+            .clone();
         app.register_asset_loader(UniversalModelLoader::new(resolver));
-        app.init_asset_loader::<Wc3ModelLoader>();
         app.init_asset_loader::<BlpImageLoader>();
-        app.init_resource::<PreparedModelCache>();
         app.init_resource::<UniversalPreparedCache>();
-        app.init_resource::<Wc3LodSettings>();
-        app.add_plugins(MaterialPlugin::<Wc3LayerMaterial>::default());
-        app.add_plugins(MaterialPlugin::<UniversalMaterial>::default());
-        app.add_plugins(ParticleRenderPlugin);
-        app.add_plugins(RibbonRenderPlugin);
-        app.add_systems(PostUpdate, configure_effect_views);
+        app.init_resource::<UniversalLodSettings>();
+        app.add_plugins((
+            MaterialPlugin::<UniversalMaterial>::default(),
+            ParticleRenderPlugin,
+            RibbonRenderPlugin,
+        ));
+        app.add_message::<UniversalModelEvent>();
+        configure(app);
+        app.add_systems(
+            Update,
+            (invalidate_universal_models, spawn_loaded_universal_models)
+                .chain()
+                .in_set(Wc3Systems::SpawnInstances),
+        );
+        app.add_systems(
+            Update,
+            (advance_universal_animation, synchronize_model_particles)
+                .chain()
+                .in_set(Wc3Systems::AdvanceAnimation),
+        );
+        app.add_systems(
+            PostUpdate,
+            animate_universal_cameras.in_set(Wc3Systems::AnimateCameras),
+        );
+        app.add_systems(
+            PostUpdate,
+            (restart_universal_attachments, animate_universal_instances)
+                .chain()
+                .in_set(Wc3Systems::EvaluateNodePoses),
+        );
+        app.add_systems(
+            PostUpdate,
+            simulate_universal_particles.in_set(Wc3Systems::SimulateEffects),
+        );
+        app.add_systems(
+            PostUpdate,
+            dispatch_universal_events.in_set(Wc3Systems::DispatchEvents),
+        );
+        app.add_systems(
+            PostUpdate,
+            (
+                update_universal_lod,
+                apply_universal_lod_visibility,
+                apply_universal_world_selection,
+            )
+                .chain()
+                .in_set(Wc3Systems::SelectLod),
+        );
         app.add_systems(
             PostUpdate,
             update_skin_bounds
@@ -74,65 +96,6 @@ impl Plugin for Wc3BevyPlugin {
                 .after(Wc3Systems::SelectLod)
                 .before(VisibilitySystems::CheckVisibility),
         );
-        configure(app);
-        app.add_systems(PostUpdate, crate::universal::simulate_universal_particles.in_set(Wc3Systems::SimulateEffects));
-        app.add_systems(Update, (invalidate_universal_models, spawn_loaded_universal_models).chain().in_set(Wc3Systems::SpawnInstances));
-        app.add_systems(
-            Update,
-            advance_universal_animation.in_set(Wc3Systems::AdvanceAnimation),
-        );
-        app.add_systems(
-            PostUpdate,
-            animate_universal_instances.in_set(Wc3Systems::EvaluateNodePoses),
-        );
-        app.add_message::<Wc3ModelEvent>();
-        app.add_systems(PostUpdate, update_lod.in_set(Wc3Systems::SelectLod));
-        app.add_systems(
-            PostUpdate,
-            dispatch_events.in_set(Wc3Systems::DispatchEvents),
-        );
-        app.add_systems(
-            Update,
-            (invalidate_prepared_models, spawn_loaded_instances)
-                .chain()
-                .in_set(Wc3Systems::SpawnInstances),
-        );
-        app.add_systems(
-            Update,
-            update_particle_textures.in_set(Wc3Systems::BindTextures),
-        );
-        app.add_systems(
-            Update,
-            advance_animation.in_set(Wc3Systems::AdvanceAnimation),
-        );
-        app.add_systems(
-            Update,
-            (
-                animate_particle_models,
-                animate_attachments,
-                animate_lights,
-                animate_layers,
-                animate_surface,
-                share_constant_materials,
-            )
-                .chain()
-                .in_set(Wc3Systems::AnimateInstances),
-        );
-        app.add_systems(
-            PostUpdate,
-            animate_cameras.in_set(Wc3Systems::AnimateCameras),
-        );
-        app.add_systems(
-            PostUpdate,
-            animate_nodes.in_set(Wc3Systems::EvaluateNodePoses),
-        );
-        app.add_systems(
-            PostUpdate,
-            update_model_particles.in_set(Wc3Systems::SimulateModelParticles),
-        );
-        app.add_systems(
-            PostUpdate,
-            (update_quad_particles, update_ribbons).in_set(Wc3Systems::SimulateEffects),
-        );
+        app.add_systems(PostUpdate, configure_effect_views);
     }
 }

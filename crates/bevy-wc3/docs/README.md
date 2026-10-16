@@ -1,8 +1,8 @@
 # bevy-wc3 documentation
 
-Start with the [crate README](../README.md) for a minimal Bevy application.
-These guides separate application setup, model inspection, rendering behavior,
-and implementation details so you can choose the depth needed for your task.
+Start with the [crate README](../README.md) for a minimal Bevy application. These
+guides separate application setup, model inspection, rendering behavior, and
+implementation details so you can choose the depth needed for your task.
 
 ## Application and architecture
 
@@ -10,9 +10,8 @@ The application guide covers runtime integration; the tool guide helps inspect
 assets before integrating them. Architecture is intended for contributors and
 applications that need explicit control over scheduling or preparation.
 
-- [Using bevy-wc3](usage.md): load instances from files or named MPQ sources,
-  place external BLP0 payloads, choose textures, control playback, bake static
-  poses, mount child models, configure lights, and detect instance readiness.
+- [Using bevy-wc3](usage.md): load native/semantic instances, resolve resources and images, control typed
+  playback, bake poses, mount child models, and manage replacement.
 - [Viewer and captures](tools.md): inspect assets, override textures, and render
   PNGs at controlled simulation times, including synchronized frame measurements.
 - [Architecture](architecture.md): semantic loading and preparation, shared and per-instance
@@ -22,13 +21,13 @@ applications that need explicit control over scheduling or preparation.
 
 ## Rendering
 
-The files under `rendering/` describe how the renderer evaluates model data
-and draws it through Bevy. Start with the [renderer overview](rendering/renderer.md),
+The files under `rendering/` describe how the renderer evaluates model data and
+draws it through Bevy. Start with the [renderer overview](rendering/renderer.md),
 then choose a topic:
 
-- [Direct semantic rendering](rendering/universal.md): Universal compilation,
-  native resource providers, semantic animation, and the direct runtime's limits.
-- [Animation blending](rendering/animation-blending.md): sequence controls,
+- [Semantic compiler and native resources](rendering/universal.md): Universal compilation,
+  native resource providers, semantic animation, and family-specific interpretation limits.
+- [Animation blending](rendering/animation-blending.md): typed clip controls,
   local-pose transitions, interruption, and effect/event sampling.
 - [Node transforms and flags](rendering/node-flags.md): inheritance,
   billboarding, camera anchoring, and driving-camera selection.
@@ -42,13 +41,13 @@ then choose a topic:
   settings, and application customization.
 - [Model cameras](rendering/cameras.md): authored views and opt-in playback.
 - [Model events](rendering/events.md): messages, timing, and occurrence poses.
-- [Classic model particles (PREM)](rendering/prem.md): child models,
+- [External-model particles](rendering/prem.md): child models,
   world-space motion, animation, and lifetime.
-- [Quad particles (PRE2)](rendering/pre2.md): emission, head/tail geometry,
+- [Sprite particles](rendering/pre2.md): emission, head/tail geometry,
   lifetime animation, and sorting.
 - [Ribbon trails](rendering/ribbons.md): birth-time sections, connected
   geometry, atlas animation, gravity, and material passes.
 
-Each guide describes the implemented behavior and relevant input, resource,
-or integration limits. Update the relevant guide when an implementation changes,
+Each guide describes the implemented behavior and relevant input, resource, or
+integration limits. Update the relevant guide when an implementation changes,
 keeping implemented behavior distinct from unverified game fidelity.

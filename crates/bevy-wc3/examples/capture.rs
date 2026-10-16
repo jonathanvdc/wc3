@@ -1,7 +1,7 @@
 //! Capture an MDX or MDL offscreen at fixed animation times.
 //! Run `cargo run -p bevy-wc3 --example capture -- --help` for options.
 use bevy::app::PluginsState;
-use bevy::asset::{AssetPath, AssetPlugin, LoadState, RecursiveDependencyLoadState};
+use bevy::asset::{AssetPlugin, LoadState, RecursiveDependencyLoadState};
 use bevy::camera::{RenderTarget, ShadowLodOrigin};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::Tonemapping;
@@ -17,34 +17,32 @@ use bevy::time::TimeUpdateStrategy;
 use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 use bevy_wc3::{
-    prepare_model_asset, spawn_universal_model, PreparedModel, UniversalAnimationError,
-    UniversalAssetSettings, UniversalMaterial, UniversalModelAsset, UniversalPathResolver,
-    UniversalPlayback, UniversalResourceResolver, Wc3Animation, Wc3BevyPlugin, Wc3CameraBinding,
-    Wc3CameraSample, Wc3LayerMaterial, Wc3Lod, Wc3LodOverride, Wc3LodSettings, Wc3LodState,
-    Wc3Model, Wc3ModelAsset, Wc3ModelCameras, Wc3ModelInstance, Wc3NodeCamera, Wc3PoseBaker,
-    Wc3PoseOptions, Wc3TextureBindings, Wc3TextureSlot,
+    spawn_universal_model, PreparedUniversalModel, UniversalAnimationError, UniversalAssetSettings,
+    UniversalBakeSpace, UniversalCameraBinding, UniversalInstance, UniversalLod,
+    UniversalLodOverride, UniversalLodSettings, UniversalMaterial, UniversalModelAsset,
+    UniversalModelInstance, UniversalModelInstanceError, UniversalPlayback, UniversalPoseBaker,
+    UniversalPoseOptions, UniversalWorldSelection, Wc3BevyPlugin,
 };
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env::args;
 use std::error::Error;
-use std::fs::{create_dir_all, read, File};
+use std::fs::{create_dir_all, File};
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use wc3::model::conversion::ExportOptions;
-use wc3::model::formats::mdlx::V1800;
 use wc3::model::formats::wmo::Profile as WmoProfile;
-use wc3::model::io;
-use wc3::model::Resource as ModelResource;
+#[path = "support/resolver.rs"]
+mod resolver;
+use resolver::{parse_wmo_profile, ModelResolver};
 
 type CaptureResult<T> = Result<T, Box<dyn Error>>;
 const TIMEOUT: Duration = Duration::from_secs(30);
-const HELP: &str = "Usage: capture MODEL.{mdx,mdl} OUTPUT_DIR [options]
+const HELP: &str = "Usage: capture MODEL OUTPUT_DIR [options]
 
 Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
-  --universal           Compile native semantics directly (requires --eye and --target)
+  --allow-loss          Explicitly discard unsupported native data, retaining diagnostics
   --wmo-profile NAME    classic, legion, bfa, shadowlands-pre92, shadowlands, dragonflight, warwithin
   --file-id ID=PATH     Map a native file-data identity to an asset-root-relative file
   --bake-pose           Render offline-baked geometry instead of the live hierarchy
@@ -71,13 +69,12 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --camera-fov-multiplier NUMBER  Authored FOV scale (default: 1; portraits: 0.75)
   --asset-root PATH      Texture asset root (default: model's directory)
   --replaceable ID=PATH  Replaceable texture override
-  --bitmap INDEX=PATH    Model bitmap override
-  --particle2 INDEX=PATH PRE2 texture override
+  --bitmap INDEX=PATH    Semantic texture override (including effect textures)
 Texture override paths are relative to the asset root. Existing captures are overwritten.";
 
 struct TextureChoice {
     index: u32,
-    slot: Option<Wc3TextureSlot>,
+    slot: Option<usize>,
     path: String,
 }
 
@@ -87,7 +84,7 @@ struct PlaybackChange {
 }
 
 struct Options {
-    universal: bool,
+    allow_loss: bool,
     wmo_profile: Option<WmoProfile>,
     file_ids: HashMap<u32, String>,
     bake_pose: bool,
@@ -101,8 +98,8 @@ struct Options {
     times: Vec<f64>,
     benchmark_frames: Option<usize>,
     sequence: usize,
-    lod: Wc3Lod,
-    lod_settings: Wc3LodSettings,
+    lod: UniversalLod,
+    lod_settings: UniversalLodSettings,
     plays: Vec<PlaybackChange>,
     blend: Option<Duration>,
     fps: f64,
@@ -128,7 +125,7 @@ impl Options {
             .next()
             .ok_or("pass an output directory after the model path")?;
         let mut options = Self {
-            universal: false,
+            allow_loss: false,
             wmo_profile: None,
             file_ids: HashMap::new(),
             bake_pose: false,
@@ -142,8 +139,8 @@ impl Options {
             times: vec![1.0],
             benchmark_frames: None,
             sequence: 0,
-            lod: Wc3Lod::default(),
-            lod_settings: Wc3LodSettings::default(),
+            lod: UniversalLod::Fixed(0),
+            lod_settings: UniversalLodSettings::default(),
             plays: Vec::new(),
             blend: None,
             fps: 60.0,
@@ -159,12 +156,12 @@ impl Options {
             if option == "--help" || option == "-h" {
                 return Ok(None);
             }
-            if option == "--universal" {
-                options.universal = true;
-                continue;
-            }
             if option == "--no-default-light" {
                 options.no_default_light = true;
+                continue;
+            }
+            if option == "--allow-loss" {
+                options.allow_loss = true;
                 continue;
             }
             if option == "--bake-pose" {
@@ -184,16 +181,7 @@ impl Options {
                 .ok_or_else(|| format!("missing value for {option}"))?;
             match option.as_str() {
                 "--wmo-profile" => {
-                    options.wmo_profile = Some(match value.as_str() {
-                        "classic" => WmoProfile::Classic,
-                        "legion" => WmoProfile::Legion,
-                        "bfa" => WmoProfile::Bfa,
-                        "shadowlands-pre92" => WmoProfile::ShadowlandsPre92,
-                        "shadowlands" => WmoProfile::Shadowlands,
-                        "dragonflight" => WmoProfile::Dragonflight,
-                        "warwithin" => WmoProfile::WarWithin,
-                        _ => return Err("unsupported WMO profile".into()),
-                    })
+                    options.wmo_profile = Some(parse_wmo_profile(&value)?);
                 }
                 "--file-id" => {
                     let (id, path) = value.split_once('=').ok_or("file-id must be ID=PATH")?;
@@ -220,9 +208,9 @@ impl Options {
                 }
                 "--lod" => {
                     options.lod = if value == "auto" {
-                        Wc3Lod::Automatic
+                        UniversalLod::Automatic
                     } else {
-                        Wc3Lod::Fixed(value.parse()?)
+                        UniversalLod::Fixed(value.parse()?)
                     }
                 }
                 "--lod-bias" => options.lod_settings.quality_bias = value.parse()?,
@@ -261,15 +249,14 @@ impl Options {
                 "--model-camera" => options.model_camera = Some(value.parse()?),
                 "--camera-fov-multiplier" => options.camera_fov_multiplier = value.parse()?,
                 "--asset-root" => options.asset_root = Some(value.into()),
-                "--replaceable" | "--bitmap" | "--particle2" => {
+                "--replaceable" | "--bitmap" => {
                     let (index, path) = value.split_once('=').ok_or("expected ID=PATH")?;
                     let index: u32 = index.parse()?;
                     if path.is_empty() {
                         return Err("texture path cannot be empty".into());
                     }
                     let slot = match option.as_str() {
-                        "--bitmap" => Some(Wc3TextureSlot::Bitmap(index as usize)),
-                        "--particle2" => Some(Wc3TextureSlot::Particle2(index as usize)),
+                        "--bitmap" => Some(index as usize),
                         _ => None,
                     };
                     options.textures.push(TextureChoice {
@@ -317,72 +304,34 @@ impl Options {
         for &time in &options.times {
             Duration::try_from_secs_f64(time)?;
         }
-        if !options.universal && (options.wmo_profile.is_some() || !options.file_ids.is_empty()) {
-            return Err("--wmo-profile and --file-id require --universal".into());
-        }
         Ok(Some(options))
     }
 
-    fn camera(&self, model: &Wc3Model) -> CaptureResult<Transform> {
-        let document = io::mdlx::plan::<V1800>(&model.model, &ExportOptions::default())?
-            .execute()?
-            .value;
+    fn camera(&self, model: &PreparedUniversalModel) -> CaptureResult<Transform> {
         if let Some(index) = self.model_camera {
-            let mut definitions = document.cameras();
-            let definition = definitions.nth(index).ok_or_else(|| {
-                format!(
-                    "model camera {index} is out of range ({} cameras)",
-                    document.cameras().count()
-                )
-            })?;
-            let sample = Wc3CameraSample {
-                position: Vec3::from_array(definition.position),
-                target: Vec3::from_array(definition.target_position),
-                roll: 0.0,
-                field_of_view: definition.field_of_view,
-                near_clip: definition.near_clip,
-                far_clip: definition.far_clip,
-            };
-            sample
-                .perspective_projection(self.camera_fov_multiplier)
-                .ok_or("model camera has invalid FOV or clipping distances")?;
-            // Animated pose is resolved after the instance has loaded.
-            return Ok(Transform::default());
+            if model.cameras().nth(index).is_none() {
+                return Err(format!("model camera {index} is out of range").into());
+            }
+            return Ok(Transform::IDENTITY);
         }
-        let info = document.model_info();
-        let center = info
-            .as_ref()
-            .map(|info| {
-                (Vec3::from_array(info.minimum_extent) + Vec3::from_array(info.maximum_extent))
-                    * 0.5
-            })
-            .filter(|center| center.is_finite())
-            .unwrap_or(Vec3::ZERO);
-        let radius = info
-            .map(|info| {
-                info.bounds_radius.max(
-                    (Vec3::from_array(info.maximum_extent) - Vec3::from_array(info.minimum_extent))
-                        .length()
-                        * 0.5,
-                )
-            })
-            .filter(|radius| radius.is_finite())
-            .unwrap_or(100.0)
-            .max(1.0);
+        let bounds = model.rest_bounds();
+        let center = bounds.map_or(Vec3::ZERO, |bounds| bounds.center.into());
+        let radius = bounds
+            .map_or(1., |bounds| bounds.half_extents.length())
+            .max(0.1);
         let target = self.target.unwrap_or(center);
         let aspect = self.size.x as f32 / self.size.y as f32;
         let eye = self.eye.unwrap_or(
-            target
-                + Vec3::new(0.7, -1.5, 0.55).normalize() * radius * 4.0 * (1.0 / aspect).max(1.0),
+            target + Vec3::new(0.7, 0.55, 1.5).normalize() * radius * 4. * (1. / aspect).max(1.),
         );
         let direction = target - eye;
         if direction.length_squared() < 0.000001 {
             return Err("camera eye and target must differ".into());
         }
-        let up = if direction.normalize().cross(Vec3::Z).length_squared() < 0.000001 {
-            Vec3::Y
-        } else {
+        let up = if direction.normalize().cross(Vec3::Y).length_squared() < 0.000001 {
             Vec3::Z
+        } else {
+            Vec3::Y
         };
         Ok(Transform::from_translation(eye).looking_at(target, up))
     }
@@ -401,8 +350,8 @@ struct ScreenshotResult(Option<Result<(), String>>);
 
 fn replace_with_baked_pose(
     app: &mut App,
-    prepared: &PreparedModel,
-    baker: &mut Wc3PoseBaker,
+    prepared: &PreparedUniversalModel,
+    baker: &mut UniversalPoseBaker,
     root: Entity,
     camera: Entity,
     entities: &mut Vec<Entity>,
@@ -411,41 +360,34 @@ fn replace_with_baked_pose(
     for entity in entities.drain(..) {
         world.despawn(entity);
     }
-    let animation = world.get::<Wc3Animation>(root).unwrap();
-    let options = Wc3PoseOptions {
-        sequence: (!animation.sequences().is_empty()).then_some(animation.sequence()),
-        elapsed_ms: animation.elapsed_ms(),
-        global_elapsed_ms: animation.elapsed_ms(),
-        camera: Some(
-            world
-                .get::<GlobalTransform>(camera)
-                .unwrap()
-                .compute_transform(),
-        ),
-    };
-    let bindings = world.get::<Wc3TextureBindings>(root).unwrap().clone();
-    let selected = world.get::<Wc3LodState>(root).unwrap().selected_level();
-    let pose = world.resource_scope(|world, mut images: Mut<Assets<Image>>| {
-        baker.bake(
-            prepared,
-            world.resource::<Assets<Mesh>>(),
-            &mut images,
-            &bindings,
-            options,
-        )
-    })?;
-    for part in pose
-        .parts
-        .into_iter()
-        .filter(|part| part.visible && part.lod.is_none_or(|lod| lod == selected))
-    {
+    let playback = world.get::<UniversalPlayback>(root).unwrap();
+    let camera_world = world.get::<GlobalTransform>(camera).unwrap().to_matrix();
+    let camera =
+        Transform::from_matrix(prepared.model_to_bevy().to_matrix().inverse() * camera_world);
+    let pose = baker.bake(
+        prepared,
+        world.resource::<Assets<Mesh>>(),
+        world.resource::<Assets<SkinnedMeshInverseBindposes>>(),
+        UniversalPoseOptions {
+            playback: Some(playback),
+            world_selection: world.get::<UniversalWorldSelection>(root),
+            camera: Some(camera),
+            lod: Some(playback.lod),
+            space: UniversalBakeSpace::Bevy,
+            ..Default::default()
+        },
+    )?;
+    for part in pose.parts.into_iter().filter(|part| part.visible) {
+        let Some(material) = part.material else {
+            continue;
+        };
         let mesh = world.resource_mut::<Assets<Mesh>>().add(part.mesh);
         let material = world
-            .resource_mut::<Assets<Wc3LayerMaterial>>()
-            .add(part.material.material);
+            .resource_mut::<Assets<UniversalMaterial>>()
+            .add(material);
         entities.push(
             world
-                .spawn((Mesh3d(mesh), MeshMaterial3d(material), Transform::default()))
+                .spawn((Mesh3d(mesh), MeshMaterial3d(material), Transform::IDENTITY))
                 .id(),
         );
     }
@@ -458,369 +400,10 @@ fn main() -> CaptureResult<()> {
         println!("{HELP}");
         return Ok(());
     };
-    if options.universal {
-        return capture_universal(options);
-    }
-    let model_path = options.model.canonicalize()?;
-    let asset_root = options
-        .asset_root
-        .clone()
-        .unwrap_or_else(|| model_path.parent().unwrap().to_owned())
-        .canonicalize()?;
-    let asset_path = model_path
-        .strip_prefix(&asset_root)
-        .map_err(|_| "model must be inside the asset root")?
-        .to_string_lossy()
-        .into_owned();
-    // Report parse/conversion errors before initializing the GPU.
-    let source = Wc3Model::decode(&read(&model_path)?)?;
-    let sequence_count = source.model.clips().count();
-    if options.sequence >= sequence_count && !(sequence_count == 0 && options.sequence == 0) {
-        return Err(format!(
-            "sequence {} is out of range ({} sequences)",
-            options.sequence, sequence_count
-        )
-        .into());
-    }
-    for change in &options.plays {
-        if change.sequence >= sequence_count {
-            return Err(format!("scheduled sequence {} is out of range", change.sequence).into());
-        }
-    }
-    let camera = options.camera(&source)?;
-    drop(source);
-    let mut app = App::new();
-    app.add_plugins((
-        DefaultPlugins
-            .set(AssetPlugin {
-                file_path: asset_root.to_string_lossy().into_owned(),
-                ..default()
-            })
-            .set(WindowPlugin {
-                primary_window: None,
-                exit_condition: ExitCondition::DontExit,
-                ..default()
-            })
-            .set(RenderPlugin {
-                synchronous_pipeline_compilation: true,
-                ..default()
-            })
-            .disable::<WinitPlugin>()
-            .disable::<PipelinedRenderingPlugin>(),
-        Wc3BevyPlugin,
-    ));
-    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::ZERO));
-    app.init_resource::<ScreenshotResult>();
-    let deadline = Instant::now() + TIMEOUT;
-    while app.plugins_state() != PluginsState::Ready {
-        check_deadline(deadline, "initializing renderer")?;
-        sleep(Duration::from_millis(5));
-    }
-    app.finish();
-    app.cleanup();
-    let limit = app
-        .world()
-        .resource::<RenderDevice>()
-        .limits()
-        .max_texture_dimension_2d;
-    if options.size.max_element() > limit {
-        return Err(format!("image dimensions exceed the GPU limit of {limit}").into());
-    }
-    app.world_mut()
-        .resource_mut::<Time<Virtual>>()
-        .set_max_delta(Duration::from_secs(1));
-    let assets = app.world().resource::<AssetServer>().clone();
-    let handle: Handle<Wc3ModelAsset> = assets.load(asset_path);
-    let mut bindings = Wc3TextureBindings::default();
-    let mut overrides = Vec::new();
-    for choice in &options.textures {
-        let image: Handle<Image> = assets.load(choice.path.clone());
-        if let Some(slot) = choice.slot {
-            bindings.set_slot(slot, image.clone());
-        } else {
-            bindings.set_replaceable(choice.index, image.clone());
-        }
-        overrides.push(image);
-    }
-    let root = app
-        .world_mut()
-        .spawn((
-            Wc3ModelInstance::new(handle.clone()),
-            bindings,
-            options.lod,
-            Wc3LodOverride(options.lod_settings.clone()),
-        ))
-        .id();
-    let image = app
-        .world_mut()
-        .resource_mut::<Assets<Image>>()
-        .add(Image::new_target_texture(
-            options.size.x,
-            options.size.y,
-            TextureFormat::Rgba8UnormSrgb,
-            None,
-        ));
-    let camera_entity = app
-        .world_mut()
-        .spawn((
-            Camera3d::default(),
-            options.tonemapping,
-            ShadowLodOrigin,
-            Msaa::Sample4,
-            RenderTarget::Image(image.clone().into()),
-            camera,
-        ))
-        .id();
-    if let Some(index) = options.model_camera {
-        app.world_mut()
-            .entity_mut(camera_entity)
-            .insert(Wc3CameraBinding {
-                fov_multiplier: options.camera_fov_multiplier,
-                ..Wc3CameraBinding::new(root, index)
-            });
-        app.world_mut()
-            .entity_mut(root)
-            .insert(Wc3NodeCamera(camera_entity));
-    }
-    if options.prepasses {
-        app.world_mut().entity_mut(camera_entity).insert((
-            DepthPrepass,
-            NormalPrepass,
-            MotionVectorPrepass,
-        ));
-    }
-    if options.bevy_reference {
-        let mesh = app
-            .world_mut()
-            .resource_mut::<Assets<Mesh>>()
-            .add(Sphere::new(0.5));
-        let material = app
-            .world_mut()
-            .resource_mut::<Assets<StandardMaterial>>()
-            .add(StandardMaterial {
-                base_color: Color::srgb(0.8, 0.15, 0.05),
-                metallic: 0.6,
-                perceptual_roughness: 0.3,
-                ..default()
-            });
-        app.world_mut().spawn((
-            Mesh3d(mesh),
-            MeshMaterial3d(material),
-            Transform::from_xyz(0.0, 2.0, 0.0),
-        ));
-    }
-    if !options.no_default_light {
-        app.world_mut().spawn((
-            DirectionalLight {
-                illuminance: options.illuminance,
-                shadow_maps_enabled: options.prepasses,
-                ..default()
-            },
-            Transform::from_xyz(1.0, -1.0, 2.0).looking_at(Vec3::ZERO, Vec3::Z),
-        ));
-    }
-    let deadline = Instant::now() + TIMEOUT;
-    loop {
-        step(&mut app, Duration::ZERO)?;
-        check_asset(&assets, &handle)?;
-        for image in &overrides {
-            check_asset(&assets, image)?;
-        }
-        if assets.is_loaded_with_dependencies(&handle)
-            && overrides
-                .iter()
-                .all(|image| assets.is_loaded_with_dependencies(image))
-            && app.world().get::<Wc3Animation>(root).is_some()
-        {
-            break;
-        }
-        check_deadline(deadline, "loading model, spawning it, and loading textures")?;
-        sleep(Duration::from_millis(5));
-    }
-    app.world_mut()
-        .get_mut::<Wc3Animation>(root)
-        .unwrap()
-        .play_immediately(options.sequence);
-    settle(&mut app)?;
-    let prepared_pose = if options.bake_pose {
-        Some(
-            app.world_mut()
-                .resource_scope(|world, mut meshes: Mut<Assets<Mesh>>| {
-                    world.resource_scope(
-                        |world, mut binds: Mut<Assets<SkinnedMeshInverseBindposes>>| {
-                            let models = world.resource::<Assets<Wc3ModelAsset>>();
-                            prepare_model_asset(
-                                &mut meshes,
-                                &mut binds,
-                                models.get(&handle).unwrap(),
-                            )
-                        },
-                    )
-                }),
-        )
-    } else {
-        None
-    };
-    let mut pose_baker = Wc3PoseBaker::default();
-    let mut baked_entities = Vec::new();
-    create_dir_all(&options.output)?;
-    let mut elapsed = 0.0;
-    let mut next_play = 0;
-    for (index, &time) in options.times.iter().enumerate() {
-        // Simulate from zero; seeking the animation alone would omit live particles.
-        loop {
-            if let Some(change) = options
-                .plays
-                .get(next_play)
-                .filter(|change| change.time <= elapsed + 1e-9 && change.time <= time + 1e-9)
-            {
-                let mut animation = app.world_mut().get_mut::<Wc3Animation>(root).unwrap();
-                if let Some(duration) = options.blend {
-                    animation.play_with_blend(change.sequence, duration);
-                } else {
-                    animation.play(change.sequence);
-                }
-                next_play += 1;
-                continue;
-            }
-            if elapsed + 1e-9 >= time {
-                break;
-            }
-            let target = options
-                .plays
-                .get(next_play)
-                .map_or(time, |change| time.min(change.time));
-            let dt = Duration::try_from_secs_f64((target - elapsed).min(1.0 / options.fps))?;
-            step(&mut app, dt)?;
-            elapsed += dt.as_secs_f64();
-        }
-        settle(&mut app)?;
-        if let Some(index) = options.model_camera {
-            let world = app.world();
-            let definitions = world
-                .get::<Wc3ModelCameras>(root)
-                .ok_or("model cameras are missing")?;
-            let animation = world
-                .get::<Wc3Animation>(root)
-                .ok_or("model animation is missing")?;
-            let sample = definitions
-                .sample(index, animation)
-                .ok_or("model camera is missing")?;
-            let transform = world
-                .get::<GlobalTransform>(root)
-                .ok_or("model transform is missing")?;
-            sample
-                .world_transform(transform)
-                .ok_or("model camera has an invalid animated view")?;
-            sample
-                .perspective_projection(options.camera_fov_multiplier)
-                .ok_or("model camera has an invalid lens")?;
-        }
-        if let Some(prepared) = &prepared_pose {
-            replace_with_baked_pose(
-                &mut app,
-                prepared,
-                &mut pose_baker,
-                root,
-                camera_entity,
-                &mut baked_entities,
-            )?;
-            settle(&mut app)?;
-        }
-        if let Some(frames) = options.benchmark_frames {
-            benchmark_pose(&mut app, &options, index, time, frames)?;
-        }
-        let path = options
-            .output
-            .join(format!("frame-{index:04}-{time:.3}s.png"));
-        app.world_mut().resource_mut::<ScreenshotResult>().0 = None;
-        let destination = path.clone();
-        app.world_mut()
-            .spawn(Screenshot::image(image.clone()))
-            .observe(
-                move |event: On<ScreenshotCaptured>, mut result: ResMut<ScreenshotResult>| {
-                    result.0 = Some(
-                        event
-                            .image
-                            .clone()
-                            .try_into_dynamic()
-                            .map_err(|error| error.to_string())
-                            .and_then(|image| {
-                                image
-                                    .to_rgb8()
-                                    .save(&destination)
-                                    .map_err(|error| error.to_string())
-                            }),
-                    );
-                },
-            );
-        let deadline = Instant::now() + TIMEOUT;
-        loop {
-            step(&mut app, Duration::ZERO)?;
-            if let Some(result) = app.world_mut().resource_mut::<ScreenshotResult>().0.take() {
-                result.map_err(|error| format!("saving {}: {error}", path.display()))?;
-                break;
-            }
-            check_deadline(deadline, "waiting for screenshot readback")?;
-            sleep(Duration::from_millis(5));
-        }
-        println!(
-            "Selected geometry LOD: {}",
-            app.world()
-                .get::<Wc3LodState>(root)
-                .unwrap()
-                .selected_level()
-        );
-        println!(
-            "{} (sequence {}, time {time:.6}s)",
-            path.display(),
-            app.world().get::<Wc3Animation>(root).unwrap().sequence()
-        );
-    }
-    Ok(())
+    capture(options)
 }
 
-struct CaptureUniversalResolver {
-    file_ids: HashMap<u32, String>,
-    wmo_profile: Option<WmoProfile>,
-}
-impl UniversalResourceResolver for CaptureUniversalResolver {
-    fn candidates(
-        &self,
-        resource: &ModelResource<'_>,
-        owner: &AssetPath<'_>,
-    ) -> Vec<AssetPath<'static>> {
-        if let ModelResource::FileDataId(id) = resource {
-            return self
-                .file_ids
-                .get(id)
-                .map(|path| {
-                    vec![AssetPath::from(path.clone()).with_source(owner.source().clone_owned())]
-                })
-                .unwrap_or_default();
-        }
-        UniversalPathResolver.candidates(resource, owner)
-    }
-    fn wmo_profile(&self, _owner: &AssetPath<'_>) -> Option<WmoProfile> {
-        self.wmo_profile
-    }
-}
-
-fn capture_universal(options: Options) -> CaptureResult<()> {
-    let eye = options
-        .eye
-        .ok_or("Universal capture currently requires an explicit --eye")?;
-    let target = options
-        .target
-        .ok_or("Universal capture currently requires an explicit --target")?;
-    if options.bake_pose
-        || options.model_camera.is_some()
-        || options.blend.is_some()
-        || !options.textures.is_empty()
-        || options.benchmark_frames.is_some()
-    {
-        return Err("Universal capture does not yet implement pose baking, authored cameras, blend overrides, texture overrides, or frame benchmarks".into());
-    }
+fn capture(options: Options) -> CaptureResult<()> {
     let model = options.model.canonicalize()?;
     let asset_root = options
         .asset_root
@@ -834,8 +417,20 @@ fn capture_universal(options: Options) -> CaptureResult<()> {
         .into_owned();
     let mut app = App::new();
     app.insert_resource(UniversalAssetSettings {
-        resolver: Arc::new(CaptureUniversalResolver {
+        resolver: Arc::new(ModelResolver {
+            allow_loss: options.allow_loss,
             file_ids: options.file_ids.clone(),
+            bitmaps: options
+                .textures
+                .iter()
+                .filter_map(|choice| choice.slot.map(|index| (index, choice.path.clone())))
+                .collect(),
+            replaceables: options
+                .textures
+                .iter()
+                .filter(|choice| choice.slot.is_none())
+                .map(|choice| (choice.index, choice.path.clone()))
+                .collect(),
             wmo_profile: options.wmo_profile,
         }),
     });
@@ -859,6 +454,7 @@ fn capture_universal(options: Options) -> CaptureResult<()> {
         Wc3BevyPlugin,
     ));
     app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::ZERO));
+    app.insert_resource(options.lod_settings.clone());
     app.init_resource::<ScreenshotResult>();
     let deadline = Instant::now() + TIMEOUT;
     while app.plugins_state() != PluginsState::Ready {
@@ -897,8 +493,12 @@ fn capture_universal(options: Options) -> CaptureResult<()> {
                 |world, mut binds: Mut<Assets<SkinnedMeshInverseBindposes>>| {
                     let models = world.resource::<Assets<UniversalModelAsset>>();
                     let asset = models.get(&handle).unwrap();
+                    let mut diagnostics = BTreeMap::new();
                     for diagnostic in asset.compiled.diagnostics() {
-                        eprintln!("Universal rendering: {}", diagnostic.message);
+                        *diagnostics.entry(&diagnostic.message).or_insert(0usize) += 1;
+                    }
+                    for (message, count) in diagnostics {
+                        eprintln!("Universal rendering ({count} occurrences): {message}");
                     }
                     for resource in &asset.unresolved_images {
                         eprintln!("Unresolved image: {resource:?}");
@@ -933,7 +533,7 @@ fn capture_universal(options: Options) -> CaptureResult<()> {
             ShadowLodOrigin,
             Msaa::Sample4,
             RenderTarget::Image(image.clone().into()),
-            Transform::from_translation(eye).looking_at(target, Vec3::Y),
+            options.camera(&prepared)?,
         ))
         .id();
     if options.prepasses {
@@ -950,7 +550,7 @@ fn capture_universal(options: Options) -> CaptureResult<()> {
                 shadow_maps_enabled: options.prepasses,
                 ..default()
             },
-            Transform::from_xyz(1., -1., 2.).looking_at(Vec3::ZERO, Vec3::Z),
+            Transform::from_xyz(1., 2., 1.).looking_at(Vec3::ZERO, Vec3::Y),
         ));
     }
     if options.bevy_reference {
@@ -988,6 +588,22 @@ fn capture_universal(options: Options) -> CaptureResult<()> {
             })
         });
     app.world_mut().flush();
+    app.world_mut().entity_mut(root).insert((
+        options.lod,
+        UniversalLodOverride(options.lod_settings.clone()),
+    ));
+    if let Some(index) = options.model_camera {
+        let feature = prepared
+            .cameras()
+            .nth(index)
+            .ok_or("model camera index out of range")?;
+        app.world_mut()
+            .entity_mut(camera)
+            .insert(UniversalCameraBinding {
+                fov_multiplier: options.camera_fov_multiplier,
+                ..UniversalCameraBinding::new(root, feature.id)
+            });
+    }
     {
         let mut playback = app
             .world_mut()
@@ -995,7 +611,7 @@ fn capture_universal(options: Options) -> CaptureResult<()> {
             .ok_or("Universal playback was not spawned")?;
         playback.clip = clips.get(options.sequence).map(|(id, _)| *id);
         playback.driving_camera = Some(camera);
-        if let Wc3Lod::Fixed(level) = options.lod {
+        if let UniversalLod::Fixed(level) = options.lod {
             playback.lod = level;
         }
     }
@@ -1003,6 +619,8 @@ fn capture_universal(options: Options) -> CaptureResult<()> {
     create_dir_all(&options.output)?;
     let mut elapsed = 0.;
     let mut next_play = 0;
+    let mut baker = UniversalPoseBaker::default();
+    let mut baked_entities = Vec::new();
     for (index, &time) in options.times.iter().enumerate() {
         loop {
             if let Some(change) = options
@@ -1011,9 +629,12 @@ fn capture_universal(options: Options) -> CaptureResult<()> {
                 .filter(|change| change.time <= elapsed + 1e-9 && change.time <= time + 1e-9)
             {
                 let mut playback = app.world_mut().get_mut::<UniversalPlayback>(root).unwrap();
-                playback.clip = Some(clips[change.sequence].0);
-                playback.clip_time = 0.;
-                playback.timeline_time = 0.;
+                let clip = clips[change.sequence].0;
+                if let Some(duration) = options.blend {
+                    playback.play_with_blend(clip, duration);
+                } else {
+                    playback.play(clip);
+                }
                 next_play += 1;
                 continue;
             }
@@ -1035,6 +656,43 @@ fn capture_universal(options: Options) -> CaptureResult<()> {
             .and_then(|error| error.0.as_ref())
         {
             return Err(format!("Universal animation failed: {error}").into());
+        }
+        if let Some(camera_index) = options.model_camera {
+            let instance = app.world().get::<UniversalInstance>(root).unwrap();
+            let playback = app.world().get::<UniversalPlayback>(root).unwrap();
+            let feature = prepared.cameras().nth(camera_index).unwrap();
+            let sample = instance
+                .sample_camera(
+                    feature.id,
+                    playback,
+                    options.size.x as f32 / options.size.y as f32,
+                )?
+                .ok_or("authored camera is unavailable")?;
+            sample
+                .perspective_projection(options.camera_fov_multiplier)
+                .ok_or("authored camera has invalid lens")?;
+            let root_world = app
+                .world()
+                .get::<GlobalTransform>(root)
+                .copied()
+                .unwrap_or_default();
+            sample
+                .world_transform(root_world.mul_transform(prepared.model_to_bevy()))
+                .ok_or("authored camera has a degenerate view transform")?;
+        }
+        if options.bake_pose {
+            replace_with_baked_pose(
+                &mut app,
+                &prepared,
+                &mut baker,
+                root,
+                camera,
+                &mut baked_entities,
+            )?;
+            settle(&mut app)?;
+        }
+        if let Some(frames) = options.benchmark_frames {
+            benchmark_pose(&mut app, &options, index, time, frames)?;
         }
         let path = options
             .output
@@ -1164,10 +822,39 @@ fn step(app: &mut App, dt: Duration) -> CaptureResult<()> {
 fn settle(app: &mut App) -> CaptureResult<()> {
     let deadline = Instant::now() + TIMEOUT;
     let mut frames = 0;
+    let mut requests = app
+        .world_mut()
+        .query_filtered::<(), With<UniversalModelInstance>>();
+    let mut errors = app.world_mut().query::<&UniversalModelInstanceError>();
     loop {
         step(app, Duration::ZERO)?;
+        if let Some(error) = errors.iter(app.world()).next() {
+            return Err(format!("model instance failed: {error:?}").into());
+        }
         frames += 1;
+        if frames == 8 {
+            let cache = app.sub_app(RenderApp).world().resource::<PipelineCache>();
+            if cache
+                .pipelines()
+                .any(|pipeline| matches!(pipeline.state, CachedPipelineState::Err(_)))
+            {
+                for (_, shader) in app.world().resource::<Assets<Shader>>().iter() {
+                    if shader.path.contains("universal") {
+                        eprintln!(
+                            "Pending shader {}: {:?}; imports {:?}",
+                            shader.path, shader.import_path, shader.imports
+                        );
+                    }
+                }
+                for pipeline in cache.pipelines() {
+                    if let CachedPipelineState::Err(error) = &pipeline.state {
+                        eprintln!("Pending pipeline: {error:?}");
+                    }
+                }
+            }
+        }
         if frames >= 8
+            && requests.iter(app.world()).next().is_none()
             && app
                 .sub_app(RenderApp)
                 .world()
@@ -1178,10 +865,31 @@ fn settle(app: &mut App) -> CaptureResult<()> {
         {
             return Ok(());
         }
-        check_deadline(deadline, "preparing render pipelines")?;
+        if Instant::now() >= deadline {
+            let cache = app.sub_app(RenderApp).world().resource::<PipelineCache>();
+            let errors: Vec<_> = cache
+                .pipelines()
+                .filter_map(|pipeline| {
+                    if let CachedPipelineState::Err(error) = &pipeline.state {
+                        Some(format!("{error:?}"))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            return Err(format!(
+                "timed out preparing render pipelines; unresolved shader errors: {}",
+                errors.join("; ")
+            )
+            .into());
+        }
         sleep(Duration::from_millis(5));
     }
 }
+
+#[cfg(test)]
+#[path = "support/model.rs"]
+mod semantic;
 
 #[cfg(test)]
 mod tests {
@@ -1224,13 +932,13 @@ mod tests {
         ])
         .unwrap()
         .unwrap();
-        assert_eq!(options.lod, Wc3Lod::Automatic);
+        assert_eq!(options.lod, UniversalLod::Automatic);
         assert_eq!(options.lod_settings.quality_bias, 2.0);
         assert_eq!(options.lod_settings.minimum_level, 2);
         assert_eq!(options.lod_settings.thresholds, [300.0, 150.0]);
         assert_eq!(
             parse(&["--lod", "2"]).unwrap().unwrap().lod,
-            Wc3Lod::Fixed(2)
+            UniversalLod::Fixed(2)
         );
         for arguments in [
             vec!["--lod", "bad"],
@@ -1297,8 +1005,13 @@ mod tests {
     }
 
     #[test]
-    fn authored_camera_selection_validates_index_and_lens_before_loading_gpu() {
-        let model = Wc3Model::decode_mdl(include_str!("../tests/fixtures/cameras.mdl")).unwrap();
+    fn authored_camera_selection_validates_index_before_loading_gpu() {
+        let model = semantic::decode(include_bytes!("../tests/fixtures/cameras.mdl")).unwrap();
+        let compiled = bevy_wc3::compile_universal_model(&model, |_| None).unwrap();
+        let model = compiled.prepare(
+            &mut Assets::<Mesh>::default(),
+            &mut Assets::<SkinnedMeshInverseBindposes>::default(),
+        );
         let options = parse(&["--model-camera", "0", "--camera-fov-multiplier", "0.75"])
             .unwrap()
             .unwrap();
@@ -1310,12 +1023,5 @@ mod tests {
             .unwrap()
             .camera(&model)
             .is_err());
-        assert!(
-            parse(&["--model-camera", "0", "--camera-fov-multiplier", "10"])
-                .unwrap()
-                .unwrap()
-                .camera(&model)
-                .is_err()
-        );
     }
 }

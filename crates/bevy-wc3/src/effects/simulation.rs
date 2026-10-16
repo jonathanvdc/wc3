@@ -1,77 +1,8 @@
-use bevy::prelude::*;
 use bytemuck::Pod;
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use crate::animation::Wc3Animation;
 use crate::effects::records::RecordRing;
-
-pub(crate) fn simulation_delta(time: &Time, animation: &Wc3Animation) -> f64 {
-    let dt = time.delta_secs_f64() * animation.speed;
-    if animation.playing && dt.is_finite() {
-        dt.max(0.0)
-    } else {
-        0.0
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct SimulationClock {
-    pub(crate) time: f64,
-    last_sequence: usize,
-    last_elapsed_ms: f64,
-}
-
-impl Default for SimulationClock {
-    fn default() -> Self {
-        Self {
-            time: 0.0,
-            last_sequence: usize::MAX,
-            last_elapsed_ms: 0.0,
-        }
-    }
-}
-
-impl SimulationClock {
-    /// Report discontinuities without deciding what happens to existing objects.
-    pub(crate) fn observe(&mut self, animation: &Wc3Animation) -> bool {
-        let reset =
-            self.last_sequence != animation.sequence || animation.elapsed_ms < self.last_elapsed_ms;
-        self.last_sequence = animation.sequence;
-        self.last_elapsed_ms = animation.elapsed_ms;
-        reset
-    }
-
-    pub(crate) fn advance(&mut self, dt: f64) {
-        if dt.is_finite() && dt > 0.0 {
-            self.time += dt;
-        }
-    }
-}
-
-pub(crate) fn sequence_ended(animation: &Wc3Animation) -> bool {
-    animation
-        .sequences
-        .get(animation.sequence)
-        .is_some_and(|sequence| {
-            sequence.flags.non_looping()
-                && animation.elapsed_ms
-                    >= f64::from(sequence.interval[1].saturating_sub(sequence.interval[0]))
-        })
-}
-
-pub(crate) fn birth_animation(animation: &Wc3Animation, age: f64) -> Wc3Animation {
-    animation.sample_at_elapsed(animation.elapsed_ms - age * 1000.0)
-}
-
-/// Integer-millisecond tracks need stable sampling at exact key boundaries.
-pub(crate) fn sample_clock(mut animation: Wc3Animation) -> Wc3Animation {
-    let rounded = animation.elapsed_ms.round();
-    if (animation.elapsed_ms - rounded).abs() < 1e-6 {
-        animation.elapsed_ms = rounded;
-    }
-    animation
-}
 
 pub(crate) fn split_time(time: f64) -> [f32; 2] {
     let high = time as f32;
@@ -120,6 +51,7 @@ impl BirthSchedule {
     pub(crate) fn offset(&self, index: usize) -> f64 {
         ((index as f64 + 1.0 - self.remainder) / self.rate).clamp(0.0, self.dt)
     }
+    #[cfg(test)]
     pub(crate) fn age(&self, index: usize) -> f64 {
         self.dt - self.offset(index)
     }

@@ -1,34 +1,6 @@
 use super::*;
 
 #[test]
-fn seeks_report_discontinuities_without_rewinding_simulation_time() {
-    let mut animation = Wc3Animation {
-        sequence: 0,
-        elapsed_ms: 0.0,
-        speed: 1.0,
-        playing: true,
-        sequences: Vec::new(),
-        global_sequences: Vec::new(),
-        event_playback: Default::default(),
-        pose_playback: Default::default(),
-    };
-    let mut clock = SimulationClock::default();
-    assert!(clock.observe(&animation));
-    clock.advance(0.5);
-    animation.elapsed_ms = 500.0;
-    assert!(!clock.observe(&animation));
-    animation.elapsed_ms = 100.0;
-    assert!(clock.observe(&animation));
-    assert_eq!(clock.time, 0.5);
-    animation.sequence = 1;
-    assert!(clock.observe(&animation));
-    for dt in [0.0, -1.0, f64::INFINITY, f64::NAN] {
-        clock.advance(dt);
-    }
-    assert_eq!(clock.time, 0.5);
-}
-
-#[test]
 fn fractional_births_survive_partial_steps_and_integer_boundaries() {
     for rounding in [
         EmissionRounding::Model,

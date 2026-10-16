@@ -2,10 +2,10 @@ use bevy::asset::{AssetApp, AssetPlugin, AssetServer};
 use bevy::image::{Image, ImageLoaderSettings};
 use bevy::prelude::{default, App, Assets, Handle};
 use bevy::tasks::{ComputeTaskPool, IoTaskPool, TaskPoolBuilder};
-use bevy_wc3::{BlpImageLoader, Wc3ModelAsset, Wc3ModelLoader};
+use bevy_wc3::{BlpImageLoader, UniversalModelAsset, UniversalModelLoader, UniversalPathResolver};
 use std::borrow::Cow;
 use std::fs;
-use std::path::Path;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use wc3::model::formats::mdlx::mdl::Read as _;
 use wc3::model::formats::mdlx::mdx::Write as _;
@@ -57,28 +57,40 @@ fn asset_server_loads_mdx_and_mdl_files() {
         ..default()
     });
     app.init_asset::<Image>();
-    app.init_asset::<Wc3ModelAsset>();
-    app.init_asset_loader::<Wc3ModelLoader>();
+    app.init_asset::<UniversalModelAsset>();
+    app.register_asset_loader(UniversalModelLoader::new(Arc::new(UniversalPathResolver)));
     app.init_asset_loader::<BlpImageLoader>();
-    let handles: [Handle<Wc3ModelAsset>; 2] =
+    let handles: [Handle<UniversalModelAsset>; 2] =
         ["quad.mdx", "quad.mdl"].map(|path| app.world().resource::<AssetServer>().load(path));
     wait_for(&mut app, |app| {
         handles.iter().all(|handle| {
             app.world()
-                .resource::<Assets<Wc3ModelAsset>>()
+                .resource::<Assets<UniversalModelAsset>>()
                 .contains(handle)
         })
     });
-    let assets = app.world().resource::<Assets<Wc3ModelAsset>>();
+    let assets = app.world().resource::<Assets<UniversalModelAsset>>();
     let mdx = assets.get(&handles[0]).unwrap();
     let mdl = assets.get(&handles[1]).unwrap();
-    assert_eq!(mdx.source_version, mdl.source_version);
-    assert_eq!(mdx.compiled().sequences(), mdl.compiled().sequences());
-    assert_eq!(mdx.compiled().bounds(), mdl.compiled().bounds());
     assert_eq!(
-        mdx.compiled().texture_definitions(),
-        mdl.compiled().texture_definitions()
+        mdx.compiled
+            .clips()
+            .iter()
+            .map(|(_, name)| name)
+            .collect::<Vec<_>>(),
+        mdl.compiled
+            .clips()
+            .iter()
+            .map(|(_, name)| name)
+            .collect::<Vec<_>>()
     );
+    let bounds = |asset: &UniversalModelAsset| {
+        asset
+            .compiled
+            .rest_bounds()
+            .map(|bounds| (bounds.center, bounds.half_extents))
+    };
+    assert_eq!(bounds(mdx), bounds(mdl));
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -125,10 +137,10 @@ fn asset_server_resolves_child_models_and_keeps_missing_slots() {
         ..default()
     });
     app.init_asset::<Image>();
-    app.init_asset::<Wc3ModelAsset>();
-    app.init_asset_loader::<Wc3ModelLoader>();
+    app.init_asset::<UniversalModelAsset>();
+    app.register_asset_loader(UniversalModelLoader::new(Arc::new(UniversalPathResolver)));
     app.init_asset_loader::<BlpImageLoader>();
-    let handle: Handle<Wc3ModelAsset> = app
+    let handle: Handle<UniversalModelAsset> = app
         .world()
         .resource::<AssetServer>()
         .load("units/parent.mdl");
@@ -137,19 +149,28 @@ fn asset_server_resolves_child_models_and_keeps_missing_slots() {
             .resource::<AssetServer>()
             .is_loaded_with_dependencies(&handle)
     });
-    let assets = app.world().resource::<Assets<Wc3ModelAsset>>();
-    let resources = assets.get(&handle).unwrap().model_resources();
-    assert!(resources.attachment(0).is_none());
-    assert!(resources.attachment(3).is_none());
-    assert!(resources.particle(1).is_none());
-    for (child, path) in [
-        (resources.attachment(1).unwrap(), "units/weapon.mdl"),
-        (resources.attachment(2).unwrap(), "root.mdl"),
-        (resources.particle(0).unwrap(), "units/spark.mdx"),
-    ] {
-        assert_eq!(child.path().unwrap().path(), Path::new(path));
-        assert!(assets.contains(&child));
+    let assets = app.world().resource::<Assets<UniversalModelAsset>>();
+    assert!(assets
+        .get(&handle)
+        .unwrap()
+        .compiled
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| diagnostic.feature.is_some()
+            && diagnostic.message.contains("could not be resolved")));
+    let server = app.world().resource::<AssetServer>();
+    for path in ["units/weapon.mdl", "root.mdl", "units/spark.mdx"] {
+        let child = server
+            .get_handle::<UniversalModelAsset>(path)
+            .expect("selected child registered");
+        assert!(assets.contains(&child), "child {path} loaded");
     }
+    assert!(server
+        .get_handle::<UniversalModelAsset>("spark.mdl")
+        .is_none());
+    assert!(server
+        .get_handle::<UniversalModelAsset>("units/weapon.mdx")
+        .is_none());
     fs::remove_dir_all(directory).unwrap();
 }
 

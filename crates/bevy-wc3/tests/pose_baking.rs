@@ -1,435 +1,271 @@
-mod support;
-use bevy::asset::RenderAssetUsages;
-use bevy::ecs::world::CommandQueue;
-use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
 use bevy::mesh::{skinning::SkinnedMeshInverseBindposes, VertexAttributeValues};
 use bevy::prelude::*;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy_wc3::{
-    prepare_model, spawn_prepared_model, PreparedModel, Wc3PartId, Wc3PoseBaker, Wc3PoseOptions,
-    Wc3TextureBindings, Wc3TextureColorSpace, Wc3TextureRole, Wc3TextureSlot,
+    compile_universal_model, PreparedUniversalModel, UniversalBakeSpace, UniversalBakedSource,
+    UniversalPlayback, UniversalPoseBaker, UniversalPoseOptions, UniversalWorldSelection,
 };
-use support::NativeFixture;
 use wc3::model::formats::mdlx::animation::{Track, ValueKeyframe};
-use wc3::model::formats::mdlx::geometry::Geoset;
-use wc3::model::formats::mdlx::materials::LayerFilterMode;
 use wc3::model::formats::mdlx::scene::{Bone, Node, NodeFlags};
+use wc3::model::{
+    conversion::ImportOptions,
+    formats::mdlx::{mdl::Read as _, Document, V800},
+    io,
+    profiles::Universal,
+};
 
-fn prepare(source: &NativeFixture) -> (PreparedModel, Assets<Mesh>) {
+fn prepare(
+    source: &Document<'_, V800>,
+    image: Option<Handle<Image>>,
+) -> (
+    PreparedUniversalModel,
+    Assets<Mesh>,
+    Assets<SkinnedMeshInverseBindposes>,
+) {
+    let model = io::mdlx::import_owned(source, &ImportOptions::default())
+        .unwrap()
+        .value
+        .widen::<Universal>();
     let mut meshes = Assets::default();
-    let prepared = prepare_model(
-        &mut meshes,
-        &mut Assets::<SkinnedMeshInverseBindposes>::default(),
-        &source.checked().unwrap(),
-        |_| None,
-    )
-    .unwrap();
-    (prepared, meshes)
+    let mut binds = Assets::default();
+    let compiled = compile_universal_model(&model, |_| image.clone()).unwrap();
+    (compiled.prepare(&mut meshes, &mut binds), meshes, binds)
 }
-
-fn options(elapsed_ms: f64) -> Wc3PoseOptions {
-    Wc3PoseOptions {
-        sequence: Some(0),
-        elapsed_ms,
-        global_elapsed_ms: elapsed_ms,
-        ..default()
-    }
+fn source() -> Document<'static, V800> {
+    Document::<V800>::decode_mdl(include_str!("fixtures/quad_model.mdl")).unwrap()
 }
-
 fn positions(mesh: &Mesh) -> &[[f32; 3]] {
     mesh.attribute(Mesh::ATTRIBUTE_POSITION)
         .unwrap()
         .as_float3()
         .unwrap()
 }
-
-fn vector_track<'data>(global: Option<u32>) -> Track<'data, [f32; 3]> {
-    Track::linear(
-        [
-            ValueKeyframe {
-                frame: 0,
-                value: [0.0; 3],
-            },
-            ValueKeyframe {
-                frame: 1000,
-                value: [10.0, 0.0, 0.0],
-            },
-        ],
-        global,
-    )
-    .unwrap()
+fn playback(prepared: &PreparedUniversalModel, local: f64, shared: f64) -> UniversalPlayback {
+    let mut value = UniversalPlayback::default();
+    value.play(prepared.clips()[0].0);
+    value.clip_time = local;
+    value.timeline_time = local;
+    value.shared_time = shared;
+    value
 }
-
 #[test]
-fn source_identity_survives_empty_geosets_shared_meshes_and_spawning() {
-    let mut source =
-        NativeFixture::decode_mdl(include_str!("fixtures/geoset_capture.mdl")).unwrap();
-    let mut geosets = source.model.geosets().cloned().collect::<Vec<_>>();
-    let empty = Geoset::new([], [], []).unwrap();
-    geosets.insert(0, empty);
-    source.model.set_geosets(geosets);
-    for animation in source.model.geoset_animations_mut() {
-        animation.geoset_id += 1;
-    }
-    for bone in source.model.bones_mut() {
-        bone.geoset_id = bone.geoset_id.saturating_add(1);
-    }
-    let material = source.model.materials_mut().next().unwrap();
-    material.layers.push(material.layers[0].clone());
-    let (prepared, mut meshes) = prepare(&source);
-    let parts: Vec<_> = prepared.parts().collect();
-    assert_eq!(
-        parts.iter().map(|part| part.id).collect::<Vec<_>>(),
-        vec![
-            Wc3PartId {
-                geoset: 1,
-                material: 0,
-                layer: 0
-            },
-            Wc3PartId {
-                geoset: 1,
-                material: 0,
-                layer: 1
-            },
-            Wc3PartId {
-                geoset: 2,
-                material: 0,
-                layer: 0
-            },
-            Wc3PartId {
-                geoset: 2,
-                material: 0,
-                layer: 1
-            },
-        ]
-    );
-    assert_eq!(parts[0].mesh, parts[1].mesh);
-    let mut world = World::new();
-    let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &world);
-    spawn_prepared_model(
-        &mut commands,
-        &mut meshes,
-        &mut Assets::default(),
-        &prepared,
-    );
-    queue.apply(&mut world);
-    let mut query = world.query::<&Wc3PartId>();
-    let mut spawned: Vec<_> = query.iter(&world).copied().collect();
-    spawned.sort_by_key(|part| (part.geoset, part.layer));
-    assert_eq!(
-        spawned,
-        parts.iter().map(|part| part.id).collect::<Vec<_>>()
-    );
-}
-
-#[test]
-fn independent_clocks_pose_eight_influences_and_repeat_without_mutating_meshes() {
-    let mut source = NativeFixture::decode_mdl(include_str!("fixtures/quad_model.mdl")).unwrap();
-    source.model.set_global_sequences(&[1000]);
-    let mut bones = Vec::new();
-    for id in 0..8 {
+fn independent_clocks_pose_eight_influences_without_mutating_sources() {
+    let mut native = source();
+    native.set_global_sequences(&[1000]);
+    native.set_bones((0..8).map(|id| {
         let mut node = Node::new("joint", id).unwrap();
-        node.translation = Some(vector_track((id >= 4).then_some(0)));
-        bones.push(Bone::new(node, u32::MAX, u32::MAX));
-    }
-    source.model.set_bones(bones);
-    source.model.set_pivot_points(&[[0.0; 3]; 8]);
-    let geoset = source.model.geosets_mut().next().unwrap();
-    geoset
+        node.translation = Some(
+            Track::linear(
+                [
+                    ValueKeyframe {
+                        frame: 0,
+                        value: [0.; 3],
+                    },
+                    ValueKeyframe {
+                        frame: 1000,
+                        value: [10., 0., 0.],
+                    },
+                ],
+                (id >= 4).then_some(0),
+            )
+            .unwrap(),
+        );
+        Bone::new(node, u32::MAX, u32::MAX)
+    }));
+    native.set_pivot_points(&[[0.; 3]; 8]);
+    native
+        .geosets_mut()
+        .next()
+        .unwrap()
         .set_matrix_groups([[0, 1, 2, 3, 4, 5, 6, 7]])
         .unwrap();
-    let (prepared, meshes) = prepare(&source);
-    drop(source);
-    let input = positions(meshes.get(prepared.parts().next().unwrap().mesh).unwrap()).to_vec();
-    let mut baker = Wc3PoseBaker::default();
-    let mut images = Assets::default();
-    let first = baker
-        .bake(
-            &prepared,
-            &meshes,
-            &mut images,
-            &Wc3TextureBindings::default(),
-            Wc3PoseOptions {
-                sequence: Some(0),
-                elapsed_ms: 250.0,
-                global_elapsed_ms: 750.0,
-                ..default()
-            },
-        )
-        .unwrap();
-    assert!((positions(&first.parts[0].mesh)[0][0] - input[0][0] - 5.0).abs() < 1e-5);
+    let (prepared, meshes, binds) = prepare(&native, None);
+    let part = prepared.parts().next().unwrap();
+    let input = positions(meshes.get(part.mesh).unwrap()).to_vec();
+    let state = playback(&prepared, 0.25, 0.75);
+    let mut baker = UniversalPoseBaker::default();
+    let options = UniversalPoseOptions {
+        playback: Some(&state),
+        space: UniversalBakeSpace::Authored,
+        ..default()
+    };
+    let first = baker.bake(&prepared, &meshes, &binds, options).unwrap();
+    let second = baker.bake(&prepared, &meshes, &binds, options).unwrap();
+    assert_eq!(
+        positions(&first.parts[0].mesh),
+        positions(&second.parts[0].mesh)
+    );
+    for (input, actual) in input.iter().zip(positions(&first.parts[0].mesh)) {
+        assert!((actual[0] - input[0] - 5.).abs() < 1e-5);
+    }
     assert!(!first.parts[0]
         .mesh
         .contains_attribute(Mesh::ATTRIBUTE_JOINT_INDEX));
-    assert!(!first.parts[0]
-        .mesh
-        .attributes()
-        .any(|(attribute, _)| attribute.name == "Model_ExtraJointIndex"));
-    assert_eq!(
-        positions(meshes.get(prepared.parts().next().unwrap().mesh).unwrap()),
-        input
-    );
-    let second = baker
-        .bake(
-            &prepared,
-            &meshes,
-            &mut images,
-            &Wc3TextureBindings::default(),
-            options(1250.0),
-        )
+    assert_eq!(positions(meshes.get(part.mesh).unwrap()), input);
+    let UniversalBakedSource::Geometry(identity) = first.parts[0].source else {
+        panic!()
+    };
+    assert_eq!(identity.instance, part.source.instance);
+    assert_eq!(identity.mesh, part.source.mesh);
+}
+#[test]
+fn snapshots_retain_image_handles_without_changing_shared_assets() {
+    let mut images = Assets::<Image>::default();
+    let image = images.add(Image::default());
+    let (prepared, meshes, binds) = prepare(&source(), Some(image.clone()));
+    let baked = UniversalPoseBaker::default()
+        .bake(&prepared, &meshes, &binds, default())
         .unwrap();
-    assert!((positions(&second.parts[0].mesh)[0][0] - input[0][0] - 2.5).abs() < 1e-5);
-    let third = baker
+    assert_eq!(
+        baked.parts[0]
+            .material
+            .as_ref()
+            .unwrap()
+            .base
+            .base_color_texture,
+        Some(image.clone())
+    );
+    assert_eq!(
+        prepared
+            .parts()
+            .next()
+            .unwrap()
+            .material
+            .base
+            .base_color_texture,
+        Some(image)
+    );
+    assert_eq!(images.len(), 1);
+    assert!(baked.bounds.is_some());
+}
+#[test]
+fn mirrored_and_collapsed_scales_keep_finite_geometry() {
+    for scale in [[-2., 1., 1.], [0.; 3]] {
+        let mut native = source();
+        native.bones_mut().next().unwrap().node.scaling = Some(Track::constant(scale));
+        let (prepared, meshes, binds) = prepare(&native, None);
+        let baked = UniversalPoseBaker::default()
+            .bake(
+                &prepared,
+                &meshes,
+                &binds,
+                UniversalPoseOptions {
+                    space: UniversalBakeSpace::Authored,
+                    ..default()
+                },
+            )
+            .unwrap();
+        for position in positions(&baked.parts[0].mesh) {
+            assert!(Vec3::from_array(*position).is_finite());
+        }
+        if let Some(VertexAttributeValues::Float32x4(tangents)) =
+            baked.parts[0].mesh.attribute(Mesh::ATTRIBUTE_TANGENT)
+        {
+            assert!(tangents.iter().flatten().all(|value| value.is_finite()));
+            if scale[0] < 0. {
+                assert!(tangents.iter().all(|value| value[3] < 0.));
+            }
+        }
+    }
+}
+#[test]
+fn missing_assets_invalid_clocks_and_camera_requirements_are_errors() {
+    let mut native = source();
+    native.bones_mut().next().unwrap().node.flags = NodeFlags(8);
+    let (prepared, mut meshes, binds) = prepare(&native, None);
+    let mut baker = UniversalPoseBaker::default();
+    assert!(baker.bake(&prepared, &meshes, &binds, default()).is_err());
+    let camera = Transform::from_xyz(0., -10., 5.).looking_at(Vec3::ZERO, Vec3::Z);
+    let options = UniversalPoseOptions {
+        camera: Some(camera),
+        ..default()
+    };
+    assert!(baker.bake(&prepared, &meshes, &binds, options).is_ok());
+    let state = playback(&prepared, f64::NAN, 0.);
+    assert!(baker
         .bake(
             &prepared,
             &meshes,
-            &mut images,
-            &Wc3TextureBindings::default(),
-            Wc3PoseOptions {
-                sequence: Some(0),
-                elapsed_ms: 250.0,
-                global_elapsed_ms: 750.0,
+            &binds,
+            UniversalPoseOptions {
+                playback: Some(&state),
+                ..options
+            }
+        )
+        .is_err());
+    let handle = prepared.parts().next().unwrap().mesh.clone();
+    meshes.remove(&handle);
+    assert!(baker.bake(&prepared, &meshes, &binds, options).is_err());
+}
+
+#[test]
+fn world_group_selection_intersects_authored_surface_visibility() {
+    use wc3::model::{
+        controls::world::{Group, GroupId, WorldSystem},
+        System,
+    };
+    let mut model = io::mdlx::import_owned(&source(), &ImportOptions::default())
+        .unwrap()
+        .value
+        .widen::<Universal>();
+    let instance = model.instances().next().unwrap().0;
+    let system = model
+        .edit(|builder| {
+            builder.add_system(System::Wmo(WorldSystem {
+                groups: vec![Group {
+                    instances: vec![instance],
+                    ..default()
+                }],
+                ..default()
+            }))
+        })
+        .unwrap();
+    let mut meshes = Assets::default();
+    let mut binds = Assets::default();
+    let prepared = compile_universal_model(&model, |_| None)
+        .unwrap()
+        .prepare(&mut meshes, &mut binds);
+    let mut baker = UniversalPoseBaker::default();
+    assert!(
+        baker
+            .bake(&prepared, &meshes, &binds, default())
+            .unwrap()
+            .parts[0]
+            .visible
+    );
+    let mut selection = UniversalWorldSelection::default();
+    selection.hidden_groups.insert(GroupId { system, index: 0 });
+    let pose = baker
+        .bake(
+            &prepared,
+            &meshes,
+            &binds,
+            UniversalPoseOptions {
+                world_selection: Some(&selection),
                 ..default()
             },
         )
         .unwrap();
-    assert_eq!(
-        positions(&third.parts[0].mesh),
-        positions(&first.parts[0].mesh)
-    );
+    assert!(!pose.parts[0].visible);
+    assert!(pose.bounds.is_none());
 }
-
 #[test]
-fn material_snapshots_preserve_override_provenance_and_reuse_linear_variants() {
-    let mut source = NativeFixture::decode_mdl(include_str!("fixtures/hd_capture.mdl")).unwrap();
-    source.model.textures_mut().nth(1).unwrap().replaceable_id = 31;
-    source.model.materials_mut().next().unwrap().layers[0].filter_mode =
-        LayerFilterMode::Transparent;
-    let (prepared, meshes) = prepare(&source);
-    let mut images = Assets::default();
-    let mut image = Image::new(
-        Extent3d {
-            width: 1,
-            height: 1,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        vec![128; 4],
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::default(),
-    );
-    image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-        address_mode_u: ImageAddressMode::Repeat,
-        ..default()
-    });
-    let by_id = images.add(image.clone());
-    let by_slot = images.add(image);
-    let mut bindings = Wc3TextureBindings::default();
-    bindings.set_replaceable(31, by_id.clone());
-    bindings.set_slot(Wc3TextureSlot::Bitmap(1), by_slot.clone());
-    bindings.set_slot(Wc3TextureSlot::Bitmap(2), by_slot.clone());
-    bindings.set_slot(Wc3TextureSlot::Bitmap(3), by_slot.clone());
-    let mut baker = Wc3PoseBaker::default();
-    let pose = baker
-        .bake(&prepared, &meshes, &mut images, &bindings, options(500.0))
-        .unwrap();
-    let snapshot = &pose.parts[0].material;
-    let normal = snapshot.texture(Wc3TextureRole::Normal).unwrap();
-    assert_eq!(normal.bitmap, 1);
-    assert_eq!(normal.authored_path.as_deref(), Some("hd_normal.png"));
-    assert_eq!(normal.replaceable_id, Some(31));
-    assert_eq!(normal.image, Some(by_slot.clone()));
-    assert_eq!(normal.color_space, Wc3TextureColorSpace::Linear);
-    let ImageSampler::Descriptor(sampler) = &normal.sampler else {
-        panic!("lost sampler")
-    };
-    assert_eq!(sampler.address_mode_u, ImageAddressMode::Repeat);
-    let linear = snapshot.material.base.normal_map_texture.clone().unwrap();
-    assert_ne!(linear, by_slot);
-    assert_eq!(
-        images.get(&linear).unwrap().texture_descriptor.format,
-        TextureFormat::Rgba8Unorm
-    );
-    assert_eq!(
-        images.get(&by_slot).unwrap().texture_descriptor.format,
-        TextureFormat::Rgba8UnormSrgb
-    );
-    assert_eq!(snapshot.material.base.emissive.red, 2.0);
-    assert_eq!(snapshot.material.base.uv_transform.translation.x, 0.25);
-    assert_eq!(snapshot.fresnel_color, [0.2, 0.4, 1.0]);
-    assert_eq!(snapshot.material.base.alpha_mode, AlphaMode::Mask(0.75));
-    let count = images.len();
-    let repeated = baker
-        .bake(&prepared, &meshes, &mut images, &bindings, options(500.0))
-        .unwrap();
-    assert_eq!(images.len(), count);
-    assert_eq!(
-        repeated.parts[0].material.material.base.normal_map_texture,
-        Some(linear)
-    );
-    bindings.clear_slot(Wc3TextureSlot::Bitmap(1));
-    let replaced = baker
-        .bake(&prepared, &meshes, &mut images, &bindings, options(500.0))
-        .unwrap();
-    assert_eq!(
-        replaced.parts[0]
-            .material
-            .texture(Wc3TextureRole::Normal)
-            .unwrap()
-            .image,
-        Some(by_id)
-    );
-}
-
-#[test]
-fn nonlooping_visibility_tint_bounds_and_lods_are_evaluated_without_world_state() {
-    let source = NativeFixture::decode_mdl(include_str!("fixtures/geoset_capture.mdl")).unwrap();
-    let (prepared, meshes) = prepare(&source);
-    let mut baker = Wc3PoseBaker::default();
-    let pose = baker
-        .bake(
-            &prepared,
-            &meshes,
-            &mut Assets::default(),
-            &Wc3TextureBindings::default(),
-            options(2000.0),
-        )
-        .unwrap();
-    assert!(pose.parts[0].visible);
-    assert!(!pose.parts[1].visible);
-    assert_eq!(
-        pose.parts[1]
-            .material
-            .material
-            .base
-            .base_color
-            .to_linear()
-            .to_f32_array(),
-        [0.0, 1.0, 0.0, 0.0]
-    );
-    assert_eq!(pose.bounds.unwrap().center, pose.parts[0].bounds.center);
-    let source = NativeFixture::decode_mdl(include_str!("fixtures/lod_capture.mdl")).unwrap();
-    let (prepared, meshes) = prepare(&source);
-    let pose = baker
-        .bake(
-            &prepared,
-            &meshes,
-            &mut Assets::default(),
-            &Wc3TextureBindings::default(),
-            options(0.0),
-        )
-        .unwrap();
-    assert_eq!(
-        pose.parts.iter().map(|part| part.lod).collect::<Vec<_>>(),
-        prepared.parts().map(|part| part.lod).collect::<Vec<_>>()
-    );
-    assert!(pose.parts.len() >= 3);
-}
-
-#[test]
-fn malformed_hierarchies_nonfinite_times_and_missing_camera_are_errors() {
-    let mut source = NativeFixture::decode_mdl(include_str!("fixtures/quad_model.mdl")).unwrap();
-    let (prepared, meshes) = prepare(&source);
-    let mut baker = Wc3PoseBaker::default();
-    let mut images = Assets::default();
-    assert!(baker
-        .bake(
-            &prepared,
-            &meshes,
-            &mut images,
-            &Wc3TextureBindings::default(),
-            options(f64::NAN)
-        )
-        .is_err());
-    assert!(baker
-        .bake(
-            &prepared,
-            &meshes,
-            &mut images,
-            &Wc3TextureBindings::default(),
-            Wc3PoseOptions {
-                sequence: Some(99),
-                ..default()
+fn malformed_skin_and_normal_streams_are_rejected() {
+    for malformed_normal in [false, true] {
+        let (prepared, mut meshes, binds) = prepare(&source(), None);
+        let handle = prepared.parts().next().unwrap().mesh.clone();
+        {
+            let mut mesh = meshes.get_mut(&handle).unwrap();
+            if malformed_normal {
+                let count = mesh.count_vertices();
+                *mesh.attribute_mut(Mesh::ATTRIBUTE_NORMAL).unwrap() =
+                    VertexAttributeValues::Float32x2(vec![[0.; 2]; count]);
+            } else {
+                mesh.remove_attribute(Mesh::ATTRIBUTE_JOINT_INDEX);
+                mesh.remove_attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT);
             }
-        )
-        .is_err());
-    let bone = source.model.bones_mut().next().unwrap();
-    bone.node.flags = NodeFlags(8);
-    let (prepared, meshes) = prepare(&source);
-    assert!(baker
-        .bake(
-            &prepared,
-            &meshes,
-            &mut images,
-            &Wc3TextureBindings::default(),
-            options(0.0)
-        )
-        .is_err());
-    assert!(baker
-        .bake(
-            &prepared,
-            &meshes,
-            &mut images,
-            &Wc3TextureBindings::default(),
-            Wc3PoseOptions {
-                camera: Some(Transform::from_xyz(0.0, -10.0, 5.0).looking_at(Vec3::ZERO, Vec3::Z)),
-                ..options(0.0)
-            }
-        )
-        .is_ok());
-    let bone = source.model.bones_mut().next().unwrap();
-    bone.node.flags = NodeFlags(0);
-    bone.node.parent_id = 0;
-    assert!(
-        source.checked().is_err(),
-        "cyclic hierarchy must be rejected at import"
-    );
-}
-
-#[test]
-fn mirrored_and_collapsed_scales_keep_normals_and_tangents_finite() {
-    let mut source = NativeFixture::decode_mdl(include_str!("fixtures/quad_model.mdl")).unwrap();
-    let bone = source.model.bones_mut().next().unwrap();
-    bone.node.scaling = Some(Track::constant([-2.0, 1.0, 1.0]));
-    let (prepared, meshes) = prepare(&source);
-    let pose = Wc3PoseBaker::default()
-        .bake(
-            &prepared,
-            &meshes,
-            &mut Assets::default(),
-            &Wc3TextureBindings::default(),
-            options(0.0),
-        )
-        .unwrap();
-    let Some(VertexAttributeValues::Float32x4(tangents)) =
-        pose.parts[0].mesh.attribute(Mesh::ATTRIBUTE_TANGENT)
-    else {
-        panic!("tangents missing")
-    };
-    assert_eq!(tangents[0][3], -1.0);
-    source.model.bones_mut().next().unwrap().node.scaling = Some(Track::constant([0.0; 3]));
-    let (prepared, meshes) = prepare(&source);
-    let pose = Wc3PoseBaker::default()
-        .bake(
-            &prepared,
-            &meshes,
-            &mut Assets::default(),
-            &Wc3TextureBindings::default(),
-            options(0.0),
-        )
-        .unwrap();
-    assert!(positions(&pose.parts[0].mesh)
-        .iter()
-        .flatten()
-        .all(|value| value.is_finite()));
-    assert!(pose.parts[0]
-        .mesh
-        .attribute(Mesh::ATTRIBUTE_NORMAL)
-        .unwrap()
-        .as_float3()
-        .unwrap()
-        .iter()
-        .flatten()
-        .all(|value| value.is_finite()));
+        }
+        assert!(UniversalPoseBaker::default()
+            .bake(&prepared, &meshes, &binds, default())
+            .is_err());
+    }
 }

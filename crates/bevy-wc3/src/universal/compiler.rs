@@ -1,25 +1,35 @@
 //! Compile semantic graphs into owned immutable render definitions.
+use super::bounds::rest_bounds;
 use super::coordinates::{axis, basis};
+use super::effects::RuntimeParticles;
+use super::events::RuntimeEvents;
 use super::features::RuntimeFeatures;
-use super::geometry::{apply_skin, compile_geometry_with_uvs};
+use super::geometry::{apply_skin, compile_geometry_with_uvs, whole_geometry};
+use super::lod::LodDefinition;
 use super::material::compile_material_with_images;
 use super::material::mesh_alpha_mode;
 use super::mesh_animation::{MeshAnimation, MeshMaterialState};
-use super::particles::RuntimeParticles;
+use super::mesh_interner::MeshInterner;
+use super::placements::ModelPlacementSpace;
+use super::pose::BillboardConvention;
+use super::skin_bounds::compile_skin_bounds;
 use super::textures::TextureImages;
+use super::world::WorldRuntime;
 use super::{
-    ClipTiming, CompiledUniversalModel, RenderDiagnostic, RuntimeDraw, RuntimeNode, RuntimeSkin,
-    TextureRequest, UniversalMaterial,
+    ClipTiming, CompiledUniversalModel, RenderDiagnostic, RuntimeDraw, RuntimeLiquid, RuntimeNode,
+    RuntimeSkin, TextureRequest, UniversalDrawSource, UniversalMaterial, UniversalModelAsset,
 };
 use crate::ModelError;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::profiles::Universal;
+use wc3::model::systems::ModelMetadata;
+use wc3::model::systems::System;
 use wc3::model::{
-    AnimationProgram, Attachment, Billboard, Camera as ModelCamera, ClipControls,
-    Light as ModelLight, Model, NodeFeature, ParticleDetails, ParticleEmitter, PropertyTarget,
-    SkinId,
+    AnimationProgram, Attachment, Billboard, Camera as ModelCamera, ClipControls, FeatureId,
+    Light as ModelLight, MaterialSelection, MeshControls, Model, NodeControls, NodeFeature,
+    ParticleDetails, ParticleEmitter, PropertyTarget, RibbonEmitter, SkinId,
 };
 
 fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
@@ -77,6 +87,17 @@ fn node_order(nodes: &[RuntimeNode]) -> Result<Vec<usize>, ModelError> {
     Ok(order)
 }
 
+/// Application-selected authored state used during immutable model compilation.
+#[derive(Clone, Debug, Default)]
+pub struct UniversalCompileOptions {
+    /// Material appearance. Ambiguous defaults require an explicit selection.
+    pub material: MaterialSelection,
+    /// Resolved optional child models, keyed by the authored attachment or emitter.
+    pub child_models: HashMap<FeatureId, Handle<UniversalModelAsset>>,
+    /// External child coordinate-space overrides; omitted features use authored space.
+    pub model_placements: HashMap<FeatureId, ModelPlacementSpace>,
+}
+
 /// Compile geometry, skin bindings, default appearances, surfaces, and animation
 /// directly from a borrowed Universal model.
 ///
@@ -86,6 +107,17 @@ fn node_order(nodes: &[RuntimeNode]) -> Result<Vec<usize>, ModelError> {
 /// Invalid geometry and unsupported joint counts return an error atomically.
 pub fn compile_universal_model(
     model: &Model<'_, Universal>,
+    resolve_image: impl FnMut(TextureRequest<'_, '_>) -> Option<Handle<Image>>,
+) -> Result<CompiledUniversalModel, ModelError> {
+    compile_universal_model_with_options(model, UniversalCompileOptions::default(), resolve_image)
+}
+
+/// Compile a model with an explicit authored appearance selection.
+///
+/// Resource handling and ownership are identical to [`compile_universal_model`].
+pub fn compile_universal_model_with_options(
+    model: &Model<'_, Universal>,
+    options: UniversalCompileOptions,
     mut resolve_image: impl FnMut(TextureRequest<'_, '_>) -> Option<Handle<Image>>,
 ) -> Result<CompiledUniversalModel, ModelError> {
     model.validate().map_err(|e| ModelError(e.to_string()))?;
@@ -103,6 +135,11 @@ pub fn compile_universal_model(
             rest: node.transform,
             inheritance: node.inheritance,
             billboard: node.billboard,
+            billboard_convention: if matches!(node.controls, Some(NodeControls::Mdlx(_))) {
+                BillboardConvention::Warcraft3
+            } else {
+                BillboardConvention::Generic
+            },
             visible: node.visible,
             camera_anchored: node.camera_anchored,
         })
@@ -126,6 +163,18 @@ pub fn compile_universal_model(
         })
         .collect();
     let mut diagnostics = Vec::new();
+    for (id, clip) in model.clips() {
+        if let Some(ClipControls::M2(controls)) = &clip.controls {
+            if controls.blend_time != [0; 2] {
+                diagnostics.push(RenderDiagnostic {
+                    feature: None,
+                    material: None,
+                    message: format!("M2 clip {id:?} ({}) declares incoming/outgoing blend durations {:?} milliseconds; native transition arbitration is not interpreted, so use UniversalPlayback::play_with_blend for an explicit duration", clip.name(), controls.blend_time),
+                });
+            }
+        }
+    }
+
     let images = Arc::new(TextureImages::resolve(model, &mut resolve_image));
     let mut materials = HashMap::new();
     for (id, _) in model.materials() {
@@ -146,23 +195,54 @@ pub fn compile_universal_model(
     }
     let mesh_animation = MeshAnimation::compile(model);
     let mut geometry_cache = HashMap::new();
+    let mut mesh_interner = MeshInterner::default();
     let mut draws = Vec::new();
     for (instance_id, instance) in model.instances() {
         let source = model
             .mesh(instance.mesh)
             .ok_or_else(|| ModelError("instance geometry is absent".into()))?;
         let skin_id = instance.skin.or(source.skin());
-        for draw in &instance.draws {
-            let material_id = model
-                .material_for_draw(instance_id, draw.id(), None)
-                .map_err(|error| ModelError(error.to_string()))?;
-            let subset = source
-                .subset(draw.subset)
-                .ok_or_else(|| ModelError("draw subset is absent".into()))?;
+        let implicit = instance.draws.is_empty()
+            && match source.controls.as_ref() {
+                Some(MeshControls::D3(value)) => value.material_slot.is_some(),
+                Some(MeshControls::D4(value)) => value.material_slot.is_some(),
+                _ => false,
+            };
+        let selections = if implicit {
+            vec![(
+                UniversalDrawSource::WholeInstance,
+                None,
+                model
+                    .resolve_instance_material(instance_id, options.material)
+                    .map_err(|error| ModelError(error.to_string()))?,
+                whole_geometry(source)?,
+            )]
+        } else {
+            instance
+                .draws
+                .iter()
+                .map(|draw| {
+                    let material = model
+                        .resolve_material(instance_id, draw.id(), options.material)
+                        .map_err(|error| ModelError(error.to_string()))?;
+                    let subset = source
+                        .subset(draw.subset)
+                        .ok_or_else(|| ModelError("draw subset is absent".into()))?
+                        .clone();
+                    Ok((
+                        UniversalDrawSource::Draw(draw.id()),
+                        Some(draw.subset),
+                        material,
+                        subset,
+                    ))
+                })
+                .collect::<Result<Vec<_>, ModelError>>()?
+        };
+        for (draw_source, subset_id, material_id, subset) in selections {
             for (pass, surface) in materials[&material_id].iter().enumerate() {
                 let key = (
                     instance.mesh,
-                    draw.subset,
+                    subset_id,
                     surface.coordinate,
                     surface.secondary_coordinate,
                     skin_id,
@@ -172,7 +252,7 @@ pub fn compile_universal_model(
                 } else {
                     let mut parts = compile_geometry_with_uvs(
                         source,
-                        subset,
+                        &subset,
                         surface.coordinate,
                         surface.secondary_coordinate,
                     )?;
@@ -182,6 +262,7 @@ pub fn compile_universal_model(
                             .ok_or_else(|| ModelError("instance skin is absent".into()))?;
                         for part in &mut parts {
                             apply_skin(part, source, &skin.joints)?;
+                            compile_skin_bounds(&mut part.mesh)?;
                         }
                     }
                     let parts = parts
@@ -190,7 +271,7 @@ pub fn compile_universal_model(
                             part.mesh.merge_duplicate_vertices().map_err(|e| {
                                 ModelError(format!("cannot index compiled mesh: {e}"))
                             })?;
-                            Ok(Arc::new(part.mesh))
+                            Ok(mesh_interner.intern(part.mesh))
                         })
                         .collect::<Result<Vec<_>, ModelError>>()?;
                     geometry_cache.entry(key).or_insert(parts)
@@ -198,7 +279,7 @@ pub fn compile_universal_model(
                 for mesh in meshes {
                     draws.push(RuntimeDraw {
                         instance: instance_id,
-                        draw: draw.id(),
+                        source: draw_source,
                         mesh_id: instance.mesh,
                         material_id,
                         mesh_state: mesh_animation
@@ -237,6 +318,9 @@ pub fn compile_universal_model(
         model,
         &node_map,
         images.color_images().as_ref(),
+        &materials,
+        &options.child_models,
+        &options.model_placements,
     ));
     diagnostics.extend(
         particles
@@ -248,15 +332,32 @@ pub fn compile_universal_model(
                 message: message.clone(),
             }),
     );
+    let features = Arc::new(RuntimeFeatures::compile(
+        model,
+        &options.child_models,
+        &options.model_placements,
+    ));
+    diagnostics.extend(
+        features
+            .light_diagnostics()
+            .map(|(feature, message)| RenderDiagnostic {
+                feature: Some(feature),
+                material: None,
+                message: message.to_owned(),
+            }),
+    );
     for (id, feature) in model.features() {
         let message = match &feature.payload {
-            NodeFeature::Particle(ParticleEmitter::Simulated(definition)) if matches!(definition.details,ParticleDetails::AgeDriven(_)|ParticleDetails::Atlas(_)) => continue,
+            NodeFeature::Particle(ParticleEmitter::Simulated(definition)) if matches!(definition.details,ParticleDetails::AgeDriven(_)|ParticleDetails::Atlas(_)|ParticleDetails::Model(_)|ParticleDetails::Programmed(_)) => continue,
+            NodeFeature::Ribbon(RibbonEmitter::Trail(_) | RibbonEmitter::Programmed(_)) | NodeFeature::Event(_) => continue,
             NodeFeature::GeometryAnimation(value) if value.mesh.is_some() && !value.drop_shadow && value.unclassified.bits() == 0 => continue,
             NodeFeature::GeometryAnimation(_) => "geometry tint and opacity are rendered; orphan controllers, authored drop shadows, and unclassified geometry flags need application interpretation".to_string(),
             NodeFeature::Camera(ModelCamera::Portable(_) | ModelCamera::Aimed(_))
             | NodeFeature::Attachment(Attachment::Point(_)) => continue,
+            NodeFeature::Light(ModelLight::World(_) | ModelLight::Specular(_) | ModelLight::Point(_)) | NodeFeature::PointLight(_) => continue,
             NodeFeature::Light(ModelLight::Portable(_) | ModelLight::AmbientDiffuse(_)) =>
                 "direct illumination uses Bevy scene lights; ambient terms remain available through UniversalLight metadata".to_string(),
+            NodeFeature::Attachment(Attachment::External(_)) if options.child_models.contains_key(&id) => continue,
             NodeFeature::Attachment(Attachment::External(_)) =>
                 "external attachment identity and activation are exposed; application resource instantiation is required".to_string(),
             _ => format!("{} requires a visual interpreter or application integration", feature_name(&feature.payload)),
@@ -267,9 +368,57 @@ pub fn compile_universal_model(
             message,
         });
     }
-    for (id, _) in model.systems() {
+    let world = WorldRuntime::compile(model)?;
+    diagnostics.extend(
+        world
+            .diagnostics
+            .into_iter()
+            .map(|message| RenderDiagnostic {
+                feature: None,
+                material: None,
+                message,
+            }),
+    );
+    let mut liquids = Vec::new();
+    for liquid in world.liquids {
+        let mesh = mesh_interner.intern(liquid.mesh);
+        let surfaces = liquid.material.and_then(|id| materials.get(&id));
+        for pass in 0..surfaces.map_or(1, Vec::len) {
+            let surface = surfaces.map(|surfaces| {
+                let surface = &surfaces[pass];
+                (
+                    UniversalMaterial {
+                        base: surface.material.clone(),
+                        extension: surface.state.clone(),
+                    },
+                    Arc::new(surface.animation.clone()),
+                )
+            });
+            liquids.push(RuntimeLiquid {
+                instance: liquid.instance,
+                node: node_map[&liquid.node],
+                ordinal: liquid.ordinal,
+                liquid_type: liquid.liquid_type,
+                material_id: liquid.material,
+                pass,
+                mesh: mesh.clone(),
+                surface,
+            });
+        }
+    }
+    for (id, system) in model.systems() {
+        if matches!(system, System::Wmo(_)) {
+            continue;
+        }
         diagnostics.push(RenderDiagnostic { feature: None, material: None, message: format!("system {id:?} remains in its authored/default state; application simulation is not active") });
     }
+    let lod = Arc::new(LodDefinition::compile(&draws, world.runtime.lod_levels()));
+    let has_animation = !model.timeline_channels().is_empty()
+        || !model.shared_channels().is_empty()
+        || model.clips().any(|(_, clip)| !clip.channels().is_empty())
+        || model
+            .controllers()
+            .any(|(_, controller)| !controller.channels.is_empty());
     let pose_animated = model
         .timeline_channels()
         .iter()
@@ -296,8 +445,14 @@ pub fn compile_universal_model(
                 Billboard::None | Billboard::Locked { enabled: false, .. }
             )
     });
-    Ok(CompiledUniversalModel {
+    let mut compiled = CompiledUniversalModel {
         nodes: nodes.into(),
+        blend_time: match model.metadata() {
+            Some(ModelMetadata::Mdlx(metadata)) => metadata.blend_time,
+            _ => 0.,
+        },
+        lod,
+        has_animation,
         pose_animated,
         camera_sensitive,
         order: order.into(),
@@ -310,6 +465,7 @@ pub fn compile_universal_model(
         skins,
         draws,
         diagnostics: diagnostics.into(),
+        rest_bounds: None,
         basis: basis(model)?,
         up: axis(model.basis().up()),
         timing: Arc::new(
@@ -327,12 +483,36 @@ pub fn compile_universal_model(
                             origin,
                             duration: clip.duration().as_seconds(),
                             looping: clip.is_looping(),
+                            controllers: match &clip.controls {
+                                Some(ClipControls::M3(controls)) => controls
+                                    .selection
+                                    .as_ref()
+                                    .map(|selection| selection.controllers.clone())
+                                    .unwrap_or_default()
+                                    .into(),
+                                _ => Arc::from([]),
+                            },
+                            blend_duration: match &clip.controls {
+                                Some(ClipControls::M3(controls)) => {
+                                    Some(controls.blend_duration.as_seconds())
+                                }
+                                _ => None,
+                            },
                         },
                     ))
                 })
                 .collect(),
         ),
-        features: Arc::new(RuntimeFeatures::compile(model)),
+        features,
+        events: Arc::new(RuntimeEvents::compile(model)),
         particles,
-    })
+        world: Arc::new(world.runtime),
+        liquids,
+    };
+    compiled.rest_bounds = rest_bounds(&compiled, model.bounds());
+    Ok(compiled)
 }
+
+#[cfg(test)]
+#[path = "compiler_tests.rs"]
+mod tests;

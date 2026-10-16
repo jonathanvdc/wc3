@@ -1,78 +1,61 @@
-# Reforged materials
+# Reforged DefaultUnit surfaces
 
-Reforged materials combine diffuse, normal, surface, emissive, team-color, and
-environment textures with animated controls. The renderer maps supported shaders
-into Bevy's material pipeline. This guide explains texture roles, color spaces,
-UV animation, render passes, and shader coverage.
+MDLX DefaultUnit materials combine diffuse, normal, surface, emissive, team-color,
+and reflection roles in `UniversalMaterial`. Native adapters normalize older
+six-layer forms into semantic roles before rendering. Unknown/Crystal shaders retain
+a diagnosed diffuse fallback; they do not receive DefaultUnit slot rules merely
+because they contain several textures.
 
-## Material selection
+## PBR integration and roles
 
-`Shader_HD_DefaultUnit` uses one mesh pass per normalized HD layer. Older
-version-900/1000 six-layer materials are normalized by `wc3` into texture roles;
-SD shader IDs in newer files still use the SD material path. HD Crystal and
-unknown shader IDs log a warning and render using their diffuse texture as a fallback.
+The extension preserves Bevy forward PBR, dynamic lighting, shadows, fog controls,
+and post-processing. It registers local shader assets without replacing Bevy's
+global pipeline. Compiled HD opaque surfaces use forward rendering; forcing them
+through deferred shading is unsupported.
 
-## Bevy integration
-
-The renderer keeps `ExtendedMaterial<StandardMaterial, Wc3LayerState>` and Bevy's
-forward lighting, shadows, fog, decals, and post-processing. It registers local
-shaders without replacing any global Bevy shader. WC3 opaque materials explicitly
-use forward rendering, including in scenes whose default is deferred. Forcing a
-WC3 material's `opaque_render_method` to Deferred is unsupported.
-
-## Texture roles and color spaces
-
-A normalized DefaultUnit layer assigns six slots to surface properties. Color
-textures and data textures use different color spaces so lighting receives the
-intended values:
-
-| Slot | Interpretation |
+| Role | Interpretation |
 | --- | --- |
-| 0 | Diffuse RGB and source alpha; existing layer/geoset tint and alpha apply. |
-| 1 | Linear RG tangent-space normal, reconstructing positive Z with a clamped square root. Authored UV0 tangents are preserved; other UV sets or missing tangents use Bevy's generated tangent basis. |
-| 2 | Linear ORM: red occlusion, green perceptual roughness, blue metallic, alpha team-color mask. |
-| 3 | Emissive color multiplied by animated emissive gain and geoset tint. Missing maps produce no emission. |
-| 4 | Team-color texture, supplied through bitmap or replaceable bindings. Diffuse RGB multiplies `mix(white, team, ORM.a)`; alpha remains diffuse alpha. |
-| 5 | Environment color sampled with Z-up equirectangular reflection coordinates, roughness-dependent mip bias, and a metallic/Schlick weighting. This is a reflection approximation. |
+| Diffuse | Color and alpha, multiplied by surface and mesh tint/opacity. |
+| Normal | Linear RG tangent normal; positive Z reconstructed with a clamped square root. |
+| ORM | Linear red occlusion, green perceptual roughness, blue metallic, alpha team mask. |
+| Emissive | Color multiplied by animated emissive gain and mesh tint. |
+| Team | Diffuse multiplies white-to-team color according to ORM alpha. |
+| Reflection | Equirectangular environment color with roughness mip bias and metallic/Schlick weighting. |
 
-Normal/ORM bindings obtain private linear image variants when a source uses an
-sRGB format. The source image is never modified, so ordinary Bevy materials can
-use the same bitmap. Variants preserve bytes, sampler, format compression, and
-mips; they are reused and invalidated by image modification/removal events.
-This also applies to per-instance overrides and animated texture choices. Custom
-image sources must remain accessible in `Assets<Image>` to create variants
-(use `RenderAssetUsages::MAIN_WORLD`, included in the default usage).
-The BLP loader honors `ImageLoaderSettings::is_srgb`.
+Reflection is an approximation of authored native shading. Bevy world directions are
+mapped into the authored environment convention. Missing normal/ORM roles retain a
+rough nonmetallic base; absent team/emissive/environment maps contribute nothing.
+Ordinary Bevy reflectance remains active on shaded surfaces.
 
-## Animated surfaces and UV sets
+## Images and animated coordinates
 
-Every texture-role track, emissive gain, and Fresnel color/opacity/team-color track
-samples the existing sequence/global clocks. UV translation/rotation/scaling
-uses the same center-pivot transform as ribbons. Each layer selects its
-`CoordinateId` through a shared mesh variant; all available UV sets can be selected. An unavailable nonzero
-UV set is a preparation error. Identical UV arrays share a mesh within a geoset
-even across different CoordinateIds. Equality is exact; nearby coordinates remain distinct. UV0 with
-authored tangents retains its separate basis.
+Role-aware `TextureRequest` values request linear normal/ORM images and sRGB color
+images unless an explicit semantic declaration overrides that choice. The loader
+creates separately labeled sampler/color-space variants without modifying source
+images. The same resource can safely appear as both color and numeric data. Custom
+resolvers must return images with the requested interpretation.
 
-Fresnel currently adds a fifth-power view-angle rim, colored by the stored
-Fresnel color/team contribution, multiplied by opacity and geoset tint. It is
-separate from Bevy's physical Fresnel. Emissive and environment contributions
-enter the lit path before Bevy's post-lighting processing. Unshaded layers use
-Bevy's unlit path; Unfogged layers disable Bevy fog. Missing ORM defaults to a
-nonmetallic, rough surface; absent team/environment maps have no contribution.
+Role texture choices, gain, Fresnel controls, and UV transforms animate through the
+same semantic programme as nodes. Each layer selects its authored coordinate set.
+Equal compiled coordinates share geometry, exact differences retain distinct meshes,
+and authored tangents retain their source basis. Missing requested coordinates
+produce compilation errors.
 
-## Render passes
+Fresnel contributes an authored fifth-power rim with color/team influence, opacity,
+and mesh tint, separate from Bevy's physical surface Fresnel. Unlit and unfogged
+controls follow their Bevy equivalents. Surface properties sample the destination
+directly during node-pose transitions.
 
-HD Transparent layers use a 0.75 alpha cutoff. The forward, shadow/depth, normal,
-and motion-vector passes share diffuse alpha, UV transforms, and skinning. The
-normal prepass uses the same RG normal reconstruction as the forward pass.
-Existing WC3 blend/depth settings remain. PriorityPlane is an approximate Bevy
-material depth/sort bias. Mesh draws use Bevy render phases;
-SortPrimsFarZ/SortPrimsNearZ do not reorder mesh primitives.
+## Passes and limits
 
-## Shader coverage
+HD Transparent uses a 0.75 alpha cutoff. Forward and supported prepasses retain
+matching alpha/UV/skinning interpretation, including eight influences. Normal
+prepass reconstructs the same RG normal. Independent blend/depth specialization
+preserves authored states. A default extension used directly with an application's
+StandardMaterial leaves its base blend/depth policy intact.
 
-The surface rules above apply to DefaultUnit. Crystal and unknown shader
-variants have only the diffuse fallback described under material selection;
-full shader support is absent. Popcorn emitters and FaceFX playback are separate
-unsupported features.
+Priority is a Bevy sort/depth bias. Native primitive sorting is not applied to mesh
+triangles, and a dedicated native mesh/effect ordering scheme is absent. Crystal,
+unknown shader programmes, Popcorn, and facial animation require additional
+interpreters. Implemented DefaultUnit behavior remains an authored PBR
+interpretation, not a guarantee of exact game lighting.
