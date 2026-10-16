@@ -321,6 +321,7 @@ fn skybox<'a>(
 fn world<'a, 'data>(model: &'a Model<'data, Wmo>) -> Result<&'a WorldSystem<'data>, Error> {
     model
         .systems()
+        .iter()
         .next()
         .map(|(_, system)| system)
         .ok_or_else(|| Error::new("world.system", "world system is missing"))

@@ -155,7 +155,7 @@ fn appearance_export_honors_numeric_approximation_policy() {
     let mut asset = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let mesh_id = asset.meshes().next().unwrap().0;
+    let mesh_id = asset.meshes().iter().next().unwrap().0;
     asset
         .edit(|builder| {
             let mut mesh = builder.model().mesh(mesh_id).unwrap().clone();
@@ -250,7 +250,7 @@ fn appearance_and_animation_bundle_roundtrip_keeps_independent_declarations() {
         .unwrap()
         .value;
     assert_eq!(asset.clips().len(), 1);
-    assert!(asset.clips().next().unwrap().1.channels().iter().any(|channel| matches!(channel,wc3::model::Channel::Rotation(track) if track.curve.interpolation()==wc3::model::Interpolation::Nlerp)));
+    assert!(asset.clips().iter().next().unwrap().1.channels().iter().any(|channel| matches!(channel,wc3::model::Channel::Rotation(track) if track.curve.interpolation()==wc3::model::Interpolation::Nlerp)));
     assert!(conversion::plan(&asset, &ExportOptions::default()).is_err());
     let out = conversion::plan_bundle(&asset, &ExportOptions::default())
         .unwrap()
@@ -280,9 +280,11 @@ fn actual_slot_variants_survive_without_look_or_geometry_uses() {
     assert_eq!(asset.appearance().slots().len(), 2);
     assert!(asset
         .instances()
+        .iter()
         .all(|(_, instance)| instance.draws.is_empty()));
     assert!(asset
         .materials()
+        .iter()
         .all(|(_, material)| material.name.is_empty()));
     let output = conversion::plan(&asset, &ExportOptions::default())
         .unwrap()
@@ -385,6 +387,7 @@ fn unknown_bone_pulses_are_rejected_or_dropped_before_graph_edits() {
 
     let bone = asset
         .nodes()
+        .iter()
         .find(|(_, node)| {
             matches!(
                 node.controls,
@@ -727,6 +730,7 @@ fn look_at_typed_target_rejects_non_bones_and_ambiguous_native_export_names() {
         .value;
     let frame = asset
         .nodes()
+        .iter()
         .find(|(_, node)| matches!(node.controls, NodeRole::ModelSpace))
         .unwrap()
         .0;
@@ -792,7 +796,7 @@ fn auxiliary_direction_bytes_survive_strict_import_and_profile_conversion() {
     );
     let imported = conversion::import(&native, &ImportOptions::default()).unwrap();
     assert!(imported.report.issues.is_empty());
-    let (_, mesh) = imported.value.meshes().next().unwrap();
+    let (_, mesh) = imported.value.meshes().iter().next().unwrap();
     assert!(mesh
         .geometry
         .streams()
@@ -830,7 +834,7 @@ fn absent_auxiliary_direction_stream_exports_zero_bytes() {
     let mut imported = conversion::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, mesh) = imported.meshes().next().unwrap();
+    let (id, mesh) = imported.meshes().iter().next().unwrap();
     let mut mesh = mesh.clone();
     let mut streams = mesh.geometry.streams().clone();
     streams.extras.direction_auxiliary = Default::default();

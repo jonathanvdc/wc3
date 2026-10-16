@@ -60,6 +60,7 @@ fn write_model<'a, D: Dialect>(
     }
     let world = model
         .systems()
+        .iter()
         .next()
         .map(|(_, world)| world)
         .ok_or_else(|| {

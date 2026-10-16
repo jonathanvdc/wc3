@@ -60,6 +60,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
     let existing: Vec<_> = builder
         .model()
         .features()
+        .iter()
         .filter_map(|(id, feature)| match &feature.payload {
             surface::Feature::Extent(value) if value.control.source_id == identity => {
                 Some((id, (**value).clone()))

@@ -30,6 +30,7 @@ pub(in crate::model::io::m3::logical) fn write<E: Envelope>(
     ) -> BTreeMap<FeatureId, u32> {
         graph
             .features()
+            .iter()
             .filter(|(_, feature)| select(&feature.payload))
             .enumerate()
             .map(|(index, (id, _))| (id, index as u32))
@@ -75,7 +76,7 @@ pub(in crate::model::io::m3::logical) fn write<E: Envelope>(
         });
     }
     let copies = append(writer.document, &copy_rows)?.cast();
-    let legacy=graph.features().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Particle(p) if p.details.noise_smoothness != 0.0));
+    let legacy=graph.features().iter().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Particle(p) if p.details.noise_smoothness != 0.0));
     macro_rules! encode_particles {
         ($version:ty) => {{
             let mut rows = Vec::new();
@@ -103,7 +104,7 @@ pub(in crate::model::io::m3::logical) fn write<E: Envelope>(
     } else {
         encode_particles!(nr::V24)
     };
-    let legacy_ribbon = graph.features().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Ribbon(ribbon) if ribbon.deprecated_unknown != 0));
+    let legacy_ribbon = graph.features().iter().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Ribbon(ribbon) if ribbon.deprecated_unknown != 0));
     macro_rules! encode_ribbons {
         ($version:ty) => {{
             let mut rows = Vec::new();

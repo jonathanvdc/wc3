@@ -149,6 +149,7 @@ fn physics_and_attachment_fields_are_active_and_editable() {
         .value;
     let (id, system) = asset
         .systems()
+        .iter()
         .find(|(_, system)| matches!(system, surface::System::Physics(_)))
         .unwrap();
     let mut system = system.clone();
@@ -223,7 +224,7 @@ fn physics_and_attachment_fields_are_active_and_editable() {
     assert_eq!(attachment.unknown, 123);
     assert_eq!(attachment.bone_index, 1);
     let reread = io::m3::import(&output, &ImportOptions::default()).unwrap();
-    assert!(reread.value.features().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Attachment(attachment)if attachment.identity=="socket")));
+    assert!(reread.value.features().iter().any(|(_,feature)|matches!(&feature.payload,surface::Feature::Attachment(attachment)if attachment.identity=="socket")));
 }
 
 #[test]
@@ -289,7 +290,7 @@ fn selection_and_attachment_volumes_use_editable_collision_meshes() {
     let mut asset = io::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, original) = asset.features().find(|(_, value)| matches!(&value.payload, surface::Feature::HitTest(shape) if shape.role == surface::HitTestRole::Fuzzy)).unwrap();
+    let (id, original) = asset.features().iter().find(|(_, value)| matches!(&value.payload, surface::Feature::HitTest(shape) if shape.role == surface::HitTestRole::Fuzzy)).unwrap();
     let mut edited = original.clone();
     let surface::Feature::HitTest(shape) = &mut edited.payload else {
         unreachable!()
@@ -374,6 +375,7 @@ fn named_turrets_reference_active_parts_instead_of_trigger_data() {
         .value;
     let groups = asset
         .systems()
+        .iter()
         .find_map(|(_, system)| match system {
             surface::System::TurretGroups(groups) => Some(groups),
             _ => None,
@@ -451,6 +453,7 @@ fn body_constraints_use_checked_local_identities() {
         .value;
     let (id, system) = asset
         .systems()
+        .iter()
         .find(|(_, system)| matches!(system, surface::System::Physics(_)))
         .unwrap();
     let mut edited = system.clone();
@@ -522,6 +525,7 @@ fn animation_split_declarations_preserve_unresolved_typed_controls() {
         .value;
     let items = asset
         .systems()
+        .iter()
         .find_map(|(_, system)| match system {
             surface::System::AnimationPartitions(declarations) => {
                 Some(&declarations[0].split_items)
@@ -575,5 +579,5 @@ fn unresolved_reference_qualifiers_require_explicit_loss_policy() {
         .issues
         .iter()
         .any(|issue| issue.path.starts_with("m3.reference_qualifier.MODL")));
-    assert_eq!(converted.value.nodes().count(), 2);
+    assert_eq!(converted.value.nodes().iter().count(), 2);
 }

@@ -197,6 +197,7 @@ where
     } else {
         model
             .clips()
+            .iter()
             .map(|(_, clip)| {
                 clip.channels()
                     .iter()
@@ -291,7 +292,7 @@ where
                         "M2 requires a clip or shared sequence clock",
                     ));
                 }
-                Clock::Clip => model.clips().nth(index).unwrap().1.duration(),
+                Clock::Clip => model.clips().iter().nth(index).unwrap().1.duration(),
                 Clock::Shared(id) => model.clock(id).unwrap().period(),
             };
             let clipped = U::restrict(track, Time::default(), period)?;

@@ -207,7 +207,7 @@ fn world_group_selection_intersects_authored_surface_visibility() {
         .unwrap()
         .value
         .widen::<Universal>();
-    let instance = model.instances().next().unwrap().0;
+    let instance = model.instances().iter().next().unwrap().0;
     let system = model
         .edit(|builder| {
             builder.add_system(System::Wmo(WorldSystem {

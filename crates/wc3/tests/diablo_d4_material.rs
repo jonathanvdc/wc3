@@ -46,7 +46,7 @@ fn standalone_materials_share_texture_identity_and_rebuild_native_resources() {
     let imported = convert::import_material(&source, &ImportOptions::default()).unwrap();
     assert!(imported.report.issues.is_empty());
     assert_eq!(imported.value.textures().len(), 1);
-    let (material_id, material) = imported.value.materials().next().unwrap();
+    let (material_id, material) = imported.value.materials().iter().next().unwrap();
     let shader = material.surface.shader.as_ref().unwrap();
     assert_eq!(shader.textures[0].image, shader.textures[1].image);
     assert_eq!(shader.asset.as_ref().unwrap().sno_id, 77);
@@ -97,7 +97,7 @@ fn ordered_parameter_entries_keep_duplicate_keys_and_controls() {
     duplicate.value.light_group = 9;
     values.push(duplicate);
     let imported = convert::import_material(&source, &ImportOptions::default()).unwrap();
-    let (id, material) = imported.value.materials().next().unwrap();
+    let (id, material) = imported.value.materials().iter().next().unwrap();
     let entries = &material.surface.shader.as_ref().unwrap().values[0].scalars;
     assert_eq!(entries[0].key, entries[1].key);
     assert_eq!(entries[0].value, 0.75);

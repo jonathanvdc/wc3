@@ -21,7 +21,7 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
         ));
     }
 
-    if value.controllers().len() != 0 {
+    if !value.controllers().is_empty() {
         return Err(Error::new(
             "controllers",
             "Warcraft III has one authored timeline per property, without layered controllers",

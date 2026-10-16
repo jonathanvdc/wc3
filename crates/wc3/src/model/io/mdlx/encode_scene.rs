@@ -37,6 +37,7 @@ pub(super) fn write<'a, T: Dialect>(
     let mut next = nodes.len() as u32;
     let native_bones: BTreeSet<_> = model
         .nodes()
+        .iter()
         .filter_map(|(id, node)| node.controls.bone.is_some().then_some(id))
         .collect();
     for (feature_id, feature) in model.features() {

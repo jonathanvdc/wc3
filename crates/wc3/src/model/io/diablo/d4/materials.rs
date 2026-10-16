@@ -85,6 +85,7 @@ pub(super) fn read_shader(
                 let existing = model
                     .model()
                     .textures()
+                    .iter()
                     .find(|(_, image)| model.image_resource(image.resource) == Some(&resource))
                     .map(|(id, _)| id);
                 TextureSelection::Image(match existing {

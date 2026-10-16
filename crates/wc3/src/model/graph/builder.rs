@@ -1,7 +1,6 @@
 //! Transactional graph construction and editing.
 use crate::model::ids::Scope;
 use crate::model::profiles::{Profile, Universal};
-use crate::model::PathResource;
 use crate::model::{
     AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, Clock, ClockId, Controller,
     ControllerId, DrawAppearanceSchema, DrawSubsetId, Error, Event, EventId, FeatureId, InstanceId,
@@ -12,6 +11,7 @@ use crate::model::{
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
 };
+use crate::model::{Dependencies, PathResource, Table};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 /// A draft that accepts forward node relationships and publishes only a validated graph.
@@ -34,9 +34,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
     /// Adds an independent image dependency declaration.
     pub fn add_image_resource(&mut self, value: P::ImageResource<'a>) -> ImageResourceId {
-        let id = self.model.scope.allocate();
-        self.model.image_resources.insert(id, value);
-        id
+        self.model.dependencies.images.add(&self.model.scope, value)
     }
     /// Resolves a image dependency in the draft.
     pub fn image_resource(&self, id: ImageResourceId) -> Option<&P::ImageResource<'a>> {
@@ -48,22 +46,18 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: ImageResourceId,
         value: P::ImageResource<'a>,
     ) -> Result<(), Error> {
-        *self
-            .model
-            .image_resources
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("resources", "unknown identity"))? = value;
-        Ok(())
+        self.model
+            .dependencies
+            .images
+            .replace(id, value, "resources")
     }
     /// Removes a declaration; publication rejects any remaining references to it.
     pub fn remove_image_resource(&mut self, id: ImageResourceId) -> Option<P::ImageResource<'a>> {
-        self.model.image_resources.remove(&id)
+        self.model.dependencies.images.remove(&id)
     }
     /// Adds an independent model dependency declaration.
     pub fn add_model_resource(&mut self, value: P::ModelResource<'a>) -> ModelResourceId {
-        let id = self.model.scope.allocate();
-        self.model.model_resources.insert(id, value);
-        id
+        self.model.dependencies.models.add(&self.model.scope, value)
     }
     /// Resolves a model dependency in the draft.
     pub fn model_resource(&self, id: ModelResourceId) -> Option<&P::ModelResource<'a>> {
@@ -75,22 +69,21 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: ModelResourceId,
         value: P::ModelResource<'a>,
     ) -> Result<(), Error> {
-        *self
-            .model
-            .model_resources
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("resources", "unknown identity"))? = value;
-        Ok(())
+        self.model
+            .dependencies
+            .models
+            .replace(id, value, "resources")
     }
     /// Removes a declaration; publication rejects any remaining references to it.
     pub fn remove_model_resource(&mut self, id: ModelResourceId) -> Option<P::ModelResource<'a>> {
-        self.model.model_resources.remove(&id)
+        self.model.dependencies.models.remove(&id)
     }
     /// Adds an independent effect dependency declaration.
     pub fn add_effect_resource(&mut self, value: P::EffectResource<'a>) -> EffectResourceId {
-        let id = self.model.scope.allocate();
-        self.model.effect_resources.insert(id, value);
-        id
+        self.model
+            .dependencies
+            .effects
+            .add(&self.model.scope, value)
     }
     /// Resolves a effect dependency in the draft.
     pub fn effect_resource(&self, id: EffectResourceId) -> Option<&P::EffectResource<'a>> {
@@ -102,25 +95,24 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: EffectResourceId,
         value: P::EffectResource<'a>,
     ) -> Result<(), Error> {
-        *self
-            .model
-            .effect_resources
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("resources", "unknown identity"))? = value;
-        Ok(())
+        self.model
+            .dependencies
+            .effects
+            .replace(id, value, "resources")
     }
     /// Removes a declaration; publication rejects any remaining references to it.
     pub fn remove_effect_resource(
         &mut self,
         id: EffectResourceId,
     ) -> Option<P::EffectResource<'a>> {
-        self.model.effect_resources.remove(&id)
+        self.model.dependencies.effects.remove(&id)
     }
     /// Adds an independent physics dependency declaration.
     pub fn add_physics_resource(&mut self, value: P::PhysicsResource<'a>) -> PhysicsResourceId {
-        let id = self.model.scope.allocate();
-        self.model.physics_resources.insert(id, value);
-        id
+        self.model
+            .dependencies
+            .physics
+            .add(&self.model.scope, value)
     }
     /// Resolves a physics dependency in the draft.
     pub fn physics_resource(&self, id: PhysicsResourceId) -> Option<&P::PhysicsResource<'a>> {
@@ -132,28 +124,27 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: PhysicsResourceId,
         value: P::PhysicsResource<'a>,
     ) -> Result<(), Error> {
-        *self
-            .model
-            .physics_resources
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("resources", "unknown identity"))? = value;
-        Ok(())
+        self.model
+            .dependencies
+            .physics
+            .replace(id, value, "resources")
     }
     /// Removes a declaration; publication rejects any remaining references to it.
     pub fn remove_physics_resource(
         &mut self,
         id: PhysicsResourceId,
     ) -> Option<P::PhysicsResource<'a>> {
-        self.model.physics_resources.remove(&id)
+        self.model.dependencies.physics.remove(&id)
     }
     /// Adds an independent boneoverride dependency declaration.
     pub fn add_bone_override_resource(
         &mut self,
         value: P::BoneOverrideResource<'a>,
     ) -> BoneOverrideResourceId {
-        let id = self.model.scope.allocate();
-        self.model.bone_override_resources.insert(id, value);
-        id
+        self.model
+            .dependencies
+            .bone_overrides
+            .add(&self.model.scope, value)
     }
     /// Resolves a boneoverride dependency in the draft.
     pub fn bone_override_resource(
@@ -168,19 +159,17 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: BoneOverrideResourceId,
         value: P::BoneOverrideResource<'a>,
     ) -> Result<(), Error> {
-        *self
-            .model
-            .bone_override_resources
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("resources", "unknown identity"))? = value;
-        Ok(())
+        self.model
+            .dependencies
+            .bone_overrides
+            .replace(id, value, "resources")
     }
     /// Removes a declaration; publication rejects any remaining references to it.
     pub fn remove_bone_override_resource(
         &mut self,
         id: BoneOverrideResourceId,
     ) -> Option<P::BoneOverrideResource<'a>> {
-        self.model.bone_override_resources.remove(&id)
+        self.model.dependencies.bone_overrides.remove(&id)
     }
     /// Identity reserved for this model before publication.
     pub fn id(&self) -> ModelId {
@@ -197,12 +186,8 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         let id = scope.allocate();
         Self {
             model: Model {
-                image_resources: BTreeMap::new(),
-                model_resources: BTreeMap::new(),
-                effect_resources: BTreeMap::new(),
-                physics_resources: BTreeMap::new(),
-                bone_override_resources: BTreeMap::new(),
-                textures: BTreeMap::new(),
+                dependencies: Dependencies::default(),
+                textures: Table::default(),
                 scope,
                 id,
                 name: name.into(),
@@ -210,22 +195,22 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
                 units: LengthUnit::default(),
                 bounds: P::default_bounds(),
                 metadata: Default::default(),
-                systems: BTreeMap::new(),
+                systems: Table::default(),
                 timeline_channels: Vec::new(),
                 timeline_events: Vec::new(),
                 shared_channels: Vec::new(),
                 shared_events: Vec::new(),
-                features: BTreeMap::new(),
+                features: Table::default(),
                 appearance: Default::default(),
-                nodes: BTreeMap::new(),
-                meshes: BTreeMap::new(),
-                materials: BTreeMap::new(),
-                clips: BTreeMap::new(),
-                skins: BTreeMap::new(),
-                instances: BTreeMap::new(),
-                clocks: BTreeMap::new(),
-                controllers: BTreeMap::new(),
-                texture_transforms: BTreeMap::new(),
+                nodes: Table::default(),
+                meshes: Table::default(),
+                materials: Table::default(),
+                clips: Table::default(),
+                skins: Table::default(),
+                instances: Table::default(),
+                clocks: Table::default(),
+                controllers: Table::default(),
+                texture_transforms: Table::default(),
             },
             pending_nodes: BTreeSet::new(),
             pending_features: BTreeMap::new(),
@@ -244,9 +229,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         &mut self,
         value: TextureTransform,
     ) -> Result<TextureTransformId, Error> {
-        let id = self.model.scope.allocate();
-        self.model.texture_transforms.insert(id, value);
-        Ok(id)
+        Ok(self.model.texture_transforms.add(&self.model.scope, value))
     }
     /// Replaces a shared texture-coordinate transform belonging to this graph.
     pub fn set_texture_transform(
@@ -270,9 +253,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
     /// Adds a animation controller to the draft; publication validates its values and relationships.
     pub fn add_controller(&mut self, value: Controller<'a, P>) -> Result<ControllerId, Error> {
-        let id = self.model.scope.allocate();
-        self.model.controllers.insert(id, value);
-        Ok(id)
+        Ok(self.model.controllers.add(&self.model.scope, value))
     }
     /// Defines or replaces a animation controller belonging to this draft.
     pub fn set_controller(
@@ -281,7 +262,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         value: Controller<'a, P>,
     ) -> Result<(), Error> {
         if !self.model.scope.contains(id)
-            || (!self.pending_controllers.remove(&id) && !self.model.controllers.contains_key(&id))
+            || (!self.pending_controllers.remove(&id) && !self.model.controllers.contains_key(id))
         {
             return Err(Error::new("controller", "unknown identity"));
         }
@@ -323,7 +304,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: ClipId,
         value: impl Into<P::Clip<'a>>,
     ) -> Result<(), Error> {
-        if !self.model.clips.contains_key(&id) {
+        if !self.model.clips.contains_key(id) {
             return Err(Error::new("clip.controls", "unknown owner"));
         }
         self.model
@@ -339,7 +320,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: ControllerId,
         value: impl Into<P::Controller<'a>>,
     ) -> Result<(), Error> {
-        if !self.model.controllers.contains_key(&id) {
+        if !self.model.controllers.contains_key(id) {
             return Err(Error::new("controller.controls", "unknown owner"));
         }
         self.model
@@ -352,7 +333,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     /// Defines or replaces a hierarchy node belonging to this draft.
     pub fn set_node(&mut self, id: NodeId, node: Node<'a, P>) -> Result<(), Error> {
         if !self.model.scope.contains(id)
-            || (!self.pending_nodes.remove(&id) && !self.model.nodes.contains_key(&id))
+            || (!self.pending_nodes.remove(&id) && !self.model.nodes.contains_key(id))
         {
             return Err(Error::new("node", "unknown identity"));
         }
@@ -552,9 +533,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
     /// Adds an independently authored scene system.
     pub fn add_system(&mut self, value: P::System<'a>) -> Result<SystemId, Error> {
-        let id = self.model.scope.allocate();
-        self.model.systems.insert(id, value);
-        Ok(id)
+        Ok(self.model.systems.add(&self.model.scope, value))
     }
     /// Replaces an independently authored scene system belonging to this graph.
     pub fn set_system(&mut self, id: SystemId, value: P::System<'a>) -> Result<(), Error> {
@@ -664,13 +643,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
     /// Replaces a draft mesh; publication validates its data and relationships.
     pub fn set_mesh(&mut self, id: MeshId, value: Mesh<'a, P>) -> Result<(), Error> {
-        let slot = self
-            .model
-            .meshes
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("mesh", "unknown identity"))?;
-        *slot = value;
-        Ok(())
+        self.model.meshes.replace(id, value, "mesh")
     }
     /// Replaces a draft material; publication validates its data and relationships.
     pub fn reserve_material(&mut self) -> MaterialId {
@@ -684,43 +657,19 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
             self.model.materials.insert(id, value);
             return Ok(());
         }
-        let slot = self
-            .model
-            .materials
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("material", "unknown identity"))?;
-        *slot = value;
-        Ok(())
+        self.model.materials.replace(id, value, "material")
     }
     /// Replaces a draft texture; publication validates its data and relationships.
     pub fn set_texture(&mut self, id: TextureId, value: Texture<'a, P>) -> Result<(), Error> {
-        let slot = self
-            .model
-            .textures
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("texture", "unknown identity"))?;
-        *slot = value;
-        Ok(())
+        self.model.textures.replace(id, value, "texture")
     }
     /// Replaces a draft clip; publication validates its data and relationships.
     pub fn set_clip(&mut self, id: ClipId, value: Clip<'a, P>) -> Result<(), Error> {
-        let slot = self
-            .model
-            .clips
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("clip", "unknown identity"))?;
-        *slot = value;
-        Ok(())
+        self.model.clips.replace(id, value, "clip")
     }
     /// Replaces a draft skin; publication validates its data and relationships.
     pub fn set_skin(&mut self, id: SkinId, value: Skin<'a, P>) -> Result<(), Error> {
-        let slot = self
-            .model
-            .skins
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("skin", "unknown identity"))?;
-        *slot = value;
-        Ok(())
+        self.model.skins.replace(id, value, "skin")
     }
     /// Replaces a draft instance; publication validates its data and relationships.
     pub fn set_instance(
@@ -728,41 +677,23 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id: InstanceId,
         value: MeshInstance<'a, P>,
     ) -> Result<(), Error> {
-        let slot = self
-            .model
-            .instances
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("instance", "unknown identity"))?;
-        *slot = value;
-        Ok(())
+        self.model.instances.replace(id, value, "instance")
     }
     /// Replaces a draft clock; publication validates its data and relationships.
     pub fn set_clock(&mut self, id: ClockId, value: SharedClock) -> Result<(), Error> {
-        let slot = self
-            .model
-            .clocks
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("clock", "unknown identity"))?;
-        *slot = value;
-        Ok(())
+        self.model.clocks.replace(id, value, "clock")
     }
     /// Adds a hierarchy node to the draft; publication validates its values and relationships.
     pub fn add_node(&mut self, value: Node<'a, P>) -> Result<NodeId, Error> {
-        let id = self.model.scope.allocate();
-        self.model.nodes.insert(id, value);
-        Ok(id)
+        Ok(self.model.nodes.add(&self.model.scope, value))
     }
     /// Adds a shared geometry to the draft; publication validates its values and relationships.
     pub fn add_mesh(&mut self, value: Mesh<'a, P>) -> Result<MeshId, Error> {
-        let id = self.model.scope.allocate();
-        self.model.meshes.insert(id, value);
-        Ok(id)
+        Ok(self.model.meshes.add(&self.model.scope, value))
     }
     /// Adds a surface to the draft; publication validates its values and relationships.
     pub fn add_material(&mut self, value: Material<'a, P>) -> Result<MaterialId, Error> {
-        let id = self.model.scope.allocate();
-        self.model.materials.insert(id, value);
-        Ok(id)
+        Ok(self.model.materials.add(&self.model.scope, value))
     }
     /// Declares a path image and a texture using its default interpretation.
     pub fn add_file_texture(&mut self, path: &'a str) -> Result<TextureId, Error>
@@ -775,33 +706,23 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
     /// Adds a texture resource to the draft; publication validates its values and relationships.
     pub fn add_texture(&mut self, value: Texture<'a, P>) -> Result<TextureId, Error> {
-        let id = self.model.scope.allocate();
-        self.model.textures.insert(id, value);
-        Ok(id)
+        Ok(self.model.textures.add(&self.model.scope, value))
     }
     /// Adds a playback clip to the draft; publication validates its values and relationships.
     pub fn add_clip(&mut self, value: Clip<'a, P>) -> Result<ClipId, Error> {
-        let id = self.model.scope.allocate();
-        self.model.clips.insert(id, value);
-        Ok(id)
+        Ok(self.model.clips.add(&self.model.scope, value))
     }
     /// Adds a joint binding to the draft; publication validates its values and relationships.
     pub fn add_skin(&mut self, value: Skin<'a, P>) -> Result<SkinId, Error> {
-        let id = self.model.scope.allocate();
-        self.model.skins.insert(id, value);
-        Ok(id)
+        Ok(self.model.skins.add(&self.model.scope, value))
     }
     /// Adds a geometry placement to the draft; publication validates its values and relationships.
     pub fn add_instance(&mut self, value: MeshInstance<'a, P>) -> Result<InstanceId, Error> {
-        let id = self.model.scope.allocate();
-        self.model.instances.insert(id, value);
-        Ok(id)
+        Ok(self.model.instances.add(&self.model.scope, value))
     }
     /// Adds a repeating animation clock to the draft; publication validates its values and relationships.
     pub fn add_clock(&mut self, value: SharedClock) -> Result<ClockId, Error> {
-        let id = self.model.scope.allocate();
-        self.model.clocks.insert(id, value);
-        Ok(id)
+        Ok(self.model.clocks.add(&self.model.scope, value))
     }
     /// Appends a typed channel to an existing playback clip.
     pub fn add_channel(&mut self, id: ClipId, channel: Channel<'a, P>) -> Result<(), Error> {

@@ -29,7 +29,7 @@ pub(super) fn plan_with_animations(
             "native appearance resources do not declare a model display name",
         )?;
     }
-    if !animations && model.clips().len() != 0 {
+    if !animations && !model.clips().is_empty() {
         context.unsupported(
             "d3.animation",
             "appearance output requires separately planned native animation documents",
@@ -46,6 +46,7 @@ pub(super) fn plan_with_animations(
             if !matches!(node.controls, NodeRole::Bone(_))
                 || model
                     .nodes()
+                    .iter()
                     .filter(|(_, candidate)| {
                         matches!(candidate.controls, NodeRole::Bone(_))
                             && candidate.name == node.name
@@ -84,6 +85,7 @@ pub(super) fn plan_with_animations(
     }
     let bones: Vec<_> = model
         .nodes()
+        .iter()
         .filter(|(_, n)| matches!(n.controls, NodeRole::Bone(_)))
         .collect();
     let bone_indices: BTreeMap<_, _> = bones
@@ -201,7 +203,7 @@ pub(super) fn plan_with_animations(
             )?;
         }
     }
-    if asset.textures().len() != 0 {
+    if !asset.textures().is_empty() {
         context.unsupported("d3.resources.textures","native D3 materials own external SNO references; model texture definitions have no native appearance table")?;
     }
     let mut used_meshes = Vec::new();
@@ -281,7 +283,11 @@ pub(super) fn plan_with_animations(
         }
         used_meshes.push(instance.mesh);
     }
-    if model.meshes().any(|(id, _)| !used_meshes.contains(&id)) {
+    if model
+        .meshes()
+        .iter()
+        .any(|(id, _)| !used_meshes.contains(&id))
+    {
         context.unsupported(
             "d3.geometry.unplaced",
             "native appearance cannot retain geometry with no placement",

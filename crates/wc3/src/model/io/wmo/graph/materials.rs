@@ -170,6 +170,7 @@ pub(super) fn write<'a, D: Dialect>(
     let mut selectors = std::collections::BTreeMap::new();
     let used = model
         .materials()
+        .iter()
         .flat_map(|(_, material)| {
             material
                 .surface
@@ -329,6 +330,7 @@ pub(super) fn write<'a, D: Dialect>(
     }
     if model
         .materials()
+        .iter()
         .any(|(_, material)| material.surface.extension.is_some())
     {
         append(

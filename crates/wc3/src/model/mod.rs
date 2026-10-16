@@ -158,3 +158,8 @@ pub use surface_evaluation::*;
 
 pub mod resources;
 pub use resources::*;
+
+mod table;
+pub use table::Table;
+mod dependencies;
+pub use dependencies::Dependencies;

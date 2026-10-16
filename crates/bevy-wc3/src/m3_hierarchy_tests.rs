@@ -122,6 +122,7 @@ fn native_zero_flag_hierarchy_preserves_skinned_rest_and_animated_parent_placeme
         .widen::<Universal>();
     let parent = source
         .nodes()
+        .iter()
         .find(|(_, node)| node.name == "parent")
         .unwrap()
         .0;

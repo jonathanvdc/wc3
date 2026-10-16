@@ -15,6 +15,7 @@ fn spawned_instances_expose_authored_views_without_creating_bevy_cameras() {
     .widen::<Universal>();
     let cameras = source
         .features()
+        .iter()
         .filter(|(_, feature)| matches!(feature.payload, NodeFeature::Camera(_)))
         .map(|(id, _)| id)
         .collect::<Vec<_>>();

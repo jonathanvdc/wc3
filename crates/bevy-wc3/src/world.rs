@@ -542,6 +542,7 @@ impl WorldRuntime {
         }
         runtime.feature_nodes = model
             .features()
+            .iter()
             .filter_map(|(id, feature)| {
                 (runtime.feature_sets.contains_key(&id) || runtime.feature_groups.contains_key(&id))
                     .then_some((id, feature.node))

@@ -1,8 +1,8 @@
 //! Infallible payload embeddings preserve identities and encoded storage.
 use crate::model::profiles::{Extends, Profile};
 use crate::model::{
-    AttachedFeature, Clip, Controller, Draw, Material, Mesh, MeshInstance, Model, Node, Skin,
-    Texture,
+    AttachedFeature, Clip, Controller, Dependencies, Draw, Material, Mesh, MeshInstance, Model,
+    Node, Skin, Texture,
 };
 struct PayloadMap<'a, P: Profile, Q: Profile> {
     texture: fn(P::Texture<'a>) -> Q::Texture<'a>,
@@ -44,32 +44,38 @@ impl<'a, P: Profile> Model<'a, P> {
     }
     fn map_payloads<Q: Extends<P>>(self, maps: PayloadMap<'a, P, Q>) -> Model<'a, Q> {
         Model {
-            image_resources: self
-                .image_resources
-                .into_iter()
-                .map(|(id, value)| (id, Q::image_resource(value)))
-                .collect(),
-            model_resources: self
-                .model_resources
-                .into_iter()
-                .map(|(id, value)| (id, Q::model_resource(value)))
-                .collect(),
-            effect_resources: self
-                .effect_resources
-                .into_iter()
-                .map(|(id, value)| (id, Q::effect_resource(value)))
-                .collect(),
-            physics_resources: self
-                .physics_resources
-                .into_iter()
-                .map(|(id, value)| (id, Q::physics_resource(value)))
-                .collect(),
-            bone_override_resources: self
-                .bone_override_resources
-                .into_iter()
-                .map(|(id, value)| (id, Q::bone_override_resource(value)))
-                .collect(),
-
+            dependencies: Dependencies {
+                images: self
+                    .dependencies
+                    .images
+                    .into_iter()
+                    .map(|(id, value)| (id, Q::image_resource(value)))
+                    .collect(),
+                models: self
+                    .dependencies
+                    .models
+                    .into_iter()
+                    .map(|(id, value)| (id, Q::model_resource(value)))
+                    .collect(),
+                effects: self
+                    .dependencies
+                    .effects
+                    .into_iter()
+                    .map(|(id, value)| (id, Q::effect_resource(value)))
+                    .collect(),
+                physics: self
+                    .dependencies
+                    .physics
+                    .into_iter()
+                    .map(|(id, value)| (id, Q::physics_resource(value)))
+                    .collect(),
+                bone_overrides: self
+                    .dependencies
+                    .bone_overrides
+                    .into_iter()
+                    .map(|(id, value)| (id, Q::bone_override_resource(value)))
+                    .collect(),
+            },
             textures: self
                 .textures
                 .into_iter()

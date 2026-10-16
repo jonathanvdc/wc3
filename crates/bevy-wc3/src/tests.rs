@@ -189,7 +189,7 @@ fn assert_matrix_close(actual: Mat4, expected: Mat4) {
 fn rendered_hierarchy_preserves_shear_and_declared_coordinate_units() {
     use wc3::model::{Basis, Quaternion};
     let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
-    let mount = source.instances().next().unwrap().1.node;
+    let mount = source.instances().iter().next().unwrap().1.node;
     let parent_rotation = Quat::from_rotation_z(0.3);
     let child_rotation = Quat::from_rotation_z(0.7);
     source
@@ -464,7 +464,7 @@ fn material_handle(app: &mut App, root: Entity, node: NodeId) -> Handle<ModelMat
         .clone()
 }
 fn spawn_pair(source: &Model<'_>) -> (App, Entity, Entity, NodeId) {
-    let node = source.instances().next().unwrap().1.node;
+    let node = source.instances().iter().next().unwrap().1.node;
     let compiled = compile_model(source, |_| None).unwrap();
     let mut meshes = Assets::default();
     let mut binds = Assets::default();
@@ -507,7 +507,7 @@ fn animated_materials_are_isolated_between_playback_clocks() {
     use wc3::model::profiles::mdlx::properties::Layer as LayerProperty;
     use wc3::model::{Channel, Clock, Curve, Time as ModelTime, Track};
     let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
-    let material = source.materials().next().unwrap().0;
+    let material = source.materials().iter().next().unwrap().0;
     let property = LayerProperty(0).opacity().bind(material);
     source
         .edit(|builder| {
@@ -687,7 +687,7 @@ fn public_rest_bounds_use_joint_rest_pose_instead_of_mesh_placement() {
 #[test]
 fn driving_camera_and_root_local_changes_update_billboards_before_propagation() {
     let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
-    let mount = source.instances().next().unwrap().1.node;
+    let mount = source.instances().iter().next().unwrap().1.node;
     let mut node = source.node(mount).unwrap().clone();
     node.billboard = Billboard::Spherical;
     source
@@ -899,7 +899,7 @@ fn programmed_shadow_cast_and_receive_flags_are_independent() {
     for cast in [false, true] {
         for receive in [false, true] {
             let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
-            let id = source.materials().next().unwrap().0;
+            let id = source.materials().iter().next().unwrap().0;
             let mut standard = programmed::Standard::default();
             standard
                 .state

@@ -158,6 +158,7 @@ impl RuntimeRibbons {
             gravity_axis: basis.transform_vector3(axis(model.basis().up())),
             clips: model
                 .clips()
+                .iter()
                 .map(|(id, c)| (id, (c.duration().as_seconds(), c.is_looping())))
                 .collect(),
             ..Default::default()

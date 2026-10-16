@@ -48,6 +48,7 @@ impl CharacterCatalog {
     pub fn inspect(model: &Model<'_>) -> Self {
         let bones = model
             .nodes()
+            .iter()
             .filter_map(|(id, node)| match &node.controls {
                 Some(NodeControls::M2(controls)) => Some(BoneIdentity {
                     node: id,

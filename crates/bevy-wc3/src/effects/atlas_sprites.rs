@@ -155,6 +155,7 @@ impl RuntimeAtlasParticles {
         let mut result = Self {
             clips: model
                 .clips()
+                .iter()
                 .map(|(id, c)| (id, (c.duration().as_seconds(), c.is_looping())))
                 .collect(),
             ..Default::default()
@@ -791,6 +792,7 @@ mod tests {
                 .widen();
         let (feature, mut payload) = model
             .features()
+            .iter()
             .find(|(_, value)| matches!(value.payload, NodeFeature::Particle(_)))
             .map(|(id, value)| (id, value.payload.clone()))
             .unwrap();
@@ -800,7 +802,7 @@ mod tests {
         };
         definition.emission.trigger = ParticleTrigger::KeyedBurst;
         definition.emission.rate = ParticleScalar::Animated(Animated::new(0., property.clone()));
-        let boolean_source = model.nodes().next().unwrap().0.visibility();
+        let boolean_source = model.nodes().iter().next().unwrap().0.visibility();
         if boolean {
             definition.emission.rate = ParticleScalar::Animated(Animated {
                 default: 0.,
@@ -833,6 +835,7 @@ mod tests {
             .unwrap();
         let nodes = model
             .nodes()
+            .iter()
             .enumerate()
             .map(|(index, (id, _))| (id, index))
             .collect();

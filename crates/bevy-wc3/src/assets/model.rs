@@ -567,6 +567,7 @@ async fn compile_loaded(
     let mut missing = HashSet::new();
     let indices: HashMap<_, _> = model
         .textures()
+        .iter()
         .enumerate()
         .map(|(index, (id, _))| (id, index))
         .collect();

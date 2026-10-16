@@ -34,10 +34,12 @@ pub(super) fn write<'a, D: Dialect>(
     let mut file_mode = false;
     for (feature_id, feature) in model
         .features()
+        .iter()
         .filter(|(_, feature)| matches!(feature.payload, profile::Node::Light(_)))
         .chain(
             model
                 .features()
+                .iter()
                 .filter(|(_, feature)| matches!(feature.payload, profile::Node::Attachment(_))),
         )
     {

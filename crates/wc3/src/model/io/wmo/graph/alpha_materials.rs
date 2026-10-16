@@ -15,6 +15,7 @@ pub(super) fn write<'a>(
 ) -> Result<BTreeMap<MaterialId, u16>, Error> {
     let used = model
         .materials()
+        .iter()
         .flat_map(|(_, material)| {
             material
                 .surface

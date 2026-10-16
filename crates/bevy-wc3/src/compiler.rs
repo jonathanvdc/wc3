@@ -117,6 +117,7 @@ pub fn compile_model_with_options(
     let targets = AnimationTargets::new(model);
     let node_map: HashMap<_, _> = model
         .nodes()
+        .iter()
         .enumerate()
         .map(|(index, (id, _))| (id, index))
         .collect();
@@ -225,7 +226,7 @@ pub fn compile_model_with_options(
                 }
             }
             if animated {
-                selected.extend(model.textures().map(|(id, _)| id));
+                selected.extend(model.textures().iter().map(|(id, _)| id));
             }
             selected
         });
@@ -237,7 +238,7 @@ pub fn compile_model_with_options(
     });
     let materials = compile_materials_with_images(
         model,
-        model.materials().filter_map(|(id, _)| {
+        model.materials().iter().filter_map(|(id, _)| {
             selected_materials
                 .as_ref()
                 .is_none_or(|selected| selected.contains(&id))
@@ -553,18 +554,23 @@ pub fn compile_model_with_options(
         })
         || !model.timeline_channels().is_empty()
         || !model.shared_channels().is_empty()
-        || model.clips().any(|(_, clip)| !clip.channels().is_empty())
+        || model
+            .clips()
+            .iter()
+            .any(|(_, clip)| !clip.channels().is_empty())
         || model
             .controllers()
+            .iter()
             .any(|(_, controller)| !controller.channels.is_empty());
     let pose_animated = model
         .timeline_channels()
         .iter()
         .chain(model.shared_channels())
-        .chain(model.clips().flat_map(|(_, clip)| clip.channels()))
+        .chain(model.clips().iter().flat_map(|(_, clip)| clip.channels()))
         .chain(
             model
                 .controllers()
+                .iter()
                 .flat_map(|(_, controller)| &controller.channels),
         )
         .any(|channel| {
@@ -600,6 +606,7 @@ pub fn compile_model_with_options(
         animation: Arc::new(AnimationProgram::compile(model)),
         clips: model
             .clips()
+            .iter()
             .map(|(id, clip)| (id, clip.name().to_string()))
             .collect::<Vec<_>>()
             .into(),
@@ -612,6 +619,7 @@ pub fn compile_model_with_options(
         timing: Arc::new(
             model
                 .clips()
+                .iter()
                 .filter_map(|(id, clip)| {
                     let origin = match &clip.controls {
                         Some(ClipControls::Mdlx(controls)) => controls.start.as_seconds(),

@@ -430,6 +430,7 @@ fn native_bound_constants_keep_opaque_composite_base_and_no_animation_sidecar() 
         .widen::<Universal>();
     let composite = model
         .materials()
+        .iter()
         .find_map(|(id, material)| (material.name == "constant composite").then_some(id))
         .unwrap();
     let MaterialSurface::Programmed(surface) = &model.material(composite).unwrap().surface else {

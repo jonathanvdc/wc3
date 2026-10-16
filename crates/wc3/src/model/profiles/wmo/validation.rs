@@ -108,11 +108,11 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
         aabb_bounds(mesh.bounds, "world.geometry.bounds")?;
     }
     use crate::model::{Billboard, Inheritance, Transform};
-    if value.clips().len() != 0
-        || value.clocks().len() != 0
-        || value.controllers().len() != 0
-        || value.skins().len() != 0
-        || value.texture_transforms().len() != 0
+    if !value.clips().is_empty()
+        || !value.clocks().is_empty()
+        || !value.controllers().is_empty()
+        || !value.skins().is_empty()
+        || !value.texture_transforms().is_empty()
         || !value.timeline_channels().is_empty()
         || !value.shared_channels().is_empty()
         || !value.timeline_events().is_empty()

@@ -2,8 +2,8 @@
 use crate::model::profiles::{Narrows, Profile};
 use crate::model::GeometrySchema as _;
 use crate::model::{
-    AttachedFeature, Clip, Controller, Draw, Error, Material, Mesh, MeshInstance, Model, Node,
-    Skin, Texture,
+    AttachedFeature, Clip, Controller, Dependencies, Draw, Error, Material, Mesh, MeshInstance,
+    Model, Node, Skin, Texture,
 };
 impl<'a, P: Profile> Model<'a, P> {
     fn try_map_payloads<Q: Narrows<P>>(self) -> Result<Model<'a, Q>, Error> {
@@ -21,32 +21,38 @@ impl<'a, P: Profile> Model<'a, P> {
         let clip = Q::clip;
         let controller = Q::controller;
         Ok(Model {
-            image_resources: self
-                .image_resources
-                .into_iter()
-                .map(|(id, value)| Ok((id, Q::image_resource(value)?)))
-                .collect::<Result<_, Error>>()?,
-            model_resources: self
-                .model_resources
-                .into_iter()
-                .map(|(id, value)| Ok((id, Q::model_resource(value)?)))
-                .collect::<Result<_, Error>>()?,
-            effect_resources: self
-                .effect_resources
-                .into_iter()
-                .map(|(id, value)| Ok((id, Q::effect_resource(value)?)))
-                .collect::<Result<_, Error>>()?,
-            physics_resources: self
-                .physics_resources
-                .into_iter()
-                .map(|(id, value)| Ok((id, Q::physics_resource(value)?)))
-                .collect::<Result<_, Error>>()?,
-            bone_override_resources: self
-                .bone_override_resources
-                .into_iter()
-                .map(|(id, value)| Ok((id, Q::bone_override_resource(value)?)))
-                .collect::<Result<_, Error>>()?,
-
+            dependencies: Dependencies {
+                images: self
+                    .dependencies
+                    .images
+                    .into_iter()
+                    .map(|(id, value)| Ok((id, Q::image_resource(value)?)))
+                    .collect::<Result<_, Error>>()?,
+                models: self
+                    .dependencies
+                    .models
+                    .into_iter()
+                    .map(|(id, value)| Ok((id, Q::model_resource(value)?)))
+                    .collect::<Result<_, Error>>()?,
+                effects: self
+                    .dependencies
+                    .effects
+                    .into_iter()
+                    .map(|(id, value)| Ok((id, Q::effect_resource(value)?)))
+                    .collect::<Result<_, Error>>()?,
+                physics: self
+                    .dependencies
+                    .physics
+                    .into_iter()
+                    .map(|(id, value)| Ok((id, Q::physics_resource(value)?)))
+                    .collect::<Result<_, Error>>()?,
+                bone_overrides: self
+                    .dependencies
+                    .bone_overrides
+                    .into_iter()
+                    .map(|(id, value)| Ok((id, Q::bone_override_resource(value)?)))
+                    .collect::<Result<_, Error>>()?,
+            },
             textures: self
                 .textures
                 .into_iter()

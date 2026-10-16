@@ -41,6 +41,7 @@ pub(super) fn write<E: Envelope>(
 ) -> Result<Ref<records::targets::RigidBody>, Error> {
     let candidates: Vec<_> = graph
         .systems()
+        .iter()
         .filter_map(|(_, system)| {
             if let System::Physics(system) = system {
                 Some(&system.bodies)

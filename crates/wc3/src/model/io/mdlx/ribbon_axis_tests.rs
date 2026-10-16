@@ -16,7 +16,7 @@ fn ribbon_axis_import_roundtrip_and_strict_export_loss() {
     source.set_ribbon_emitters([ribbon]);
     source.set_pivot_points(&[[0.; 3]]);
     let mut model = import(&source, &ImportOptions::default()).unwrap().value;
-    let (id, feature) = model.features().next().unwrap();
+    let (id, feature) = model.features().iter().next().unwrap();
     let Feature::Ribbon(ribbon) = &feature.payload else {
         panic!("ribbon lost")
     };
@@ -27,7 +27,7 @@ fn ribbon_axis_import_roundtrip_and_strict_export_loss() {
         .unwrap()
         .value;
     let roundtrip = import(&output, &ImportOptions::default()).unwrap().value;
-    let Feature::Ribbon(ribbon) = &roundtrip.features().next().unwrap().1.payload else {
+    let Feature::Ribbon(ribbon) = &roundtrip.features().iter().next().unwrap().1.payload else {
         panic!("ribbon lost")
     };
     assert_eq!(ribbon.geometry.axis, Axis::PositiveY);

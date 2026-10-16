@@ -33,7 +33,7 @@ pub(in crate::model::io::m3::logical) fn encode<E: Envelope>(
     let mut reflection = Vec::new();
     let mut lens_flare = Vec::new();
     let mut data_driven = Vec::new();
-    let entries: Vec<_> = writer.model.materials().map(|(id, _)| id).collect();
+    let entries: Vec<_> = writer.model.materials().iter().map(|(id, _)| id).collect();
     writer.materials = entries
         .iter()
         .enumerate()

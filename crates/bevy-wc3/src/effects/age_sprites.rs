@@ -246,6 +246,7 @@ impl RuntimeAgeSprites {
         let mut result = Self {
             clips: model
                 .clips()
+                .iter()
                 .map(|(id, c)| (id, (c.duration().as_seconds(), c.is_looping())))
                 .collect(),
             ..Self::default()

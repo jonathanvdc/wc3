@@ -214,20 +214,23 @@ impl Model<'_> {
             .timeline_channels()
             .iter()
             .chain(self.shared_channels())
-            .chain(self.clips().flat_map(|(_, clip)| clip.channels()))
+            .chain(self.clips().iter().flat_map(|(_, clip)| clip.channels()))
             .chain(
                 self.controllers()
+                    .iter()
                     .flat_map(|(_, controller)| &controller.channels),
             )
             .map(|channel| channel.target().clone())
             .collect();
         let indices: HashMap<_, _> = self
             .nodes()
+            .iter()
             .enumerate()
             .map(|(index, (id, _))| (id, index))
             .collect();
         PoseLayout::new(
             self.nodes()
+                .iter()
                 .map(|(id, node)| PoseNode {
                     id,
                     name: node.name.to_string(),

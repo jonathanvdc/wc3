@@ -210,6 +210,7 @@ fn hidden_hair_texture_is_optional_but_selected_missing_texture_is_an_error() {
     let (mut body, _) = model("body", &[0, 401]);
     let hidden_materials: Vec<_> = body
         .instances()
+        .iter()
         .filter(|(_, instance)| instance.selection_group == 0)
         .flat_map(|(id, instance)| instance.draws.iter().map(move |draw| (id, draw.id())))
         .map(|(instance, draw)| {

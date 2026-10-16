@@ -11,7 +11,7 @@ fn classic_source_compiles_after_encoded_storage_is_released() {
     let bytes = include_bytes!("fixtures/quad_model.mdx").to_vec();
     let model = semantic::decode(&bytes).unwrap();
     drop(bytes);
-    assert_eq!(model.meshes().count(), 1);
+    assert_eq!(model.meshes().iter().count(), 1);
     let compiled = compile_model(&model, |_| None).unwrap();
     drop(model);
     let mut meshes = Assets::<Mesh>::default();
@@ -71,6 +71,7 @@ fn particle_fixture_preserves_distinct_native_emitter_definitions() {
     let model = semantic::decode(include_bytes!("fixtures/particle_capture.mdl")).unwrap();
     let emitters: Vec<_> = model
         .features()
+        .iter()
         .filter_map(|(id, feature)| match &feature.payload {
             NodeFeature::Particle(ParticleEmitter::Simulated(value))
                 if matches!(value.details, ParticleDetails::Atlas(_)) =>
@@ -109,6 +110,7 @@ fn semantic_compilation_retains_feature_identities_across_fixture_families() {
         let model = semantic::decode(text).unwrap();
         let expected: Vec<_> = model
             .features()
+            .iter()
             .map(|(id, feature)| (id, feature.node))
             .collect();
         let compiled = compile_model(&model, |_| None).unwrap();

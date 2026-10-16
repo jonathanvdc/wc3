@@ -31,6 +31,7 @@ pub(super) fn events(
     let mut groups = BTreeMap::<(Option<u32>, String), BTreeMap<i32, usize>>::new();
     let clips = model
         .clips()
+        .iter()
         .map(|(id, _)| {
             (
                 encoder.starts[&id],
@@ -156,6 +157,7 @@ pub(super) fn controls<T: Dialect>(
         target.set_gliders(
             model
                 .meshes()
+                .iter()
                 .filter_map(|(id, mesh)| mesh.controls.glider.then_some(id))
                 .flat_map(|mesh| meshes.get(&mesh).into_iter().flatten())
                 .map(|id| native::Glider { geoset_id: *id }),
@@ -180,11 +182,13 @@ pub(super) fn controls<T: Dialect>(
         }
         if model
             .nodes()
+            .iter()
             .any(|(_, node)| node.controls.bind_pose.is_some())
         {
             let node_ids: BTreeMap<_, _> = encoder
                 .model
                 .nodes()
+                .iter()
                 .enumerate()
                 .map(|(index, (id, _))| (index as u32, id))
                 .collect();

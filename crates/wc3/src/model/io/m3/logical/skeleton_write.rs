@@ -114,6 +114,7 @@ pub(super) fn prepare(
     }
     let nodes: Vec<_> = model
         .nodes()
+        .iter()
         .filter_map(|(id, _)| wanted.contains(&id).then_some(id))
         .collect();
     if nodes.len() > u16::MAX as usize {

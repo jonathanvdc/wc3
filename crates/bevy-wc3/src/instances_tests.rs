@@ -212,16 +212,18 @@ fn separately_decoded_replacement_rebinds_clip_and_pose_scoped_identities() {
         .widen();
     let old_clip = old
         .clips()
+        .iter()
         .find(|(_, clip)| clip.name() == "Selected")
         .unwrap()
         .0;
     let new_clip = new
         .clips()
+        .iter()
         .find(|(_, clip)| clip.name() == "Selected")
         .unwrap()
         .0;
-    let old_node = old.nodes().next().unwrap().0;
-    let new_node = new.nodes().next().unwrap().0;
+    let old_node = old.nodes().iter().next().unwrap().0;
+    let new_node = new.nodes().iter().next().unwrap().0;
     assert_ne!(old_clip, new_clip);
     assert_ne!(old_node, new_node);
     let mut app = app();

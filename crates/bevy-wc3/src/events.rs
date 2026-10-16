@@ -178,11 +178,13 @@ impl RuntimeEvents {
     pub fn compile(model: &Model<'_>) -> Self {
         let node_indices: HashMap<_, _> = model
             .nodes()
+            .iter()
             .enumerate()
             .map(|(index, (id, _))| (id, index))
             .collect();
         let sources: HashMap<_, _> = model
             .features()
+            .iter()
             .filter_map(|(id, feature)| {
                 let NodeFeature::Event(source) = &feature.payload else {
                     return None;
@@ -210,10 +212,12 @@ impl RuntimeEvents {
             programs: HashMap::new(),
             clocks: model
                 .clocks()
+                .iter()
                 .map(|(id, value)| (id, value.period().as_seconds()))
                 .collect(),
             clips: model
                 .clips()
+                .iter()
                 .map(|(id, value)| {
                     let origin = match &value.controls {
                         Some(ClipControls::Mdlx(value)) => Some(value.start.as_seconds()),

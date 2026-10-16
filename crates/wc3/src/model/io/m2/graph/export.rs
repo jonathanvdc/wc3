@@ -110,13 +110,14 @@ where
     core.name = ZeroVec::alloc_from_slice(&model.name().bytes().chain([0]).collect::<Vec<_>>());
     let bone_controls: BTreeMap<_, _> = model
         .nodes()
+        .iter()
         .filter_map(|(id, node)| node.controls.as_ref().map(|value| (id, value)))
         .collect();
     let mut nodes: Vec<_> = bone_controls.keys().copied().collect();
     for (_, attached) in model.features() {
         if !matches!(attached.payload, profile::ActorKind::Camera(_)) {
             let node = model.node(attached.node).unwrap();
-            let animated=model.clips().flat_map(|(_,clip)|clip.channels().iter()).chain(model.shared_channels().iter()).any(|channel|match channel{semantic::Channel::Vector3(t)=>matches!(t.target.target(),semantic::PropertyTarget::Translation(id)|semantic::PropertyTarget::Scale(id)if *id==attached.node),semantic::Channel::Rotation(t)=>matches!(t.target.target(),semantic::PropertyTarget::Rotation(id)if *id==attached.node),_=>false});
+            let animated=model.clips().iter().flat_map(|(_,clip)|clip.channels().iter()).chain(model.shared_channels().iter()).any(|channel|match channel{semantic::Channel::Vector3(t)=>matches!(t.target.target(),semantic::PropertyTarget::Translation(id)|semantic::PropertyTarget::Scale(id)if *id==attached.node),semantic::Channel::Rotation(t)=>matches!(t.target.target(),semantic::PropertyTarget::Rotation(id)if *id==attached.node),_=>false});
             if (animated
                 || node.transform.rotation != semantic::Quaternion::default()
                 || node.transform.scale != [1.; 3])
@@ -126,7 +127,7 @@ where
             }
         }
     }
-    let textures: Vec<_> = asset.textures().map(|(id, _)| id).collect();
+    let textures: Vec<_> = asset.textures().iter().map(|(id, _)| id).collect();
     let mut texture_ids = Vec::new();
     for (_, texture) in asset.textures() {
         let (kind, path, id) = match asset
@@ -150,7 +151,7 @@ where
         });
         texture_ids.push(id)
     }
-    let clips: Vec<_> = model.clips().map(|(id, _)| id).collect();
+    let clips: Vec<_> = model.clips().iter().map(|(id, _)| id).collect();
     let mut starts = Vec::new();
     let mut start = 0u32;
     for (_, clip) in model.clips() {
@@ -331,6 +332,7 @@ where
     )?;
     let particle_programs: Vec<_> = model
         .features()
+        .iter()
         .filter_map(|(_, feature)| {
             if let profile::ActorKind::Particle(value) = &feature.payload {
                 Some(value.details.rendering.texture_program)

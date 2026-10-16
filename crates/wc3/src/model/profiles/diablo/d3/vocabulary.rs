@@ -134,6 +134,7 @@ impl Profile for D3 {
         }
         if model
             .instances()
+            .iter()
             .any(|(_, instance)| !instance.draws.is_empty())
         {
             return Err(Error::new(
@@ -143,7 +144,7 @@ impl Profile for D3 {
         }
         if !model.timeline_channels().is_empty()
             || !model.shared_channels().is_empty()
-            || model.controllers().len() != 0
+            || !model.controllers().is_empty()
         {
             return Err(Error::new(
                 "d3.animation",
@@ -154,10 +155,18 @@ impl Profile for D3 {
     }
     fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
         for resource in model
-            .image_resources()
+            .dependencies()
+            .images()
+            .iter()
             .map(|(_, value)| value)
-            .chain(model.model_resources().map(|(_, value)| value))
-            .chain(model.effect_resources().map(|(_, value)| value))
+            .chain(model.dependencies().models().iter().map(|(_, value)| value))
+            .chain(
+                model
+                    .dependencies()
+                    .effects()
+                    .iter()
+                    .map(|(_, value)| value),
+            )
         {
             if !matches!(
                 resource,

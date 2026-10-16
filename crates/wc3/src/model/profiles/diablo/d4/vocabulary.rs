@@ -149,10 +149,10 @@ impl Profile for D4 {
                 ));
             }
         }
-        if model.clips().len() != 0
+        if !model.clips().is_empty()
             || !model.timeline_channels().is_empty()
             || !model.shared_channels().is_empty()
-            || model.controllers().len() != 0
+            || !model.controllers().is_empty()
         {
             return Err(Error::new(
                 "d4.animation",

@@ -123,7 +123,7 @@ fn geometry_skin_and_animation_survive_native_round_trip() {
     let decoded = m3::Bundle::from_model(m3::Document::<m3::Md34>::read(&bytes.model).unwrap());
     let imported = io::m3::import(&decoded, &ImportOptions::default()).unwrap();
     let model = &imported.value;
-    let (_, mesh) = model.meshes().next().unwrap();
+    let (_, mesh) = model.meshes().iter().next().unwrap();
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
     let sem::Topology::Triangles(triangles) = mesh.topology() else {
         panic!("triangle topology")
@@ -133,18 +133,19 @@ fn geometry_skin_and_animation_survive_native_round_trip() {
     assert_eq!(
         model
             .nodes()
+            .iter()
             .find(|(_, node)| node.name == "Root")
             .unwrap()
             .1
             .name,
         "Root"
     );
-    let (_, controller) = model.controllers().next().unwrap();
+    let (_, controller) = model.controllers().iter().next().unwrap();
     let sem::Channel::Vector3(track) = &controller.channels[0] else {
         panic!("vector track")
     };
     assert_eq!(track.curve.values().get(1), Some([1., 2., 3.]));
-    assert_eq!(model.clips().count(), 1);
+    assert_eq!(model.clips().iter().count(), 1);
 }
 #[test]
 fn quantization_requires_an_explicit_policy() {
@@ -169,7 +170,7 @@ fn profiles_select_root_and_envelope_independently() {
 #[test]
 fn standard_controls_remain_active_after_geometry_edit() {
     let mut asset = asset();
-    let (id, material) = asset.materials().next().unwrap();
+    let (id, material) = asset.materials().iter().next().unwrap();
     let mut material = material.clone();
     let surface::Material::Standard(standard) = &mut material.surface else {
         unreachable!()
@@ -228,6 +229,7 @@ fn dormant_standard_and_hair_surfaces_are_authored_materials() {
     assert!(imported
         .value
         .materials()
+        .iter()
         .any(|(_, material)| matches!(material.surface, surface::Material::Hair(_))));
 }
 
@@ -246,8 +248,8 @@ fn imported_graph_widens_and_narrows_without_changing_identity_or_values() {
         .unwrap()
         .value;
     let model_id = imported.id();
-    let mesh_id = imported.meshes().next().unwrap().0;
-    let node_id = imported.nodes().next().unwrap().0;
+    let mesh_id = imported.meshes().iter().next().unwrap().0;
+    let node_id = imported.nodes().iter().next().unwrap().0;
     assert!(imported.mesh(mesh_id).unwrap().positions().is_owned());
     let narrowed = imported
         .widen::<sem::profiles::Universal>()
@@ -258,7 +260,7 @@ fn imported_graph_widens_and_narrows_without_changing_identity_or_values() {
     let mesh = narrowed.mesh(mesh_id).unwrap();
     assert!(mesh.positions().is_owned());
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
-    assert_eq!(narrowed.controllers().count(), 1);
+    assert_eq!(narrowed.controllers().iter().count(), 1);
 }
 #[test]
 fn native_profile_rejects_coordinate_metadata_that_cannot_round_trip() {
@@ -343,7 +345,7 @@ fn unknown_sections_and_vertex_qualifiers_require_explicit_drop() {
 #[test]
 fn contribution_groups_round_trip_sparse_slots_and_arbitrary_normal_weights() {
     let mut asset = asset();
-    let (id, material) = asset.materials().next().unwrap();
+    let (id, material) = asset.materials().iter().next().unwrap();
     let mut material = material.clone();
     let surface::Material::Standard(standard) = &mut material.surface else {
         unreachable!()
@@ -379,6 +381,7 @@ fn contribution_groups_round_trip_sparse_slots_and_arbitrary_normal_weights() {
         .value;
     let (_, material) = imported
         .materials()
+        .iter()
         .find(|(_, material)| material.name == "Solid")
         .unwrap();
     let surface::Material::Standard(standard) = &material.surface else {

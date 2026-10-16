@@ -58,7 +58,7 @@ impl Profile for M2 {
                 "M2 has fixed authored axes and no physical-unit declaration",
             ));
         }
-        if model.clips().any(|(_, clip)| !clip.is_looping()) {
+        if model.clips().iter().any(|(_, clip)| !clip.is_looping()) {
             return Err(Error::new(
                 "m2.clips.looping",
                 "nonlooping playback has no established native M2 mapping",
@@ -66,7 +66,7 @@ impl Profile for M2 {
         }
 
         let declared = |id| model.node(id).is_some_and(|node| node.controls.is_some());
-        if model.controllers().len() != 0 {
+        if !model.controllers().is_empty() {
             return Err(Error::new(
                 "m2.controllers",
                 "M2 animation has no layer-controller objects",
@@ -86,6 +86,7 @@ impl Profile for M2 {
         }
         if model
             .skins()
+            .iter()
             .any(|(_, skin)| skin.joints.iter().any(|id| !declared(*id)))
         {
             return Err(Error::new(
@@ -93,7 +94,7 @@ impl Profile for M2 {
                 "joint palette must reference declared bones",
             ));
         }
-        if model.meshes().any(|(_, mesh)| {
+        if model.meshes().iter().any(|(_, mesh)| {
             mesh.controls
                 .as_ref()
                 .and_then(|controls| controls.center_bone)

@@ -69,6 +69,7 @@ impl Profile for M3 {
         }
         if model
             .systems()
+            .iter()
             .filter(|(_, system)| matches!(system, profiles::m3::System::Physics(_)))
             .count()
             > 1
@@ -100,7 +101,7 @@ impl Profile for M3 {
                 ));
             }
         }
-        if missing_selection && model.systems().any(|(_,system)|matches!(system,profiles::m3::System::ControllerSelections(groups) if !groups.is_empty())) {
+        if missing_selection && model.systems().iter().any(|(_,system)|matches!(system,profiles::m3::System::ControllerSelections(groups) if !groups.is_empty())) {
             return Err(Error::new("m3.controller_selections", "unassociated selections require a declaration for every positional playback selection"));
         }
         for (_, node) in model.nodes() {
@@ -145,6 +146,7 @@ impl Profile for M3 {
         }
         if model
             .clips()
+            .iter()
             .any(|(_, clip)| !clip.channels().is_empty() || !clip.events().is_empty())
         {
             return Err(Error::new(
@@ -218,13 +220,13 @@ impl Profile for M3 {
                 ));
             }
         }
-        if model.clips().any(|(_, clip)| clip.alias().is_some()) {
+        if model.clips().iter().any(|(_, clip)| clip.alias().is_some()) {
             return Err(Error::new(
                 "m3.clip.alias",
                 "M3 sequences select controller programs directly",
             ));
         }
-        if model.skins().any(|(_, skin)| {
+        if model.skins().iter().any(|(_, skin)| {
             skin.joints.iter().any(|id| {
                 !model
                     .node(*id)
@@ -242,7 +244,10 @@ impl Profile for M3 {
                 .is_some_and(|node| matches!(node.controls, profiles::m3::NodeRole::Bone(_)))
         };
         for (id, mesh) in model.meshes() {
-            if !model.instances().any(|(_, instance)| instance.mesh == id)
+            if !model
+                .instances()
+                .iter()
+                .any(|(_, instance)| instance.mesh == id)
                 && mesh.skin().is_none()
                 && mesh
                     .influences()
@@ -258,7 +263,10 @@ impl Profile for M3 {
             }
             if let Some(control) = &mesh.controls {
                 if control.undrawn.is_some()
-                    && model.instances().any(|(_, instance)| instance.mesh == id)
+                    && model
+                        .instances()
+                        .iter()
+                        .any(|(_, instance)| instance.mesh == id)
                 {
                     return Err(Error::new(
                         "m3.region.placement",
@@ -268,6 +276,7 @@ impl Profile for M3 {
                 if let Some(skin_id) = control.skin {
                     if model
                         .instances()
+                        .iter()
                         .any(|(_, instance)| instance.mesh == id && instance.skin.is_some())
                     {
                         return Err(Error::new(

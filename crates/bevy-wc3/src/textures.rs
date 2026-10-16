@@ -301,6 +301,7 @@ impl TextureImages {
             .collect::<HashMap<_, _>>();
         let colors = model
             .textures()
+            .iter()
             .filter_map(|(id, texture)| {
                 let key = TextureImageKey {
                     id,
@@ -318,10 +319,12 @@ impl TextureImages {
             colors: Arc::new(colors),
             samplers: model
                 .textures()
+                .iter()
                 .map(|(id, texture)| (id, texture.sampler))
                 .collect(),
             declared: model
                 .textures()
+                .iter()
                 .map(|(id, texture)| (id, texture.color_space))
                 .collect(),
         }

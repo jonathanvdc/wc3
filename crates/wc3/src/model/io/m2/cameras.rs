@@ -33,7 +33,7 @@ pub trait CameraConversion: ModelLayout {
 }
 macro_rules! static_cameras {($($v:ty),*)=>{$(impl CameraConversion for $v {
     fn logical_fov<'a,'data:'a,D:Dialect<Layout=Self>>(_: &'a Bundle<'data,D>,camera:&'a native::records::Camera<'data,Self>,_:FeatureId,_:&[ClipId],_:&[ClockId],_:&mut GraphBuilder<'a>)->Result<Animated<f32>,Error>{Ok(Animated::constant(camera.field_of_view))}
-    fn write_logical_fov(model:&Graph<'_>,value:&Animated<f32>,camera:&mut native::records::Camera<'static,Self>,_:&[u32],_:&mut Vec<u32>,context:&mut Context)->Result<(),Error>{if value.binding.as_ref().is_some_and(|target|model.timeline_channels().iter().chain(model.shared_channels()).chain(model.clips().flat_map(|(_,clip)|clip.channels())).chain(model.controllers().flat_map(|(_,controller)|controller.channels.iter())).any(|channel|channel.target()==target.target())){context.unsupported("m2.camera.fov","target dialect has only static field of view")?}camera.field_of_view=value.default;Ok(())}
+    fn write_logical_fov(model:&Graph<'_>,value:&Animated<f32>,camera:&mut native::records::Camera<'static,Self>,_:&[u32],_:&mut Vec<u32>,context:&mut Context)->Result<(),Error>{if value.binding.as_ref().is_some_and(|target|model.timeline_channels().iter().chain(model.shared_channels()).chain(model.clips().iter().flat_map(|(_,clip)|clip.channels())).chain(model.controllers().iter().flat_map(|(_,controller)|controller.channels.iter())).any(|channel|channel.target()==target.target())){context.unsupported("m2.camera.fov","target dialect has only static field of view")?}camera.field_of_view=value.default;Ok(())}
 })*};}
 static_cameras!(V256, V257, V260, V263, V264);
 macro_rules! animated_cameras {($($v:ty),*)=>{$(impl CameraConversion for $v {

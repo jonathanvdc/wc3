@@ -46,7 +46,7 @@ fn additive_camera_keys_remain_exact_and_borrowed() {
     source.set_cameras([camera]);
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
-    let (_, feature) = graph.features().next().unwrap();
+    let (_, feature) = graph.features().iter().next().unwrap();
     let profile::Node::Camera(camera) = &feature.payload else {
         panic!("camera feature missing")
     };
@@ -158,7 +158,7 @@ fn unknown_native_blend_remains_its_own_operation() {
     material.layers.push(layer);
     source.set_materials([material]);
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    let surface = &imported.value.materials().next().unwrap().1.surface;
+    let surface = &imported.value.materials().iter().next().unwrap().1.surface;
     let material = surface;
     assert_eq!(material.layers[0].state.blend, profile::Blend::Unknown(8));
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
@@ -204,7 +204,7 @@ fn borrowed_mesh_authoring_edits_rebuild_native_geometry() {
     .unwrap();
     let mut imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
-    let (id, mesh) = graph.meshes().next().unwrap();
+    let (id, mesh) = graph.meshes().iter().next().unwrap();
     assert!(!mesh.positions().is_owned());
     let mut edited = mesh.clone();
     let mut positions = edited.positions().to_vec();
@@ -255,7 +255,7 @@ fn invalid_unicode_names_need_an_explicit_loss_policy() {
     )
     .unwrap();
     assert!(!output.report.issues.is_empty());
-    assert_eq!(output.value.nodes().next().unwrap().1.name, "�");
+    assert_eq!(output.value.nodes().iter().next().unwrap().1.name, "�");
 }
 
 #[test]
@@ -322,12 +322,12 @@ fn shared_uv_transform_links_are_scoped_and_rebuild_animation() {
     source.set_texture_animations([transform]);
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
-    let (id, transform) = graph.texture_transforms().next().unwrap();
+    let (id, transform) = graph.texture_transforms().iter().next().unwrap();
     assert_eq!(
         transform.translation.binding.as_ref().unwrap(),
         &id.translation::<Mdlx>()
     );
-    let material = &graph.materials().next().unwrap().1.surface;
+    let material = &graph.materials().iter().next().unwrap().1.surface;
     assert_eq!(material.layers[0].binding.coordinates.transform, Some(id));
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
@@ -436,7 +436,10 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
     let graph = &imported.value;
     assert_eq!(graph.clips().len(), 2);
     assert_eq!(graph.timeline_channels().len(), 1);
-    assert!(graph.clips().all(|(_, clip)| clip.channels().is_empty()));
+    assert!(graph
+        .clips()
+        .iter()
+        .all(|(_, clip)| clip.channels().is_empty()));
     let Channel::Vector3(mut track) = graph.timeline_channels()[0].clone() else {
         panic!("translation curve missing")
     };
@@ -543,7 +546,7 @@ fn skinned_geometry_placement_edits_cannot_silently_disappear() {
     let mut asset = io::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let anchor = asset.instances().next().unwrap().1.node;
+    let anchor = asset.instances().iter().next().unwrap().1.node;
     let result = asset.edit(|builder| {
         let mut node = builder.model().node(anchor).unwrap().clone();
         node.transform.translation = [1., 0., 0.];
@@ -564,7 +567,15 @@ fn logical_sequence_flag_words_keep_unknown_bits_through_native_output() {
         .unwrap()
         .value;
     assert_eq!(
-        asset.clips().next().unwrap().1.controls.unclassified.bits(),
+        asset
+            .clips()
+            .iter()
+            .next()
+            .unwrap()
+            .1
+            .controls
+            .unclassified
+            .bits(),
         0x8000_0000
     );
     let output = io::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())

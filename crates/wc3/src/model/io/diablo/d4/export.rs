@@ -17,14 +17,14 @@ pub(super) fn plan(
     asset.validate()?;
     let model = asset;
     let mut context = Context::export(options);
-    if model.clips().len() != 0 {
+    if !model.clips().is_empty() {
         context.unsupported(
             "d4.animation",
             "compressed native animation curves require a separately established decoder",
         )?;
     }
 
-    if asset.textures().len() != 0 {
+    if !asset.textures().is_empty() {
         context.unsupported("d4.resources.textures","appearance output cannot retain model texture definitions; texture inputs belong to separately planned material resources")?;
     }
     if options.look.is_some() {
@@ -86,6 +86,7 @@ pub(super) fn plan(
     };
     let bones: Vec<_> = model
         .nodes()
+        .iter()
         .filter(|(_, node)| matches!(node.controls, NodeRole::Bone(_)))
         .collect();
     let bone_indices: BTreeMap<_, _> = bones
@@ -381,13 +382,17 @@ pub(super) fn plan(
         root.structure.chunks[chunk].lods[lod].sub_objects[index].base_lod_sub_object_index =
             signed(base_index)?;
     }
-    if model.meshes().any(|(id, _)| !locations.contains_key(&id)) {
+    if model
+        .meshes()
+        .iter()
+        .any(|(id, _)| !locations.contains_key(&id))
+    {
         context.unsupported(
             "d4.geometry.unplaced",
             "native appearance cannot retain a mesh without a placement",
         )?;
     }
-    if model.materials().any(|(id, _)| {
+    if model.materials().iter().any(|(id, _)| {
         !slots
             .iter()
             .any(|(_, slot)| slot.variants().any(|(_, material)| material == id))

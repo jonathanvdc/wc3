@@ -119,8 +119,14 @@ impl Resolver<Configuration> for Workshop {
 fn application_defined_machine_configuration_compiles_without_native_character_metadata() {
     let (chassis, mounting_frame, _) = model(false);
     let (module, _, paint) = model(true);
-    assert!(chassis.nodes().all(|(_, node)| node.controls.is_none()));
-    assert!(module.nodes().all(|(_, node)| node.controls.is_none()));
+    assert!(chassis
+        .nodes()
+        .iter()
+        .all(|(_, node)| node.controls.is_none()));
+    assert!(module
+        .nodes()
+        .iter()
+        .all(|(_, node)| node.controls.is_none()));
     let models: Models<'_> = [(resource("chassis"), chassis), (resource("module"), module)].into();
     let selection = Configuration {
         chassis: Chassis::Tripod,

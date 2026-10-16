@@ -184,8 +184,8 @@ fn unselected_program_and_orphan_keys_remain_editable() {
     )
     .unwrap();
     let rebuilt = rebuilt.finish().unwrap();
-    assert_eq!(rebuilt.clips().count(), 0);
-    let (_, controller) = rebuilt.controllers().next().unwrap();
+    assert_eq!(rebuilt.clips().iter().count(), 0);
+    let (_, controller) = rebuilt.controllers().iter().next().unwrap();
     assert_eq!(controller.name, "unselected");
     assert_eq!(controller.controls.unbound.len(), 2);
     for block in &controller.controls.unbound {
@@ -365,13 +365,14 @@ fn named_selection_libraries_and_legacy_sequence_controls_roundtrip_independentl
     )
     .unwrap();
     let graph = rebuilt.finish().unwrap();
-    let (_, clip) = graph.clips().next().unwrap();
+    let (_, clip) = graph.clips().iter().next().unwrap();
     assert_eq!(clip.name, "clip name");
     assert_eq!(clip.controls.selection.as_ref().unwrap().name, "group name");
     assert_eq!(clip.controls.sequence_number, -19);
     assert_eq!(clip.controls.legacy_control, Some(0x8000_1234));
     let libraries = graph
         .systems()
+        .iter()
         .find_map(|(_, system)| match system {
             surface::System::ControllerSelections(value) => Some(value),
             _ => None,

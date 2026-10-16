@@ -284,6 +284,7 @@ pub(super) fn prepare<'data>(
         if builder
             .model()
             .instances()
+            .iter()
             .all(|(_, instance)| instance.mesh != mesh)
         {
             builder.remove_mesh(mesh);
@@ -293,6 +294,7 @@ pub(super) fn prepare<'data>(
         if builder
             .model()
             .instances()
+            .iter()
             .all(|(_, instance)| instance.node != node)
             && builder.model().node_features(node).next().is_none()
         {

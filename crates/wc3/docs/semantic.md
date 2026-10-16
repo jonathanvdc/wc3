@@ -32,14 +32,26 @@ an unrelated owner cannot satisfy a relationship. Graph identity is independent
 of native record ordering, so output codecs can reorder tables without changing
 which objects refer to one another.
 
-`Model<'data, P>` owns its graph and separate dependency tables for images,
-external models, effects, physics, and bone overrides. Textures, materials, and
-meshes remain graph objects with their own IDs. A texture refers to an
+`Model<'data, P>` owns its graph as typed `Table<K, V>` collections. The key
+parameter identifies an object family independently of its payload's profile and
+borrowed lifetime. Collection accessors such as `nodes()`, `meshes()`, and
+`materials()` expose immutable lookup through `get(id)`, membership through
+`contains_key(id)`, and size through `len()` and `is_empty()`. Call `iter()` to
+traverse `(Id<K>, &V)` pairs in stable identity order, or iterate the collection
+directly in a `for` loop. `keys()` and `values()` provide the corresponding views.
+Edits remain operations on a `ModelBuilder`, where object-specific checks and
+complete graph validation apply.
+
+External declarations are grouped under `model.dependencies()`, with typed
+`images()`, `models()`, `effects()`, `physics()`, and `bone_overrides()` tables.
+Textures, materials, and meshes remain graph objects with their own IDs. A texture refers to an
 `ImageResourceId`; multiple textures can share that image declaration while
 choosing independent sampling and color interpretation. Child placements and
 skyboxes use `ModelResourceId`, while external effect instances use
-`EffectResourceId`. Each handle resolves only in its owning model through methods
-such as `image_resource` and `model_resource`; plural methods enumerate each table.
+`EffectResourceId`. Each handle resolves only in its owning model: for example,
+`model.dependencies().images().get(image)` resolves an image declaration.
+Singular model helpers such as `image_resource(image)` remain convenient for
+individual lookups.
 
 Declare dependencies through `ModelBuilder::add_image_resource` and the
 corresponding methods for other kinds. Reusing a handle explicitly shares a
@@ -70,7 +82,8 @@ let mut draft = Model::<Mdlx>::builder("Shared image");
 let image = draft.add_image_resource(MdlxImageResource::Path(b"body.blp".as_slice().into()));
 let texture = draft.add_texture(Texture::new(image))?;
 let model = draft.finish()?;
-assert_eq!(model.texture(texture).unwrap().resource, image);
+assert_eq!(model.textures().get(texture).unwrap().resource, image);
+assert_eq!(model.dependencies().images().len(), 1);
 Ok::<(), wc3::model::Error>(())
 ```
 

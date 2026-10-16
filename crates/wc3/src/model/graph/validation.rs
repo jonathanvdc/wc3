@@ -13,10 +13,10 @@ impl<P: Profile> Model<'_, P> {
         if let Some(bounds) = self.bounds {
             bounds.validate()?;
         }
-        for (id, node) in &self.nodes {
+        for (id, node) in self.nodes.iter() {
             node.transform.validate()?;
             let mut ancestors = BTreeSet::new();
-            ancestors.insert(*id);
+            ancestors.insert(id);
             let mut parent = node.parent;
             while let Some(p) = parent {
                 if !ancestors.insert(p) {
@@ -24,7 +24,7 @@ impl<P: Profile> Model<'_, P> {
                 }
                 parent = self
                     .nodes
-                    .get(&p)
+                    .get(p)
                     .ok_or_else(|| Error::new("nodes.parent", "parent is absent"))?
                     .parent;
             }
@@ -65,17 +65,19 @@ impl<P: Profile> Model<'_, P> {
         let mut conflicting_types = false;
         let mut visit = |link| {
             missing |= match link {
-                Link::ImageResource(id) => !self.image_resources.contains_key(&id),
-                Link::ModelResource(id) => !self.model_resources.contains_key(&id),
-                Link::EffectResource(id) => !self.effect_resources.contains_key(&id),
-                Link::PhysicsResource(id) => !self.physics_resources.contains_key(&id),
-                Link::BoneOverrideResource(id) => !self.bone_override_resources.contains_key(&id),
+                Link::ImageResource(id) => !self.dependencies.images.contains_key(id),
+                Link::ModelResource(id) => !self.dependencies.models.contains_key(id),
+                Link::EffectResource(id) => !self.dependencies.effects.contains_key(id),
+                Link::PhysicsResource(id) => !self.dependencies.physics.contains_key(id),
+                Link::BoneOverrideResource(id) => {
+                    !self.dependencies.bone_overrides.contains_key(id)
+                }
 
                 Link::Model(id) => id != self.id,
                 Link::AppearanceSlot(id) => !self.appearance.contains_slot(id),
                 Link::SystemMember { system, member } => !self
                     .systems
-                    .get(&system)
+                    .get(system)
                     .is_some_and(|value| value.contains(member)),
                 Link::InvalidValue => true,
                 Link::Property {
@@ -96,46 +98,46 @@ impl<P: Profile> Model<'_, P> {
                     }
                     false
                 }
-                Link::Node(id) => !self.nodes.contains_key(&id),
+                Link::Node(id) => !self.nodes.contains_key(id),
                 Link::FeatureAlternatives { id, kinds } => self
                     .features
-                    .get(&id)
+                    .get(id)
                     .is_none_or(|feature| !kinds.contains(&feature.payload.kind())),
                 Link::TypedFeature { id, kind } => self
                     .features
-                    .get(&id)
+                    .get(id)
                     .is_none_or(|feature| feature.payload.kind() != kind),
                 Link::Event(id) => self.event(id).is_none(),
-                Link::Feature(id) => !self.features.contains_key(&id),
-                Link::Instance(id) => !self.instances.contains_key(&id),
+                Link::Feature(id) => !self.features.contains_key(id),
+                Link::Instance(id) => !self.instances.contains_key(id),
                 Link::TypedMesh { id, kind } => self
                     .meshes
-                    .get(&id)
+                    .get(id)
                     .is_none_or(|mesh| mesh.geometry.kind() != kind),
-                Link::Mesh(id) => !self.meshes.contains_key(&id),
-                Link::Material(id) => !self.materials.contains_key(&id),
+                Link::Mesh(id) => !self.meshes.contains_key(id),
+                Link::Material(id) => !self.materials.contains_key(id),
                 Link::Texture(id) => self.texture(id).is_none(),
-                Link::Clip(id) => !self.clips.contains_key(&id),
-                Link::Skin(id) => !self.skins.contains_key(&id),
-                Link::Clock(id) => !self.clocks.contains_key(&id),
-                Link::Controller(id) => !self.controllers.contains_key(&id),
-                Link::TextureTransform(id) => !self.texture_transforms.contains_key(&id),
-                Link::System(id) => !self.systems.contains_key(&id),
+                Link::Clip(id) => !self.clips.contains_key(id),
+                Link::Skin(id) => !self.skins.contains_key(id),
+                Link::Clock(id) => !self.clocks.contains_key(id),
+                Link::Controller(id) => !self.controllers.contains_key(id),
+                Link::TextureTransform(id) => !self.texture_transforms.contains_key(id),
+                Link::System(id) => !self.systems.contains_key(id),
             };
         };
-        for value in self.image_resources.values() {
+        for value in self.dependencies.images.values() {
             value.visit_links(&mut visit);
         }
-        for value in self.model_resources.values() {
+        for value in self.dependencies.models.values() {
             value.visit_links(&mut visit);
         }
-        for value in self.effect_resources.values() {
+        for value in self.dependencies.effects.values() {
             value.visit_links(&mut visit);
         }
-        for value in self.physics_resources.values() {
+        for value in self.dependencies.physics.values() {
             value.visit_links(&mut visit);
         }
-        for value in self.bone_override_resources.values() {
+        for value in self.dependencies.bone_overrides.values() {
             value.visit_links(&mut visit);
         }
         for node in self.nodes.values() {
@@ -272,9 +274,9 @@ impl<P: Profile> Model<'_, P> {
             ));
         }
 
-        for (id, clip) in &self.clips {
+        for (id, clip) in self.clips.iter() {
             let mut chain = BTreeSet::new();
-            chain.insert(*id);
+            chain.insert(id);
             let mut alias = clip.alias;
             if alias.is_some() && (!clip.channels.is_empty() || !clip.events.is_empty()) {
                 return Err(Error::new(
@@ -308,7 +310,7 @@ impl<P: Profile> Model<'_, P> {
         let expected: BTreeSet<_> = self
             .instances
             .iter()
-            .flat_map(|(id, instance)| instance.draws.iter().map(move |draw| (*id, draw.id())))
+            .flat_map(|(id, instance)| instance.draws.iter().map(move |draw| (id, draw.id())))
             .collect();
         for instance in self.instances.values() {
             for draw in &instance.draws {
@@ -329,13 +331,10 @@ impl<P: Profile> Model<'_, P> {
                 if !assignments.insert((binding.instance, binding.draw)) {
                     return Err(Error::new("look.bindings", "draw has multiple assignments"));
                 }
-                if !self.materials.contains_key(&binding.material)
-                    || self
-                        .instances
-                        .get(&binding.instance)
-                        .is_none_or(|instance| {
-                            !instance.draws.iter().any(|draw| draw.id() == binding.draw)
-                        })
+                if !self.materials.contains_key(binding.material)
+                    || self.instances.get(binding.instance).is_none_or(|instance| {
+                        !instance.draws.iter().any(|draw| draw.id() == binding.draw)
+                    })
                 {
                     return Err(Error::new(
                         "look.bindings",
@@ -370,7 +369,7 @@ impl<P: Profile> Model<'_, P> {
                 let skin = instance
                     .skin
                     .or_else(|| mesh.skin())
-                    .and_then(|id| self.skins.get(&id))
+                    .and_then(|id| self.skins.get(id))
                     .ok_or_else(|| {
                         Error::new("instance.skin", "skinned geometry requires a skin")
                     })?;

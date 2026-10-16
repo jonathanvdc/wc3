@@ -11,9 +11,13 @@ use crate::model::{
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
 };
+use crate::model::{
+    ClipObject, ClockObject, ControllerObject, FeatureObject, InstanceObject, MaterialObject,
+    MeshObject, NodeObject, SkinObject, SystemObject, TextureObject, TextureTransformObject,
+};
+use crate::model::{Dependencies, Table};
 use crate::model::{Texture, TextureId};
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 /// A repeating or frozen clock shared by animation channels.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SharedClock {
@@ -37,12 +41,8 @@ impl SharedClock {
 /// An encoding-independent model. All public access is immutable; edits are checked before publication.
 #[derive(Clone, Debug)]
 pub struct Model<'a, P: Profile = Universal> {
-    image_resources: BTreeMap<ImageResourceId, P::ImageResource<'a>>,
-    model_resources: BTreeMap<ModelResourceId, P::ModelResource<'a>>,
-    effect_resources: BTreeMap<EffectResourceId, P::EffectResource<'a>>,
-    physics_resources: BTreeMap<PhysicsResourceId, P::PhysicsResource<'a>>,
-    bone_override_resources: BTreeMap<BoneOverrideResourceId, P::BoneOverrideResource<'a>>,
-    textures: BTreeMap<TextureId, Texture<'a, P>>,
+    dependencies: Dependencies<'a, P>,
+    textures: Table<TextureObject, Texture<'a, P>>,
     scope: Scope,
     id: ModelId,
     name: Cow<'a, str>,
@@ -50,88 +50,58 @@ pub struct Model<'a, P: Profile = Universal> {
     units: LengthUnit,
     bounds: Option<Bounds>,
     metadata: P::ModelMetadata<'a>,
-    systems: BTreeMap<SystemId, P::System<'a>>,
+    systems: Table<SystemObject, P::System<'a>>,
     timeline_channels: Vec<Channel<'a, P>>,
     timeline_events: Vec<Event<'a>>,
     shared_channels: Vec<Channel<'a, P>>,
     shared_events: Vec<Event<'a>>,
-    features: BTreeMap<FeatureId, AttachedFeature<'a, P>>,
+    features: Table<FeatureObject, AttachedFeature<'a, P>>,
     appearance: P::Appearance<'a>,
-    nodes: BTreeMap<NodeId, Node<'a, P>>,
-    meshes: BTreeMap<MeshId, Mesh<'a, P>>,
-    materials: BTreeMap<MaterialId, Material<'a, P>>,
-    clips: BTreeMap<ClipId, Clip<'a, P>>,
-    skins: BTreeMap<SkinId, Skin<'a, P>>,
-    instances: BTreeMap<InstanceId, MeshInstance<'a, P>>,
-    clocks: BTreeMap<ClockId, SharedClock>,
-    controllers: BTreeMap<ControllerId, Controller<'a, P>>,
-    texture_transforms: BTreeMap<TextureTransformId, TextureTransform>,
+    nodes: Table<NodeObject, Node<'a, P>>,
+    meshes: Table<MeshObject, Mesh<'a, P>>,
+    materials: Table<MaterialObject, Material<'a, P>>,
+    clips: Table<ClipObject, Clip<'a, P>>,
+    skins: Table<SkinObject, Skin<'a, P>>,
+    instances: Table<InstanceObject, MeshInstance<'a, P>>,
+    clocks: Table<ClockObject, SharedClock>,
+    controllers: Table<ControllerObject, Controller<'a, P>>,
+    texture_transforms: Table<TextureTransformObject, TextureTransform>,
 }
 impl<'a, P: Profile> Model<'a, P> {
+    /// External dependency declarations owned by this model.
+    pub fn dependencies(&self) -> &Dependencies<'a, P> {
+        &self.dependencies
+    }
     /// Resolves a model-owned image dependency declaration.
     pub fn image_resource(&self, id: ImageResourceId) -> Option<&P::ImageResource<'a>> {
-        self.image_resources.get(&id)
-    }
-    /// Iterates image dependency declarations in identity order.
-    pub fn image_resources(
-        &self,
-    ) -> impl ExactSizeIterator<Item = (ImageResourceId, &P::ImageResource<'a>)> {
-        self.image_resources.iter().map(|(id, value)| (*id, value))
+        self.dependencies.images.get(id)
     }
     /// Resolves a model-owned model dependency declaration.
     pub fn model_resource(&self, id: ModelResourceId) -> Option<&P::ModelResource<'a>> {
-        self.model_resources.get(&id)
-    }
-    /// Iterates model dependency declarations in identity order.
-    pub fn model_resources(
-        &self,
-    ) -> impl ExactSizeIterator<Item = (ModelResourceId, &P::ModelResource<'a>)> {
-        self.model_resources.iter().map(|(id, value)| (*id, value))
+        self.dependencies.models.get(id)
     }
     /// Resolves a model-owned effect dependency declaration.
     pub fn effect_resource(&self, id: EffectResourceId) -> Option<&P::EffectResource<'a>> {
-        self.effect_resources.get(&id)
-    }
-    /// Iterates effect dependency declarations in identity order.
-    pub fn effect_resources(
-        &self,
-    ) -> impl ExactSizeIterator<Item = (EffectResourceId, &P::EffectResource<'a>)> {
-        self.effect_resources.iter().map(|(id, value)| (*id, value))
+        self.dependencies.effects.get(id)
     }
     /// Resolves a model-owned physics dependency declaration.
     pub fn physics_resource(&self, id: PhysicsResourceId) -> Option<&P::PhysicsResource<'a>> {
-        self.physics_resources.get(&id)
-    }
-    /// Iterates physics dependency declarations in identity order.
-    pub fn physics_resources(
-        &self,
-    ) -> impl ExactSizeIterator<Item = (PhysicsResourceId, &P::PhysicsResource<'a>)> {
-        self.physics_resources
-            .iter()
-            .map(|(id, value)| (*id, value))
+        self.dependencies.physics.get(id)
     }
     /// Resolves a model-owned boneoverride dependency declaration.
     pub fn bone_override_resource(
         &self,
         id: BoneOverrideResourceId,
     ) -> Option<&P::BoneOverrideResource<'a>> {
-        self.bone_override_resources.get(&id)
-    }
-    /// Iterates boneoverride dependency declarations in identity order.
-    pub fn bone_override_resources(
-        &self,
-    ) -> impl ExactSizeIterator<Item = (BoneOverrideResourceId, &P::BoneOverrideResource<'a>)> {
-        self.bone_override_resources
-            .iter()
-            .map(|(id, value)| (*id, value))
+        self.dependencies.bone_overrides.get(id)
     }
     /// Resolves a texture identity in this model.
     pub fn texture(&self, id: TextureId) -> Option<&Texture<'a, P>> {
-        self.textures.get(&id)
+        self.textures.get(id)
     }
-    /// Iterates texture definitions in identity order.
-    pub fn textures(&self) -> impl ExactSizeIterator<Item = (TextureId, &Texture<'a, P>)> {
-        self.textures.iter().map(|(id, texture)| (*id, texture))
+    /// Texture definitions in stable identity order.
+    pub fn textures(&self) -> &Table<TextureObject, Texture<'a, P>> {
+        &self.textures
     }
     /// Edits a draft and publishes it only after the complete model validates.
     pub fn edit<R>(
@@ -197,33 +167,29 @@ impl<'a, P: Profile> Model<'a, P> {
     pub fn metadata(&self) -> &P::ModelMetadata<'a> {
         &self.metadata
     }
-    /// Iterates independent scene systems in stable graph identity order.
-    pub fn systems(&self) -> impl ExactSizeIterator<Item = (SystemId, &P::System<'a>)> {
-        self.systems.iter().map(|(id, value)| (*id, value))
+    /// Independent scene system definitions in stable identity order.
+    pub fn systems(&self) -> &Table<SystemObject, P::System<'a>> {
+        &self.systems
     }
     /// Resolves an independent scene system belonging to this graph.
     pub fn system(&self, id: SystemId) -> Option<&P::System<'a>> {
-        self.systems.get(&id)
+        self.systems.get(id)
     }
-    /// Iterates shared texture-coordinate transforms in stable graph identity order.
-    pub fn texture_transforms(
-        &self,
-    ) -> impl ExactSizeIterator<Item = (TextureTransformId, &TextureTransform)> {
-        self.texture_transforms
-            .iter()
-            .map(|(id, value)| (*id, value))
+    /// Shared texture-coordinate transform definitions in stable identity order.
+    pub fn texture_transforms(&self) -> &Table<TextureTransformObject, TextureTransform> {
+        &self.texture_transforms
     }
     /// Resolves a shared texture-coordinate transform belonging to this graph.
     pub fn texture_transform(&self, id: TextureTransformId) -> Option<&TextureTransform> {
-        self.texture_transforms.get(&id)
+        self.texture_transforms.get(id)
     }
-    /// Iterates animation controller definitions in stable graph identity order.
-    pub fn controllers(&self) -> impl ExactSizeIterator<Item = (ControllerId, &Controller<'a, P>)> {
-        self.controllers.iter().map(|(id, value)| (*id, value))
+    /// Animation controller definitions in stable identity order.
+    pub fn controllers(&self) -> &Table<ControllerObject, Controller<'a, P>> {
+        &self.controllers
     }
     /// Resolves a animation controller; returns `None` when the identity is absent from this graph.
     pub fn controller(&self, id: ControllerId) -> Option<&Controller<'a, P>> {
-        self.controllers.get(&id)
+        self.controllers.get(id)
     }
     /// Owner-local playback behavior of a clip belonging to this graph.
     pub fn clip_controls(&self, id: ClipId) -> Option<&P::Clip<'a>> {
@@ -233,13 +199,13 @@ impl<'a, P: Profile> Model<'a, P> {
     pub fn controller_controls(&self, id: ControllerId) -> Option<&P::Controller<'a>> {
         Some(&self.controller(id)?.controls)
     }
-    /// Iterates attached behavior definitions in stable graph identity order.
-    pub fn features(&self) -> impl ExactSizeIterator<Item = (FeatureId, &AttachedFeature<'a, P>)> {
-        self.features.iter().map(|(id, value)| (*id, value))
+    /// Attached behavior definitions in stable identity order.
+    pub fn features(&self) -> &Table<FeatureObject, AttachedFeature<'a, P>> {
+        &self.features
     }
     /// Resolves a attached behavior; returns `None` when the identity is absent from this graph.
     pub fn feature(&self, id: FeatureId) -> Option<&AttachedFeature<'a, P>> {
-        self.features.get(&id)
+        self.features.get(id)
     }
     /// Iterates the independently attached behaviors anchored to a hierarchy node.
     pub fn node_features(
@@ -249,7 +215,7 @@ impl<'a, P: Profile> Model<'a, P> {
         self.features
             .iter()
             .filter(move |(_, value)| value.node == node)
-            .map(|(id, value)| (*id, &value.payload))
+            .map(|(id, value)| (id, &value.payload))
     }
     /// Complete material assignment vocabulary selected by the profile.
     pub fn appearance(&self) -> &P::Appearance<'a> {
@@ -289,29 +255,29 @@ impl<'a, P: Profile> Model<'a, P> {
             .map(|binding| binding.material)
             .ok_or_else(|| Error::new("look.bindings", "draw has no material assignment"))
     }
-    /// Iterates hierarchy node definitions in stable graph identity order.
-    pub fn nodes(&self) -> impl ExactSizeIterator<Item = (NodeId, &Node<'a, P>)> {
-        self.nodes.iter().map(|(id, value)| (*id, value))
+    /// Hierarchy node definitions in stable identity order.
+    pub fn nodes(&self) -> &Table<NodeObject, Node<'a, P>> {
+        &self.nodes
     }
     /// Resolves a hierarchy node; returns `None` when the identity is absent from this graph.
     pub fn node(&self, id: NodeId) -> Option<&Node<'a, P>> {
-        self.nodes.get(&id)
+        self.nodes.get(id)
     }
-    /// Iterates shared geometry definitions in stable graph identity order.
-    pub fn meshes(&self) -> impl ExactSizeIterator<Item = (MeshId, &Mesh<'a, P>)> {
-        self.meshes.iter().map(|(id, value)| (*id, value))
+    /// Shared geometry definitions in stable identity order.
+    pub fn meshes(&self) -> &Table<MeshObject, Mesh<'a, P>> {
+        &self.meshes
     }
     /// Resolves a shared geometry; returns `None` when the identity is absent from this graph.
     pub fn mesh(&self, id: MeshId) -> Option<&Mesh<'a, P>> {
-        self.meshes.get(&id)
+        self.meshes.get(id)
     }
-    /// Iterates surface definitions in stable graph identity order.
-    pub fn materials(&self) -> impl ExactSizeIterator<Item = (MaterialId, &Material<'a, P>)> {
-        self.materials.iter().map(|(id, value)| (*id, value))
+    /// Surface definitions in stable identity order.
+    pub fn materials(&self) -> &Table<MaterialObject, Material<'a, P>> {
+        &self.materials
     }
     /// Resolves a surface; returns `None` when the identity is absent from this graph.
     pub fn material(&self, id: MaterialId) -> Option<&Material<'a, P>> {
-        self.materials.get(&id)
+        self.materials.get(id)
     }
     /// Resolves a clip's playback program through its alias chain.
     pub fn clip_program(&self, id: ClipId) -> Option<&Clip<'a, P>> {
@@ -321,37 +287,37 @@ impl<'a, P: Profile> Model<'a, P> {
         }
         Some(clip)
     }
-    /// Iterates playback clip definitions in stable graph identity order.
-    pub fn clips(&self) -> impl ExactSizeIterator<Item = (ClipId, &Clip<'a, P>)> {
-        self.clips.iter().map(|(id, value)| (*id, value))
+    /// Playback clip definitions in stable identity order.
+    pub fn clips(&self) -> &Table<ClipObject, Clip<'a, P>> {
+        &self.clips
     }
     /// Resolves a playback clip; returns `None` when the identity is absent from this graph.
     pub fn clip(&self, id: ClipId) -> Option<&Clip<'a, P>> {
-        self.clips.get(&id)
+        self.clips.get(id)
     }
-    /// Iterates joint binding definitions in stable graph identity order.
-    pub fn skins(&self) -> impl ExactSizeIterator<Item = (SkinId, &Skin<'a, P>)> {
-        self.skins.iter().map(|(id, value)| (*id, value))
+    /// Joint binding definitions in stable identity order.
+    pub fn skins(&self) -> &Table<SkinObject, Skin<'a, P>> {
+        &self.skins
     }
     /// Resolves a joint binding; returns `None` when the identity is absent from this graph.
     pub fn skin(&self, id: SkinId) -> Option<&Skin<'a, P>> {
-        self.skins.get(&id)
+        self.skins.get(id)
     }
-    /// Iterates geometry placement definitions in stable graph identity order.
-    pub fn instances(&self) -> impl ExactSizeIterator<Item = (InstanceId, &MeshInstance<'a, P>)> {
-        self.instances.iter().map(|(id, value)| (*id, value))
+    /// Geometry placement definitions in stable identity order.
+    pub fn instances(&self) -> &Table<InstanceObject, MeshInstance<'a, P>> {
+        &self.instances
     }
     /// Resolves a geometry placement; returns `None` when the identity is absent from this graph.
     pub fn instance(&self, id: InstanceId) -> Option<&MeshInstance<'a, P>> {
-        self.instances.get(&id)
+        self.instances.get(id)
     }
-    /// Iterates shared animation clock definitions in stable graph identity order.
-    pub fn clocks(&self) -> impl ExactSizeIterator<Item = (ClockId, &SharedClock)> {
-        self.clocks.iter().map(|(id, value)| (*id, value))
+    /// Shared animation clock definitions in stable identity order.
+    pub fn clocks(&self) -> &Table<ClockObject, SharedClock> {
+        &self.clocks
     }
     /// Resolves a shared animation clock; returns `None` when the identity is absent from this graph.
     pub fn clock(&self, id: ClockId) -> Option<&SharedClock> {
-        self.clocks.get(&id)
+        self.clocks.get(id)
     }
 }
 impl<'a> Model<'a> {

@@ -112,6 +112,7 @@ fn particle_texture_programs_follow_the_material_prefix_and_round_trip() {
     let programs: Vec<_> = imported
         .value
         .features()
+        .iter()
         .filter_map(|(_, feature)| {
             if let mp::ActorKind::Particle(particle) = &feature.payload {
                 Some(particle.details.rendering.texture_program)
@@ -126,6 +127,7 @@ fn particle_texture_programs_follow_the_material_prefix_and_round_trip() {
             let textures = imported
                 .value
                 .textures()
+                .iter()
                 .map(|(id, _)| id)
                 .collect::<Vec<_>>();
             let options = ExportOptions::default();
@@ -190,7 +192,7 @@ fn particle_texture_program_counts_and_unmapped_material_controls_are_explicit()
     )
     .unwrap();
     assert!(!imported.report.issues.is_empty());
-    assert!(imported.value.features().any(|(_, feature)| {
+    assert!(imported.value.features().iter().any(|(_, feature)| {
         matches!(&feature.payload, mp::ActorKind::Particle(particle) if particle.details.rendering.texture_program == Some([3,11]))
     }));
 }
@@ -199,7 +201,7 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     let source = native_triangle();
     let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
     let semantic = &imported.value;
-    let mesh = semantic.meshes().next().unwrap().1;
+    let mesh = semantic.meshes().iter().next().unwrap().1;
     assert!(mesh.positions().is_owned());
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
     let sm::Topology::Triangles(triangles) = mesh.topology() else {
@@ -208,7 +210,7 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     assert!(triangles.is_owned());
     assert_eq!(triangles.get(0), Some([0, 1, 2]));
     assert_eq!(mesh.influences().joint_weights(0).unwrap()[0].weight, 1.);
-    let texture = imported.value.textures().next().unwrap().1;
+    let texture = imported.value.textures().iter().next().unwrap().1;
     assert!(
         matches!(imported.value.image_resource(texture.resource).unwrap(),sm::M2ImageResource::Path(Cow::Borrowed(path))if *path==b"textures/checker.blp")
     );
@@ -275,7 +277,7 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
     };
     let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
     let model = &imported.value;
-    let clip = model.clips().next().unwrap().1;
+    let clip = model.clips().iter().next().unwrap().1;
     let sm::Channel::Vector3(track) = &clip.channels()[0] else {
         panic!("translation channel lost")
     };
@@ -310,7 +312,7 @@ fn semantic_geometry_edits_rebuild_native_values() {
     let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, mesh) = asset.meshes().next().unwrap();
+    let (id, mesh) = asset.meshes().iter().next().unwrap();
     let mut mesh = mesh.clone();
     let mut positions: Vec<_> = mesh.positions().iter().collect();
     positions[1] = [5., 0., 0.];
@@ -477,6 +479,7 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
     assert_eq!(
         model
             .features()
+            .iter()
             .filter(|(_, f)| matches!(
                 f.payload,
                 mp::ActorKind::Attachment(_)
@@ -491,6 +494,7 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
     );
     assert!(model
         .systems()
+        .iter()
         .any(|(_, system)| matches!(system, mp::System::Collision(_))));
     let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
         .unwrap()
@@ -510,6 +514,7 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
     let (ribbon_id, ribbon) = imported
         .value
         .features()
+        .iter()
         .find(|(_, feature)| matches!(feature.payload, mp::ActorKind::Ribbon(_)))
         .unwrap();
     let mp::ActorKind::Ribbon(definition) = &ribbon.payload else {
@@ -521,6 +526,7 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
         .value;
     let (_, ribbon) = roundtrip
         .features()
+        .iter()
         .find(|(_, feature)| matches!(feature.payload, mp::ActorKind::Ribbon(_)))
         .unwrap();
     let mp::ActorKind::Ribbon(definition) = &ribbon.payload else {
@@ -546,7 +552,7 @@ fn native_material_edits_affect_rebuilt_output() {
     let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, material) = asset.materials().next().unwrap();
+    let (id, material) = asset.materials().iter().next().unwrap();
     let mut surface = material.surface.clone();
     surface.shader = 42;
     asset
@@ -657,6 +663,7 @@ fn native_physics_shapes_and_body_offsets_are_editable() {
         .value;
     let (system_id, system) = asset
         .systems()
+        .iter()
         .find(|(_, s)| matches!(s, mp::System::Physics(_)))
         .unwrap();
     let mut system = system.clone();
@@ -745,6 +752,7 @@ fn sparse_bone_overrides_use_editable_pose_matrices() {
         .value;
     let (system_id, system) = asset
         .systems()
+        .iter()
         .find(|(_, s)| matches!(s, mp::System::BoneOverrides(_)))
         .unwrap();
     let mut system = system.clone();
@@ -829,6 +837,7 @@ fn static_node_transforms_become_constant_native_curves() {
         .value;
     let id = asset
         .nodes()
+        .iter()
         .find(|(_, node)| node.controls.is_some())
         .unwrap()
         .0;
@@ -868,6 +877,7 @@ fn local_effect_transforms_drive_the_effects_emitted_bone() {
         .value;
     let node = asset
         .features()
+        .iter()
         .find(|(_, f)| matches!(f.payload, mp::ActorKind::Light(_)))
         .unwrap()
         .1
@@ -911,9 +921,9 @@ fn unknown_native_blend_does_not_collide_with_common_transparency() {
     let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let surface = &asset.materials().next().unwrap().1.surface;
+    let surface = &asset.materials().iter().next().unwrap().1.surface;
     assert!(surface.state.blend == mp::values::BlendMode::Unknown(8));
-    let id = asset.nodes().next().unwrap().0;
+    let id = asset.nodes().iter().next().unwrap().0;
     let mut node = asset.node(id).unwrap().clone();
     node.name = Cow::Borrowed("edited");
     asset.edit(|draft| draft.set_node(id, node)).unwrap();
@@ -964,7 +974,7 @@ fn texture_options_keep_unknown_bits_and_reject_unencoded_interpretations() {
     let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let id = asset.textures().next().unwrap().0;
+    let id = asset.textures().iter().next().unwrap().0;
     let texture = asset.texture(id).unwrap();
     assert_eq!(texture.controls.flags.bits(), 0x8000_0000);
     assert_eq!(texture.color_space, sm::ColorSpace::Unspecified);
@@ -999,7 +1009,7 @@ fn replacement_texture_retains_its_separately_declared_filename() {
     let asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let texture = asset.textures().next().unwrap().1;
+    let texture = asset.textures().iter().next().unwrap().1;
     assert_eq!(
         asset.image_resource(texture.resource).unwrap(),
         &sm::M2ImageResource::Replaceable(0x1234)
@@ -1064,7 +1074,7 @@ fn native_alias_keeps_light_programme_on_its_referenced_clip() {
     });
     let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
     let model = &imported.value;
-    let clips = model.clips().collect::<Vec<_>>();
+    let clips = model.clips().iter().collect::<Vec<_>>();
     assert_eq!(clips.len(), 2);
     assert_eq!(clips[1].1.alias(), Some(clips[0].0));
     assert!(clips[1].1.channels().is_empty());
@@ -1101,7 +1111,7 @@ fn zero_duration_global_tracks_are_typed_frozen_clocks_and_roundtrip_without_ret
     let imported = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let clocks: Vec<_> = imported.clocks().map(|(_, clock)| *clock).collect();
+    let clocks: Vec<_> = imported.clocks().iter().map(|(_, clock)| *clock).collect();
     assert_eq!(
         clocks,
         vec![
@@ -1111,7 +1121,7 @@ fn zero_duration_global_tracks_are_typed_frozen_clocks_and_roundtrip_without_ret
             }
         ]
     );
-    let node = imported.nodes().next().unwrap().0;
+    let node = imported.nodes().iter().next().unwrap().0;
     let program = sm::AnimationProgram::compile(&imported);
     for seconds in [-1., 0., 0.5, 100.] {
         let sample = program
@@ -1185,7 +1195,7 @@ fn native_shader_routes_share_repeated_coordinate_animation() {
     let imported = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let surface = &imported.materials().next().unwrap().1.surface;
+    let surface = &imported.materials().iter().next().unwrap().1.surface;
     assert_eq!(
         surface
             .textures
@@ -1218,7 +1228,7 @@ fn native_shader_routes_share_repeated_coordinate_animation() {
     let reread = io::m2::import(&native, &ImportOptions::default())
         .unwrap()
         .value;
-    let surface = &reread.materials().next().unwrap().1.surface;
+    let surface = &reread.materials().iter().next().unwrap().1.surface;
     assert_eq!(
         surface.textures[0].coordinates.transform,
         surface.textures[2].coordinates.transform
@@ -1237,7 +1247,7 @@ fn native_environment_then_t1_exports_the_active_transform_in_slot_zero() {
     let imported = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let surface = &imported.materials().next().unwrap().1.surface;
+    let surface = &imported.materials().iter().next().unwrap().1.surface;
     assert_eq!(surface.textures[0].coordinates.source, -1);
     assert_eq!(surface.textures[1].coordinates.source, 0);
     let native = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
@@ -1259,7 +1269,7 @@ fn native_three_route_programme_uses_third_transform_for_uv1() {
     let imported = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let surface = &imported.materials().next().unwrap().1.surface;
+    let surface = &imported.materials().iter().next().unwrap().1.surface;
     assert_eq!(
         surface
             .textures
@@ -1287,7 +1297,7 @@ fn native_export_rejects_independent_transforms_on_repeated_shader_routes() {
     let mut imported = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, material) = imported.materials().next().unwrap();
+    let (id, material) = imported.materials().iter().next().unwrap();
     let mut surface = material.surface.clone();
     surface.textures[2].coordinates.transform.translation = sm::Animated::constant([99., 0., 0.]);
     imported
@@ -1302,7 +1312,7 @@ fn native_export_rejects_coordinate_sources_incompatible_with_shader_routes() {
     let mut imported = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, material) = imported.materials().next().unwrap();
+    let (id, material) = imported.materials().iter().next().unwrap();
     let mut surface = material.surface.clone();
     surface.textures[2].coordinates.source = 0;
     imported
@@ -1317,7 +1327,7 @@ fn application_guild_palettes_survive_profile_changes_but_require_export_loss_po
     let mut imported = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, material) = imported.materials().next().unwrap();
+    let (id, material) = imported.materials().iter().next().unwrap();
     let mut surface = material.surface.clone();
     assert_eq!(surface.guild_palette, mp::GuildPalette::default());
     surface.guild_palette.background = [0.25, 0.5, 0.75];
@@ -1329,6 +1339,7 @@ fn application_guild_palettes_survive_profile_changes_but_require_export_loss_po
     assert_eq!(
         narrowed
             .materials()
+            .iter()
             .next()
             .unwrap()
             .1
@@ -1359,6 +1370,7 @@ fn application_guild_palettes_survive_profile_changes_but_require_export_loss_po
         roundtrip
             .value
             .materials()
+            .iter()
             .next()
             .unwrap()
             .1

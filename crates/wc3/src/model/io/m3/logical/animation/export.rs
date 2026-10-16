@@ -412,6 +412,7 @@ pub(in crate::model::io::m3::logical) fn write<E: Envelope>(
     }
     let sequences = if model
         .clips()
+        .iter()
         .any(|(_, clip)| clip.controls.legacy_control.is_some())
     {
         append(document, &sequences)?.cast()

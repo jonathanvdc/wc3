@@ -324,7 +324,7 @@ where
                             .collect::<Result<Vec<_>, _>>()?,
                     )
                 } else {
-                    for (index, (_, clip)) in model.clips().enumerate() {
+                    for (index, (_, clip)) in model.clips().iter().enumerate() {
                         leaves.push(
                             clip.events()
                                 .iter()

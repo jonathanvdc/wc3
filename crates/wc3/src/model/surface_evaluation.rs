@@ -24,10 +24,11 @@ impl MeshAppearance {
             .timeline_channels()
             .iter()
             .chain(model.shared_channels())
-            .chain(model.clips().flat_map(|(_, clip)| clip.channels()))
+            .chain(model.clips().iter().flat_map(|(_, clip)| clip.channels()))
             .chain(
                 model
                     .controllers()
+                    .iter()
                     .flat_map(|(_, controller)| &controller.channels),
             )
             .map(|channel| channel.target().clone())

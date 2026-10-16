@@ -183,6 +183,7 @@ fn native_world_clamp_authority_imports_without_texture_sampler_mutation() {
         .widen();
     assert!(model
         .textures()
+        .iter()
         .all(|(_, texture)| texture.sampler == Sampler::default()));
     assert!(texture_requests(&model)
         .iter()

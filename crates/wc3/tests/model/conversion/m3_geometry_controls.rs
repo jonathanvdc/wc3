@@ -65,7 +65,7 @@ fn draw_controls_and_preferred_uv_encoding_survive_geometry_edits() {
         .widen::<sem::profiles::Universal>()
         .try_narrow::<sem::profiles::M3>()
         .unwrap();
-    let (id, mesh) = imported.meshes().next().unwrap();
+    let (id, mesh) = imported.meshes().iter().next().unwrap();
     assert_eq!(
         mesh.controls.as_ref().unwrap().uv_encoding,
         Some(surface::UvEncoding {
@@ -142,6 +142,7 @@ fn draw_controls_and_preferred_uv_encoding_survive_geometry_edits() {
         reread
             .value
             .meshes()
+            .iter()
             .next()
             .unwrap()
             .1
@@ -181,8 +182,8 @@ fn undrawn_regions_retain_definition_binding_and_detail_level() {
     let mut asset = io::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    assert_eq!(asset.instances().count(), 0);
-    let (id, definition) = asset.meshes().next().unwrap();
+    assert_eq!(asset.instances().iter().count(), 0);
+    let (id, definition) = asset.meshes().iter().next().unwrap();
     assert!(definition.skin().is_some());
     let placement = definition
         .controls
@@ -225,10 +226,10 @@ fn undrawn_regions_retain_definition_binding_and_detail_level() {
     let imported = io::m3::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (_, mesh) = imported.meshes().next().unwrap();
+    let (_, mesh) = imported.meshes().iter().next().unwrap();
     assert!(mesh.skin().is_some());
     assert_eq!(mesh.texture_coordinates()[0].get(0), Some([0.5, 0.]));
-    assert_eq!(imported.instances().count(), 0);
+    assert_eq!(imported.instances().iter().count(), 0);
 }
 
 #[test]
@@ -280,6 +281,7 @@ fn unselected_bounds_definitions_are_emitted_without_invented_draws() {
     assert_eq!(
         imported
             .features()
+            .iter()
             .filter(|(_, feature)| matches!(feature.payload, surface::Feature::Extent(_)))
             .count(),
         2
@@ -356,7 +358,14 @@ fn noncanonical_uv_offsets_survive_strict_export_for_drawn_and_undrawn_regions()
         let imported = io::m3::import(&source, &ImportOptions::default())
             .unwrap()
             .value;
-        let coordinates = imported.meshes().next().unwrap().1.texture_coordinates()[0].to_vec();
+        let coordinates = imported
+            .meshes()
+            .iter()
+            .next()
+            .unwrap()
+            .1
+            .texture_coordinates()[0]
+            .to_vec();
         let restored = imported
             .widen::<sem::profiles::Universal>()
             .try_narrow::<M3>()
@@ -388,7 +397,14 @@ fn noncanonical_uv_offsets_survive_strict_export_for_drawn_and_undrawn_regions()
             .unwrap()
             .value;
         assert_eq!(
-            reread.meshes().next().unwrap().1.texture_coordinates()[0].to_vec(),
+            reread
+                .meshes()
+                .iter()
+                .next()
+                .unwrap()
+                .1
+                .texture_coordinates()[0]
+                .to_vec(),
             coordinates
         );
     }
@@ -397,7 +413,7 @@ fn noncanonical_uv_offsets_survive_strict_export_for_drawn_and_undrawn_regions()
 #[test]
 fn nonfinite_preferred_uv_encoding_fails_checked_mesh_edits() {
     let mut asset = asset();
-    let (id, mesh) = asset.meshes().next().unwrap();
+    let (id, mesh) = asset.meshes().iter().next().unwrap();
     let mut mesh = mesh.clone();
     mesh.controls
         .get_or_insert_with(Default::default)
@@ -408,6 +424,7 @@ fn nonfinite_preferred_uv_encoding_fails_checked_mesh_edits() {
     assert!(asset.edit(|builder| builder.set_mesh(id, mesh)).is_err());
     assert!(asset
         .meshes()
+        .iter()
         .next()
         .unwrap()
         .1

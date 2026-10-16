@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 use wc3::model::profiles::{Mdlx, Universal, M2};
 use wc3::model::{
-    Attachment, ChildModel, ImageResource, M2ImageResource, Model, Node, NodeFeature, PathResource,
-    PlacementAppearance, ResourceLocator, Texture,
+    Attachment, ChildModel, ImageResource, M2ImageResource, MdlxImageResource, Model, Node,
+    NodeFeature, PathResource, PlacementAppearance, ResourceLocator, Texture,
 };
 
 #[test]
@@ -152,6 +152,7 @@ fn resource_particle_modes_round_trip_with_present_and_absent_dependencies() {
                     .widen::<Universal>();
                 let details = model
                     .features()
+                    .iter()
                     .find_map(|(_, feature)| {
                         let NodeFeature::Particle(ParticleEmitter::Simulated(value)) =
                             &feature.payload
@@ -187,4 +188,48 @@ fn resource_particle_modes_round_trip_with_present_and_absent_dependencies() {
             }
         }
     }
+}
+
+#[test]
+fn typed_collections_preserve_order_and_reject_foreign_identities() {
+    let mut draft = Model::<Mdlx>::builder("tables");
+    let first = draft.add_node(Node::named("first")).unwrap();
+    let second = draft.add_node(Node::named("second")).unwrap();
+    let image = draft.add_image_resource(MdlxImageResource::Path(b"body.blp".as_slice().into()));
+    let mut foreign = Model::<Mdlx>::builder("foreign");
+    let foreign_node = foreign.add_node(Node::named("foreign")).unwrap();
+    let foreign_image =
+        foreign.add_image_resource(MdlxImageResource::Path(b"body.blp".as_slice().into()));
+    let model = draft.finish().unwrap();
+    assert_eq!(model.nodes().len(), 2);
+    assert_eq!(model.nodes().keys().collect::<Vec<_>>(), [first, second]);
+    assert_eq!(
+        model
+            .nodes()
+            .iter()
+            .rev()
+            .map(|(id, _)| id)
+            .collect::<Vec<_>>(),
+        [second, first]
+    );
+    assert_eq!(
+        model
+            .nodes()
+            .values()
+            .map(|node| node.name.as_ref())
+            .collect::<Vec<_>>(),
+        ["first", "second"]
+    );
+    assert!(model.nodes().get(foreign_node).is_none());
+    assert!(!model.nodes().contains_key(foreign_node));
+    assert!(model.dependencies().images().get(foreign_image).is_none());
+    assert!(model.meshes().is_empty());
+    assert!(model.dependencies().physics().is_empty());
+    let nodes: Vec<_> = model.nodes().into_iter().map(|(id, _)| id).collect();
+    assert_eq!(nodes, [first, second]);
+
+    let model = model.widen::<Universal>().try_narrow::<Mdlx>().unwrap();
+    assert_eq!(model.nodes().keys().collect::<Vec<_>>(), nodes);
+    assert_eq!(model.nodes().get(first).unwrap().name, "first");
+    assert!(model.dependencies().images().contains_key(image));
 }

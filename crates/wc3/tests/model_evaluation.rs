@@ -27,7 +27,7 @@ fn building() -> Model<'static> {
 #[test]
 fn standing_snapshot_retains_bindings_and_supports_editable_geometry_without_images() {
     let mut model = building();
-    let root = model.nodes().next().unwrap().0;
+    let root = model.nodes().iter().next().unwrap().0;
     model
         .edit(|draft| {
             draft.add_timeline_channel(Channel::Vector3(Track {
@@ -274,10 +274,10 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
     use wc3::model::profiles::mdlx::properties::Layer;
     use wc3::model::{Animated, SurfaceColor, TextureTransform};
     let mut model = building();
-    let material_id = model.materials().next().unwrap().0;
+    let material_id = model.materials().iter().next().unwrap().0;
     let opacity = Layer(0).opacity().bind(material_id).widen();
     let selection = Layer(0).texture().bind(material_id).widen();
-    let texture = model.textures().next().unwrap().0;
+    let texture = model.textures().iter().next().unwrap().0;
     let mut material = model.material(material_id).unwrap().clone();
     let MaterialSurface::Layered(surface) = &mut material.surface else {
         panic!("layered fixture")

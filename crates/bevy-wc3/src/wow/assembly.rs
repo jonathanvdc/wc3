@@ -86,6 +86,7 @@ fn source(
         .transpose()?;
     let textures = model
         .textures()
+        .iter()
         .filter_map(|(id, texture)| {
             match model
                 .image_resource(texture.resource)
@@ -120,6 +121,7 @@ fn bind_part(
         EquipmentBinding::Attachment(identity) => {
             let points: Vec<_> = body
                 .features()
+                .iter()
                 .filter_map(|(id, feature)| {
                     let point = match &feature.payload {
                         NodeFeature::Attachment(value) => value.socket(),

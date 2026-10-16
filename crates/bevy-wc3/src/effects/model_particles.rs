@@ -133,6 +133,7 @@ impl RuntimeModelParticles {
         let mut result = Self {
             clips: model
                 .clips()
+                .iter()
                 .map(|(id, c)| (id, (c.duration().as_seconds(), c.is_looping())))
                 .collect(),
             gravity_axis: basis(model).map_or(Vec3::Z, |basis| {

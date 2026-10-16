@@ -45,7 +45,7 @@ pub(super) fn write<'view, 'source: 'view, E: Envelope>(
         animations: ids,
     } = references;
     let layout = Layout {
-        uv_mask: model.meshes().fold(0u8, |mask, (_, mesh)| {
+        uv_mask: model.meshes().iter().fold(0u8, |mask, (_, mesh)| {
             mask | mesh
                 .texture_coordinates()
                 .iter()
@@ -54,10 +54,11 @@ pub(super) fn write<'view, 'source: 'view, E: Envelope>(
                     mask | if values.is_empty() { 0 } else { 1 << channel }
                 })
         }),
-        color: model.meshes().any(|(_, m)| m.colors().is_some()),
+        color: model.meshes().iter().any(|(_, m)| m.colors().is_some()),
     };
     let first_lod = model
         .instances()
+        .iter()
         .map(|(_, value)| value.lod.unwrap_or(0))
         .min();
     let mut region_map = BTreeMap::<MeshId, Vec<u32>>::new();

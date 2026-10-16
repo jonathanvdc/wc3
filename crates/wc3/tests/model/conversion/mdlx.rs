@@ -133,7 +133,7 @@ fn complete_native_surface_is_an_editable_logical_payload() {
     let source = source();
     let mut imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
-    let (id, material) = graph.materials().next().unwrap();
+    let (id, material) = graph.materials().iter().next().unwrap();
     let mut material = material.surface.clone();
     material.layers[0].opacity.default = 0.25;
     imported
@@ -162,6 +162,7 @@ fn complete_native_emitter_is_an_editable_logical_feature() {
     let graph = &imported.value;
     let (id, mut feature) = graph
         .features()
+        .iter()
         .find(|(_, feature)| matches!(feature.payload, profile::Node::AtlasParticles(_)))
         .map(|(id, feature)| (id, feature.payload.clone()))
         .unwrap();
@@ -218,7 +219,7 @@ fn unknown_blocks_are_rejected_or_dropped_before_authoring_edits() {
         .iter()
         .any(|chunk| matches!(chunk, mdlx::chunks::ModelChunk::Unknown(_))));
     let graph = &imported.value;
-    let (id, mesh) = graph.meshes().next().unwrap();
+    let (id, mesh) = graph.meshes().iter().next().unwrap();
     let mut mesh = mesh.clone();
     mesh.geometry = mesh
         .geometry
@@ -327,7 +328,7 @@ fn ambient_illumination_and_nonlooping_clips_preserve_behavior() {
         .flags
         .set_non_looping(true);
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
-    assert!(!imported.value.clips().next().unwrap().1.is_looping());
+    assert!(!imported.value.clips().iter().next().unwrap().1.is_looping());
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -350,7 +351,7 @@ fn owned_import_survives_native_document_and_input_drop() {
             .value
     };
     assert_eq!(imported.name(), "Quad");
-    let positions = imported.meshes().next().unwrap().1.positions();
+    let positions = imported.meshes().iter().next().unwrap().1.positions();
     assert_eq!(positions.len(), 4);
     assert!(positions.is_owned());
     let output = io::mdlx::plan::<mdlx::V800>(&imported, &ExportOptions::default())
@@ -372,7 +373,7 @@ fn borrowed_import_retains_native_vertex_storage() {
     let imported = io::mdlx::import(&document, &ImportOptions::default())
         .unwrap()
         .value;
-    let positions = imported.meshes().next().unwrap().1.positions();
+    let positions = imported.meshes().iter().next().unwrap().1.positions();
     assert!(!positions.is_owned());
     assert_eq!(
         positions.as_bytes().as_ptr(),
@@ -395,11 +396,25 @@ fn direct_decoders_produce_independent_semantic_models() {
     drop(native);
     assert_eq!(from_text.name(), from_bytes.name());
     assert_eq!(
-        from_text.meshes().next().unwrap().1.positions(),
-        from_bytes.meshes().next().unwrap().1.positions()
+        from_text.meshes().iter().next().unwrap().1.positions(),
+        from_bytes.meshes().iter().next().unwrap().1.positions()
     );
-    assert!(from_text.meshes().next().unwrap().1.positions().is_owned());
-    assert!(from_bytes.meshes().next().unwrap().1.positions().is_owned());
+    assert!(from_text
+        .meshes()
+        .iter()
+        .next()
+        .unwrap()
+        .1
+        .positions()
+        .is_owned());
+    assert!(from_bytes
+        .meshes()
+        .iter()
+        .next()
+        .unwrap()
+        .1
+        .positions()
+        .is_owned());
 }
 
 #[test]

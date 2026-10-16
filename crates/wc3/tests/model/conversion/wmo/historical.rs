@@ -150,6 +150,7 @@ fn alpha_direct_geometry_and_lighting_controls_survive_edits() {
     let model = &asset;
     let (id, mut mesh) = model
         .meshes()
+        .iter()
         .next()
         .map(|(id, mesh)| (id, mesh.clone()))
         .unwrap();
@@ -238,7 +239,7 @@ fn historical_multiple_placements_relocate_lighting_windows() {
         .value;
     asset
         .edit(|builder| {
-            let (system, world) = builder.model().systems().next().unwrap();
+            let (system, world) = builder.model().systems().iter().next().unwrap();
             let mut world = world.clone();
             let first = world.groups[0].instances[0];
             let mut placement = builder.model().instance(first).unwrap().clone();
@@ -271,7 +272,7 @@ fn historical_multiple_placements_relocate_lighting_windows() {
         .execute()
         .unwrap()
         .value;
-    assert_eq!(asset.instances().count(), 2);
+    assert_eq!(asset.instances().iter().count(), 2);
     assert_eq!(
         encoded.group(0).unwrap().header.interior_batches[0].vertex_count,
         6

@@ -82,7 +82,7 @@ fn warcraft_layer_additive_selectors_share_weighted_rgb_operation_and_roundtrip_
         ),
     ] {
         let model = layer_model(selector);
-        let blend = model.materials().next().unwrap().1.surface.layers[0]
+        let blend = model.materials().iter().next().unwrap().1.surface.layers[0]
             .state
             .blend;
         assert_eq!(blend, layered::Blend::AdditiveAlpha(encoding));
@@ -103,7 +103,7 @@ fn warcraft_layer_additive_selectors_share_weighted_rgb_operation_and_roundtrip_
 #[test]
 fn unweighted_semantic_addition_has_no_exact_warcraft_layer_encoding() {
     let mut model = layer_model("Additive");
-    let (material, source) = model.materials().next().unwrap();
+    let (material, source) = model.materials().iter().next().unwrap();
     let mut surface = source.surface.clone();
     surface.layers[0].state.blend = layered::Blend::Additive;
     model
@@ -131,7 +131,7 @@ fn atlas_additive_preserves_its_encoding_and_rejects_material_only_selector() {
     let mut model = semantic_mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let (id, feature) = model.features().next().unwrap();
+    let (id, feature) = model.features().iter().next().unwrap();
     let profile::Node::AtlasParticles(particle) = &feature.payload else {
         panic!("atlas particle lost")
     };

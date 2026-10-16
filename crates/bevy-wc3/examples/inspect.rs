@@ -10,10 +10,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         let model = semantic::decode(&read(&path)?)?;
         println!(
             "{path}: {} meshes, {} materials, {} nodes, {} clips",
-            model.meshes().count(),
-            model.materials().count(),
-            model.nodes().count(),
-            model.clips().count(),
+            model.meshes().iter().count(),
+            model.materials().iter().count(),
+            model.nodes().iter().count(),
+            model.clips().iter().count(),
         );
     }
     Ok(())

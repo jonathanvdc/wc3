@@ -21,7 +21,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     asset.validate()?;
     let model = asset;
     let mut context = Context::export(options);
-    if model.systems().next().is_some() {
+    if model.systems().iter().next().is_some() {
         context.unsupported(
             "model.systems",
             "Warcraft III cannot encode the authored global system without semantic translation",
@@ -137,6 +137,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     result.set_materials(materials);
     let node_ids: BTreeMap<NodeId, u32> = model
         .nodes()
+        .iter()
         .enumerate()
         .map(|(index, (id, _))| (id, index as u32))
         .collect();

@@ -19,7 +19,7 @@ fn native_widening_and_narrowing_preserves_identities_and_borrowed_geometry() {
         .unwrap()
         .value;
     let model_id = asset.id();
-    let mesh_id = asset.meshes().next().unwrap().0;
+    let mesh_id = asset.meshes().iter().next().unwrap().0;
     let positions = asset.mesh(mesh_id).unwrap().positions().clone();
     assert!(!positions.is_owned());
 

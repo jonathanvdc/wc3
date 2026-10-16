@@ -89,6 +89,7 @@ pub(super) fn write<'a, V: FormatVersion>(
             encoder
                 .model
                 .texture_transforms()
+                .iter()
                 .position(|(key, _)| key == id)
                 .expect("validated transform") as u32
         });

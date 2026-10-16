@@ -168,6 +168,7 @@ impl<'data, P: Profile> Model<'data, P> {
         Ok(SampledAnimation {
             clocks: Cow::Owned(
                 self.clocks()
+                    .iter()
                     .map(|(id, clock)| (id, clock.period()))
                     .collect(),
             ),
@@ -507,6 +508,7 @@ impl<P: Profile> AnimationProgram<P> {
         Self {
             clocks: model
                 .clocks()
+                .iter()
                 .map(|(id, clock)| (id, clock.period()))
                 .collect(),
             global: IndexedChannels::new(
@@ -520,6 +522,7 @@ impl<P: Profile> AnimationProgram<P> {
             ),
             clips: model
                 .clips()
+                .iter()
                 .map(|(id, clip)| {
                     (
                         id,
@@ -536,6 +539,7 @@ impl<P: Profile> AnimationProgram<P> {
                 .collect(),
             controllers: model
                 .controllers()
+                .iter()
                 .map(|(id, controller)| {
                     (
                         id,

@@ -25,6 +25,7 @@ impl Encoder<'_, '_, '_> {
         let model = self.model;
         for channel in model
             .clips()
+            .iter()
             .flat_map(|(id, _)| {
                 model
                     .clip_program(id)
@@ -120,6 +121,7 @@ impl Encoder<'_, '_, '_> {
         let channels = self
             .model
             .clips()
+            .iter()
             .flat_map(|(id, _)| {
                 self.model
                     .clip_program(id)

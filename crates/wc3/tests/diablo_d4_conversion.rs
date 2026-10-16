@@ -128,7 +128,7 @@ fn declared_geometry_material_slots_and_independent_sphere_round_trip() {
     assert!(imported.report.issues.is_empty());
     let options = ExportOptions::default();
     let model = &imported.value;
-    let (_, mesh) = model.meshes().next().unwrap();
+    let (_, mesh) = model.meshes().iter().next().unwrap();
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
     assert_eq!(mesh.texture_coordinates()[0].get(2), Some([0., 1.]));
     assert!(matches!(mesh.geometry.influences(), InfluenceRows::None));
@@ -154,7 +154,7 @@ fn declared_geometry_material_slots_and_independent_sphere_round_trip() {
         convert::import_with_layouts(&decoded, &layouts, &ImportOptions::default()).unwrap();
     let model = &second.value;
     assert_eq!(
-        model.meshes().next().unwrap().1.positions().get(1),
+        model.meshes().iter().next().unwrap().1.positions().get(1),
         Some([1., 0., 0.])
     );
 }
@@ -270,6 +270,7 @@ fn segment_palettes_map_actual_bones_and_rebuild_inverse_skinning_bindings() {
     let model = &imported.value;
     let row = model
         .meshes()
+        .iter()
         .next()
         .unwrap()
         .1

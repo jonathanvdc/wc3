@@ -153,7 +153,7 @@ fn exact_property_narrowing_accepts_shared_fields_and_rejects_different_semantic
         .clone()
         .widen::<Universal>();
     assert!(target.try_narrow::<M2>().is_ok());
-    let feature = model.features().next().unwrap().0;
+    let feature = model.features().iter().next().unwrap().0;
     assert!(light::VISIBILITY
         .bind(feature)
         .widen::<Universal>()

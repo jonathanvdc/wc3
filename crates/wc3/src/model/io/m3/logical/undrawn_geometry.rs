@@ -27,7 +27,11 @@ pub(super) fn write(
         let M3Geometry::Display(_) = &mesh.geometry else {
             continue;
         };
-        if graph.instances().any(|(_, instance)| instance.mesh == id) {
+        if graph
+            .instances()
+            .iter()
+            .any(|(_, instance)| instance.mesh == id)
+        {
             continue;
         }
         let controls = mesh.controls.as_ref();

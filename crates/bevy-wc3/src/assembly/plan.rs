@@ -14,6 +14,7 @@ fn source_model<'a, 'data>(
 fn validate_source(source: &Source, model: &Model<'_>) -> Result<(), ModelError> {
     let draws: HashSet<_> = model
         .instances()
+        .iter()
         .flat_map(|(_, instance)| instance.draws.iter().map(|d| d.id()))
         .collect();
     if source
@@ -49,6 +50,7 @@ fn union(a: &DrawSelection, b: &DrawSelection, model: &Model<'_>) -> DrawSelecti
     // that instance. Whole-instance native geometry is selected by visibility.
     let draws = model
         .instances()
+        .iter()
         .flat_map(|(id, instance)| {
             instance
                 .draws

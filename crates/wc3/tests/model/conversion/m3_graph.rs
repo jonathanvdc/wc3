@@ -40,7 +40,11 @@ fn source() -> m3::Bundle<'static> {
 fn imported_typed_graph_edits_rebuild_native_bone_fields() {
     let source = source();
     let mut imported: Model<'_, M3> = io::m3::import(&source, &Default::default()).unwrap().value;
-    let (id, node) = imported.nodes().find(|(_, node)| node.name == "b").unwrap();
+    let (id, node) = imported
+        .nodes()
+        .iter()
+        .find(|(_, node)| node.name == "b")
+        .unwrap();
     assert!(matches!(node.name, std::borrow::Cow::Borrowed(_)));
     let mut node = node.clone();
     node.transform.translation = [3., 4., 5.];
@@ -68,6 +72,7 @@ fn imported_typed_graph_edits_rebuild_native_bone_fields() {
     let (_, node) = reread
         .value
         .nodes()
+        .iter()
         .find(|(_, node)| node.name == "b")
         .unwrap();
     assert_eq!(node.transform.translation, [3., 4., 5.]);
@@ -76,7 +81,11 @@ fn imported_typed_graph_edits_rebuild_native_bone_fields() {
 fn complete_camera_optics_rebuild_without_editable_document_backing() {
     let source = source();
     let mut imported = io::m3::import(&source, &Default::default()).unwrap().value;
-    let (id, _) = imported.nodes().find(|(_, node)| node.name == "b").unwrap();
+    let (id, _) = imported
+        .nodes()
+        .iter()
+        .find(|(_, node)| node.name == "b")
+        .unwrap();
     let constant = |value| surface::Property {
         initial: value,
         reset: value,
@@ -173,6 +182,7 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
     let mut imported = io::m3::import(&source, &Default::default()).unwrap().value;
     let (copy_id, feature) = imported
         .features()
+        .iter()
         .find(|(_, feature)| matches!(feature.payload, surface::Feature::ParticleCopy(_)))
         .unwrap();
     let mut payload = feature.payload.clone();
@@ -216,6 +226,7 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
         reread
             .value
             .features()
+            .iter()
             .filter(|(_, feature)| matches!(feature.payload, surface::Feature::Particle(_)))
             .count(),
         1
@@ -224,6 +235,7 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
         reread
             .value
             .features()
+            .iter()
             .filter(|(_, feature)| matches!(feature.payload, surface::Feature::ParticleCopy(_)))
             .count(),
         1
@@ -252,7 +264,7 @@ fn every_particle_record_revision_maps_through_logical_fields() {
             let imported=io::m3::import(&source,&Default::default()).unwrap().value;
             let output=io::m3::plan::<m3::StarCraft2>(&imported,&Default::default()).unwrap().execute().unwrap().value;
             let reread=io::m3::import(&output,&Default::default()).unwrap();
-            assert_eq!(reread.value.features().filter(|(_,feature)|matches!(feature.payload,surface::Feature::Particle(_))).count(),1);
+            assert_eq!(reread.value.features().iter().filter(|(_,feature)|matches!(feature.payload,surface::Feature::Particle(_))).count(),1);
         }};
     }
     roundtrip!(nr::V10, deprecated_noise_smoothness = 0.375);
@@ -324,6 +336,7 @@ fn static_collision_streams_are_materialized_and_independently_editable() {
         .widen::<Universal>();
     let collision = widened
         .meshes()
+        .iter()
         .find(|(_, mesh)| mesh.geometry.kind() == GeometryKind::Collision)
         .unwrap()
         .0;
@@ -344,7 +357,7 @@ fn static_collision_streams_are_materialized_and_independently_editable() {
         })
         .unwrap();
     let mut imported = widened.try_narrow::<M3>().unwrap();
-    let (_, surface::System::Collision(system)) = imported.systems().next().unwrap() else {
+    let (_, surface::System::Collision(system)) = imported.systems().iter().next().unwrap() else {
         panic!("expected collision world")
     };
     let id = system.mesh;
@@ -410,6 +423,7 @@ fn joint_relationships_rebuild_from_edited_logical_controls() {
     let mut asset = io::m3::import(&source, &Default::default()).unwrap().value;
     let (id, system) = asset
         .systems()
+        .iter()
         .find(|(_, system)| matches!(system, surface::System::Physics(_)))
         .unwrap();
     let mut system = system.clone();
@@ -463,6 +477,7 @@ fn body_mass_and_dynamic_defaults_are_logical_authoring_values() {
     let mut asset = io::m3::import(&source, &Default::default()).unwrap().value;
     let (id, system) = asset
         .systems()
+        .iter()
         .find(|(_, system)| matches!(system, surface::System::Physics(_)))
         .unwrap();
     let mut system = system.clone();
@@ -549,6 +564,7 @@ fn ordinary_parent_local_bones_preserve_bind_matrices_and_unresolved_flag_bits()
     let imported = io::m3::import(&source, &Default::default()).unwrap().value;
     let nodes: Vec<_> = imported
         .nodes()
+        .iter()
         .filter(|(_, node)| matches!(node.controls, surface::NodeRole::Bone(_)))
         .collect();
     assert_eq!(nodes[0].1.inheritance, Inheritance::default());
@@ -559,7 +575,7 @@ fn ordinary_parent_local_bones_preserve_bind_matrices_and_unresolved_flag_bits()
     assert_eq!(nodes[0].1.transform.scale, [2., 3., 4.]);
     assert_eq!(nodes[1].1.transform.translation, [1., 2., 3.]);
     assert_eq!(nodes[1].1.transform.scale, [0.5, 1., 2.]);
-    let (_, skin) = imported.skins().next().unwrap();
+    let (_, skin) = imported.skins().iter().next().unwrap();
     assert_eq!(skin.inverse_bind().get(0), Some(binds[0]));
     assert_eq!(skin.inverse_bind().get(1), Some(binds[1]));
     let output = io::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
@@ -580,7 +596,7 @@ fn ordinary_parent_local_bones_preserve_bind_matrices_and_unresolved_flag_bits()
 fn selective_semantic_inheritance_requires_explicit_m3_export_loss() {
     let source = source();
     let mut imported = io::m3::import(&source, &Default::default()).unwrap().value;
-    let (id, node) = imported.nodes().next().unwrap();
+    let (id, node) = imported.nodes().iter().next().unwrap();
     let mut node = node.clone();
     node.inheritance.scale = false;
     imported.edit(|draft| draft.set_node(id, node)).unwrap();

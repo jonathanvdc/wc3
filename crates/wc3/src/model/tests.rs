@@ -25,6 +25,7 @@ fn forward_parents_are_resolved_and_cycles_rejected() {
     let mut model = builder.finish().unwrap();
     let child = model
         .nodes()
+        .iter()
         .find(|(_, node)| node.name == "child")
         .unwrap()
         .0;
