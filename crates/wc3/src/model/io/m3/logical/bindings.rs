@@ -148,7 +148,7 @@ impl Bind for surface::Reflection {
 }
 impl Bind for surface::Standard {
     fn bind(&mut self, owner: OwnerId, path: &FieldPath, bindings: &mut Bindings) {
-        if let Some(value) = &mut self.diffuse.input {
+        if let Some(value) = &mut self.diffuse {
             value.bind(owner, &path.child(Field::DiffuseLayer), bindings);
         }
         if let Some(value) = &mut self.decal_layer {

@@ -1,10 +1,11 @@
-//! Capture an MDX or MDL offscreen at fixed animation times.
+//! Capture a native model offscreen at fixed animation times.
 //! Run `cargo run -p bevy-wc3 --example capture -- --help` for options.
 use bevy::app::PluginsState;
 use bevy::asset::{AssetPlugin, LoadState, RecursiveDependencyLoadState};
 use bevy::camera::{RenderTarget, ShadowLodOrigin};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::Tonemapping;
+use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
@@ -440,13 +441,18 @@ fn replace_with_baked_pose(
         let Some(material) = part.material else {
             continue;
         };
+        let casts_shadows = material.extension.casts_shadows();
+        let receives_shadows = material.extension.receives_shadows();
         let mesh = world.resource_mut::<Assets<Mesh>>().add(part.mesh);
         let material = world.resource_mut::<Assets<ModelMaterial>>().add(material);
-        entities.push(
-            world
-                .spawn((Mesh3d(mesh), MeshMaterial3d(material), Transform::IDENTITY))
-                .id(),
-        );
+        let mut entity = world.spawn((Mesh3d(mesh), MeshMaterial3d(material), Transform::IDENTITY));
+        if !casts_shadows {
+            entity.insert(NotShadowCaster);
+        }
+        if !receives_shadows {
+            entity.insert(NotShadowReceiver);
+        }
+        entities.push(entity.id());
     }
     world.entity_mut(root).insert(Visibility::Hidden);
     Ok(())
@@ -915,6 +921,9 @@ fn check_deadline(deadline: Instant, operation: &str) -> CaptureResult<()> {
 fn step(app: &mut App, dt: Duration) -> CaptureResult<()> {
     *app.world_mut().resource_mut::<TimeUpdateStrategy>() = TimeUpdateStrategy::ManualDuration(dt);
     app.update();
+    if let Some(exit) = app.should_exit() {
+        return Err(format!("render application exited before capture completed: {exit:?}").into());
+    }
     let cache = app.sub_app(RenderApp).world().resource::<PipelineCache>();
     for pipeline in cache.pipelines() {
         if let CachedPipelineState::Err(error) = &pipeline.state {

@@ -255,8 +255,10 @@ fn m3_normal_and_diffuse_uses_of_one_image_select_distinct_interpretations() {
     let id = builder.add_texture(Texture::file("shared.png")).unwrap();
     let mut layer = programmed::TextureLayer::default();
     layer.binding.image = Some(id);
-    let mut standard = programmed::Standard::default();
-    standard.diffuse.input = Some(layer.clone());
+    let mut standard = programmed::Standard {
+        diffuse: Some(layer.clone()),
+        ..Default::default()
+    };
     standard.normals.base = Some(layer);
     let material = builder
         .add_material(Material {
@@ -408,4 +410,98 @@ fn live_guild_palette_updates_uniforms_without_changing_pipeline_identity() {
         }
         material.set_guild_palette(GuildPalette::default()).unwrap();
     }
+}
+
+#[test]
+fn nested_composites_expand_ordered_passes_and_multiply_opacity_once() {
+    let mut builder = ModelBuilder::<Universal>::new("nested composite");
+    let leaf = builder
+        .add_material(Material {
+            name: "leaf".into(),
+            surface: SurfaceSet::Programmed(Box::new(programmed::Material::Standard(
+                Box::default(),
+            ))),
+        })
+        .unwrap();
+    let inner = builder
+        .add_material(Material {
+            name: "inner".into(),
+            surface: SurfaceSet::Programmed(Box::new(programmed::Material::Composite(Box::new(
+                programmed::Composite {
+                    priority: 3,
+                    sections: vec![programmed::CompositeSection {
+                        material: leaf,
+                        map_multiplier: programmed::Property {
+                            initial: 0.5,
+                            ..Default::default()
+                        },
+                    }],
+                },
+            )))),
+        })
+        .unwrap();
+    let outer = builder
+        .add_material(Material {
+            name: "outer".into(),
+            surface: SurfaceSet::Programmed(Box::new(programmed::Material::Composite(Box::new(
+                programmed::Composite {
+                    priority: 7,
+                    sections: vec![
+                        programmed::CompositeSection {
+                            material: inner,
+                            map_multiplier: programmed::Property {
+                                initial: 0.25,
+                                ..Default::default()
+                            },
+                        },
+                        programmed::CompositeSection {
+                            material: leaf,
+                            map_multiplier: programmed::Property {
+                                initial: 1.,
+                                ..Default::default()
+                            },
+                        },
+                    ],
+                },
+            )))),
+        })
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let passes =
+        compile_material_with_images(&model, outer, Arc::new(TextureImages::default())).unwrap();
+    assert_eq!(passes.len(), 2);
+    assert_eq!(passes[0].material.base_color.alpha(), 0.125);
+    assert_eq!(passes[0].material.alpha_mode, AlphaMode::Blend);
+    assert_eq!(passes[1].material.base_color.alpha(), 1.);
+    assert_eq!(passes[1].material.alpha_mode, AlphaMode::Opaque);
+    assert!(passes.iter().all(|pass| pass.material.depth_bias == 7.));
+    let sample = model.animation_sample(AnimationSample::default()).unwrap();
+    let mut passes = passes.into_iter();
+    let pass = passes.next().unwrap();
+    let animation =
+        pass.animation
+            .with_mesh(pass.material.base_color, pass.material.alpha_mode, None);
+    let mut material = ModelMaterial {
+        base: pass.material,
+        extension: pass.state,
+    };
+    animation.apply_to_material(&sample, &mut material);
+    assert_eq!(material.base.base_color.alpha(), 0.125);
+    assert!(!animation.apply_to_material(&sample, &mut material));
+}
+
+#[test]
+fn programmed_shader_family_is_static_and_uniform_edits_reuse_its_pipeline() {
+    let ordinary = ModelMaterialExtension::default();
+    let ordinary_key = ModelMaterialKey::from(&ordinary);
+    assert!(!ordinary_key.programmed);
+    let mut standard = ordinary;
+    standard.programmed.settings.x = 1;
+    let standard_key = ModelMaterialKey::from(&standard);
+    assert!(standard_key.programmed);
+    assert_ne!(ordinary_key, standard_key);
+    standard.programmed.diffuse_team = Vec4::new(0.2, 0.4, 0.8, 1.);
+    standard.programmed.layers[0].controls.z = 0.25;
+    standard.enable_effect_color();
+    assert_eq!(ModelMaterialKey::from(&standard), standard_key);
 }

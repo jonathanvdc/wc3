@@ -9,8 +9,7 @@ use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::m3::logical::GraphBuilder;
 use crate::model::ExplicitBinding;
 use crate::model::{
-    profiles::m3 as surface, Billboard, Inheritance, Node, NodeId, Property, Quaternion, Skin,
-    Transform,
+    profiles::m3 as surface, Billboard, Node, NodeId, Property, Quaternion, Skin, Transform,
 };
 use native::Envelope;
 use std::array::from_fn;
@@ -60,11 +59,8 @@ pub(super) fn read<'a, E: Envelope>(
                     scale: bone.scale.initial_value,
                     ..Transform::default()
                 };
-                node.inheritance = Inheritance {
-                    translation: bone.flags.inherit_translation(),
-                    rotation: bone.flags.inherit_rotation(),
-                    scale: bone.flags.inherit_scale(),
-                };
+                // Native zero-bit bones use ordinary parent-local TRS composition.
+                // The legacy low-bit names do not establish selective inheritance.
                 node.billboard = if bone.flags.billboard1() {
                     Billboard::Spherical
                 } else {
@@ -75,7 +71,7 @@ pub(super) fn read<'a, E: Envelope>(
                 batching.binding = Some(surface::properties::BATCHING.bind(id).widen());
                 let payload = surface::BoneControls {
                     source_id: i64::from(bone.id),
-                    extra_flags: surface::values::BoneFlags(bone.flags.bits() & !0x17),
+                    extra_flags: surface::values::BoneFlags(bone.flags.bits() & !0x10),
                     reserved: bone.padding,
                     position: control(anim(bone.position), id.translation()),
                     rotation: control(

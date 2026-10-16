@@ -82,7 +82,7 @@ pub use features::{
 };
 pub use instances::{ModelInstance, ModelInstanceError, ModelRebind, ModelSource};
 pub use lod::{Lod, LodOverride, LodSettings, LodState};
-pub use material::{ModelMaterial, ModelMaterialExtension};
+pub use material::{ModelMaterial, ModelMaterialExtension, TeamColors};
 pub use physics::{PhysicsBodyInfo, PhysicsFrame, PhysicsSimulation};
 pub use placements::PlacementSpace;
 pub use plugin::Wc3BevyPlugin;

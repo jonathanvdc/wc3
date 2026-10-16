@@ -227,10 +227,10 @@ and runtime as application loading.
 Native loading preserves native-family vocabulary rather than promising the same
 shader coverage for every family. MDLX common layers and effects, M2 common surfaces
 and age-driven sprites, WMO groups/layered surfaces/vertex lighting/liquid grids, M3 common
-surfaces (including packed normals and constrained AO/specular), lights and selected programmes, and known Diablo roles each have separate
+Standard layers and composite passes, lights and selected programmes, and known Diablo roles each have separate
 interpretation limits. Native loading, generic geometry, and basic surface
 interpretation are separate capabilities from full game-specific rendering. M2 illumination/constant programmes and the modern six-binding guild layout, specialized WMO terrain/window/LOD and extended
-combiners, programmed M3 surfaces, external
+combiners, specialized M3 families and advanced layer controls, external
 Diablo shaders, and external effect programmes require additional interpreters.
 These gaps appear in model diagnostics.
 

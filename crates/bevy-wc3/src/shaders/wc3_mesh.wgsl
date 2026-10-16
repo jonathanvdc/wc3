@@ -58,6 +58,9 @@ struct Vertex {
 #ifdef WORLD_LAYER_ALPHA
     @location(11) second_color: vec4<f32>,
 #endif
+#ifdef VERTEX_UVS_D
+    @location(12) uv_d: vec2<f32>,
+#endif
 };
 // WC3 END: vertex input.
 
@@ -154,6 +157,9 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 #endif
 #ifdef VERTEX_UVS_C
     out.uv_c = vertex.uv_c;
+#endif
+#ifdef VERTEX_UVS_D
+    out.uv_d = vertex.uv_d;
 #endif
 #ifdef WORLD_LAYER_ALPHA
     out.world_layer_alpha = vertex.second_color.a;

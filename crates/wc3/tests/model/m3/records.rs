@@ -780,13 +780,14 @@ fn selectors_and_flag_edits_preserve_unrecognized_wire_values() {
 
     let mut flags = MaterialFlags(0x8000_0000);
     flags.set_unfogged(true);
-    flags.set_depth_fog(true);
-    assert_eq!(flags.bits(), 0x8000_2004);
+    flags.set_normal_blend(true);
+    flags.set_normal_blend2(true);
+    assert_eq!(flags.bits(), 0x8800_2004);
     flags.set_unfogged(false);
-    assert_eq!(flags.bits(), 0x8000_2000);
+    assert_eq!(flags.bits(), 0x8800_0004);
     let mut output = Encoder::<Md34>::new();
     flags.write(&mut output).unwrap();
-    assert_eq!(output.finish(), 0x8000_2000u32.to_le_bytes());
+    assert_eq!(output.finish(), 0x8800_0004u32.to_le_bytes());
 }
 
 #[test]

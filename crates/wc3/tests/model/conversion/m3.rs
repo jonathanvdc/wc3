@@ -174,6 +174,10 @@ fn standard_controls_remain_active_after_geometry_edit() {
     let surface::Material::Standard(standard) = &mut material.surface else {
         unreachable!()
     };
+    standard.layer_blend = surface::values::LayerBlendOp::Lerp;
+    standard.state.rasterization.flags.set_normal_blend(true);
+    standard.state.rasterization.flags.set_normal_blend2(true);
+    standard.state.rasterization.flags.set_unfogged(true);
     standard.specular.parameters.exponent = 17.;
     standard.state.ordering = -3;
     asset
@@ -193,6 +197,10 @@ fn standard_controls_remain_active_after_geometry_edit() {
         .get(0)
         .unwrap()
         .unwrap();
+    assert_eq!(material.layer_blend_mode.raw(), 3);
+    assert!(material.flags.normal_blend());
+    assert!(material.flags.normal_blend2());
+    assert!(material.flags.unfogged());
     assert_eq!(material.specular_exponent, 17.);
     assert_eq!(material.priority, -3);
 }

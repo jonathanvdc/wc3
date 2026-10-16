@@ -557,8 +557,8 @@ bitfield! {
     pub vertex_color, set_vertex_color: 0;
     /// Returns or changes the vertex alpha control.
     pub vertex_alpha, set_vertex_alpha: 1;
-    /// Returns or changes the unfogged control.
-    pub unfogged, set_unfogged: 2;
+    /// Enables normal blending in standard material revision 19 and later.
+    pub normal_blend, set_normal_blend: 2;
     /// Returns or changes the two sided control.
     pub two_sided, set_two_sided: 3;
     /// Returns or changes the unshaded control.
@@ -577,8 +577,8 @@ bitfield! {
     pub simulate_roughness, set_simulate_roughness: 11;
     /// Returns or changes the pixel forward lighting control.
     pub pixel_forward_lighting, set_pixel_forward_lighting: 12;
-    /// Returns or changes the depth fog control.
-    pub depth_fog, set_depth_fog: 13;
+    /// Returns or changes the unfogged control.
+    pub unfogged, set_unfogged: 13;
     /// Returns or changes the transparent shadows control.
     pub transparent_shadows, set_transparent_shadows: 14;
     /// Returns or changes the decal lighting control.
@@ -605,6 +605,8 @@ bitfield! {
     pub accept_splats_only, set_accept_splats_only: 25;
     /// Returns or changes the background object control.
     pub background_object, set_background_object: 26;
+    /// Enables the second normal blending mask in standard material revision 19 and later.
+    pub normal_blend2, set_normal_blend2: 27;
     /// Returns or changes the depth prepass low required control.
     pub depth_prepass_low_required, set_depth_prepass_low_required: 28;
     /// Returns or changes the no highlighting control.

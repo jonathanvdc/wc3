@@ -22,18 +22,30 @@ pub(crate) const EXTRA_TEXCOORD: MeshVertexAttribute =
 pub(crate) const SECOND_COLOR: MeshVertexAttribute =
     MeshVertexAttribute::new("Model_Color1", 138_000_004, VertexFormat::Float32x4);
 
+/// Fourth explicitly authored coordinate stream.
+pub(crate) const FOURTH_TEXCOORD: MeshVertexAttribute =
+    MeshVertexAttribute::new("Model_Uv3", 138_000_005, VertexFormat::Float32x2);
+
 pub(crate) fn specialize_mesh_attributes(
     descriptor: &mut RenderPipelineDescriptor,
     layout: &MeshVertexBufferLayoutRef,
     generated_coordinates: bool,
     third_uv: bool,
     second_color: bool,
+    fourth_uv: bool,
 ) -> Result<(), SpecializedMeshPipelineError> {
     let extra = layout.0.contains(EXTRA_JOINT_INDEX) && layout.0.contains(EXTRA_JOINT_WEIGHT);
     let third_uv = third_uv && layout.0.contains(EXTRA_TEXCOORD);
     let second_color = second_color && layout.0.contains(SECOND_COLOR);
-    if !extra && !generated_coordinates && !third_uv && !second_color {
+    let fourth_uv = fourth_uv && layout.0.contains(FOURTH_TEXCOORD);
+    if !extra && !generated_coordinates && !third_uv && !second_color && !fourth_uv {
         return Ok(());
+    }
+    if fourth_uv {
+        descriptor.vertex.shader_defs.push("VERTEX_UVS_D".into());
+        if let Some(fragment) = &mut descriptor.fragment {
+            fragment.shader_defs.push("VERTEX_UVS_D".into());
+        }
     }
     if second_color {
         descriptor
@@ -106,6 +118,9 @@ pub(crate) fn specialize_mesh_attributes(
     }
     if second_color {
         add(SECOND_COLOR, 11);
+    }
+    if fourth_uv {
+        add(FOURTH_TEXCOORD, 12);
     }
     descriptor.vertex.buffers = vec![layout.0.get_layout(&attributes)?];
     Ok(())

@@ -253,7 +253,7 @@ impl Collect for surface::Reflection {
 }
 impl Collect for surface::Standard {
     fn collect(&self, bindings: &mut Bindings) {
-        if let Some(value) = &self.diffuse.input {
+        if let Some(value) = &self.diffuse {
             value.collect(bindings);
         }
         if let Some(value) = &self.decal_layer {

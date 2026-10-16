@@ -39,9 +39,11 @@ fn emitter() -> Emitter {
         head_tail: ParticleHeadTail::Head,
         tail_length: 0.,
         seed: 7,
-        material_animation: None,
         programmed: None,
-        material: particle_material(ParticleBlend::Alpha, None, false),
+        passes: vec![MaterialPass {
+            material: particle_material(ParticleBlend::Alpha, None, false),
+            animation: None,
+        }],
     }
 }
 #[test]
@@ -164,9 +166,8 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         )
         .unwrap();
     let mut state = EmitterInstance {
-        entity: Entity::PLACEHOLDER,
         mesh: Handle::default(),
-        material: Handle::default(),
+        passes: vec![],
         births: vec![birth],
         squirts: SquirtSchedule::default(),
         appearances: Vec::new(),
@@ -306,7 +307,9 @@ fn programmed_appearance_storage_preserves_compact_m2_stride_and_retires_in_lock
     let birth_size = std::mem::size_of::<Birth>();
     let appearance_size = std::mem::size_of::<ProgrammedAppearance>();
     let inline_size = std::mem::size_of::<(Birth, Option<ProgrammedAppearance>)>();
-    println!("Birth={birth_size}, ProgrammedAppearance={appearance_size}, previous inline stride={inline_size}");
+    println!(
+        "Birth={birth_size}, ProgrammedAppearance={appearance_size}, previous inline stride={inline_size}"
+    );
     assert!(birth_size <= 96, "M2 birth records must remain compact");
     assert!(inline_size > birth_size * 2);
     let model = Model::empty("appearance retirement").unwrap();
@@ -317,9 +320,8 @@ fn programmed_appearance_storage_preserves_compact_m2_stride_and_retires_in_lock
         .birth(&sample, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
     let mut state = EmitterInstance {
-        entity: Entity::PLACEHOLDER,
         mesh: Handle::default(),
-        material: Handle::default(),
+        passes: vec![],
         squirts: SquirtSchedule::default(),
         births: (0..3)
             .map(|index| {
@@ -451,9 +453,8 @@ fn world_particles_follow_only_translation_after_their_birth() {
         RenderAssetUsages::default(),
     ));
     let state = EmitterInstance {
-        entity: Entity::PLACEHOLDER,
         mesh,
-        material: Handle::default(),
+        passes: vec![],
         births: vec![prior_birth],
         squirts: SquirtSchedule::default(),
         appearances: Vec::new(),
@@ -510,22 +511,20 @@ fn world_particles_follow_only_translation_after_their_birth() {
 }
 
 #[test]
-fn programmed_squirts_share_capacity_and_do_not_replay_on_pause_or_seek() {
+fn programmed_passes_share_population_capacity_pause_and_seek() {
     let model = Model::empty("squirt sample").unwrap();
     let program = AnimationProgram::compile(&model);
     let mut programme = ProgrammedSprite::fixture();
     programme.rate = Animated::constant(0.);
     programme.squirt = Animated::constant(7);
     programme.max_particles = 3;
-    let source = emitter();
-    let emitter = Emitter::programmed(
-        source.feature,
-        source.node,
-        0,
-        programme,
-        source.material,
-        Arc::new(SurfaceAnimation::default()),
-    );
+    let mut source = emitter();
+    let mut second = source.passes[0].clone();
+    second.material = super::super::programmed::no_shadow_material();
+    second.material.base.base_color = Color::BLACK;
+    second.material.base.depth_bias = 3.;
+    source.passes.push(second);
+    let emitter = Emitter::programmed(source.feature, source.node, 0, programme, source.passes);
     let runtime = RuntimeAgeSprites {
         emitters: vec![emitter],
         ..Default::default()
@@ -542,6 +541,31 @@ fn programmed_squirts_share_capacity_and_do_not_replay_on_pause_or_seek() {
         root,
     );
     queue.apply(&mut world);
+    assert_eq!(instances.emitters.len(), 1);
+    assert_eq!(meshes.len(), 1);
+    assert_eq!(materials.len(), 2);
+    let state = &instances.emitters[0];
+    assert_eq!(state.passes.len(), 2);
+    assert_eq!(world.query::<&SpriteEmitter>().iter(&world).count(), 1);
+    for pass in &state.passes {
+        assert_eq!(world.get::<Mesh3d>(pass.entity).unwrap().0, state.mesh);
+    }
+    assert_ne!(state.passes[0].material, state.passes[1].material);
+    assert!(!world
+        .entity(state.passes[0].entity)
+        .contains::<NotShadowCaster>());
+    assert!(!world
+        .entity(state.passes[0].entity)
+        .contains::<NotShadowReceiver>());
+    assert!(world
+        .entity(state.passes[1].entity)
+        .contains::<NotShadowCaster>());
+    assert!(world
+        .entity(state.passes[1].entity)
+        .contains::<NotShadowReceiver>());
+    let second = materials.get(&state.passes[1].material).unwrap();
+    assert_eq!(second.base.base_color, Color::BLACK);
+    assert_eq!(second.base.depth_bias, 3.);
     let mut query = world.query::<&mut SpriteEmitter>();
     for (time, change) in [
         (0., EffectChange::Continuous),
@@ -573,6 +597,11 @@ fn programmed_squirts_share_capacity_and_do_not_replay_on_pause_or_seek() {
             &mut materials,
         );
         assert_eq!(instances.emitters[0].dropped, 4);
+        if let Some(pass) = instances.emitters[0].passes.first() {
+            let statistics = world.get::<SpriteEmitter>(pass.entity).unwrap();
+            assert_eq!(statistics.alive, instances.emitters[0].births.len());
+            assert_eq!(statistics.dropped, 4);
+        }
         if time == 0. {
             assert_eq!(instances.emitters[0].births.len(), 3);
             assert_eq!(instances.emitters[0].appearances.len(), 3);

@@ -57,10 +57,8 @@ where
         material_class: surface::values::MaterialClass::from_raw((r.material_class).raw()),
         parallax_height: anim(r.parallax_height),
         motion_blur_amount: anim(r.motion_blur_amount),
-        diffuse: SurfaceContribution {
-            input: diffuse_layer,
-            parameters: surface::values::LayerBlendOp::from_raw((r.layer_blend_mode).raw()),
-        },
+        diffuse: diffuse_layer,
+        layer_blend: surface::values::LayerBlendOp::from_raw(r.layer_blend_mode.raw()),
         specular: SurfaceContribution {
             input: SpecularInputs {
                 color: specular_layer,

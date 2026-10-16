@@ -181,8 +181,10 @@ fn programmed_input_validation_reaches_nested_components_at_publication() {
         noise_amplitude: f32::NAN,
         ..Default::default()
     };
-    let mut standard = Standard::default();
-    standard.diffuse.input = Some(layer);
+    let standard = Standard {
+        diffuse: Some(layer),
+        ..Default::default()
+    };
     let mut builder = Model::<M3>::builder("invalid input");
     builder
         .add_material(Material {

@@ -81,6 +81,8 @@ impl TextureRequest<'_, '_> {
 
 /// Collect image uses needed by supported surface roles and default color selection.
 /// A texture used as both color and data receives independent requests.
+/// M3 roles share GPU samplers for equal authored sampler values. Resolvers must
+/// therefore use equal filtering, mipmap and anisotropy settings for those requests.
 pub fn texture_requests<'view, 'data>(
     model: &'view Model<'data>,
 ) -> Vec<TextureRequest<'view, 'data>> {
@@ -147,7 +149,11 @@ pub fn texture_requests<'view, 'data>(
             SurfaceSet::Programmed(surface) => {
                 if let programmed::Material::Standard(surface) = &**surface {
                     for layer in [
-                        &surface.diffuse.input,
+                        &surface.diffuse,
+                        &surface.decal_layer,
+                        &surface.specular.input.color,
+                        &surface.environment_layer,
+                        &surface.light_map_layer,
                         &surface.emissive.input.primary.input,
                         &surface.emissive.input.secondary.input,
                     ]

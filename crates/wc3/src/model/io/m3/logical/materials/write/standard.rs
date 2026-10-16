@@ -22,7 +22,7 @@ pub(super) fn encode<E: Envelope>(
         hdr_environment_constant: r.hdr_environment_constant,
         hdr_environment_diffuse: r.hdr_environment_diffuse,
         hdr_environment_specular: r.hdr_environment_specular,
-        diffuse_layer: writer.layer(r.diffuse.input.as_ref())?,
+        diffuse_layer: writer.layer(r.diffuse.as_ref())?,
         decal_layer: writer.layer(r.decal_layer.as_ref())?,
         specular_layer: writer.layer(r.specular.input.color.as_ref())?,
         gloss_layer: writer.layer(r.specular.input.gloss.as_ref())?,
@@ -41,7 +41,7 @@ pub(super) fn encode<E: Envelope>(
         normal_blend1_layer: writer.layer(r.normals.primary.input.as_ref())?,
         normal_blend2_layer: writer.layer(r.normals.secondary.input.as_ref())?,
         material_class: nr::MaterialClass::from_raw(r.material_class.raw()),
-        layer_blend_mode: nr::LayerBlendOp::from_raw(r.diffuse.parameters.raw()),
+        layer_blend_mode: nr::LayerBlendOp::from_raw(r.layer_blend.raw()),
         emissive_blend_mode1: nr::LayerBlendOp::from_raw(r.emissive.input.primary.parameters.raw()),
         emissive_blend_mode2: nr::LayerBlendOp::from_raw(
             r.emissive.input.secondary.parameters.raw(),

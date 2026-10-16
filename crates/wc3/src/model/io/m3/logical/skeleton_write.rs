@@ -3,7 +3,7 @@ use super::animation::AnimationIds;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::records as nr;
 use crate::model::io::m3::logical::Graph;
-use crate::model::{profiles::m3 as surface, Billboard, NodeId, Property};
+use crate::model::{profiles::m3 as surface, Billboard, Inheritance, NodeId, Property};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) struct Skeleton {
@@ -175,10 +175,13 @@ pub(super) fn prepare(
                 "identifier/control word exceeds its native 32-bit domain",
             ));
         }
-        let mut flags = nr::BoneFlags(control.map_or(0, |c| c.extra_flags.bits()) & !0x17);
-        flags.set_inherit_translation(node.inheritance.translation);
-        flags.set_inherit_rotation(node.inheritance.rotation);
-        flags.set_inherit_scale(node.inheritance.scale);
+        if node.inheritance != Inheritance::default() {
+            context.unsupported(
+                "m3.node.inheritance",
+                "selective semantic inheritance has no established M3 encoding",
+            )?;
+        }
+        let mut flags = nr::BoneFlags(control.map_or(0, |c| c.extra_flags.bits()) & !0x10);
         match node.billboard {
             Billboard::None => {}
             Billboard::Spherical => flags.set_billboard1(true),

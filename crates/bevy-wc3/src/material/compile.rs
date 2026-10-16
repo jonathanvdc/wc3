@@ -1,7 +1,8 @@
 //! Native-family surface interpretation into PBR passes and explicit states.
 use super::super::textures::{is_default_unit, TextureImages, TextureRole};
 use super::model::compile_model_shader;
-use super::programmed::compile_programmed;
+use super::programmed::compile_programmed_with_targets;
+use super::targets::AnimationTargets;
 use super::world::compile_world;
 use super::{layered_uv, Blend, HdAnimation, ModelMaterial, SurfacePass};
 use crate::error::ModelError;
@@ -9,17 +10,55 @@ use bevy::material::OpaqueRendererMethod;
 use bevy::math::Affine2;
 use bevy::prelude::*;
 use bevy::render::render_resource::Face;
-use std::{array::from_fn, fmt::Debug, sync::Arc};
+use std::{array::from_fn, collections::HashMap, fmt::Debug, sync::Arc};
 use wc3::model::materials::state::{BlendOperations, Lighting, Operation};
-use wc3::model::materials::{diablo3, layered, SurfaceSet};
+use wc3::model::materials::{diablo3, layered, programmed, SurfaceSet};
 use wc3::model::profiles::Universal;
-use wc3::model::{ColorSpace, MaterialId, Model, Sampler, TextureId, TextureTransform};
+use wc3::model::{Animated, ColorSpace, MaterialId, Model, Sampler, TextureId, TextureTransform};
 
+#[cfg(test)]
 pub(crate) fn compile_material_with_images(
     model: &Model<'_, Universal>,
     id: MaterialId,
     images: Arc<TextureImages>,
 ) -> Result<Vec<SurfacePass>, ModelError> {
+    compile_material(
+        model,
+        id,
+        &images,
+        &AnimationTargets::new(model),
+        &mut Vec::new(),
+    )
+}
+
+/// Compile a model's selected material set with one shared channel lookup.
+pub(crate) fn compile_materials_with_images(
+    model: &Model<'_, Universal>,
+    ids: impl IntoIterator<Item = MaterialId>,
+    images: Arc<TextureImages>,
+) -> Result<HashMap<MaterialId, Vec<SurfacePass>>, ModelError> {
+    let targets = AnimationTargets::new(model);
+    ids.into_iter()
+        .map(|id| {
+            compile_material(model, id, &images, &targets, &mut Vec::new())
+                .map(|passes| (id, passes))
+        })
+        .collect()
+}
+
+fn compile_material(
+    model: &Model<'_, Universal>,
+    id: MaterialId,
+    images: &Arc<TextureImages>,
+    targets: &AnimationTargets,
+    path: &mut Vec<MaterialId>,
+) -> Result<Vec<SurfacePass>, ModelError> {
+    if path.contains(&id) {
+        return Err(ModelError(format!(
+            "cyclic composite material reference: {path:?} -> {id:?}"
+        )));
+    }
+    path.push(id);
     let resolved_images = images.as_ref();
     let material = model
         .material(id)
@@ -28,14 +67,64 @@ pub(crate) fn compile_material_with_images(
         SurfaceSet::Layered(surface) => surface
             .layers
             .iter()
-            .map(|layer| compile_layer(model, surface, layer, &images))
+            .map(|layer| compile_layer(model, surface, layer, images))
             .collect::<Result<Vec<_>, _>>()?,
         SurfaceSet::ModelShader(surface) => {
             vec![compile_model_shader(model, surface, resolved_images)?]
         }
         SurfaceSet::World(surface) => vec![compile_world(model, surface, resolved_images)?],
         SurfaceSet::Programmed(surface) => {
-            vec![compile_programmed(model, surface, resolved_images)?]
+            if let programmed::Material::Composite(composite) = &**surface {
+                let mut passes = Vec::new();
+                for section in &composite.sections {
+                    let mut section_passes =
+                        compile_material(model, section.material, images, targets, path)?;
+                    for pass in &mut section_passes {
+                        let alpha = pass.material.base_color.alpha();
+                        pass.animation.unweighted_opacity.get_or_insert(alpha);
+                        pass.animation.pass_weights.push(Animated {
+                            default: section.map_multiplier.initial,
+                            property: section
+                                .map_multiplier
+                                .binding
+                                .clone()
+                                .filter(|_| targets.contains(&section.map_multiplier.binding)),
+                        });
+                        pass.material
+                            .base_color
+                            .set_alpha(alpha * section.map_multiplier.initial);
+                        pass.material.depth_bias = composite.priority as f32;
+                        if section.map_multiplier.initial != 1.
+                            || targets.contains(&section.map_multiplier.binding)
+                        {
+                            if let AlphaMode::Mask(cutoff) = pass.material.alpha_mode {
+                                pass.state.combiner.clip.x = cutoff;
+                            }
+                            if matches!(
+                                pass.material.alpha_mode,
+                                AlphaMode::Opaque | AlphaMode::Mask(_)
+                            ) {
+                                pass.material.alpha_mode = AlphaMode::Blend;
+                                pass.state.blend = Some(Blend::Alpha);
+                            }
+                        }
+                    }
+                    passes.extend(section_passes);
+                }
+                if passes.len() > 1 {
+                    for pass in &mut passes {
+                        pass.diagnostics.push("M3 composite section order is retained in pass records, but Bevy render phases may reorder material passes; native within-composite ordering is not guaranteed".into());
+                    }
+                }
+                passes
+            } else {
+                vec![compile_programmed_with_targets(
+                    model,
+                    surface,
+                    resolved_images,
+                    targets,
+                )?]
+            }
         }
         SurfaceSet::D3(surface) => vec![compile_diablo3(surface)],
         SurfaceSet::D4(surface) => {
@@ -56,6 +145,7 @@ pub(crate) fn compile_material_with_images(
             *diagnostic = format!("material {id:?} ({}): {diagnostic}", material.name);
         }
     }
+    path.pop();
     Ok(passes)
 }
 

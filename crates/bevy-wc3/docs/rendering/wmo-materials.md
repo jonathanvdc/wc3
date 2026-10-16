@@ -25,7 +25,10 @@ texture definitions.
 
 Native modulate-add and inverse-source-alpha-add blends retain their separate
 RGB and alpha factors in Bevy's transparent phase, without premultiplying the
-shader output.
+shader output. Native batch sequence is not enforced across Bevy render phases
+and pipeline bins. Coplanar surfaces and overlapping transparent batches can
+therefore resolve differently when material or pipeline grouping changes; exact
+native overlay ordering remains a rendering limitation.
 
 The second vertex-color stream's alpha controls layer mixtures independently of
 the first stream's lighting alpha. Its default is one when the stream is absent.

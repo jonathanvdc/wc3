@@ -103,14 +103,19 @@ skipped time through `SpriteEmitter`. Budgets discard work rather than
 creating an unbounded catch-up queue. Root despawn removes simulation and render
 state. Hierarchy visibility gates rendering; effect activation controls births.
 
-Fog and game-specific ordering across effect and mesh families are not reproduced by
-the shared effect transport. M3 programmed particles use the same bounded CPU
-transport with a separate interpreter, described below.
+Game-specific ordering across effect and mesh families is not reproduced by the
+shared transport. The staged GPU sprite path does not reproduce native effect fog.
+M3 programmed particles use the bounded CPU transport with ordinary Bevy material
+fog and the authored unfogged control, as described below.
 
 ## M3 standard billboard subset
 
-Standard billboards support point, plane, box, and sphere distributions with
-constant, Z-axis, radial, or random velocity selection. Continuous emission and
+Standard billboards support point, plane, box, sphere, cylinder, and disc
+distributions with constant, Z-axis, radial, or random velocity selection.
+Cylinders use the authored radius and Z height; discs use the same circular
+cross section at zero height. Radial sampling is uniform over area or volume.
+Positive native gravity accelerates down model Z; negative gravity accelerates
+upward, independently of the emitter bone orientation. Continuous emission and
 independent squirt-count keys sample authored occurrence poses. Squirt keys follow
 their selected clip, timeline, or shared clock, including repeating clock crossings;
 seek jumps skip crossed births. A nonanimated count emits at the clock origin.
@@ -119,8 +124,13 @@ share the continuous emitter's population and birth budgets. Optional speed/life
 ranges randomize at birth; color,
 alpha, size, and rotation freeze their start/middle/end controls at birth, with
 independent normalized midpoints. Linear and smooth interpolation and two-phase
-flipbooks are implemented. The primary compiled PBR material pass animates on the
-model clocks; supplementary passes are not instantiated.
+flipbooks are implemented. Every compiled PBR material pass animates independently
+on the model clocks and retains its blend/depth and opacity controls. Passes share
+one population, appearance records, sorting work, and generated mesh; adding a
+material pass does not multiply emission or the population budget. Lifetime RGB
+tints the diffuse input, and lifetime alpha multiplies material opacity,
+independently of material mesh-vertex color flags. Native tinting of post-lighting
+emission layers remains unverified.
 
 Authored maximum population tightens the shared 8,192 cap. Unsupported geometry,
 shape cutouts, encoded XY gravity, and Bezier/hold or unknown interpolation

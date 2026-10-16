@@ -51,6 +51,9 @@ struct VertexOutput {
 #ifdef WORLD_LAYER_ALPHA
     @location(12) world_layer_alpha: f32,
 #endif
+#ifdef VERTEX_UVS_D
+    @location(13) uv_d: vec2<f32>,
+#endif
 }
 #else
 #import bevy_pbr::forward_io
@@ -86,6 +89,9 @@ struct VertexOutput {
 #endif
 #ifdef WORLD_LAYER_ALPHA
     @location(12) world_layer_alpha: f32,
+#endif
+#ifdef VERTEX_UVS_D
+    @location(13) uv_d: vec2<f32>,
 #endif
 }
 #endif
@@ -163,6 +169,9 @@ fn from_bevy(in: prepass_io::VertexOutput) -> VertexOutput {
 #ifdef WORLD_LAYER_ALPHA
     out.world_layer_alpha=1.0;
 #endif
+#ifdef VERTEX_UVS_D
+    out.uv_d=vec2(0.0);
+#endif
     return out;
 }
 #endif
@@ -223,6 +232,9 @@ fn from_bevy(in: forward_io::VertexOutput) -> VertexOutput {
 #endif
 #ifdef WORLD_LAYER_ALPHA
     out.world_layer_alpha=1.0;
+#endif
+#ifdef VERTEX_UVS_D
+    out.uv_d=vec2(0.0);
 #endif
     return out;
 }

@@ -47,8 +47,8 @@ then choose a topic:
   surface animation, UV sets, and Bevy shading integration.
 - [WMO materials](rendering/wmo-materials.md): layered texture programmes, native
   vertex-light preparation, regional ambient contributions and scene limits.
-- [M3 materials](rendering/m3-materials.md): packed normals, basic occlusion,
-  constant specular approximations and remaining layer programmes.
+- [M3 materials](rendering/m3-materials.md): the complete family/role inventory,
+  animated Standard layers, composite passes and PBR fidelity limits.
 - [Model lights](rendering/lights.md): animated scene lights, conversion
   settings, and application customization.
 - [Model cameras](rendering/cameras.md): authored views and opt-in playback.
@@ -58,7 +58,7 @@ then choose a topic:
 - [Sprite particles](rendering/pre2.md): emission, head/tail geometry,
   lifetime animation, M2 packed gravity/twinkle/secondary textures, and sorting.
 - [Ribbon trails](rendering/ribbons.md): birth-time sections, connected
-  geometry, atlas animation, gravity, and material passes.
+  geometry, atlas animation, gravity, material passes, and M3 endpoint beams.
 
 Each guide describes the implemented behavior and relevant input, resource, or
 integration limits. Update the relevant guide when an implementation changes,

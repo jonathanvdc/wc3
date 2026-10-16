@@ -493,3 +493,97 @@ fn body_mass_and_dynamic_defaults_are_logical_authoring_values() {
     assert_eq!(body.dynamic_state.initial_value, u32::MAX);
     assert_eq!(body.dynamic_state.null_value, 16_777_217);
 }
+
+#[test]
+fn ordinary_parent_local_bones_preserve_bind_matrices_and_unresolved_flag_bits() {
+    use wc3::model::Inheritance;
+
+    let source = source();
+    let model = source.model;
+    let id = model.root_id();
+    let mut root = model.root::<nr::ModelRecord<nr::V29>>().unwrap();
+    let mut parent = model
+        .container()
+        .resolve::<nr::Bone<nr::V1>>(root.bones.cast())
+        .unwrap()
+        .get(0)
+        .unwrap()
+        .unwrap();
+    parent.flags = nr::BoneFlags(0);
+    parent.position.initial_value = [3., 4., 5.];
+    let half = std::f32::consts::FRAC_1_SQRT_2;
+    parent.rotation.initial_value = [0., 0., half, half];
+    parent.scale.initial_value = [2., 3., 4.];
+    let mut child = parent;
+    child.id = 18;
+    child.parent_index = 0;
+    // Preserve these native controls without treating their legacy names as
+    // semantic selective inheritance. The parent intentionally has zero bits.
+    child.flags = nr::BoneFlags(7);
+    child.position.initial_value = [1., 2., 3.];
+    child.rotation.initial_value = [0., 0., 0., 1.];
+    child.scale.initial_value = [0.5, 1., 2.];
+    let binds = [
+        [
+            [0., -1. / 3., 0., 0.],
+            [0.5, 0., 0., 0.],
+            [0., 0., 0.25, 0.],
+            [-2., 1., -1.25, 1.],
+        ],
+        [
+            [0., -1. / 3., 0., 0.],
+            [1., 0., 0., 0.],
+            [0., 0., 0.125, 0.],
+            [-6., -1., -2.125, 1.],
+        ],
+    ];
+    let mut document = model.into_container();
+    let bones = document.append(&[parent, child]).unwrap();
+    root.bones = m3::Ref::from_section(2, bones.index());
+    let inverse = document
+        .append(&binds.map(|matrix| nr::InitialReference { matrix }))
+        .unwrap();
+    root.initial_reference = m3::Ref::from_section(2, inverse.index());
+    document.replace(id, &[root]).unwrap();
+    let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
+    let imported = io::m3::import(&source, &Default::default()).unwrap().value;
+    let nodes: Vec<_> = imported
+        .nodes()
+        .filter(|(_, node)| matches!(node.controls, surface::NodeRole::Bone(_)))
+        .collect();
+    assert_eq!(nodes[0].1.inheritance, Inheritance::default());
+    assert_eq!(nodes[1].1.inheritance, Inheritance::default());
+    assert_eq!(nodes[1].1.parent, Some(nodes[0].0));
+    assert_eq!(nodes[0].1.transform.translation, [3., 4., 5.]);
+    assert_eq!(nodes[0].1.transform.rotation.0, [0., 0., half, half]);
+    assert_eq!(nodes[0].1.transform.scale, [2., 3., 4.]);
+    assert_eq!(nodes[1].1.transform.translation, [1., 2., 3.]);
+    assert_eq!(nodes[1].1.transform.scale, [0.5, 1., 2.]);
+    let (_, skin) = imported.skins().next().unwrap();
+    assert_eq!(skin.inverse_bind().get(0), Some(binds[0]));
+    assert_eq!(skin.inverse_bind().get(1), Some(binds[1]));
+    let output = io::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let bones = output
+        .model
+        .container()
+        .resolve::<nr::Bone<nr::V1>>(output.model.root_record().unwrap().bones().cast())
+        .unwrap();
+    assert_eq!(bones.get(0).unwrap().unwrap().flags.bits(), 0);
+    assert_eq!(bones.get(1).unwrap().unwrap().flags.bits(), 7);
+}
+
+#[test]
+fn selective_semantic_inheritance_requires_explicit_m3_export_loss() {
+    let source = source();
+    let mut imported = io::m3::import(&source, &Default::default()).unwrap().value;
+    let (id, node) = imported.nodes().next().unwrap();
+    let mut node = node.clone();
+    node.inheritance.scale = false;
+    imported.edit(|draft| draft.set_node(id, node)).unwrap();
+    let error = io::m3::plan::<m3::StarCraft2>(&imported, &Default::default()).unwrap_err();
+    assert_eq!(error.path, "m3.node.inheritance");
+}

@@ -7,12 +7,7 @@ struct HdUniform {
     maps: vec4<u32>,
 };
 @group(#{MATERIAL_BIND_GROUP}) @binding(103) var<uniform> hd: HdUniform;
-@group(#{MATERIAL_BIND_GROUP}) @binding(104) var orm_map: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(105) var orm_sampler: sampler;
-@group(#{MATERIAL_BIND_GROUP}) @binding(106) var team_map: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(107) var team_sampler: sampler;
-@group(#{MATERIAL_BIND_GROUP}) @binding(108) var environment_map: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(109) var environment_sampler: sampler;
+#import "embedded://bevy_wc3/shaders/surface_images.wgsl"::{orm_map,orm_sampler,team_map,team_sampler,environment_map,environment_sampler}
 #import bevy_pbr::{pbr_bindings, pbr_functions, pbr_types, mesh_view_bindings::view}
 
 fn apply_hd(in: VertexOutput, is_front: bool, input: PbrInput) -> PbrInput {

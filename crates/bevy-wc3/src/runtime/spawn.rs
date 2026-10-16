@@ -10,6 +10,7 @@ use super::mounts::MountedModel;
 use super::{ModelDraw, ModelNode, ModelRig, Playback, PlaybackError, PoseOverrides};
 use crate::bounds::transform_bounds;
 use crate::physics::PhysicsState;
+use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -169,6 +170,12 @@ pub(crate) fn populate_model(
                     .unwrap_or(nodes[draw.node]),
             ),
         ));
+        if !draw.material.extension.casts_shadows() {
+            entity.insert(NotShadowCaster);
+        }
+        if !draw.material.extension.receives_shadows() {
+            entity.insert(NotShadowReceiver);
+        }
         if let Some(skin) = draw.skin {
             let skin = &model.skins[skin];
             entity.insert((
@@ -201,6 +208,12 @@ pub(crate) fn populate_model(
             ),
         ));
         if let Some((surface, animation)) = &liquid.surface {
+            if !surface.extension.casts_shadows() {
+                entity.insert(NotShadowCaster);
+            }
+            if !surface.extension.receives_shadows() {
+                entity.insert(NotShadowReceiver);
+            }
             let id = liquid
                 .material_id
                 .expect("compiled liquid surface has material identity");

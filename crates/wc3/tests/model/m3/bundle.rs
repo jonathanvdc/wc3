@@ -21,7 +21,7 @@ fn model<E: Envelope>(primary: u32, additional: &[u32]) -> Document<'static, E> 
 }
 #[test]
 fn external_animation_closure_retains_native_envelopes_and_hashes() {
-    let base = model::<Md34>(100, &[200]).write().unwrap();
+    let base = model::<Md34>(999, &[100, 200]).write().unwrap();
     let first = model::<Md33>(100, &[200]).write().unwrap();
     let second = model::<Md34>(200, &[100]).write().unwrap();
     let mut requested = Vec::new();
@@ -50,7 +50,7 @@ fn external_animation_closure_retains_native_envelopes_and_hashes() {
 }
 #[test]
 fn missing_or_wrong_animation_bindings_are_rejected() {
-    let base = model::<Md34>(100, &[]).write().unwrap();
+    let base = model::<Md34>(0, &[100]).write().unwrap();
     assert!(Bundle::<Md34>::read(&base, |_| Ok(None)).is_err());
     let wrong = model::<Md34>(999, &[]).write().unwrap();
     assert!(Bundle::<Md34>::read(&base, |_| Ok(Some(wrong.as_slice()))).is_err());
@@ -211,4 +211,34 @@ fn newly_established_root_revisions_have_exact_common_metadata() {
     let model = Document::from_container(document).unwrap();
     assert_eq!(model.root_record().unwrap().revision(), 27);
     assert_eq!(model.animation_hashes().unwrap(), [27, 28]);
+}
+
+#[test]
+fn self_contained_binding_identity_does_not_request_a_companion() {
+    let source = model::<Md34>(0xe12b5dfe, &[]).write().unwrap();
+    let bundle = Bundle::<Md34>::read(&source, |_| {
+        panic!("base identity is not an external dependency")
+    })
+    .unwrap();
+    assert_eq!(
+        bundle.model.root_record().unwrap().animation_hash(),
+        0xe12b5dfe
+    );
+    assert!(bundle.dependencies().unwrap().is_empty());
+    assert!(bundle.animations().next().is_none());
+    assert_eq!(bundle.write().unwrap().model, source);
+}
+
+#[test]
+fn companion_back_reference_to_base_is_satisfied_without_a_duplicate_file() {
+    let source = model::<Md34>(100, &[200]).write().unwrap();
+    let companion = model::<Md34>(200, &[100]).write().unwrap();
+    let mut requests = Vec::new();
+    let bundle = Bundle::<Md34>::read(&source, |hash| {
+        requests.push(hash);
+        Ok((hash == 200).then_some(companion.as_slice()))
+    })
+    .unwrap();
+    assert_eq!(requests, [200]);
+    assert_eq!(bundle.dependencies().unwrap(), [200]);
 }

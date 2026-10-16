@@ -110,10 +110,10 @@ impl Profile for M3 {
                 ));
             }
             if let profiles::m3::NodeRole::Bone(controls) = &node.controls {
-                if controls.extra_flags.bits() & 0x17 != 0 {
+                if controls.extra_flags.bits() & 0x10 != 0 {
                     return Err(Error::new(
                         "m3.node.flags",
-                        "inheritance and billboard controls belong to the node fields",
+                        "the interpreted billboard control belongs to the node field",
                     ));
                 }
             }

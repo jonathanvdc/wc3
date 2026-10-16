@@ -10,6 +10,7 @@ use crate::mesh_attributes::EXTRA_TEXCOORD;
 use crate::textures::{particle_sampler, TextureImages, TextureRole};
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
+use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::mesh::{MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::*;
 use std::array::from_fn;
@@ -76,9 +77,13 @@ struct Emitter {
     head_tail: ParticleHeadTail,
     tail_length: f32,
     seed: u64,
-    material: ModelMaterial,
-    material_animation: Option<Arc<SurfaceAnimation>>,
+    passes: Vec<MaterialPass>,
     programmed: Option<ProgrammedSprite>,
+}
+#[derive(Clone)]
+struct MaterialPass {
+    material: ModelMaterial,
+    animation: Option<Arc<SurfaceAnimation>>,
 }
 #[derive(Clone, Default)]
 pub(super) struct RuntimeAgeSprites {
@@ -106,9 +111,8 @@ struct Birth {
     appearance_index: u32,
 }
 struct EmitterInstance {
-    entity: Entity,
     mesh: Handle<Mesh>,
-    material: Handle<ModelMaterial>,
+    passes: Vec<MaterialPassInstance>,
     births: Vec<Birth>,
     squirts: SquirtSchedule,
     appearances: Vec<ProgrammedAppearance>,
@@ -120,6 +124,10 @@ struct EmitterInstance {
     pose_scratch: Vec<usize>,
     dropped: u64,
     skipped_seconds: f64,
+}
+struct MaterialPassInstance {
+    entity: Entity,
+    material: Handle<ModelMaterial>,
 }
 impl EmitterInstance {
     fn retire(&mut self, now: f64) {
@@ -268,25 +276,34 @@ impl RuntimeAgeSprites {
                     ));
                     continue;
                 };
-                let Some(pass) = passes.first() else {
+                if passes.is_empty() {
                     continue;
-                };
-                if passes.len() > 1 {
-                    result.diagnostics.push((feature,"Programmed billboards currently draw the primary material pass; supplementary passes are not instantiated".into()));
                 }
-                let mut material = ModelMaterial {
-                    base: pass.material.clone(),
-                    extension: pass.state.clone(),
-                };
-                material.base.cull_mode = None;
-                material.base.unlit |= !programme.lit;
+                let passes = passes
+                    .iter()
+                    .map(|pass| {
+                        let mut material = ModelMaterial {
+                            base: pass.material.clone(),
+                            extension: pass.state.clone(),
+                        };
+                        material.extension.enable_effect_color();
+                        material.base.cull_mode = None;
+                        material.base.unlit |= !programme.lit;
+                        MaterialPass {
+                            material,
+                            animation: pass
+                                .animation
+                                .is_animated()
+                                .then(|| Arc::new(pass.animation.clone())),
+                        }
+                    })
+                    .collect();
                 result.emitters.push(Emitter::programmed(
                     feature,
                     value.node,
                     node_indices[&value.node],
                     programme,
-                    material,
-                    Arc::new(pass.animation.clone()),
+                    passes,
                 ));
                 continue;
             }
@@ -299,14 +316,18 @@ impl RuntimeAgeSprites {
                 continue;
             }
             let ParticleAppearance::Curves(appearance) = &definition.appearance else {
-                diagnostic("M2 emitter has no normalized-age appearance programme; sprite simulation is unavailable");
+                diagnostic(
+                    "M2 emitter has no normalized-age appearance programme; sprite simulation is unavailable",
+                );
                 continue;
             };
             if !matches!(
                 details.shape.generator,
                 ParticleGenerator::Plane | ParticleGenerator::Sphere
             ) {
-                diagnostic("M2 spline, bone and unknown generators require a dedicated emission interpreter");
+                diagnostic(
+                    "M2 spline, bone and unknown generators require a dedicated emission interpreter",
+                );
                 continue;
             }
             if !matches!(definition.emission.trigger, ParticleTrigger::Continuous) {
@@ -340,7 +361,9 @@ impl RuntimeAgeSprites {
                 continue;
             }
             if details.rendering.model.is_some() || details.rendering.child_model.is_some() {
-                diagnostic("M2 model particles and child emitter resources are not instantiated by the sprite transport");
+                diagnostic(
+                    "M2 model particles and child emitter resources are not instantiated by the sprite transport",
+                );
                 continue;
             }
             let basic_program = details
@@ -351,7 +374,9 @@ impl RuntimeAgeSprites {
                 && details.rendering.textures.len() == 3
                 && basic_program;
             if !basic_program {
-                diagnostic("M2 particle texture programme requires an advanced UV/shader interpreter; displaying its primary input");
+                diagnostic(
+                    "M2 particle texture programme requires an advanced UV/shader interpreter; displaying its primary input",
+                );
             }
             if details.rendering.textures.len() > 1 && !multi_texture {
                 diagnostic(
@@ -370,13 +395,21 @@ impl RuntimeAgeSprites {
                 diagnostic("M2 wind timing is retained but not evaluated");
             }
             if appearance.legacy_atlas.is_some() {
-                diagnostic("Legacy particle atlas segments currently use normalized-age cell curves when present");
+                diagnostic(
+                    "Legacy particle atlas segments currently use normalized-age cell curves when present",
+                );
             }
             if !matches!(details.rendering.head_tail, ParticleHeadTail::Head) {
-                diagnostic("M2 tails use velocity times the authored tail parameter; exact client time-versus-distance fidelity remains unverified");
+                diagnostic(
+                    "M2 tails use velocity times the authored tail parameter; exact client time-versus-distance fidelity remains unverified",
+                );
             }
-            diagnostic("M2 particle motion interpolates application root transforms between updates; inherited velocity uses a frame-interval estimate");
-            diagnostic("CPU sprite transport limits each emitter to 8192 living particles, 8192 births and 4096 emission intervals per update; omitted births and long-update seconds are reported");
+            diagnostic(
+                "M2 particle motion interpolates application root transforms between updates; inherited velocity uses a frame-interval estimate",
+            );
+            diagnostic(
+                "CPU sprite transport limits each emitter to 8192 living particles, 8192 births and 4096 emission intervals per update; omitted births and long-update seconds are reported",
+            );
             let image = details
                 .rendering
                 .textures
@@ -404,12 +437,14 @@ impl RuntimeAgeSprites {
                 | (1 << 28)
                 | (1 << 30);
             if details.flags.bits() & !supported_flags != 0 {
-                diagnostic(&format!("M2 particle controls {:#010x} are retained but not evaluated by the sprite transport",details.flags.bits() & !supported_flags));
+                diagnostic(&format!(
+                    "M2 particle controls {:#010x} are retained but not evaluated by the sprite transport",
+                    details.flags.bits() & !supported_flags
+                ));
             }
 
             result.emitters.push(Emitter {
                 feature,
-                material_animation: None,
                 programmed: None,
                 node: value.node,
                 node_index: node_indices[&value.node],
@@ -456,33 +491,37 @@ impl RuntimeAgeSprites {
                 seed: u64::from(details.id)
                     .wrapping_add(result.emitters.len() as u64)
                     .wrapping_add(1),
-                material: {
-                    let lit = !details.flags.disable_lighting();
-                    let mut material = if multi_texture {
-                        let layers = from_fn(|slot| {
-                            details
-                                .rendering
-                                .textures
-                                .get(slot)
-                                .and_then(|id| particle_image(model, images, *id))
-                                .cloned()
-                        });
-                        particle_material_layers(
-                            details.rendering.blend,
-                            layers,
-                            false,
-                            if details.flags.multi_texture_three_colors() {
-                                ParticleComposition::ThreeColor
-                            } else {
-                                ParticleComposition::TwoColor
-                            },
-                        )
-                    } else {
-                        particle_material(details.rendering.blend, image, lit)
-                    };
-                    material.base.depth_bias = f32::from(details.rendering.texture_tile_rotation);
-                    material
-                },
+                passes: vec![MaterialPass {
+                    animation: None,
+                    material: {
+                        let lit = !details.flags.disable_lighting();
+                        let mut material = if multi_texture {
+                            let layers = from_fn(|slot| {
+                                details
+                                    .rendering
+                                    .textures
+                                    .get(slot)
+                                    .and_then(|id| particle_image(model, images, *id))
+                                    .cloned()
+                            });
+                            particle_material_layers(
+                                details.rendering.blend,
+                                layers,
+                                false,
+                                if details.flags.multi_texture_three_colors() {
+                                    ParticleComposition::ThreeColor
+                                } else {
+                                    ParticleComposition::TwoColor
+                                },
+                            )
+                        } else {
+                            particle_material(details.rendering.blend, image, lit)
+                        };
+                        material.base.depth_bias =
+                            f32::from(details.rendering.texture_tile_rotation);
+                        material
+                    },
+                }],
             });
         }
         result
@@ -514,28 +553,43 @@ impl RuntimeAgeSprites {
                     mesh.insert_attribute(EXTRA_TEXCOORD, vec![[0.; 2]; 3]);
                 }
                 let mesh = meshes.add(mesh);
-                let material = materials.add(emitter.material.clone());
-                let entity = commands
-                    .spawn((
-                        SpriteEmitter {
-                            feature: emitter.feature,
-                            node: emitter.node,
-                            alive: 0,
-                            dropped: 0,
-                            skipped_seconds: 0.,
-                        },
-                        Mesh3d(mesh.clone()),
-                        MeshMaterial3d(material.clone()),
-                        Transform::default(),
-                        Visibility::default(),
-                        NoFrustumCulling,
-                        ChildOf(basis),
-                    ))
-                    .id();
+                let passes = emitter
+                    .passes
+                    .iter()
+                    .enumerate()
+                    .map(|(index, pass)| {
+                        let material = materials.add(pass.material.clone());
+                        let entity = commands
+                            .spawn((
+                                Mesh3d(mesh.clone()),
+                                MeshMaterial3d(material.clone()),
+                                Transform::default(),
+                                Visibility::default(),
+                                NoFrustumCulling,
+                                ChildOf(basis),
+                            ))
+                            .id();
+                        if index == 0 {
+                            commands.entity(entity).insert(SpriteEmitter {
+                                feature: emitter.feature,
+                                node: emitter.node,
+                                alive: 0,
+                                dropped: 0,
+                                skipped_seconds: 0.,
+                            });
+                        }
+                        if !pass.material.extension.casts_shadows() {
+                            commands.entity(entity).insert(NotShadowCaster);
+                        }
+                        if !pass.material.extension.receives_shadows() {
+                            commands.entity(entity).insert(NotShadowReceiver);
+                        }
+                        MaterialPassInstance { entity, material }
+                    })
+                    .collect();
                 EmitterInstance {
-                    entity,
                     mesh,
-                    material,
+                    passes,
                     births: Vec::new(),
                     squirts: SquirtSchedule::default(),
                     appearances: Vec::new(),
@@ -573,8 +627,10 @@ impl RuntimeAgeSprites {
         let start = if backwards { frame.time } else { previous };
         let delta = frame.time - start;
         for (emitter, state) in self.emitters.iter().zip(&mut instances.emitters) {
-            if let Some(animation) = &emitter.material_animation {
-                animation.apply_to_assets(frame.sample, &state.material, materials);
+            for (pass, instance) in emitter.passes.iter().zip(&state.passes) {
+                if let Some(animation) = &pass.animation {
+                    animation.apply_to_assets(frame.sample, &instance.material, materials);
+                }
             }
             let had_births = !state.births.is_empty();
             let node =
@@ -722,15 +778,17 @@ impl RuntimeAgeSprites {
                     emitter.draw(state, &frame, node, &mut mesh);
                 }
             }
-            if let Ok(mut stats) = statistics.get_mut(state.entity) {
-                if stats.alive != state.births.len() {
-                    stats.alive = state.births.len();
-                }
-                if stats.dropped != state.dropped {
-                    stats.dropped = state.dropped;
-                }
-                if stats.skipped_seconds != state.skipped_seconds {
-                    stats.skipped_seconds = state.skipped_seconds;
+            if let Some(pass) = state.passes.first() {
+                if let Ok(mut stats) = statistics.get_mut(pass.entity) {
+                    if stats.alive != state.births.len() {
+                        stats.alive = state.births.len();
+                    }
+                    if stats.dropped != state.dropped {
+                        stats.dropped = state.dropped;
+                    }
+                    if stats.skipped_seconds != state.skipped_seconds {
+                        stats.skipped_seconds = state.skipped_seconds;
+                    }
                 }
             }
         }
@@ -921,8 +979,7 @@ impl Emitter {
         node: NodeId,
         node_index: usize,
         programme: ProgrammedSprite,
-        material: ModelMaterial,
-        animation: Arc<SurfaceAnimation>,
+        passes: Vec<MaterialPass>,
     ) -> Self {
         let mut flags = ParticleFlags::default();
         flags.set_attached(programme.model_space);
@@ -957,8 +1014,7 @@ impl Emitter {
             head_tail: ParticleHeadTail::Head,
             tail_length: 0.,
             seed: node_index as u64 + 1,
-            material,
-            material_animation: animation.is_animated().then_some(animation),
+            passes,
             programmed: Some(programme),
         }
     }

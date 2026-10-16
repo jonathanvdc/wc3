@@ -143,10 +143,18 @@ impl SurfaceAnimation {
     }
 
     pub(crate) fn is_animated(&self) -> bool {
-        self.input_weights
+        self.pass_weights
             .iter()
-            .flatten()
-            .any(|v| v.property.is_some())
+            .any(|value| value.property.is_some())
+            || self
+                .programmed
+                .as_ref()
+                .is_some_and(|animation| animation.is_animated())
+            || self
+                .input_weights
+                .iter()
+                .flatten()
+                .any(|v| v.property.is_some())
             || [&self.third_transform, &self.fourth_transform]
                 .into_iter()
                 .flatten()
@@ -260,6 +268,9 @@ impl SurfaceAnimation {
                 );
             }
         }
+        if let Some(programmed) = &self.programmed {
+            changed |= programmed.apply(sample, &mut material.extension.programmed);
+        }
         if let Some(hd) = &self.hd {
             changed |= hd.apply(Some(sample), material);
         }
@@ -276,6 +287,7 @@ impl SurfaceAnimation {
             || self.rgba.is_some()
             || self.opacity.is_some()
             || self.weight.is_some()
+            || !self.pass_weights.is_empty()
             || self.mesh.is_some()
         {
             let rgb = self.color.as_ref().map(|v| sample.animated(v));
@@ -294,7 +306,7 @@ impl SurfaceAnimation {
                 .map(|v| sample.animated(v))
                 .unwrap_or_else(|| {
                     if self.rgba.is_none() && self.weight.is_none() {
-                        current.alpha
+                        self.unweighted_opacity.unwrap_or(current.alpha)
                     } else {
                         1.
                     }
@@ -304,7 +316,12 @@ impl SurfaceAnimation {
                     .weight
                     .as_ref()
                     .map(|v| sample.animated(v))
-                    .unwrap_or(1.0);
+                    .unwrap_or(1.0)
+                * self
+                    .pass_weights
+                    .iter()
+                    .map(|value| sample.animated(value))
+                    .product::<f32>();
             let tint = self
                 .mesh
                 .as_ref()

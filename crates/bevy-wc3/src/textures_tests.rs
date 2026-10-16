@@ -22,8 +22,10 @@ fn programmed_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion(
         layer.binding.contribution.map_alpha.initial = 1.;
         layer.binding.sampling.flags.set_uv_wrap_x(wrap_u);
         layer.binding.sampling.flags.set_uv_wrap_y(wrap_v);
-        let mut surface = programmed::Standard::default();
-        surface.diffuse.input = Some(layer.clone());
+        let mut surface = programmed::Standard {
+            diffuse: Some(layer.clone()),
+            ..Default::default()
+        };
         surface.normals.base = Some(layer.clone());
         surface.ambient_occlusion_layer = Some(layer);
         materials.push((
@@ -76,7 +78,13 @@ fn programmed_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion(
             .unwrap();
         assert_eq!(pass.material.base_color_texture.as_ref(), Some(color));
         assert_eq!(pass.material.normal_map_texture.as_ref(), Some(data));
-        assert_eq!(pass.material.occlusion_texture.as_ref(), Some(data));
+        assert!(resolved
+            .get_with_sampler(texture, ColorSpace::Unspecified, TextureRole::Data, sampler)
+            .is_some());
+        assert!(!pass
+            .diagnostics
+            .iter()
+            .any(|line| line.contains("is unresolved")));
         assert_ne!(color, data);
     }
     assert_eq!(

@@ -1,5 +1,7 @@
 //! Direct mesh projection, preserving face and corner attribute correspondence.
-use super::mesh_attributes::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT, EXTRA_TEXCOORD, SECOND_COLOR};
+use super::mesh_attributes::{
+    EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT, EXTRA_TEXCOORD, FOURTH_TEXCOORD, SECOND_COLOR,
+};
 use crate::ModelError;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{PrimitiveTopology, VertexAttributeValues};
@@ -273,7 +275,13 @@ pub(super) fn compile_geometry_with_uvs(
     secondary: Option<u32>,
     third: Option<u32>,
 ) -> Result<Vec<GeometryPart>, ModelError> {
-    compile_geometry_with_color(mesh, subset, coordinate, secondary, third, |_, color| color)
+    compile_geometry_with_color(
+        mesh,
+        subset,
+        coordinate,
+        [secondary, third, None],
+        |_, color| color,
+    )
 }
 
 /// Apply instance-specific color interpretation while original vertex identity
@@ -282,10 +290,10 @@ pub(super) fn compile_geometry_with_color(
     mesh: &ModelMesh<'_>,
     subset: &DrawSubset,
     coordinate: u32,
-    secondary: Option<u32>,
-    third: Option<u32>,
+    additional: [Option<u32>; 3],
     color: impl Fn(usize, [f32; 4]) -> [f32; 4],
 ) -> Result<Vec<GeometryPart>, ModelError> {
+    let [secondary, third, fourth] = additional;
     let topology = mesh
         .connectivity(subset.selection.connectivity)
         .ok_or_else(|| ModelError("draw connectivity is absent".into()))?;
@@ -345,6 +353,7 @@ pub(super) fn compile_geometry_with_color(
             let mut uvs = Vec::new();
             let mut secondary_uvs = Vec::new();
             let mut third_uvs = Vec::new();
+            let mut fourth_uvs = Vec::new();
             let mut colors = Vec::new();
             let mut second_colors = Vec::new();
             let mut tangents = Vec::new();
@@ -359,9 +368,11 @@ pub(super) fn compile_geometry_with_color(
                 {
                     uvs.push(values.get(index).unwrap());
                 }
-                for (coordinate, target) in
-                    [(secondary, &mut secondary_uvs), (third, &mut third_uvs)]
-                {
+                for (coordinate, target) in [
+                    (secondary, &mut secondary_uvs),
+                    (third, &mut third_uvs),
+                    (fourth, &mut fourth_uvs),
+                ] {
                     if let Some(coordinate) = coordinate {
                         if let Some((AttributeValues::Vector2(values), index)) =
                             attribute(mesh, subset, &AttributeSemantic::TexCoord(coordinate), c)?
@@ -424,6 +435,9 @@ pub(super) fn compile_geometry_with_color(
             }
             if third.is_some() {
                 output.insert_attribute(EXTRA_TEXCOORD, third_uvs);
+            }
+            if fourth.is_some() {
+                output.insert_attribute(FOURTH_TEXCOORD, fourth_uvs);
             }
             if !uvs.is_empty() {
                 output.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);

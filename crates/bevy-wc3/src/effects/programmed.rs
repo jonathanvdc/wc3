@@ -5,6 +5,8 @@
 //! then evolve independently. Primitive emission and free-flight conventions
 //! remain visually unverified against the game, separately from missing modes.
 use super::frame::EffectFrame;
+#[cfg(test)]
+use crate::material::ModelMaterial;
 use bevy::prelude::*;
 #[cfg(test)]
 use std::array::from_fn;
@@ -154,7 +156,12 @@ impl ProgrammedSprite {
         }
         if !matches!(
             details.emitter_shape,
-            EmitterShape::Point | EmitterShape::Plane | EmitterShape::Box | EmitterShape::Sphere
+            EmitterShape::Point
+                | EmitterShape::Plane
+                | EmitterShape::Box
+                | EmitterShape::Sphere
+                | EmitterShape::Cylinder
+                | EmitterShape::Disc
         ) {
             return Err("Programmed emitter shape has no implemented sampling distribution".into());
         }
@@ -356,6 +363,16 @@ impl ProgrammedSprite {
                     * sample.animated(&self.radius).abs()
                     * random[3].cbrt()
             }
+            EmitterShape::Cylinder | EmitterShape::Disc => {
+                let angle = random[2] * TAU;
+                let radius = sample.animated(&self.radius).abs() * random[3].sqrt();
+                let height = if self.shape == EmitterShape::Cylinder {
+                    signed.z * dimensions.z * 0.5
+                } else {
+                    0.
+                };
+                Vec3::new(radius * angle.cos(), radius * angle.sin(), height)
+            }
             _ => return None,
         };
         let direction = match self.velocity {
@@ -376,7 +393,10 @@ impl ProgrammedSprite {
             }
             _ => return None,
         };
-        let acceleration = Vec3::Z * self.gravity;
+        // Native gravity is positive down the model's Z axis. Art Tools uses
+        // negative gravity for upward acceleration; the basis conversion below
+        // transports this model-space vector independently of the emitter bone.
+        let acceleration = Vec3::NEG_Z * self.gravity;
         let (origin, velocity, acceleration) = if self.model_space {
             (origin, direction * speed, acceleration)
         } else {
@@ -709,3 +729,38 @@ impl ProgrammedAppearance {
 #[cfg(test)]
 #[path = "programmed_tests.rs"]
 mod tests;
+
+/// A native M3 material with both ordinary shadow participation switches off.
+#[cfg(test)]
+pub(super) fn no_shadow_material() -> ModelMaterial {
+    use crate::material::compile_material_with_images;
+    use crate::textures::TextureImages;
+    use std::sync::Arc;
+    use wc3::model::materials::{programmed, SurfaceSet};
+    use wc3::model::profiles::Universal;
+    use wc3::model::{Material, Model};
+    let mut builder = Model::<Universal>::builder("effect shadow flags");
+    let mut standard = programmed::Standard::default();
+    standard.state.rasterization.flags.set_no_shadows_cast(true);
+    standard
+        .state
+        .rasterization
+        .flags
+        .set_no_shadows_receive(true);
+    let id = builder
+        .add_material(Material {
+            name: "no shadow".into(),
+            surface: SurfaceSet::Programmed(Box::new(programmed::Material::Standard(Box::new(
+                standard,
+            )))),
+        })
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let pass = compile_material_with_images(&model, id, Arc::new(TextureImages::default()))
+        .unwrap()
+        .remove(0);
+    ModelMaterial {
+        base: pass.material,
+        extension: pass.state,
+    }
+}

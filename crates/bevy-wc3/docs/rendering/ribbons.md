@@ -47,8 +47,8 @@ A narrow programmed-ribbon subset constructs billboard or planar beams between
 authored endpoint anchors. Animated pivot-local anchor offsets and emission offsets
 shape a linearly subdivided path, bounded to 256 anchors/segments. Normalized
 distance controls width, RGBA, and rotation; explicit maximum length limits the
-beam. The primary animated PBR material and source-anchor visibility are retained,
-with reusable CPU mesh buffers.
+beam. Every compiled PBR material pass animates independently while sharing one
+generated mesh and reusable path buffers. Source-anchor visibility is retained.
 
 This is distinct from emitted lifetime trails. Programmes without endpoint
 anchors, cylinder/star geometry, and Bezier/hold interpolation are unsupported.

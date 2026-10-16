@@ -5,6 +5,7 @@ use super::programmed::{animated, nondefault_scalar, nondefault_variation, Progr
 use super::RibbonEmitter;
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
+use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::mesh::{PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -29,6 +30,10 @@ struct Definition {
     segments: usize,
     max_length: Animated<f32>,
     active: Animated<u32>,
+    passes: Vec<Pass>,
+}
+#[derive(Clone)]
+struct Pass {
     material: ModelMaterial,
     animation: Arc<SurfaceAnimation>,
 }
@@ -38,9 +43,8 @@ pub(super) struct RuntimeProgrammedRibbons {
     diagnostics: Vec<(FeatureId, String)>,
 }
 struct State {
-    entity: Entity,
     mesh: Handle<Mesh>,
-    material: Handle<ModelMaterial>,
+    passes: Vec<PassState>,
     points: Vec<Vec3>,
     sampled: Vec<(Vec3, f32)>,
     appearance: Option<ProgrammedAppearance>,
@@ -49,6 +53,10 @@ struct State {
     anchor: Option<Mat4>,
     max_length: f32,
     visible: bool,
+}
+struct PassState {
+    entity: Entity,
+    material: Handle<ModelMaterial>,
 }
 #[derive(Default)]
 pub(super) struct ProgrammedRibbonInstances {
@@ -96,7 +104,9 @@ impl RuntimeProgrammedRibbons {
             let mut diagnose =
                 |message: &str| result.diagnostics.push((feature, message.to_owned()));
             if definition.spline_points.is_empty() {
-                diagnose("M3 ribbons without endpoint anchors require emitted-section motion and lifespan simulation; this mode is not implemented");
+                diagnose(
+                    "M3 ribbons without endpoint anchors require emitted-section motion and lifespan simulation; this mode is not implemented",
+                );
                 continue;
             }
             if !matches!(
@@ -121,11 +131,8 @@ impl RuntimeProgrammedRibbons {
                 diagnose("M3 endpoint ribbon material does not resolve to a compiled PBR surface");
                 continue;
             };
-            let Some(pass) = passes.first() else {
+            if passes.is_empty() {
                 continue;
-            };
-            if passes.len() > 1 {
-                diagnose("M3 endpoint ribbon currently draws the primary material pass; supplementary passes are not instantiated");
             }
             if [
                 &definition.yaw,
@@ -137,7 +144,9 @@ impl RuntimeProgrammedRibbons {
             .into_iter()
             .any(nondefault_variation)
             {
-                diagnose("M3 endpoint ribbon yaw/pitch/speed/size/alpha variation controls are not implemented");
+                diagnose(
+                    "M3 endpoint ribbon yaw/pitch/speed/size/alpha variation controls are not implemented",
+                );
             }
             if nondefault_scalar(&definition.overlay)
                 || nondefault_scalar(&definition.particle_velocity)
@@ -151,12 +160,9 @@ impl RuntimeProgrammedRibbons {
                     "M3 endpoint ribbon edge_falloff and vertex_alpha flags are not implemented",
                 );
             }
-            diagnose("M3 endpoint ribbons use piecewise-linear anchor paths with normalized width/color/rotation, bounded to 256 segments; authored tangent/velocity variations, noise and exact game fidelity remain unimplemented or unverified");
-            let mut material = ModelMaterial {
-                base: pass.material.clone(),
-                extension: pass.state.clone(),
-            };
-            material.base.cull_mode = None;
+            diagnose(
+                "M3 endpoint ribbons use piecewise-linear anchor paths with normalized width/color/rotation, bounded to 256 segments; authored tangent/velocity variations, noise and exact game fidelity remain unimplemented or unverified",
+            );
             result.definitions.push(Definition {
                 feature,
                 node: attached.node,
@@ -172,8 +178,21 @@ impl RuntimeProgrammedRibbons {
                 segments: (definition.divisions.ceil().max(1.) as usize).min(MAX_SEGMENTS),
                 max_length: animated(&definition.max_length),
                 active: animated(&definition.active),
-                material,
-                animation: Arc::new(pass.animation.clone()),
+                passes: passes
+                    .iter()
+                    .map(|pass| {
+                        let mut material = ModelMaterial {
+                            base: pass.material.clone(),
+                            extension: pass.state.clone(),
+                        };
+                        material.extension.enable_effect_color();
+                        material.base.cull_mode = None;
+                        Pass {
+                            material,
+                            animation: Arc::new(pass.animation.clone()),
+                        }
+                    })
+                    .collect(),
             });
         }
         result
@@ -199,28 +218,43 @@ impl RuntimeProgrammedRibbons {
                     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.; 2]; 3]);
                     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, vec![[0.; 4]; 3]);
                     let mesh = meshes.add(mesh);
-                    let material = materials.add(definition.material.clone());
-                    let entity = commands
-                        .spawn((
-                            RibbonEmitter {
-                                feature: definition.feature,
-                                node: definition.node,
-                                sections: 0,
-                                segments: 0,
-                                omitted_sections: 0,
-                            },
-                            Mesh3d(mesh.clone()),
-                            MeshMaterial3d(material.clone()),
-                            Transform::default(),
-                            Visibility::default(),
-                            NoFrustumCulling,
-                            ChildOf(basis),
-                        ))
-                        .id();
+                    let passes = definition
+                        .passes
+                        .iter()
+                        .enumerate()
+                        .map(|(index, pass)| {
+                            let material = materials.add(pass.material.clone());
+                            let entity = commands
+                                .spawn((
+                                    Mesh3d(mesh.clone()),
+                                    MeshMaterial3d(material.clone()),
+                                    Transform::default(),
+                                    Visibility::default(),
+                                    NoFrustumCulling,
+                                    ChildOf(basis),
+                                ))
+                                .id();
+                            if index == 0 {
+                                commands.entity(entity).insert(RibbonEmitter {
+                                    feature: definition.feature,
+                                    node: definition.node,
+                                    sections: 0,
+                                    segments: 0,
+                                    omitted_sections: 0,
+                                });
+                            }
+                            if !pass.material.extension.casts_shadows() {
+                                commands.entity(entity).insert(NotShadowCaster);
+                            }
+                            if !pass.material.extension.receives_shadows() {
+                                commands.entity(entity).insert(NotShadowReceiver);
+                            }
+                            PassState { entity, material }
+                        })
+                        .collect();
                     State {
-                        entity,
                         mesh,
-                        material,
+                        passes,
                         points: Vec::new(),
                         sampled: Vec::new(),
                         appearance: None,
@@ -248,10 +282,11 @@ impl RuntimeProgrammedRibbons {
             frame.selection.shared_time,
         );
         for (definition, state) in self.definitions.iter().zip(&mut states.states) {
-            if definition.animation.is_animated() {
-                definition
-                    .animation
-                    .apply_to_assets(frame.sample, &state.material, materials);
+            for (pass, state) in definition.passes.iter().zip(&state.passes) {
+                if pass.animation.is_animated() {
+                    pass.animation
+                        .apply_to_assets(frame.sample, &state.material, materials);
+                }
             }
             let anchor = frame.basis_world * frame.feature_matrix(definition.anchor);
             let appearance = ProgrammedAppearance::from_age(
@@ -321,14 +356,16 @@ impl RuntimeProgrammedRibbons {
                 );
             }
             state.appearance = Some(appearance);
-            if let Ok(mut statistics) = statistics.get_mut(state.entity) {
-                let sections = state.sampled.len();
-                let segments = sections.saturating_sub(1);
-                if statistics.sections != sections {
-                    statistics.sections = sections;
-                }
-                if statistics.segments != segments {
-                    statistics.segments = segments;
+            if let Some(pass) = state.passes.first() {
+                if let Ok(mut statistics) = statistics.get_mut(pass.entity) {
+                    let sections = state.sampled.len();
+                    let segments = sections.saturating_sub(1);
+                    if statistics.sections != sections {
+                        statistics.sections = sections;
+                    }
+                    if statistics.segments != segments {
+                        statistics.segments = segments;
+                    }
                 }
             }
         }
@@ -479,5 +516,127 @@ mod tests {
         let pointer = output.as_ptr();
         sample_path(&points, 4, 3., &mut output);
         assert_eq!(pointer, output.as_ptr());
+    }
+    #[test]
+    fn endpoint_material_passes_share_one_mesh_and_keep_distinct_materials() {
+        use bevy::ecs::world::CommandQueue;
+        use wc3::model::profiles::Universal;
+        use wc3::model::{
+            Attachment, AttachmentActivation, AttachmentIdentity, AttachmentPoint, Node,
+        };
+        let mut builder = Model::<Universal>::builder("ribbon passes");
+        let node = builder.add_node(Node::named("anchor")).unwrap();
+        let feature = builder
+            .add_feature(
+                node,
+                NodeFeature::Attachment(Attachment::Point(AttachmentPoint {
+                    identity: AttachmentIdentity::Role(11),
+                    activation: AttachmentActivation::Uncontrolled,
+                    control: None,
+                })),
+            )
+            .unwrap();
+        let runtime = RuntimeProgrammedRibbons {
+            definitions: vec![Definition {
+                feature,
+                node,
+                anchor: 0,
+                points: vec![],
+                appearance: ProgrammedAge {
+                    size_mid_time: 0.5,
+                    color_mid_time: 0.5,
+                    alpha_mid_time: 0.5,
+                    rotation_mid_time: 0.5,
+                    size_mid_hold_time: 0.,
+                    color_mid_hold_time: 0.,
+                    alpha_mid_hold_time: 0.,
+                    rotation_mid_hold_time: 0.,
+                    size_animation: Default::default(),
+                    rotation_animation: Default::default(),
+                    color_start: Default::default(),
+                    color_mid: Default::default(),
+                    color_end: Default::default(),
+                },
+                smoothing: [Smoothing::Linear; 2],
+                kind: RibbonKind::Billboard,
+                segments: 1,
+                max_length: Animated::constant(10.),
+                active: Animated::constant(1),
+                passes: [Color::WHITE, Color::BLACK]
+                    .map(|color| {
+                        let mut material = if color == Color::BLACK {
+                            super::super::programmed::no_shadow_material()
+                        } else {
+                            ModelMaterial {
+                                base: StandardMaterial::default(),
+                                extension: Default::default(),
+                            }
+                        };
+                        material.base.base_color = color;
+                        Pass {
+                            material,
+                            animation: Arc::default(),
+                        }
+                    })
+                    .into(),
+            }],
+            diagnostics: vec![],
+        };
+        let mut world = World::new();
+        let basis = world.spawn_empty().id();
+        let mut queue = CommandQueue::default();
+        let mut meshes = Assets::default();
+        let mut materials = Assets::default();
+        let states = runtime.spawn(
+            &mut Commands::new(&mut queue, &world),
+            &mut meshes,
+            &mut materials,
+            basis,
+        );
+        queue.apply(&mut world);
+        assert_eq!(meshes.len(), 1);
+        assert_eq!(materials.len(), 2);
+        let state = &states.states[0];
+        assert_eq!(state.passes.len(), 2);
+        assert_eq!(world.query::<&RibbonEmitter>().iter(&world).count(), 1);
+        for pass in &state.passes {
+            assert_eq!(world.get::<Mesh3d>(pass.entity).unwrap().0, state.mesh);
+            assert_eq!(
+                world
+                    .get::<MeshMaterial3d<ModelMaterial>>(pass.entity)
+                    .unwrap()
+                    .0,
+                pass.material
+            );
+        }
+        assert_ne!(state.passes[0].material, state.passes[1].material);
+        assert!(!world
+            .entity(state.passes[0].entity)
+            .contains::<NotShadowCaster>());
+        assert!(!world
+            .entity(state.passes[0].entity)
+            .contains::<NotShadowReceiver>());
+        assert!(world
+            .entity(state.passes[1].entity)
+            .contains::<NotShadowCaster>());
+        assert!(world
+            .entity(state.passes[1].entity)
+            .contains::<NotShadowReceiver>());
+        assert_eq!(
+            materials
+                .get(&state.passes[0].material)
+                .unwrap()
+                .base
+                .base_color,
+            Color::WHITE
+        );
+        assert_eq!(
+            materials
+                .get(&state.passes[1].material)
+                .unwrap()
+                .base
+                .base_color,
+            Color::BLACK
+        );
     }
 }

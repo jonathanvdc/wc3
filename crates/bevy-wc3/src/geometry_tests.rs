@@ -398,3 +398,43 @@ fn second_color_projects_corner_values_independently_of_primary_illumination() {
         ]))
     );
 }
+
+#[test]
+fn fourth_uv_preserves_corner_rows_without_allocating_unused_streams() {
+    let mut source = mesh(
+        &[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [1., 1., 0.]],
+        Topology::Triangles([[0, 1, 2], [2, 1, 3]].into_iter().collect()),
+    );
+    let coordinates = [
+        [0., 0.],
+        [1., 0.],
+        [0., 1.],
+        [0.2, 0.8],
+        [0.8, 0.2],
+        [1., 1.],
+    ];
+    source
+        .geometry
+        .attributes
+        .insert(Attribute {
+            semantic: AttributeSemantic::TexCoord(3),
+            domain: AttributeDomain::Corner,
+            values: AttributeValues::Vector2(coordinates.into_iter().collect()),
+        })
+        .unwrap();
+    let id = source.add_primary_subset(0, 2);
+    let subset = source.subset(id).unwrap();
+    let parts =
+        compile_geometry_with_color(&source, subset, 0, [None, None, Some(3)], |_, color| color)
+            .unwrap();
+    let Some(VertexAttributeValues::Float32x2(uvs)) = parts[0].mesh.attribute(FOURTH_TEXCOORD)
+    else {
+        panic!("fourth UVs absent")
+    };
+    assert_eq!(uvs, &coordinates);
+    assert_ne!(uvs[2], uvs[3]);
+    assert!(!parts[0].mesh.contains_attribute(Mesh::ATTRIBUTE_UV_1));
+    assert!(!parts[0].mesh.contains_attribute(EXTRA_TEXCOORD));
+    let parts = compile_geometry(&source, subset, 0).unwrap();
+    assert!(!parts[0].mesh.contains_attribute(FOURTH_TEXCOORD));
+}

@@ -39,8 +39,10 @@ pub struct Standard {
     pub parallax_height: Property<f32>,
     /// Controls motion blur amount through its animation value.
     pub motion_blur_amount: Property<f32>,
-    /// Base diffuse input and its compositing operation.
-    pub diffuse: SurfaceContribution<Option<TextureLayer>, LayerBlendOp>,
+    /// Base diffuse input.
+    pub diffuse: Option<TextureLayer>,
+    /// Shared composition operation for the decal and environment layers.
+    pub layer_blend: LayerBlendOp,
     /// Specular and gloss inputs with their shader response model.
     pub specular: SurfaceContribution<SpecularInputs<Option<TextureLayer>>, SpecularResponse>,
     /// Independently composited emission slots and their shared HDR scale.

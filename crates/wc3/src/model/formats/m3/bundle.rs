@@ -102,9 +102,16 @@ impl<'data, E: Envelope> Bundle<'data, E> {
     pub fn animations(&self) -> impl Iterator<Item = (u32, &AnimationFile<'data>)> {
         self.animations.iter().map(|(hash, file)| (*hash, file))
     }
-    /// Declared external animation hashes, deduplicated in deterministic order.
+    /// Declared companion hashes and explicit registrations, in deterministic order.
+    /// The base document's own binding identity is already satisfied by the base.
     pub fn dependencies(&self) -> Result<Vec<u32>, ReadError> {
-        let mut pending: BTreeSet<_> = self.model.animation_hashes()?.into_iter().collect();
+        let base_identity = self.model.root_record()?.animation_hash();
+        let mut pending: BTreeSet<_> = self
+            .model
+            .animation_hashes()?
+            .into_iter()
+            .filter(|hash| *hash != base_identity)
+            .collect();
         pending.extend(self.animations.keys().copied());
         let mut visited = BTreeSet::new();
         while let Some(identity) = pending.pop_first() {
@@ -113,7 +120,7 @@ impl<'data, E: Envelope> Bundle<'data, E> {
             }
             if let Some(file) = self.animations.get(&identity) {
                 for next in file.animation_dependencies(identity)? {
-                    if !visited.contains(&next) {
+                    if next != base_identity && !visited.contains(&next) {
                         pending.insert(next);
                     }
                 }

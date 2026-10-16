@@ -891,3 +891,46 @@ fn m2_nonzero_transition_pairs_require_explicit_application_duration() {
             && diagnostic.message.contains("play_with_blend")
     }));
 }
+
+#[test]
+fn programmed_shadow_cast_and_receive_flags_are_independent() {
+    use bevy::light::{NotShadowCaster, NotShadowReceiver};
+    use wc3::model::materials::programmed;
+    for cast in [false, true] {
+        for receive in [false, true] {
+            let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
+            let id = source.materials().next().unwrap().0;
+            let mut standard = programmed::Standard::default();
+            standard
+                .state
+                .rasterization
+                .flags
+                .set_no_shadows_cast(!cast);
+            standard
+                .state
+                .rasterization
+                .flags
+                .set_no_shadows_receive(!receive);
+            source
+                .edit(|builder| {
+                    builder.set_material_surface(
+                        id,
+                        MaterialSurface::Programmed(Box::new(programmed::Material::Standard(
+                            Box::new(standard),
+                        ))),
+                    )
+                })
+                .unwrap();
+            let (mut app, _, _, _) = spawn_pair(&source);
+            let mut draws = app.world_mut().query_filtered::<(Option<&NotShadowCaster>, Option<&NotShadowReceiver>), With<ModelDraw>>();
+            assert_eq!(draws.iter(app.world()).count(), 2);
+            for (no_cast, no_receive) in draws.iter(app.world()) {
+                assert_eq!(no_cast.is_none(), cast);
+                assert_eq!(no_receive.is_none(), receive);
+            }
+        }
+    }
+}
+
+#[path = "m3_hierarchy_tests.rs"]
+mod m3_hierarchy;

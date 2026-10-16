@@ -1,10 +1,14 @@
 //! Direct semantic surface preparation for the Bevy PBR pipeline.
 mod animation;
+mod bindings;
 mod compile;
 mod model;
 mod particle;
+mod targets;
 pub(crate) use particle::{particle_material_layers, ParticleComposition};
 mod programmed;
+use programmed::layers::{ProgrammedAnimation, ProgrammedUniform};
+pub use programmed::TeamColors;
 #[path = "ribbon_material.rs"]
 mod ribbon_material;
 mod world;
@@ -19,17 +23,20 @@ use bevy::pbr::{
 };
 use bevy::prelude::*;
 use bevy::render::render_resource::{
-    AsBindGroup, BlendComponent, BlendFactor, BlendOperation, BlendState, CompareFunction,
+    BlendComponent, BlendFactor, BlendOperation, BlendState, CompareFunction,
     RenderPipelineDescriptor, ShaderType, SpecializedMeshPipelineError,
 };
 use bevy::shader::ShaderRef;
+#[cfg(test)]
 pub(crate) use compile::compile_material_with_images;
+pub(crate) use compile::compile_materials_with_images;
 use compile::rasterization;
 #[cfg(test)]
 use compile::{blend, depth};
 #[cfg(test)]
 use model::legacy_combiner;
 pub(crate) use ribbon_material::effect_state;
+use std::array::from_fn;
 use std::collections::HashMap;
 use std::sync::Arc;
 #[cfg(test)]
@@ -51,6 +58,7 @@ pub(crate) struct SurfacePass {
     pub state: ModelMaterialExtension,
     pub secondary_coordinate: Option<u32>,
     pub third_coordinate: Option<u32>,
+    pub fourth_coordinate: Option<u32>,
 }
 
 /// A semantic material retaining Bevy PBR shading and authored draw state.
@@ -71,41 +79,87 @@ pub(crate) enum Blend {
 }
 
 /// Semantic fixed-function state without a dependency on any native model codec.
-#[derive(Asset, TypePath, AsBindGroup, Clone, Debug)]
-#[bind_group_data(ModelMaterialKey)]
+#[derive(Asset, TypePath, Clone, Debug)]
 pub struct ModelMaterialExtension {
-    #[uniform(100)]
     combiner: CombinerUniform,
-    #[texture(101)]
-    #[sampler(102)]
     secondary: Option<Handle<Image>>,
-    #[uniform(103)]
     hd: HdUniform,
-    #[texture(104)]
-    #[sampler(105)]
     orm: Option<Handle<Image>>,
-    #[texture(106)]
-    #[sampler(107)]
     team_color: Option<Handle<Image>>,
-    #[texture(108)]
-    #[sampler(109)]
     environment: Option<Handle<Image>>,
-    #[texture(111)]
-    #[sampler(112)]
     tertiary: Option<Handle<Image>>,
-    #[texture(114)]
-    #[sampler(115)]
     fourth: Option<Handle<Image>>,
-    #[uniform(110)]
     world: WorldUniform,
-    #[uniform(113)]
     particle: ParticleUniform,
+    programmed: ProgrammedUniform,
+    programmed_samplers: [Option<Handle<Image>>; 6],
+    normal_secondary: Option<Handle<Image>>,
+    normal_secondary_mask: Option<Handle<Image>>,
+    light_map: Option<Handle<Image>>,
+    ambient_occlusion: Option<Handle<Image>>,
     blend: Option<Blend>,
     depth_test: bool,
     depth_write: Option<bool>,
+    cast_shadows: bool,
+    receive_shadows: bool,
+    fourth_uv: bool,
 }
 
 impl ModelMaterialExtension {
+    pub(crate) fn enable_effect_color(&mut self) {
+        if self.programmed.settings.x != 0 {
+            self.programmed.settings.y = 1;
+            self.programmed.settings.z = 1;
+        }
+    }
+
+    /// Application colours used by an M3 standard material's team operations.
+    pub fn team_colors(&self) -> Option<TeamColors> {
+        (self.programmed.settings.x != 0).then(|| TeamColors {
+            diffuse: self.programmed.diffuse_team.truncate(),
+            emissive: self.programmed.emissive_team.truncate(),
+            diffuse_exponent: self.programmed.diffuse_team.w,
+            emissive_exponent: self.programmed.emissive_team.w,
+        })
+    }
+
+    /// Updates team colours without changing shader pipelines or model resources.
+    ///
+    /// Returns `true` when a standard material's colours change; returns `false`
+    /// when the colours are unchanged or this surface has no team-colour program.
+    pub fn set_team_colors(&mut self, colors: TeamColors) -> Result<bool, ModelError> {
+        if !colors.diffuse.is_finite()
+            || !colors.emissive.is_finite()
+            || !colors.diffuse_exponent.is_finite()
+            || colors.diffuse_exponent < 0.
+            || !colors.emissive_exponent.is_finite()
+            || colors.emissive_exponent < 0.
+        {
+            return Err(ModelError::new(
+                "team colours must be finite and both mask exponents nonnegative",
+            ));
+        }
+        if self.programmed.settings.x == 0 {
+            return Ok(false);
+        }
+        if self.team_colors() == Some(colors) {
+            return Ok(false);
+        }
+        self.programmed.diffuse_team = colors.diffuse.extend(colors.diffuse_exponent);
+        self.programmed.emissive_team = colors.emissive.extend(colors.emissive_exponent);
+        Ok(true)
+    }
+
+    /// Whether the authored surface casts ordinary Bevy shadows.
+    pub fn casts_shadows(&self) -> bool {
+        self.cast_shadows
+    }
+
+    /// Whether the authored surface receives ordinary Bevy shadows.
+    pub fn receives_shadows(&self) -> bool {
+        self.receive_shadows
+    }
+
     pub(crate) fn set_world_illumination(&mut self, ambient: Vec3, lighting: u32) -> [u32; 4] {
         if self.world.flags.x == 0 {
             return [0; 4];
@@ -283,9 +337,18 @@ impl Default for ModelMaterialExtension {
             environment: None,
             world: WorldUniform::default(),
             particle: ParticleUniform::default(),
+            programmed: ProgrammedUniform::default(),
+            programmed_samplers: from_fn(|_| None),
+            normal_secondary: None,
+            normal_secondary_mask: None,
+            light_map: None,
+            ambient_occlusion: None,
             blend: None,
             depth_test: true,
             depth_write: None,
+            cast_shadows: true,
+            receive_shadows: true,
+            fourth_uv: false,
         }
     }
 }
@@ -298,13 +361,17 @@ pub struct ModelMaterialKey {
     depth_write: Option<bool>,
     generated_coordinates: bool,
     third_uv: bool,
+    fourth_uv: bool,
     world_layer_alpha: bool,
     edge_fade: bool,
+    programmed: bool,
 }
 
 impl From<&ModelMaterialExtension> for ModelMaterialKey {
     fn from(state: &ModelMaterialExtension) -> Self {
         Self {
+            programmed: state.programmed.settings.x != 0,
+            fourth_uv: state.fourth_uv,
             world_layer_alpha: matches!(
                 state.world.composition.x,
                 7 | 10 | 12 | 13 | 14 | 16 | 18 | 19 | 20
@@ -313,7 +380,12 @@ impl From<&ModelMaterialExtension> for ModelMaterialKey {
             third_uv: state.particle.mode.x != 0
                 || (matches!(state.combiner.coordinates.w, 1 | 3)
                     || state.combiner.additional_coordinates.x == 3
-                    || state.world.composition.y > 2),
+                    || state.world.composition.y > 2
+                    || state
+                        .programmed
+                        .layers
+                        .iter()
+                        .any(|layer| layer.flags.y != 0 && layer.route.x == 2)),
             generated_coordinates: state.combiner.coordinates.x != 0
                 || state.combiner.coordinates.y != 0
                 || state.combiner.coordinates.w == 1,
@@ -394,7 +466,13 @@ impl MaterialExtension for ModelMaterialExtension {
             key.bind_group_data.generated_coordinates || key.bind_group_data.edge_fade,
             key.bind_group_data.third_uv,
             key.bind_group_data.world_layer_alpha,
+            key.bind_group_data.fourth_uv,
         )?;
+        if key.bind_group_data.programmed {
+            if let Some(fragment) = &mut descriptor.fragment {
+                fragment.shader_defs.push("PROGRAMMED_MATERIAL".into());
+            }
+        }
         if key.bind_group_data.edge_fade {
             descriptor.vertex.shader_defs.push("MODEL_EDGE_FADE".into());
             if let Some(fragment) = &mut descriptor.fragment {
@@ -432,6 +510,8 @@ pub(crate) struct SurfaceAnimation {
     rgba: Option<Animated<[f32; 4]>>,
     opacity: Option<Animated<f32>>,
     weight: Option<Animated<f32>>,
+    pass_weights: Vec<Animated<f32>>,
+    unweighted_opacity: Option<f32>,
     texture: Option<Animated<Option<TextureId>>>,
     transform: Option<TextureTransform>,
     secondary_transform: Option<TextureTransform>,
@@ -446,6 +526,7 @@ pub(crate) struct SurfaceAnimation {
     images: Arc<HashMap<TextureId, Handle<Image>>>,
     centered_transform: bool,
     hd: Option<HdAnimation>,
+    programmed: Option<ProgrammedAnimation>,
 }
 
 #[derive(Clone)]
@@ -472,6 +553,7 @@ impl Default for SurfacePass {
             },
             secondary_coordinate: None,
             third_coordinate: None,
+            fourth_coordinate: None,
         }
     }
 }

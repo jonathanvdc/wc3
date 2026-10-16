@@ -674,6 +674,7 @@ impl ValidateLinks for Standard {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.state.visit_links(visitor);
         self.diffuse.visit_links(visitor);
+        self.layer_blend.visit_links(visitor);
         self.specular.visit_links(visitor);
         self.emissive.visit_links(visitor);
         self.opacity.visit_links(visitor);

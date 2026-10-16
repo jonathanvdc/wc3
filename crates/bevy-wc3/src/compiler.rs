@@ -6,7 +6,7 @@ use super::events::RuntimeEvents;
 use super::features::RuntimeFeatures;
 use super::geometry::{apply_skin, compile_geometry_with_color, whole_geometry};
 use super::lod::LodDefinition;
-use super::material::compile_material_with_images;
+use super::material::compile_materials_with_images;
 use super::material::mesh_alpha_mode;
 use super::mesh_animation::{MeshAnimation, MeshMaterialState};
 use super::mesh_interner::MeshInterner;
@@ -27,6 +27,7 @@ use bevy::prelude::*;
 use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use wc3::model::profiles::m3::NodeRole as M3NodeRole;
 use wc3::model::profiles::Universal;
 use wc3::model::systems::ModelMetadata;
 use wc3::model::systems::System;
@@ -170,6 +171,13 @@ pub fn compile_model_with_options(
         })
         .collect();
     let mut diagnostics = Vec::new();
+    for (id, node) in model.nodes() {
+        if let Some(NodeControls::M3(M3NodeRole::Bone(controls))) = &node.controls {
+            if controls.extra_flags.bits() & 7 != 0 {
+                diagnostics.push(RenderDiagnostic { feature: None, material: None, message: format!("M3 node {id:?} ({}) retains unresolved native inheritance flags; rendering uses ordinary parent transforms", node.name) });
+            }
+        }
+    }
     for node in &nodes {
         if node.billboard_convention == BillboardConvention::M2
             && matches!(node.billboard, Billboard::Locked { enabled: true, .. })
@@ -271,16 +279,18 @@ pub fn compile_model_with_options(
         }
         None => TextureImages::resolve(model, &mut resolve_image),
     });
-    let mut materials = HashMap::new();
-    for (id, _) in model.materials() {
-        if selected_materials
-            .as_ref()
-            .is_some_and(|selected| !selected.contains(&id))
-        {
-            continue;
-        }
-        let passes = compile_material_with_images(model, id, images.clone())?;
-        for pass in &passes {
+    let materials = compile_materials_with_images(
+        model,
+        model.materials().filter_map(|(id, _)| {
+            selected_materials
+                .as_ref()
+                .is_none_or(|selected| selected.contains(&id))
+                .then_some(id)
+        }),
+        images.clone(),
+    )?;
+    for (&id, passes) in &materials {
+        for pass in passes {
             diagnostics.extend(
                 pass.diagnostics
                     .iter()
@@ -292,7 +302,6 @@ pub fn compile_model_with_options(
                     }),
             );
         }
-        materials.insert(id, passes);
     }
     let mesh_animation = MeshAnimation::compile(model);
     let mut geometry_cache = HashMap::new();
@@ -364,6 +373,7 @@ pub fn compile_model_with_options(
                     surface.coordinate,
                     surface.secondary_coordinate,
                     surface.third_coordinate,
+                    surface.fourth_coordinate,
                     skin_id,
                     color_adjustment.as_ref().map(|_| instance_id),
                 );
@@ -374,8 +384,11 @@ pub fn compile_model_with_options(
                         source,
                         &subset,
                         surface.coordinate,
-                        surface.secondary_coordinate,
-                        surface.third_coordinate,
+                        [
+                            surface.secondary_coordinate,
+                            surface.third_coordinate,
+                            surface.fourth_coordinate,
+                        ],
                         |vertex, color| {
                             color_adjustment
                                 .as_ref()

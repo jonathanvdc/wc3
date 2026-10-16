@@ -36,6 +36,11 @@ approximations and emit a diagnostic; their native mirroring and camera-frame
 reconstruction are not implemented. Generic semantic billboards retain their +Z
 facing convention.
 
+M3 bones use ordinary parent-local translation, rotation, and scale composition.
+Native low-bit inheritance controls remain preserved in the semantic bone payload;
+their historical names do not determine selective inheritance behavior. Imported
+M3 bones therefore inherit the full parent transform.
+
 Camera anchoring adds the driving camera position once along an inherited chain.
 Repeated anchored descendants account for the already inherited offset. It does not
 itself force a node to face the camera.

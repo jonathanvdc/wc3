@@ -87,11 +87,11 @@ bitfield! {
     pub struct BoneFlags(u32);
     /// Returns the complete stored bit mask.
     pub bits, _: 31, 0;
-    /// Returns or changes the inherit translation control.
+    /// Legacy inherit-translation bit; its runtime inheritance meaning is unresolved.
     pub inherit_translation, set_inherit_translation: 0;
-    /// Returns or changes the inherit scale control.
+    /// Legacy inherit-scale bit; its runtime inheritance meaning is unresolved.
     pub inherit_scale, set_inherit_scale: 1;
-    /// Returns or changes the inherit rotation control.
+    /// Legacy inherit-rotation bit; its runtime inheritance meaning is unresolved.
     pub inherit_rotation, set_inherit_rotation: 2;
     /// Returns or changes the billboard1 control.
     pub billboard1, set_billboard1: 4;
