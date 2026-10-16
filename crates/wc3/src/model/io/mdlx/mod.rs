@@ -7,6 +7,9 @@ use crate::model::formats::mdlx::{
 use crate::model::profiles::Mdlx;
 use crate::model::Model;
 mod animation;
+#[cfg(test)]
+#[path = "billboard_tests.rs"]
+mod billboard_tests;
 mod curves;
 mod encode_animation;
 mod encode_geometry;
@@ -18,17 +21,14 @@ mod export;
 mod geometry;
 mod import;
 mod materials;
+#[cfg(test)]
+#[path = "ribbon_axis_tests.rs"]
+mod ribbon_axis_tests;
 mod scene;
 mod scene_lights;
 mod state;
 mod storage;
 mod text;
-#[cfg(test)]
-#[path = "billboard_tests.rs"]
-mod billboard_tests;
-#[cfg(test)]
-#[path = "ribbon_axis_tests.rs"]
-mod ribbon_axis_tests;
 /// Decodes MDX directly into an independent semantic model.
 /// Files without a `VERS` chunk use format version 800.
 pub fn decode_mdx(

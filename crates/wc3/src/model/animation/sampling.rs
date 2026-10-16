@@ -7,6 +7,7 @@ use crate::model::{
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
+use std::iter::once;
 
 /// Clock values and explicitly selected programmes for one evaluation.
 ///
@@ -48,7 +49,24 @@ pub struct SampledAnimation<'view, 'data, P: Profile = Universal> {
 
 enum ChannelSelection<'view, 'data, P: Profile> {
     Flat(Vec<&'view Channel<'data, P>>),
-    Indexed(Vec<&'view IndexedChannels<P>>),
+    Indexed(IndexedSelection<'view, P>),
+}
+// Ordinary clips need only inline borrowed programme references. Controller
+// storage allocates only when the caller explicitly selects controllers.
+struct IndexedSelection<'view, P: Profile> {
+    global: &'view IndexedChannels<P>,
+    clip: Option<&'view IndexedChannels<P>>,
+    controllers: Vec<&'view ControllerProgram<P>>,
+}
+impl<'view, P: Profile> IndexedSelection<'view, P> {
+    fn iter(&self) -> impl DoubleEndedIterator<Item = &'view IndexedChannels<P>> + '_ {
+        once(self.global).chain(self.clip).chain(
+            self.controllers
+                .iter()
+                .copied()
+                .map(|controller| &controller.channels),
+        )
+    }
 }
 #[derive(Clone, Debug)]
 struct IndexedChannels<P: Profile> {
@@ -524,7 +542,7 @@ impl<P: Profile> AnimationProgram<P> {
         sample: AnimationSample<'_>,
     ) -> Result<SampledAnimation<'_, 'static, P>, Error> {
         validate_interval(sample.timeline_interval)?;
-        let mut channels = vec![&self.global];
+        let mut selected_clip = None;
         let mut clip_time = sample.clip_time;
         let mut clip_policy = None;
         if let Some(id) = sample.clip {
@@ -543,7 +561,7 @@ impl<P: Profile> AnimationProgram<P> {
             } else {
                 0.
             })?;
-            channels.push(&clip.channels);
+            selected_clip = Some(&clip.channels);
         }
         let mut controllers = Vec::with_capacity(sample.controllers.len());
         for (index, id) in sample.controllers.iter().enumerate() {
@@ -561,9 +579,6 @@ impl<P: Profile> AnimationProgram<P> {
             })?);
         }
         controllers.sort_by_key(|controller| controller.priority);
-        for controller in controllers {
-            channels.push(&controller.channels);
-        }
         Ok(SampledAnimation {
             clocks: Cow::Borrowed(&self.clocks),
             clip_time,
@@ -571,7 +586,11 @@ impl<P: Profile> AnimationProgram<P> {
             timeline_time: sample.timeline_time,
             timeline_interval: sample.timeline_interval,
             shared_time: sample.shared_time,
-            channels: ChannelSelection::Indexed(channels),
+            channels: ChannelSelection::Indexed(IndexedSelection {
+                global: &self.global,
+                clip: selected_clip,
+                controllers,
+            }),
         })
     }
 }
@@ -665,10 +684,13 @@ mod tests {
         );
         let program = AnimationProgram::compile(&model);
         drop(model);
-        assert_eq!(
-            program.sample(sample).unwrap().property(&property),
-            Some([2.; 3])
-        );
+        let sampled = program.sample(sample).unwrap();
+        let ChannelSelection::Indexed(selection) = &sampled.channels else {
+            panic!("owned programs must use indexed selection")
+        };
+        assert_eq!(selection.controllers.capacity(), 0);
+        assert_eq!(selection.iter().count(), 2);
+        assert_eq!(sampled.property(&property), Some([2.; 3]));
     }
     #[test]
     fn independent_clocks_and_controller_priority_are_explicit() {

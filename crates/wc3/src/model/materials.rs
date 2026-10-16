@@ -124,7 +124,7 @@ pub enum ColorSpace {
     Unknown(u8),
 }
 /// Texture address behavior.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum AddressMode {
     /// Repeats the image.
     #[default]
@@ -137,7 +137,7 @@ pub enum AddressMode {
     Unknown(u8),
 }
 /// Texture sampling choices independent of image ownership.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Sampler {
     /// Horizontal addressing.
     pub u: AddressMode,
@@ -232,7 +232,6 @@ impl Default for Resource<'_> {
         Self::Path(Cow::Borrowed(&[]))
     }
 }
-
 
 impl<
         D3: ValidateLinks,
