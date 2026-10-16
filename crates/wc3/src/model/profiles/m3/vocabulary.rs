@@ -475,8 +475,6 @@ impl Profile for M3 {
     }
 
     fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
-        let resources = model.resources();
-
         let mut used = HashSet::new();
         for (_, material) in model.materials() {
             material.surface.visit_links(&mut |link| {
@@ -485,7 +483,7 @@ impl Profile for M3 {
                 }
             });
         }
-        for (id, texture) in resources.textures() {
+        for (id, texture) in model.textures() {
             if !used.contains(&id) {
                 return Err(Error::new(
                     "m3.texture.unused",

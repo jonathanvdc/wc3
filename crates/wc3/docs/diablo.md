@@ -253,8 +253,8 @@ supported record vocabulary even when the semantic adapter rejects a projection.
 `io::diablo::d4::import_material` creates a checked material-only graph
 from a native material resource. The shader definition retains external shader-map
 and value-set selections, ordered texture inputs, constant scalar/vector parameters,
-and its material-resource controls. Texture SNOs are interned in the model's
-resource arena with the Diablo IV namespace, so repeated inputs share one editable
+and its material-resource controls. Texture SNOs are interned as model-owned
+texture definitions with the Diablo IV namespace, so repeated inputs share one editable
 image identity. Negative absent-image selections remain distinct from image handles.
 
 `plan_material` selects an actual material identity and rebuilds its native document.

@@ -237,7 +237,6 @@ pub(in crate::model::io::m3) fn plan<'view, 'source: 'view, P: ExportProfile>(
     let (tables, material_indices) = {
         let mut writer = materials::write::Writer {
             model: graph,
-            resources: asset.resources(),
             document: &mut document,
             animation_ids: &ids,
             context: &mut context,

@@ -7,7 +7,7 @@ use crate::model::{Error, Link, TextureId, ValidateLinks};
 /// A texture input retains negative source selections independently of image handles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextureSelection {
-    /// An image in the owning collection's resource arena.
+    /// An image defined in the owning model.
     Image(TextureId),
     /// A negative native selection whose precise absent-image convention is unresolved.
     Absent(i32),

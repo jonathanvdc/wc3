@@ -16,7 +16,6 @@ pub(super) struct Indices {
 }
 pub(super) fn write<'a, D: Dialect>(
     model: &Model<'_, Wmo>,
-    resources: &crate::model::Resources<'_, Wmo>,
     world: &profile::WorldSystem<'_>,
     root: &mut impl super::root_output::RootOutput<'a, D>,
     context: &mut Context,
@@ -77,15 +76,15 @@ pub(super) fn write<'a, D: Dialect>(
                     flags.set_cast_shadows(extra.shadows);
                     let cookie = extra
                         .cookie
-                        .map(|id| {
-                            match &resources.texture(id).expect("validated cookie").resource {
+                        .map(
+                            |id| match &model.texture(id).expect("validated cookie").resource {
                                 Resource::FileDataId(value) => Ok(*value),
                                 _ => Err(Error::new(
                                     "world.light.cookie",
                                     "light cookies require a database file identifier",
                                 )),
-                            }
-                        })
+                            },
+                        )
                         .transpose()?
                         .unwrap_or(0);
                     let row = records::NewLight {

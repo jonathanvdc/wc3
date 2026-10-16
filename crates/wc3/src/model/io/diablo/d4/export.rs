@@ -25,7 +25,7 @@ pub(super) fn plan(
     }
 
     if asset.textures().len() != 0 {
-        context.unsupported("d4.resources.textures","appearance output cannot retain the collection image arena; texture inputs belong to separately planned material resources")?;
+        context.unsupported("d4.resources.textures","appearance output cannot retain model texture definitions; texture inputs belong to separately planned material resources")?;
     }
     if options.look.is_some() {
         return Err(error(

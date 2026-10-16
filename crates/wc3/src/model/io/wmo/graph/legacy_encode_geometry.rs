@@ -96,7 +96,6 @@ pub(super) struct Body<'a, B> {
 }
 pub(super) fn write<'a, B: Batch>(
     model: &Model<'_, Wmo>,
-    resources: &crate::model::Resources<'_, Wmo>,
     instance_id: InstanceId,
     materials: &BTreeMap<MaterialId, u16>,
     look: Option<LookId>,
@@ -362,7 +361,7 @@ pub(super) fn write<'a, B: Batch>(
     result
         .chunks
         .push(LegacyGroupChunk::Batches(array(&batches)?));
-    write_lighting(region, resources, &mut result.chunks)?;
+    write_lighting(region, model, &mut result.chunks)?;
     if !mesh.geometry.lightmap_coordinates().is_empty() {
         result
             .chunks
@@ -428,7 +427,7 @@ pub(super) fn write<'a, B: Batch>(
 }
 fn write_lighting<'a, B: RecordLayout>(
     region: &RegionControls<'_>,
-    resources: &crate::model::Resources<'_, Wmo>,
+    model: &Model<'_, Wmo>,
     chunks: &mut Vec<LegacyGroupChunk<'a, B>>,
 ) -> Result<(), Error> {
     if !region.lightmap_rectangles.is_empty() {
@@ -449,7 +448,7 @@ fn write_lighting<'a, B: RecordLayout>(
             .lightmap_images
             .iter()
             .map(|id| {
-                let texture = resources.texture(*id).expect("validated image resource");
+                let texture = model.texture(*id).expect("validated image resource");
                 let crate::model::Resource::EmbeddedImage { bytes, .. } = &texture.resource else {
                     return Err(Error::new(
                         "world.lightmap",

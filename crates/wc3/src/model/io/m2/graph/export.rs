@@ -125,9 +125,9 @@ where
             }
         }
     }
-    let textures: Vec<_> = asset.resources().textures().map(|(id, _)| id).collect();
+    let textures: Vec<_> = asset.textures().map(|(id, _)| id).collect();
     let mut texture_ids = Vec::new();
-    for (_, texture) in asset.resources().textures() {
+    for (_, texture) in asset.textures() {
         let (kind, path, id) = match &texture.resource {
             Resource::Path(path) => (TextureSource::File, path.as_ref(), 0),
             Resource::FileDataId(id) => (TextureSource::File, &[][..], *id),

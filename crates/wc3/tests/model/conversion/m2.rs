@@ -207,7 +207,7 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     assert!(triangles.is_owned());
     assert_eq!(triangles.get(0), Some([0, 1, 2]));
     assert_eq!(mesh.influences().joint_weights(0).unwrap()[0].weight, 1.);
-    let texture = imported.value.resources().textures().next().unwrap().1;
+    let texture = imported.value.textures().next().unwrap().1;
     assert!(
         matches!(&texture.resource,sm::Resource::Path(Cow::Borrowed(path))if *path==b"textures/checker.blp")
     );
@@ -963,8 +963,8 @@ fn texture_options_keep_unknown_bits_and_reject_unencoded_interpretations() {
     let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let id = asset.resources().textures().next().unwrap().0;
-    let texture = asset.resources().texture(id).unwrap();
+    let id = asset.textures().next().unwrap().0;
+    let texture = asset.texture(id).unwrap();
     assert_eq!(texture.controls.flags.bits(), 0x8000_0000);
     assert_eq!(texture.color_space, sm::ColorSpace::Unspecified);
     let native = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
@@ -975,15 +975,15 @@ fn texture_options_keep_unknown_bits_and_reject_unencoded_interpretations() {
     assert_eq!(native.model.core().textures[0].flags.bits(), 0x8000_0001);
     let original = texture.sampler;
     assert!(asset
-        .edit_resources(|draft| {
+        .edit(|draft| {
             let mut value = draft.texture(id).unwrap().clone();
             value.sampler.u = sm::AddressMode::Mirror;
             draft.set_texture(id, value)
         })
         .is_err());
-    assert_eq!(asset.resources().texture(id).unwrap().sampler, original);
+    assert_eq!(asset.texture(id).unwrap().sampler, original);
     assert!(asset
-        .edit_resources(|draft| {
+        .edit(|draft| {
             let mut value = draft.texture(id).unwrap().clone();
             value.color_space = sm::ColorSpace::Srgb;
             draft.set_texture(id, value)
@@ -998,7 +998,7 @@ fn replacement_texture_retains_its_separately_declared_filename() {
     let asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let texture = asset.resources().textures().next().unwrap().1;
+    let texture = asset.textures().next().unwrap().1;
     assert_eq!(texture.resource, sm::Resource::Replaceable(0x1234));
     assert!(matches!(texture.controls.path, Some(Cow::Borrowed(_))));
     assert_eq!(

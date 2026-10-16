@@ -1,4 +1,4 @@
-//! Typed object handles distinguish logical graph and shared-library identity domains.
+//! Typed object handles distinguish object families and owning models.
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;

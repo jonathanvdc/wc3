@@ -1,5 +1,6 @@
 //! Checks relationships between local world-profile objects.
 use super::{Volume, WorldSystem};
+use crate::model::Model;
 use crate::model::{Bounds, Error};
 
 impl WorldSystem<'_> {
@@ -90,7 +91,7 @@ impl WorldSystem<'_> {
     }
 }
 
-pub(super) fn model(value: &crate::model::Model<'_, super::Wmo>) -> Result<(), Error> {
+pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
     if value.units() != crate::model::LengthUnit::Unspecified
         || value.basis() != crate::model::Basis::default()
     {
@@ -250,7 +251,7 @@ pub(super) fn model(value: &crate::model::Model<'_, super::Wmo>) -> Result<(), E
     Ok(())
 }
 
-pub(super) fn resources(value: &crate::model::Resources<'_, super::Wmo>) -> Result<(), Error> {
+pub(super) fn resources(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
     use crate::model::{ColorSpace, Resource, Sampler};
     for (_, texture) in value.textures() {
         if !matches!(

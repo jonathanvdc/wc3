@@ -1,7 +1,7 @@
 use wc3::model::materials::layered::{Layer, LayeredSurface};
 use wc3::model::profiles::Universal;
 use wc3::model::{
-    Animated, Material, MaterialSurface, ModelBuilder, Resource, Resources, Texture, TextureId,
+    Animated, Material, MaterialSurface, Model, ModelBuilder, Resource, Texture, TextureId,
 };
 
 fn textured_material(texture: TextureId) -> Material<'static> {
@@ -24,7 +24,7 @@ fn model_resource_edits_are_transactional_and_clones_are_independent() {
     let mut model = draft.finish().unwrap();
     let original = model.clone();
     model
-        .edit_resources(|draft| draft.set_texture(texture, Texture::file("edited.blp")))
+        .edit(|draft| draft.set_texture(texture, Texture::file("edited.blp")))
         .unwrap();
     assert_eq!(
         model.texture(texture).unwrap().resource,
@@ -35,12 +35,12 @@ fn model_resource_edits_are_transactional_and_clones_are_independent() {
         Resource::Path("original.blp".as_bytes().into())
     );
     assert!(model
-        .edit_resources(|draft| {
+        .edit(|draft| {
             draft.remove_texture(texture);
             Ok(())
         })
         .is_err());
-    assert_eq!(model.resources().len(), 1);
+    assert_eq!(model.textures().len(), 1);
     assert_eq!(
         model.texture(texture).unwrap().resource,
         Resource::Path("edited.blp".as_bytes().into())
@@ -49,9 +49,12 @@ fn model_resource_edits_are_transactional_and_clones_are_independent() {
 
 #[test]
 fn unanimated_texture_references_are_checked_at_publication() {
-    let mut foreign = Resources::<Universal>::builder();
-    let texture = foreign.add_texture(Texture::file("foreign.blp"));
+    let mut foreign = Model::<Universal>::builder("textures");
+    let texture = foreign.add_texture(Texture::file("foreign.blp")).unwrap();
     let mut draft = ModelBuilder::new("invalid");
+    assert!(draft
+        .set_texture(texture, Texture::file("foreign-edit.blp"))
+        .is_err());
     draft.add_material(textured_material(texture)).unwrap();
     assert!(draft.finish().is_err());
 }

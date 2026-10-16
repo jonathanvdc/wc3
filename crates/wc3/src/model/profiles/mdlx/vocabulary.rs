@@ -44,9 +44,7 @@ impl Profile for Mdlx {
     type Clip<'a> = mdlx::Sequence;
     type Controller<'a> = NoControls;
     fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
-        let resources = model.resources();
-
-        super::validation::resources(resources)
+        super::validation::resources(model)
     }
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
         super::validation::model(model)

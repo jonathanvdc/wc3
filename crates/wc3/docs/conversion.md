@@ -65,8 +65,8 @@ its strict loss boundaries.
 A `model::Model` owns its checked graph, resources, and profile-specific
 metadata. Conversion adapters return this same model. `metadata()` exposes the
 payload selected by `Profile::ModelMetadata`; use `ModelBuilder::set_metadata`
-inside `Model::edit` to replace it. `Model::edit` and `Model::edit_resources`
-stage changes and publish them atomically after validation. Dependencies, mesh
+inside `Model::edit` to replace it. `Model::edit` stages graph, texture, and
+metadata changes and publishes them atomically after validation. Dependencies, mesh
 placements, draws, and material assignments retain separate identities, so
 changing one placement need not modify every user of a shared mesh.
 

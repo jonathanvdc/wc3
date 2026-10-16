@@ -3,16 +3,12 @@ use super::super::animation::AnimationIds;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::m3::logical::Graph;
-use crate::model::{
-    profiles::{m3 as surface, M3},
-    MaterialId, Resource, Resources, TextureId,
-};
+use crate::model::{profiles::m3 as surface, MaterialId, Resource, TextureId};
 use native::{Envelope, Ref};
 use std::collections::BTreeMap;
 use std::str::from_utf8;
 pub(in crate::model::io::m3::logical) struct Writer<'model, 'source, 'out, 'draft, E: Envelope> {
     pub model: &'model Graph<'source>,
-    pub resources: &'model Resources<'source, M3>,
     pub document: &'draft mut native::Container<'out, E>,
     pub animation_ids: &'draft AnimationIds,
     pub context: &'draft mut Context,
@@ -32,7 +28,7 @@ impl<'model, 'source, 'out, 'draft, E: Envelope> Writer<'model, 'source, 'out, '
     }
     fn texture(&self, id: TextureId) -> Result<&'model str, Error> {
         let texture = self
-            .resources
+            .model
             .texture(id)
             .ok_or_else(|| Error::new("m3.texture", "texture handle is missing"))?;
         match &texture.resource {

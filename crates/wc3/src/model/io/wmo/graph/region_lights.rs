@@ -114,7 +114,6 @@ fn error(error: crate::model::formats::wmo::ReadError) -> Error {
 
 pub(super) fn write<'a, D: Dialect>(
     model: &Model<'_, Wmo>,
-    resources: &crate::model::Resources<'_, Wmo>,
     region: &RegionControls<'_>,
     group: &mut impl super::group_output::GroupOutput<'a, D>,
 ) -> Result<(), Error> {
@@ -154,7 +153,7 @@ pub(super) fn write<'a, D: Dialect>(
         let node = model.node(feature.node).expect("validated program anchor");
         absolute(node)?;
         let cookie = source.cookie.map_or(Ok(0), |id| {
-            match &resources.texture(id).expect("validated cookie").resource {
+            match &model.texture(id).expect("validated cookie").resource {
                 Resource::FileDataId(id) => Ok(*id),
                 _ => Err(Error::new(
                     "world.region.program.cookie",

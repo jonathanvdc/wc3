@@ -146,9 +146,7 @@ impl Profile for D3 {
         Ok(())
     }
     fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
-        let resources = model.resources();
-
-        for (_, texture) in resources.textures() {
+        for (_, texture) in model.textures() {
             if !matches!(
                 texture.resource,
                 Resource::Sno {

@@ -1,7 +1,7 @@
 //! Editable model meaning, independent of native encoding and record layout.
 //!
 //! A [`Model`](crate::model::Model) owns its graph, profile-specific metadata, and
-//! [`Resources`](crate::model::Resources) arena. It connects hierarchy nodes, shared geometry,
+//! texture definitions. It connects hierarchy nodes, shared geometry,
 //! material definitions, resource references, animation, and scene systems through scoped IDs.
 //! A [`MeshInstance`](crate::model::MeshInstance) places a mesh at a node; its [`Draw`](crate::model::Draw) values select the
 //! geometry and rendering controls for individual passes. A [`Look`](crate::model::Look) supplies a complete
@@ -62,8 +62,6 @@ pub use animation::{
 };
 mod playback_controls;
 pub use playback_controls::*;
-mod resources;
-pub use resources::*;
 pub mod appearance;
 pub use appearance::{
     AppearanceSchema, DrawAppearanceSchema, DrawLooks, MaterialSelection, SingleLook,

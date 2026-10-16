@@ -18,14 +18,13 @@ pub(super) fn write<'a, D: Dialect>(
     let mut context = Context::export(options);
     if let Some(normalized) = super::normalize::prepare(model)? {
         context.issue("world.groups.geometry",IssueKind::Normalized,"compatible geometry placements at the same detail level joined while preserving draw order and material assignments");
-        write_model(&normalized, normalized.resources(), options, context)
+        write_model(&normalized, options, context)
     } else {
-        write_model(model, asset.resources(), options, context)
+        write_model(model, options, context)
     }
 }
 fn write_model<'a, D: Dialect>(
-    model: &crate::model::Model<'_, Wmo>,
-    resources: &crate::model::Resources<'_, Wmo>,
+    model: &Model<'_, Wmo>,
     options: &ExportOptions,
     mut context: Context,
 ) -> Result<Plan<Bundle<'a, D>>, Error> {
@@ -76,9 +75,8 @@ fn write_model<'a, D: Dialect>(
     }
     super::visibility::write(world, &mut root)?;
     super::environment::write(world, &mut root)?;
-    let actor_indices =
-        super::encode_scene::write(model, resources, world, &mut root, &mut context)?;
-    let material_ids = materials::write(model, resources, &mut root, &mut context)?;
+    let actor_indices = super::encode_scene::write(model, world, &mut root, &mut context)?;
+    let material_ids = materials::write(model, &mut root, &mut context)?;
     let mut names = vec![0u8];
     let mut name_offsets = Vec::new();
     let mut region_names = std::collections::BTreeMap::new();
@@ -232,7 +230,7 @@ fn write_model<'a, D: Dialect>(
                 &actor_indices,
                 &mut portal_refs,
             )?;
-            super::region_lights::write(model, resources, region, &mut document)?;
+            super::region_lights::write(model, region, &mut document)?;
             let key = GroupKey {
                 index,
                 lod: lod as usize,

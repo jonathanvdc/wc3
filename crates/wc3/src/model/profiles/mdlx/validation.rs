@@ -118,7 +118,7 @@ fn validate_channel(channel: &Channel<'_, super::Mdlx>) -> Result<(), Error> {
     Ok(())
 }
 
-pub(super) fn resources(value: &crate::model::Resources<'_, Mdlx>) -> Result<(), Error> {
+pub(super) fn resources(value: &Model<'_, Mdlx>) -> Result<(), Error> {
     use crate::model::{AddressMode, ColorSpace, Resource};
     for (_, texture) in value.textures() {
         if !matches!(

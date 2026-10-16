@@ -8,7 +8,7 @@ use crate::model::profiles::diablo::d4::{
     ScalarValue, Shader, TextureInput, TextureSelection, VectorValue, D4,
 };
 use crate::model::profiles::NoControls;
-use crate::model::{Resource, Resources, ResourcesBuilder, SnoNamespace, Texture};
+use crate::model::{Model, ModelBuilder, Resource, SnoNamespace, Texture};
 use zerovec::ZeroVec;
 
 pub(super) fn read_appearance(
@@ -59,7 +59,7 @@ pub(super) fn write_appearance(
 
 pub(super) fn read_shader(
     value: &native::UberMaterial<'_>,
-    resources: &mut ResourcesBuilder<'_, D4>,
+    model: &mut ModelBuilder<'_, D4>,
     context: &mut Context,
 ) -> Result<Shader, Error> {
     let textures = value
@@ -81,18 +81,20 @@ pub(super) fn read_shader(
                     group: 44,
                     id: native.tex as u32,
                 };
-                let existing = resources
+                let existing = model
+                    .model()
                     .textures()
                     .find(|(_, image)| image.resource == resource)
                     .map(|(id, _)| id);
-                TextureSelection::Image(existing.unwrap_or_else(|| {
-                    resources.add_texture(Texture {
+                TextureSelection::Image(match existing {
+                    Some(id) => id,
+                    None => model.add_texture(Texture {
                         resource,
                         controls: NoControls,
                         color_space: Default::default(),
                         sampler: Default::default(),
-                    })
-                }))
+                    })?,
+                })
             };
             Ok(TextureInput {
                 image: selection,
@@ -180,7 +182,7 @@ pub(super) fn read_shader(
 }
 pub(super) fn write_shader(
     value: &Shader,
-    resources: &Resources<'_, D4>,
+    model: &Model<'_, D4>,
     _context: &mut Context,
 ) -> Result<native::UberMaterial<'static>, Error> {
     let textures = value
@@ -190,7 +192,7 @@ pub(super) fn write_shader(
             let tex = match input.image {
                 TextureSelection::Absent(code) if code < 0 => code,
                 TextureSelection::Image(id) => {
-                    match resources.texture(id).map(|image| &image.resource) {
+                    match model.texture(id).map(|image| &image.resource) {
                         Some(Resource::Sno {
                             namespace: SnoNamespace::Diablo4,
                             group: 44,
@@ -203,7 +205,7 @@ pub(super) fn write_shader(
                         })?,
                         _ => return Err(Error::new(
                             "d4.material.texture",
-                            "shader input requires a Diablo IV texture SNO from its resource arena",
+                            "shader input requires a Diablo IV texture SNO from its owning model",
                         )),
                     }
                 }

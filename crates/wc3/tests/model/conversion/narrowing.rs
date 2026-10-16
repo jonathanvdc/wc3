@@ -49,7 +49,7 @@ fn resource_narrowing_moves_owned_paths_without_reallocating() {
         .widen::<Universal>()
         .try_narrow::<Mdlx>()
         .unwrap();
-    let Resource::Path(path) = &asset.resources().texture(id).unwrap().resource else {
+    let Resource::Path(path) = &asset.texture(id).unwrap().resource else {
         unreachable!()
     };
     assert_eq!(path.as_ptr(), pointer);

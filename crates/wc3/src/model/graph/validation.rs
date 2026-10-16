@@ -2,14 +2,12 @@
 use crate::model::profiles::{FeaturePayload, Profile};
 use crate::model::{
     AppearanceSchema, BindingSchema as _, Clock, Error, GeometrySchema, Link, Model,
-    PropertyIdentity, PropertyTarget, Resources, SharedClock, SystemPayload, ValidateLinks,
-    VertexInfluences,
+    PropertyIdentity, PropertyTarget, SharedClock, SystemPayload, ValidateLinks, VertexInfluences,
 };
 use std::collections::{BTreeSet, HashMap, HashSet};
 impl<P: Profile> Model<'_, P> {
     /// Checks values, graph relationships, metadata, and owned resources.
     pub fn validate(&self) -> Result<(), Error> {
-        let resources = &self.resources;
         self.units.validate()?;
         self.appearance.validate()?;
         if let Some(bounds) = self.bounds {
@@ -53,13 +51,13 @@ impl<P: Profile> Model<'_, P> {
         for skin in self.skins.values() {
             skin.binding.validate(skin.joints.len())?;
         }
-        self.validate_relationships(resources)?;
+        self.validate_relationships()?;
         P::validate_model(self)?;
         P::validate_resources(self)
     }
 }
 impl<P: Profile> Model<'_, P> {
-    fn validate_relationships(&self, resources: &Resources<'_, P>) -> Result<(), Error> {
+    fn validate_relationships(&self) -> Result<(), Error> {
         let mut missing = false;
         let mut property_types = HashMap::new();
         let mut declared_properties = HashSet::new();
@@ -110,7 +108,7 @@ impl<P: Profile> Model<'_, P> {
                     .is_none_or(|mesh| mesh.geometry.kind() != kind),
                 Link::Mesh(id) => !self.meshes.contains_key(&id),
                 Link::Material(id) => !self.materials.contains_key(&id),
-                Link::Texture(id) => resources.texture(id).is_none(),
+                Link::Texture(id) => self.texture(id).is_none(),
                 Link::Clip(id) => !self.clips.contains_key(&id),
                 Link::Skin(id) => !self.skins.contains_key(&id),
                 Link::Clock(id) => !self.clocks.contains_key(&id),
@@ -142,7 +140,7 @@ impl<P: Profile> Model<'_, P> {
                 }
             }
         }
-        for (_, texture) in resources.textures() {
+        for (_, texture) in self.textures() {
             texture.controls.visit_links(&mut visit);
         }
         for skin in self.skins.values() {

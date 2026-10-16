@@ -2,6 +2,7 @@
 use crate::model::profiles::{Extends, Profile};
 use crate::model::{
     AttachedFeature, Clip, Controller, Draw, Material, Mesh, MeshInstance, Model, Node, Skin,
+    Texture,
 };
 struct PayloadMap<'a, P: Profile, Q: Profile> {
     texture: fn(P::Texture<'a>) -> Q::Texture<'a>,
@@ -43,7 +44,21 @@ impl<'a, P: Profile> Model<'a, P> {
     }
     fn map_payloads<Q: Profile>(self, maps: PayloadMap<'a, P, Q>) -> Model<'a, Q> {
         Model {
-            resources: self.resources.map_controls(maps.texture),
+            textures: self
+                .textures
+                .into_iter()
+                .map(|(id, texture)| {
+                    (
+                        id,
+                        Texture {
+                            resource: texture.resource,
+                            color_space: texture.color_space,
+                            sampler: texture.sampler,
+                            controls: (maps.texture)(texture.controls),
+                        },
+                    )
+                })
+                .collect(),
             scope: self.scope,
             id: self.id,
             name: self.name,

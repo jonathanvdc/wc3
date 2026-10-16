@@ -15,7 +15,7 @@ use crate::model::profiles::wmo::{
     Group as WorldGroup, ModelMetadata, RegionControls, WorldSystem,
 };
 use crate::model::profiles::Wmo;
-use crate::model::{InstanceId, Model, Quaternion, Resource, Resources};
+use crate::model::{InstanceId, Model, Quaternion, Resource};
 use std::collections::BTreeMap;
 
 pub(super) fn alpha<'a>(
@@ -27,14 +27,13 @@ pub(super) fn alpha<'a>(
     let mut context = Context::export(options);
     if let Some(model) = super::normalize::prepare(model)? {
         context.issue("world.groups.geometry", IssueKind::Normalized, "compatible geometry placements joined with relocated historical vertex and lighting selections");
-        alpha_model(&model, model.resources(), options, context)
+        alpha_model(&model, options, context)
     } else {
-        alpha_model(model, asset.resources(), options, context)
+        alpha_model(model, options, context)
     }
 }
 fn alpha_model<'a>(
     model: &Model<'_, Wmo>,
-    resources: &Resources<'_, Wmo>,
     options: &ExportOptions,
     mut context: Context,
 ) -> Result<Plan<Root14<'a>>, Error> {
@@ -63,8 +62,8 @@ fn alpha_model<'a>(
     skybox(controls, &mut root, &mut context)?;
     visibility::write(world, &mut root)?;
     environment::write(world, &mut root)?;
-    let actors = encode_scene::write(model, resources, world, &mut root, &mut context)?;
-    let material_ids = alpha_materials::write(model, resources, &mut root, &mut context)?;
+    let actors = encode_scene::write(model, world, &mut root, &mut context)?;
+    let material_ids = alpha_materials::write(model, &mut root, &mut context)?;
     let names = names(model, world)?;
     root.append(RootChunk::GroupNames(encode::array(&names.bytes)?))?;
     let mut portals = Vec::new();
@@ -75,7 +74,6 @@ fn alpha_model<'a>(
         let region = &instance.controls;
         let body = legacy_encode_geometry::write::<Batch14>(
             model,
-            resources,
             instance_id,
             &material_ids,
             options.look,
@@ -157,14 +155,13 @@ pub(super) fn beta<'a>(
     let mut context = Context::export(options);
     if let Some(model) = super::normalize::prepare(model)? {
         context.issue("world.groups.geometry", IssueKind::Normalized, "compatible geometry placements joined with relocated historical vertex and lighting selections");
-        beta_model(&model, model.resources(), options, context)
+        beta_model(&model, options, context)
     } else {
-        beta_model(model, asset.resources(), options, context)
+        beta_model(model, options, context)
     }
 }
 fn beta_model<'a>(
     model: &Model<'_, Wmo>,
-    resources: &Resources<'_, Wmo>,
     options: &ExportOptions,
     mut context: Context,
 ) -> Result<Plan<Bundle16<'a>>, Error> {
@@ -190,8 +187,8 @@ fn beta_model<'a>(
     skybox(controls, &mut root, &mut context)?;
     visibility::write(world, &mut root)?;
     environment::write(world, &mut root)?;
-    let actors = encode_scene::write(model, resources, world, &mut root, &mut context)?;
-    let material_ids = materials::write(model, resources, &mut root, &mut context)?;
+    let actors = encode_scene::write(model, world, &mut root, &mut context)?;
+    let material_ids = materials::write(model, &mut root, &mut context)?;
     let names = names(model, world)?;
     root.append(RootChunk::GroupNames(encode::array(&names.bytes)?))?;
     let infos = world
@@ -222,7 +219,6 @@ fn beta_model<'a>(
         }
         let body = legacy_encode_geometry::write::<Batch16>(
             model,
-            resources,
             instance_id,
             &material_ids,
             options.look,

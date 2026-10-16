@@ -34,9 +34,7 @@ impl Profile for M2 {
     type Clip<'a> = m2::SequenceControls;
     type Controller<'a> = NoControls;
     fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
-        let resources = model.resources();
-
-        super::texture::resources(resources)
+        super::texture::resources(model)
     }
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
         if model.bounds().is_none() {

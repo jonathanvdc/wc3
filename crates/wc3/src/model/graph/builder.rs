@@ -5,7 +5,7 @@ use crate::model::{
     AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, Clock, ClockId, Controller,
     ControllerId, DrawAppearanceSchema, DrawSubsetId, Error, Event, EventId, FeatureId, InstanceId,
     LengthUnit, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Model,
-    ModelId, Node, NodeId, Resources, SharedClock, Skin, SkinId, SystemId, Texture, TextureId,
+    ModelId, Node, NodeId, SharedClock, Skin, SkinId, SystemId, Texture, TextureId,
     TextureTransform, TextureTransformId,
 };
 use std::borrow::Cow;
@@ -32,9 +32,9 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     pub fn id(&self) -> ModelId {
         self.model.id()
     }
-    /// Resolves a texture in the draft dependency arena.
+    /// Resolves a texture defined in the draft model.
     pub fn texture(&self, id: TextureId) -> Option<&Texture<'a, P>> {
-        self.model.resources().texture(id)
+        self.model.texture(id)
     }
 
     /// Begins an unpublished graph using the explicit payload vocabulary `P`.
@@ -43,7 +43,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         let id = scope.allocate();
         Self {
             model: Model {
-                resources: Resources::default(),
+                textures: BTreeMap::new(),
                 scope,
                 id,
                 name: name.into(),
@@ -535,7 +535,13 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
     /// Replaces a draft texture; publication validates its data and relationships.
     pub fn set_texture(&mut self, id: TextureId, value: Texture<'a, P>) -> Result<(), Error> {
-        self.model.resources.set_texture(id, value)
+        let slot = self
+            .model
+            .textures
+            .get_mut(&id)
+            .ok_or_else(|| Error::new("texture", "unknown identity"))?;
+        *slot = value;
+        Ok(())
     }
     /// Replaces a draft clip; publication validates its data and relationships.
     pub fn set_clip(&mut self, id: ClipId, value: Clip<'a, P>) -> Result<(), Error> {
@@ -599,13 +605,11 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         self.model.materials.insert(id, value);
         Ok(id)
     }
-    /// Replaces the model-owned texture definitions while retaining their identities.
-    pub fn set_resources(&mut self, library: Resources<'a, P>) {
-        self.model.resources = library;
-    }
     /// Adds a texture resource to the draft; publication validates its values and relationships.
     pub fn add_texture(&mut self, value: Texture<'a, P>) -> Result<TextureId, Error> {
-        Ok(self.model.resources.add_texture(value))
+        let id = self.model.scope.allocate();
+        self.model.textures.insert(id, value);
+        Ok(id)
     }
     /// Adds a playback clip to the draft; publication validates its values and relationships.
     pub fn add_clip(&mut self, value: Clip<'a, P>) -> Result<ClipId, Error> {
@@ -707,7 +711,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
     /// Removes this texture from the draft; publication rejects references left pointing to it.
     pub fn remove_texture(&mut self, id: TextureId) -> Option<Texture<'a, P>> {
-        self.model.resources.remove_texture(id)
+        self.model.textures.remove(&id)
     }
     /// Removes this clip from the draft; publication rejects references left pointing to it.
     pub fn remove_clip(&mut self, id: ClipId) -> Option<Clip<'a, P>> {

@@ -8,7 +8,7 @@ use crate::model::{
     LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, ModelId, Node, NodeId, Skin, SkinId,
     SystemId, TextureTransform, TextureTransformId, Time,
 };
-use crate::model::{Resources, ResourcesBuilder, Texture, TextureId};
+use crate::model::{Texture, TextureId};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 /// A repeating or frozen clock shared by animation channels.
@@ -34,7 +34,7 @@ impl SharedClock {
 /// An encoding-independent model. All public access is immutable; edits are checked before publication.
 #[derive(Clone, Debug)]
 pub struct Model<'a, P: Profile = Universal> {
-    resources: Resources<'a, P>,
+    textures: BTreeMap<TextureId, Texture<'a, P>>,
     scope: Scope,
     id: ModelId,
     name: Cow<'a, str>,
@@ -60,17 +60,13 @@ pub struct Model<'a, P: Profile = Universal> {
     texture_transforms: BTreeMap<TextureTransformId, TextureTransform>,
 }
 impl<'a, P: Profile> Model<'a, P> {
-    /// Texture definitions owned by this model.
-    pub fn resources(&self) -> &Resources<'a, P> {
-        &self.resources
-    }
     /// Resolves a texture identity in this model.
     pub fn texture(&self, id: TextureId) -> Option<&Texture<'a, P>> {
-        self.resources.texture(id)
+        self.textures.get(&id)
     }
     /// Iterates texture definitions in identity order.
     pub fn textures(&self) -> impl ExactSizeIterator<Item = (TextureId, &Texture<'a, P>)> {
-        self.resources.textures()
+        self.textures.iter().map(|(id, texture)| (*id, texture))
     }
     /// Edits a draft and publishes it only after the complete model validates.
     pub fn edit<R>(
@@ -80,19 +76,6 @@ impl<'a, P: Profile> Model<'a, P> {
         let mut draft = ModelBuilder::from_model(self.clone());
         let result = edit(&mut draft)?;
         *self = draft.finish()?;
-        Ok(result)
-    }
-    /// Checks resource edits against the model before publishing them.
-    pub fn edit_resources<R>(
-        &mut self,
-        edit: impl FnOnce(&mut ResourcesBuilder<'a, P>) -> Result<R, Error>,
-    ) -> Result<R, Error> {
-        let mut resources = self.resources.draft();
-        let result = edit(&mut resources)?;
-        let mut draft = self.clone();
-        draft.resources = resources.finish();
-        draft.validate()?;
-        *self = draft;
         Ok(result)
     }
     /// Stable identity of this model and its model-level property targets.

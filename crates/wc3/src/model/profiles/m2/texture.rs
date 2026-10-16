@@ -1,7 +1,7 @@
 //! Resource admissibility for the built-in model profile.
 use crate::model::profiles::M2;
-use crate::model::{Error, Resources};
-pub(super) fn resources(resources: &Resources<'_, M2>) -> Result<(), Error> {
+use crate::model::{Error, Model};
+pub(super) fn resources(resources: &Model<'_, M2>) -> Result<(), Error> {
     use crate::model::{AddressMode, ColorSpace, Resource};
     for (_, texture) in resources.textures() {
         if !matches!(

@@ -216,10 +216,12 @@ fn model_rasterization_preserves_unknown_flags_and_edits_known_operations() {
 fn image_source_vocabularies_can_supply_graph_relationships() {
     use wc3::model::materials::bindings::TextureBinding;
     use wc3::model::profiles::Universal;
-    use wc3::model::{Resources, Texture};
+    use wc3::model::{Model, Texture};
 
-    let mut resources = Resources::<Universal>::builder();
-    let source = resources.add_texture(Texture::file("generated-source.blp"));
+    let mut resources = Model::<Universal>::builder("textures");
+    let source = resources
+        .add_texture(Texture::file("generated-source.blp"))
+        .unwrap();
     let binding = TextureBinding {
         image: ImageSelection {
             source,

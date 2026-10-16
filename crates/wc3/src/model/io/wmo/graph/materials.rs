@@ -8,6 +8,7 @@ use crate::model::materials::world::SurfaceOptions;
 use crate::model::materials::world::WorldBlend;
 use crate::model::profiles::wmo as profile;
 use crate::model::profiles::Wmo;
+use crate::model::Model;
 use crate::model::{
     ColorSpace, Material, MaterialId, ModelBuilder, Resource, Sampler, Texture, TextureId,
 };
@@ -156,8 +157,7 @@ pub(super) fn read<'a, 'data: 'a>(
 }
 
 pub(super) fn write<'a, D: Dialect>(
-    model: &crate::model::Model<'_, Wmo>,
-    resources: &crate::model::Resources<'_, Wmo>,
+    model: &Model<'_, Wmo>,
     root: &mut impl super::root_output::RootOutput<'a, D>,
     context: &mut crate::model::conversion::Context,
 ) -> Result<std::collections::BTreeMap<MaterialId, u16>, Error> {
@@ -175,7 +175,7 @@ pub(super) fn write<'a, D: Dialect>(
                 .filter_map(|binding| binding.image)
         })
         .collect::<std::collections::BTreeSet<_>>();
-    for (id, texture) in resources.textures() {
+    for (id, texture) in model.textures() {
         if !used.contains(&id) {
             continue;
         }

@@ -27,14 +27,14 @@ the complete model. Additional controls belong directly to their actual owners,
 so understanding a node or draw does not require consulting a parallel extension
 table.
 
-IDs identify objects within their owning graph or resource arena. An ID from
+IDs identify objects within their owning model. An ID from
 an unrelated owner cannot satisfy a relationship. Graph identity is independent
 of native record ordering, so output codecs can reorder tables without changing
 which objects refer to one another.
 
-`Model<'data, P>` owns its graph and a `Resources` arena containing texture
-definitions. Materials and effects refer to those definitions by texture ID;
-`Model::texture` and `Model::resources` resolve them in the same ownership context.
+`Model<'data, P>` owns its graph, including texture definitions alongside
+materials and meshes. Materials and effects refer to those definitions by texture ID;
+`Model::texture` resolves them and `Model::textures` iterates the definitions.
 Cloning a model preserves its IDs and borrowed array storage while creating an
 independently editable copy of its definitions.
 
@@ -684,9 +684,8 @@ model when no draft edits are needed; use `Model::<P>::builder(name)` to author
 a selected vocabulary.
 
 Published models provide immutable access. `Model::edit` stages graph, metadata,
-and resource changes in a `ModelBuilder`; `Model::edit_resources` stages changes
-only to texture definitions. Both publish only after the complete model validates.
-A failed edit leaves the original model unchanged. Conversion adapters import into
+and texture changes in a `ModelBuilder` and publishes only after the complete
+model validates. A failed edit leaves the original model unchanged. Conversion adapters import into
 this same model and plan native output directly from it. Typed profile fields
 retain source details with an identified owner and participate in checked edits
 and exact narrowing. Retain the decoded native document separately when its

@@ -2,7 +2,8 @@
 use crate::model::profiles::{Narrows, Profile};
 use crate::model::GeometrySchema as _;
 use crate::model::{
-    AttachedFeature, Clip, Controller, Draw, Error, Material, Mesh, MeshInstance, Model, Node, Skin,
+    AttachedFeature, Clip, Controller, Draw, Error, Material, Mesh, MeshInstance, Model, Node,
+    Skin, Texture,
 };
 impl<'a, P: Profile> Model<'a, P> {
     fn try_map_payloads<Q: Narrows<P>>(self) -> Result<Model<'a, Q>, Error> {
@@ -20,7 +21,21 @@ impl<'a, P: Profile> Model<'a, P> {
         let clip = Q::clip;
         let controller = Q::controller;
         Ok(Model {
-            resources: self.resources.try_narrow::<Q>()?,
+            textures: self
+                .textures
+                .into_iter()
+                .map(|(id, texture)| {
+                    Ok((
+                        id,
+                        Texture {
+                            resource: texture.resource,
+                            color_space: texture.color_space,
+                            sampler: texture.sampler,
+                            controls: Q::texture(texture.controls)?,
+                        },
+                    ))
+                })
+                .collect::<Result<_, Error>>()?,
             scope: self.scope,
             id: self.id,
             name: self.name,

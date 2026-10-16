@@ -70,7 +70,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     result.set_sequences(sequences);
     let mut textures = Vec::new();
     let mut texture_ids = BTreeMap::new();
-    for (id, source) in asset.resources().textures() {
+    for (id, source) in asset.textures() {
         texture_ids.insert(id, textures.len() as u32);
         let metadata = &source.controls;
         let path: &[u8] = match &source.resource {

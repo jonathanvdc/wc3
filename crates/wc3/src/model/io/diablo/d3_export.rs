@@ -201,8 +201,8 @@ pub(super) fn plan_with_animations(
             )?;
         }
     }
-    if asset.resources().textures().len() != 0 {
-        context.unsupported("d3.resources.textures","native D3 materials own external SNO references; the shared resource arena has no native appearance table")?;
+    if asset.textures().len() != 0 {
+        context.unsupported("d3.resources.textures","native D3 materials own external SNO references; model texture definitions have no native appearance table")?;
     }
     let mut used_meshes = Vec::new();
     for (_, instance) in model.instances() {

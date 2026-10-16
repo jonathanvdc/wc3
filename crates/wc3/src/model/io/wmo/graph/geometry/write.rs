@@ -6,8 +6,9 @@ use crate::model::formats::wmo::{Dialect, Group};
 use crate::model::profiles::wmo::Lighting;
 use crate::model::profiles::Wmo;
 use crate::model::MaterialId;
+use crate::model::Model;
 pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
-    model: &crate::model::Model<'_, Wmo>,
+    model: &Model<'_, Wmo>,
     instance_id: crate::model::InstanceId,
     lod: u32,
     names: (u32, u32),

@@ -3,7 +3,7 @@ use super::materials::{read_shader, write_shader};
 use crate::model::conversion::{Context, Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::formats::diablo::d4::{self, records as native};
 use crate::model::profiles::diablo::d4::{Material as Surface, MaterialAssetControls, D4};
-use crate::model::{Material, MaterialId, Model, Resources};
+use crate::model::{Material, MaterialId, Model};
 
 /// Imports one standalone material resource as a checked material-only graph.
 pub fn import_material<'a>(
@@ -23,8 +23,8 @@ pub fn import_material<'a>(
     {
         context.unsupported("d4.material.programs", "decal variants, biome/clutter programs, and playback controller paths require additional semantic declarations")?;
     }
-    let mut resources = Resources::<D4>::builder();
-    let mut shader = read_shader(&root.uber_material, &mut resources, &mut context)?;
+    let mut model = Model::<D4>::builder("");
+    let mut shader = read_shader(&root.uber_material, &mut model, &mut context)?;
     shader.asset = Some(MaterialAssetControls {
         sno_id: root.sno_id,
         record_flags: root.record_flags,
@@ -39,8 +39,6 @@ pub fn import_material<'a>(
         gravity_magnitude: root.gravity_magnitude,
         animated_influences: root.fx_animated_influences.indices,
     });
-    let mut model = Model::<D4>::builder("");
-    model.set_resources(resources.finish());
     model.add_material(Material {
         name: "".into(),
         surface: Surface {
@@ -91,7 +89,7 @@ pub fn plan_material(
         record_flags: controls.record_flags,
         flags: controls.flags,
         surface: controls.surface,
-        uber_material: write_shader(shader, asset.resources(), &mut context)?,
+        uber_material: write_shader(shader, asset, &mut context)?,
         unk_93ea20a: controls.unclassified_scalars[0],
         unk_a08119e: controls.unclassified_scalars[1],
         unk_5b1ce37: controls.unclassified_scalars[2],

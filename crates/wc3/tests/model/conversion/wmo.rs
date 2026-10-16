@@ -224,7 +224,7 @@ fn edited_geometry_rebuilds_native_companions() {
         .unwrap();
     assert_eq!(positions.get(0).unwrap().unwrap(), [0.25, 0.5, 0.75]);
     assert_eq!(
-        asset.resources().textures().next().unwrap().1.resource,
+        asset.textures().next().unwrap().1.resource,
         Resource::FileDataId(123)
     );
 }

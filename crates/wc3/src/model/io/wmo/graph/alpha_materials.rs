@@ -5,11 +5,10 @@ use crate::model::conversion::{Context, Error};
 use crate::model::formats::wmo::legacy::{Material14, Root14, RootChunk14};
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::profiles::Wmo;
-use crate::model::{MaterialId, Model, Resource, Resources};
+use crate::model::{MaterialId, Model, Resource};
 use std::collections::{BTreeMap, BTreeSet};
 pub(super) fn write<'a>(
     model: &Model<'_, Wmo>,
-    resources: &Resources<'_, Wmo>,
     output: &mut Root14<'a>,
     context: &mut Context,
 ) -> Result<BTreeMap<MaterialId, u16>, Error> {
@@ -25,7 +24,7 @@ pub(super) fn write<'a>(
         .collect::<BTreeSet<_>>();
     let mut names = vec![0];
     let mut textures = BTreeMap::new();
-    for (id, texture) in resources.textures() {
+    for (id, texture) in model.textures() {
         if !used.contains(&id) {
             continue;
         }
