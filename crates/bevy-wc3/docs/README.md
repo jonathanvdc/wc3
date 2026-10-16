@@ -13,7 +13,7 @@ applications that need explicit control over scheduling or preparation.
 - [Using bevy-wc3](usage.md): load native/semantic instances, resolve resources and images, control typed
   playback, bake poses, mount child models, and manage replacement.
 - [Viewer and captures](tools.md): inspect assets, override textures, and render
-  PNGs at controlled simulation times, including synchronized frame measurements.
+  PNGs at controlled simulation times, including synchronized frame measurements and pipelined character-crowd benchmarks.
 - [Architecture](architecture.md): semantic loading and preparation, shared and per-instance
   state, renderer modules, effect record storage, and the `Wc3Systems` scheduling
   contract.
