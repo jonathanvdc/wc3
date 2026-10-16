@@ -60,7 +60,7 @@ where
                     position,
                     animate: animated(
                         model,
-                        &value.activation,
+                        &value.visibility,
                         starts,
                         globals,
                         context,

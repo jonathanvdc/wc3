@@ -49,7 +49,7 @@ pub(super) fn write<'a, D: Dialect>(
         }
         match &feature.payload {
             profile::Node::Light(source) => {
-                if source.color.property.is_some() || source.intensity.property.is_some() {
+                if source.color.binding.is_some() || source.intensity.binding.is_some() {
                     context.unsupported(
                         "world.light.animation",
                         "root light tables encode constant color and intensity",

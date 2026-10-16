@@ -2,7 +2,7 @@
 use super::curves::{CurveValue, SampleValue};
 use crate::model::profiles::{Profile, Universal};
 use crate::model::{
-    Animated, Channel, ClipId, Clock, ClockId, ControllerId, Error, Model, Property,
+    Animated, BindingValue, Channel, ClipId, Clock, ClockId, ControllerId, Error, Model, Property,
     PropertyTarget, Quaternion, TextureId, Time, Track,
 };
 use std::borrow::Cow;
@@ -363,9 +363,9 @@ impl<'view, 'data, P: Profile> SampledAnimation<'view, 'data, P> {
     /// Evaluates an animated value, preserving its authored default without a channel.
     pub fn animated<T: ChannelValue>(&self, value: &Animated<T, P>) -> T {
         value
-            .property
+            .binding
             .as_ref()
-            .and_then(|property| self.property(property))
+            .and_then(|binding| binding.sample(self))
             .unwrap_or(value.default)
     }
 }
@@ -411,9 +411,9 @@ impl<P: Profile> RetimedAnimation<'_, '_, '_, P> {
     /// Preserves an authored default when no selected channel supplies a value.
     pub fn animated<T: ChannelValue>(&self, value: &Animated<T, P>) -> T {
         value
-            .property
+            .binding
             .as_ref()
-            .and_then(|property| self.property(property))
+            .and_then(|binding| binding.sample(self))
             .unwrap_or(value.default)
     }
     /// Borrows the effective source track at the overridden clock values.
@@ -727,9 +727,9 @@ pub trait PropertySample<P: Profile = Universal> {
     /// Samples an animated value with its authored fallback.
     fn animated<T: ChannelValue>(&self, value: &Animated<T, P>) -> T {
         value
-            .property
+            .binding
             .as_ref()
-            .and_then(|p| self.property(p))
+            .and_then(|binding| binding.sample(self))
             .unwrap_or(value.default)
     }
 }

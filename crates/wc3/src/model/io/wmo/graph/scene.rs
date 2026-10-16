@@ -222,7 +222,7 @@ pub(super) fn read<'a, 'data: 'a>(
                     id,
                     profile::Node::Attachment(profile::Doodad {
                         resource,
-                        point: (),
+                        socket: (),
                         appearance: WorldPlacementAppearance {
                             color_multiplier: None,
                             tint: light.map_or_else(

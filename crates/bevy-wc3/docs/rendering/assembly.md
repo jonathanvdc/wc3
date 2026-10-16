@@ -27,12 +27,15 @@ node without introducing an inventory slot:
 ```rust
 use bevy_wc3::assembly::{compile_assembly, Assembly, Part, Source};
 use bevy_wc3::PartBinding;
+use wc3::model::{ModelMount, MountTarget};
 
 let mut plan = Assembly::new(Source::new(chassis_resource));
-plan.parts.push(Part::new(Source::new(sensor_resource), PartBinding::Rigid {
-    parent: mounting_node,
-    transform: mounting_transform,
-}));
+plan.parts.push(Part::new(Source::new(sensor_resource), PartBinding::Mounted(
+    ModelMount {
+        transform: mounting_transform,
+        ..ModelMount::new(MountTarget::Node(mounting_node))
+    },
+)));
 let compiled = compile_assembly(&plan, &models, &mut images, decode_image)?;
 ```
 
@@ -63,12 +66,18 @@ images. Atlas composition happens during setup, rather than animation updates.
 
 ## Bind components
 
-`PartBinding::Rigid` retains a component's independent rig beneath a host `NodeId`.
-`PartBinding::Attachment` follows a `FeatureId` attachment point and its authored
-activation gate. Their transforms map component-authored coordinates into the
-carrying node's frame. The component's standalone axis/unit conversion is removed;
-applications supply an appropriate transform when physical placement needs a
-different conversion.
+`PartBinding::Mounted` accepts `wc3::model::ModelMount`, the same placement
+vocabulary used to describe authored attachment children. `MountTarget::Node`
+retains an independent rig beneath a host node. `MountTarget::Socket`
+follows an exposed socket, including its authored visibility gate. A resource-only
+child does not expose a socket and is rejected as a socket target.
+
+The placement carries a semantic `Transform` with translation, rotation, scale and
+pivot. `CoordinatePolicy::Host`, the default, uses the carrying model's
+axes and numerical units. `CoordinatePolicy::Child` retains the child's
+standalone frame and units using the same basis correction as automatically loaded children. The
+local transform applies in the target frame before that correction. Resource
+selection and clip synchronization remain independent of placement.
 
 `PartBinding::Skinned` supplies an explicit `JointMap` and part-to-host rest
 transform. Mapped joints reuse the host skeleton, while corrected inverse binds
@@ -79,7 +88,7 @@ No generic bone-name, joint-index or native checksum matching is inferred.
 Clip mappings use host seconds without stretching curves. Independently animated
 rigid components follow the host's pause state and playback rate. Controller-driven
 skinned parts require matching authored timeline origins. `PoseBaker` includes
-composed components and attachment activation; explicit mounted playback snapshots
+composed components and attachment visibility; explicit mounted playback snapshots
 can supply independent child clocks.
 
 ## Compile and reuse

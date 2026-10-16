@@ -3,40 +3,28 @@ use super::coordinates::basis;
 use bevy::prelude::*;
 use wc3::model::Model;
 
-/// Frame in which an external attachment or model particle is authored.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum PlacementSpace {
-    /// Child geometry uses the carrying node's authored axes and numerical units.
-    /// The child's standalone frame conversion is cancelled. This matches native
-    /// attachment and particle references, including WMO doodad placements.
-    #[default]
-    Authored,
-    /// Child geometry retains its own physical units and standalone Bevy frame.
-    /// The parent's frame conversion is cancelled at the mount before applying
-    /// the child's conversion. Select this explicitly for cross-frame resources.
-    Physical,
-}
+pub use wc3::model::CoordinatePolicy;
 
 /// Mount policy retained on a request so reloading always recomputes from source.
 #[derive(Component, Clone, Copy, Debug)]
-pub(crate) struct ChildModelPlacement {
-    pub space: PlacementSpace,
+pub(crate) struct ChildCoordinates {
+    pub coordinates: CoordinatePolicy,
     pub parent_basis: Transform,
 }
-impl ChildModelPlacement {
-    pub(crate) fn from_model(model: &Model<'_>, space: PlacementSpace) -> Self {
+impl ChildCoordinates {
+    pub(crate) fn from_model(model: &Model<'_>, coordinates: CoordinatePolicy) -> Self {
         // Compilation validates this same frame before exposing the definitions.
         Self {
-            space,
+            coordinates,
             parent_basis: basis(model).unwrap_or_default(),
         }
     }
     pub(crate) fn basis(self, child_basis: Transform) -> Transform {
-        match self.space {
+        match self.coordinates {
             // inverse(child_basis) * child_basis is exactly identity. Avoid
             // unnecessary inversion error when retaining authored coordinates.
-            PlacementSpace::Authored => Transform::IDENTITY,
-            PlacementSpace::Physical => Transform::from_matrix(
+            CoordinatePolicy::Host => Transform::IDENTITY,
+            CoordinatePolicy::Child => Transform::from_matrix(
                 self.parent_basis.to_matrix().inverse() * child_basis.to_matrix(),
             ),
         }
@@ -64,12 +52,12 @@ mod tests {
         let node = Transform::from_xyz(3., 4., 5.)
             .with_rotation(Quat::from_rotation_y(0.3))
             .to_matrix();
-        let authored = ChildModelPlacement {
-            space: PlacementSpace::Authored,
+        let authored = ChildCoordinates {
+            coordinates: CoordinatePolicy::Host,
             parent_basis: parent,
         };
-        let physical = ChildModelPlacement {
-            space: PlacementSpace::Physical,
+        let physical = ChildCoordinates {
+            coordinates: CoordinatePolicy::Child,
             parent_basis: parent,
         };
         close(
@@ -84,8 +72,8 @@ mod tests {
     }
     #[test]
     fn reload_recomputes_from_original_frame_without_accumulating_correction() {
-        let placement = ChildModelPlacement {
-            space: PlacementSpace::Physical,
+        let placement = ChildCoordinates {
+            coordinates: CoordinatePolicy::Child,
             parent_basis: Transform::from_rotation(Quat::from_rotation_x(0.9))
                 .with_scale(Vec3::splat(0.02)),
         };

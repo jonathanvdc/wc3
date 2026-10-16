@@ -42,7 +42,7 @@ where
     macro_rules! bind_field {
         ($node:ident,$actor:ident,$field:expr,$key:ident,$native:expr,$variant:ident,$map:expr) => {{
             let property = profile::properties::$actor::$key.bind($node);
-            $field.property = Some(property.clone().widen());
+            $field.binding = Some(property.clone().widen().into());
             for (seq, clip) in animation::sequences(clips) {
                 let (start, _) = tables
                     .sequences
@@ -72,10 +72,10 @@ where
         let mut attachment = profile::Attachment {
             identity: value.id,
             control: (),
-            activation: Animated::constant(initial(&value.animate).unwrap_or(1) != 0),
+            visibility: Animated::constant(initial(&value.animate).unwrap_or(1) != 0),
         };
         let property = profile::properties::attachment::ENABLED.bind(feature);
-        attachment.activation.property = Some(property.clone().widen());
+        attachment.visibility.binding = Some(property.clone().widen().into());
         for (sequence, clip) in animation::sequences(clips) {
             let (start, _) = attachment_tables
                 .sequences
@@ -457,9 +457,9 @@ where
         let position = profile::properties::camera::POSITION.bind(feature);
         let target = profile::properties::camera::TARGET.bind(feature);
         let roll = profile::properties::camera::ROLL.bind(feature);
-        camera.eye_offset.property = Some(position.clone().widen());
-        camera.target_offset.property = Some(target.clone().widen());
-        camera.roll.property = Some(roll.clone().widen());
+        camera.eye_offset.binding = Some(position.clone().widen().into());
+        camera.target_offset.binding = Some(target.clone().widen().into());
+        camera.roll.binding = Some(roll.clone().widen().into());
         for (seq, clip) in animation::sequences(clips) {
             let (start, _) = tables
                 .sequences

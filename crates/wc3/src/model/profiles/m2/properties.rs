@@ -1,6 +1,5 @@
 //! Typed World of Warcraft destinations, independent of native track descriptors.
 use crate::model::profiles::M2;
-use crate::model::AttachmentActivation;
 use crate::model::NodeFeature;
 use crate::model::{
     FeatureId, FeatureProperty, MaterialId, OwnerId, PropertyIdentityKey, PropertyKey,
@@ -321,6 +320,7 @@ impl PropertyPayload for Target {
     fn from_identity(key: &PropertyIdentityKey) -> Option<Self> {
         if let Some(value) = key.downcast_ref::<FeatureProperty>() {
             return Some(match value {
+                FeatureProperty::SocketVisibility => Self::Attachment(AttachmentField::Enabled),
                 FeatureProperty::LightDiffuseColor => Self::Light(LightField::DiffuseColor),
                 FeatureProperty::LightDiffuseIntensity => Self::Light(LightField::DiffuseIntensity),
                 FeatureProperty::LightAmbientColor => Self::Light(LightField::AmbientColor),
@@ -475,9 +475,7 @@ impl Target {
                 matches!(field, CameraField::Roll)
                     || matches!(v.convention, CameraConvention::Diagonal(_))
             }
-            (Self::Attachment(_), NodeFeature::Attachment(Attachment::Point(value))) => {
-                matches!(value.activation, AttachmentActivation::Enabled(_))
-            }
+            (Self::Attachment(_), NodeFeature::Attachment(Attachment::Socket(_))) => true,
             (Self::Ribbon(field), NodeFeature::Ribbon(RibbonEmitter::Trail(value))) => {
                 match field {
                     RibbonField::TextureSlot => {

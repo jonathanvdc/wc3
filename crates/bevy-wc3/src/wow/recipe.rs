@@ -3,7 +3,7 @@ use crate::assembly::TextureReplacement;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use wc3::model::{AttachmentIdentity, ClipId, NodeId, Resource};
+use wc3::model::{ClipId, NodeId, Resource, SocketIdentity};
 
 /// Sex category used by the game database when choosing character assets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -144,7 +144,7 @@ impl GeosetSelection {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EquipmentBinding {
     /// Rigid equipment follows the native attachment point's authored frame.
-    Attachment(AttachmentIdentity<'static>),
+    Attachment(SocketIdentity<'static>),
     /// Deforming equipment uses explicitly validated native CRC/key-bone matching.
     SharedSkeleton,
 }

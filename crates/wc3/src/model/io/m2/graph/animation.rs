@@ -1,6 +1,7 @@
 //! Borrowed native curves expressed as typed logical channels.
 use super::*;
 use crate::model::io::materialize;
+use crate::model::BindingValue;
 use semantic::profiles::M2;
 use semantic::{Clock, Curve, CurveValue, Property, Time};
 
@@ -437,8 +438,16 @@ where
     V::Timeline<'static>: TimelineFactory,
     V::TrackValues<'static, T>: ValuesFactory<T>,
 {
-    let mut track = if let Some(property) = &value.property {
-        encode(model, property, starts, globals, context, &convert)?
+    let mut track = if let Some(property) = &value.binding {
+        if let Some(property) = property.property() {
+            encode(model, property, starts, globals, context, &convert)?
+        } else {
+            context.unsupported(
+                "m2.animation.binding",
+                "native scalar tracks cannot directly encode a converted boolean binding",
+            )?;
+            Track::default()
+        }
     } else {
         Track::default()
     };

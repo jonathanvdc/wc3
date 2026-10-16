@@ -186,7 +186,7 @@ pub(super) fn model(value: &crate::model::Model<'_, super::Wmo>) -> Result<(), E
         let node = value.node(feature.node).expect("validated feature anchor");
         match &feature.payload {
             super::Node::Light(light) => {
-                if light.color.property.is_some() || light.intensity.property.is_some() {
+                if light.color.binding.is_some() || light.intensity.binding.is_some() {
                     return Err(Error::new(
                         "world.light.curves",
                         "static world lights use constant properties or authored flicker programs",

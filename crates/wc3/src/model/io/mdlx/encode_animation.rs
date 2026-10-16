@@ -5,9 +5,10 @@ use crate::model::formats::mdlx::{
     animation::{TangentKeyframe, Track as NativeTrack, TrackValue, ValueKeyframe},
     Animatable,
 };
-use crate::model::profiles::Mdlx;
+use crate::model::profiles::{Mdlx, Universal};
 use crate::model::{
-    Animated, ClipId, Clock, ClockId, CurveDomain, Interpolation, Model, Property, PropertyTarget,
+    Animated, BindingValue, ClipId, Clock, ClockId, CurveDomain, Interpolation, Model,
+    PropertyTarget,
 };
 use std::collections::{BTreeMap, HashSet};
 
@@ -61,7 +62,7 @@ impl Encoder<'_, '_, '_> {
         U: Value,
     {
         let value = map(source.default)?;
-        let Some(property) = &source.property else {
+        let Some(property) = &source.binding else {
             return Ok(Animatable::Static(value));
         };
         Ok(match self.track(property, map, path)? {
@@ -69,16 +70,24 @@ impl Encoder<'_, '_, '_> {
             None => Animatable::Static(value),
         })
     }
-    pub fn track<T, U>(
+    pub fn track<T, B>(
         &mut self,
-        property: &Property<U>,
-        map: impl Fn(U) -> Result<T, Error> + Clone,
+        binding: &B,
+        map: impl Fn(B::Value) -> Result<T, Error> + Clone,
         path: &str,
     ) -> Result<Option<NativeTrack<'static, T>>, Error>
     where
         T: TrackValue,
-        U: Value,
+        B: BindingValue<Profile = Universal>,
+        B::Value: Value,
     {
+        let Some(property) = binding.property() else {
+            self.context.unsupported(
+                path,
+                "Warcraft III scalar tracks cannot directly encode a converted boolean binding",
+            )?;
+            return Ok(None);
+        };
         self.target(property.target(), map, path)
     }
     pub fn target<T, U>(

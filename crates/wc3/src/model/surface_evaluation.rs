@@ -2,8 +2,8 @@
 use crate::model::materials::layered::{Layer, LayeredSurface};
 use crate::model::materials::model_shader::{ShaderPass, TextureUnit};
 use crate::model::{
-    Animated, ChannelValue, MeshId, Model, NodeFeature, Property, PropertySample, PropertyTarget,
-    TextureTransform,
+    Animated, BindingValue, ChannelValue, MeshId, Model, NodeFeature, Property, PropertySample,
+    PropertyTarget, TextureTransform,
 };
 use glam::{Affine2, EulerRot, Mat4, Quat, Vec2, Vec3};
 use std::collections::{HashMap, HashSet};
@@ -43,11 +43,11 @@ impl MeshAppearance {
                     };
                     let opacity = source.opacity.clone();
                     let animated = color
-                        .property
+                        .binding
                         .as_ref()
                         .is_some_and(|property| targets.contains(property.target()))
                         || opacity
-                            .property
+                            .binding
                             .as_ref()
                             .is_some_and(|property| targets.contains(property.target()));
                     values.insert(

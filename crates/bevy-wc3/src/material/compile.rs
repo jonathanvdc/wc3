@@ -84,12 +84,17 @@ fn compile_material(
                         pass.animation.unweighted_opacity.get_or_insert(alpha);
                         pass.animation.pass_weights.push(Animated {
                             default: section.map_multiplier.initial,
-                            property: section.map_multiplier.binding.clone().filter(|_| {
-                                targets.scalar_changes(
-                                    section.map_multiplier.initial,
-                                    &section.map_multiplier.binding,
-                                )
-                            }),
+                            binding: section
+                                .map_multiplier
+                                .binding
+                                .clone()
+                                .filter(|_| {
+                                    targets.scalar_changes(
+                                        section.map_multiplier.initial,
+                                        &section.map_multiplier.binding,
+                                    )
+                                })
+                                .map(Into::into),
                         });
                         pass.material
                             .base_color

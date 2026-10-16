@@ -10,7 +10,8 @@ use crate::{CompiledModel, DrawSelection, JointMap, ModelError, PartBinding};
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::{Assets, Image, Mat4, Mesh};
 use std::collections::{BTreeMap, HashSet};
-use wc3::model::{Attachment, Model, NodeFeature, NodeId, Resource};
+use wc3::model::{Model, NodeFeature, NodeId, Resource};
+use wc3::model::{ModelMount, MountTarget, Transform as ModelTransform};
 
 #[derive(Clone, PartialEq, Eq)]
 struct NativeBinding {
@@ -116,10 +117,7 @@ fn bind_part(
                 .features()
                 .filter_map(|(id, feature)| {
                     let point = match &feature.payload {
-                        NodeFeature::Attachment(Attachment::Point(point)) => Some(point),
-                        NodeFeature::Attachment(Attachment::External(external)) => {
-                            external.point.as_ref()
-                        }
+                        NodeFeature::Attachment(value) => value.socket(),
                         _ => None,
                     }?;
                     (point.identity == *identity).then_some((id, feature.node))
@@ -145,10 +143,14 @@ fn bind_part(
                 .ok_or_else(|| ModelError("attachment node is absent".into()))?
                 .transform
                 .pivot;
-            PartBinding::Attachment {
-                point,
-                transform: Mat4::from_translation(pivot.into()),
-            }
+            PartBinding::Mounted(ModelMount {
+                target: MountTarget::Socket(point),
+                transform: ModelTransform {
+                    translation: pivot,
+                    ..Default::default()
+                },
+                ..ModelMount::new(MountTarget::Socket(point))
+            })
         }
         EquipmentBinding::SharedSkeleton => {
             let mut joints: Vec<_> = part

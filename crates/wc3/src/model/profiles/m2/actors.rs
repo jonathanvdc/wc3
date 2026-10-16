@@ -2,7 +2,7 @@
 use super::values::{CameraKind, LightKind};
 use crate::model::profiles::M2;
 use crate::model::AngleTrail;
-use crate::model::AttachmentPointDefinition;
+use crate::model::SocketDefinition;
 use crate::model::{AimedCamera, AmbientDiffuseLight};
 use crate::model::{Animated, AttachedFeature, FeatureSet, Link, ValidateLinks};
 
@@ -12,7 +12,7 @@ pub type Actor<'a> = AttachedFeature<'a, M2>;
 /// Distinct scene feature families.
 pub type ActorKind<'a> = FeatureSet<'a, M2>;
 /// Runtime attachment role and enable control.
-pub type Attachment = AttachmentPointDefinition<u32, Animated<bool>, ()>;
+pub type Attachment = SocketDefinition<u32, Animated<bool>, ()>;
 pub use crate::model::scene::model::Event;
 /// Model light with independently animated ambient and diffuse components.
 pub type Light = AmbientDiffuseLight<LightKind, Animated<bool>>;
@@ -24,7 +24,7 @@ pub type Ribbon = AngleTrail;
 impl ActorKind<'_> {
     pub(crate) fn visit_profile_links(&self, v: &mut dyn FnMut(Link)) {
         match self {
-            Self::Attachment(x) => x.activation.visit_links(v),
+            Self::Attachment(x) => x.visibility.visit_links(v),
             Self::Light(x) => x.visit_links(v),
             Self::Camera(x) => x.visit_links(v),
             Self::Ribbon(x) => x.visit_links(v),

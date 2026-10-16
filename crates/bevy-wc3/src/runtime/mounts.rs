@@ -302,7 +302,9 @@ mod camera_tests {
     use crate::{compile_model, spawn_model, ModelMaterial, ModelPart, ModelRig, PartBinding};
     use bevy::ecs::world::CommandQueue;
     use wc3::model::profiles::Universal;
-    use wc3::model::{Billboard, Model, Node, Quaternion, Transform as ModelTransform};
+    use wc3::model::{
+        Billboard, Model, ModelMount, MountTarget, Node, Quaternion, Transform as ModelTransform,
+    };
 
     #[test]
     fn mounted_billboards_resolve_current_carrier_frame_without_transform_propagation() {
@@ -326,10 +328,7 @@ mod camera_tests {
         let composed = host
             .compose([ModelPart::new(
                 &part,
-                PartBinding::Rigid {
-                    parent: carrier,
-                    transform: Mat4::IDENTITY,
-                },
+                PartBinding::Mounted(ModelMount::new(MountTarget::Node(carrier))),
             )])
             .unwrap();
         let mut meshes = Assets::default();
@@ -388,30 +387,31 @@ mod activation_tests {
     use super::*;
     use crate::effects::model_particles::hierarchy_visible;
     use crate::{
-        compile_model, spawn_model, AttachmentPoint, ModelMaterial, ModelPart, ModelRig,
-        PartBinding,
+        compile_model, spawn_model, AttachmentState, ModelAttachment, ModelMaterial, ModelPart,
+        ModelRig, PartBinding,
     };
     use bevy::ecs::system::SystemState;
     use bevy::ecs::world::CommandQueue;
-    use wc3::model::profiles::{m2::properties::attachment, Universal};
+    use wc3::model::profiles::Universal;
+    use wc3::model::socket;
     use wc3::model::{
-        Animated, Attachment, AttachmentActivation, AttachmentIdentity,
-        AttachmentPoint as SemanticAttachmentPoint, Channel, Clip, Clock, Curve, Model, Node,
-        NodeFeature, Time, Track,
+        Animated, Attachment, Channel, Clip, Clock, Curve, Model, Node, NodeFeature,
+        Socket as SemanticSocket, SocketIdentity, Time, Track,
     };
+    use wc3::model::{ModelMount, MountTarget};
 
     #[test]
     fn authored_attachment_activation_gates_composed_equipment_through_ancestor() {
         let mut host = Model::<Universal>::builder("attachment host");
         let carrier = host.add_node(Node::named("carrier")).unwrap();
         let point = host.reserve_feature(carrier);
-        let enabled = attachment::ENABLED.bind(point);
+        let visibility = socket::VISIBILITY.bind(point);
         host.set_feature(
             point,
-            NodeFeature::Attachment(Attachment::Point(SemanticAttachmentPoint {
-                identity: AttachmentIdentity::Role(11),
-                activation: AttachmentActivation::Enabled(Animated::new(true, enabled.clone())),
-                control: None,
+            NodeFeature::Attachment(Attachment::Socket(SemanticSocket {
+                identity: SocketIdentity::Role(11),
+                visibility: Animated::new(1., visibility.clone()),
+                control: Some(23),
             })),
         )
         .unwrap();
@@ -420,11 +420,11 @@ mod activation_tests {
             .unwrap();
         host.add_channel(
             clip,
-            Channel::Boolean(Track {
-                target: enabled.widen(),
+            Channel::Scalar(Track {
+                target: visibility,
                 curve: Curve::step(
                     vec![Time::seconds(0.).unwrap(), Time::seconds(0.5).unwrap()],
-                    vec![true, false],
+                    vec![1., 0.],
                 )
                 .unwrap(),
                 clock: Clock::Clip,
@@ -438,10 +438,7 @@ mod activation_tests {
         let composed = host
             .compose([ModelPart::new(
                 &part,
-                PartBinding::Attachment {
-                    point,
-                    transform: Mat4::IDENTITY,
-                },
+                PartBinding::Mounted(ModelMount::new(MountTarget::Socket(point))),
             )])
             .unwrap();
         let mut meshes = Assets::default();
@@ -471,8 +468,15 @@ mod activation_tests {
         let child = app.world().get::<ModelRig>(root).unwrap().mounts()[0];
         let gate = app.world().get::<ChildOf>(child).unwrap().parent();
         assert!(
-            app.world().get::<AttachmentPoint>(gate).is_some(),
+            app.world().get::<ModelAttachment>(gate).is_some(),
             "equipment bypassed the authored attachment gate"
+        );
+        let definition = &app.world().get::<ModelAttachment>(gate).unwrap().0;
+        assert_eq!(definition.socket().unwrap().control, Some(23));
+        assert_eq!(definition.socket().unwrap().visibility.default, 1.);
+        assert_eq!(
+            app.world().get::<AttachmentState>(gate).unwrap().visibility,
+            1.
         );
         let carrier = app
             .world()

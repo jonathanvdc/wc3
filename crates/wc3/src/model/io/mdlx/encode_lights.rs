@@ -93,7 +93,7 @@ pub(super) fn camera<V: FormatVersion>(
     record.far_clip = source.clipping[1];
     record.translation = source
         .eye_offset
-        .property
+        .binding
         .as_ref()
         .map(|property| encoder.track(property, Ok, "camera.eye_offset"))
         .transpose()?
@@ -104,7 +104,7 @@ pub(super) fn camera<V: FormatVersion>(
         });
     record.target_translation = source
         .target_offset
-        .property
+        .binding
         .as_ref()
         .map(|property| encoder.track(property, Ok, "camera.target_offset"))
         .transpose()?
@@ -115,7 +115,7 @@ pub(super) fn camera<V: FormatVersion>(
         });
     record.rotation = source
         .roll
-        .property
+        .binding
         .as_ref()
         .map(|property| encoder.track(property, Ok, "camera.roll"))
         .transpose()?
@@ -133,7 +133,7 @@ pub(super) fn camera<V: FormatVersion>(
         ($field:ident) => {
             if let Some(value) = &source.convention.$field {
                 record.$field = value
-                    .property
+                    .binding
                     .as_ref()
                     .map(|property| {
                         encoder.track(property, Ok, concat!("camera.", stringify!($field)))

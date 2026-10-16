@@ -2,7 +2,7 @@
 use super::graph::{Graph, GraphBuilder};
 use super::*;
 use crate::model::profiles::m2 as profile;
-use crate::model::{Animated, Channel, ClipId, ClockId, FeatureId};
+use crate::model::{Animated, BindingValue, Channel, ClipId, ClockId, FeatureId};
 
 /// Selects field-of-view representation through the native dialect's field types.
 pub trait CameraConversion: ModelLayout {
@@ -33,7 +33,7 @@ pub trait CameraConversion: ModelLayout {
 }
 macro_rules! static_cameras {($($v:ty),*)=>{$(impl CameraConversion for $v {
     fn logical_fov<'a,'data:'a,D:Dialect<Layout=Self>>(_: &'a Bundle<'data,D>,camera:&'a native::records::Camera<'data,Self>,_:FeatureId,_:&[ClipId],_:&[ClockId],_:&mut GraphBuilder<'a>)->Result<Animated<f32>,Error>{Ok(Animated::constant(camera.field_of_view))}
-    fn write_logical_fov(model:&Graph<'_>,value:&Animated<f32>,camera:&mut native::records::Camera<'static,Self>,_:&[u32],_:&mut Vec<u32>,context:&mut Context)->Result<(),Error>{if value.property.as_ref().is_some_and(|target|model.clips().any(|(_,clip)|clip.channels().iter().any(|c|matches!(c,Channel::Scalar(t)if t.target==*target)))){context.unsupported("m2.camera.fov","target dialect has only static field of view")?}camera.field_of_view=value.default;Ok(())}
+    fn write_logical_fov(model:&Graph<'_>,value:&Animated<f32>,camera:&mut native::records::Camera<'static,Self>,_:&[u32],_:&mut Vec<u32>,context:&mut Context)->Result<(),Error>{if value.binding.as_ref().is_some_and(|target|model.timeline_channels().iter().chain(model.shared_channels()).chain(model.clips().flat_map(|(_,clip)|clip.channels())).chain(model.controllers().flat_map(|(_,controller)|controller.channels.iter())).any(|channel|channel.target()==target.target())){context.unsupported("m2.camera.fov","target dialect has only static field of view")?}camera.field_of_view=value.default;Ok(())}
 })*};}
 static_cameras!(V256, V257, V260, V263, V264);
 macro_rules! animated_cameras {($($v:ty),*)=>{$(impl CameraConversion for $v {
@@ -41,3 +41,39 @@ macro_rules! animated_cameras {($($v:ty),*)=>{$(impl CameraConversion for $v {
     fn write_logical_fov(model:&Graph<'_>,value:&Animated<f32>,camera:&mut native::records::Camera<'static,Self>,starts:&[u32],globals:&mut Vec<u32>,context:&mut Context)->Result<(),Error>{camera.field_of_view_track=graph::animation::animated_spline(model,value,starts,globals,context,|v,_|Ok(v))?;Ok(())}
 })*};}
 animated_cameras!(V265, V272, V272PreSplit, V273, V274);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::conversion::ExportOptions;
+    use crate::model::{Clock, Curve, Model, Node, ScalarBinding, Time, Track};
+
+    #[test]
+    fn static_fov_rejects_boolean_timeline_animation() {
+        let mut builder = Model::builder("boolean camera source");
+        let node = builder.add_node(Node::named("carrier")).unwrap();
+        let source = node.visibility();
+        let value = Animated {
+            default: 1.,
+            binding: Some(ScalarBinding::FromBoolean(source.clone().widen())),
+        };
+        builder
+            .add_timeline_channel(Channel::Boolean(Track {
+                target: source,
+                curve: Curve::step([Time::default()], [true]).unwrap(),
+                clock: Clock::Timeline,
+            }))
+            .unwrap();
+        let model = builder.finish().unwrap();
+        let mut camera = native::records::Camera::<V256>::new();
+        let result = V256::write_logical_fov(
+            &model,
+            &value,
+            &mut camera,
+            &[],
+            &mut Vec::new(),
+            &mut Context::export(&ExportOptions::default()),
+        );
+        assert!(result.is_err());
+    }
+}

@@ -405,9 +405,23 @@ impl<T, P: Profile> Property<T, P> {
                 .expect("infallible property embedding"),
         )
     }
-    /// Projects a destination into a supported subset vocabulary.
-    pub fn try_narrow<Q: Narrows<P>>(self) -> Result<Property<T, Q>, Error> {
-        Ok(Property::new(self.target.map_profile::<Q>(Q::property)?))
+    /// Projects a destination without changing its value domain.
+    pub fn try_narrow<Q: Narrows<P>>(self) -> Result<Property<T, Q>, Error>
+    where
+        T: 'static,
+    {
+        let source_type = TypeId::of::<T>();
+        let target = self.target.map_profile::<Q>(Q::property)?;
+        if target.value_type() != Some(source_type) {
+            return Err(Error::new(
+                "animation.binding",
+                "narrowing changes the binding source value domain",
+            ));
+        }
+        Ok(Property {
+            target,
+            marker: PhantomData,
+        })
     }
 }
 impl NodeId {

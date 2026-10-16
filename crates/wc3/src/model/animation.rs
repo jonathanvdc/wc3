@@ -1,4 +1,5 @@
 //! Typed curves and property destinations, independent of file clocks and channel numbers.
+use std::any::TypeId;
 /// Resettable values with authored sampling controls.
 pub mod programmed;
 use crate::model::profiles::{Extends, Narrows, Profile, Universal};
@@ -50,21 +51,23 @@ pub enum Interpolation {
 }
 pub mod properties;
 pub use properties::*;
+mod bindings;
+pub use bindings::*;
 
 /// Rest value and optional binding to a typed animated property.
 #[derive(Clone, Debug)]
-pub struct Animated<T, P: Profile = Universal> {
+pub struct Animated<T: AnimatedValue, P: Profile = Universal> {
     /// Value when no animation overrides this property.
     pub default: T,
-    /// Typed animated destination.
-    pub property: Option<Property<T, P>>,
+    /// Optional typed read binding.
+    pub binding: Option<Binding<T, P>>,
 }
-impl<T, P: Profile> Animated<T, P> {
+impl<T: AnimatedValue, P: Profile> Animated<T, P> {
     /// An unanimated value.
     pub fn constant(default: T) -> Self {
         Self {
             default,
-            property: None,
+            binding: None,
         }
     }
     /// Binds a rest value to its animation destination.
@@ -74,11 +77,11 @@ impl<T, P: Profile> Animated<T, P> {
     {
         Self {
             default,
-            property: Some(property.widen()),
+            binding: Some(property.widen::<P>().into()),
         }
     }
 }
-impl<T: Default, P: Profile> Default for Animated<T, P> {
+impl<T: AnimatedValue + Default, P: Profile> Default for Animated<T, P> {
     fn default() -> Self {
         Self::constant(T::default())
     }
@@ -326,7 +329,38 @@ impl<'a, P: Profile> Channel<'a, P> {
             Self::Unsigned4(track) => Channel::Unsigned4(track.map_profile(map)?),
             Self::Bytes4(track) => Channel::Bytes4(track.map_profile(map)?),
             Self::Rotation(track) => Channel::Rotation(track.map_profile(map)?),
-            Self::Scalar(track) => Channel::Scalar(track.map_profile(map)?),
+            Self::Scalar(track) => {
+                let track = track.map_profile(map)?;
+                if track.target.target().value_type() == Some(TypeId::of::<bool>()) {
+                    if track.curve.interpolation() != Interpolation::Step
+                        || track
+                            .curve
+                            .values()
+                            .iter()
+                            .any(|value| value != 0. && value != 1.)
+                    {
+                        return Err(Error::new(
+                            "socket.visibility",
+                            "boolean socket visibility requires binary step keys",
+                        ));
+                    }
+                    Channel::Boolean(Track {
+                        target: Property::new(track.target.target().clone()),
+                        curve: Curve::step(
+                            track.curve.times().clone(),
+                            track
+                                .curve
+                                .values()
+                                .iter()
+                                .map(|value| value == 1.)
+                                .collect::<Vec<_>>(),
+                        )?,
+                        clock: track.clock,
+                    })
+                } else {
+                    Channel::Scalar(track)
+                }
+            }
             Self::Vector2(track) => Channel::Vector2(track.map_profile(map)?),
             Self::Vector3(track) => Channel::Vector3(track.map_profile(map)?),
             Self::Vector4(track) => Channel::Vector4(track.map_profile(map)?),
@@ -344,18 +378,20 @@ impl<'a, P: Profile> Channel<'a, P> {
         self.map_profile(|key| Ok(Q::property(key)))
             .expect("infallible property embedding")
     }
-    /// Projects a typed programme into a subset vocabulary without rebuilding its curves.
+    /// Projects a typed programme exactly, converting binary scalar step keys when required.
     pub fn try_narrow<Q: Narrows<P>>(self) -> Result<Channel<'a, Q>, Error> {
         self.map_profile(Q::property)
     }
 }
 
-impl<T: PartialEq, P: Profile, Q: Profile> PartialEq<Animated<T, Q>> for Animated<T, P> {
+impl<T: AnimatedValue + PartialEq, P: Profile, Q: Profile> PartialEq<Animated<T, Q>>
+    for Animated<T, P>
+{
     fn eq(&self, other: &Animated<T, Q>) -> bool {
         self.default == other.default
-            && match (&self.property, &other.property) {
+            && match (&self.binding, &other.binding) {
                 (None, None) => true,
-                (Some(a), Some(b)) => a == b,
+                (Some(a), Some(b)) => a.equivalent::<Q>(b),
                 _ => false,
             }
     }

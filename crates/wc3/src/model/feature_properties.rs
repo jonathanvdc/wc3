@@ -9,6 +9,8 @@ use std::any::TypeId;
 /// A shared destination on an attached behavior.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FeatureProperty {
+    /// Visibility of content mounted at an exposed socket.
+    SocketVisibility,
     /// Diffuse illumination color.
     LightDiffuseColor,
     /// Diffuse illumination multiplier.
@@ -221,4 +223,13 @@ mod m3_tests {
         let specular = Target::Field(FieldPath::root(Field::Light).child(Field::SpecularColor));
         assert_ne!(native.identity(), specular.identity());
     }
+}
+
+/// Socket content animation destinations.
+pub mod socket {
+    use super::*;
+    /// Fractional visibility of mounted content.
+    pub const VISIBILITY: PropertyKey<FeatureId, f32, Universal> = PropertyKey::new(
+        UniversalProperty::Feature(FeatureProperty::SocketVisibility),
+    );
 }

@@ -8,9 +8,9 @@ use wc3::model::profiles::mdlx::{
 };
 use wc3::model::profiles::{FeaturePayload, Mdlx, Profile, Universal, M2};
 use wc3::model::{
-    Animated, AttachmentPointDefinition, Channel, Clock, Curve, FeatureId, FeatureKind,
-    FeatureSchema, FeatureView, LightEmission, Link, Material, Model, Node, OwnerId, Property,
-    PropertyDescriptor, PropertyPayload, PropertyTarget, Time, Track, ValidateLinks,
+    Animated, Channel, Clock, Curve, FeatureId, FeatureKind, FeatureSchema, FeatureView,
+    LightEmission, Link, Material, Model, Node, OwnerId, Property, PropertyDescriptor,
+    PropertyPayload, PropertyTarget, SocketDefinition, Time, Track, ValidateLinks,
 };
 
 fn light_model<'a>(times: &'a [Time], values: &'a [f32]) -> Model<'a, Mdlx> {
@@ -87,8 +87,8 @@ fn selectors_require_the_actual_feature_family_even_when_declared_by_a_field() {
         .set_feature(
             feature,
             MdlxFeature::Attachment(Attachment {
-                point: AttachmentPointDefinition {
-                    activation: Animated::new(1., property.clone()),
+                socket: SocketDefinition {
+                    visibility: Animated::new(1., property.clone()),
                     ..Default::default()
                 },
                 ..Default::default()

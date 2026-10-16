@@ -1,5 +1,6 @@
 //! Compile semantic graphs into owned immutable render definitions.
 use super::bounds::rest_bounds;
+use super::child_coordinates::CoordinatePolicy;
 use super::coordinates::{axis, basis};
 use super::effects::RuntimeParticles;
 use super::events::RuntimeEvents;
@@ -10,7 +11,6 @@ use super::material::compile_materials_with_images;
 use super::material::mesh_alpha_mode;
 use super::mesh_animation::{multiply, state as mesh_state, MeshAnimation, MeshMaterialState};
 use super::mesh_interner::MeshInterner;
-use super::placements::PlacementSpace;
 use super::pose::BillboardConvention;
 use super::skin_bounds::compile_skin_bounds;
 use super::textures::TextureImages;
@@ -87,8 +87,8 @@ pub struct CompileOptions {
     pub draws: DrawSelection,
     /// Resolved optional child models, keyed by the authored attachment or emitter.
     pub child_models: HashMap<FeatureId, Handle<ModelAsset>>,
-    /// External child coordinate-space overrides; omitted features use authored space.
-    pub model_placements: HashMap<FeatureId, PlacementSpace>,
+    /// Child coordinate policies; omitted features use the host authored frame.
+    pub child_coordinates: HashMap<FeatureId, CoordinatePolicy>,
 }
 
 /// Compile geometry, skin bindings, default appearances, surfaces, and animation
@@ -448,7 +448,7 @@ pub fn compile_model_with_options(
         &images,
         &materials,
         &options.child_models,
-        &options.model_placements,
+        &options.child_coordinates,
     ));
     diagnostics.extend(
         particles
@@ -463,7 +463,7 @@ pub fn compile_model_with_options(
     let features = Arc::new(RuntimeFeatures::compile(
         model,
         &options.child_models,
-        &options.model_placements,
+        &options.child_coordinates,
     ));
     diagnostics.extend(
         features
@@ -481,12 +481,12 @@ pub fn compile_model_with_options(
             NodeFeature::GeometryAnimation(value) if value.mesh.is_some() && !value.drop_shadow && value.unclassified.bits() == 0 => continue,
             NodeFeature::GeometryAnimation(_) => "geometry tint and opacity are rendered; orphan controllers, authored drop shadows, and unclassified geometry flags need application interpretation".to_string(),
             NodeFeature::Camera(ModelCamera::Portable(_) | ModelCamera::Aimed(_))
-            | NodeFeature::Attachment(Attachment::Point(_)) => continue,
+            | NodeFeature::Attachment(Attachment::Socket(_)) => continue,
             NodeFeature::Light(SemanticLight::World(_) | SemanticLight::Specular(_) | SemanticLight::Point(_)) | NodeFeature::PointLight(_) => continue,
             NodeFeature::Light(SemanticLight::Portable(_) | SemanticLight::AmbientDiffuse(_)) =>
                 "direct illumination uses Bevy scene lights; ambient terms remain available through ModelLight metadata".to_string(),
-            NodeFeature::Attachment(Attachment::External(_)) if options.child_models.contains_key(&id) => continue,
-            NodeFeature::Attachment(Attachment::External(_)) =>
+            NodeFeature::Attachment(Attachment::Child(_)) if options.child_models.contains_key(&id) => continue,
+            NodeFeature::Attachment(Attachment::Child(_)) =>
                 "external attachment identity and activation are exposed; application resource instantiation is required".to_string(),
             _ => format!("{} requires a visual interpreter or application integration", feature_name(&feature.payload)),
         };

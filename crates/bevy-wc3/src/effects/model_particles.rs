@@ -1,6 +1,6 @@
 //! External-model particles with frozen world-space births and independent clocks.
+use super::super::child_coordinates::{ChildCoordinates, CoordinatePolicy};
 use super::super::coordinates::basis;
-use super::super::placements::{ChildModelPlacement, PlacementSpace};
 use super::super::{ModelAsset, ModelInstance, ModelRig, Playback};
 use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
@@ -36,7 +36,7 @@ struct Emitter {
     node: NodeId,
     anchor: usize,
     model: Handle<ModelAsset>,
-    placement: ChildModelPlacement,
+    placement: ChildCoordinates,
     rate: Animated<f32>,
     activation: ParticleActivation,
     speed: Animated<f32>,
@@ -128,7 +128,7 @@ impl RuntimeModelParticles {
         model: &Model<'_>,
         nodes: &HashMap<NodeId, usize>,
         children: &HashMap<FeatureId, Handle<ModelAsset>>,
-        placements: &HashMap<FeatureId, PlacementSpace>,
+        placements: &HashMap<FeatureId, CoordinatePolicy>,
     ) -> Self {
         let mut result = Self {
             clips: model
@@ -187,7 +187,7 @@ impl RuntimeModelParticles {
                 node: attached.node,
                 anchor: nodes[&attached.node],
                 model: child.clone(),
-                placement: ChildModelPlacement::from_model(
+                placement: ChildCoordinates::from_model(
                     model,
                     placements.get(&feature).copied().unwrap_or_default(),
                 ),

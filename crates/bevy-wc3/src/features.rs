@@ -1,10 +1,9 @@
 //! Authored scene features evaluated without taking ownership of application cameras.
-use super::placements::{ChildModelPlacement, PlacementSpace};
+use super::child_coordinates::{ChildCoordinates, CoordinatePolicy};
 use super::runtime::{ModelDraw, ModelNode};
 use super::world::WorldLiquidSurface;
 use super::{ModelAsset, ModelInstance, ModelRig, Playback};
 use bevy::prelude::*;
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
 use wc3::model::profiles::Universal;
@@ -12,11 +11,10 @@ use wc3::model::scene::world::LightKind as WorldLightKind;
 use wc3::model::scene::{Camera as PortableCamera, LightKind};
 use wc3::model::values::programmed::LightKind as ProgrammedLightKind;
 use wc3::model::{
-    AimedCamera, Attachment, AttachmentActivation, AttachmentIdentity,
-    AttachmentPoint as SemanticAttachmentPoint, Camera as ModelCamera, CameraConvention, ClipId,
-    FeatureId, FeatureKind, IlluminationKind, Light as SemanticLight, LightActivation, Model,
-    NodeFeature, NodeId, PlacementAppearance as SemanticPlacementAppearance,
-    Resource as ModelResource, SampledAnimation,
+    AimedCamera, Attachment, Camera as ModelCamera, CameraConvention, ClipId, FeatureId,
+    FeatureKind, IlluminationKind, Light as SemanticLight, LightActivation, Model, ModelMount,
+    MountTarget, NodeFeature, NodeId, PlacementAppearance as SemanticPlacementAppearance,
+    SampledAnimation,
 };
 
 /// Conversion controls on a model's animation root. Absence uses the defaults.
@@ -59,10 +57,9 @@ pub struct ModelFeature {
     pub node: NodeId,
 }
 
-/// Complete authored external-placement appearance, independent of interpretation.
-/// WMO colors describe illumination and are not blindly multiplied into albedo.
+/// Complete semantic attachment definition, including authored activation and appearance.
 #[derive(Component, Clone, Debug)]
-pub struct PlacementAppearance(pub SemanticPlacementAppearance);
+pub struct ModelAttachment(pub Attachment<'static>);
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AttachmentClock {
@@ -70,15 +67,11 @@ pub(crate) struct AttachmentClock {
     time: f64,
 }
 
-/// Authored attachment identity and its current activation.
+/// Sampled attachment state, separate from the immutable authored definition.
 #[derive(Component, Clone, Debug)]
-pub struct AttachmentPoint {
-    /// Identity retains its namespace; numeric roles and indices are distinct.
-    pub identity: Option<AttachmentIdentity<'static>>,
-    /// Optional external model to resolve through the application's provider.
-    pub resource: Option<ModelResource<'static>>,
+pub struct AttachmentState {
     /// Current fractional visibility, or zero/one for boolean activation.
-    pub activation: f32,
+    pub visibility: f32,
     clock: Option<AttachmentClock>,
 }
 
@@ -121,25 +114,14 @@ enum CameraDefinition {
 #[derive(Clone)]
 struct AttachmentDefinition {
     feature: ModelFeature,
-    point: Option<SemanticAttachmentPoint<'static>>,
-    resource: Option<ModelResource<'static>>,
-    appearance: SemanticPlacementAppearance,
+    definition: Attachment<'static>,
     model: Option<Handle<ModelAsset>>,
-    placement: ChildModelPlacement,
+    placement: Option<ModelMount>,
+    parent_basis: Transform,
 }
 impl AttachmentDefinition {
-    fn activation(&self, sample: &SampledAnimation<'_, '_, Universal>) -> f32 {
-        match self.point.as_ref().map(|point| &point.activation) {
-            Some(AttachmentActivation::Enabled(value)) => {
-                if sample.animated(value) {
-                    1.
-                } else {
-                    0.
-                }
-            }
-            Some(AttachmentActivation::Visibility(value)) => sample.animated(value).clamp(0., 1.),
-            _ => 1.,
-        }
+    fn visibility(&self, sample: &SampledAnimation<'_, '_, Universal>) -> f32 {
+        self.definition.visibility(sample)
     }
 }
 #[derive(Clone, Default)]
@@ -164,19 +146,6 @@ impl RuntimeFeatureInstances {
     }
 }
 
-fn owned_point(point: &SemanticAttachmentPoint<'_>) -> SemanticAttachmentPoint<'static> {
-    SemanticAttachmentPoint {
-        identity: match &point.identity {
-            AttachmentIdentity::Named(name) => {
-                AttachmentIdentity::Named(Cow::Owned(name.to_string()))
-            }
-            AttachmentIdentity::Role(role) => AttachmentIdentity::Role(*role),
-            AttachmentIdentity::Index(index) => AttachmentIdentity::Index(*index),
-        },
-        activation: point.activation.clone(),
-        control: point.control,
-    }
-}
 pub(super) type LightQuery<'world, 'state> = Query<
     'world,
     'state,
@@ -190,7 +159,7 @@ pub(super) type LightQuery<'world, 'state> = Query<
 pub(super) type AttachmentQuery<'world, 'state> = Query<
     'world,
     'state,
-    (&'static mut AttachmentPoint, &'static mut Visibility),
+    (&'static mut AttachmentState, &'static mut Visibility),
     (
         Without<ModelNode>,
         Without<ModelDraw>,
@@ -213,15 +182,15 @@ impl RuntimeFeatures {
             SemanticLight::Specular(_)=>Some((feature.id,"M3 diffuse light animation, range and shadow flags use Bevy lights; independent specular response, distance-decay law, LOD gates and native cone calibration remain uninterpreted")),
             SemanticLight::Point(_)=>Some((feature.id,"Region point-light color, intensity and range use Bevy lights; native attenuation-start and unresolved controls remain uninterpreted")),
             _=>None,
-        }).chain(self.attachments.iter().filter_map(|definition| match &definition.appearance {
-            SemanticPlacementAppearance::World { .. } => Some((definition.feature.id, "WMO placement appearance is retained on PlacementAppearance; interior direct illumination, region-derived ambient lighting, linked lights and placement controls require application interpretation, without changing child albedo or scene lighting")),
-            SemanticPlacementAppearance::Unmodified => None,
+        }).chain(self.attachments.iter().filter_map(|definition| match definition.definition.child().map(|value| &value.appearance) {
+            Some(SemanticPlacementAppearance::World { .. }) => Some((definition.feature.id, "WMO placement appearance is retained on ModelAttachment; interior direct illumination, region-derived ambient lighting, linked lights and placement controls require application interpretation, without changing child albedo or scene lighting")),
+            _ => None,
         }))
     }
     pub fn compile(
         model: &Model<'_>,
         children: &HashMap<FeatureId, Handle<ModelAsset>>,
-        placements: &HashMap<FeatureId, PlacementSpace>,
+        placements: &HashMap<FeatureId, CoordinatePolicy>,
     ) -> Self {
         let mut result = Self::default();
         for (id, value) in model.features() {
@@ -240,29 +209,17 @@ impl RuntimeFeatures {
                 NodeFeature::Camera(ModelCamera::Portable(camera)) => result
                     .cameras
                     .push((feature, CameraDefinition::Portable((**camera).clone()))),
-                NodeFeature::Attachment(Attachment::Point(point)) => {
-                    result.attachments.push(AttachmentDefinition {
-                        feature,
-                        point: Some(owned_point(point)),
-                        resource: None,
-                        appearance: SemanticPlacementAppearance::Unmodified,
-                        model: None,
-                        placement: ChildModelPlacement::from_model(model, PlacementSpace::Authored),
-                    })
-                }
-                NodeFeature::Attachment(Attachment::External(value)) => {
-                    result.attachments.push(AttachmentDefinition {
-                        feature,
-                        point: value.point.as_ref().map(owned_point),
-                        resource: Some(value.resource.clone().into_owned()),
-                        appearance: value.appearance.clone(),
-                        model: children.get(&id).cloned(),
-                        placement: ChildModelPlacement::from_model(
-                            model,
-                            placements.get(&id).copied().unwrap_or_default(),
-                        ),
-                    })
-                }
+                NodeFeature::Attachment(value) => result.attachments.push(AttachmentDefinition {
+                    feature,
+                    definition: value.clone().into_owned(),
+                    model: value.child().and_then(|_| children.get(&id).cloned()),
+                    placement: value.mount(id, feature.node).map(|mut placement| {
+                        placement.coordinates = placements.get(&id).copied().unwrap_or_default();
+                        placement
+                    }),
+                    parent_basis: ChildCoordinates::from_model(model, CoordinatePolicy::Host)
+                        .parent_basis,
+                }),
                 _ => {}
             }
         }
@@ -288,6 +245,11 @@ impl RuntimeFeatures {
         self.attachments
             .extend(source.attachments.iter().cloned().map(|mut attachment| {
                 attachment.feature = remap(attachment.feature);
+                if let Some(placement) = &mut attachment.placement {
+                    if let MountTarget::Node(node) = &mut placement.target {
+                        *node = nodes[node];
+                    }
+                }
                 attachment
             }));
         self.hooks.extend(
@@ -300,7 +262,9 @@ impl RuntimeFeatures {
     pub(crate) fn attachment_node(&self, id: FeatureId) -> Option<NodeId> {
         self.attachments
             .iter()
-            .find(|definition| definition.feature.id == id)
+            .find(|definition| {
+                definition.feature.id == id && definition.definition.socket().is_some()
+            })
             .map(|definition| definition.feature.node)
     }
     pub(crate) fn attachment_entity(
@@ -310,7 +274,9 @@ impl RuntimeFeatures {
     ) -> Option<Entity> {
         self.attachments
             .iter()
-            .position(|definition| definition.feature.id == id)
+            .position(|definition| {
+                definition.feature.id == id && definition.definition.socket().is_some()
+            })
             .and_then(|index| instances.attachments.get(index).copied())
     }
     pub(crate) fn attachment_active(
@@ -320,8 +286,10 @@ impl RuntimeFeatures {
     ) -> bool {
         self.attachments
             .iter()
-            .find(|definition| definition.feature.id == id)
-            .is_some_and(|definition| definition.activation(sample) > 0.)
+            .find(|definition| {
+                definition.feature.id == id && definition.definition.socket().is_some()
+            })
+            .is_some_and(|definition| definition.visibility(sample) > 0.)
     }
     /// All authored integration identities, including collision and controllers.
     pub fn hooks(&self) -> &[(ModelFeature, FeatureKind)] {
@@ -407,22 +375,25 @@ impl RuntimeFeatures {
             else {
                 continue;
             };
-            let identity = definition.point.as_ref().map(|p| p.identity.clone());
             let mut entity = commands.spawn((
                 definition.feature,
-                AttachmentPoint {
-                    identity,
-                    resource: definition.resource.clone(),
-                    activation: 1.,
+                AttachmentState {
+                    visibility: 1.,
                     clock: None,
                 },
-                PlacementAppearance(definition.appearance.clone()),
+                ModelAttachment(definition.definition.clone()),
                 Transform::default(),
                 Visibility::default(),
                 ChildOf(parent),
             ));
-            if let Some(model) = &definition.model {
-                entity.insert((ModelInstance(model.clone()), definition.placement));
+            if let (Some(model), Some(placement)) = (&definition.model, definition.placement) {
+                entity.insert((
+                    ModelInstance(model.clone()),
+                    ChildCoordinates {
+                        coordinates: placement.coordinates,
+                        parent_basis: definition.parent_basis,
+                    },
+                ));
             }
             instances.attachments.push(entity.id());
         }
@@ -614,8 +585,8 @@ impl RuntimeFeatures {
         }
         for (definition, &entity) in self.attachments.iter().zip(&instances.attachments) {
             if let Ok((mut point, mut visibility)) = attachments.get_mut(entity) {
-                let activation = definition.activation(sample);
-                set_if_changed!(point.activation, activation);
+                let activation = definition.visibility(sample);
+                set_if_changed!(point.visibility, activation);
                 set_if_changed!(
                     *visibility,
                     if activation > 0. {
@@ -738,30 +709,6 @@ mod tests {
         assert_eq!(camera.vertical_field_of_view, 1.);
         assert_eq!(camera.clipping, [0.1, 100.]);
     }
-    #[test]
-    fn resource_and_attachment_identity_detach_from_borrowed_storage() {
-        let resource = ModelResource::Named {
-            namespace: Cow::Borrowed("casc"),
-            name: Cow::Borrowed("asset"),
-        }
-        .into_owned();
-        let point = owned_point(&SemanticAttachmentPoint {
-            identity: AttachmentIdentity::Named(Cow::Borrowed("hand")),
-            activation: AttachmentActivation::Uncontrolled,
-            control: None,
-        });
-        assert!(matches!(
-            resource,
-            ModelResource::Named {
-                namespace: Cow::Owned(_),
-                name: Cow::Owned(_)
-            }
-        ));
-        assert!(matches!(
-            point.identity,
-            AttachmentIdentity::Named(Cow::Owned(_))
-        ));
-    }
 }
 
 #[cfg(test)]
@@ -858,7 +805,7 @@ mod imported_light_tests {
 
 type AttachmentParentData = (&'static ModelRig, &'static Playback);
 type AttachmentChildData = (
-    &'static mut AttachmentPoint,
+    &'static mut AttachmentState,
     &'static mut Playback,
     &'static mut Visibility,
 );
@@ -886,7 +833,7 @@ pub(crate) fn restart_attachments(
             .iter()
             .zip(&instance.feature_instances().attachments)
         {
-            let activation = definition.activation(&sample);
+            let activation = definition.visibility(&sample);
             pending.push((
                 *entity,
                 activation,
@@ -915,7 +862,7 @@ pub(crate) fn restart_attachments(
 }
 
 fn observe_attachment_clock(
-    point: &mut AttachmentPoint,
+    point: &mut AttachmentState,
     playback: &mut Playback,
     activation: f32,
     clock: AttachmentClock,
@@ -923,21 +870,19 @@ fn observe_attachment_clock(
     let changed_clock = point
         .clock
         .is_some_and(|previous| previous.clip != clock.clip || clock.time < previous.time);
-    if activation > 0. && (point.activation <= 0. || changed_clock) {
+    if activation > 0. && (point.visibility <= 0. || changed_clock) {
         playback.restart();
     }
     point.clock = Some(clock);
-    point.activation = activation;
+    point.visibility = activation;
 }
 #[cfg(test)]
 mod attachment_lifecycle_tests {
     use super::*;
     #[test]
     fn inactive_mounts_restart_only_on_activation_or_parent_backwards_traversal() {
-        let mut point = AttachmentPoint {
-            identity: None,
-            resource: None,
-            activation: 0.,
+        let mut point = AttachmentState {
+            visibility: 0.,
             clock: None,
         };
         let mut playback = Playback::new();

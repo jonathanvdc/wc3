@@ -1,6 +1,7 @@
 use super::*;
 use std::f64::consts::FRAC_PI_2;
 use wc3::model::systems::model_physics::Spring;
+use wc3::model::{ModelMount, MountTarget};
 use wc3::model::{Node, Quaternion};
 
 fn fixture(dynamic: usize) -> (PhysicsDefinition, Vec<Mat4>) {
@@ -552,10 +553,7 @@ fn mounted_physics_inherits_forces_through_current_frame_carrier_rotation() {
     let composed = host
         .compose([ModelPart::new(
             &part,
-            PartBinding::Rigid {
-                parent: carrier,
-                transform: Mat4::IDENTITY,
-            },
+            PartBinding::Mounted(ModelMount::new(MountTarget::Node(carrier))),
         )])
         .unwrap();
     let mut meshes = Assets::default();

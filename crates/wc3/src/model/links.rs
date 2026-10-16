@@ -190,7 +190,7 @@ impl<T: CurveValue + 'static, P: Profile> ValidateLinks for Animated<T, P> {
             v(Link::InvalidValue);
         }
         self.default.visit_value_links(v);
-        self.property.visit_links(v);
+        self.binding.visit_links(v);
     }
 }
 use crate::model::{Channel, Clock, Track};

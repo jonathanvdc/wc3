@@ -65,7 +65,7 @@ impl Node<'_> {
                 value.convention.focal_length.visit_links(visitor);
                 value.convention.f_stop.visit_links(visitor)
             }
-            Node::Attachment(value) => value.point.activation.visit_links(visitor),
+            Node::Attachment(value) => value.socket.visibility.visit_links(visitor),
             Node::Event(_) => {}
             Node::CollisionShape(_) => {}
 

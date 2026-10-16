@@ -142,7 +142,7 @@ fn parent_replacement_defers_requests_in_its_old_owned_hierarchy() {
 
 #[test]
 fn mounted_frame_correction_preserves_root_and_cached_basis_across_reload() {
-    use super::super::placements::PlacementSpace;
+    use super::super::child_coordinates::CoordinatePolicy;
     let mut app = app();
     let (mut asset, node) = fixture();
     let child_basis =
@@ -153,8 +153,8 @@ fn mounted_frame_correction_preserves_root_and_cached_basis_across_reload() {
         .resource_mut::<Assets<ModelAsset>>()
         .add(asset);
     let id = handle.id();
-    let placement = ChildModelPlacement {
-        space: PlacementSpace::Physical,
+    let placement = ChildCoordinates {
+        coordinates: CoordinatePolicy::Child,
         parent_basis: Transform::from_rotation(Quat::from_rotation_x(1.1))
             .with_scale(Vec3::splat(0.01)),
     };

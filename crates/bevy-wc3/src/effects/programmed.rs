@@ -17,9 +17,9 @@ use wc3::model::values::programmed::{
     EmitterShape, ParticleInstance, Smoothing, Variation, VelocityKind,
 };
 use wc3::model::{
-    Animated, ClipId, Clock, ParticleAppearance, ParticleDefinition, ParticleDetails,
-    ParticleGravity, ParticleScalar, ParticleTrigger, ProgrammedAge, RetimedAnimation,
-    VariationControl,
+    Animated, AnimatedValue, ClipId, Clock, ParticleAppearance, ParticleDefinition,
+    ParticleDetails, ParticleGravity, ParticleScalar, ParticleTrigger, ProgrammedAge,
+    RetimedAnimation, VariationControl,
 };
 
 #[derive(Clone)]
@@ -84,10 +84,10 @@ pub(super) struct SpriteStyle {
     pub rotation: f32,
     pub cell: u32,
 }
-pub(super) fn animated<T: Clone>(property: &Property<T>) -> Animated<T> {
+pub(super) fn animated<T: AnimatedValue>(property: &Property<T>) -> Animated<T> {
     Animated {
         default: property.initial.clone(),
-        property: property.binding.clone(),
+        binding: property.binding.clone().map(Into::into),
     }
 }
 fn scalar(value: &ParticleScalar) -> Animated<f32> {
@@ -482,7 +482,7 @@ impl SquirtSchedule {
     ) {
         self.occurrences.clear();
         let track = amount
-            .property
+            .binding
             .as_ref()
             .and_then(|target| frame.sample.track(target));
         let clock = track
@@ -553,7 +553,7 @@ impl SquirtSchedule {
         } else {
             // An inactive bound programme must not fall back to an authored
             // default burst; defaults apply only to genuinely unbound values.
-            if amount.property.is_none() {
+            if amount.binding.is_none() {
                 add(origin, amount.default);
             }
         }

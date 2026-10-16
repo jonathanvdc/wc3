@@ -65,7 +65,7 @@ fn standing_snapshot_retains_bindings_and_supports_editable_geometry_without_ima
             let frozen = surface.sampled(&sample);
             let texture = frozen.layers[0].binding.image.default.unwrap();
             assert!(model.texture(texture).is_some());
-            assert!(frozen.layers[0].binding.image.property.is_none());
+            assert!(frozen.layers[0].binding.image.binding.is_none());
             let tint = appearances
                 .get(&instance.mesh)
                 .map_or([1.; 4], |v| v.sample(&sample));
@@ -314,7 +314,7 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
     let frozen = source.sampled(&sample);
     assert!((frozen.layers[0].opacity.default - 0.5).abs() < 1e-6);
     assert_eq!(frozen.layers[0].binding.image.default, None);
-    assert!(frozen.layers[0].opacity.property.is_none());
+    assert!(frozen.layers[0].opacity.binding.is_none());
     assert_eq!(frozen.layers[0].state, source.layers[0].state);
     assert_eq!(
         frozen.layers[0].binding.coordinates,

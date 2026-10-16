@@ -7,6 +7,7 @@ use wc3::model::{
     Influence, Material, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node as ModelNode,
     Quaternion, Skin, Time, Track, UniversalBinding,
 };
+use wc3::model::{ModelMount, MountTarget, Transform as ModelTransform};
 
 fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
     let mut builder = Model::<Universal>::builder("bound triangle");
@@ -196,10 +197,14 @@ fn rigid_equipment_uses_mount_frame_and_can_sync_its_clip() {
     let armor = compile_model(&armor, |_| None).unwrap();
     let mut part = ModelPart::new(
         &armor,
-        Rigid {
-            parent: joint,
-            transform: Mat4::from_translation(Vec3::Y),
-        },
+        Mounted(ModelMount {
+            target: MountTarget::Node(joint),
+            transform: ModelTransform {
+                translation: Vec3::Y.to_array(),
+                ..Default::default()
+            },
+            ..ModelMount::new(MountTarget::Node(joint))
+        }),
     );
     part.clips.insert(clip, armor_clip);
     let composed = body.compose([part]).unwrap();
@@ -210,10 +215,7 @@ fn rigid_equipment_uses_mount_frame_and_can_sync_its_clip() {
 #[test]
 fn mapped_attachment_anchor_retains_source_pivot_and_rest_space() {
     use crate::pose::{local_matrix, PoseContext};
-    use wc3::model::{
-        AnimationSample, Attachment, AttachmentActivation, AttachmentIdentity, AttachmentPoint,
-        NodeFeature,
-    };
+    use wc3::model::{AnimationSample, Attachment, NodeFeature, Socket, SocketIdentity};
     let (host, joint, clip) = model(1.);
     let (mut source, source_joint, _) = model(3.);
     let mut source_node = source.node(source_joint).unwrap().clone();
@@ -223,9 +225,9 @@ fn mapped_attachment_anchor_retains_source_pivot_and_rest_space() {
             builder.set_node(source_joint, source_node)?;
             builder.add_feature(
                 source_joint,
-                NodeFeature::Attachment(Attachment::Point(AttachmentPoint {
-                    identity: AttachmentIdentity::Role(11),
-                    activation: AttachmentActivation::Uncontrolled,
+                NodeFeature::Attachment(Attachment::Socket(Socket {
+                    identity: SocketIdentity::Role(11),
+                    visibility: Animated::constant(1.),
                     control: None,
                 })),
             )
@@ -297,10 +299,7 @@ fn repeated_rigid_parts_share_geometry_and_skinned_subassemblies_retain_mounts()
     let source = source
         .compose([ModelPart::new(
             &gem,
-            Rigid {
-                parent: source_joint,
-                transform: Mat4::IDENTITY,
-            },
+            Mounted(ModelMount::new(MountTarget::Node(source_joint))),
         )])
         .unwrap();
     let combined = host
@@ -312,19 +311,17 @@ fn repeated_rigid_parts_share_geometry_and_skinned_subassemblies_retain_mounts()
                     transform: Mat4::IDENTITY,
                 },
             ),
+            ModelPart::new(&gem, Mounted(ModelMount::new(MountTarget::Node(joint)))),
             ModelPart::new(
                 &gem,
-                Rigid {
-                    parent: joint,
-                    transform: Mat4::IDENTITY,
-                },
-            ),
-            ModelPart::new(
-                &gem,
-                Rigid {
-                    parent: joint,
-                    transform: Mat4::from_translation(Vec3::Y),
-                },
+                Mounted(ModelMount {
+                    target: MountTarget::Node(joint),
+                    transform: ModelTransform {
+                        translation: Vec3::Y.to_array(),
+                        ..Default::default()
+                    },
+                    ..ModelMount::new(MountTarget::Node(joint))
+                }),
             ),
         ])
         .unwrap();
@@ -370,10 +367,7 @@ fn mounted_baking_accepts_independent_clock_snapshots() {
     let composed = host
         .compose([ModelPart::new(
             &part,
-            Rigid {
-                parent: joint,
-                transform: Mat4::IDENTITY,
-            },
+            Mounted(ModelMount::new(MountTarget::Node(joint))),
         )])
         .unwrap();
     let mut meshes = Assets::default();
@@ -484,17 +478,16 @@ fn mapped_controller_clips_activate_part_programmes_on_checked_host_timeline() {
 #[test]
 fn attachment_mounts_retain_activation_when_baking() {
     use wc3::model::{
-        Animated, Attachment as ModelAttachment, AttachmentActivation, AttachmentIdentity,
-        AttachmentPoint, NodeFeature,
+        Animated, Attachment as ModelAttachment, NodeFeature, Socket, SocketIdentity,
     };
     let (mut body, joint, clip) = model(1.);
     let point = body
         .edit(|builder| {
             builder.add_feature(
                 joint,
-                NodeFeature::Attachment(ModelAttachment::Point(AttachmentPoint {
-                    identity: AttachmentIdentity::Role(6),
-                    activation: AttachmentActivation::Enabled(Animated::constant(false)),
+                NodeFeature::Attachment(ModelAttachment::Socket(Socket {
+                    identity: SocketIdentity::Role(6),
+                    visibility: Animated::constant(0.),
                     control: None,
                 })),
             )
@@ -506,16 +499,13 @@ fn attachment_mounts_retain_activation_when_baking() {
     let composed = body
         .compose([ModelPart::new(
             &armor,
-            Attachment {
-                point,
-                transform: Mat4::IDENTITY,
-            },
+            Mounted(ModelMount::new(MountTarget::Socket(point))),
         )])
         .unwrap();
     let mut meshes = Assets::default();
     let mut binds = Assets::<SkinnedMeshInverseBindposes>::default();
     let prepared = composed.prepare(&mut meshes, &mut binds);
-    assert_eq!(prepared.mounts().next().unwrap().point, Some(point));
+    assert_eq!(prepared.mounts().next().unwrap().socket, Some(point));
     let playback = Playback::for_clip(clip);
     let baked = PoseBaker::default()
         .bake(
@@ -531,4 +521,98 @@ fn attachment_mounts_retain_activation_when_baking() {
     assert_eq!(baked.parts.len(), 2);
     assert!(baked.parts[0].visible);
     assert!(!baked.parts[1].visible);
+}
+
+#[test]
+fn resource_only_placement_is_not_an_attachment_point() {
+    use wc3::model::{Attachment, ChildModel, NodeFeature, PlacementAppearance, Resource};
+    let (mut body, joint, _) = model(1.);
+    let placement = body
+        .edit(|builder| {
+            builder.add_feature(
+                joint,
+                NodeFeature::Attachment(Attachment::Child(ChildModel {
+                    resource: Resource::Path(b"child.mdx".as_slice().into()),
+                    socket: None,
+                    appearance: PlacementAppearance::Unmodified,
+                })),
+            )
+        })
+        .unwrap();
+    let body = compile_model(&body, |_| None).unwrap();
+    let (part, _, _) = model(3.);
+    let part = compile_model(&part, |_| None).unwrap();
+    assert!(body
+        .compose([ModelPart::new(
+            &part,
+            Mounted(ModelMount::new(MountTarget::Socket(placement)))
+        )])
+        .is_err());
+    assert!(body
+        .compose([ModelPart::new(
+            &part,
+            Mounted(ModelMount::new(MountTarget::Node(joint)))
+        )])
+        .is_ok());
+}
+
+#[test]
+fn physical_placements_preserve_child_units_and_up_axis() {
+    use wc3::model::{Axis, Basis, CoordinatePolicy, Handedness, LengthUnit};
+    let (mut body, joint, clip) = model(1.);
+    body.edit(|builder| {
+        builder.set_units(LengthUnit::MetersPerUnit(0.01));
+        Ok(())
+    })
+    .unwrap();
+    let (mut part, _, _) = model(3.);
+    part.edit(|builder| {
+        builder.set_basis(Basis::new(
+            Axis::PositiveY,
+            Axis::NegativeZ,
+            Handedness::Right,
+        )?);
+        builder.set_units(LengthUnit::MetersPerUnit(2.));
+        Ok(())
+    })
+    .unwrap();
+    let body = compile_model(&body, |_| None).unwrap();
+    let part = compile_model(&part, |_| None).unwrap();
+    let offset = ModelTransform {
+        translation: [2., 3., 4.],
+        ..Default::default()
+    };
+    let physical = body
+        .compose([ModelPart::new(
+            &part,
+            Mounted(ModelMount {
+                transform: offset,
+                coordinates: CoordinatePolicy::Child,
+                ..ModelMount::new(MountTarget::Node(joint))
+            }),
+        )])
+        .unwrap();
+    // A child unit spans two meters, or 200 host centimeters.
+    // Child Y-up becomes host Z-up, independently of the placement offset.
+    assert!(position(&physical, clip, 0., 1).abs_diff_eq(Vec3::new(603., 3., 4.), 1e-3));
+    assert!(physical.mounts[0]
+        .transform
+        .to_matrix()
+        .transform_point3(Vec3::Y)
+        .abs_diff_eq(Vec3::new(2., 3., 204.), 1e-3));
+    let authored = body
+        .compose([ModelPart::new(
+            &part,
+            Mounted(ModelMount {
+                transform: offset,
+                ..ModelMount::new(MountTarget::Node(joint))
+            }),
+        )])
+        .unwrap();
+    assert!(position(&authored, clip, 0., 1).abs_diff_eq(Vec3::new(6., 3., 4.), 1e-5));
+    let mut invalid = ModelMount::new(MountTarget::Node(joint));
+    invalid.transform.rotation = Quaternion([0.; 4]);
+    assert!(body
+        .compose([ModelPart::new(&part, Mounted(invalid))])
+        .is_err());
 }

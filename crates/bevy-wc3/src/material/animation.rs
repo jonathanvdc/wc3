@@ -6,7 +6,7 @@ use crate::animation_targets::AnimationTargets;
 use bevy::math::Affine2;
 use bevy::prelude::*;
 use std::array::from_fn;
-use wc3::model::{Animated, SampledAnimation};
+use wc3::model::{Animated, AnimatedValue, SampledAnimation};
 use wc3::model::{SurfaceColor, TextureTransform};
 
 impl HdAnimation {
@@ -14,15 +14,15 @@ impl HdAnimation {
         self.slots
             .iter()
             .flatten()
-            .any(|value| value.property.is_some())
+            .any(|value| value.binding.is_some())
             || self
                 .gain
                 .as_ref()
-                .is_some_and(|value| value.property.is_some())
+                .is_some_and(|value| value.binding.is_some())
             || self.fresnel.as_ref().is_some_and(|value| {
-                value.color.property.is_some()
-                    || value.opacity.property.is_some()
-                    || value.team_color.property.is_some()
+                value.color.binding.is_some()
+                    || value.opacity.binding.is_some()
+                    || value.team_color.binding.is_some()
             })
     }
 
@@ -128,9 +128,9 @@ impl SurfaceAnimation {
     /// A semantic binding may exist without any channel in the model. Such a
     /// binding evaluates to its own default and needs no instance-owned asset.
     pub(super) fn prune_static_bindings(&mut self, targets: &AnimationTargets) {
-        fn retain<T>(value: &mut Option<Animated<T>>, targets: &AnimationTargets) {
+        fn retain<T: AnimatedValue>(value: &mut Option<Animated<T>>, targets: &AnimationTargets) {
             if let Some(value) = value {
-                targets.retain(&mut value.property);
+                targets.retain(&mut value.binding);
             }
         }
         retain(&mut self.color, targets);
@@ -158,9 +158,9 @@ impl SurfaceAnimation {
         .into_iter()
         .flatten()
         {
-            targets.retain(&mut transform.translation.property);
-            targets.retain(&mut transform.rotation.property);
-            targets.retain(&mut transform.scale.property);
+            targets.retain(&mut transform.translation.binding);
+            targets.retain(&mut transform.rotation.binding);
+            targets.retain(&mut transform.scale.binding);
         }
         if let Some(hd) = &mut self.hd {
             for slot in &mut hd.slots {
@@ -170,7 +170,7 @@ impl SurfaceAnimation {
                 targets.retain_scalar(gain);
             }
             if let Some(fresnel) = &mut hd.fresnel {
-                targets.retain(&mut fresnel.color.property);
+                targets.retain(&mut fresnel.color.binding);
                 targets.retain_scalar(&mut fresnel.opacity);
                 targets.retain_scalar(&mut fresnel.team_color);
             }
@@ -198,7 +198,7 @@ impl SurfaceAnimation {
     pub(crate) fn is_animated(&self) -> bool {
         self.pass_weights
             .iter()
-            .any(|value| value.property.is_some())
+            .any(|value| value.binding.is_some())
             || self
                 .programmed
                 .as_ref()
@@ -207,14 +207,14 @@ impl SurfaceAnimation {
                 .input_weights
                 .iter()
                 .flatten()
-                .any(|v| v.property.is_some())
+                .any(|v| v.binding.is_some())
             || [&self.third_transform, &self.fourth_transform]
                 .into_iter()
                 .flatten()
                 .any(|t| {
-                    t.translation.property.is_some()
-                        || t.rotation.property.is_some()
-                        || t.scale.property.is_some()
+                    t.translation.binding.is_some()
+                        || t.rotation.binding.is_some()
+                        || t.scale.binding.is_some()
                 })
             || self.uses_shared_time()
             || self.hd.as_ref().is_some_and(HdAnimation::is_animated)
@@ -222,40 +222,40 @@ impl SurfaceAnimation {
             || self
                 .rgba
                 .as_ref()
-                .is_some_and(|value| value.property.is_some())
+                .is_some_and(|value| value.binding.is_some())
             || self
                 .emission
                 .as_ref()
-                .is_some_and(|value| value.property.is_some())
+                .is_some_and(|value| value.binding.is_some())
             || self
                 .color
                 .as_ref()
-                .is_some_and(|value| value.property.is_some())
+                .is_some_and(|value| value.binding.is_some())
             || self
                 .opacity
                 .as_ref()
-                .is_some_and(|value| value.property.is_some())
+                .is_some_and(|value| value.binding.is_some())
             || self
                 .weight
                 .as_ref()
-                .is_some_and(|value| value.property.is_some())
+                .is_some_and(|value| value.binding.is_some())
             || self
                 .texture
                 .as_ref()
-                .is_some_and(|value| value.property.is_some())
+                .is_some_and(|value| value.binding.is_some())
             || self
                 .emissive_gain
                 .as_ref()
-                .is_some_and(|value| value.property.is_some())
+                .is_some_and(|value| value.binding.is_some())
             || self.transform.as_ref().is_some_and(|value| {
-                value.translation.property.is_some()
-                    || value.rotation.property.is_some()
-                    || value.scale.property.is_some()
+                value.translation.binding.is_some()
+                    || value.rotation.binding.is_some()
+                    || value.scale.binding.is_some()
             })
             || self.secondary_transform.as_ref().is_some_and(|value| {
-                value.translation.property.is_some()
-                    || value.rotation.property.is_some()
-                    || value.scale.property.is_some()
+                value.translation.binding.is_some()
+                    || value.rotation.binding.is_some()
+                    || value.scale.binding.is_some()
             })
     }
     pub(crate) fn apply_to_assets(

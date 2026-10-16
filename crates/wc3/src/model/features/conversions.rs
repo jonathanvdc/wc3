@@ -3,9 +3,7 @@ use super::{
     Attachment, Camera, EventSource, Light, NodeFeature, ParticleDetails, ParticleEmitter,
     RibbonEmitter,
 };
-use super::{
-    AttachmentPoint, ExternalAttachment, ParticleDefinition, ProgrammedRibbon, TrailEmitter,
-};
+use super::{ChildModel, ParticleDefinition, ProgrammedRibbon, Socket, TrailEmitter};
 use crate::model::profiles::{m2, m3, mdlx, wmo};
 use crate::model::scene;
 impl<'a> From<mdlx::Node<'a>> for NodeFeature<'a> {
@@ -22,7 +20,7 @@ impl<'a> From<mdlx::Node<'a>> for NodeFeature<'a> {
             mdlx::Node::ParticleProgram(value) => Self::ParticleProgram(Box::new(value)),
             mdlx::Node::Light(value) => Self::Light(Light::AmbientDiffuse(Box::new(value.into()))),
             mdlx::Node::Camera(value) => Self::Camera(Camera::Aimed(Box::new(value.into()))),
-            mdlx::Node::Attachment(value) => Self::Attachment(Attachment::External(value.into())),
+            mdlx::Node::Attachment(value) => Self::Attachment(Attachment::Child(value.into())),
             mdlx::Node::Event(value) => Self::Event(EventSource::Named(value)),
             mdlx::Node::CollisionShape(value) => Self::CollisionShape(value),
         }
@@ -63,11 +61,9 @@ impl<'a> TryFrom<NodeFeature<'a>> for mdlx::Node<'a> {
                 Ok(value) => Ok(Self::Camera(value)),
                 Err(value) => Err(Box::new(NodeFeature::Camera(Camera::Aimed(value)))),
             },
-            NodeFeature::Attachment(Attachment::External(value)) => match value.try_into() {
+            NodeFeature::Attachment(Attachment::Child(value)) => match value.try_into() {
                 Ok(value) => Ok(Self::Attachment(value)),
-                Err(value) => Err(Box::new(NodeFeature::Attachment(Attachment::External(
-                    *value,
-                )))),
+                Err(value) => Err(Box::new(NodeFeature::Attachment(Attachment::Child(*value)))),
             },
             NodeFeature::Event(EventSource::Named(value)) => Ok(Self::Event(value)),
             NodeFeature::CollisionShape(value) => Ok(Self::CollisionShape(value)),
@@ -78,7 +74,7 @@ impl<'a> TryFrom<NodeFeature<'a>> for mdlx::Node<'a> {
 impl<'a> From<m2::ActorKind<'a>> for NodeFeature<'a> {
     fn from(value: m2::ActorKind<'a>) -> Self {
         match value {
-            m2::ActorKind::Attachment(value) => Self::Attachment(Attachment::Point(value.into())),
+            m2::ActorKind::Attachment(value) => Self::Attachment(Attachment::Socket(value.into())),
             m2::ActorKind::Light(value) => {
                 Self::Light(Light::AmbientDiffuse(Box::new(value.into())))
             }
@@ -97,9 +93,11 @@ impl<'a> TryFrom<NodeFeature<'a>> for m2::ActorKind<'a> {
     type Error = Box<NodeFeature<'a>>;
     fn try_from(value: NodeFeature<'a>) -> Result<Self, Self::Error> {
         match value {
-            NodeFeature::Attachment(Attachment::Point(value)) => match value.try_into() {
+            NodeFeature::Attachment(Attachment::Socket(value)) => match value.try_into() {
                 Ok(value) => Ok(Self::Attachment(value)),
-                Err(value) => Err(Box::new(NodeFeature::Attachment(Attachment::Point(*value)))),
+                Err(value) => Err(Box::new(NodeFeature::Attachment(Attachment::Socket(
+                    *value,
+                )))),
             },
             NodeFeature::Light(Light::AmbientDiffuse(value)) => match (*value).try_into() {
                 Ok(value) => Ok(Self::Light(value)),
@@ -151,7 +149,7 @@ impl<'a> From<m3::Feature<'a>> for NodeFeature<'a> {
             }
             m3::Feature::Light(value) => Self::Light(Light::Specular(value)),
             m3::Feature::Camera(value) => Self::Camera(Camera::Optical(value)),
-            m3::Feature::Attachment(value) => Self::Attachment(Attachment::Point((*value).into())),
+            m3::Feature::Attachment(value) => Self::Attachment(Attachment::Socket((*value).into())),
         }
     }
 }
@@ -189,9 +187,11 @@ impl<'a> TryFrom<NodeFeature<'a>> for m3::Feature<'a> {
             },
             NodeFeature::Light(Light::Specular(value)) => Ok(Self::Light(value)),
             NodeFeature::Camera(Camera::Optical(value)) => Ok(Self::Camera(value)),
-            NodeFeature::Attachment(Attachment::Point(value)) => match value.try_into() {
+            NodeFeature::Attachment(Attachment::Socket(value)) => match value.try_into() {
                 Ok(value) => Ok(Self::Attachment(Box::new(value))),
-                Err(value) => Err(Box::new(NodeFeature::Attachment(Attachment::Point(*value)))),
+                Err(value) => Err(Box::new(NodeFeature::Attachment(Attachment::Socket(
+                    *value,
+                )))),
             },
             value => Err(Box::new(value)),
         }
@@ -200,7 +200,7 @@ impl<'a> TryFrom<NodeFeature<'a>> for m3::Feature<'a> {
 impl<'a> From<wmo::Node<'a>> for NodeFeature<'a> {
     fn from(value: wmo::Node<'a>) -> Self {
         match value {
-            wmo::Node::Attachment(value) => Self::Attachment(Attachment::External(value.into())),
+            wmo::Node::Attachment(value) => Self::Attachment(Attachment::Child(value.into())),
             wmo::Node::Light(value) => Self::Light(Light::World(value)),
             wmo::Node::PointLight(value) => Self::Light(Light::Point(value)),
             wmo::Node::LightProgram(value) => Self::LightProgram(value),
@@ -211,11 +211,9 @@ impl<'a> TryFrom<NodeFeature<'a>> for wmo::Node<'a> {
     type Error = Box<NodeFeature<'a>>;
     fn try_from(value: NodeFeature<'a>) -> Result<Self, Self::Error> {
         match value {
-            NodeFeature::Attachment(Attachment::External(value)) => match value.try_into() {
+            NodeFeature::Attachment(Attachment::Child(value)) => match value.try_into() {
                 Ok(value) => Ok(Self::Attachment(value)),
-                Err(value) => Err(Box::new(NodeFeature::Attachment(Attachment::External(
-                    *value,
-                )))),
+                Err(value) => Err(Box::new(NodeFeature::Attachment(Attachment::Child(*value)))),
             },
             NodeFeature::Light(Light::World(value)) => Ok(Self::Light(value)),
             NodeFeature::Light(Light::Point(value)) => Ok(Self::PointLight(value)),
@@ -229,9 +227,7 @@ impl<'a> From<scene::Feature<'a>> for NodeFeature<'a> {
         match value {
             scene::Feature::Camera(value) => Self::Camera(Camera::Portable(value)),
             scene::Feature::Light(value) => Self::Light(Light::Portable(value)),
-            scene::Feature::Attachment(value) => {
-                Self::Attachment(Attachment::External(value.into()))
-            }
+            scene::Feature::Attachment(value) => Self::Attachment(Attachment::Child(value.into())),
             scene::Feature::Particles(value) => Self::Particle(ParticleEmitter::Resource(value)),
             scene::Feature::Ribbon(value) => Self::Ribbon(RibbonEmitter::Resource(value)),
             scene::Feature::FaceActor(value) => Self::FaceActor(value),
@@ -244,11 +240,9 @@ impl<'a> TryFrom<NodeFeature<'a>> for scene::Feature<'a> {
         match value {
             NodeFeature::Camera(Camera::Portable(value)) => Ok(Self::Camera(value)),
             NodeFeature::Light(Light::Portable(value)) => Ok(Self::Light(value)),
-            NodeFeature::Attachment(Attachment::External(value)) => match value.try_into() {
+            NodeFeature::Attachment(Attachment::Child(value)) => match value.try_into() {
                 Ok(value) => Ok(Self::Attachment(value)),
-                Err(value) => Err(Box::new(NodeFeature::Attachment(Attachment::External(
-                    *value,
-                )))),
+                Err(value) => Err(Box::new(NodeFeature::Attachment(Attachment::Child(*value)))),
             },
             NodeFeature::Particle(ParticleEmitter::Resource(value)) => Ok(Self::Particles(value)),
             NodeFeature::Ribbon(RibbonEmitter::Resource(value)) => Ok(Self::Ribbon(value)),
@@ -273,13 +267,13 @@ impl<'a> From<ProgrammedRibbon<'a>> for NodeFeature<'a> {
         Self::Ribbon(RibbonEmitter::Programmed(Box::new(value)))
     }
 }
-impl<'a> From<AttachmentPoint<'a>> for NodeFeature<'a> {
-    fn from(value: AttachmentPoint<'a>) -> Self {
-        Self::Attachment(Attachment::Point(value))
+impl<'a> From<Socket<'a>> for NodeFeature<'a> {
+    fn from(value: Socket<'a>) -> Self {
+        Self::Attachment(Attachment::Socket(value))
     }
 }
-impl<'a> From<ExternalAttachment<'a>> for NodeFeature<'a> {
-    fn from(value: ExternalAttachment<'a>) -> Self {
-        Self::Attachment(Attachment::External(value))
+impl<'a> From<ChildModel<'a>> for NodeFeature<'a> {
+    fn from(value: ChildModel<'a>) -> Self {
+        Self::Attachment(Attachment::Child(value))
     }
 }

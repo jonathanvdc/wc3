@@ -1198,13 +1198,13 @@ fn native_shader_routes_share_repeated_coordinate_animation() {
         .coordinates
         .transform
         .translation
-        .property
+        .binding
         .is_some());
     assert!(surface.textures[1]
         .coordinates
         .transform
         .translation
-        .property
+        .binding
         .is_none());
     let native = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
@@ -1223,7 +1223,7 @@ fn native_shader_routes_share_repeated_coordinate_animation() {
         .coordinates
         .transform
         .translation
-        .property
+        .binding
         .is_some());
 }
 

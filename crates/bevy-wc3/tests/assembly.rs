@@ -8,7 +8,8 @@ use bevy_wc3::{BakeSpace, ModelError, PartBinding, PoseBaker, PoseOptions};
 use wc3::model::materials::layered::{Layer, LayeredSurface};
 use wc3::model::{
     Animated, Draw, GeometryData, Material, MaterialSurface, Mesh as ModelMesh, MeshInstance,
-    Model, Node, NodeId, Resource, Texture, TextureId,
+    Model, ModelMount, MountTarget, Node, NodeId, Resource, Texture, TextureId,
+    Transform as ModelTransform,
 };
 
 fn resource(name: &'static str) -> Resource<'static> {
@@ -101,10 +102,13 @@ impl Resolver<Configuration> for Workshop {
             );
             assembly.parts.push(Part::new(
                 source,
-                PartBinding::Rigid {
-                    parent: self.mounting_frame,
-                    transform: Mat4::from_translation(offset),
-                },
+                PartBinding::Mounted(ModelMount {
+                    transform: ModelTransform {
+                        translation: offset.to_array(),
+                        ..Default::default()
+                    },
+                    ..ModelMount::new(MountTarget::Node(self.mounting_frame))
+                }),
             ));
         }
         Ok(assembly)

@@ -208,8 +208,8 @@ where
                     if let Some(color) = core.colors.get(batch.color_index as usize) {
                         let rgb = profile::properties::COLOR.bind(material);
                         let alpha = profile::properties::OPACITY.bind(material);
-                        surface.color.property = Some(rgb.clone().widen());
-                        surface.opacity.property = Some(alpha.clone().widen());
+                        surface.color.binding = Some(rgb.clone().widen().into());
+                        surface.opacity.binding = Some(alpha.clone().widen().into());
                         for (seq, clip) in animation::sequences(clips) {
                             let (start, _) = tables
                                 .sequences
@@ -247,7 +247,7 @@ where
                         let prop = profile::properties::TextureUnit(slot)
                             .weight()
                             .bind(material);
-                        unit.contribution.property = Some(prop.clone().widen());
+                        unit.contribution.binding = Some(prop.clone().widen().into());
                         for (seq, clip) in animation::sequences(clips) {
                             let (start, _) = tables
                                 .sequences
@@ -293,9 +293,11 @@ where
                         let sc = profile::properties::TextureUnit(slot)
                             .scale()
                             .bind(material);
-                        unit.coordinates.transform.translation.property = Some(tr.clone().widen());
-                        unit.coordinates.transform.rotation.property = Some(ro.clone().widen());
-                        unit.coordinates.transform.scale.property = Some(sc.clone().widen());
+                        unit.coordinates.transform.translation.binding =
+                            Some(tr.clone().widen().into());
+                        unit.coordinates.transform.rotation.binding =
+                            Some(ro.clone().widen().into());
+                        unit.coordinates.transform.scale.binding = Some(sc.clone().widen().into());
                         for (seq, clip) in animation::sequences(clips) {
                             let (start, _) = tables
                                 .sequences

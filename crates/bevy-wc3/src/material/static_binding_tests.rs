@@ -15,11 +15,11 @@ fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
     let mut surface = model_shader::ShaderPass {
         color: Animated {
             default: [0.2, 0.4, 0.6],
-            property: Some(m2::properties::COLOR.bind(material).widen()),
+            binding: Some(m2::properties::COLOR.bind(material).widen()),
         },
         opacity: Animated {
             default: 0.75,
-            property: Some(m2::properties::OPACITY.bind(material).widen()),
+            binding: Some(m2::properties::OPACITY.bind(material).widen().into()),
         },
         ..Default::default()
     };
@@ -27,14 +27,15 @@ fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
     let mut texture: model_shader::TextureUnit = model_shader::TextureUnit {
         contribution: Animated {
             default: 0.8,
-            property: Some(unit.weight().bind(material).widen()),
+            binding: Some(unit.weight().bind(material).widen().into()),
         },
         ..Default::default()
     };
-    texture.coordinates.transform.translation.property =
-        Some(unit.translation().bind(material).widen());
-    texture.coordinates.transform.rotation.property = Some(unit.rotation().bind(material).widen());
-    texture.coordinates.transform.scale.property = Some(unit.scale().bind(material).widen());
+    texture.coordinates.transform.translation.binding =
+        Some(unit.translation().bind(material).widen().into());
+    texture.coordinates.transform.rotation.binding =
+        Some(unit.rotation().bind(material).widen().into());
+    texture.coordinates.transform.scale.binding = Some(unit.scale().bind(material).widen().into());
     surface.textures.push(texture);
     builder
         .set_material(
@@ -113,7 +114,7 @@ fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_controller()
         let mut animation = SurfaceAnimation {
             color: Some(Animated {
                 default: [0.25; 3],
-                property: Some(node.translation()),
+                binding: Some(node.translation()),
             }),
             ..Default::default()
         };
@@ -140,15 +141,15 @@ fn pruning_visits_every_uv_transform_weight_and_hd_control() {
     let model = builder.finish().unwrap();
     let scalar = || Animated {
         default: 0.375,
-        property: Some(material.opacity()),
+        binding: Some(material.opacity().into()),
     };
     let mut transform = TextureTransform::default();
-    transform.translation.property = Some(node.translation());
-    transform.rotation.property = Some(node.rotation());
-    transform.scale.property = Some(node.scale());
+    transform.translation.binding = Some(node.translation().into());
+    transform.rotation.binding = Some(node.rotation().into());
+    transform.scale.binding = Some(node.scale().into());
     let texture = Animated {
         default: None,
-        property: Some(mdlx::properties::Layer(0).texture().bind(material).widen()),
+        binding: Some(mdlx::properties::Layer(0).texture().bind(material).widen()),
     };
     let mut animation = SurfaceAnimation {
         opacity: Some(scalar()),
@@ -167,7 +168,7 @@ fn pruning_visits_every_uv_transform_weight_and_hd_control() {
             fresnel: Some(layered::Fresnel {
                 color: Animated {
                     default: [0.2; 3],
-                    property: Some(node.translation()),
+                    binding: Some(node.translation()),
                 },
                 opacity: scalar(),
                 team_color: scalar(),
@@ -192,7 +193,7 @@ fn scalar_material() -> (ModelBuilder<'static>, MaterialId) {
         color: Animated::constant([1.; 3]),
         opacity: Animated {
             default: 1.,
-            property: Some(material.opacity()),
+            binding: Some(material.opacity().into()),
         },
         ..Default::default()
     };
@@ -233,7 +234,7 @@ fn constant_scalar_tracks_matching_default_do_not_require_private_materials() {
             .unwrap()
             .remove(0);
         assert!(!pass.animation.is_animated());
-        assert!(pass.animation.opacity.as_ref().unwrap().property.is_none());
+        assert!(pass.animation.opacity.as_ref().unwrap().binding.is_none());
         assert_eq!(pass.material.base_color.alpha(), 1.);
     }
 }
@@ -270,7 +271,7 @@ fn conflicting_clip_constants_and_controller_overrides_keep_materials_live() {
             .unwrap()
             .remove(0);
         assert!(pass.animation.is_animated());
-        assert!(pass.animation.opacity.unwrap().property.is_some());
+        assert!(pass.animation.opacity.unwrap().binding.is_some());
     }
 }
 
@@ -330,7 +331,7 @@ fn equal_spline_endpoints_do_not_prove_constant_scalar_output() {
         .unwrap()
         .remove(0);
     assert!(pass.animation.is_animated());
-    assert!(pass.animation.opacity.unwrap().property.is_some());
+    assert!(pass.animation.opacity.unwrap().binding.is_some());
 }
 
 #[test]
@@ -341,11 +342,11 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
     let mut unit: model_shader::TextureUnit = model_shader::TextureUnit {
         contribution: Animated {
             default: 1.,
-            property: Some(material.opacity()),
+            binding: Some(material.opacity().into()),
         },
         ..Default::default()
     };
-    unit.coordinates.transform.translation.property = Some(node.translation());
+    unit.coordinates.transform.translation.binding = Some(node.translation().into());
     let surface = model_shader::ShaderPass {
         color: Animated::constant([1.; 3]),
         opacity: Animated::constant(1.),
@@ -386,14 +387,14 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
     let pass = compile_material_with_images(&model, material, Arc::default())
         .unwrap()
         .remove(0);
-    assert!(pass.animation.weight.as_ref().unwrap().property.is_none());
+    assert!(pass.animation.weight.as_ref().unwrap().binding.is_none());
     assert!(pass
         .animation
         .transform
         .as_ref()
         .unwrap()
         .translation
-        .property
+        .binding
         .is_some());
     assert!(pass.animation.is_animated());
     let mut value = pass.material;

@@ -14,7 +14,7 @@ pub(super) fn visibility(
     path: &str,
 ) -> Result<Option<Track<'static, f32>>, Error> {
     let track = source
-        .property
+        .binding
         .as_ref()
         .map(|property| encoder.track(property, Ok, path))
         .transpose()?
@@ -115,14 +115,14 @@ pub(super) fn controls<T: Dialect>(
             transforms.push(native::TextureAnimation {
                 translation: source
                     .translation
-                    .property
+                    .binding
                     .as_ref()
                     .map(|property| encoder.track(property, Ok, "texture_transform.translation"))
                     .transpose()?
                     .flatten(),
                 rotation: source
                     .rotation
-                    .property
+                    .binding
                     .as_ref()
                     .map(|property| {
                         encoder.track(
@@ -135,7 +135,7 @@ pub(super) fn controls<T: Dialect>(
                     .flatten(),
                 scaling: source
                     .scale
-                    .property
+                    .binding
                     .as_ref()
                     .map(|property| encoder.track(property, Ok, "texture_transform.scale"))
                     .transpose()?

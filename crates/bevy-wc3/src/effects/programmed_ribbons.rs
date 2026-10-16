@@ -521,17 +521,15 @@ mod tests {
     fn endpoint_material_passes_share_one_mesh_and_keep_distinct_materials() {
         use bevy::ecs::world::CommandQueue;
         use wc3::model::profiles::Universal;
-        use wc3::model::{
-            Attachment, AttachmentActivation, AttachmentIdentity, AttachmentPoint, Node,
-        };
+        use wc3::model::{Animated, Attachment, Node, Socket, SocketIdentity};
         let mut builder = Model::<Universal>::builder("ribbon passes");
         let node = builder.add_node(Node::named("anchor")).unwrap();
         let feature = builder
             .add_feature(
                 node,
-                NodeFeature::Attachment(Attachment::Point(AttachmentPoint {
-                    identity: AttachmentIdentity::Role(11),
-                    activation: AttachmentActivation::Uncontrolled,
+                NodeFeature::Attachment(Attachment::Socket(Socket {
+                    identity: SocketIdentity::Role(11),
+                    visibility: Animated::constant(1.),
                     control: None,
                 })),
             )

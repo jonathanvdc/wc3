@@ -36,6 +36,6 @@ radius, and custom falloff/shadow-range controls are not reproduced.
 WMO Euler/cone calibration, cookies, flicker, and regional light-set activation
 remain uninterpreted. M3 separate specular response, decay law, and light LOD gates
 are not reproduced. WMO placement appearance retains interior illumination and
-linked-light information on `PlacementAppearance`; it is not multiplied
+linked-light information in the external definition on `ModelAttachment`; it is not multiplied
 into child albedo. Applications need region ambient/interior direction policy to
 interpret those controls without double-counting Bevy scene lights.

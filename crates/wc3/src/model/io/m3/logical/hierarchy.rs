@@ -68,7 +68,7 @@ pub(super) fn read<'a, E: Envelope>(
                 };
                 let rotation = anim(bone.rotation);
                 let mut batching = anim(bone.batching);
-                batching.binding = Some(surface::properties::BATCHING.bind(id).widen());
+                batching.binding = Some(surface::properties::BATCHING.bind(id).widen().into());
                 let payload = surface::BoneControls {
                     source_id: i64::from(bone.id),
                     extra_flags: surface::values::BoneFlags(bone.flags.bits() & !0x10),

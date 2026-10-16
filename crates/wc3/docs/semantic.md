@@ -65,8 +65,8 @@ copy of the same data structure.
 Parameters express independent choices within a definition. For example,
 `AmbientDiffuseLight<Kind, Activation>` selects the illumination selector and
 activation domain; `AimedCamera<FieldOfView, Convention>` selects static or
-animated projection and its controls. `AttachmentPointDefinition<Identity,
-Activation, Controls>` separates identity from activation and unresolved controls.
+animated projection and its controls. `SocketDefinition<Identity,
+Visibility, Controls>` separates identity from visibility and unresolved controls.
 `ParticleComposition<Emission, Motion, Lifetime, Appearance, Details>` combines
 complete emitter components. Narrow profiles choose exact types for these
 parameters; Universal chooses explicit alternatives that admit more behavior.
@@ -252,17 +252,31 @@ as a constant animated value; adding a binding prevents exact MDLX narrowing.
 Optical camera programs retain their initial/reset values and animation-reference
 metadata rather than collapsing them into a simpler rest value.
 
-Attachments compose identity, activation, and placement independently.
-`AttachmentPoint` exposes a named identity, an application role, or an MDLX point
+Attachments compose identity, visibility, and placement independently.
+`Socket` exposes a named identity, an application role, or an MDLX point
 index; those namespaces remain distinct even when their numeric values coincide.
-Its activation explicitly describes uncontrolled, boolean-enabled, or fractionally
-visible behavior. The point also retains any unresolved authored control.
-Exact export checks identity namespace, activation semantics, and control presence
-against the destination vocabulary. `ExternalAttachment` combines a resource with an optional point
-and placement appearance. MDLX attachments and WMO doodads therefore share the
-external placement structure, while world tint and light selection remain an
-explicit appearance program. MDLX path strings retain their borrowed or owned
+Its `visibility: Animated<f32>` describes mounted content visibility; constant
+`1.0` represents an uncontrolled socket. Native M2 boolean bindings are read as
+scalar zero or one through `ScalarBinding::FromBoolean`, preserving the source
+identity, shared channels, and clocks. The socket also retains unresolved authored
+controls. Exact M2 narrowing requires binary defaults and either an original
+boolean source or binary step curves on the shared `socket::VISIBILITY` property;
+fractional values and fades are rejected. Native formats without a visibility
+control require constant-one visibility. Exact export checks identity namespace,
+visibility representability, and control presence
+against the destination vocabulary. `ChildModel` combines a resource with an
+optional socket and placement appearance. `Attachment::Socket` exposes a socket
+without instantiating a child; `Attachment::Child` declares a child reference. MDLX
+attachments and WMO doodads therefore share the child model structure, while
+world tint and light selection remain an explicit appearance program. MDLX path strings retain their borrowed or owned
 storage as byte paths; exact MDLX narrowing requires UTF-8.
+
+`ModelMount` describes where a child follows the carrying model, independently of
+resource selection and playback. `Attachment::mount` derives this description
+for an authored child reference. Its `MountTarget` selects a node or a socket,
+with socket targets retaining authored visibility. A local transform supplies the
+offset. `CoordinatePolicy::Host` uses the host's authored axes and units;
+`CoordinatePolicy::Child` retains the child's standalone axes and units.
 
 `ParticleDefinition` is Universal's selection of `ParticleComposition`, owning
 shared emission, motion, lifetime, and particle-age appearance components.
@@ -555,12 +569,20 @@ and boolean enablement versus fractional visibility.
 Publication checks owner identities, selector families, existing layer and slot
 ordinals, and declared value domains.
 
-`Animated<T, P>` keeps a rest value and optional binding separate from playback
-programs. Built-in owner payloads retain bindings in the universal structural
-vocabulary so their complete payloads can move unchanged into containing profiles.
-`Animated::new` embeds a supplied property into that vocabulary when the
-`Extends` relationship permits it. Direct assignment to a payload's `property`
-field can use `property.widen::<Universal>()`. Custom payloads may instead use
+`Animated<T, P>` keeps a rest value and an optional typed read binding separate
+from playback programs. `AnimatedValue` selects the binding representation for
+its value domain through `Binding<T, P>`. Most domains read a `Property<T, P>`
+directly. Scalars use `ScalarBinding`, whose `Property` variant reads a scalar
+source and whose `FromBoolean` variant reads a boolean source as zero or one.
+The source keeps its identity and clocks; the conversion happens when sampling
+the binding. Tracks still target direct `Property<T, P>` addresses, so a converted
+read cannot become a channel destination.
+
+Built-in owner payloads retain bindings in the universal structural vocabulary
+so their complete payloads can move unchanged into containing profiles.
+`Animated::new` embeds a supplied direct property when the `Extends` relationship
+permits it. Direct assignment to a payload's `binding` field can use
+`Some(property.widen::<Universal>().into())`. Custom payloads may instead use
 `Animated<T, ApplicationProfile>` to constrain their own bindings directly.
 Program channels always carry their model's profile.
 
@@ -595,7 +617,8 @@ seconds and can precede playback. Coincident keys retain their input order: the
 first key defines the incoming limit, while the last defines the boundary value
 and outgoing segment.
 
-Custom value types implement `AsULE` for encoded storage and `CurveValue` for
+Custom value types implement `AnimatedValue` to select their read binding
+(usually `Property<Self, P>`), `AsULE` for encoded storage, and `CurveValue` for
 curve behavior, selecting `DiscreteDomain`,
 `NumericDomain`, `ContinuousDomain`, or `RotationDomain` through its associated
 `Domain` type. That choice derives the constructor capability traits and supplies

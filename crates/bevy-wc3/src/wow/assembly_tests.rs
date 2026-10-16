@@ -323,7 +323,7 @@ fn collection_policy_conflicts_fail_before_images_are_resolved() {
 
 #[test]
 fn rigid_equipment_mounts_at_the_attachment_feature_and_preserves_its_pivot() {
-    use wc3::model::{AttachmentActivation, AttachmentIdentity, AttachmentPoint};
+    use wc3::model::{Attachment, Socket, SocketIdentity};
 
     let (mut body, joint) = model("body", &[401]);
     let mut node = body.node(joint).unwrap().clone();
@@ -333,9 +333,9 @@ fn rigid_equipment_mounts_at_the_attachment_feature_and_preserves_its_pivot() {
             builder.set_node(joint, node)?;
             builder.add_feature(
                 joint,
-                NodeFeature::Attachment(Attachment::Point(AttachmentPoint {
-                    identity: AttachmentIdentity::Role(6),
-                    activation: AttachmentActivation::Enabled(Animated::constant(false)),
+                NodeFeature::Attachment(Attachment::Socket(Socket {
+                    identity: SocketIdentity::Role(6),
+                    visibility: Animated::constant(0.),
                     control: None,
                 })),
             )
@@ -347,13 +347,13 @@ fn rigid_equipment_mounts_at_the_attachment_feature_and_preserves_its_pivot() {
         (Resource::FileDataId(2), shoulder),
     ]);
     let mut recipe = definition();
-    recipe.parts[0].binding = EquipmentBinding::Attachment(AttachmentIdentity::Role(6));
+    recipe.parts[0].binding = EquipmentBinding::Attachment(SocketIdentity::Role(6));
     let compiled = compile_character(&recipe, &models, &mut Assets::default(), |_| {
         Ok(RgbaImage::new(1, 1, vec![255; 4]).unwrap())
     })
     .unwrap();
     assert_eq!(compiled.mounts.len(), 1);
-    assert_eq!(compiled.mounts[0].point, Some(point));
+    assert_eq!(compiled.mounts[0].socket, Some(point));
     assert_eq!(
         compiled.mounts[0].transform.translation.to_array(),
         [1., 2., 3.]

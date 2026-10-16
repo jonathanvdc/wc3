@@ -106,7 +106,7 @@ impl NodeFeature<'_> {
             Self::Light(Light::World(_)) => FeatureKind::WmoLight,
             Self::Light(Light::Point(_)) => FeatureKind::WmoPointLight,
             Self::LightProgram(_) => FeatureKind::WmoPointProgram,
-            Self::Attachment(Attachment::External(ExternalAttachment {
+            Self::Attachment(Attachment::Child(ChildModel {
                 appearance: PlacementAppearance::World { .. },
                 ..
             })) => FeatureKind::WmoDoodad,

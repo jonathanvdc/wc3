@@ -1,5 +1,5 @@
 //! Mathematical value domains and interpolation capabilities.
-use crate::model::{Link, Quaternion, TextureId};
+use crate::model::{AnimatedValue, Link, Quaternion, TextureId};
 use std::fmt::Debug;
 use zerovec::ule::AsULE;
 
@@ -62,7 +62,7 @@ impl private::RotationDomain for RotationDomain {}
 ///
 /// The associated types distinguish derivatives and control points from key values.
 /// Native adapters use the conversion methods when decoding format-specific controls.
-pub trait CurveValue: AsULE + Clone + Send + Sync + Debug + 'static {
+pub trait CurveValue: AnimatedValue + AsULE + Clone + Send + Sync + Debug + 'static {
     /// Interpolation domain, which determines all constructor capabilities.
     type Domain: CurveDomain;
     /// Hermite derivative domain. Quaternion derivatives are component vectors.

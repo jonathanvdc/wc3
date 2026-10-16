@@ -335,7 +335,7 @@ fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
     let material = builder.reserve_material();
     let property = material.opacity();
     let mut opacity = constant([1.; 4]);
-    opacity.binding.contribution.map_alpha.binding = Some(property.clone());
+    opacity.binding.contribution.map_alpha.binding = Some(property.clone().into());
     let mut surface = programmed::Standard::default();
     surface.opacity.primary = Some(opacity);
     builder

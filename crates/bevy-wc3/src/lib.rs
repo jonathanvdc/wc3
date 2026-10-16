@@ -33,6 +33,7 @@ mod assets;
 mod baking;
 mod bounds;
 mod camera;
+mod child_coordinates;
 mod compiled;
 mod compiler;
 mod composition;
@@ -50,7 +51,6 @@ mod mesh_animation;
 pub(crate) mod mesh_attributes;
 mod mesh_interner;
 mod physics;
-mod placements;
 mod plugin;
 mod pose;
 mod runtime;
@@ -71,6 +71,7 @@ pub use baking::{
     BakeSpace, BakedPart, BakedPose, BakedSource, PoseBaker, PoseOptions, PreparedPart,
 };
 pub use camera::CameraBinding;
+pub use child_coordinates::CoordinatePolicy;
 pub use compiled::{CompiledModel, DrawSource, PreparedModel, PreparedMount, RenderDiagnostic};
 pub use compiler::{compile_model, compile_model_with_options, CompileOptions};
 pub use composition::{DrawSelection, JointMap, ModelPart, PartBinding};
@@ -78,14 +79,12 @@ pub use effects::{ModelEmitter, RibbonEmitter, SpriteEmitter};
 pub use error::ModelError;
 pub use events::{EventDispatchStats, EventProgram, EventSource, ModelEvent};
 pub use features::{
-    AttachmentPoint, ModelFeature, ModelLight, ModelLightSettings, PlacementAppearance,
-    SampledCamera,
+    AttachmentState, ModelAttachment, ModelFeature, ModelLight, ModelLightSettings, SampledCamera,
 };
 pub use instances::{ModelInstance, ModelInstanceError, ModelRebind, ModelSource};
 pub use lod::{Lod, LodOverride, LodSettings, LodState};
 pub use material::{ModelMaterial, ModelMaterialExtension, TeamColors};
 pub use physics::{PhysicsBodyInfo, PhysicsFrame, PhysicsSimulation};
-pub use placements::PlacementSpace;
 pub use plugin::Wc3BevyPlugin;
 pub use runtime::{
     spawn_model, ControllerSelection, ModelDraw, ModelNode, ModelRig, Playback, PlaybackError,

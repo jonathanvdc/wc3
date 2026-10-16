@@ -56,9 +56,9 @@ mod rotation;
 pub use rotation::*;
 pub mod animation;
 pub use animation::{
-    curves::*, properties::*, Animated, AnimationProgram, AnimationSample, Channel, ChannelValue,
-    Clip, Clock, Controller, Event, Interpolation, PropertySample, RetimedAnimation,
-    SampledAnimation, SampledTrack, Time, Track,
+    curves::*, properties::*, Animated, AnimatedValue, AnimationProgram, AnimationSample, Binding,
+    BindingValue, Channel, ChannelValue, Clip, Clock, Controller, Event, Interpolation,
+    PropertySample, RetimedAnimation, SampledAnimation, SampledTrack, ScalarBinding, Time, Track,
 };
 mod playback_controls;
 pub use playback_controls::*;
@@ -90,6 +90,8 @@ pub use geometry::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Bounds, Draw, Influence, Mesh,
     MeshInstance, NodeInfluence, Skin, Topology, VertexInfluences,
 };
+mod mounts;
+pub use mounts::*;
 mod node;
 mod node_evaluation;
 pub use node::*;
@@ -110,7 +112,7 @@ pub use look::*;
 mod feature_schema;
 pub use feature_schema::*;
 pub mod feature_properties;
-pub use feature_properties::FeatureProperty;
+pub use feature_properties::{socket, FeatureProperty};
 pub mod features;
 pub use features::*;
 /// Compile-time logical vocabularies and lossless embeddings.

@@ -32,8 +32,8 @@ impl<'a> TryFrom<ParticleDefinition<'a>> for mdlx::Particle<'a> {
             && matches!(&v.motion.gravity, ParticleGravity::Directional(_))
             && matches!(&v.lifetime.duration, ParticleScalar::Animated(_))
             && v.emission.variation == 0.0
-            && matches!(&v.motion.variation, ParticleScalar::Animated(a) if a.property.is_none() && a.default == 0.0)
-            && matches!(&v.lifetime.variation, ParticleScalar::Animated(a) if a.property.is_none() && a.default == 0.0)
+            && matches!(&v.motion.variation, ParticleScalar::Animated(a) if a.binding.is_none() && a.default == 0.0)
+            && matches!(&v.lifetime.variation, ParticleScalar::Animated(a) if a.binding.is_none() && a.default == 0.0)
             && matches!(v.emission.trigger, ParticleTrigger::Continuous))
             || !matches!(&v.details, ParticleDetails::Model(_))
             || !matches!(&v.appearance, ParticleAppearance::Resource)
@@ -114,13 +114,13 @@ impl<'a> TryFrom<ParticleDefinition<'a>> for mdlx::Particle2 {
             && matches!(&v.motion.speed, ParticleScalar::Animated(_))
             && matches!(&v.motion.variation, ParticleScalar::Animated(_))
             && matches!(&v.motion.gravity, ParticleGravity::Directional(_))
-            && matches!(&v.lifetime.duration, ParticleScalar::Animated(a) if a.property.is_none())
+            && matches!(&v.lifetime.duration, ParticleScalar::Animated(a) if a.binding.is_none())
             && matches!(
                 &v.emission.trigger,
                 ParticleTrigger::Continuous | ParticleTrigger::KeyedBurst
             )
             && v.emission.variation == 0.0
-            && matches!(&v.lifetime.variation, ParticleScalar::Animated(a) if a.property.is_none() && a.default == 0.0))
+            && matches!(&v.lifetime.variation, ParticleScalar::Animated(a) if a.binding.is_none() && a.default == 0.0))
             || !matches!(&v.details, ParticleDetails::Atlas(_))
             || !matches!(&v.appearance, ParticleAppearance::Staged(_))
         {
@@ -205,7 +205,7 @@ impl<'a> TryFrom<ParticleDefinition<'a>> for m2::Particle<'a> {
             && matches!(&v.motion.variation, ParticleScalar::Animated(_))
             && matches!(&v.motion.gravity, ParticleGravity::Vector(_))
             && matches!(&v.lifetime.duration, ParticleScalar::Animated(_))
-            && matches!(&v.lifetime.variation, ParticleScalar::Animated(a) if a.property.is_none())
+            && matches!(&v.lifetime.variation, ParticleScalar::Animated(a) if a.binding.is_none())
             && matches!(v.emission.trigger, ParticleTrigger::Continuous))
             || !matches!(&v.details, ParticleDetails::AgeDriven(_))
             || !matches!(&v.appearance, ParticleAppearance::Curves(_))

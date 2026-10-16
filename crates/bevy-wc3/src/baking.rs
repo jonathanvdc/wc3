@@ -329,7 +329,7 @@ impl PoseBaker {
                 part.mesh = bake_mesh(&part.mesh, &[], basis * frame, &mut self.transforms)?;
                 part.visible &= self.visible[mount.parent]
                     && mount
-                        .point
+                        .socket
                         .is_none_or(|point| prepared.features.attachment_active(point, &sample));
                 part.bounds = part.mesh.compute_aabb();
                 include_bounds(&mut result.bounds, part.bounds.filter(|_| part.visible));

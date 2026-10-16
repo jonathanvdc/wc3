@@ -37,8 +37,9 @@ after replacement.
 
 Authored axes and meters-per-unit are converted beneath the application root.
 Application transforms use Bevy's Y-up coordinate frame. External children default
-to `PlacementSpace::Authored`, cancelling their standalone frame conversion;
-select `Physical` explicitly when a child should retain its own units and frame.
+to `CoordinatePolicy::Host`, cancelling their standalone frame conversion;
+To retain a child's own units and frame, select `CoordinatePolicy::Child`
+for its feature in `CompileOptions::child_coordinates`.
 
 ## Resolve resources and textures
 
@@ -115,16 +116,19 @@ kinds, including unsupported interpreters. Complete unsupported payloads are not
 retained as owned hook components; inspect the graph or provider compile-options
 callback when an application needs those definitions.
 
-## Mount models on attachment points
+## Mount models on sockets
 
-`AttachmentPoint` exposes identity, resource, and current activation on an
-animated mount. Resolved external model references load automatically. Child
+`ModelAttachment` retains the complete Universal `Attachment` definition on an
+animated mount. The wrapped definition's `socket()` accessor exposes socket identity,
+authored scalar visibility, and controls; `child()` exposes any child resource and
+placement appearance. `AttachmentState::visibility` holds the current sampled visibility
+separately. Resolved external model references load automatically. Child
 instances start their first clip and restart when the mount activates, the parent
 changes clip, or parent time moves backwards. Their rigs and clocks remain
 independent. Hierarchy visibility gates rendered content; hidden parents do not
-implicitly pause every child animation clock.
+implicitly pause every child animation clock. A positive sampled visibility opens
+the mount gate; fractional values are retained but do not multiply child opacity.
 
-`PlacementAppearance` retains the complete authored placement appearance.
 WMO placement RGB is interior illumination, not a generic albedo tint; the renderer
 does not multiply it into child color or overwrite scene lighting. Applications
 interpreting it also need interior/exterior region membership, ambient lighting,
@@ -163,10 +167,11 @@ model definition. A `PartBinding::Skinned` supplies an explicit `JointMap` and
 part-to-host rest transform. Mapped joints reuse the host skeleton; inverse binds
 retain the equipment's authored rest space. Unmatched weighted joints must descend
 from a mapped joint, so extra chains can animate without silently creating another
-host skeleton. `PartBinding::Rigid` retains an independent child model beneath
-a selected host node and can instantiate the same source asset more than once.
-`PartBinding::Attachment` addresses a typed attachment feature and also follows
-its authored activation gate; use this binding for equipment on attachment points.
+host skeleton. `PartBinding::Mounted` takes the semantic `ModelMount`
+definition and retains an independent child model. `MountTarget::Node` selects
+a host node; `MountTarget::Socket` follows an exposed socket and its authored
+activation gate. Resource-only placements cannot be selected as sockets.
+The same source asset can be instantiated more than once.
 
 Prepare and spawn the combined definition through the ordinary APIs. Meshes and
 bind palettes are shared across rigid occurrences. `PreparedModel::mounts()` and

@@ -56,7 +56,7 @@ pub(super) fn read<'a, E: Envelope>(
                     surface::Feature::Attachment(
                         (surface::Attachment {
                             identity: string(document, r.name)?,
-                            activation: (),
+                            visibility: (),
                             control: r.unknown,
                         })
                         .into(),

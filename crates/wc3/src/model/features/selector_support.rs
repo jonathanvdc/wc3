@@ -11,6 +11,9 @@ impl NodeFeature<'_> {
     ) -> Option<bool> {
         let property = key.downcast_ref::<FeatureProperty>()?;
         Some(match property {
+            FeatureProperty::SocketVisibility => {
+                matches!(self, Self::Attachment(value) if value.socket().is_some())
+            }
             FeatureProperty::CameraVerticalFieldOfView => {
                 matches!(self, Self::Camera(Camera::Aimed(camera)) if matches!(camera.convention, CameraConvention::Vertical(_)))
             }

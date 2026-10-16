@@ -14,7 +14,7 @@ fn vertical_field_of_view_publishes_in_universal_and_cannot_narrow_to_static_mdl
     let NodeFeature::Camera(Camera::Aimed(camera)) = &mut feature else {
         panic!("expected aimed camera")
     };
-    camera.field_of_view.property = Some(camera::VERTICAL_FIELD_OF_VIEW.bind(id));
+    camera.field_of_view.binding = Some(camera::VERTICAL_FIELD_OF_VIEW.bind(id).into());
     draft.set_feature(id, feature).unwrap();
     draft
         .add_timeline_channel(Channel::Scalar(Track {

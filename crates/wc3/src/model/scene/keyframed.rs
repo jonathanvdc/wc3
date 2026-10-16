@@ -2,7 +2,7 @@
 use crate::model::values::layered::{GeometryAnimationFlags, PopcornFlags};
 use crate::model::AtlasParticles;
 use crate::model::GravityTrail;
-use crate::model::IndexedAttachment;
+use crate::model::IndexedChildModel;
 use crate::model::ResourceParticle;
 use crate::model::{AimedCamera, AmbientDiffuseLight, PhotographicControls, VisibleLight};
 use crate::model::{Animated, MeshId};
@@ -93,7 +93,7 @@ pub type Light = AmbientDiffuseLight<LightKind, VisibleLight>;
 /// Authored camera with animated eye, target, roll, and photographic parameters.
 pub type Camera = AimedCamera<f32, PhotographicControls>;
 /// External model attachment.
-pub type Attachment<'a> = IndexedAttachment<Cow<'a, str>>;
+pub type Attachment<'a> = IndexedChildModel<Cow<'a, str>>;
 /// Events generated on a model or independent looping clock.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Events<'a> {

@@ -93,7 +93,7 @@ pub(crate) struct ClipTiming {
 #[derive(Clone)]
 pub(crate) struct RuntimeMount<M> {
     pub(crate) parent: usize,
-    pub(crate) point: Option<FeatureId>,
+    pub(crate) socket: Option<FeatureId>,
     pub(crate) transform: Transform,
     pub(crate) model: M,
     pub(crate) clips: HashMap<ClipId, ClipId>,
@@ -136,7 +136,7 @@ pub struct PreparedMount<'a> {
     /// Destination authored node identity.
     pub parent: NodeId,
     /// Attachment activation gate, when mounted through a feature.
-    pub point: Option<FeatureId>,
+    pub socket: Option<FeatureId>,
     /// Child authored coordinates into the carrying node's frame.
     pub transform: Transform,
     /// Prepared child definitions; geometry is shared with other occurrences.
@@ -211,7 +211,7 @@ impl CompiledModel {
                 .iter()
                 .map(|mount| RuntimeMount {
                     parent: mount.parent,
-                    point: mount.point,
+                    socket: mount.socket,
                     transform: mount.transform,
                     model: mount
                         .model
@@ -311,7 +311,7 @@ impl PreparedModel {
     pub fn mounts(&self) -> impl ExactSizeIterator<Item = PreparedMount<'_>> {
         self.mounts.iter().map(|mount| PreparedMount {
             parent: self.nodes[mount.parent].id,
-            point: mount.point,
+            socket: mount.socket,
             transform: mount.transform,
             model: &mount.model,
         })

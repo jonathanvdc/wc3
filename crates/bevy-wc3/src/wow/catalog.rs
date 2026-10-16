@@ -3,8 +3,8 @@ use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use wc3::model::materials::SurfaceSet;
 use wc3::model::{
-    Attachment, AttachmentIdentity, DrawId, InstanceId, Model, NodeControls, NodeFeature, NodeId,
-    Resource, TextureId,
+    DrawId, InstanceId, Model, NodeControls, NodeFeature, NodeId, Resource, SocketIdentity,
+    TextureId,
 };
 
 /// Stable native matching hints; semantic identities remain scoped to each model.
@@ -86,12 +86,11 @@ impl CharacterCatalog {
         let mut attachments: BTreeMap<u32, Vec<NodeId>> = BTreeMap::new();
         for (_, feature) in model.features() {
             let point = match &feature.payload {
-                NodeFeature::Attachment(Attachment::Point(point)) => Some(point),
-                NodeFeature::Attachment(Attachment::External(external)) => external.point.as_ref(),
+                NodeFeature::Attachment(value) => value.socket(),
                 _ => None,
             };
             if let Some(point) = point {
-                if let AttachmentIdentity::Role(role) = point.identity {
+                if let SocketIdentity::Role(role) = point.identity {
                     attachments.entry(role).or_default().push(feature.node);
                 }
             }

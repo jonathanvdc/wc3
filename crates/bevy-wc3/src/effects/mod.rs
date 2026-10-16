@@ -10,9 +10,9 @@ mod programmed_ribbons;
 use programmed_ribbons::{ProgrammedRibbonInstances, RuntimeProgrammedRibbons};
 mod ribbons;
 mod world;
+use super::child_coordinates::CoordinatePolicy;
 use super::events::EventTraversal;
 use super::material::{ModelMaterial, SurfacePass};
-use super::placements::PlacementSpace;
 use super::ModelAsset;
 use crate::textures::TextureImages;
 pub use age_sprites::SpriteEmitter;
@@ -91,7 +91,7 @@ impl RuntimeParticles {
         images: &TextureImages,
         materials: &HashMap<MaterialId, Vec<SurfacePass>>,
         children: &HashMap<FeatureId, Handle<ModelAsset>>,
-        placements: &HashMap<FeatureId, PlacementSpace>,
+        placements: &HashMap<FeatureId, CoordinatePolicy>,
     ) -> Self {
         let age = RuntimeAgeSprites::compile(model, nodes, images, materials);
         let atlas = RuntimeAtlasParticles::compile(model, nodes, images.color_images());

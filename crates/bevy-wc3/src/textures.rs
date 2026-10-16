@@ -124,7 +124,7 @@ pub fn texture_requests<'view, 'data>(
                         }
                         // Texture tracks may select any model-owned image. Their data
                         // interpretations must already exist before animation runs.
-                        if slot.binding.image.property.is_some() {
+                        if slot.binding.image.binding.is_some() {
                             for (id, _) in model.textures() {
                                 add(id, role, None);
                             }

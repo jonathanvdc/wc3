@@ -51,7 +51,7 @@ fn additive_camera_keys_remain_exact_and_borrowed() {
         panic!("camera feature missing")
     };
     assert_eq!(camera.target, [30_000_000., 40., 50.]);
-    let property = camera.eye_offset.property.as_ref().unwrap();
+    let property = camera.eye_offset.binding.as_ref().unwrap();
     let curve = graph
         .timeline_channels()
         .iter()
@@ -324,7 +324,7 @@ fn shared_uv_transform_links_are_scoped_and_rebuild_animation() {
     let graph = &imported.value;
     let (id, transform) = graph.texture_transforms().next().unwrap();
     assert_eq!(
-        transform.translation.property.as_ref().unwrap(),
+        transform.translation.binding.as_ref().unwrap(),
         &id.translation::<Mdlx>()
     );
     let material = &graph.materials().next().unwrap().1.surface;

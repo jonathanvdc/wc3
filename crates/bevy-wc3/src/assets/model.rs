@@ -475,7 +475,7 @@ async fn compile_loaded(
             continue;
         }
         let (purpose, resource) = match &feature.payload {
-            NodeFeature::Attachment(Attachment::External(value)) => (
+            NodeFeature::Attachment(Attachment::Child(value)) => (
                 ResourcePurpose::Attachment,
                 value.resource.clone().into_owned(),
             ),

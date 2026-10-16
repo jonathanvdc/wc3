@@ -97,10 +97,12 @@ cookies, flicker, and regional light-set activation remain uninterpreted. M3's
 separate specular response, decay law, and light LOD controls also remain available
 without an exact lighting equivalent.
 
-Attachment points preserve identity namespaces, resource identity, and activation.
-`PlacementAppearance` retains complete WMO placement appearance. Its
-interior direct illumination, linked-light and region controls remain application
-hooks; they are not multiplied into child albedo. Child models start their first
+`ModelAttachment` retains the complete semantic attachment definition, including
+socket identity namespaces, authored visibility, unresolved controls, child resource
+identity and WMO placement appearance. `AttachmentState` holds sampled visibility.
+The authored child's `ModelMount` describes its node or socket target
+independently of loading and playback policy. WMO interior direct illumination,
+linked-light and region controls remain application hooks; they are not multiplied into child albedo. Child models start their first
 clip and restart on activation, parent clip changes, or backwards parent traversal.
 
 Authored cameras can be sampled on request or bound to an application-owned
@@ -205,7 +207,7 @@ companion failures stop loading; missing optional images remain inspectable on
 `ModelAsset`.
 
 M2 bundles resolve bone animations and attachment tables through their external
-skeleton chain. Attachment activation uses the owning skeleton's animation stream;
+skeleton chain. Attachment visibility uses the owning skeleton's animation stream;
 ordinary root tracks use the inherited sequence-storage flags. Nonempty deferred
 tracks require that context before validation or writing. Empty equipment
 sequences do not manufacture sibling animation-file dependencies, while explicit

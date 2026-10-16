@@ -1,5 +1,5 @@
 //! Logical cameras, illumination, resource systems, and attachments.
-use crate::model::features::IndexedAttachment;
+use crate::model::features::IndexedChildModel;
 use crate::model::{Animated, Link, Resource, ValidateLinks};
 /// A portable feature attached to a graph hierarchy node.
 #[derive(Clone, Debug)]
@@ -20,7 +20,7 @@ pub enum Feature<'a> {
 impl ValidateLinks for Feature<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
-            Self::Attachment(value) => value.point.activation.visit_links(visitor),
+            Self::Attachment(value) => value.socket.visibility.visit_links(visitor),
             Self::Camera(value) => {
                 value.field_of_view.visit_links(visitor);
                 value.target.visit_links(visitor);
@@ -99,4 +99,4 @@ pub struct Light {
     pub attenuation_coefficients: [Option<f32>; 3],
 }
 /// External attachment resource and animation visibility.
-pub type Attachment<'a> = IndexedAttachment<Resource<'a>>;
+pub type Attachment<'a> = IndexedChildModel<Resource<'a>>;

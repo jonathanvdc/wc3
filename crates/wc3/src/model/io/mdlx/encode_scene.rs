@@ -265,10 +265,10 @@ pub(super) fn write<'a, T: Dialect>(
             }
             profile::Node::Attachment(source) => {
                 let mut record =
-                    native::Attachment::new(node, &source.resource, source.point.identity)
+                    native::Attachment::new(node, &source.resource, source.socket.identity)
                         .map_err(|error| Error::new("attachment.resource", error.to_string()))?;
                 record.visibility = super::encode_helpers::visibility(
-                    &source.point.activation,
+                    &source.socket.visibility,
                     encoder,
                     "attachment.visibility",
                 )?;

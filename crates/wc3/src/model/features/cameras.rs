@@ -79,7 +79,7 @@ impl From<m2::Camera> for AimedCamera {
 impl TryFrom<AimedCamera> for mdlx::Camera {
     type Error = Box<AimedCamera>;
     fn try_from(v: AimedCamera) -> Result<Self, Self::Error> {
-        if v.field_of_view.property.is_some() {
+        if v.field_of_view.binding.is_some() {
             return Err(Box::new(v));
         }
         let CameraConvention::Vertical(control) = v.convention else {

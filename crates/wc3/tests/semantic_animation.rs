@@ -1,11 +1,11 @@
 use wc3::model::common::ZeroVec;
 use wc3::model::profiles::mdlx::properties::{light, Layer, LightField, Target as MdlxTarget};
-use wc3::model::profiles::{Mdlx, Universal};
+use wc3::model::profiles::{Mdlx, Profile, Universal};
 use wc3::model::MaterialSurface;
 use wc3::model::{
-    BezierKeyframe, ContinuousDomain, Curve, CurveValue, HermiteKeyframe, Interpolation, Material,
-    Model, Node, OwnerId, PropertyTarget, Quaternion, TcbKeyframe, TcbParameters, Time,
-    ValueKeyframe,
+    AnimatedValue, BezierKeyframe, ContinuousDomain, Curve, CurveValue, HermiteKeyframe,
+    Interpolation, Material, Model, Node, OwnerId, Property, PropertyTarget, Quaternion,
+    TcbKeyframe, TcbParameters, Time, ValueKeyframe,
 };
 use zerovec::ule::AsULE;
 
@@ -184,6 +184,9 @@ impl AsULE for Probability {
     fn from_unaligned(value: Self::ULE) -> Self {
         Self(f32::from_unaligned(value))
     }
+}
+impl AnimatedValue for Probability {
+    type Binding<P: Profile> = Property<Self, P>;
 }
 impl CurveValue for Probability {
     type Domain = ContinuousDomain;

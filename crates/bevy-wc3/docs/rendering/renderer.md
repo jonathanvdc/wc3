@@ -67,8 +67,11 @@ typed geometry choices and composed textures independently of game vocabulary.
 The [WoW adapter](characters.md) supplies native character interpretation. Authored rigid-body
 secondary motion is optional; native solver response remains approximate.
 
-Attachment mounts retain source identities, resources, activation, and complete
-placement appearance. Common [lights](lights.md) become Bevy scene lights;
+Attachment mounts retain the complete semantic definition in `ModelAttachment`;
+`AttachmentState` contains sampled visibility and playback lifecycle state.
+Authored children and assembly parts share `ModelMount`, with explicit node or
+socket targets and authored or physical coordinate interpretation.
+Common [lights](lights.md) become Bevy scene lights;
 [cameras](cameras.md) bind opt-in to application-owned views. [Events](events.md)
 publish typed occurrences for gameplay rather than executing commands. [Static-world
 metadata](universal.md#static-worlds) exposes groups, portal-frustum selection, liquid grids, and

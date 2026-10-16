@@ -11,7 +11,7 @@ use crate::model::{
     AtlasParticle, AtlasParticleRendering, AtlasParticleShape, ModelParticle, ParticleEmission,
     ParticleLifetime, ParticleMotion, StagedParticleAppearance,
 };
-use crate::model::{AttachmentPointDefinition, Axis};
+use crate::model::{Axis, SocketDefinition};
 use crate::model::{Clock, ClockId, Event, MaterialId, ModelBuilder, NodeId, TextureId, Time};
 use crate::model::{GravityTrailControls, LayeredTrailRendering, TrailAppearance, TrailGeometry};
 use std::collections::BTreeMap;
@@ -284,10 +284,10 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             let payload = profile::Node::Attachment(profile::Attachment {
                 resource: S::text(source.path.text()),
                 appearance: (),
-                point: AttachmentPointDefinition {
+                socket: SocketDefinition {
                     identity: source.id,
                     control: (),
-                    activation: decoder.track(
+                    visibility: decoder.track(
                         source.visibility.as_ref(),
                         1.,
                         feature,

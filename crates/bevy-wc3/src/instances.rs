@@ -1,8 +1,8 @@
 //! Asset-backed instance requests and shared GPU preparation.
 use super::bounds::transform_bounds;
+use super::child_coordinates::ChildCoordinates;
 use super::effects::model_particles::ModelParticleChild;
 use super::events::EventClocks;
-use super::placements::ChildModelPlacement;
 use super::runtime::populate_model;
 use super::{
     ControllerSelection, ModelAsset, ModelMaterial, ModelRig, Playback, PoseOverrides,
@@ -333,7 +333,7 @@ type ModelRequests<'world, 'state> = Query<
         &'static ModelInstance,
         Option<&'static Playback>,
         Option<&'static ModelRig>,
-        Option<&'static ChildModelPlacement>,
+        Option<&'static ChildCoordinates>,
         Option<&'static PoseOverrides>,
         Option<&'static ModelInstanceError>,
     ),

@@ -7,7 +7,7 @@ use crate::model::{
     scene, AimedCamera, AmbientDiffuseLight, Animated, Attachment, Camera, CameraConvention, Light,
     NodeFeature, ParticleEmitter, Resource, RibbonEmitter,
 };
-use crate::model::{AttachmentPoint, Axis, EventSource, ExternalAttachment};
+use crate::model::{Axis, ChildModel, EventSource, Socket};
 use crate::model::{
     ParticleDefinition, ParticleScalar, ParticleTrigger, ProgrammedRibbon, TrailAtlasSlot,
     TrailEmitter,
@@ -57,9 +57,9 @@ pub enum LightView<'view> {
 #[derive(Clone, Copy, Debug)]
 pub enum AttachmentView<'view, 'data> {
     /// Shared attachment point identity and activation.
-    Point(&'view AttachmentPoint<'data>),
+    Socket(&'view Socket<'data>),
     /// Shared external resource placement definition.
-    ExternalDefinition(&'view ExternalAttachment<'data>),
+    ChildDefinition(&'view ChildModel<'data>),
     /// Complete External definition, retaining its authored semantics.
     External(&'view scene::Attachment<'data>),
     /// Complete Mdlx definition, retaining its authored semantics.
@@ -489,10 +489,8 @@ impl<'data> NodeFeature<'data> {
                 Light::Point(v) => LightView::RegionPoint(v),
             }),
             Self::Attachment(v) => match v {
-                Attachment::External(v) => {
-                    FeatureView::Attachment(AttachmentView::ExternalDefinition(v))
-                }
-                Attachment::Point(v) => FeatureView::Attachment(AttachmentView::Point(v)),
+                Attachment::Child(v) => FeatureView::Attachment(AttachmentView::ChildDefinition(v)),
+                Attachment::Socket(v) => FeatureView::Attachment(AttachmentView::Socket(v)),
             },
             Self::Particle(v) => FeatureView::Particles(match v {
                 ParticleEmitter::Resource(v) => ParticlesView::External(v),

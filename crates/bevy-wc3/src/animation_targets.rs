@@ -1,6 +1,7 @@
 //! Shared node-channel presence and conservative material constant analysis.
 use std::collections::{HashMap, HashSet};
-use wc3::model::{Animated, Channel, Interpolation, Model, Property, PropertyTarget};
+use wc3::model::profiles::Universal;
+use wc3::model::{Animated, BindingValue, Channel, Interpolation, Model, PropertyTarget};
 
 pub(crate) struct AnimationTargets {
     targets: HashSet<PropertyTarget>,
@@ -51,21 +52,28 @@ impl AnimationTargets {
         }
     }
 
-    pub(crate) fn contains<T>(&self, binding: &Option<Property<T>>) -> bool {
+    pub(crate) fn contains<B: BindingValue<Profile = Universal>>(
+        &self,
+        binding: &Option<B>,
+    ) -> bool {
         binding
             .as_ref()
             .is_some_and(|property| self.targets.contains(property.target()))
     }
 
     /// Prune a cloned runtime binding while preserving its authored rest value.
-    pub(crate) fn retain<T>(&self, binding: &mut Option<Property<T>>) {
+    pub(crate) fn retain<B: BindingValue<Profile = Universal>>(&self, binding: &mut Option<B>) {
         if !self.contains(binding) {
             *binding = None;
         }
     }
     /// A scalar binding is redundant only when every possible programme writes
     /// exactly its fallback value. Different clip/controller constants remain live.
-    pub(crate) fn scalar_changes(&self, default: f32, binding: &Option<Property<f32>>) -> bool {
+    pub(crate) fn scalar_changes<B: BindingValue<Value = f32, Profile = Universal>>(
+        &self,
+        default: f32,
+        binding: &Option<B>,
+    ) -> bool {
         self.contains(binding)
             && !binding.as_ref().is_some_and(|property| {
                 self.scalar_constants
@@ -77,10 +85,14 @@ impl AnimationTargets {
     }
 
     pub(crate) fn retain_scalar(&self, value: &mut Animated<f32>) {
-        self.retain_scalar_binding(value.default, &mut value.property);
+        self.retain_scalar_binding(value.default, &mut value.binding);
     }
 
-    pub(crate) fn retain_scalar_binding(&self, default: f32, binding: &mut Option<Property<f32>>) {
+    pub(crate) fn retain_scalar_binding<B: BindingValue<Value = f32, Profile = Universal>>(
+        &self,
+        default: f32,
+        binding: &mut Option<B>,
+    ) {
         if !self.scalar_changes(default, binding) {
             *binding = None;
         }

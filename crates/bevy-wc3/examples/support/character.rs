@@ -14,7 +14,7 @@ use wc3::blp::Blp;
 use wc3::model::conversion::{ImportOptions, LossPolicy, UnknownPolicy};
 use wc3::model::formats::m2::{Bundle, Chunked, FileKey, V274};
 use wc3::model::io::m2 as semantic_m2;
-use wc3::model::{AttachmentIdentity, Resource};
+use wc3::model::{Resource, SocketIdentity};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -128,7 +128,7 @@ pub fn load(
             binding: part
                 .attachment
                 .map_or(EquipmentBinding::SharedSkeleton, |role| {
-                    EquipmentBinding::Attachment(AttachmentIdentity::Role(role))
+                    EquipmentBinding::Attachment(SocketIdentity::Role(role))
                 }),
             joints: BTreeMap::new(),
             retain_unmatched_joints: false,

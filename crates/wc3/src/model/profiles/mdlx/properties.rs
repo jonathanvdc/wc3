@@ -1,6 +1,5 @@
 //! Typed Warcraft III property definitions used by semantic animation bindings.
 use crate::model::profiles::Mdlx;
-use crate::model::AttachmentActivation;
 use crate::model::NodeFeature;
 use crate::model::{
     FeatureId, FeatureProperty, MaterialId, OwnerId, PropertyIdentityKey, PropertyKey,
@@ -454,6 +453,9 @@ pub enum LayerField {
 impl Target {
     fn shared_feature_property(&self) -> Option<&'static FeatureProperty> {
         match self {
+            Self::Attachment(AttachmentField::Visibility) => {
+                Some(&FeatureProperty::SocketVisibility)
+            }
             Self::Light(LightField::Color) => Some(&FeatureProperty::LightDiffuseColor),
             Self::Light(LightField::Intensity) => Some(&FeatureProperty::LightDiffuseIntensity),
             Self::Light(LightField::AmbientColor) => Some(&FeatureProperty::LightAmbientColor),
@@ -493,6 +495,7 @@ impl PropertyPayload for Target {
     fn from_identity(key: &PropertyIdentityKey) -> Option<Self> {
         if let Some(value) = key.downcast_ref::<FeatureProperty>() {
             return Some(match value {
+                FeatureProperty::SocketVisibility => Self::Attachment(AttachmentField::Visibility),
                 FeatureProperty::LightDiffuseColor => Self::Light(LightField::Color),
                 FeatureProperty::LightDiffuseIntensity => Self::Light(LightField::Intensity),
                 FeatureProperty::LightAmbientColor => Self::Light(LightField::AmbientColor),
@@ -791,10 +794,8 @@ impl Target {
                     _ => true,
                 }
             }
-            (Self::Attachment(_), NodeFeature::Attachment(Attachment::External(value))) => {
-                value.point.as_ref().is_some_and(|point| {
-                    matches!(point.activation, AttachmentActivation::Visibility(_))
-                })
+            (Self::Attachment(_), NodeFeature::Attachment(Attachment::Child(value))) => {
+                value.socket.is_some()
             }
             _ => false,
         }

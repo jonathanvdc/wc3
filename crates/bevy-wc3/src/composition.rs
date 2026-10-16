@@ -1,5 +1,6 @@
 //! Checked composition of independently compiled models into one animated rig.
 use crate::bounds::{rest_bounds, transform_bounds};
+use crate::child_coordinates::ChildCoordinates;
 use crate::compiled::{CompiledModel, RuntimeMount, RuntimeNode, RuntimeSkin};
 use crate::compiler::node_order;
 use crate::lod::LodDefinition;
@@ -14,8 +15,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use wc3::model::profiles::Universal;
 use wc3::model::{
-    Billboard, ClipId, DrawId, FeatureId, Inheritance, InstanceId, Model, Node, NodeId,
-    PropertyTarget, Quaternion, Transform as ModelTransform,
+    Billboard, ClipId, DrawId, Inheritance, InstanceId, Model, ModelMount, MountTarget, Node,
+    NodeId, PropertyTarget, Quaternion, Transform as ModelTransform,
 };
 
 /// Geometry choices independent of animation, materials, and automatic LOD.
@@ -76,20 +77,8 @@ impl JointMap {
 /// Relationship of a component model to a character or other carrying rig.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PartBinding {
-    /// Preserve the part's skeleton beneath one host node.
-    Rigid {
-        /// Carrying node in the destination rig.
-        parent: NodeId,
-        /// Part authored coordinates into the carrying node's local frame.
-        transform: Mat4,
-    },
-    /// Follow an attachment feature, including its authored activation gate.
-    Attachment {
-        /// Attachment point in the destination model.
-        point: FeatureId,
-        /// Child authored coordinates into the attachment node's local frame.
-        transform: Mat4,
-    },
+    /// Instantiate an independent child rig at a semantic node or attachment point.
+    Mounted(ModelMount),
     /// Reuse host joints for skinning and retain only extra equipment bones.
     Skinned {
         /// Checked source/destination correspondence.
@@ -224,13 +213,18 @@ impl CompiledModel {
                 .map(|(i, node)| (node.id, i))
                 .collect();
             let rigid = match &part.binding {
-                Rigid { parent, transform } => Some((*parent, None, *transform)),
-                Attachment { point, transform } => {
-                    let parent = output
-                        .features
-                        .attachment_node(*point)
-                        .ok_or_else(|| ModelError("attachment point is absent".into()))?;
-                    Some((parent, Some(*point), *transform))
+                Mounted(placement) => {
+                    let (parent, point) = match placement.target {
+                        MountTarget::Node(parent) => (parent, None),
+                        MountTarget::Socket(point) => {
+                            let parent = output
+                                .features
+                                .attachment_node(point)
+                                .ok_or_else(|| ModelError("attachment point is absent".into()))?;
+                            (parent, Some(point))
+                        }
+                    };
+                    Some((parent, point, *placement))
                 }
                 Skinned { .. } => None,
             };
@@ -238,7 +232,17 @@ impl CompiledModel {
                 let parent = *host_indices
                     .get(&parent)
                     .ok_or_else(|| ModelError("rigid mount node is absent".into()))?;
-                let placement = transform(placement)?;
+                placement
+                    .validate_transform()
+                    .map_err(|error| ModelError(error.to_string()))?;
+                let conversion = ChildCoordinates {
+                    coordinates: placement.coordinates,
+                    parent_basis: output.basis,
+                }
+                .basis(source.basis)
+                .to_matrix();
+                let placement =
+                    transform(local_transform(placement.transform).to_matrix() * conversion)?;
                 for (&host, &child) in &part.clips {
                     if !output.clips.iter().any(|(id, _)| *id == host)
                         || !source.clips.iter().any(|(id, _)| *id == child)
@@ -250,7 +254,7 @@ impl CompiledModel {
                 }
                 output.mounts.push(RuntimeMount {
                     parent,
-                    point,
+                    socket: point,
                     transform: local_transform(placement),
                     model: Arc::new(source.clone()),
                     clips: part.clips,
@@ -278,7 +282,7 @@ impl CompiledModel {
             let host_rest = rest_poses(&output);
             let mut mapped = HashMap::new();
             let (frame, parent) = match &part.binding {
-                Rigid { .. } | Attachment { .. } => unreachable!("rigid parts were handled above"),
+                Mounted(_) => unreachable!("rigid parts were handled above"),
                 Skinned { joints, transform } => {
                     if joints.0.is_empty() {
                         return Err(ModelError(
@@ -443,7 +447,7 @@ impl CompiledModel {
             for mount in &source.mounts {
                 output.mounts.push(RuntimeMount {
                     parent: frame_map[mount.parent],
-                    point: mount.point,
+                    socket: mount.socket,
                     transform: mount.transform,
                     model: mount.model.clone(),
                     clips: part

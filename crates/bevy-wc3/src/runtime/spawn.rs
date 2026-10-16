@@ -256,7 +256,7 @@ pub(crate) fn populate_model(
         let child = spawn_model(commands, meshes, materials, &child_model, mount.transform);
         mounted_roots.push(child);
         let parent = mount
-            .point
+            .socket
             .and_then(|point| model.features.attachment_entity(point, &feature_instances))
             .unwrap_or(nodes[mount.parent]);
         commands.entity(child).insert((

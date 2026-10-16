@@ -1,38 +1,89 @@
-//! Attachment identities and external placements composed independently.
+//! Sockets and authored child models, composed independently.
+use std::any::TypeId;
 use std::borrow::Cow;
 use std::str::from_utf8;
 
-use crate::model::profiles::{m2, m3, mdlx, wmo};
-use crate::model::{scene, Animated, FeatureKind, Link, Resource, ValidateLinks};
+use crate::model::profiles::{m2, m3, mdlx, wmo, Universal};
+use crate::model::{
+    scene, Animated, FeatureId, FeatureKind, Link, ModelMount, MountTarget, NodeId, Property,
+    Resource, SampledAnimation, ScalarBinding, ValidateLinks,
+};
 
-/// Attachment points and external model placements.
+/// Sockets and authored child model references.
 #[derive(Clone, Debug)]
 pub enum Attachment<'a> {
-    /// A point exposed to game content, without an instantiated resource.
-    Point(AttachmentPoint<'a>),
+    /// A socket exposed to game content, without an instantiated resource.
+    Socket(Socket<'a>),
     /// A resource instantiated at its carrying node.
-    External(ExternalAttachment<'a>),
+    Child(ChildModel<'a>),
 }
 
-/// Identity and activation of an exposed attachment point.
+impl<'a> Attachment<'a> {
+    /// Exposed socket, when this behavior declares one.
+    pub fn socket(&self) -> Option<&Socket<'a>> {
+        match self {
+            Self::Socket(point) => Some(point),
+            Self::Child(value) => value.socket.as_ref(),
+        }
+    }
+
+    /// Instantiated child resource, when this behavior declares one.
+    pub fn child(&self) -> Option<&ChildModel<'a>> {
+        match self {
+            Self::Socket(_) => None,
+            Self::Child(value) => Some(value),
+        }
+    }
+
+    /// Describe the authored child mount independently of resource resolution.
+    /// The supplied identities belong to this behavior and its carrying node.
+    pub fn mount(&self, feature: FeatureId, node: NodeId) -> Option<ModelMount> {
+        self.child().map(|_| {
+            ModelMount::new(if self.socket().is_some() {
+                MountTarget::Socket(feature)
+            } else {
+                MountTarget::Node(node)
+            })
+        })
+    }
+
+    /// Detach borrowed resource paths and socket names from their source storage.
+    pub fn into_owned(self) -> Attachment<'static> {
+        match self {
+            Self::Socket(point) => Attachment::Socket(point.into_owned()),
+            Self::Child(value) => Attachment::Child(ChildModel {
+                resource: value.resource.into_owned(),
+                socket: value.socket.map(Socket::into_owned),
+                appearance: value.appearance,
+            }),
+        }
+    }
+
+    /// Sample mounted content visibility; children without a socket are fully visible.
+    pub fn visibility(&self, sample: &SampledAnimation<'_, '_, Universal>) -> f32 {
+        self.socket()
+            .map_or(1., |point| sample.animated(&point.visibility).clamp(0., 1.))
+    }
+}
+
+/// Identity and visibility of an exposed socket.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct AttachmentPointDefinition<I, A, C> {
+pub struct SocketDefinition<I, A, C> {
     /// Identity in an explicitly distinguished application namespace.
     pub identity: I,
-    /// Authored activation behavior.
-    pub activation: A,
+    /// Authored visibility of mounted content.
+    pub visibility: A,
     /// Additional authored control whose meaning remains unresolved.
     pub control: C,
 }
 
-/// Broad built-in attachment-point vocabulary.
-pub type AttachmentPoint<'a> =
-    AttachmentPointDefinition<AttachmentIdentity<'a>, AttachmentActivation, Option<u32>>;
+/// Broad built-in socket vocabulary.
+pub type Socket<'a> = SocketDefinition<SocketIdentity<'a>, Animated<f32>, Option<u32>>;
 
 /// Attachment namespaces do not imply correspondence between numeric values.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AttachmentIdentity<'a> {
-    /// Named point addressed by game content.
+pub enum SocketIdentity<'a> {
+    /// Named socket addressed by game content.
     Named(Cow<'a, str>),
     /// Application attachment role from an M2 model.
     Role(u32),
@@ -40,34 +91,43 @@ pub enum AttachmentIdentity<'a> {
     Index(u32),
 }
 
-/// Discrete enablement and fractional visibility have distinct meanings.
-#[derive(Clone, Debug)]
-pub enum AttachmentActivation {
-    /// No authored activation control.
-    Uncontrolled,
-    /// Discrete enable toggle.
-    Enabled(Animated<bool>),
-    /// Fractional visibility multiplier.
-    Visibility(Animated<f32>),
+impl Socket<'_> {
+    /// Detach a borrowed socket name from its source storage.
+    pub fn into_owned(self) -> Socket<'static> {
+        Socket {
+            identity: self.identity.into_owned(),
+            visibility: self.visibility,
+            control: self.control,
+        }
+    }
 }
-
-/// Instantiated resource with optional attachment-point identity and appearance.
+impl SocketIdentity<'_> {
+    /// Preserve the identity namespace while owning any borrowed name.
+    pub fn into_owned(self) -> SocketIdentity<'static> {
+        match self {
+            Self::Named(name) => SocketIdentity::Named(Cow::Owned(name.into_owned())),
+            Self::Role(role) => SocketIdentity::Role(role),
+            Self::Index(index) => SocketIdentity::Index(index),
+        }
+    }
+}
+/// Child resource with an optional exposed socket and authored appearance.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ExternalAttachmentDefinition<R, P, A> {
+pub struct ChildModelDefinition<R, S, A> {
     /// Resource path or external database identity, preserving borrowed storage.
     pub resource: R,
-    /// Optional exposed point identifying this instance.
-    pub point: P,
+    /// Exposed socket, when admitted by the selected vocabulary.
+    pub socket: S,
     /// Authored placement appearance and controls.
     pub appearance: A,
 }
 
 /// Broad built-in external-placement vocabulary.
-pub type ExternalAttachment<'a> =
-    ExternalAttachmentDefinition<Resource<'a>, Option<AttachmentPoint<'a>>, PlacementAppearance>;
-/// External placement carrying an indexed point with fractional visibility.
-pub type IndexedAttachment<R> =
-    ExternalAttachmentDefinition<R, AttachmentPointDefinition<u32, Animated<f32>, ()>, ()>;
+pub type ChildModel<'a> =
+    ChildModelDefinition<Resource<'a>, Option<Socket<'a>>, PlacementAppearance>;
+/// Child resource carrying an indexed socket with fractional visibility.
+pub type IndexedChildModel<R> =
+    ChildModelDefinition<R, SocketDefinition<u32, Animated<f32>, ()>, ()>;
 /// World placement appearance, independently reusable from its resource identity.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WorldPlacementAppearance {
@@ -94,89 +154,111 @@ pub enum PlacementAppearance {
     },
 }
 
-impl<'a> From<m2::Attachment> for AttachmentPoint<'a> {
+impl<'a> From<m2::Attachment> for Socket<'a> {
     fn from(value: m2::Attachment) -> Self {
         Self {
-            identity: AttachmentIdentity::Role(value.identity),
-            activation: AttachmentActivation::Enabled(value.activation),
+            identity: SocketIdentity::Role(value.identity),
+            visibility: Animated {
+                default: if value.visibility.default { 1. } else { 0. },
+                binding: value.visibility.binding.map(ScalarBinding::FromBoolean),
+            },
             control: None,
         }
     }
 }
-impl<'a> TryFrom<AttachmentPoint<'a>> for m2::Attachment {
-    type Error = Box<AttachmentPoint<'a>>;
-    fn try_from(value: AttachmentPoint<'a>) -> Result<Self, Self::Error> {
-        match value {
-            AttachmentPoint {
-                identity: AttachmentIdentity::Role(role),
-                activation: AttachmentActivation::Enabled(enabled),
-                control: None,
-            } => Ok(Self {
-                identity: role,
-                activation: enabled,
-                control: (),
-            }),
-            value => Err(Box::new(value)),
+impl<'a> TryFrom<Socket<'a>> for m2::Attachment {
+    type Error = Box<Socket<'a>>;
+    fn try_from(value: Socket<'a>) -> Result<Self, Self::Error> {
+        if let Socket {
+            identity: SocketIdentity::Role(role),
+            visibility,
+            control: None,
+        } = &value
+        {
+            if visibility.default == 0. || visibility.default == 1. {
+                let binding = match &visibility.binding {
+                    Some(ScalarBinding::FromBoolean(property)) => Some(property.clone()),
+                    Some(ScalarBinding::Property(property)) => {
+                        let Ok(target) = property.target().clone().try_narrow::<m2::M2>() else {
+                            return Err(Box::new(value));
+                        };
+                        if target.value_type() != Some(TypeId::of::<bool>()) {
+                            return Err(Box::new(value));
+                        }
+                        Some(Property::new(target.widen()))
+                    }
+                    None => None,
+                };
+                return Ok(Self {
+                    identity: *role,
+                    visibility: Animated {
+                        default: visibility.default == 1.,
+                        binding,
+                    },
+                    control: (),
+                });
+            }
         }
+        Err(Box::new(value))
     }
 }
-impl<'a> From<m3::Attachment<'a>> for AttachmentPoint<'a> {
+impl<'a> From<m3::Attachment<'a>> for Socket<'a> {
     fn from(value: m3::Attachment<'a>) -> Self {
         Self {
-            identity: AttachmentIdentity::Named(value.identity),
-            activation: AttachmentActivation::Uncontrolled,
+            identity: SocketIdentity::Named(value.identity),
+            visibility: Animated::constant(1.),
             control: Some(value.control),
         }
     }
 }
-impl<'a> TryFrom<AttachmentPoint<'a>> for m3::Attachment<'a> {
-    type Error = Box<AttachmentPoint<'a>>;
-    fn try_from(value: AttachmentPoint<'a>) -> Result<Self, Self::Error> {
+impl<'a> TryFrom<Socket<'a>> for m3::Attachment<'a> {
+    type Error = Box<Socket<'a>>;
+    fn try_from(value: Socket<'a>) -> Result<Self, Self::Error> {
         match value {
-            AttachmentPoint {
-                identity: AttachmentIdentity::Named(name),
-                activation: AttachmentActivation::Uncontrolled,
+            Socket {
+                identity: SocketIdentity::Named(name),
+                visibility,
                 control: Some(control),
-            } => Ok(Self {
+            } if visibility.default == 1. && visibility.binding.is_none() => Ok(Self {
                 identity: name,
-                activation: (),
+                visibility: (),
                 control,
             }),
             value => Err(Box::new(value)),
         }
     }
 }
-impl<'a> From<scene::Attachment<'a>> for ExternalAttachment<'a> {
+impl<'a> From<scene::Attachment<'a>> for ChildModel<'a> {
     fn from(value: scene::Attachment<'a>) -> Self {
         Self {
             resource: value.resource,
-            point: Some(AttachmentPoint {
-                identity: AttachmentIdentity::Index(value.point.identity),
-                activation: AttachmentActivation::Visibility(value.point.activation),
+            socket: Some(Socket {
+                identity: SocketIdentity::Index(value.socket.identity),
+                visibility: value.socket.visibility,
                 control: None,
             }),
             appearance: PlacementAppearance::Unmodified,
         }
     }
 }
-impl<'a> TryFrom<ExternalAttachment<'a>> for scene::Attachment<'a> {
-    type Error = Box<ExternalAttachment<'a>>;
-    fn try_from(value: ExternalAttachment<'a>) -> Result<Self, Self::Error> {
+impl<'a> TryFrom<ChildModel<'a>> for scene::Attachment<'a> {
+    type Error = Box<ChildModel<'a>>;
+    fn try_from(value: ChildModel<'a>) -> Result<Self, Self::Error> {
         match value {
-            ExternalAttachment {
+            ChildModel {
                 resource,
-                point:
-                    Some(AttachmentPoint {
-                        identity: AttachmentIdentity::Index(id),
-                        activation: AttachmentActivation::Visibility(visibility),
+                socket:
+                    Some(Socket {
+                        identity: SocketIdentity::Index(id),
+                        visibility,
                         control: None,
                     }),
                 appearance: PlacementAppearance::Unmodified,
             } => Ok(Self {
                 resource,
-                point: AttachmentPointDefinition {
+                socket: SocketDefinition {
                     identity: id,
-                    activation: visibility,
+                    visibility,
                     control: (),
                 },
                 appearance: (),
@@ -185,22 +267,22 @@ impl<'a> TryFrom<ExternalAttachment<'a>> for scene::Attachment<'a> {
         }
     }
 }
-impl<'a> From<mdlx::Attachment<'a>> for ExternalAttachment<'a> {
+impl<'a> From<mdlx::Attachment<'a>> for ChildModel<'a> {
     fn from(value: mdlx::Attachment<'a>) -> Self {
         scene::Attachment {
             resource: Resource::Path(match value.resource {
                 Cow::Borrowed(path) => Cow::Borrowed(path.as_bytes()),
                 Cow::Owned(path) => Cow::Owned(path.into_bytes()),
             }),
-            point: value.point,
+            socket: value.socket,
             appearance: (),
         }
         .into()
     }
 }
-impl<'a> TryFrom<ExternalAttachment<'a>> for mdlx::Attachment<'a> {
-    type Error = Box<ExternalAttachment<'a>>;
-    fn try_from(value: ExternalAttachment<'a>) -> Result<Self, Self::Error> {
+impl<'a> TryFrom<ChildModel<'a>> for mdlx::Attachment<'a> {
+    type Error = Box<ChildModel<'a>>;
+    fn try_from(value: ChildModel<'a>) -> Result<Self, Self::Error> {
         if !matches!(&value.resource, Resource::Path(path) if from_utf8(path).is_ok()) {
             return Err(Box::new(value));
         }
@@ -214,16 +296,16 @@ impl<'a> TryFrom<ExternalAttachment<'a>> for mdlx::Attachment<'a> {
         };
         Ok(Self {
             resource,
-            point: value.point,
+            socket: value.socket,
             appearance: (),
         })
     }
 }
-impl<'a> From<wmo::Doodad<'a>> for ExternalAttachment<'a> {
+impl<'a> From<wmo::Doodad<'a>> for ChildModel<'a> {
     fn from(value: wmo::Doodad<'a>) -> Self {
         Self {
             resource: value.resource,
-            point: None,
+            socket: None,
             appearance: PlacementAppearance::World {
                 tint: value.appearance.tint,
                 color_multiplier: value.appearance.color_multiplier,
@@ -232,13 +314,13 @@ impl<'a> From<wmo::Doodad<'a>> for ExternalAttachment<'a> {
         }
     }
 }
-impl<'a> TryFrom<ExternalAttachment<'a>> for wmo::Doodad<'a> {
-    type Error = Box<ExternalAttachment<'a>>;
-    fn try_from(value: ExternalAttachment<'a>) -> Result<Self, Self::Error> {
+impl<'a> TryFrom<ChildModel<'a>> for wmo::Doodad<'a> {
+    type Error = Box<ChildModel<'a>>;
+    fn try_from(value: ChildModel<'a>) -> Result<Self, Self::Error> {
         match value {
-            ExternalAttachment {
+            ChildModel {
                 resource,
-                point: None,
+                socket: None,
                 appearance:
                     PlacementAppearance::World {
                         tint,
@@ -247,7 +329,7 @@ impl<'a> TryFrom<ExternalAttachment<'a>> for wmo::Doodad<'a> {
                     },
             } => Ok(Self {
                 resource,
-                point: (),
+                socket: (),
                 appearance: WorldPlacementAppearance {
                     tint,
                     color_multiplier,
@@ -259,32 +341,23 @@ impl<'a> TryFrom<ExternalAttachment<'a>> for wmo::Doodad<'a> {
     }
 }
 impl<I: ValidateLinks, A: ValidateLinks, C: ValidateLinks> ValidateLinks
-    for AttachmentPointDefinition<I, A, C>
+    for SocketDefinition<I, A, C>
 {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.identity.visit_links(visitor);
-        self.activation.visit_links(visitor);
+        self.visibility.visit_links(visitor);
         self.control.visit_links(visitor);
     }
 }
-impl ValidateLinks for AttachmentIdentity<'_> {
+impl ValidateLinks for SocketIdentity<'_> {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
-impl ValidateLinks for AttachmentActivation {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        match self {
-            Self::Uncontrolled => {}
-            Self::Enabled(value) => value.visit_links(visitor),
-            Self::Visibility(value) => value.visit_links(visitor),
-        }
-    }
-}
-impl<R: ValidateLinks, P: ValidateLinks, A: ValidateLinks> ValidateLinks
-    for ExternalAttachmentDefinition<R, P, A>
+impl<R: ValidateLinks, S: ValidateLinks, A: ValidateLinks> ValidateLinks
+    for ChildModelDefinition<R, S, A>
 {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.resource.visit_links(visitor);
-        self.point.visit_links(visitor);
+        self.socket.visit_links(visitor);
         self.appearance.visit_links(visitor);
     }
 }
@@ -332,8 +405,8 @@ impl Default for WorldPlacementAppearance {
 impl ValidateLinks for Attachment<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
-            Self::Point(value) => value.visit_links(visitor),
-            Self::External(value) => value.visit_links(visitor),
+            Self::Socket(value) => value.visit_links(visitor),
+            Self::Child(value) => value.visit_links(visitor),
         }
     }
 }

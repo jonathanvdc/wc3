@@ -1,8 +1,7 @@
 use std::borrow::Cow;
 use wc3::model::profiles::{m2, mdlx, wmo, Extends, Mdlx, Narrows, Universal, Wmo, M2};
 use wc3::model::{
-    Animated, AttachmentPointDefinition, LightEmission, Model, Node, PhotographicControls,
-    VisibleLight,
+    Animated, LightEmission, Model, Node, PhotographicControls, SocketDefinition, VisibleLight,
 };
 use wc3::model::{
     AtlasParticle, AtlasParticleRendering, ModelParticle, ParticleEmission, ParticleLifetime,
@@ -105,7 +104,7 @@ fn complete_mdlx_feature_vocabulary_round_trips_through_universal() {
         }),
         mdlx::Node::Attachment(mdlx::Attachment {
             resource: Cow::Borrowed("attachment.mdx"),
-            point: AttachmentPointDefinition {
+            socket: SocketDefinition {
                 identity: 17,
                 ..Default::default()
             },
@@ -211,7 +210,7 @@ fn m2_enable_and_camera_conventions_survive_projection() {
     let features = [
         m2::ActorKind::Attachment(m2::Attachment {
             identity: 31,
-            activation: Animated::constant(false),
+            visibility: Animated::constant(false),
             control: (),
         }),
         m2::ActorKind::Light(m2::Light {
@@ -355,7 +354,12 @@ fn camera_narrowing_rejects_newly_authored_animation_on_static_field_of_view() {
     let NodeFeature::Camera(Camera::Aimed(camera)) = &mut feature else {
         panic!("expected aimed camera")
     };
-    camera.field_of_view.property = Some(m2::properties::camera::FIELD_OF_VIEW.bind(id).widen());
+    camera.field_of_view.binding = Some(
+        m2::properties::camera::FIELD_OF_VIEW
+            .bind(id)
+            .widen()
+            .into(),
+    );
     assert!(<Mdlx as Narrows<Universal>>::feature(feature).is_err());
 }
 
@@ -364,8 +368,8 @@ fn external_attachments_narrow_by_resource_meaning_without_source_tags() {
     use wc3::model::{scene, NodeFeature, Resource};
     let source = scene::Feature::Attachment(scene::Attachment {
         resource: Resource::Path(Cow::Borrowed(b"effects/attachment.mdx")),
-        point: AttachmentPointDefinition {
-            activation: Animated::constant(0.5),
+        socket: SocketDefinition {
+            visibility: Animated::constant(0.5),
             identity: 21,
             control: (),
         },
@@ -378,16 +382,16 @@ fn external_attachments_narrow_by_resource_meaning_without_source_tags() {
     };
     assert_eq!(restored.resource, "effects/attachment.mdx");
     assert!(matches!(restored.resource, Cow::Borrowed(_)));
-    assert_eq!(restored.point.identity, 21);
-    assert_eq!(restored.point.activation.default, 0.5);
+    assert_eq!(restored.socket.identity, 21);
+    assert_eq!(restored.socket.visibility.default, 0.5);
     for resource in [
         Resource::Path(Cow::Borrowed(&[255])),
         Resource::FileDataId(123),
     ] {
         let feature = NodeFeature::from(scene::Feature::Attachment(scene::Attachment {
             resource,
-            point: AttachmentPointDefinition {
-                activation: Animated::constant(1.),
+            socket: SocketDefinition {
+                visibility: Animated::constant(1.),
                 identity: 0,
                 control: (),
             },
