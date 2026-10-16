@@ -6,6 +6,7 @@ use bevy::camera::{RenderTarget, ShadowLodOrigin};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
+use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::render_resource::{CachedPipelineState, PipelineCache, PollType, TextureFormat};
@@ -19,7 +20,8 @@ use bevy::winit::WinitPlugin;
 use bevy_wc3::{
     spawn_model, AssetSettings, BakeSpace, CameraBinding, Lod, LodOverride, LodSettings,
     ModelAsset, ModelInstance, ModelInstanceError, ModelMaterial, ModelRig, PhysicsSimulation,
-    Playback, PlaybackError, PoseBaker, PoseOptions, PreparedModel, Wc3BevyPlugin, WorldSelection,
+    Playback, PlaybackError, PoseBaker, PoseOptions, PreparedModel, SpriteEmitter, Wc3BevyPlugin,
+    WorldSelection,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::env::args;
@@ -43,6 +45,7 @@ const HELP: &str = "Usage: capture MODEL OUTPUT_DIR [options]
 
 Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --character-recipe PATH  Assemble a resolved modern M2 character recipe (JSON)
+  --particle-stats      Report sprite populations and omitted simulation work at each capture
   --physics             Enable authored rigid-body secondary motion
   --allow-loss          Explicitly discard unsupported native data, retaining diagnostics
   --wmo-profile NAME    classic, legion, bfa, shadowlands-pre92, shadowlands, dragonflight, warwithin
@@ -93,6 +96,7 @@ struct Options {
     file_ids: HashMap<u32, String>,
     bake_pose: bool,
     prepasses: bool,
+    particle_stats: bool,
     bevy_reference: bool,
     no_default_light: bool,
     tonemapping: Tonemapping,
@@ -136,6 +140,7 @@ impl Options {
             file_ids: HashMap::new(),
             bake_pose: false,
             prepasses: false,
+            particle_stats: false,
             bevy_reference: false,
             no_default_light: false,
             tonemapping: Tonemapping::None,
@@ -161,6 +166,10 @@ impl Options {
         while let Some(option) = arguments.next() {
             if option == "--help" || option == "-h" {
                 return Ok(None);
+            }
+            if option == "--particle-stats" {
+                options.particle_stats = true;
+                continue;
             }
             if option == "--physics" {
                 options.physics = true;
@@ -782,6 +791,29 @@ fn capture(options: Options) -> CaptureResult<()> {
             sleep(Duration::from_millis(5));
         }
         println!("{} (Universal, time {time:.6}s)", path.display());
+        if options.particle_stats {
+            let world = app.world_mut();
+            let mut query = world.query::<(&SpriteEmitter, &Mesh3d)>();
+            let meshes = world.resource::<Assets<Mesh>>();
+            for (emitter, handle) in query.iter(world) {
+                let mesh = meshes.get(&handle.0);
+                let vertices = mesh.map_or(0, Mesh::count_vertices);
+                let alpha = mesh
+                    .and_then(|mesh| mesh.attribute(Mesh::ATTRIBUTE_COLOR))
+                    .and_then(|values| {
+                        if let VertexAttributeValues::Float32x4(colors) = values {
+                            Some(colors.iter().map(|c| c[3]).fold(0., f32::max))
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(0.);
+                println!(
+                    "Sprite {:?}: alive={}, vertices={}, max_alpha={:.6}, dropped={}, skipped_seconds={:.6}",
+                    emitter.feature, emitter.alive, vertices, alpha, emitter.dropped, emitter.skipped_seconds
+                );
+            }
+        }
     }
     Ok(())
 }
@@ -1065,6 +1097,12 @@ mod tests {
         assert_eq!(options.eye, Some(Vec3::new(0.0, -15.0, 5.0)));
         assert_eq!(options.tonemapping, Tonemapping::None);
         assert_eq!(options.illuminance, 5_000.0);
+        assert!(
+            parse(&["--particle-stats"])
+                .unwrap()
+                .unwrap()
+                .particle_stats
+        );
         let original = parse(&["--tonemapping", "tony-mcmapface", "--illuminance", "20000"])
             .unwrap()
             .unwrap();

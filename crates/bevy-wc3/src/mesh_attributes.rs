@@ -14,14 +14,26 @@ pub(crate) const EXTRA_JOINT_WEIGHT: MeshVertexAttribute = MeshVertexAttribute::
     VertexFormat::Float32x4,
 );
 
+/// Optional third coordinate stream, independent of both ordinary mesh UV sets.
+pub(crate) const EXTRA_TEXCOORD: MeshVertexAttribute =
+    MeshVertexAttribute::new("Model_Uv2", 138_000_003, VertexFormat::Float32x2);
+
 pub(crate) fn specialize_mesh_attributes(
     descriptor: &mut RenderPipelineDescriptor,
     layout: &MeshVertexBufferLayoutRef,
     generated_coordinates: bool,
+    third_uv: bool,
 ) -> Result<(), SpecializedMeshPipelineError> {
     let extra = layout.0.contains(EXTRA_JOINT_INDEX) && layout.0.contains(EXTRA_JOINT_WEIGHT);
-    if !extra && !generated_coordinates {
+    let third_uv = third_uv && layout.0.contains(EXTRA_TEXCOORD);
+    if !extra && !generated_coordinates && !third_uv {
         return Ok(());
+    }
+    if third_uv {
+        descriptor.vertex.shader_defs.push("VERTEX_UVS_C".into());
+        if let Some(fragment) = &mut descriptor.fragment {
+            fragment.shader_defs.push("VERTEX_UVS_C".into());
+        }
     }
     if extra {
         descriptor
@@ -74,6 +86,9 @@ pub(crate) fn specialize_mesh_attributes(
     }
     add(EXTRA_JOINT_INDEX, 8);
     add(EXTRA_JOINT_WEIGHT, 9);
+    if third_uv {
+        add(EXTRA_TEXCOORD, 10);
+    }
     descriptor.vertex.buffers = vec![layout.0.get_layout(&attributes)?];
     Ok(())
 }

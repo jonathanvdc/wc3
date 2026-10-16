@@ -52,7 +52,7 @@ then choose a topic:
 - [External-model particles](rendering/prem.md): child models,
   world-space motion, animation, and lifetime.
 - [Sprite particles](rendering/pre2.md): emission, head/tail geometry,
-  lifetime animation, and sorting.
+  lifetime animation, M2 packed gravity/twinkle/secondary textures, and sorting.
 - [Ribbon trails](rendering/ribbons.md): birth-time sections, connected
   geometry, atlas animation, gravity, and material passes.
 

@@ -61,9 +61,28 @@ pub trait ExportDialect: Dialect {
     /// Installs numeric texture IDs, or diagnoses an envelope without extension chunks.
     fn texture_ids(model: &mut native::Document<'static, Self>, ids: Vec<u32>)
         -> Result<(), Error>;
+    /// Installs material-prefixed particle texture-program selectors where chunk framing permits them.
+    fn texture_combiner_hints(
+        model: &mut native::Document<'static, Self>,
+        values: Vec<[u8; 2]>,
+        context: &mut Context,
+    ) -> Result<(), Error>;
 }
 
 impl<V: ModelLayout> ExportDialect for native::Flat<V> {
+    fn texture_combiner_hints(
+        _: &mut native::Document<'static, Self>,
+        values: Vec<[u8; 2]>,
+        context: &mut Context,
+    ) -> Result<(), Error> {
+        if !values.is_empty() {
+            context.unsupported(
+                "m2.particle.texture_program",
+                "flat MD20 cannot carry TXAC particle texture programmes",
+            )?;
+        }
+        Ok(())
+    }
     fn inline_physics(
         _: &mut native::Document<'static, Self>,
         file: native::companions::PhysicsFile<'static>,
@@ -112,6 +131,21 @@ impl<V: ModelLayout> ExportDialect for native::Flat<V> {
 }
 
 impl<V: ModelLayout> ExportDialect for Chunked<V> {
+    fn texture_combiner_hints(
+        model: &mut native::Document<'static, Self>,
+        values: Vec<[u8; 2]>,
+        _: &mut Context,
+    ) -> Result<(), Error> {
+        if !values.is_empty() {
+            model
+                .insert_extension(
+                    0,
+                    Chunk::TextureCombinerHints(ZeroVec::alloc_from_slice(&values)),
+                )
+                .map_err(failure)?;
+        }
+        Ok(())
+    }
     fn inline_physics(
         model: &mut native::Document<'static, Self>,
         file: native::companions::PhysicsFile<'static>,

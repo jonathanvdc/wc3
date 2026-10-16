@@ -70,7 +70,9 @@ environment sampling without taking over scene fog or ambient lighting.
 
 [Model particles](prem.md) instantiate child models. [Atlas sprites](pre2.md)
 construct view-facing heads/tails on the GPU; M2 age-driven particles currently use
-reusable CPU meshes. [Trails](ribbons.md) retain birth-time cross sections and share
+reusable CPU meshes with authored twinkle and independent secondary UV motion.
+Supported M2 two/three-color particle programmes use the shared Bevy material
+transport with unlit composition and matching alpha-discard prepasses. [Trails](ribbons.md) retain birth-time cross sections and share
 GPU records across passes. Effect families have explicit simulation budgets and
 separate unsupported controls.
 
@@ -85,7 +87,7 @@ coverage; focused guides state the implemented behavior and remaining limits.
 | Geometry | More than eight skin influences fails; skinned bounds update conservatively from contributing joints. No generated simplification or per-view skeletal pose. |
 | Surfaces | Higher M2 table entries and three distinct coordinate routes, complex WMO combinations, many programmed M3 surfaces, and external Diablo shaders need additional interpretation. |
 | Scene features | Bevy lighting differs from native falloff and regional illumination. Unsupported feature hooks expose IDs/kinds, not complete owned definitions. |
-| Effects | Native packed/spline/programmed controls are only partially interpreted; external effect resources need application providers. |
+| Effects | Spline/bone generators, advanced M2 texture programmes and modulation-gain controls, and several programmed simulations remain unsupported; external effects need providers. |
 | Fidelity | Implemented motion, material, billboard, and native shader behavior is not a promise of exact game rendering. |
 
 The shared [viewer and capture tool](../tools.md) uses this same renderer and

@@ -8,6 +8,7 @@ MIT OR Apache-2.0. Keep this pinned attribution when changing local shaders.
 | `material.wgsl` | [`bevy_pbr/src/render/pbr.wgsl`](https://github.com/bevyengine/bevy/blob/v0.19.1/crates/bevy_pbr/src/render/pbr.wgsl) |
 | `material_prepass.wgsl` | [`bevy_pbr/src/render/pbr_prepass.wgsl`](https://github.com/bevyengine/bevy/blob/v0.19.1/crates/bevy_pbr/src/render/pbr_prepass.wgsl) |
 | `wc3_mesh.wgsl` | [`bevy_pbr/src/render/mesh.wgsl`](https://github.com/bevyengine/bevy/blob/v0.19.1/crates/bevy_pbr/src/render/mesh.wgsl) |
+| `model_io.wgsl` | [`bevy_pbr/src/render/forward_io.wgsl`](https://github.com/bevyengine/bevy/blob/v0.19.1/crates/bevy_pbr/src/render/forward_io.wgsl) and [`bevy_pbr/src/prepass/prepass_io.wgsl`](https://github.com/bevyengine/bevy/blob/v0.19.1/crates/bevy_pbr/src/prepass/prepass_io.wgsl) |
 | `wc3_prepass.wgsl` | [`bevy_pbr/src/prepass/prepass.wgsl`](https://github.com/bevyengine/bevy/blob/v0.19.1/crates/bevy_pbr/src/prepass/prepass.wgsl) |
 
 ## Local integration
@@ -23,7 +24,10 @@ The vertex entry points retain their filenames while serving Universal geometry.
 prepass paths, including previous-frame deformation for motion vectors. Shader
 locations 8 and 9 carry the second index/weight set when enabled by specialization.
 `mesh_attributes.rs` defines the corresponding mesh attributes and
-`material.rs` specializes their layouts.
+`material.rs` specializes their layouts. An optional third UV stream uses
+attribute and varying location 10. `model_io.wgsl` retains the pinned Bevy
+conditional output members, adds that stream, and explicitly converts ordinary
+fields back into Bevy's input type before calling its PBR functions.
 
 Extension binding declarations live with `ModelMaterialExtension` and must
 match the WGSL uniform/texture declarations. These shaders do not replace global
@@ -35,6 +39,12 @@ and [architecture](../../docs/architecture.md) for runtime ownership and limits.
 and alpha-discard prepasses. The vertex wrappers generate sphere environment
 coordinates, including the normal stream in depth-only layouts when required.
 Native additive inputs enter PBR emissive; ordinary diffuse stays in Bevy albedo.
+
+`particle_composition.wgsl` supplies the independent two-color/three-alpha and
+three-color/three-alpha particle equations. Its dedicated uniform leaves mesh
+combiners unchanged. Primary texture sampling stays in Bevy; the two additional
+textures use their own particle coordinate streams. Alpha-discard prepasses use
+the same composition.
 
 ## Bevy upgrades
 

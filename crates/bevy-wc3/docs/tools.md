@@ -69,7 +69,11 @@ particle births and events and produces a different effect population.
 
 Images are named `frame-0000-0.000s.png`, and so on; reruns overwrite matching
 files. The tool requires a GPU even though it does not open a window. Loading,
-pipeline, or readback failures terminate with an error.
+pipeline, or readback failures terminate with an error. Add `--particle-stats`
+to report each sprite emitter's live population, generated vertex count, maximum
+vertex alpha, dropped births, and skipped simulation time beside each capture.
+These counters help distinguish simulation and visibility problems; inspect the
+images to assess appearance.
 
 Use `--bake-pose` to render static meshes and material snapshots from the offline
 baker at each capture time. The same camera, textures, authored LOD selection,

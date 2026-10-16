@@ -431,6 +431,10 @@ pub struct AgeDrivenParticleRendering<'a> {
     pub color_index: u16,
     /// Ordered particle texture resources.
     pub textures: Vec<TextureId>,
+    /// Native texture-program selectors, when an emitter has a container-level
+    /// combiner programme. Byte meanings remain opaque; absence selects the
+    /// baseline texture path rather than discarding an unknown programme.
+    pub texture_program: Option<[u8; 2]>,
     /// Model geometry resource used for model particles.
     pub model: Option<Resource<'a>>,
     /// Resource containing child emitters.

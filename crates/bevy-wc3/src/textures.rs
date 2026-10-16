@@ -3,7 +3,10 @@ use bevy::prelude::{Handle, Image};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use wc3::model::materials::{layered, programmed, world, SurfaceSet};
-use wc3::model::{AddressMode, ColorSpace, Model, Sampler, Texture, TextureId};
+use wc3::model::{
+    AddressMode, ColorSpace, Model, NodeFeature, ParticleDetails, ParticleEmitter, Sampler,
+    Texture, TextureId,
+};
 
 /// Purpose of one sampled image, independent of its resource identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -213,7 +216,29 @@ pub fn texture_requests<'view, 'data>(
             _ => {}
         }
     }
+    for (_, feature) in model.features() {
+        if let NodeFeature::Particle(ParticleEmitter::Simulated(particle)) = &feature.payload {
+            if let ParticleDetails::AgeDriven(details) = &particle.details {
+                for &id in &details.rendering.textures {
+                    if let Some(texture) = model.texture(id) {
+                        add(
+                            id,
+                            TextureRole::Color,
+                            Some(particle_sampler(texture.sampler)),
+                        );
+                    }
+                }
+            }
+        }
+    }
     requests
+}
+
+/// Native age-driven sprites tile their image inputs independently of mesh uses.
+pub(crate) fn particle_sampler(mut sampler: Sampler) -> Sampler {
+    sampler.u = AddressMode::Repeat;
+    sampler.v = AddressMode::Repeat;
+    sampler
 }
 
 /// M3 layers independently select wrapping on each image axis.

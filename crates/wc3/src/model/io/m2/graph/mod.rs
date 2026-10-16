@@ -47,6 +47,18 @@ where
         ));
     }
     source.validate_complete().map_err(failure)?;
+    if source
+        .model
+        .extensions()
+        .filter(|chunk| matches!(chunk, Chunk::TextureCombinerHints(_)))
+        .count()
+        > 1
+    {
+        return Err(Error::new(
+            "m2.texture_programs",
+            "multiple TXAC tables are ambiguous during semantic import",
+        ));
+    }
 
     let mut context = Context::import(options);
     let name = core.name.as_bytes();
@@ -356,6 +368,21 @@ where
     let asset = builder.finish()?;
     for chunk in source.model.extensions() {
         match chunk {
+            Chunk::TextureCombinerHints(programs) => {
+                if programs.len() != core.materials.len() + core.particles.len() {
+                    return Err(Error::new("m2.texture_programs", "TXAC must contain one row per native material followed by one row per particle emitter"));
+                }
+                if programs
+                    .iter()
+                    .take(core.materials.len())
+                    .any(|value| value != [0; 2])
+                {
+                    context.unsupported(
+                        "m2.material.texture_program",
+                        "nonzero material TXAC selectors have no logical surface mapping",
+                    )?;
+                }
+            }
             Chunk::Core(_)
             | Chunk::PhysicsId(_)
             | Chunk::SkinIds(_)

@@ -131,10 +131,14 @@ cycles rather than repeating a burst on every frame. Gravity and fixed-plane
 geometry follow the authored model axes after coordinate conversion.
 
 M2 age-driven sprites retain independent normalized-age color, opacity, scale, and
-atlas curves. Their current transport rebuilds one reusable CPU mesh per emitter as
+atlas curves, plus authored twinkle and per-particle secondary texture motion.
+Native packed gravity is decoded to animated vectors before rendering. Modern
+head/tail flags and legacy geometry bytes resolve to an explicit semantic choice. Their current transport rebuilds one reusable CPU mesh per emitter as
 its population or view changes. Motion evaluates gravity, wind, and linear drag
 analytically. Local particles follow the current emitter transform; world particles
-retain their birth frame with optional authored emitter-follow translation. Paused, unchanged frames avoid mesh uploads.
+retain their birth frame with optional authored emitter-follow translation.
+M2 attached particles use their current emitter frame; detached gravity does not
+rotate or scale with the animated bone. Declared model axes and units still apply. Paused, unchanged frames avoid mesh uploads.
 Living-particle, per-update birth, and long-update budgets bound CPU work;
 `SpriteEmitter` exposes omitted work and current population.
 
@@ -152,9 +156,9 @@ Authored emitter hierarchy and visibility evaluate at each occurrence time,
 including nonlinear parent motion. Application root motion interpolates the two
 observed frame transforms. Continuous emission uses bounded 60 Hz midpoint
 integration; this is a numerical approximation of animated rates. Keyed bursts
-retain their discrete clock crossings. Spline generators, packed-gravity
-interpretations, and several programmed effect families remain unsupported and
-produce diagnostics.
+retain their discrete clock crossings. Spline/bone generators, advanced M2 texture programmes and unresolved modulation
+gain, and several programmed effect families remain unsupported and produce
+diagnostics.
 
 ## Static worlds
 

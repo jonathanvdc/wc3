@@ -1,3 +1,5 @@
+#import "embedded://bevy_wc3/shaders/model_io.wgsl"::{VertexOutput,to_bevy,from_bevy}
+#import "embedded://bevy_wc3/shaders/particle_composition.wgsl"::{particle,compose_particle}
 // Adapted from Bevy v0.19.1 pbr.wgsl (MIT OR Apache-2.0).
 #import bevy_pbr::{
     pbr_types,
@@ -8,12 +10,12 @@
 
 #ifdef PREPASS_PIPELINE
 #import bevy_pbr::{
-    prepass_io::{VertexOutput, FragmentOutput},
+    prepass_io::FragmentOutput,
     pbr_deferred_functions::deferred_output,
 }
 #else
 #import bevy_pbr::{
-    forward_io::{VertexOutput, FragmentOutput},
+    forward_io::FragmentOutput,
     pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
     pbr_types::STANDARD_MATERIAL_FLAGS_UNLIT_BIT,
 }
@@ -51,7 +53,7 @@ fn fragment(
 #endif
 ) -> FragmentOutput {
 #ifdef MESHLET_MESH_MATERIAL_PASS
-    let vertex_output = resolve_vertex_output(frag_coord);
+    let vertex_output = from_bevy(resolve_vertex_output(frag_coord));
     let is_front = true;
 #endif
 
@@ -64,7 +66,7 @@ fn fragment(
 #endif
 
 #ifdef FORWARD_DECAL
-    let forward_decal_info = get_forward_decal_info(in);
+    let forward_decal_info = get_forward_decal_info(to_bevy(in));
     in.world_position = forward_decal_info.world_position;
     in.uv = forward_decal_info.uv;
 #endif
@@ -80,7 +82,7 @@ fn fragment(
 #endif
 
     // generate a PbrInput struct from the StandardMaterial bindings
-    var pbr_input = pbr_input_from_standard_material(in, is_front);
+    var pbr_input = pbr_input_from_standard_material(to_bevy(in), is_front);
 
     if world.flags.x != 0u {
         if world.flags.y != 0u {
@@ -128,6 +130,19 @@ fn fragment(
         }
     }
 
+    // Primary texture/tint have already been sampled by Bevy. The extra
+    // layers use independent per-particle streams and preserve Bevy lighting.
+    if particle.mode.x!=0u {
+        var b=vec4(1.0); var c=vec4(1.0);
+#ifdef VERTEX_UVS_B
+        b=textureSample(secondary,secondary_sampler,in.uv_b);
+#endif
+#ifdef VERTEX_UVS_C
+        c=textureSample(tertiary,tertiary_sampler,in.uv_c);
+#endif
+        pbr_input.material.base_color=compose_particle(pbr_input.material.base_color,b,c,vec4(1.0));
+    }
+
     if pbr_input.material.base_color.a < combiner.clip.x { discard; }
 
     // alpha discard
@@ -138,7 +153,7 @@ fn fragment(
 
 #ifdef PREPASS_PIPELINE
     // write the gbuffer, lighting pass id, and optionally normal and motion_vector textures
-    let out = deferred_output(in, pbr_input);
+    let out = deferred_output(to_bevy(in), pbr_input);
 #else
     // in forward mode, we calculate the lit color immediately, and then apply some post-lighting effects here.
     // in deferred mode the lit color and these effects will be calculated in the deferred lighting shader

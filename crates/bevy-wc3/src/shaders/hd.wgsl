@@ -1,10 +1,6 @@
 // Shared HD PBR interpretation, extracted from this project's WC3 material shader.
 #import bevy_pbr::pbr_types::PbrInput
-#ifdef PREPASS_PIPELINE
-#import bevy_pbr::prepass_io::VertexOutput
-#else
-#import bevy_pbr::forward_io::VertexOutput
-#endif
+#import "embedded://bevy_wc3/shaders/model_io.wgsl"::VertexOutput
 struct HdUniform {
     fresnel_color: vec4<f32>,
     fresnel: vec4<f32>,

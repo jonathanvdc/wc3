@@ -7,8 +7,7 @@ fn emitter() -> Emitter {
     let mut builder = Model::<Universal>::builder("particle identity");
     let node = builder.reserve_node();
     let feature = builder.reserve_feature(node);
-    let mut flags = ParticleFlags::default();
-    flags.set_billboard(true);
+    let flags = ParticleFlags::default();
     Emitter {
         feature,
         node,
@@ -35,7 +34,8 @@ fn emitter() -> Emitter {
         spin: [0.; 4],
         appearance: ParticleAgeCurves::default(),
         atlas: [1, 1],
-        texture_scale: 1.,
+        age_appearance: None,
+        multi_texture: false,
         head_tail: ParticleHeadTail::Head,
         tail_length: 0.,
         seed: 7,
@@ -98,7 +98,7 @@ fn local_particles_keep_local_origins_while_world_births_detach() {
         )
         .unwrap();
     assert_eq!(world.origin, Vec3::X * 10.);
-    emitter.flags.set_model_space(true);
+    emitter.flags.set_attached(true);
     let local = emitter
         .birth(
             &sample.at_times(Default::default(), Default::default(), Default::default()),
@@ -171,6 +171,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         squirts: SquirtSchedule::default(),
         appearances: Vec::new(),
         order: Vec::new(),
+        age_appearances: Vec::new(),
         fraction: 0.,
         ordinal: 0,
         previous_node: Mat4::IDENTITY,
@@ -334,6 +335,7 @@ fn programmed_appearance_storage_preserves_compact_m2_stride_and_retires_in_lock
             ProgrammedAppearance::constant(3.),
         ],
         order: Vec::new(),
+        age_appearances: Vec::new(),
         fraction: 0.,
         ordinal: 0,
         previous_node: Mat4::IDENTITY,
@@ -360,6 +362,30 @@ fn programmed_appearance_storage_preserves_compact_m2_stride_and_retires_in_lock
     assert!(state.births.is_empty());
     assert!(state.appearances.is_empty());
     assert_eq!(pointer, state.appearances.as_ptr());
+    state.births = (0..3)
+        .map(|index| {
+            let mut value = birth.clone();
+            value.appearance_index = index;
+            value.lifetime = if index == 0 { 1. } else { 10. };
+            value
+        })
+        .collect();
+    state.age_appearances = vec![AgeParticleAppearance::default(); 3];
+    let pointer = state.age_appearances.as_ptr();
+    state.retire(2.);
+    assert_eq!(state.age_appearances.len(), 2);
+    assert_eq!(
+        state
+            .births
+            .iter()
+            .map(|b| b.appearance_index)
+            .collect::<Vec<_>>(),
+        [0, 1]
+    );
+    assert_eq!(state.age_appearances.as_ptr(), pointer);
+    state.retire(20.);
+    assert!(state.age_appearances.is_empty());
+    assert_eq!(state.age_appearances.as_ptr(), pointer);
 }
 
 #[test]
@@ -388,12 +414,12 @@ fn emitter_follow_interpolates_speed_knots_and_preserves_local_motion() {
         emitter.follow_displacement(Mat4::IDENTITY, translated(4.), 1.),
         Vec3::X * 2.
     );
-    emitter.flags.set_model_space(true);
+    emitter.flags.set_attached(true);
     assert_eq!(
         emitter.follow_displacement(Mat4::IDENTITY, translated(4.), 1.),
         Vec3::ZERO
     );
-    emitter.flags.set_model_space(false);
+    emitter.flags.set_attached(false);
     emitter.follow = [[2., 0.5], [2., 0.5]];
     assert_eq!(
         emitter.follow_displacement(Mat4::IDENTITY, translated(4.), 1.),
@@ -432,6 +458,7 @@ fn world_particles_follow_only_translation_after_their_birth() {
         squirts: SquirtSchedule::default(),
         appearances: Vec::new(),
         order: Vec::new(),
+        age_appearances: Vec::new(),
         fraction: 0.,
         ordinal: 1,
         previous_node: Mat4::IDENTITY,
@@ -552,5 +579,127 @@ fn programmed_squirts_share_capacity_and_do_not_replay_on_pause_or_seek() {
         } else {
             assert!(instances.emitters[0].births.is_empty());
         }
+    }
+}
+
+#[test]
+fn semantic_gravity_is_independent_of_the_emitter_bone_and_scalar_packing_flags() {
+    let model = Model::empty("gravity").unwrap();
+    let sample = model.animation_sample(AnimationSample::default()).unwrap();
+    let retimed = sample.at_times(Default::default(), Default::default(), Default::default());
+    let mut emitter = emitter();
+    emitter.flags.set_packed_gravity(true);
+    emitter.gravity = ParticleGravity::Vector(Animated::constant([1., -2., 3.]));
+    let node =
+        Mat4::from_scale_rotation_translation(Vec3::splat(4.), Quat::from_rotation_x(1.2), Vec3::X);
+    let basis = Mat4::from_rotation_y(0.7);
+    let (birth, _) = emitter
+        .birth_in(&retimed, 0., node, basis, Vec3::ZERO, 0)
+        .unwrap();
+    assert!(birth
+        .acceleration
+        .abs_diff_eq(basis.transform_vector3(Vec3::new(1., -2., 3.)), 1e-6));
+    emitter.flags.set_attached(true);
+    let (birth, _) = emitter
+        .birth_in(&retimed, 0., node, basis, Vec3::ZERO, 0)
+        .unwrap();
+    assert_eq!(birth.acceleration, Vec3::new(1., -2., 3.));
+}
+
+#[test]
+fn sphere_and_plane_use_distinct_polar_axes_and_head_flags_do_not_aim_velocity() {
+    let model = Model::empty("directions").unwrap();
+    let sample = model.animation_sample(AnimationSample::default()).unwrap();
+    let retimed = sample.at_times(Default::default(), Default::default(), Default::default());
+    let mut emitter = emitter();
+    emitter.vertical = Animated::constant(0.);
+    emitter.horizontal = Animated::constant(0.);
+    emitter.speed = Animated::constant(2.);
+    emitter.speed_variation = Animated::constant(0.);
+    emitter.width = Animated::constant(1.);
+    emitter.length = Animated::constant(1.);
+    emitter.flags.set_head(true);
+    let plane = emitter
+        .birth(&retimed, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .unwrap();
+    assert_eq!(plane.velocity, Vec3::Z * 2.);
+    emitter.generator = ParticleGenerator::Sphere;
+    let sphere = emitter
+        .birth(&retimed, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .unwrap();
+    assert_eq!(sphere.origin, Vec3::X);
+    assert_eq!(sphere.velocity, Vec3::X * 2.);
+    emitter.flags.set_sphere_up(true);
+    let up = emitter
+        .birth(&retimed, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .unwrap();
+    assert_eq!(up.origin, Vec3::X);
+    assert_eq!(up.velocity, Vec3::Z * 2.);
+    emitter.z_source = Animated::constant(1.);
+    let aimed = emitter
+        .birth(&retimed, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .unwrap();
+    assert!(aimed
+        .velocity
+        .abs_diff_eq(Vec3::new(1., 0., -1.).normalize() * 2., 1e-6));
+
+    assert!(emitter
+        .emitter_frame(Mat4::IDENTITY)
+        .transform_vector3(Vec3::X)
+        .abs_diff_eq(Vec3::Y, 1e-6));
+}
+
+#[test]
+fn additional_uvs_preserve_primary_atlas_and_remain_independent() {
+    let mut buffers = SpriteMeshBuffers {
+        positions: Vec::new(),
+        normals: Vec::new(),
+        uv: Vec::new(),
+        uv_secondary: Some(Vec::new()),
+        uv_tertiary: Some(Vec::new()),
+        colors: Vec::new(),
+    };
+    let corners = [Vec3::ZERO, Vec3::X, Vec3::ONE, Vec3::Y];
+    buffers.quad(
+        corners,
+        3,
+        [2, 2],
+        Some(([Vec2::new(0.25, 0.5), Vec2::new(0.75, 0.0)], [2.0, 0.25])),
+        [1.; 4],
+        Mat4::IDENTITY,
+    );
+    assert_eq!(buffers.uv[0], [0.5, 0.5]);
+    assert_eq!(buffers.uv[2], [1.0, 1.0]);
+    assert_eq!(buffers.uv_secondary.as_ref().unwrap()[2], [2.25, 2.5]);
+    assert_eq!(buffers.uv_tertiary.as_ref().unwrap()[2], [1.0, 0.25]);
+    assert_eq!(
+        buffers.uv.len(),
+        buffers.uv_secondary.as_ref().unwrap().len()
+    );
+}
+
+#[test]
+fn bone_size_inheritance_is_opt_in_and_uniform() {
+    let mut emitter = emitter();
+    let basis = Mat4::from_scale(Vec3::splat(2.));
+    let node = basis * Mat4::from_scale(Vec3::new(3., 7., 9.));
+    assert_eq!(emitter.particle_scale(node, basis), [2.; 2]);
+    emitter.flags.set_inherit_bone_scale(true);
+    assert_eq!(emitter.particle_scale(node, basis), [6.; 2]);
+}
+
+#[test]
+fn native_uniform_scale_variation_preserves_aspect_ratio() {
+    let model = Model::empty("scale variation").unwrap();
+    let sample = model.animation_sample(AnimationSample::default()).unwrap();
+    let retimed = sample.at_times(Default::default(), Default::default(), Default::default());
+    let mut emitter = emitter();
+    emitter.appearance.scale_variation = [0.4, 0.9];
+    for seed in 0..16 {
+        let birth = emitter
+            .birth(&retimed, 0., Mat4::IDENTITY, Vec3::ZERO, seed)
+            .unwrap();
+        assert_eq!(birth.scale_variation[0], birth.scale_variation[1]);
+        assert!((0.6..=1.4).contains(&birth.scale_variation[0]));
     }
 }

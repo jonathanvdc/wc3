@@ -1,4 +1,5 @@
 //! Semantic effect compilation, shared simulation clocks, and composed transports.
+mod age_appearance;
 mod age_sprites;
 mod atlas_sprites;
 mod emission;
@@ -13,6 +14,7 @@ use super::events::EventTraversal;
 use super::material::{ModelMaterial, SurfacePass};
 use super::placements::PlacementSpace;
 use super::ModelAsset;
+use crate::textures::TextureImages;
 pub use age_sprites::SpriteEmitter;
 use age_sprites::{AgeSpriteInstances, RuntimeAgeSprites};
 use atlas_sprites::{AtlasParticleInstances, RuntimeAtlasParticles};
@@ -25,7 +27,7 @@ use model_particles::{ModelParticleInstances, RuntimeModelParticles};
 pub use ribbons::RibbonEmitter;
 use ribbons::{RibbonInstancesState, RuntimeRibbons};
 use std::collections::HashMap;
-use wc3::model::{ClipId, FeatureId, MaterialId, Model, NodeId, TextureId};
+use wc3::model::{ClipId, FeatureId, MaterialId, Model, NodeId};
 pub(crate) use world::EffectWorld;
 
 #[derive(Clone, Default)]
@@ -86,13 +88,13 @@ impl RuntimeParticles {
     pub fn compile(
         model: &Model<'_>,
         nodes: &HashMap<NodeId, usize>,
-        images: &HashMap<TextureId, Handle<Image>>,
+        images: &TextureImages,
         materials: &HashMap<MaterialId, Vec<SurfacePass>>,
         children: &HashMap<FeatureId, Handle<ModelAsset>>,
         placements: &HashMap<FeatureId, PlacementSpace>,
     ) -> Self {
         let age = RuntimeAgeSprites::compile(model, nodes, images, materials);
-        let atlas = RuntimeAtlasParticles::compile(model, nodes, images);
+        let atlas = RuntimeAtlasParticles::compile(model, nodes, images.color_images());
         let ribbons = RuntimeRibbons::compile(model, nodes, materials);
         let models = RuntimeModelParticles::compile(model, nodes, children, placements);
         let beams = RuntimeProgrammedRibbons::compile(model, nodes, materials);

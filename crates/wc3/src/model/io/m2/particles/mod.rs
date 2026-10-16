@@ -8,6 +8,8 @@ pub(super) use fields::{gravity_vector, gravity_word};
 /// Layout-specific particle fields shared by the native emitter adapter.
 pub trait ParticleConversion: ModelLayout {
     /// Builds static logical fields in the selected native particle layout.
+    /// Container-level texture programmes require full graph planning and are
+    /// rejected here rather than silently omitted from the standalone record.
     fn write_logical_particle(
         value: &crate::model::profiles::m2::Particle<'_>,
         textures: &[crate::model::TextureId],

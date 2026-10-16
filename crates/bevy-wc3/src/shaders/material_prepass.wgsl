@@ -1,3 +1,5 @@
+#import "embedded://bevy_wc3/shaders/model_io.wgsl"::{VertexOutput,to_bevy,from_bevy}
+#import "embedded://bevy_wc3/shaders/particle_composition.wgsl"::{particle,compose_particle}
 // Adapted from Bevy v0.19.1 pbr_prepass.wgsl (MIT OR Apache-2.0).
 #import bevy_pbr::{
     pbr_prepass_functions,
@@ -29,7 +31,7 @@ struct HdUniform { fresnel_color: vec4<f32>, fresnel: vec4<f32>, maps: vec4<u32>
 @group(#{MATERIAL_BIND_GROUP}) @binding(103) var<uniform> hd: HdUniform;
 
 // Share composition with the color pass, including masks that are not opacity.
-fn composed_alpha(in:prepass_io::VertexOutput)->f32 {
+fn composed_alpha(in:VertexOutput)->f32 {
     var uv0=vec2(0.0); var uv1=vec2(0.0); var uv2=vec2(0.0);
 #ifdef VERTEX_UVS_A
     uv0=(pbr_bindings::material.uv_transform*vec3(in.uv,1.0)).xy;
@@ -50,6 +52,15 @@ fn composed_alpha(in:prepass_io::VertexOutput)->f32 {
 #ifdef VERTEX_COLORS
     tint*=in.color;
 #endif
+    if particle.mode.x!=0u {
+#ifdef VERTEX_UVS_B
+        b=textureSample(secondary,secondary_sampler,in.uv_b);
+#endif
+#ifdef VERTEX_UVS_C
+        c=textureSample(tertiary,tertiary_sampler,in.uv_c);
+#endif
+        return compose_particle(a,b,c,tint).a;
+    }
     return compose(a,b,c,tint).color.a;
 }
 
@@ -59,12 +70,12 @@ fn fragment(
 #ifdef MESHLET_MESH_MATERIAL_PASS
     @builtin(position) frag_coord: vec4<f32>,
 #else
-    vertex_output: prepass_io::VertexOutput,
+    vertex_output: VertexOutput,
     @builtin(front_facing) is_front: bool,
 #endif
 ) -> prepass_io::FragmentOutput {
 #ifdef MESHLET_MESH_MATERIAL_PASS
-    var in = resolve_vertex_output(frag_coord);
+    var in = from_bevy(resolve_vertex_output(frag_coord));
     let is_front = true;
 #else   // MESHLET_MESH_MATERIAL_PASS
     var in = vertex_output;
@@ -92,8 +103,8 @@ fn fragment(
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK
             && pbr_bindings::material.base_color.a < pbr_bindings::material.alpha_cutoff { discard; }
-    } else if combiner.mode.x == 0u {
-        pbr_prepass_functions::prepass_alpha_discard(in);
+    } else if combiner.mode.x == 0u && particle.mode.x == 0u {
+        pbr_prepass_functions::prepass_alpha_discard(to_bevy(in));
     } else {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK {
@@ -201,7 +212,7 @@ fn fragment(
 }
 #else
 @fragment
-fn fragment(vertex_output: prepass_io::VertexOutput) {
+fn fragment(vertex_output: VertexOutput) {
     var in=vertex_output;
 #ifdef VERTEX_COLORS
     if world.flags.x!=0u {in.color=vec4(1.0);}
@@ -211,8 +222,8 @@ fn fragment(vertex_output: prepass_io::VertexOutput) {
     if world.flags.x != 0u && world.flags.y != 0u {
         let alpha_mode=flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode==pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK && pbr_bindings::material.base_color.a < pbr_bindings::material.alpha_cutoff {discard;}
-    } else if combiner.mode.x == 0u {
-        pbr_prepass_functions::prepass_alpha_discard(in);
+    } else if combiner.mode.x == 0u && particle.mode.x == 0u {
+        pbr_prepass_functions::prepass_alpha_discard(to_bevy(in));
     } else {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK {

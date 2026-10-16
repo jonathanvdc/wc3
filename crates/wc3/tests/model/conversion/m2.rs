@@ -80,6 +80,119 @@ fn native_triangle() -> m2::Bundle<'static, m2::Flat<m2::V256>> {
     }];
     m2::Bundle::from_model(model)
 }
+
+fn particle_program_bundle(programs: &[[u8; 2]]) -> m2::Bundle<'static, m2::Chunked<m2::V274>> {
+    let source = native_triangle();
+    let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
+    let mut modern =
+        io::m2::plan::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
+            .unwrap()
+            .execute()
+            .unwrap()
+            .value;
+    for _ in 0..2 {
+        let mut particle = m2::records::ParticleEmitter::<m2::V274>::new(ModelFlags::default());
+        particle.flags.set_head(true);
+        modern.model.core_mut().particles.push(particle);
+    }
+    modern
+        .model
+        .insert_extension(
+            0,
+            m2::chunks::Chunk::TextureCombinerHints(ZeroVec::alloc_from_slice(programs)),
+        )
+        .unwrap();
+    modern
+}
+
+#[test]
+fn particle_texture_programs_follow_the_material_prefix_and_round_trip() {
+    let source = particle_program_bundle(&[[0, 0], [3, 11], [0, 0]]);
+    let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
+    let programs: Vec<_> = imported
+        .value
+        .features()
+        .filter_map(|(_, feature)| {
+            if let mp::ActorKind::Particle(particle) = &feature.payload {
+                Some(particle.details.rendering.texture_program)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(programs, vec![Some([3, 11]), Some([0, 0])]);
+    for (_, feature) in imported.value.features() {
+        if let mp::ActorKind::Particle(particle) = &feature.payload {
+            let textures = imported
+                .value
+                .textures()
+                .map(|(id, _)| id)
+                .collect::<Vec<_>>();
+            let options = ExportOptions::default();
+            let error = <m2::V274 as io::m2::ParticleConversion>::write_logical_particle(
+                particle,
+                &textures,
+                &mut conversion::Context::export(&options),
+            )
+            .unwrap_err();
+            assert!(error.to_string().contains("standalone particle record"));
+        }
+    }
+    let output = io::m2::plan::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let restored = output
+        .model
+        .extensions()
+        .find_map(|chunk| {
+            if let m2::chunks::Chunk::TextureCombinerHints(programs) = chunk {
+                Some(programs.iter().collect::<Vec<_>>())
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    assert_eq!(restored, vec![[0, 0], [3, 11], [0, 0]]);
+    assert!(
+        io::m2::plan::<m2::Flat<m2::V274>>(&imported.value, &ExportOptions::default()).is_err()
+    );
+}
+
+#[test]
+fn particle_texture_program_counts_and_unmapped_material_controls_are_explicit() {
+    let mut duplicated = particle_program_bundle(&[[0, 0], [7, 9], [0, 0]]);
+    duplicated
+        .model
+        .insert_extension(
+            0,
+            m2::chunks::Chunk::TextureCombinerHints(ZeroVec::alloc_from_slice(&[
+                [0, 0],
+                [2, 1],
+                [0, 0],
+            ])),
+        )
+        .unwrap();
+    let error = io::m2::import(&duplicated, &ImportOptions::default()).unwrap_err();
+    assert!(error.to_string().contains("multiple TXAC"));
+    let malformed = particle_program_bundle(&[[0, 0], [7, 9]]);
+    assert!(io::m2::import(&malformed, &ImportOptions::default()).is_err());
+    let source = particle_program_bundle(&[[5, 1], [3, 11], [0, 0]]);
+    assert!(io::m2::import(&source, &ImportOptions::default()).is_err());
+    let imported = io::m2::import(
+        &source,
+        &ImportOptions {
+            loss_policy: LossPolicy::Drop,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(!imported.report.issues.is_empty());
+    assert!(imported.value.features().any(|(_, feature)| {
+        matches!(&feature.payload, mp::ActorKind::Particle(particle) if particle.details.rendering.texture_program == Some([3,11]))
+    }));
+}
 #[test]
 fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     let source = native_triangle();

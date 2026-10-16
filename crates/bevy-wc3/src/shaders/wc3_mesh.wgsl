@@ -1,3 +1,4 @@
+#import "embedded://bevy_wc3/shaders/model_io.wgsl"::VertexOutput
 #ifdef MODEL_GENERATED_COORDS
 #import "embedded://bevy_wc3/shaders/combiner.wgsl"::combiner
 #import bevy_pbr::mesh_view_bindings::view
@@ -16,7 +17,6 @@
     mesh_functions,
     skinning,
     morph::{morph_position, morph_normal, morph_tangent},
-    forward_io::VertexOutput,
     view_transformations::position_world_to_clip,
 }
 
@@ -51,6 +51,9 @@ struct Vertex {
 #endif
 #ifdef MORPH_TARGETS
     @builtin(vertex_index) index: u32,
+#endif
+#ifdef VERTEX_UVS_C
+    @location(10) uv_c: vec2<f32>,
 #endif
 };
 // WC3 END: vertex input.
@@ -145,6 +148,9 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 #endif
 #ifdef VERTEX_UVS_B
     out.uv_b = vertex.uv_b;
+#endif
+#ifdef VERTEX_UVS_C
+    out.uv_c = vertex.uv_c;
 #endif
 
 #ifdef MODEL_GENERATED_COORDS

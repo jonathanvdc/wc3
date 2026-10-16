@@ -287,11 +287,11 @@ fn m3_normal_and_diffuse_uses_of_one_image_select_distinct_interpretations() {
 
 #[test]
 fn particle_blend_separates_unweighted_and_opacity_weighted_addition() {
-    let add = particle_material(ParticleBlend::Add, None, false);
-    let alpha_add = particle_material(ParticleBlend::AddAlphaKey, None, false);
+    let add = particle_material(ParticleBlend::NoAlphaAdd, None, false);
+    let alpha_add = particle_material(ParticleBlend::Add, None, false);
     assert_eq!(add.extension.blend, Some(Blend::Additive));
     assert_eq!(alpha_add.extension.blend, Some(Blend::AdditiveAlpha));
-    assert_eq!(alpha_add.extension.combiner.clip.x, 1.0 / 255.0);
+    assert_eq!(alpha_add.extension.combiner.clip.x, 0.0);
     assert!(!ModelMaterialKey::from(&add.extension).depth_write.unwrap());
     let cutout = particle_material(ParticleBlend::AlphaKey, None, true);
     assert_eq!(

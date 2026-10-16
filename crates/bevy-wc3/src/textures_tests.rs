@@ -176,3 +176,16 @@ fn native_world_clamp_authority_imports_without_texture_sampler_mutation() {
         .iter()
         .any(|request| request.sampler.u == AddressMode::Clamp));
 }
+
+#[test]
+fn age_particle_wrapping_leaves_shared_texture_sampler_unchanged() {
+    let source = Sampler {
+        u: AddressMode::Clamp,
+        v: AddressMode::Mirror,
+    };
+    let particle = particle_sampler(source);
+    assert_eq!(particle.u, AddressMode::Repeat);
+    assert_eq!(particle.v, AddressMode::Repeat);
+    assert_eq!(source.u, AddressMode::Clamp);
+    assert_eq!(source.v, AddressMode::Mirror);
+}

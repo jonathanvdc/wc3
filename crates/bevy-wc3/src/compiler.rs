@@ -410,7 +410,7 @@ pub fn compile_model_with_options(
     let particles = Arc::new(RuntimeParticles::compile(
         model,
         &node_map,
-        images.color_images().as_ref(),
+        &images,
         &materials,
         &options.child_models,
         &options.model_placements,

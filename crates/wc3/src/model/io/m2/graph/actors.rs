@@ -327,6 +327,13 @@ where
         )?;
         let feature = builder.reserve_feature(node);
         let mut particle = D::Layout::logical_particle(value, textures)?;
+        particle.details.rendering.texture_program = source.model.extensions().find_map(|chunk| {
+            if let Chunk::TextureCombinerHints(programs) = chunk {
+                programs.get(core.materials.len() + index)
+            } else {
+                None
+            }
+        });
         bind_field!(
             feature,
             particle,

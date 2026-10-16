@@ -27,6 +27,8 @@ impl Plugin for Wc3BevyPlugin {
         embedded_asset!(app, "shaders/wc3_prepass.wgsl");
         embedded_asset!(app, "shaders/material.wgsl");
         embedded_asset!(app, "shaders/combiner.wgsl");
+        embedded_asset!(app, "shaders/model_io.wgsl");
+        embedded_asset!(app, "shaders/particle_composition.wgsl");
         embedded_asset!(app, "shaders/hd.wgsl");
         embedded_asset!(app, "shaders/material_prepass.wgsl");
         embedded_asset!(app, "shaders/wc3_particle.wgsl");

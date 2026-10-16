@@ -6,6 +6,7 @@ use crate::model::{
     AgeDrivenParticle, AgeDrivenParticleRendering, AgeDrivenParticleShape, ParticleEmission,
     ParticleLifetime, ParticleMotion,
 };
+use profile::values::ParticleHeadTail as GeometrySelection;
 use zerovec::ZeroVec;
 
 pub(super) trait LogicalAge: Sized {
@@ -25,7 +26,7 @@ where
     }
     Ok(Some(Curve::linear(
         materialize(track.timestamps.len(), move |i| {
-            Time::seconds(f64::from(track.timestamps.get(i).unwrap()) / 65535.).unwrap()
+            Time::seconds(f64::from(track.timestamps.get(i).unwrap()) / 32767.).unwrap()
         }),
         materialize(track.values.len(), move |i| {
             map(track.values.get(i).unwrap())
@@ -204,7 +205,17 @@ where
     V::Lifetime<'data>: LogicalAge,
 {
     let (blend, kind, color) = value.kind.parts();
-    let legacy = value.texture_scale.legacy_parts().unwrap_or([0, 0]);
+    let legacy = value.texture_scale.legacy_parts();
+    let head_tail = legacy.map_or_else(
+        || match (value.flags.head(), value.flags.tail()) {
+            (true, false) => GeometrySelection::Head,
+            (false, true) => GeometrySelection::Tail,
+            (true, true) => GeometrySelection::Both,
+            (false, false) => GeometrySelection::Disabled,
+        },
+        |parts| GeometrySelection::from_legacy_code(parts[1]),
+    );
+    let legacy = legacy.unwrap_or([0, 0]);
     let multi = value.flags.multi_texture();
     let ids = if multi {
         vec![
@@ -238,9 +249,10 @@ where
                 blend: profile::values::ParticleBlend::from_raw(blend.raw()),
                 color_index: color as u16,
                 textures,
+                texture_program: None,
                 model: resource(&value.particle_model_filename),
                 child_model: resource(&value.child_model_filename),
-                head_tail: profile::values::ParticleHeadTail::from_raw(legacy[1]),
+                head_tail,
                 texture_scale: value.texture_scale.scales(),
                 texture_tile_rotation: value.texture_tile_rotation,
                 atlas: [value.rows, value.columns],
@@ -323,11 +335,11 @@ fn encode_age<T: semantic::CurveValue, U: Value>(
                 "age must be within zero and one",
             ));
         }
-        let raw = (time * 65535.).round() as u16;
+        let raw = (time * 32767.).round() as u16;
         context.approximate(
             "m2.particle.age",
-            (f64::from(raw) / 65535. - time).abs() as f32,
-            "age quantized to normalized u16",
+            (f64::from(raw) / 32767. - time).abs() as f32,
+            "age quantized to native fixed15 timestamps",
         )?;
         times.push(raw);
         values.push(map(curve.values().get(i).unwrap(), context)?)
@@ -350,6 +362,12 @@ where
     V::Scroll: ScrollFields,
     V::Lifetime<'static>: LogicalAge,
 {
+    if payload.details.rendering.texture_program.is_some() {
+        return Err(Error::new(
+            "m2.particle.texture_program",
+            "a standalone particle record cannot encode container-level TXAC selectors; export the complete model graph",
+        ));
+    }
     let mut value = native::records::ParticleEmitter::<V>::new(ModelFlags::default());
     value.id = payload.details.id;
     value.flags = ParticleFlags::from_bits_retain(payload.details.flags.bits());
@@ -400,13 +418,40 @@ where
         u32::from(payload.details.rendering.color_index),
     )?;
     value.texture_scale = UvFields::make(payload.details.rendering.texture_scale, context)?;
-    value.texture_scale.set_legacy_parts(
-        [
-            payload.details.shape.legacy_shape,
-            payload.details.rendering.head_tail.raw(),
-        ],
-        context,
-    )?;
+    if value.texture_scale.legacy_parts().is_some() {
+        let head_tail = payload
+            .details
+            .rendering
+            .head_tail
+            .legacy_code()
+            .ok_or_else(|| {
+                Error::new(
+                    "m2.particle.head_tail",
+                    "legacy emitter geometry cannot represent disabled heads and tails",
+                )
+            })?;
+        value
+            .texture_scale
+            .set_legacy_parts([payload.details.shape.legacy_shape, head_tail], context)?;
+    } else {
+        let (head, tail) = match payload.details.rendering.head_tail {
+            GeometrySelection::Head => (true, false),
+            GeometrySelection::Tail => (false, true),
+            GeometrySelection::Both => (true, true),
+            GeometrySelection::Disabled => (false, false),
+            GeometrySelection::Unknown(_) => {
+                return Err(Error::new(
+                    "m2.particle.head_tail",
+                    "modern emitter style bits cannot represent an unknown legacy geometry code",
+                ));
+            }
+        };
+        value.flags.set_head(head);
+        value.flags.set_tail(tail);
+        value
+            .texture_scale
+            .set_legacy_parts([payload.details.shape.legacy_shape, 0], context)?;
+    }
     value.texture_tile_rotation = payload.details.rendering.texture_tile_rotation;
     value.rows = payload.details.rendering.atlas[0];
     value.columns = payload.details.rendering.atlas[1];
@@ -453,3 +498,7 @@ where
     value.multi_texture_scroll = ScrollFields::make(scroll, context)?;
     Ok(value)
 }
+
+#[cfg(test)]
+#[path = "logical_tests.rs"]
+mod tests;

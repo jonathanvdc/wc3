@@ -121,6 +121,7 @@ fn age_driven_roundtrip_preserves_borrowed_spline_and_common_randomness() {
                 blend: Default::default(),
                 color_index: Default::default(),
                 textures: vec![],
+                texture_program: Some([5, 9]),
                 model: Default::default(),
                 child_model: Default::default(),
                 head_tail: Default::default(),

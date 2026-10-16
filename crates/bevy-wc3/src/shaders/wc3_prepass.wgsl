@@ -1,3 +1,4 @@
+#import "embedded://bevy_wc3/shaders/model_io.wgsl"::VertexOutput
 // Adapted from Bevy v0.19.1: crates/bevy_pbr/src/prepass/prepass.wgsl
 // https://github.com/bevyengine/bevy/blob/v0.19.1/crates/bevy_pbr/src/prepass/prepass.wgsl
 // Upstream license: MIT OR Apache-2.0.
@@ -11,7 +12,7 @@
     prepass_bindings,
     mesh_bindings::mesh,
     mesh_functions,
-    prepass_io::{VertexOutput, FragmentOutput},
+    prepass_io::FragmentOutput,
     skinning,
     morph,
     morph::{morph_position, morph_normal, morph_tangent},
@@ -54,6 +55,9 @@ struct Vertex {
 #endif
 #ifdef MORPH_TARGETS
     @builtin(vertex_index) index: u32,
+#endif
+#ifdef VERTEX_UVS_C
+    @location(10) uv_c: vec2<f32>,
 #endif
 };
 // WC3 END: vertex input.
@@ -170,6 +174,9 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 
 #ifdef VERTEX_UVS_B
     out.uv_b = vertex.uv_b;
+#endif
+#ifdef VERTEX_UVS_C
+    out.uv_c = vertex.uv_c;
 #endif // VERTEX_UVS_B
 
 #ifdef MODEL_GENERATED_COORDS

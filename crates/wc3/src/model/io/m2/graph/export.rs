@@ -332,6 +332,16 @@ where
         &mut bundle,
         &mut context,
     )?;
+    let particle_programs: Vec<_> = model
+        .features()
+        .filter_map(|(_, feature)| {
+            if let profile::ActorKind::Particle(value) = &feature.payload {
+                Some(value.details.rendering.texture_program)
+            } else {
+                None
+            }
+        })
+        .collect();
     actors_export::export(
         model,
         &nodes,
@@ -342,6 +352,11 @@ where
         &mut context,
     )?;
     bundle.model.core_mut().global_sequences = ZeroVec::alloc_from_slice(&globals);
+    if particle_programs.iter().any(Option::is_some) {
+        let mut programs = vec![[0; 2]; bundle.model.core().materials.len()];
+        programs.extend(particle_programs.into_iter().map(Option::unwrap_or_default));
+        D::texture_combiner_hints(&mut bundle.model, programs, &mut context)?;
+    }
     D::texture_ids(&mut bundle.model, texture_ids)?;
     for (_, system) in model.systems() {
         if let profile::System::BoneOverrides(values) = system {

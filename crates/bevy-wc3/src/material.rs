@@ -2,6 +2,8 @@
 mod animation;
 mod compile;
 mod model;
+mod particle;
+pub(crate) use particle::{particle_material_layers, ParticleComposition};
 mod programmed;
 #[path = "ribbon_material.rs"]
 mod ribbon_material;
@@ -89,6 +91,8 @@ pub struct ModelMaterialExtension {
     tertiary: Option<Handle<Image>>,
     #[uniform(110)]
     world: WorldUniform,
+    #[uniform(113)]
+    particle: ParticleUniform,
     blend: Option<Blend>,
     depth_test: bool,
     depth_write: Option<bool>,
@@ -126,6 +130,11 @@ struct CombinerUniform {
     mode: UVec4,
     clip: Vec4,
 }
+#[derive(Clone, Copy, Debug, Default, ShaderType)]
+struct ParticleUniform {
+    mode: UVec4,
+}
+
 impl Default for CombinerUniform {
     fn default() -> Self {
         Self {
@@ -159,14 +168,27 @@ pub(crate) fn particle_material(
         ParticleBlend::AlphaKey => {
             pass.material.alpha_mode = AlphaMode::Mask(128.0 / 255.0);
         }
-        ParticleBlend::Add => {
+        ParticleBlend::NoAlphaAdd => {
             pass.material.alpha_mode = AlphaMode::Blend;
             pass.state.blend = Some(Blend::Additive);
         }
-        ParticleBlend::AddAlphaKey => {
+        ParticleBlend::Add => {
             pass.material.alpha_mode = AlphaMode::Blend;
             pass.state.blend = Some(Blend::AdditiveAlpha);
-            pass.state.combiner.clip.x = 1.0 / 255.0;
+        }
+        ParticleBlend::Modulate => {
+            pass.material.alpha_mode = AlphaMode::Blend;
+            pass.state.blend = Some(Blend::Modulate);
+        }
+        ParticleBlend::Modulate2x => {
+            pass.material.alpha_mode = AlphaMode::Blend;
+            pass.state.blend = Some(Blend::Modulate2x);
+        }
+        ParticleBlend::BlendAdd => {
+            // The authored shader color is already the source term for
+            // (One, OneMinusSrcAlpha); Bevy's Premultiplied mode preserves it.
+            pass.material.alpha_mode = AlphaMode::Premultiplied;
+            pass.state.blend = Some(Blend::Premultiplied);
         }
         ParticleBlend::Alpha | ParticleBlend::Unknown(_) => {
             pass.material.alpha_mode = AlphaMode::Blend;
@@ -194,6 +216,7 @@ impl Default for ModelMaterialExtension {
             team_color: None,
             environment: None,
             world: WorldUniform::default(),
+            particle: ParticleUniform::default(),
             blend: None,
             depth_test: true,
             depth_write: None,
@@ -208,11 +231,13 @@ pub struct ModelMaterialKey {
     depth_test: bool,
     depth_write: Option<bool>,
     generated_coordinates: bool,
+    third_uv: bool,
 }
 
 impl From<&ModelMaterialExtension> for ModelMaterialKey {
     fn from(state: &ModelMaterialExtension) -> Self {
         Self {
+            third_uv: state.particle.mode.x != 0,
             generated_coordinates: state.combiner.coordinates.x != 0
                 || state.combiner.coordinates.y != 0,
             blend: state.blend,
@@ -276,6 +301,7 @@ impl MaterialExtension for ModelMaterialExtension {
             descriptor,
             layout,
             key.bind_group_data.generated_coordinates,
+            key.bind_group_data.third_uv,
         )?;
         let state = key.bind_group_data;
         if let Some(depth) = &mut descriptor.depth_stencil {

@@ -90,7 +90,7 @@ fn legacy_particle_native_offsets_and_packing_remain_distinct() {
     assert_eq!(
         late.kind,
         PackedParticleHeader {
-            blending: PackedParticleBlend::Alpha,
+            blending: PackedParticleBlend::AlphaKey,
             emitter: PackedParticleGenerator::Sphere,
             color_index: 0x0403
         }
