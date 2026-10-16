@@ -496,6 +496,16 @@ pub(in super::super) fn insert<'a>(
         }
         Clock::Clip => {
             if let Some(clip) = clip {
+                // Alias clips select another sequence's programme. Native track tables
+                // may still have a leaf for their index, but it is not an independent
+                // programme (the same rule applies to bone channels and events).
+                if builder
+                    .model()
+                    .clip(clip)
+                    .is_some_and(|clip| clip.alias().is_some())
+                {
+                    return Ok(());
+                }
                 builder.add_channel(clip, channel)?
             } else {
                 return Err(Error::new(

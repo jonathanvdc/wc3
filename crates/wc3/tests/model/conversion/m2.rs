@@ -275,14 +275,16 @@ fn quantization_requires_an_explicit_tolerance() {
 fn unresolved_companions_are_errors() {
     let mut model = m2::Document::<m2::Flat<m2::V264>>::new();
     model.core_mut().skins = 1;
-    assert!(io::m2::import(
-        &m2::Bundle::from_model(model),
-        &ImportOptions {
-            loss_policy: LossPolicy::Drop,
-            ..Default::default()
-        }
-    )
-    .is_err());
+    assert!(
+        io::m2::import(
+            &m2::Bundle::from_model(model),
+            &ImportOptions {
+                loss_policy: LossPolicy::Drop,
+                ..Default::default()
+            }
+        )
+        .is_err()
+    );
 }
 #[test]
 fn native_unknown_extensions_are_not_silently_reinserted() {
@@ -375,9 +377,11 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
             .count(),
         3
     );
-    assert!(model
-        .systems()
-        .any(|(_, system)| matches!(system, mp::System::Collision(_))));
+    assert!(
+        model
+            .systems()
+            .any(|(_, system)| matches!(system, mp::System::Collision(_)))
+    );
     let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -468,20 +472,24 @@ fn unknown_extensions_require_explicit_drop_policy() {
     )
     .unwrap();
 
-    assert!(imported
-        .report
-        .issues
-        .iter()
-        .any(|issue| issue.path == "m2.chunk" && issue.kind == conversion::IssueKind::Dropped));
+    assert!(
+        imported
+            .report
+            .issues
+            .iter()
+            .any(|issue| issue.path == "m2.chunk" && issue.kind == conversion::IssueKind::Dropped)
+    );
     let output = io::m2::plan::<m2::Chunked<m2::V256>>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap();
-    assert!(!output
-        .value
-        .model
-        .extensions()
-        .any(|chunk| chunk.tag() == *b"TEST"));
+    assert!(
+        !output
+            .value
+            .model
+            .extensions()
+            .any(|chunk| chunk.tag() == *b"TEST")
+    );
 }
 #[test]
 fn compressed_rotations_decode_to_unit_components() {
@@ -861,21 +869,25 @@ fn texture_options_keep_unknown_bits_and_reject_unencoded_interpretations() {
         .value;
     assert_eq!(native.model.core().textures[0].flags.bits(), 0x8000_0001);
     let original = texture.sampler;
-    assert!(asset
-        .edit_resources(|draft| {
-            let mut value = draft.texture(id).unwrap().clone();
-            value.sampler.u = sm::AddressMode::Mirror;
-            draft.set_texture(id, value)
-        })
-        .is_err());
+    assert!(
+        asset
+            .edit_resources(|draft| {
+                let mut value = draft.texture(id).unwrap().clone();
+                value.sampler.u = sm::AddressMode::Mirror;
+                draft.set_texture(id, value)
+            })
+            .is_err()
+    );
     assert_eq!(asset.resources().texture(id).unwrap().sampler, original);
-    assert!(asset
-        .edit_resources(|draft| {
-            let mut value = draft.texture(id).unwrap().clone();
-            value.color_space = sm::ColorSpace::Srgb;
-            draft.set_texture(id, value)
-        })
-        .is_err());
+    assert!(
+        asset
+            .edit_resources(|draft| {
+                let mut value = draft.texture(id).unwrap().clone();
+                value.color_space = sm::ColorSpace::Srgb;
+                draft.set_texture(id, value)
+            })
+            .is_err()
+    );
 }
 
 #[test]
@@ -900,4 +912,68 @@ fn replacement_texture_retains_its_separately_declared_filename() {
     let texture = &native.model.core().textures[0];
     assert_eq!(texture.kind, TextureSource::Unknown(0x1234));
     assert_eq!(texture.filename.as_bytes(), b"textures/checker.blp\0");
+}
+
+#[test]
+fn native_alias_keeps_light_programme_on_its_referenced_clip() {
+    let mut source = native_triangle();
+    let core = source.model.core_mut();
+    core.sequences = vec![
+        m2::records::Sequence {
+            id: 4,
+            timing: m2::records::LegacyTiming {
+                start: 0,
+                end: 1000,
+            },
+            flags: SequenceFlags::from_bits_retain(0x20),
+            variation_next: -1,
+            ..Default::default()
+        },
+        m2::records::Sequence {
+            id: 5,
+            timing: m2::records::LegacyTiming {
+                start: 0,
+                end: 1000,
+            },
+            flags: SequenceFlags::from_bits_retain(0x40),
+            alias_next: 0,
+            variation_next: -1,
+            ..Default::default()
+        },
+    ];
+    core.lights.push(m2::records::Light {
+        kind: LightKind::Point,
+        bone_id: 0,
+        diffuse_intensity: Track {
+            base: TrackBase {
+                interpolation: Interpolation::Linear,
+                global_sequence: u16::MAX,
+                timeline: LegacyTimeline {
+                    ranges: ZeroVec::alloc_from_slice(&[[0, 1], [0, 1]]),
+                    timestamps: ZeroVec::alloc_from_slice(&[0, 1000]),
+                },
+            },
+            values: LegacyValues::Values(ZeroVec::alloc_from_slice(&[2., 6.])),
+        },
+        ..Default::default()
+    });
+    let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
+    let model = &imported.value;
+    let clips = model.clips().collect::<Vec<_>>();
+    assert_eq!(clips.len(), 2);
+    assert_eq!(clips[1].1.alias(), Some(clips[0].0));
+    assert!(clips[1].1.channels().is_empty());
+    assert!(!clips[0].1.channels().is_empty());
+    let program = sm::AnimationProgram::compile(model);
+    let sample = program
+        .sample(sm::AnimationSample {
+            clip: Some(clips[1].0),
+            clip_time: sm::Time::seconds(0.5).unwrap(),
+            ..Default::default()
+        })
+        .unwrap();
+    let sm::Channel::Scalar(track) = &clips[0].1.channels()[0] else {
+        panic!("light intensity must remain a typed scalar channel")
+    };
+    assert_eq!(sample.property(&track.target), Some(4.));
 }
