@@ -1,5 +1,6 @@
 //! Owned surface binding evaluation and authored UV transforms.
 use super::super::{mesh_animation::MeshAnimation, textures::TextureRole};
+use super::world::scrolling_transform;
 use super::{HdAnimation, ModelMaterial, SurfaceAnimation};
 use bevy::math::Affine2;
 use bevy::prelude::*;
@@ -136,7 +137,17 @@ impl SurfaceAnimation {
     }
 
     pub(crate) fn is_animated(&self) -> bool {
-        self.hd.as_ref().is_some_and(HdAnimation::is_animated)
+        self.input_weights
+            .iter()
+            .flatten()
+            .any(|v| v.property.is_some())
+            || self.third_transform.as_ref().is_some_and(|t| {
+                t.translation.property.is_some()
+                    || t.rotation.property.is_some()
+                    || t.scale.property.is_some()
+            })
+            || self.uv_scroll.iter().flatten().any(|v| *v != 0.)
+            || self.hd.as_ref().is_some_and(HdAnimation::is_animated)
             || self.mesh.as_ref().is_some_and(MeshAnimation::is_animated)
             || self
                 .rgba
@@ -198,9 +209,31 @@ impl SurfaceAnimation {
         material: &mut ModelMaterial,
     ) -> bool {
         let mut changed = self.apply(sample, &mut material.base);
-        if let Some(transform) = &self.secondary_transform {
-            let next = Mat3::from(sampled_transform(sample, transform));
+        if self.secondary_transform.is_some() || self.uv_scroll[1] != [0.; 2] {
+            let base = self
+                .secondary_transform
+                .as_ref()
+                .map_or(Affine2::IDENTITY, |t| sampled_transform(sample, t));
+            let next = Mat3::from(scrolling_transform(
+                base,
+                self.uv_scroll[1],
+                sample.shared_time().as_seconds() as f32,
+            ));
             changed |= replace(&mut material.extension.combiner.uv_transform, next);
+        }
+        if let Some(transform) = &self.third_transform {
+            changed |= replace(
+                &mut material.extension.combiner.third_transform,
+                Mat3::from(sampled_transform(sample, transform)),
+            );
+        }
+        for (slot, weight) in self.input_weights.iter().enumerate() {
+            if let Some(weight) = weight {
+                changed |= replace(
+                    &mut material.extension.combiner.weights[slot],
+                    sample.animated(weight),
+                );
+            }
         }
         if let Some(hd) = &self.hd {
             changed |= hd.apply(Some(sample), material);
@@ -279,16 +312,26 @@ impl SurfaceAnimation {
                 changed = true;
             }
         }
-        if let Some(transform) = &self.transform {
-            let next = if self.centered_transform {
-                layered_uv(
-                    sample.animated(&transform.translation),
-                    sample.animated(&transform.rotation).0,
-                    sample.animated(&transform.scale),
-                )
-            } else {
-                sampled_transform(sample, transform)
-            };
+        if self.transform.is_some() || self.uv_scroll[0] != [0.; 2] {
+            let next = self
+                .transform
+                .as_ref()
+                .map_or(Affine2::IDENTITY, |transform| {
+                    if self.centered_transform {
+                        layered_uv(
+                            sample.animated(&transform.translation),
+                            sample.animated(&transform.rotation).0,
+                            sample.animated(&transform.scale),
+                        )
+                    } else {
+                        sampled_transform(sample, transform)
+                    }
+                });
+            let next = scrolling_transform(
+                next,
+                self.uv_scroll[0],
+                sample.shared_time().as_seconds() as f32,
+            );
             if material.uv_transform != next {
                 material.uv_transform = next;
                 changed = true;

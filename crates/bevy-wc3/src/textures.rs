@@ -144,6 +144,26 @@ pub fn texture_requests<'view, 'data>(
             SurfaceSet::Programmed(surface) => {
                 if let programmed::Material::Standard(surface) = &**surface {
                     for layer in [
+                        &surface.diffuse.input,
+                        &surface.emissive.input.primary.input,
+                        &surface.emissive.input.secondary.input,
+                    ]
+                    .into_iter()
+                    .flatten()
+                    {
+                        if let Some((id, texture)) = layer
+                            .binding
+                            .image
+                            .and_then(|id| model.texture(id).map(|texture| (id, texture)))
+                        {
+                            add(
+                                id,
+                                TextureRole::Color,
+                                Some(programmed_sampler(layer, texture.sampler)),
+                            );
+                        }
+                    }
+                    for layer in [
                         &surface.normals.base,
                         &surface.normals.primary.input,
                         &surface.normals.secondary.input,
@@ -151,8 +171,16 @@ pub fn texture_requests<'view, 'data>(
                     .into_iter()
                     .flatten()
                     {
-                        if let Some(id) = layer.binding.image {
-                            add(id, TextureRole::Normal, None);
+                        if let Some((id, texture)) = layer
+                            .binding
+                            .image
+                            .and_then(|id| model.texture(id).map(|texture| (id, texture)))
+                        {
+                            add(
+                                id,
+                                TextureRole::Normal,
+                                Some(programmed_sampler(layer, texture.sampler)),
+                            );
                         }
                     }
                     for layer in [
@@ -168,8 +196,16 @@ pub fn texture_requests<'view, 'data>(
                     .into_iter()
                     .flatten()
                     {
-                        if let Some(id) = layer.binding.image {
-                            add(id, TextureRole::Data, None);
+                        if let Some((id, texture)) = layer
+                            .binding
+                            .image
+                            .and_then(|id| model.texture(id).map(|texture| (id, texture)))
+                        {
+                            add(
+                                id,
+                                TextureRole::Data,
+                                Some(programmed_sampler(layer, texture.sampler)),
+                            );
                         }
                     }
                 }
@@ -178,6 +214,25 @@ pub fn texture_requests<'view, 'data>(
         }
     }
     requests
+}
+
+/// M3 layers independently select wrapping on each image axis.
+pub(crate) fn programmed_sampler(
+    layer: &programmed::TextureLayer,
+    mut sampler: Sampler,
+) -> Sampler {
+    let flags = layer.binding.sampling.flags;
+    sampler.u = if flags.uv_wrap_x() {
+        AddressMode::Repeat
+    } else {
+        AddressMode::Clamp
+    };
+    sampler.v = if flags.uv_wrap_y() {
+        AddressMode::Repeat
+    } else {
+        AddressMode::Clamp
+    };
+    sampler
 }
 
 /// Shared resolved images; source IDs, transfer functions, and samplers stay distinct.

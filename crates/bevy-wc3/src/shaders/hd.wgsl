@@ -29,8 +29,9 @@ fn apply_hd(in: VertexOutput, is_front: bool, input: PbrInput) -> PbrInput {
 #ifdef STANDARD_MATERIAL_NORMAL_MAP
 #ifdef VERTEX_TANGENTS
         let sampled = textureSampleBias(pbr_bindings::normal_map_texture,
-            pbr_bindings::normal_map_sampler, uv, view.mip_bias).rgb;
-        let xy = sampled.rg * 2.0 - 1.0;
+            pbr_bindings::normal_map_sampler, uv, view.mip_bias);
+        let packed=select(sampled.rg,sampled.ag,hd.maps.x==2u);
+        let xy = packed * 2.0 - 1.0;
         let nt = vec3(xy, sqrt(max(0.0, 1.0 - dot(xy, xy)))) * 0.5 + vec3(0.5);
         let flags = result.material.flags & ~pbr_types::STANDARD_MATERIAL_FLAGS_TWO_COMPONENT_NORMAL_MAP;
         let double_sided = (flags & pbr_types::STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT) != 0u;
@@ -38,6 +39,7 @@ fn apply_hd(in: VertexOutput, is_front: bool, input: PbrInput) -> PbrInput {
         result.N = pbr_functions::apply_normal_mapping(flags, tbn, double_sided, is_front, nt);
 #endif
 #endif
+        if hd.maps.x == 1u {
         var team = vec3(1.0);
         if hd.maps.z != 0u {
             team = textureSampleBias(team_map, team_sampler, uv, view.mip_bias).rgb;
@@ -69,6 +71,7 @@ fn apply_hd(in: VertexOutput, is_front: bool, input: PbrInput) -> PbrInput {
         result.material.emissive = vec4(result.material.emissive.rgb
             + (fresnel_color * rim * hd.fresnel.x + reflection)
                 * pbr_bindings::material.base_color.rgb, result.material.emissive.a);
+        }
     }
 #endif
 

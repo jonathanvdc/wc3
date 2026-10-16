@@ -4,20 +4,26 @@
 //! controls. Model-clock properties are sampled at birth; their age controls
 //! then evolve independently. Primitive emission and free-flight conventions
 //! remain visually unverified against the game, separately from missing modes.
+use super::frame::EffectFrame;
 use bevy::prelude::*;
+#[cfg(test)]
+use std::array::from_fn;
+use std::collections::HashMap;
 use std::f32::consts::TAU;
 use wc3::model::animation::programmed::Property;
 use wc3::model::values::programmed::{
     EmitterShape, ParticleInstance, Smoothing, Variation, VelocityKind,
 };
 use wc3::model::{
-    Animated, ParticleAppearance, ParticleDefinition, ParticleDetails, ParticleGravity,
-    ParticleScalar, ProgrammedAge, RetimedAnimation, VariationControl,
+    Animated, ClipId, Clock, ParticleAppearance, ParticleDefinition, ParticleDetails,
+    ParticleGravity, ParticleScalar, ParticleTrigger, ProgrammedAge, RetimedAnimation,
+    VariationControl,
 };
 
 #[derive(Clone)]
 pub(super) struct ProgrammedSprite {
     pub rate: Animated<f32>,
+    pub squirt: Animated<u16>,
     pub lifetime: Animated<f32>,
     pub lifetime_other: Animated<f32>,
     pub random_lifetime: bool,
@@ -89,6 +95,50 @@ fn scalar(value: &ParticleScalar) -> Animated<f32> {
     }
 }
 impl ProgrammedSprite {
+    #[cfg(test)]
+    pub(super) fn fixture() -> Self {
+        Self {
+            rate: Animated::constant(10.),
+            squirt: Animated::constant(0),
+            lifetime: Animated::constant(2.),
+            lifetime_other: Animated::constant(4.),
+            random_lifetime: false,
+            speed: Animated::constant(2.),
+            speed_other: Animated::constant(6.),
+            random_speed: false,
+            shape: EmitterShape::Point,
+            dimensions: Animated::constant([2.; 3]),
+            radius: Animated::constant(1.),
+            velocity: VelocityKind::ZAxis,
+            angle_x: Animated::constant(0.),
+            angle_y: Animated::constant(0.),
+            spread_x: Animated::constant(0.),
+            spread_y: Animated::constant(0.),
+            gravity: -4.,
+            model_space: false,
+            max_particles: 20,
+            lit: false,
+            sizes: Animated::constant([1., 2., 0.]),
+            rotations: Animated::constant([0., 1., 2.]),
+            colors: [
+                Animated::constant([1., 0., 0., 1.]),
+                Animated::constant([0., 1., 0., 1.]),
+                Animated::constant([0., 0., 1., 0.]),
+            ],
+            middle: [0.5; 4],
+            size_other: Animated::constant([1.; 3]),
+            rotation_other: Animated::constant([0.; 3]),
+            color_other: from_fn(|_| Animated::constant([1.; 4])),
+            random_size: false,
+            random_rotation: false,
+            random_color: false,
+            random_alpha: false,
+            smoothing: [Smoothing::Linear; 3],
+            atlas: [1, 1],
+            cells: [0; 4],
+            cell_middle: 0.5,
+        }
+    }
     pub fn compile(definition: &ParticleDefinition<'_>) -> Result<(Self, Vec<String>), String> {
         let ParticleDetails::Programmed(details) = &definition.details else {
             return Err("Expected programmed sprite controls".into());
@@ -184,10 +234,15 @@ impl ProgrammedSprite {
         if details.flipbook_rows == 0 || details.flipbook_columns == 0 {
             diagnostics.push("Programmed zero-dimensional flipbook is rendered as one cell".into());
         }
-        diagnostics.push("Programmed keyed squirt triggers and effect variation functions are not implemented; continuous emission uses the authored rate".into());
+        diagnostics.push("Programmed effect variation functions are not implemented; keyed squirt counts use bounded authored clock crossings independently of continuous emission".into());
+        let squirt = match &definition.emission.trigger {
+            ParticleTrigger::Programmed(value) => animated(value),
+            _ => Animated::constant(0),
+        };
         Ok((
             Self {
                 rate: scalar(&definition.emission.rate),
+                squirt,
                 lifetime: scalar(&definition.lifetime.duration),
                 lifetime_other: scalar(&definition.lifetime.variation),
                 random_lifetime: details.additional_flags.lifespan_randomize(),
@@ -390,6 +445,135 @@ pub(super) fn nondefault_variation(value: &VariationControl) -> bool {
         || nondefault_scalar(&value.amplitude)
         || nondefault_scalar(&value.frequency)
 }
+/// Bounded occurrence scratch; counts are independent of continuous emission.
+#[derive(Default)]
+pub(super) struct SquirtSchedule {
+    pub occurrences: Vec<(f64, u16)>,
+    pub initialized: bool,
+}
+impl SquirtSchedule {
+    pub fn collect(
+        &mut self,
+        amount: &Animated<u16>,
+        frame: &EffectFrame<'_, '_, '_>,
+        clips: &HashMap<ClipId, (f64, bool)>,
+        delta: f64,
+        include_origin: bool,
+    ) {
+        self.occurrences.clear();
+        let track = amount
+            .property
+            .as_ref()
+            .and_then(|target| frame.sample.track(target));
+        let clock = track
+            .as_ref()
+            .map_or(Clock::Clip, |track| track.track.clock);
+        let origin = if matches!(clock, Clock::Timeline) {
+            frame
+                .selection
+                .timeline_interval
+                .map_or(0., |(start, _)| start.as_seconds())
+        } else {
+            0.
+        };
+        let raw = match clock {
+            Clock::Clip => frame.selection.clip_time.as_seconds(),
+            Clock::Shared(_) => frame.selection.shared_time.as_seconds(),
+            Clock::Timeline if frame.selection.timeline_interval.is_some() => {
+                origin + frame.selection.clip_time.as_seconds()
+            }
+            Clock::Timeline => frame.selection.timeline_time.as_seconds(),
+        };
+        let previous = raw - delta;
+        let period =
+            track
+                .as_ref()
+                .and_then(|track| track.period)
+                .map(|period| period.as_seconds())
+                .or_else(|| {
+                    if track.is_some() {
+                        return None;
+                    }
+                    frame.selection.clip.and_then(|id| clips.get(&id)).and_then(
+                        |&(duration, looping)| (looping && duration > 0.).then_some(duration),
+                    )
+                });
+        let interval = SquirtInterval {
+            time: frame.time,
+            raw,
+            previous,
+            period,
+            include_origin,
+        };
+        let mut add = |key, count| interval.add(&mut self.occurrences, key, count);
+
+        if let Some(track) = track {
+            let times = track.track.curve.times();
+            for (index, key) in times.iter().enumerate() {
+                if times.get(index + 1) == Some(key) {
+                    continue;
+                }
+                if matches!(clock, Clock::Timeline)
+                    && frame
+                        .selection
+                        .timeline_interval
+                        .is_some_and(|(start, end)| key < start || key > end)
+                {
+                    continue;
+                }
+                // A loop-end key aliases the next loop's origin.
+                if period.is_some_and(|period| (key.as_seconds() - origin - period).abs() < 1e-9) {
+                    continue;
+                }
+                add(
+                    key.as_seconds(),
+                    track.track.curve.values().get(index).unwrap(),
+                );
+            }
+        } else {
+            // An inactive bound programme must not fall back to an authored
+            // default burst; defaults apply only to genuinely unbound values.
+            if amount.property.is_none() {
+                add(origin, amount.default);
+            }
+        }
+        self.occurrences.sort_by(|a, b| a.0.total_cmp(&b.0));
+        self.initialized = true;
+    }
+}
+struct SquirtInterval {
+    time: f64,
+    raw: f64,
+    previous: f64,
+    period: Option<f64>,
+    include_origin: bool,
+}
+impl SquirtInterval {
+    fn add(&self, occurrences: &mut Vec<(f64, u16)>, key: f64, count: u16) {
+        const MAX_OCCURRENCES: usize = 4096;
+        if count == 0 {
+            return;
+        }
+        let mut cycle = self
+            .period
+            .map_or(0., |period| ((self.previous - key) / period).ceil());
+        while occurrences.len() < MAX_OCCURRENCES {
+            let occurrence = key + self.period.unwrap_or(0.) * cycle;
+            if occurrence > self.raw + 1e-9 {
+                break;
+            }
+            if occurrence > self.previous + 1e-9
+                || (self.include_origin && (occurrence - self.previous).abs() < 1e-9)
+            {
+                occurrences.push((self.time - (self.raw - occurrence), count));
+            }
+            if self.period.is_none() {
+                break;
+            }
+            cycle += 1.;
+        }
+    }
+}
 fn stage(values: [f32; 3], middle: f32, age: f32, mode: Smoothing) -> f32 {
     if age >= 1. {
         return values[2];
@@ -523,107 +707,5 @@ impl ProgrammedAppearance {
     }
 }
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use wc3::model::{AnimationProgram, AnimationSample, Model};
-    #[test]
-    fn collapsed_age_stages_preserve_explicit_endpoints() {
-        for middle in [0., 1.] {
-            for smoothing in [Smoothing::Linear, Smoothing::LinearSmooth] {
-                assert_eq!(stage([2., 4., 8.], middle, 0., smoothing), 2.);
-                assert_eq!(stage([2., 4., 8.], middle, 1., smoothing), 8.);
-            }
-            let mut appearance = ProgrammedAppearance::constant(1.);
-            appearance.cells = [2, 3, 5, 7];
-            appearance.cell_middle = middle;
-            assert_eq!(appearance.sample(0.).cell, 2);
-            assert_eq!(appearance.sample(1.).cell, 7);
-        }
-    }
-    fn programme() -> ProgrammedSprite {
-        ProgrammedSprite {
-            rate: Animated::constant(10.),
-            lifetime: Animated::constant(2.),
-            lifetime_other: Animated::constant(4.),
-            random_lifetime: false,
-            speed: Animated::constant(2.),
-            speed_other: Animated::constant(6.),
-            random_speed: false,
-            shape: EmitterShape::Point,
-            dimensions: Animated::constant([2.; 3]),
-            radius: Animated::constant(1.),
-            velocity: VelocityKind::ZAxis,
-            angle_x: Animated::constant(0.),
-            angle_y: Animated::constant(0.),
-            spread_x: Animated::constant(0.),
-            spread_y: Animated::constant(0.),
-            gravity: -4.,
-            model_space: false,
-            max_particles: 20,
-            lit: false,
-            sizes: Animated::constant([1., 2., 0.]),
-            rotations: Animated::constant([0., 1., 2.]),
-            colors: [
-                Animated::constant([1., 0., 0., 1.]),
-                Animated::constant([0., 1., 0., 1.]),
-                Animated::constant([0., 0., 1., 0.]),
-            ],
-            middle: [0.5; 4],
-            size_other: Animated::constant([1.; 3]),
-            rotation_other: Animated::constant([0.; 3]),
-            color_other: std::array::from_fn(|_| Animated::constant([1.; 4])),
-            random_size: false,
-            random_rotation: false,
-            random_color: false,
-            random_alpha: false,
-            smoothing: [Smoothing::Linear; 3],
-            atlas: [1, 1],
-            cells: [0; 4],
-            cell_middle: 0.5,
-        }
-    }
-    #[test]
-    fn birth_freezes_motion_and_style_in_the_selected_space() {
-        let model = Model::empty("programmed sprite controls").unwrap();
-        let animation = AnimationProgram::compile(&model);
-        let sample = animation.sample(AnimationSample::default()).unwrap();
-        let sample = sample.at_times(Default::default(), Default::default(), Default::default());
-        let mut programme = programme();
-        let node = Mat4::from_translation(Vec3::new(3., 4., 5.));
-        let birth = programme
-            .birth(&sample, node, Mat4::IDENTITY, [0.5; 12])
-            .unwrap();
-        assert_eq!(birth.origin, Vec3::new(3., 4., 5.));
-        assert_eq!(birth.velocity, Vec3::Z * 2.);
-        assert_eq!(birth.acceleration, Vec3::NEG_Z * 4.);
-        assert_eq!(birth.appearance.sample(0.5).color, [0., 1., 0., 1.]);
-        programme.model_space = true;
-        programme.random_lifetime = true;
-        programme.random_speed = true;
-        let birth = programme
-            .birth(&sample, node, Mat4::IDENTITY, [0.5; 12])
-            .unwrap();
-        assert_eq!(birth.origin, Vec3::ZERO);
-        assert_eq!(birth.lifetime, 3.);
-        assert_eq!(birth.velocity, Vec3::Z * 4.);
-    }
-
-    #[test]
-    fn channels_use_independent_normalized_midpoints() {
-        let appearance = ProgrammedAppearance {
-            size: [0., 2., 0.],
-            rotation: [0., 1., 2.],
-            color: [[1., 0., 0., 0.], [0., 1., 0., 1.], [0., 0., 1., 0.]],
-            middle: [0.25, 0.5, 0.5, 0.75],
-            smoothing: [Smoothing::Linear; 3],
-            cells: [0, 3, 4, 7],
-            cell_middle: 0.5,
-        };
-        let value = appearance.sample(0.25);
-        assert_eq!(value.size, [2.; 2]);
-        assert_eq!(value.rotation, 0.5);
-        assert_eq!(value.color[0], 0.5);
-        assert!((value.color[3] - 1. / 3.).abs() < 1e-6);
-        assert_eq!(appearance.sample(1.).cell, 7);
-    }
-}
+#[path = "programmed_tests.rs"]
+mod tests;

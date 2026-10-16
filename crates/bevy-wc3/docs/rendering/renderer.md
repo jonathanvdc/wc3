@@ -34,9 +34,9 @@ guide](../usage.md#bake-a-static-pose).
 ## Materials and textures
 
 `ModelMaterial` extends Bevy `StandardMaterial` with authored blend/depth states
-and supported native combiners. Classic layered surfaces, common M2 combinations,
-basic WMO surfaces, M3 common layers, and known Diablo roles map into that pipeline.
-Complex combinations remain diagnostic fallbacks. Unlit and unfogged controls use
+and supported native combiners. Classic layered surfaces, [M2 texture combinations](m2-materials.md),
+basic WMO surfaces, [M3 common layers](m3-materials.md), and known Diablo roles map into that pipeline.
+Unsupported combinations remain diagnostic fallbacks. Unlit and unfogged controls use
 Bevy's corresponding behavior; mesh priority is a sort/depth bias, not a complete
 game-specific pass ordering scheme.
 
@@ -48,7 +48,9 @@ database or team-selection policy.
 
 Basic WMO shaders 0, 4, and 16 preserve diffuse interpretation and treat MOCV RGB as
 baked illumination instead of an albedo multiplier. The baked contribution adds to
-PBR illumination; Bevy dynamic lights remain active. Interior/exterior transition
+PBR illumination; Bevy dynamic lights remain active. Primary diffuse UV scrolling
+uses the instance shared clock. Secondary scroll controls are retained for shaders
+whose additional texture layers remain unsupported. Interior/exterior transition
 alpha is not interpreted. Shader 4 ignores texture alpha while retaining
 material/tint alpha. Native lighting fidelity remains unverified.
 
@@ -63,7 +65,7 @@ Attachment mounts retain source identities, resources, activation, and complete
 placement appearance. Common [lights](lights.md) become Bevy scene lights;
 [cameras](cameras.md) bind opt-in to application-owned views. [Events](events.md)
 publish typed occurrences for gameplay rather than executing commands. [Static-world
-metadata](universal.md#static-worlds) exposes groups, portals, liquid grids, and
+metadata](universal.md#static-worlds) exposes groups, portal-frustum selection, liquid grids, and
 environment sampling without taking over scene fog or ambient lighting.
 
 [Model particles](prem.md) instantiate child models. [Atlas sprites](pre2.md)
@@ -81,7 +83,7 @@ coverage; focused guides state the implemented behavior and remaining limits.
 | Area | Current boundary |
 | --- | --- |
 | Geometry | More than eight skin influences fails; skinned bounds update conservatively from contributing joints. No generated simplification or per-view skeletal pose. |
-| Surfaces | Complex M2/WMO combinations, generated coordinates, many programmed M3 surfaces, and external Diablo shaders need additional interpretation. |
+| Surfaces | Higher M2 table entries and three distinct coordinate routes, complex WMO combinations, many programmed M3 surfaces, and external Diablo shaders need additional interpretation. |
 | Scene features | Bevy lighting differs from native falloff and regional illumination. Unsupported feature hooks expose IDs/kinds, not complete owned definitions. |
 | Effects | Native packed/spline/programmed controls are only partially interpreted; external effect resources need application providers. |
 | Fidelity | Implemented motion, material, billboard, and native shader behavior is not a promise of exact game rendering. |

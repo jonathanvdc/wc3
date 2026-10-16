@@ -74,8 +74,9 @@ factors and independent depth-test/write controls specialize the GPU pipeline. A
 default `ModelMaterialExtension` leaves a standalone `StandardMaterial`'s blend
 and depth behavior intact; compiled model passes supply explicit overrides. Color,
 opacity, texture choice, and coordinate transforms animate on the same semantic
-clocks as node poses. Supported legacy M2 multiplication combinations sample
-independent primary and secondary texture coordinates before lighting. Unsupported
+clocks as node poses. Supported [M2 shader programmes](m2-materials.md) combine independent texture
+inputs and generated environment coordinates before Bevy lighting; additive
+contributions enter emissive. Unsupported
 shader selectors and composition rules produce material diagnostics. DefaultUnit HD
 layers retain diffuse, RG normal, ORM, emissive, team-color, and reflection roles,
 including animated bindings and Fresnel controls. The [Reforged material
@@ -133,12 +134,13 @@ M2 age-driven sprites retain independent normalized-age color, opacity, scale, a
 atlas curves. Their current transport rebuilds one reusable CPU mesh per emitter as
 its population or view changes. Motion evaluates gravity, wind, and linear drag
 analytically. Local particles follow the current emitter transform; world particles
-retain their birth frame. Paused, unchanged frames avoid mesh uploads.
+retain their birth frame with optional authored emitter-follow translation. Paused, unchanged frames avoid mesh uploads.
 Living-particle, per-update birth, and long-update budgets bound CPU work;
 `SpriteEmitter` exposes omitted work and current population.
 
 M3 standard billboards interpret common distributions, velocity selectors,
-normalized three-stage appearance, and flipbook timing through the CPU transport.
+normalized three-stage appearance, keyed squirt counts and flipbook timing through
+the CPU transport.
 The [sprite guide](pre2.md#m3-standard-billboard-subset) distinguishes this subset
 from unsupported programmed forces, collisions, secondary effects, and geometry.
 
@@ -159,9 +161,21 @@ produce diagnostics.
 Prepared models expose world groups, portals, placement sets, regions, liquids, and
 authored fog and ambient definitions. `WorldSelection` can hide groups or
 select placement sets. The default is conservative; an explicit `ReachableFrom`
-policy follows portal connectivity. It does not perform portal occlusion or
-clipped-frustum culling. Visibility gates intersect these selections with authored
-animation, material opacity, and LOD.
+policy follows portal connectivity. `WorldPortalPolicy::Clipped(PortalView)` adds
+opt-in portal-window traversal. Applications supply the containing group, eye and
+inward-facing frustum planes in semantic model coordinates, and update that view
+when their chosen camera moves. The renderer clips convex portal polygons against
+the current window and narrows each neighboring view through the visible edges.
+Different paths into the same room retain their separate windows; cycles are
+bounded without discarding other entrance paths.
+
+Exterior and unclassified groups remain visible. Unknown or exterior starting
+groups, unresolved portal controls, malformed polygons and traversal work limits
+fall back conservatively. Native portal-side conventions, supplemental plane
+adjustments and occluder planes are not interpreted; this is geometric window
+culling rather than a complete native visibility implementation. Applications own
+camera choice and containment rather than relying on guessed room bounds. Visibility
+gates intersect these selections with authored animation, material opacity and LOD.
 
 Liquid grids preserve holes, native spacing, and absolute vertex heights. An
 authored material is interpreted through the standard material compiler. A liquid
@@ -207,10 +221,10 @@ and runtime as application loading.
 Native loading preserves native-family vocabulary rather than promising the same
 shader coverage for every family. MDLX common layers and effects, M2 common surfaces
 and age-driven sprites, WMO groups/basic surfaces/liquid grids, M3 common
-surfaces/lights and selected programmes, and known Diablo roles each have separate
+surfaces (including packed normals and constrained AO/specular), lights and selected programmes, and known Diablo roles each have separate
 interpretation limits. Native loading, generic geometry, and basic surface
-interpretation are separate capabilities from full game-specific rendering. Complex
-M2 combiners, generated environment coordinates, programmed M3 surfaces, external
+interpretation are separate capabilities from full game-specific rendering. Higher M2 shader-table entries and additional coordinate routes, complex WMO
+combiners, programmed M3 surfaces, external
 Diablo shaders, and external effect programmes require additional interpreters.
 These gaps appear in model diagnostics.
 

@@ -94,8 +94,9 @@ pub use textures::{
     texture_requests, TextureColorSpace, TextureImageKey, TextureRequest, TextureRole,
 };
 pub use world::{
-    world_volume_weight, DoodadSet, WorldEnvironment, WorldEnvironmentSample, WorldGroup,
-    WorldLiquid, WorldLiquidSurface, WorldPortal, WorldPortalPolicy, WorldRegion, WorldSelection,
+    world_volume_weight, DoodadSet, PortalView, WorldEnvironment, WorldEnvironmentSample,
+    WorldGroup, WorldLiquid, WorldLiquidSurface, WorldPortal, WorldPortalPolicy, WorldRegion,
+    WorldSelection,
 };
 
 pub(crate) use camera::animate_cameras;

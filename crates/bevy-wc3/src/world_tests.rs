@@ -267,3 +267,269 @@ fn default_placement_selection_includes_common_without_combining_variants() {
     });
     assert!(all.set_visible(alternative));
 }
+
+fn portal_groups(system: SystemId, count: usize) -> WorldRuntime {
+    let mut runtime = WorldRuntime {
+        groups: (0..count)
+            .map(|index| WorldGroup {
+                id: GroupId {
+                    system,
+                    index: index as u32,
+                },
+                name: format!("room {index}"),
+                instances: Arc::from([]),
+                bounds: [[-100.0; 3], [100.0; 3]],
+                options: GroupOptions {
+                    interior: true,
+                    ..default()
+                },
+                detail_selection: None,
+            })
+            .collect::<Vec<_>>()
+            .into(),
+        ..default()
+    };
+    runtime.index_portal_groups();
+    runtime
+}
+
+fn window(
+    runtime: &mut WorldRuntime,
+    system: SystemId,
+    from: usize,
+    to: usize,
+    x: [f32; 2],
+    z: f32,
+) {
+    let index = runtime.portals.len();
+    let id = PortalId {
+        system,
+        index: index as u32,
+    };
+    let mut portals = runtime.portals.to_vec();
+    portals.push(WorldPortal {
+        id,
+        vertices: Arc::from([
+            [x[0], -1.0, z],
+            [x[1], -1.0, z],
+            [x[1], 1.0, z],
+            [x[0], 1.0, z],
+        ]),
+        plane: [0.0, 0.0, 1.0, -z],
+        adjustment: None,
+    });
+    runtime.portals = portals.into();
+    runtime.portal_indices.insert(id, index);
+    let a = GroupId {
+        system,
+        index: from as u32,
+    };
+    let b = GroupId {
+        system,
+        index: to as u32,
+    };
+    runtime
+        .portal_links
+        .entry(a)
+        .or_default()
+        .push(PortalConnection {
+            portal: id,
+            neighbor: b,
+            side: 1,
+            skip_viewer: false,
+            adjusted_plane: false,
+            unclassified: default(),
+        });
+    runtime.neighbors.entry(a).or_default().push(b);
+}
+
+fn forward_view(system: SystemId) -> PortalView {
+    PortalView::new(
+        GroupId { system, index: 0 },
+        Vec3::ZERO,
+        [
+            Vec4::new(1.0, 0.0, 1.0, 0.0),
+            Vec4::new(-1.0, 0.0, 1.0, 0.0),
+            Vec4::new(0.0, 1.0, 1.0, 0.0),
+            Vec4::new(0.0, -1.0, 1.0, 0.0),
+            Vec4::new(0.0, 0.0, 1.0, -0.01),
+        ],
+    )
+    .unwrap()
+}
+
+#[test]
+fn portal_view_validates_and_normalizes_halfspaces() {
+    let group = GroupId {
+        system: system_id(),
+        index: 0,
+    };
+    assert!(PortalView::new(group, Vec3::NAN, []).is_err());
+    assert!(PortalView::new(group, Vec3::ZERO, [Vec4::ZERO]).is_err());
+    assert!(PortalView::new(group, Vec3::ZERO, [Vec4::NAN]).is_err());
+    let view = PortalView::new(group, Vec3::ONE, [Vec4::new(2.0, 0.0, 0.0, -4.0)]).unwrap();
+    assert_eq!(view.group(), group);
+    assert_eq!(view.eye(), Vec3::ONE);
+    assert_eq!(view.planes(), &[Vec4::new(1.0, 0.0, 0.0, -2.0)]);
+}
+
+#[test]
+fn clipped_portals_test_frustum_then_narrow_neighbor_windows() {
+    let system = system_id();
+    let mut runtime = portal_groups(system, 4);
+    window(&mut runtime, system, 0, 1, [-0.5, 0.5], 2.0);
+    window(&mut runtime, system, 1, 2, [2.0, 3.0], 4.0);
+    window(&mut runtime, system, 0, 3, [10.0, 11.0], 2.0);
+    let selected = runtime.visibility(&WorldSelection {
+        portals: WorldPortalPolicy::Clipped(forward_view(system)),
+        ..default()
+    });
+    assert!(selected.group_visible(GroupId { system, index: 0 }));
+    assert!(selected.group_visible(GroupId { system, index: 1 }));
+    assert!(!selected.group_visible(GroupId { system, index: 2 }));
+    assert!(!selected.group_visible(GroupId { system, index: 3 }));
+}
+
+#[test]
+fn clipped_portals_revisit_groups_through_distinct_windows_and_stop_cycles() {
+    let system = system_id();
+    let mut runtime = portal_groups(system, 6);
+    // Stack order encounters the left path first; only the later right path
+    // exposes room4. A global visited-group set would incorrectly hide it.
+    window(&mut runtime, system, 0, 2, [1.0, 2.0], 2.0);
+    window(&mut runtime, system, 0, 1, [-2.0, -1.0], 2.0);
+    window(&mut runtime, system, 1, 3, [-4.0, -2.0], 4.0);
+    window(&mut runtime, system, 2, 3, [2.0, 4.0], 4.0);
+    window(&mut runtime, system, 3, 4, [4.0, 6.0], 6.0);
+    window(&mut runtime, system, 3, 5, [-0.2, 0.2], 6.0);
+    window(&mut runtime, system, 3, 0, [-4.0, 4.0], 4.0);
+    let selected = runtime.visibility(&WorldSelection {
+        portals: WorldPortalPolicy::Clipped(forward_view(system)),
+        ..default()
+    });
+    assert!((0..5).all(|index| selected.group_visible(GroupId { system, index })));
+    assert!(!selected.group_visible(GroupId { system, index: 5 }));
+}
+
+#[test]
+fn clipped_portals_keep_exterior_unknown_views_and_malformed_windows_conservative() {
+    let system = system_id();
+    let mut runtime = portal_groups(system, 3);
+    let mut groups = runtime.groups.to_vec();
+    groups[2].options.exterior = true;
+    runtime.groups = groups.into();
+    runtime.index_portal_groups();
+    window(&mut runtime, system, 0, 1, [10.0, 11.0], 2.0);
+    // An unresolved adjusted-plane instruction cannot safely reject its neighbor.
+    runtime
+        .portal_links
+        .get_mut(&GroupId { system, index: 0 })
+        .unwrap()[0]
+        .adjusted_plane = true;
+    let mut selection = WorldSelection {
+        portals: WorldPortalPolicy::Clipped(forward_view(system)),
+        ..default()
+    };
+    let selected = runtime.visibility(&selection);
+    assert!(selected.group_visible(GroupId { system, index: 1 }));
+    assert!(selected.group_visible(GroupId { system, index: 2 }));
+    assert!(selected.group_visible(GroupId {
+        system: system_id(),
+        index: 99
+    }));
+    selection.portals = WorldPortalPolicy::Clipped(
+        PortalView::new(GroupId { system, index: 99 }, Vec3::ZERO, []).unwrap(),
+    );
+    assert!(runtime
+        .visibility(&selection)
+        .group_visible(GroupId { system, index: 1 }));
+    selection.portals = WorldPortalPolicy::Clipped(
+        PortalView::new(GroupId { system, index: 2 }, Vec3::ZERO, []).unwrap(),
+    );
+    assert!(runtime
+        .visibility(&selection)
+        .group_visible(GroupId { system, index: 1 }));
+    assert!(portal_window(&[[0.0; 3]; 2], Vec3::ZERO, &[]).is_none());
+    assert!(portal_window(
+        &[
+            [0.0, 0.0, 2.0],
+            [1.0, 0.0, 2.0],
+            [0.0, 1.0, 3.0],
+            [1.0, 1.0, 2.0]
+        ],
+        Vec3::ZERO,
+        &[]
+    )
+    .is_none());
+}
+
+#[test]
+fn portal_traversal_budget_falls_back_to_all_groups() {
+    let system = system_id();
+    let mut runtime = portal_groups(system, 9);
+    // Missing portal geometry remains open. Eight mutually connected rooms have
+    // more simple paths than the work budget, despite their tiny authored graph.
+    for from in 0..8 {
+        for to in 0..8 {
+            if from == to {
+                continue;
+            }
+            runtime
+                .portal_links
+                .entry(GroupId {
+                    system,
+                    index: from,
+                })
+                .or_default()
+                .push(PortalConnection {
+                    portal: PortalId { system, index: 99 },
+                    neighbor: GroupId { system, index: to },
+                    side: 0,
+                    skip_viewer: false,
+                    adjusted_plane: false,
+                    unclassified: default(),
+                });
+        }
+    }
+    let selected = runtime.visibility(&WorldSelection {
+        portals: WorldPortalPolicy::Clipped(forward_view(system)),
+        ..default()
+    });
+    assert!(selected.group_visible(GroupId { system, index: 8 }));
+}
+
+#[test]
+fn portal_boundaries_and_degenerate_windows_remain_open() {
+    let polygon = [
+        [-1.0, -1.0, 2.0],
+        [1.0, -1.0, 2.0],
+        [1.0, 1.0, 2.0],
+        [-1.0, 1.0, 2.0],
+    ];
+    assert!(portal_window(&polygon, Vec3::new(0.0, 0.0, 2.0), &[]).is_none());
+    let parent = [Vec4::new(0.0, 0.0, 1.0, -0.1)];
+    assert_eq!(
+        window_planes(&[Vec3::new(0.0, 0.0, 2.0)], Vec3::ZERO, &parent),
+        parent
+    );
+    assert_eq!(
+        window_planes(
+            &[
+                Vec3::new(0.0, 0.0, 2.0),
+                Vec3::new(1.0, 0.0, 2.0),
+                Vec3::new(2.0, 0.0, 2.0)
+            ],
+            Vec3::ZERO,
+            &parent
+        ),
+        parent
+    );
+    let group = GroupId {
+        system: system_id(),
+        index: 0,
+    };
+    assert!(PortalView::new(group, Vec3::ZERO, [Vec4::new(0.001, 0.0, 0.0, f32::MAX)]).is_err());
+    // Finite inputs can overflow intermediate dot products; such geometry is
+    // ambiguous and must not become a rejected/empty window.
+    assert!(portal_window(&polygon, Vec3::ZERO, &[Vec4::splat(f32::MAX)]).is_none());
+}

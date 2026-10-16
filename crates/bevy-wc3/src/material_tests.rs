@@ -36,7 +36,7 @@ fn default_extension_preserves_base_blend_and_depth_while_authored_pass_override
 fn basic_world_shaders_keep_black_baked_light_separate_from_surface_albedo() {
     let model = ModelBuilder::new("world surface").finish().unwrap();
     for shader in [0, 4, 16] {
-        let surface = world::Material {
+        let surface = world_surface::Material {
             shader: Some(shader),
             diffuse: [0; 4],
             ..Default::default()
@@ -57,7 +57,7 @@ fn basic_world_shaders_keep_black_baked_light_separate_from_surface_albedo() {
             .iter()
             .any(|value| value.contains("needs its authored texture/specular combiner")));
     }
-    let unsupported = world::Material {
+    let unsupported = world_surface::Material {
         shader: Some(6),
         ..Default::default()
     };

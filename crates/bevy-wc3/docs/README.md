@@ -39,8 +39,12 @@ then choose a topic:
   selection, quality controls, and camera policy.
 - [Geoset animation](rendering/geoset-animation.md): color, opacity,
   material sharing, isolation, and sampling.
+- [M2 materials](rendering/m2-materials.md): native texture combiners, generated
+  coordinates, opacity controls and PBR integration limits.
 - [Reforged materials](rendering/reforged-materials.md): texture roles,
   surface animation, UV sets, and Bevy shading integration.
+- [M3 materials](rendering/m3-materials.md): packed normals, basic occlusion,
+  constant specular approximations and remaining layer programmes.
 - [Model lights](rendering/lights.md): animated scene lights, conversion
   settings, and application customization.
 - [Model cameras](rendering/cameras.md): authored views and opt-in playback.

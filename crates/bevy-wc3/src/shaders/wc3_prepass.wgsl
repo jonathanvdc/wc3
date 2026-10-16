@@ -3,7 +3,8 @@
 // Upstream license: MIT OR Apache-2.0.
 // WC3 changes: local Vertex input adds JOINTS_1/WEIGHTS_1 at locations 8/9;
 // extra_skin_model and extra_skin_prev_model add those four weighted matrices.
-// The forward/prepass outputs and all other logic follow the pinned Bevy source.
+// Generated sphere coordinates reuse the UV outputs and skinned normal stream.
+// The remaining forward/prepass interface follows the pinned Bevy source.
 // When upgrading Bevy, diff this file against the matching upstream version.
 
 #import bevy_pbr::{
@@ -28,10 +29,14 @@ struct Vertex {
 #ifdef VERTEX_UVS_B
     @location(2) uv_b: vec2<f32>,
 #endif
-#ifdef NORMAL_PREPASS_OR_DEFERRED_PREPASS
 #ifdef VERTEX_NORMALS
+#ifdef NORMAL_PREPASS_OR_DEFERRED_PREPASS
+    @location(3) normal: vec3<f32>,
+#else ifdef MODEL_GENERATED_COORDS
     @location(3) normal: vec3<f32>,
 #endif
+#endif
+#ifdef NORMAL_PREPASS_OR_DEFERRED_PREPASS
 #ifdef VERTEX_TANGENTS
     @location(4) tangent: vec4<f32>,
 #endif
@@ -52,6 +57,10 @@ struct Vertex {
 #endif
 };
 // WC3 END: vertex input.
+
+#ifdef MODEL_GENERATED_COORDS
+#import "embedded://bevy_wc3/shaders/combiner.wgsl"::combiner
+#endif
 
 #ifdef SKINNED
 #import "embedded://bevy_wc3/shaders/extra_skinning.wgsl"::{skin_normal_finite, skin_tangent_finite}
@@ -162,6 +171,26 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 #ifdef VERTEX_UVS_B
     out.uv_b = vertex.uv_b;
 #endif // VERTEX_UVS_B
+
+#ifdef MODEL_GENERATED_COORDS
+#ifdef VERTEX_NORMALS
+#ifdef SKINNED
+    let env_world_normal=skin_normal_finite(world_from_local,vertex.normal);
+#else
+    let env_world_normal=mesh_functions::mesh_normal_local_to_world(vertex.normal,vertex_no_morph.instance_index);
+#endif
+    let view_position=(view.view_from_world*out.world_position).xyz;
+    let view_normal=normalize((view.view_from_world*vec4(env_world_normal,0.0)).xyz);
+    let reflected=reflect(-normalize(view_position),view_normal)+vec3(0.0,0.0,1.0);
+    let generated=0.5*reflected.xy/max(length(reflected),0.000001)+vec2(0.5);
+#ifdef VERTEX_UVS_A
+    if combiner.coordinates.x!=0u {out.uv=generated;}
+#endif
+#ifdef VERTEX_UVS_B
+    if combiner.coordinates.y!=0u {out.uv_b=generated;}
+#endif
+#endif
+#endif
 
 #ifdef NORMAL_PREPASS_OR_DEFERRED_PREPASS
 #ifdef VERTEX_NORMALS

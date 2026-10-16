@@ -3,7 +3,7 @@ use super::super::material::{particle_material, ModelMaterial, SurfaceAnimation,
 use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
 use super::frame::EffectFrame;
-use super::programmed::{ProgrammedAppearance, ProgrammedSprite};
+use super::programmed::{ProgrammedAppearance, ProgrammedSprite, SquirtSchedule};
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::mesh::{MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues};
@@ -62,6 +62,7 @@ struct Emitter {
     drag: f32,
     wind: Vec3,
     inherit_velocity: f32,
+    follow: [[f32; 2]; 2],
     spin: [f32; 4],
     appearance: ParticleAgeCurves<'static>,
     atlas: [u16; 2],
@@ -99,6 +100,7 @@ struct EmitterInstance {
     mesh: Handle<Mesh>,
     material: Handle<ModelMaterial>,
     births: Vec<Birth>,
+    squirts: SquirtSchedule,
     appearances: Vec<ProgrammedAppearance>,
     order: Vec<(usize, f32)>,
     fraction: f64,
@@ -322,11 +324,10 @@ impl RuntimeAgeSprites {
                 );
             }
             if details.wind_time != 0.
-                || details.follow.iter().flatten().any(|v| *v != 0.)
                 || details.twinkle_speed != 0.
                 || details.twinkle_percent != 0.
             {
-                diagnostic("M2 wind timing, emitter-follow and twinkle controls are retained but not evaluated");
+                diagnostic("M2 wind timing and twinkle controls are retained but not evaluated");
             }
             if details.rendering.scroll.is_some() || details.rendering.texture_tile_rotation != 0 {
                 diagnostic("M2 particle texture scrolling and tile rotation are not evaluated");
@@ -387,6 +388,7 @@ impl RuntimeAgeSprites {
                 drag: details.drag.max(0.),
                 wind: Vec3::from(details.wind),
                 inherit_velocity: details.inherit_velocity,
+                follow: details.follow,
                 spin: details.spin,
                 appearance: owned_age(appearance),
                 atlas: details.rendering.atlas,
@@ -451,6 +453,7 @@ impl RuntimeAgeSprites {
                     mesh,
                     material,
                     births: Vec::new(),
+                    squirts: SquirtSchedule::default(),
                     appearances: Vec::new(),
                     order: Vec::new(),
                     fraction: 0.,
@@ -495,6 +498,7 @@ impl RuntimeAgeSprites {
                 state.appearances.clear();
                 state.fraction = 0.;
                 state.ordinal = 0;
+                state.squirts.initialized = false;
                 state.previous_node = node;
                 state.dropped = 0;
                 state.skipped_seconds = 0.;
@@ -503,6 +507,12 @@ impl RuntimeAgeSprites {
             if frame.change == EffectChange::Seek {
                 state.previous_node = node;
             }
+            let follow = emitter.follow_displacement(state.previous_node, node, delta);
+            if follow != Vec3::ZERO {
+                for birth in &mut state.births {
+                    birth.origin += follow;
+                }
+            }
             let inherited = if delta > 0. {
                 (node.w_axis.truncate() - state.previous_node.w_axis.truncate()) / delta as f32
                     * emitter.inherit_velocity
@@ -510,6 +520,28 @@ impl RuntimeAgeSprites {
                 Vec3::ZERO
             };
             let mut births_this_update = 0;
+            let births = BirthContext {
+                emitter,
+                clips: &self.clips,
+                frame,
+                previous_basis: instances.previous_basis.unwrap_or(frame.basis_world),
+                node,
+                start,
+                inherited,
+                follow,
+            };
+            if let Some(programme) = &emitter.programmed {
+                let include_origin =
+                    !state.squirts.initialized && frame.change != EffectChange::Seek;
+                state.squirts.collect(
+                    &programme.squirt,
+                    &frame,
+                    &self.clips,
+                    delta,
+                    include_origin,
+                );
+            }
+            let mut squirt_cursor = 0;
             let mut clock = EmissionClock::new(start, frame.time);
             for step in clock.by_ref() {
                 let at = step.start;
@@ -571,72 +603,33 @@ impl RuntimeAgeSprites {
                     state.dropped = state.dropped.saturating_add(omitted as u64);
                     for index in 0..accepted {
                         let time = at + (index as f64 + 1. - prior) / rate;
-                        let fraction = if delta > 0. {
-                            ((time - start) / delta) as f32
-                        } else {
-                            1.
-                        };
-                        let Some((clip, timeline, shared)) =
-                            retimed_selection(&frame, time, &self.clips)
-                        else {
-                            continue;
-                        };
-                        let sample = frame.sample.at_times(clip, timeline, shared);
-                        let birth_node = if let Some(pose) = frame.pose {
-                            let (authored, visible) =
-                                pose.at_offset(time - frame.time).sample_feature_node(
-                                    emitter.node_index,
-                                    &sample,
-                                    &mut state.pose_scratch,
-                                );
-                            if !visible {
-                                continue;
-                            }
-                            interpolated_transform(
-                                instances.previous_basis.unwrap_or(frame.basis_world),
-                                frame.basis_world,
-                                fraction,
-                            ) * authored
-                        } else {
-                            interpolated_transform(state.previous_node, node, fraction)
-                        };
-                        let ordinal = state.ordinal;
-                        state.ordinal = state.ordinal.wrapping_add(1);
-                        if state.births.len() >= emitter.capacity()
-                            || births_this_update >= MAX_BIRTHS_PER_UPDATE
-                        {
-                            state.dropped = state.dropped.saturating_add(1);
-                            continue;
-                        }
-                        births_this_update += 1;
-                        if let Some((mut birth, appearance)) = emitter.birth_in(
-                            &sample,
+                        births.squirts_until(
+                            state,
                             time,
-                            birth_node,
-                            frame.basis_world,
-                            inherited,
-                            ordinal,
-                        ) {
-                            if frame.time - birth.time < f64::from(birth.lifetime) {
-                                if let Some(appearance) = appearance {
-                                    birth.appearance_index = state.appearances.len() as u32;
-                                    state.appearances.push(appearance);
-                                }
-                                state.births.push(birth);
-                            }
-                        }
+                            &mut squirt_cursor,
+                            &mut births_this_update,
+                        );
+                        births.push(state, time, &mut births_this_update);
                     }
                     state.ordinal = state.ordinal.wrapping_add(omitted as u64);
                 }
             }
             state.skipped_seconds += clock.omitted_seconds();
+            births.squirts_until(
+                state,
+                frame.time,
+                &mut squirt_cursor,
+                &mut births_this_update,
+            );
+
             let node_changed = state.previous_node != node;
             state.previous_node = node;
             let redraw = backwards
                 || delta != 0.
                 || instances.previous_camera != frame.camera_world
                 || instances.previous_basis != Some(frame.basis_world)
-                || node_changed;
+                || node_changed
+                || (!had_births && !state.births.is_empty());
             if redraw && (had_births || !state.births.is_empty()) {
                 if let Some(mut mesh) = meshes.get_mut(&state.mesh) {
                     emitter.draw(state, &frame, node, &mut mesh);
@@ -660,12 +653,141 @@ impl RuntimeAgeSprites {
     }
 }
 
+/// Common occurrence-pose evaluation for continuous and keyed emission.
+struct BirthContext<'a, 'view, 'data> {
+    emitter: &'a Emitter,
+    clips: &'a HashMap<ClipId, (f64, bool)>,
+    frame: EffectFrame<'a, 'view, 'data>,
+    previous_basis: Mat4,
+    node: Mat4,
+    start: f64,
+    inherited: Vec3,
+    follow: Vec3,
+}
+impl BirthContext<'_, '_, '_> {
+    fn squirts_until(
+        &self,
+        state: &mut EmitterInstance,
+        end: f64,
+        cursor: &mut usize,
+        births: &mut usize,
+    ) {
+        while let Some(&(time, count)) = state.squirts.occurrences.get(*cursor) {
+            if time > end {
+                break;
+            }
+            *cursor += 1;
+            let available = MAX_BIRTHS_PER_UPDATE
+                .saturating_sub(*births)
+                .min(self.emitter.capacity().saturating_sub(state.births.len()));
+            let accepted = usize::from(count).min(available);
+            let omitted = usize::from(count) - accepted;
+            state.dropped = state.dropped.saturating_add(omitted as u64);
+            for _ in 0..accepted {
+                self.push(state, time, births);
+            }
+            state.ordinal = state.ordinal.wrapping_add(omitted as u64);
+        }
+    }
+    fn push(&self, state: &mut EmitterInstance, time: f64, births: &mut usize) {
+        let frame = &self.frame;
+        let emitter = self.emitter;
+        let delta = frame.time - self.start;
+        let fraction = if delta > 0. {
+            ((time - self.start) / delta) as f32
+        } else {
+            1.
+        };
+        let Some((clip, timeline, shared)) = retimed_selection(frame, time, self.clips) else {
+            return;
+        };
+        if frame
+            .selection
+            .clip
+            .and_then(|id| self.clips.get(&id))
+            .is_some_and(|(duration, looping)| !*looping && clip.as_seconds() >= *duration)
+        {
+            return;
+        }
+        let sample = frame.sample.at_times(clip, timeline, shared);
+        let birth_node = if let Some(pose) = frame.pose {
+            let (authored, visible) = pose.at_offset(time - frame.time).sample_feature_node(
+                emitter.node_index,
+                &sample,
+                &mut state.pose_scratch,
+            );
+            if !visible || !frame.root_visible {
+                return;
+            }
+            interpolated_transform(self.previous_basis, frame.basis_world, fraction) * authored
+        } else {
+            if !frame.root_visible
+                || !frame
+                    .node_visible
+                    .get(emitter.node_index)
+                    .copied()
+                    .unwrap_or(true)
+            {
+                return;
+            }
+            interpolated_transform(state.previous_node, self.node, fraction)
+        };
+        let ordinal = state.ordinal;
+        state.ordinal = state.ordinal.wrapping_add(1);
+        if state.births.len() >= emitter.capacity() || *births >= MAX_BIRTHS_PER_UPDATE {
+            state.dropped = state.dropped.saturating_add(1);
+            return;
+        }
+        *births += 1;
+        if let Some((mut birth, appearance)) = emitter.birth_in(
+            &sample,
+            time,
+            birth_node,
+            frame.basis_world,
+            self.inherited,
+            ordinal,
+        ) {
+            if frame.time - birth.time < f64::from(birth.lifetime) {
+                // Newborns follow only emitter translation after occurrence.
+                birth.origin += self.follow * (1. - fraction.clamp(0., 1.));
+                if let Some(appearance) = appearance {
+                    birth.appearance_index = state.appearances.len() as u32;
+                    state.appearances.push(appearance);
+                }
+                state.births.push(birth);
+            }
+        }
+    }
+}
+
 fn interpolated_transform(a: Mat4, b: Mat4, t: f32) -> Mat4 {
     let (sa, ra, ta) = a.to_scale_rotation_translation();
     let (sb, rb, tb) = b.to_scale_rotation_translation();
     Mat4::from_scale_rotation_translation(sa.lerp(sb, t), ra.slerp(rb, t), ta.lerp(tb, t))
 }
 impl Emitter {
+    /// Native follow pairs describe the fraction of emitter translation at two
+    /// emitter speeds. Rotation remains detached for world-space particles.
+    fn follow_displacement(&self, previous: Mat4, current: Mat4, delta: f64) -> Vec3 {
+        if self.flags.model_space()
+            || (self.follow[0][1] == 0. && self.follow[1][1] == 0.)
+            || delta <= 0.
+            || !delta.is_finite()
+        {
+            return Vec3::ZERO;
+        }
+        let displacement = current.w_axis.truncate() - previous.w_axis.truncate();
+        let speed = displacement.length() / delta as f32;
+        let [[speed_a, scale_a], [speed_b, scale_b]] = self.follow;
+        let scale = if speed_a == speed_b {
+            // Equal knots describe a constant rather than an undefined slope.
+            scale_a
+        } else {
+            let fraction = ((speed - speed_a) / (speed_b - speed_a)).clamp(0., 1.);
+            scale_a + (scale_b - scale_a) * fraction
+        };
+        displacement * scale
+    }
     fn capacity(&self) -> usize {
         self.programmed
             .as_ref()
@@ -704,6 +826,7 @@ impl Emitter {
             drag: 0.,
             wind: Vec3::ZERO,
             inherit_velocity: 0.,
+            follow: [[0.; 2]; 2],
             spin: [0.; 4],
             appearance: ParticleAgeCurves::default(),
             atlas: programme.atlas,

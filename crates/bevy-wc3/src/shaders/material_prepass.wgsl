@@ -21,15 +21,37 @@
 #import bevy_pbr::pbr_bindings::material_indices
 #endif  // BINDLESS
 
-struct Combiner { uv_transform: mat3x3<f32>, mode: vec4<u32>, clip: vec4<f32>, };
-@group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> combiner: Combiner;
-@group(#{MATERIAL_BIND_GROUP}) @binding(101) var secondary: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(102) var secondary_sampler: sampler;
+#import "embedded://bevy_wc3/shaders/combiner.wgsl"::{combiner,secondary,secondary_sampler,tertiary,tertiary_sampler,compose}
 struct World { flags: vec4<u32>, };
 @group(#{MATERIAL_BIND_GROUP}) @binding(110) var<uniform> world: World;
 
 struct HdUniform { fresnel_color: vec4<f32>, fresnel: vec4<f32>, maps: vec4<u32>, };
 @group(#{MATERIAL_BIND_GROUP}) @binding(103) var<uniform> hd: HdUniform;
+
+// Share composition with the color pass, including masks that are not opacity.
+fn composed_alpha(in:prepass_io::VertexOutput)->f32 {
+    var uv0=vec2(0.0); var uv1=vec2(0.0); var uv2=vec2(0.0);
+#ifdef VERTEX_UVS_A
+    uv0=(pbr_bindings::material.uv_transform*vec3(in.uv,1.0)).xy;
+    uv2=(combiner.third_transform*vec3(in.uv,1.0)).xy;
+#endif
+#ifdef VERTEX_UVS_B
+    uv1=(combiner.uv_transform*vec3(in.uv_b,1.0)).xy;
+#endif
+    var a=vec4(1.0);
+    if (pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT)!=0u {
+        a=textureSample(pbr_bindings::base_color_texture,pbr_bindings::base_color_sampler,uv0);
+    }
+    var b=vec4(1.0);
+        if combiner.coordinates.z>1u {b=textureSample(secondary,secondary_sampler,uv1);}
+    var c=vec4(1.0);
+        if combiner.coordinates.z>2u {c=textureSample(tertiary,tertiary_sampler,uv2);}
+    var tint=pbr_bindings::material.base_color;
+#ifdef VERTEX_COLORS
+    tint*=in.color;
+#endif
+    return compose(a,b,c,tint).color.a;
+}
 
 #ifdef PREPASS_FRAGMENT
 @fragment
@@ -75,22 +97,7 @@ fn fragment(
     } else {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK {
-            var alpha = pbr_bindings::material.base_color.a;
-#ifdef VERTEX_COLORS
-            alpha *= in.color.a;
-#endif
-#ifdef VERTEX_UVS_A
-            if combiner.mode.y != 0u && (flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT) != 0u {
-                let uv = (uv_transform * vec3(in.uv, 1.0)).xy;
-                alpha *= textureSample(pbr_bindings::base_color_texture,pbr_bindings::base_color_sampler,uv).a;
-            }
-#endif
-#ifdef VERTEX_UVS_B
-            if combiner.mode.z != 0u {
-                let uv = (combiner.uv_transform * vec3(in.uv_b,1.0)).xy;
-                alpha *= textureSample(secondary,secondary_sampler,uv).a * (1.0 + f32(combiner.mode.w));
-            }
-#endif
+            let alpha = composed_alpha(in);
             if alpha < pbr_bindings::material.alpha_cutoff { discard; }
         }
     }
@@ -155,10 +162,11 @@ fn fragment(
 #else   // MESHLET_MESH_MATERIAL_PASS
                 bias.mip_bias,
 #endif  // MESHLET_MESH_MATERIAL_PASS
-            ).rgb;
+            );
         if hd.maps.x != 0u {
-            let xy = Nt.rg * 2.0 - 1.0;
-            Nt = vec3(xy, sqrt(max(0.0, 1.0 - dot(xy, xy)))) * 0.5 + vec3(0.5);
+            let packed=select(Nt.rg,Nt.ag,hd.maps.x==2u);
+            let xy = packed * 2.0 - 1.0;
+            Nt = vec4(vec3(xy, sqrt(max(0.0, 1.0 - dot(xy, xy)))) * 0.5 + vec3(0.5),Nt.a);
             flags &= ~pbr_types::STANDARD_MATERIAL_FLAGS_TWO_COMPONENT_NORMAL_MAP;
         }
         let TBN = pbr_functions::calculate_tbn_mikktspace(normal, in.world_tangent);
@@ -168,7 +176,7 @@ fn fragment(
             TBN,
             double_sided,
             is_front,
-            Nt,
+            Nt.rgb,
         );
 
 #endif  // STANDARD_MATERIAL_NORMAL_MAP
@@ -193,30 +201,22 @@ fn fragment(
 }
 #else
 @fragment
-fn fragment(in: prepass_io::VertexOutput) {
+fn fragment(vertex_output: prepass_io::VertexOutput) {
+    var in=vertex_output;
+#ifdef VERTEX_COLORS
+    if world.flags.x!=0u {in.color=vec4(1.0);}
+#endif
     let flags = pbr_bindings::material.flags;
     let uv_transform = pbr_bindings::material.uv_transform;
-    if combiner.mode.x == 0u {
+    if world.flags.x != 0u && world.flags.y != 0u {
+        let alpha_mode=flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
+        if alpha_mode==pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK && pbr_bindings::material.base_color.a < pbr_bindings::material.alpha_cutoff {discard;}
+    } else if combiner.mode.x == 0u {
         pbr_prepass_functions::prepass_alpha_discard(in);
     } else {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK {
-            var alpha = pbr_bindings::material.base_color.a;
-#ifdef VERTEX_COLORS
-            alpha *= in.color.a;
-#endif
-#ifdef VERTEX_UVS_A
-            if combiner.mode.y != 0u && (flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT) != 0u {
-                let uv = (uv_transform * vec3(in.uv, 1.0)).xy;
-                alpha *= textureSample(pbr_bindings::base_color_texture,pbr_bindings::base_color_sampler,uv).a;
-            }
-#endif
-#ifdef VERTEX_UVS_B
-            if combiner.mode.z != 0u {
-                let uv = (combiner.uv_transform * vec3(in.uv_b,1.0)).xy;
-                alpha *= textureSample(secondary,secondary_sampler,uv).a * (1.0 + f32(combiner.mode.w));
-            }
-#endif
+            let alpha = composed_alpha(in);
             if alpha < pbr_bindings::material.alpha_cutoff { discard; }
         }
     }

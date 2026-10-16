@@ -182,6 +182,12 @@ impl<'data, P: Profile> Model<'data, P> {
 }
 
 impl<'view, 'data, P: Profile> SampledAnimation<'view, 'data, P> {
+    /// Absolute shared-clock input before individual periods wrap it.
+    /// Useful for continuous procedural controls independent of clip looping.
+    pub fn shared_time(&self) -> Time {
+        self.shared_time
+    }
+
     /// Evaluates the selected channels for a typed property, or returns no override.
     pub fn property<T: ChannelValue>(&self, property: &Property<T, P>) -> Option<T> {
         self.property_at(property, self.times())

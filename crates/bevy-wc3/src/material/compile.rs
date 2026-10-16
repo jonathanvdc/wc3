@@ -1,5 +1,8 @@
 //! Native-family surface interpretation into PBR passes and explicit states.
-use super::super::textures::{is_default_unit, world_sampler, TextureImages, TextureRole};
+use super::super::textures::{is_default_unit, TextureImages, TextureRole};
+use super::model::compile_model_shader;
+use super::programmed::compile_programmed;
+use super::world::compile_world;
 use super::{layered_uv, Blend, HdAnimation, ModelMaterial, SurfacePass};
 use crate::error::ModelError;
 use bevy::material::OpaqueRendererMethod;
@@ -8,10 +11,9 @@ use bevy::prelude::*;
 use bevy::render::render_resource::Face;
 use std::{array::from_fn, fmt::Debug, sync::Arc};
 use wc3::model::materials::state::{BlendOperations, Lighting, Operation};
-use wc3::model::materials::{diablo3, layered, model_shader, programmed, world, SurfaceSet};
+use wc3::model::materials::{diablo3, layered, SurfaceSet};
 use wc3::model::profiles::Universal;
-use wc3::model::values::model::ModelBlend;
-use wc3::model::{Animated, ColorSpace, MaterialId, Model, Sampler, TextureId, TextureTransform};
+use wc3::model::{ColorSpace, MaterialId, Model, Sampler, TextureId, TextureTransform};
 
 pub(crate) fn compile_material_with_images(
     model: &Model<'_, Universal>,
@@ -57,7 +59,7 @@ pub(crate) fn compile_material_with_images(
     Ok(passes)
 }
 
-fn image(
+pub(super) fn image(
     model: &Model<'_, Universal>,
     id: Option<TextureId>,
     images: &TextureImages,
@@ -66,7 +68,7 @@ fn image(
     image_role(model, id, TextureRole::Color, images, diagnostics)
 }
 
-fn image_role(
+pub(super) fn image_role(
     model: &Model<'_, Universal>,
     id: Option<TextureId>,
     role: TextureRole,
@@ -76,7 +78,7 @@ fn image_role(
     image_role_with_sampler(model, id, role, None, images, diagnostics)
 }
 
-fn image_role_with_sampler(
+pub(super) fn image_role_with_sampler(
     model: &Model<'_, Universal>,
     id: Option<TextureId>,
     role: TextureRole,
@@ -160,7 +162,7 @@ pub(super) fn depth(pass: &mut SurfacePass, test: Operation, write: Operation) {
     pass.state.depth_write = Some(!write.is_bypassed());
 }
 
-fn transform(pass: &mut SurfacePass, transform: &TextureTransform) {
+pub(super) fn transform(pass: &mut SurfacePass, transform: &TextureTransform) {
     let translation = transform.translation.default;
     let scale = transform.scale.default;
     let rotation = Quat::from_array(transform.rotation.default.0);
@@ -290,195 +292,6 @@ fn compile_layer(
     {
         pass.material.emissive = LinearRgba::rgb(gain.default, gain.default, gain.default);
         pass.material.emissive_texture = pass.material.base_color_texture.clone();
-    }
-    Ok(pass)
-}
-
-fn compile_model_shader(
-    model: &Model<'_, Universal>,
-    surface: &model_shader::ShaderPass<'_>,
-    images: &TextureImages,
-) -> Result<SurfacePass, ModelError> {
-    let mut pass = SurfacePass::default();
-    if matches!(
-        surface.state.blend,
-        BlendOperations::Extension(ModelBlend::BlendAdd)
-    ) {
-        pass.state.blend = Some(Blend::Premultiplied);
-        pass.material.alpha_mode = AlphaMode::Premultiplied;
-    } else {
-        blend(&surface.state.blend, &mut pass);
-    }
-    let raster = &surface.state.rasterization;
-    rasterization(&mut pass, raster.faces, raster.lighting);
-    depth(&mut pass, raster.depth.test, raster.depth.write);
-    let color = surface.color.default;
-    pass.animation.color = Some(surface.color.clone());
-    pass.animation.opacity = Some(surface.opacity.clone());
-    pass.material.base_color =
-        Color::linear_rgba(color[0], color[1], color[2], surface.opacity.default);
-    pass.material.depth_bias = surface.state.ordering as f32;
-    if let Some(input) = surface.textures.first() {
-        pass.material.base_color_texture =
-            image(model, input.image.texture, images, &mut pass.diagnostics)?;
-        if input.coordinates.source < 0 {
-            pass.diagnostics.push(format!(
-                "M2 generated texture coordinates {} need a shader interpreter",
-                input.coordinates.source
-            ));
-        } else {
-            pass.coordinate = input.coordinates.source as u32;
-        }
-        transform(&mut pass, &input.coordinates.transform);
-        pass.animation.transform = Some(input.coordinates.transform.clone());
-        pass.animation.weight = Some(input.contribution.clone());
-        pass.material
-            .base_color
-            .set_alpha(surface.opacity.default * input.contribution.default);
-    }
-    if let Some(mode) = legacy_combiner(surface.shader, surface.textures.len()).filter(|_| {
-        surface
-            .textures
-            .iter()
-            .all(|input| input.coordinates.source >= 0)
-    }) {
-        pass.state.combiner.mode = mode;
-        if let Some(second) = surface.textures.get(1) {
-            pass.state.secondary =
-                image(model, second.image.texture, images, &mut pass.diagnostics)?;
-            pass.secondary_coordinate = u32::try_from(second.coordinates.source).ok();
-            let mut scratch = SurfacePass::default();
-            transform(&mut scratch, &second.coordinates.transform);
-            pass.state.combiner.uv_transform = Mat3::from(scratch.material.uv_transform);
-            pass.diagnostics.extend(scratch.diagnostics);
-            pass.animation.secondary_transform = Some(second.coordinates.transform.clone());
-            if second.contribution.property.is_some() || second.contribution.default != 1.0 {
-                pass.diagnostics.push(
-                    "independent M2 secondary texture contribution weight is not evaluated".into(),
-                );
-            }
-        }
-    } else if surface.shader != 0 || surface.textures.len() > 1 {
-        pass.diagnostics.push(format!("M2 shader {} with {} texture inputs is approximated by its first input; authored combiners are not evaluated", surface.shader, surface.textures.len()));
-    }
-    Ok(pass)
-}
-
-/// Decodes established legacy selector bits, keeping external shader tables opaque.
-/// Bit semantics were researched independently from the noclip M2 skin renderer;
-/// the implementation here operates directly on our semantic texture inputs.
-pub(super) fn legacy_combiner(shader: u16, inputs: usize) -> Option<UVec4> {
-    let lower = shader & 7;
-    if shader & 0x8088 != 0 || !(inputs == 1 || (inputs == 2 && !matches!(lower, 3 | 7))) {
-        return None;
-    }
-    Some(UVec4::new(
-        1,
-        u32::from(shader & 0x70 != 0),
-        u32::from(inputs == 2 && lower != 0 && lower != 6),
-        u32::from(inputs == 2 && matches!(lower, 4 | 6)),
-    ))
-}
-
-pub(super) fn compile_world(
-    model: &Model<'_, Universal>,
-    surface: &world::Material<'_>,
-    images: &TextureImages,
-) -> Result<SurfacePass, ModelError> {
-    let mut pass = SurfacePass::default();
-    blend(&surface.state.blend, &mut pass);
-    let raster = &surface.state.rasterization;
-    rasterization(&mut pass, raster.faces, raster.lighting);
-    pass.state.world.flags = UVec4::new(1, (surface.shader == Some(4)) as u32, 0, 0);
-    pass.material.base_color_texture = image_role_with_sampler(
-        model,
-        surface.textures.first().and_then(|slot| slot.image),
-        TextureRole::Color,
-        Some(world_sampler(
-            surface,
-            surface
-                .textures
-                .first()
-                .and_then(|slot| slot.image)
-                .and_then(|id| model.texture(id))
-                .map(|texture| texture.sampler)
-                .unwrap_or_default(),
-        )),
-        images,
-        &mut pass.diagnostics,
-    )?;
-    if raster.controls.self_illuminated {
-        let color = surface.self_illumination;
-        pass.material.emissive = LinearRgba::rgb(
-            color[0] as f32 / 255.0,
-            color[1] as f32 / 255.0,
-            color[2] as f32 / 255.0,
-        );
-    }
-    if !matches!(surface.shader, Some(0 | 4 | 16)) {
-        pass.diagnostics.push(format!("WMO shader {:?} needs its authored texture/specular combiner; showing its first diffuse input with Bevy lighting", surface.shader));
-    }
-    pass.diagnostics.push("WMO vertex RGB supplies additive baked diffuse illumination through Bevy PBR; vertex alpha is retained as interior/exterior transition data but its scene-light interpolation is not evaluated, and application ambient lighting remains authoritative".into());
-    if surface.uv_scroll != [[0.0; 2]; 2] {
-        pass.diagnostics
-            .push("WMO UV scroll requires runtime surface animation".into());
-    }
-    Ok(pass)
-}
-
-fn compile_programmed(
-    model: &Model<'_, Universal>,
-    surface: &programmed::Material<'_>,
-    images: &TextureImages,
-) -> Result<SurfacePass, ModelError> {
-    let mut pass = SurfacePass::default();
-    if let programmed::Material::Standard(surface) = surface {
-        blend(&surface.state.blend, &mut pass);
-        if let Some(diffuse) = &surface.diffuse.input {
-            pass.material.base_color_texture =
-                image(model, diffuse.binding.image, images, &mut pass.diagnostics)?;
-            let color = diffuse.binding.contribution.color.initial;
-            pass.material.base_color = Color::linear_rgba(
-                color[0],
-                color[1],
-                color[2],
-                color[3] * diffuse.binding.contribution.map_alpha.initial,
-            );
-            pass.animation.rgba = Some(Animated {
-                default: color,
-                property: diffuse.binding.contribution.color.binding.clone(),
-            });
-            pass.animation.opacity = Some(Animated {
-                default: diffuse.binding.contribution.map_alpha.initial,
-                property: diffuse.binding.contribution.map_alpha.binding.clone(),
-            });
-        }
-        if let Some(normal) = &surface.normals.base {
-            pass.material.normal_map_texture = image_role(
-                model,
-                normal.binding.image,
-                TextureRole::Normal,
-                images,
-                &mut pass.diagnostics,
-            )?;
-        }
-        if let Some(emissive) = &surface.emissive.input.primary.input {
-            pass.material.emissive_texture =
-                image(model, emissive.binding.image, images, &mut pass.diagnostics)?;
-            let color = emissive.binding.contribution.color.initial;
-            let gain = surface.emissive.parameters;
-            pass.material.emissive =
-                LinearRgba::rgb(color[0] * gain, color[1] * gain, color[2] * gain);
-            pass.animation.emission = Some(Animated {
-                default: color,
-                property: emissive.binding.contribution.color.binding.clone(),
-            });
-            pass.animation.emission_scale = gain;
-        }
-        pass.diagnostics.push("M3 standard surface uses primary diffuse, normal and emission roles; shader controls, layer composition, opacity programs and specular response need an interpreter".into());
-    } else {
-        pass.diagnostics
-            .push("M3 material family requires a dedicated shader interpreter".into());
     }
     Ok(pass)
 }

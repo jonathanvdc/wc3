@@ -18,7 +18,7 @@ use super::Playback;
 use crate::ModelError;
 
 /// Explicit portal policy; the default keeps every potentially visible group.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub enum WorldPortalPolicy {
     /// Draw all groups, relying on Bevy's geometry frustum culling.
     #[default]
@@ -26,10 +26,73 @@ pub enum WorldPortalPolicy {
     /// Restrict a system to groups connected to an application-selected group.
     /// This is a reachability filter, not an occlusion or clipped-frustum solver.
     ReachableFrom(GroupId),
+    /// Traverse convex portal windows from an explicit application-owned view.
+    /// Exterior and unclassified groups remain conservative.
+    Clipped(PortalView),
+}
+
+/// One application's chosen portal-culling view, in semantic model coordinates.
+///
+/// Supply the eye and frustum of the camera whose visibility should drive this
+/// instance. Update the selection when that view moves. This policy also works
+/// for baking; it does not choose a global Bevy camera or modify scene lighting.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PortalView {
+    group: GroupId,
+    eye: Vec3,
+    planes: Arc<[Vec4]>,
+}
+
+impl PortalView {
+    /// Construct a view with inward-facing planes: `normal.dot(point) + w >= 0`.
+    /// Empty planes admit every initial direction. Planes are normalized once;
+    /// nonfinite eyes/planes and zero-length normals are rejected.
+    pub fn new(
+        group: GroupId,
+        eye: Vec3,
+        planes: impl IntoIterator<Item = Vec4>,
+    ) -> Result<Self, ModelError> {
+        if !eye.is_finite() {
+            return Err(ModelError("portal view eye must be finite".into()));
+        }
+        let planes = planes
+            .into_iter()
+            .map(|plane| {
+                let length = plane.truncate().length();
+                if !plane.is_finite() || !length.is_finite() || length <= f32::EPSILON {
+                    return Err(ModelError(
+                        "portal view planes need finite nonzero normals".into(),
+                    ));
+                }
+                let normalized = plane / length;
+                if !normalized.is_finite() {
+                    return Err(ModelError("normalized portal plane must be finite".into()));
+                }
+                Ok(normalized)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            group,
+            eye,
+            planes: planes.into(),
+        })
+    }
+    /// Explicit group containing the driving eye; no containment guess is made.
+    pub fn group(&self) -> GroupId {
+        self.group
+    }
+    /// Driving eye in semantic model coordinates.
+    pub fn eye(&self) -> Vec3 {
+        self.eye
+    }
+    /// Normalized inward-facing halfspaces in semantic model coordinates.
+    pub fn planes(&self) -> &[Vec4] {
+        &self.planes
+    }
 }
 
 /// Application selection for world groups and external placement sets.
-#[derive(Component, Clone, Debug, PartialEq, Eq)]
+#[derive(Component, Clone, Debug, PartialEq)]
 pub struct WorldSelection {
     /// Explicitly suppressed groups.
     pub hidden_groups: HashSet<GroupId>,
@@ -209,8 +272,18 @@ pub(crate) struct WorldRuntime {
     feature_sets: HashMap<FeatureId, Vec<DoodadSetId>>,
     feature_groups: HashMap<FeatureId, Vec<GroupId>>,
     neighbors: HashMap<GroupId, Vec<GroupId>>,
+    portal_links: HashMap<GroupId, Vec<PortalConnection>>,
+    portal_indices: HashMap<PortalId, usize>,
+    portal_groups: HashMap<SystemId, PortalGroups>,
     placements: Vec<(InstanceId, NodeId, Option<u32>)>,
     feature_nodes: Vec<(FeatureId, NodeId)>,
+}
+
+/// Immutable group lookup and uncullable baseline, shared by all camera updates.
+#[derive(Clone, Default)]
+struct PortalGroups {
+    options: HashMap<GroupId, GroupOptions>,
+    conservative: HashSet<GroupId>,
 }
 
 pub(crate) struct CompiledWorld {
@@ -356,7 +429,7 @@ impl WorldRuntime {
                 occluders: world.occluders.iter().collect::<Vec<_>>().into(),
             });
             if !world.portals.is_empty() {
-                diagnostics.push(format!("world system {system:?}: portal polygons and connectivity retained; default visibility is conservative, clipped-frustum portal/occluder culling is not enabled"));
+                diagnostics.push(format!("world system {system:?}: portal polygons and connectivity retained; default visibility is conservative, explicit PortalView enables clipped-window traversal; native occluder planes are not evaluated"));
             }
             if !world.fogs.is_empty() || !world.ambient_volumes.is_empty() {
                 diagnostics.push(format!("world system {system:?}: fog and ambient regions are exposed for application integration; global scene fog/ambient are not overwritten"));
@@ -390,6 +463,11 @@ impl WorldRuntime {
                         .or_default()
                         .push(group);
                 }
+                runtime
+                    .portal_links
+                    .entry(group)
+                    .or_default()
+                    .extend(region.portals.iter().cloned());
                 for portal in &region.portals {
                     // Bidirectional reachability deliberately overestimates visibility.
                     // Side tests and unknown supplemental adjustments cannot safely
@@ -470,6 +548,12 @@ impl WorldRuntime {
             })
             .collect();
         runtime.groups = groups.into();
+        runtime.index_portal_groups();
+        runtime.portal_indices = portals
+            .iter()
+            .enumerate()
+            .map(|(index, portal)| (portal.id, index))
+            .collect();
         runtime.portals = portals.into();
         runtime.doodad_sets = sets.into();
         runtime.regions = regions.into();
@@ -484,7 +568,8 @@ impl WorldRuntime {
 
     /// Resolve an explicit policy once per instance/update, not once per draw.
     pub(crate) fn visibility(&self, selection: &WorldSelection) -> WorldVisibility {
-        let reachable = if let WorldPortalPolicy::ReachableFrom(start) = selection.portals {
+        let reachable = if let WorldPortalPolicy::ReachableFrom(start) = &selection.portals {
+            let start = *start;
             if self.neighbors.contains_key(&start) {
                 let mut visited = HashSet::from([start]);
                 let mut pending = VecDeque::from([start]);
@@ -499,6 +584,9 @@ impl WorldRuntime {
             } else {
                 None
             } // Unknown application selections cannot hide the whole model.
+        } else if let WorldPortalPolicy::Clipped(view) = &selection.portals {
+            self.clipped_visibility(view)
+                .map(|groups| (view.group.system, groups))
         } else {
             None
         };
@@ -507,6 +595,107 @@ impl WorldRuntime {
             sets: selection.doodad_sets.clone(),
             reachable,
         }
+    }
+    fn index_portal_groups(&mut self) {
+        self.portal_groups.clear();
+        for group in self.groups.iter() {
+            let system = self.portal_groups.entry(group.id.system).or_default();
+            system.options.insert(group.id, group.options);
+            if !group.options.interior || group.options.exterior {
+                system.conservative.insert(group.id);
+            }
+        }
+    }
+
+    /// A bounded, per-path traversal: a group can be reached through several
+    /// windows, each of which may expose different outgoing portals.
+    fn clipped_visibility(&self, view: &PortalView) -> Option<HashSet<GroupId>> {
+        const MAX_WINDOWS: usize = 4096;
+        const MAX_PLANES: usize = 128;
+        const MAX_DEPTH: usize = 128;
+        const MAX_CONNECTIONS: usize = 32768;
+        let groups = self.portal_groups.get(&view.group.system)?;
+        let start = groups.options.get(&view.group)?;
+        if !start.interior || start.exterior {
+            return None;
+        }
+        let mut visible = groups.conservative.clone();
+        let mut pending = vec![(view.group, view.planes.to_vec(), vec![view.group])];
+        let mut windows = 0;
+        let mut connections = 0;
+        while let Some((group, planes, path)) = pending.pop() {
+            windows += 1;
+            if windows > MAX_WINDOWS || planes.len() > MAX_PLANES || path.len() > MAX_DEPTH {
+                return None; // Work limits must never turn into missing geometry.
+            }
+            visible.insert(group);
+            let links = self
+                .portal_links
+                .get(&group)
+                .map(Vec::as_slice)
+                .unwrap_or_default();
+            for connection in links {
+                connections += 1;
+                if connections > MAX_CONNECTIONS || pending.len() >= MAX_WINDOWS {
+                    return None;
+                }
+                if path.contains(&connection.neighbor) {
+                    continue;
+                }
+                if !groups.options.contains_key(&connection.neighbor) {
+                    return None;
+                }
+                // Unresolved plane adjustments and query flags remain open;
+                // authored side signs are not guessed from client conventions.
+                let clipped = if connection.adjusted_plane
+                    || connection.skip_viewer
+                    || connection.unclassified.bits() != 0
+                {
+                    Some(planes.clone())
+                } else {
+                    self.portal_indices
+                        .get(&connection.portal)
+                        .and_then(|&index| self.portals.get(index))
+                        .map_or_else(
+                            || Some(planes.clone()),
+                            |portal| {
+                                portal_window(&portal.vertices, view.eye, &planes).map_or_else(
+                                    || Some(planes.clone()),
+                                    |polygon| {
+                                        if polygon.is_empty() {
+                                            None
+                                        } else {
+                                            Some(window_planes(&polygon, view.eye, &planes))
+                                        }
+                                    },
+                                )
+                            },
+                        )
+                };
+                if let Some(clipped) = clipped {
+                    let mut next_path = path.clone();
+                    next_path.push(connection.neighbor);
+                    pending.push((connection.neighbor, clipped, next_path));
+                }
+            }
+            // Incomplete native links retain the conservative connectivity path.
+            for &neighbor in self.neighbors.get(&group).into_iter().flatten() {
+                connections += 1;
+                if connections > MAX_CONNECTIONS || pending.len() >= MAX_WINDOWS {
+                    return None;
+                }
+                if links.iter().any(|link| link.neighbor == neighbor) || path.contains(&neighbor) {
+                    continue;
+                }
+                if !groups.options.contains_key(&neighbor) {
+                    return None;
+                }
+                let mut next_path = path.clone();
+                next_path.push(neighbor);
+                pending.push((neighbor, planes.clone(), next_path));
+            }
+        }
+        Some(visible)
     }
     pub(crate) fn instance_lod(&self, instance: InstanceId) -> Option<u32> {
         self.placements
@@ -532,6 +721,131 @@ impl WorldRuntime {
                 .get(&feature)
                 .is_none_or(|sets| sets.iter().any(|set| selection.set_visible(*set)))
     }
+}
+
+// The tolerance expands accepted boundaries, preventing floating-point cracks.
+const PORTAL_EPSILON: f32 = 1.0e-5;
+
+/// None means malformed/ambiguous geometry; Some(empty) means safely clipped out.
+fn portal_window(vertices: &[[f32; 3]], eye: Vec3, planes: &[Vec4]) -> Option<Vec<Vec3>> {
+    if vertices.len() < 3 || vertices.len() > 64 {
+        return None;
+    }
+    let mut polygon: Vec<_> = vertices.iter().copied().map(Vec3::from_array).collect();
+    if polygon.iter().any(|point| !point.is_finite()) {
+        return None;
+    }
+    let origin = polygon[0];
+    let normal = (1..polygon.len() - 1).find_map(|index| {
+        (polygon[index] - origin)
+            .cross(polygon[index + 1] - origin)
+            .try_normalize()
+    })?;
+    let eye_distance = normal.dot(eye - origin);
+    if polygon.iter().any(|point| {
+        let distance = normal.dot(*point - origin);
+        !distance.is_finite() || distance.abs() > PORTAL_EPSILON
+    }) || !eye_distance.is_finite()
+        || eye_distance.abs() <= PORTAL_EPSILON
+    {
+        return None;
+    }
+    // Every edge must contain the remaining polygon in one consistent halfspace.
+    // This rejects concave/self-crossing windows instead of underestimating them.
+    let mut winding = 0.0_f32;
+    for index in 0..polygon.len() {
+        let a = polygon[index];
+        let edge = polygon[(index + 1) % polygon.len()] - a;
+        if !edge.is_finite()
+            || !edge.length_squared().is_finite()
+            || edge.length_squared() <= PORTAL_EPSILON * PORTAL_EPSILON
+        {
+            return None;
+        }
+        for point in &polygon {
+            let side = normal.dot(edge.cross(*point - a));
+            if !side.is_finite() {
+                return None;
+            }
+            if side.abs() <= PORTAL_EPSILON {
+                continue;
+            }
+            if winding == 0.0 {
+                winding = side.signum();
+            } else if side * winding < -PORTAL_EPSILON {
+                return None;
+            }
+        }
+    }
+    for plane in planes {
+        if polygon.is_empty() {
+            break;
+        }
+        let input = polygon;
+        polygon = Vec::with_capacity(input.len() + 1);
+        let mut previous = *input.last()?;
+        let mut previous_distance = plane.truncate().dot(previous) + plane.w + PORTAL_EPSILON;
+        if !previous_distance.is_finite() {
+            return None;
+        }
+        for current in input {
+            let distance = plane.truncate().dot(current) + plane.w + PORTAL_EPSILON;
+            if !distance.is_finite() {
+                return None;
+            }
+            if (distance >= 0.0) != (previous_distance >= 0.0) {
+                let denominator = previous_distance - distance;
+                if !denominator.is_finite() {
+                    return None;
+                }
+                let fraction = previous_distance / denominator;
+                let intersection = previous.lerp(current, fraction);
+                if !intersection.is_finite() {
+                    return None;
+                }
+                polygon.push(intersection);
+            }
+            if distance >= 0.0 {
+                polygon.push(current);
+            }
+            previous = current;
+            previous_distance = distance;
+        }
+    }
+    Some(polygon)
+}
+
+fn window_planes(polygon: &[Vec3], eye: Vec3, parent: &[Vec4]) -> Vec<Vec4> {
+    let mut planes = parent.to_vec();
+    if polygon.len() < 3 {
+        return planes;
+    }
+    let center = polygon.iter().copied().sum::<Vec3>() / polygon.len() as f32;
+    if !center.is_finite() {
+        return planes;
+    }
+    let has_area = (1..polygon.len() - 1).any(|index| {
+        let area = (polygon[index] - polygon[0]).cross(polygon[index + 1] - polygon[0]);
+        area.is_finite() && area.length_squared() > PORTAL_EPSILON * PORTAL_EPSILON
+    });
+    if !has_area {
+        return planes;
+    }
+    for index in 0..polygon.len() {
+        let a = polygon[index] - eye;
+        let b = polygon[(index + 1) % polygon.len()] - eye;
+        let Some(mut normal) = a.cross(b).try_normalize() else {
+            continue;
+        };
+        if normal.dot(center - eye) < 0.0 {
+            normal = -normal;
+        }
+        let plane = normal.extend(-normal.dot(eye));
+        if plane.is_finite() {
+            planes.push(plane);
+        }
+    }
+    planes
 }
 
 pub(crate) struct WorldVisibility {

@@ -16,7 +16,12 @@ endpoints. This integration approximates continuously changing rates.
 World particles retain their birth frame; local particles follow the current
 emitter. Gravity and fixed-plane geometry follow authored model axes after frame
 conversion. M2 motion additionally evaluates supported wind and linear drag
-analytically. Packed gravity and spline/bone generators need dedicated
+analytically. World-space M2 particles apply the authored emitter-follow speed/scale
+ramp to emitter translation, interpolating between the two speed knots and clamping
+at the endpoints. New births receive only translation after their occurrence; local
+particles already follow the emitter transform and receive no extra displacement.
+Emitter speed uses the observed update interval; native client fidelity for follow
+response remains unverified. Packed gravity and spline/bone generators need dedicated
 interpretation and produce diagnostics instead of a guessed scalar substitute.
 
 ## Geometry and appearance
@@ -31,7 +36,7 @@ M2 age-driven particles sample independent color, opacity, scale, and cell curve
 Reusable meshes upload when population, appearance, or view changes; paused,
 unchanged frames avoid uploads. Native tail time-versus-distance interpretation
 remains unverified. Secondary texture/composition, texture scroll/rotation,
-follow/twinkle controls, external child effects, and several native generators
+twinkle controls, external child effects, and several native generators
 remain incomplete and produce diagnostics.
 
 ## Budgets and limits
@@ -49,8 +54,13 @@ transport with a separate interpreter, described below.
 ## M3 standard billboard subset
 
 Standard billboards support point, plane, box, and sphere distributions with
-constant, Z-axis, radial, or random velocity selection. Continuous emission samples
-authored occurrence poses. Optional speed/lifespan ranges randomize at birth; color,
+constant, Z-axis, radial, or random velocity selection. Continuous emission and
+independent squirt-count keys sample authored occurrence poses. Squirt keys follow
+their selected clip, timeline, or shared clock, including repeating clock crossings;
+seek jumps skip crossed births. A nonanimated count emits at the clock origin.
+Occurrence scratch is reused and bounded to 4,096 keys per update, and squirt births
+share the continuous emitter's population and birth budgets. Optional speed/lifespan
+ranges randomize at birth; color,
 alpha, size, and rotation freeze their start/middle/end controls at birth, with
 independent normalized midpoints. Linear and smooth interpolation and two-phase
 flipbooks are implemented. The primary compiled PBR material pass animates on the
@@ -59,7 +69,7 @@ model clocks; supplementary passes are not instantiated.
 Authored maximum population tightens the shared 8,192 cap. Unsupported geometry,
 shape cutouts, encoded XY gravity, and Bezier/hold or unknown interpolation
 selectors reject that particle interpretation with diagnostics. Forces, noise,
-collision, secondary effects, squirt, specialized time controls, and kill-radius
+collision, secondary effects, specialized time controls, and kill-radius
 rules remain incomplete and are diagnosed. Endpoint-anchored programmed beams use
 a separate partial [ribbon interpreter](ribbons.md#m3-endpoint-beams). This subset's
 exact native motion and lighting fidelity is unverified.

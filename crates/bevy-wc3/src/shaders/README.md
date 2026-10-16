@@ -15,7 +15,7 @@ MIT OR Apache-2.0. Keep this pinned attribution when changing local shaders.
 The model material extension preserves Bevy's PBR/light/post-processing
 stages. `material.wgsl` evaluates supported native combiners and WMO
 baked-light interpretation; `hd.wgsl` supplies DefaultUnit role sampling,
-RG normal reconstruction, team masking, Fresnel, and environment approximation.
+RG and M3 AG normal reconstruction, team masking, Fresnel, and environment approximation.
 The prepass fragment retains matching alpha/UV/normal interpretation.
 
 The vertex entry points retain their filenames while serving Universal geometry.
@@ -30,6 +30,11 @@ match the WGSL uniform/texture declarations. These shaders do not replace global
 Bevy assets. Particle/ribbon transport has separate shader-generated geometry,
 record layouts, and material bindings. See the [material guide](../../docs/rendering/reforged-materials.md)
 and [architecture](../../docs/architecture.md) for runtime ownership and limits.
+
+`combiner.wgsl` contains the M2 texture-composition equations shared by forward
+and alpha-discard prepasses. The vertex wrappers generate sphere environment
+coordinates, including the normal stream in depth-only layouts when required.
+Native additive inputs enter PBR emissive; ordinary diffuse stays in Bevy albedo.
 
 ## Bevy upgrades
 

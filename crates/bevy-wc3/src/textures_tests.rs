@@ -5,6 +5,90 @@ use wc3::model::materials::bindings::TextureBinding;
 use wc3::model::{Material, ModelBuilder};
 
 #[test]
+fn programmed_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion() {
+    let mut builder = ModelBuilder::new("M3 layer samplers");
+    let mut source = Texture::file("shared.dds");
+    source.sampler = Sampler {
+        u: AddressMode::Mirror,
+        v: AddressMode::Mirror,
+    };
+    let texture = builder.add_texture(source).unwrap();
+    let mut materials = Vec::new();
+    for (wrap_u, wrap_v) in [(false, false), (true, false), (false, true), (true, true)] {
+        let mut layer = programmed::TextureLayer::default();
+        layer.binding.image = Some(texture);
+        layer.binding.coordinates.transform.uv_tiling.initial = [1.; 2];
+        layer.binding.coordinates.transform.uv_source_related = u32::MAX;
+        layer.binding.contribution.map_alpha.initial = 1.;
+        layer.binding.sampling.flags.set_uv_wrap_x(wrap_u);
+        layer.binding.sampling.flags.set_uv_wrap_y(wrap_v);
+        let mut surface = programmed::Standard::default();
+        surface.diffuse.input = Some(layer.clone());
+        surface.normals.base = Some(layer.clone());
+        surface.ambient_occlusion_layer = Some(layer);
+        materials.push((
+            builder
+                .add_material(Material {
+                    name: "M3 independent layer wrapping".into(),
+                    surface: SurfaceSet::Programmed(Box::new(programmed::Material::Standard(
+                        Box::new(surface),
+                    ))),
+                })
+                .unwrap(),
+            Sampler {
+                u: if wrap_u {
+                    AddressMode::Repeat
+                } else {
+                    AddressMode::Clamp
+                },
+                v: if wrap_v {
+                    AddressMode::Repeat
+                } else {
+                    AddressMode::Clamp
+                },
+            },
+        ));
+    }
+    let model = builder.finish().unwrap();
+    let mut assets = Assets::<Image>::default();
+    let resolved = Arc::new(TextureImages::resolve(&model, |_| {
+        Some(assets.add(Image::default()))
+    }));
+    for (material, sampler) in materials {
+        let pass = compile_material_with_images(&model, material, resolved.clone())
+            .unwrap()
+            .remove(0);
+        let data = resolved
+            .get_with_sampler(
+                texture,
+                ColorSpace::Unspecified,
+                TextureRole::Normal,
+                sampler,
+            )
+            .unwrap();
+        let color = resolved
+            .get_with_sampler(
+                texture,
+                ColorSpace::Unspecified,
+                TextureRole::Color,
+                sampler,
+            )
+            .unwrap();
+        assert_eq!(pass.material.base_color_texture.as_ref(), Some(color));
+        assert_eq!(pass.material.normal_map_texture.as_ref(), Some(data));
+        assert_eq!(pass.material.occlusion_texture.as_ref(), Some(data));
+        assert_ne!(color, data);
+    }
+    assert_eq!(
+        model.texture(texture).unwrap().sampler,
+        Sampler {
+            u: AddressMode::Mirror,
+            v: AddressMode::Mirror,
+        }
+    );
+}
+
+#[test]
 fn world_surface_clamps_resolve_independent_variants_without_mutating_texture() {
     let mut builder = ModelBuilder::new("world samplers");
     let mut texture = Texture::file("shared.png");

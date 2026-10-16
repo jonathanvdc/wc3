@@ -35,10 +35,7 @@
 #import bevy_pbr::decal::forward::get_forward_decal_info
 #endif
 
-struct Combiner { uv_transform: mat3x3<f32>, mode: vec4<u32>, clip: vec4<f32>, };
-@group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> combiner: Combiner;
-@group(#{MATERIAL_BIND_GROUP}) @binding(101) var secondary: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(102) var secondary_sampler: sampler;
+#import "embedded://bevy_wc3/shaders/combiner.wgsl"::{combiner,secondary,secondary_sampler,tertiary,tertiary_sampler,compose}
 struct World { flags: vec4<u32>, };
 @group(#{MATERIAL_BIND_GROUP}) @binding(110) var<uniform> world: World;
 #import bevy_pbr::pbr_bindings
@@ -98,23 +95,37 @@ fn fragment(
 
     pbr_input = apply_hd(in, is_front, pbr_input);
 
-    // Authored M2 legacy texture composition precedes Bevy illumination.
+    // Compose native texture masks before Bevy evaluates illumination.
     if combiner.mode.x != 0u {
-        var uv = vec2(0.0);
+        var uv0=vec2(0.0);
+        var uv1=vec2(0.0);
+        var uv2=vec2(0.0);
+#ifdef VERTEX_UVS_A
+        uv0=(pbr_bindings::material.uv_transform*vec3(in.uv,1.0)).xy;
+        uv2=(combiner.third_transform*vec3(in.uv,1.0)).xy;
+#endif
 #ifdef VERTEX_UVS_B
-        uv = (combiner.uv_transform * vec3(in.uv_b, 1.0)).xy;
+        uv1=(combiner.uv_transform*vec3(in.uv_b,1.0)).xy;
 #endif
-        let second = textureSample(secondary, secondary_sampler, uv);
-        var opacity = pbr_bindings::material.base_color.a;
+        var a=vec4(1.0);
+        if (pbr_input.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT)!=0u {
+            a=textureSample(pbr_bindings::base_color_texture,pbr_bindings::base_color_sampler,uv0);
+        }
+        var b=vec4(1.0);
+        if combiner.coordinates.z>1u {b=textureSample(secondary,secondary_sampler,uv1);}
+        var c=vec4(1.0);
+        if combiner.coordinates.z>2u {c=textureSample(tertiary,tertiary_sampler,uv2);}
+        var tint=pbr_bindings::material.base_color;
 #ifdef VERTEX_COLORS
-        opacity *= in.color.a;
+        tint*=in.color;
 #endif
-        var alpha = opacity;
-        if combiner.mode.y != 0u { alpha = pbr_input.material.base_color.a; }
-        if combiner.mode.z != 0u { alpha *= second.a; }
-        let gain = 1.0 + f32(combiner.mode.w);
-        if combiner.mode.z != 0u { alpha *= gain; }
-        pbr_input.material.base_color = vec4(pbr_input.material.base_color.rgb * second.rgb * gain, alpha);
+        let combined=compose(a,b,c,tint);
+        pbr_input.material.base_color=combined.color;
+        if (pbr_input.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_UNLIT_BIT)!=0u {
+            pbr_input.material.base_color=vec4(combined.color.rgb+combined.emission,combined.color.a);
+        } else {
+            pbr_input.material.emissive=vec4(pbr_input.material.emissive.rgb+combined.emission,pbr_input.material.emissive.a);
+        }
     }
 
     if pbr_input.material.base_color.a < combiner.clip.x { discard; }

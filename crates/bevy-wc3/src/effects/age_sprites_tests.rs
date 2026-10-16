@@ -1,4 +1,5 @@
 use super::*;
+use bevy::ecs::world::CommandQueue;
 use std::f32::consts::TAU;
 use wc3::model::profiles::Universal;
 use wc3::model::{AnimationProgram, AnimationSample};
@@ -30,6 +31,7 @@ fn emitter() -> Emitter {
         drag: 0.,
         wind: Vec3::ZERO,
         inherit_velocity: 0.,
+        follow: [[0.; 2]; 2],
         spin: [0.; 4],
         appearance: ParticleAgeCurves::default(),
         atlas: [1, 1],
@@ -166,6 +168,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         mesh: Handle::default(),
         material: Handle::default(),
         births: vec![birth],
+        squirts: SquirtSchedule::default(),
         appearances: Vec::new(),
         order: Vec::new(),
         fraction: 0.,
@@ -316,6 +319,7 @@ fn programmed_appearance_storage_preserves_compact_m2_stride_and_retires_in_lock
         entity: Entity::PLACEHOLDER,
         mesh: Handle::default(),
         material: Handle::default(),
+        squirts: SquirtSchedule::default(),
         births: (0..3)
             .map(|index| {
                 let mut birth = birth.clone();
@@ -356,4 +360,197 @@ fn programmed_appearance_storage_preserves_compact_m2_stride_and_retires_in_lock
     assert!(state.births.is_empty());
     assert!(state.appearances.is_empty());
     assert_eq!(pointer, state.appearances.as_ptr());
+}
+
+#[test]
+fn emitter_follow_interpolates_speed_knots_and_preserves_local_motion() {
+    let mut emitter = emitter();
+    emitter.follow = [[2., 0.25], [6., 0.75]];
+    let translated = |distance| Mat4::from_translation(Vec3::X * distance);
+    assert_eq!(
+        emitter.follow_displacement(Mat4::IDENTITY, translated(1.), 1.),
+        Vec3::X * 0.25
+    );
+    assert_eq!(
+        emitter.follow_displacement(Mat4::IDENTITY, translated(4.), 1.),
+        Vec3::X * 2.
+    );
+    assert_eq!(
+        emitter.follow_displacement(Mat4::IDENTITY, translated(8.), 1.),
+        Vec3::X * 6.
+    );
+    assert_eq!(
+        emitter.follow_displacement(Mat4::IDENTITY, translated(4.), 0.),
+        Vec3::ZERO
+    );
+    emitter.follow.swap(0, 1);
+    assert_eq!(
+        emitter.follow_displacement(Mat4::IDENTITY, translated(4.), 1.),
+        Vec3::X * 2.
+    );
+    emitter.flags.set_model_space(true);
+    assert_eq!(
+        emitter.follow_displacement(Mat4::IDENTITY, translated(4.), 1.),
+        Vec3::ZERO
+    );
+    emitter.flags.set_model_space(false);
+    emitter.follow = [[2., 0.5], [2., 0.5]];
+    assert_eq!(
+        emitter.follow_displacement(Mat4::IDENTITY, translated(4.), 1.),
+        Vec3::X * 2.
+    );
+}
+
+#[test]
+fn world_particles_follow_only_translation_after_their_birth() {
+    let model = Model::empty("follow sample").unwrap();
+    let program = AnimationProgram::compile(&model);
+    let sample = program.sample(AnimationSample::default()).unwrap();
+    let mut emitter = emitter();
+    emitter.follow = [[0., 0.5], [1., 0.5]];
+    emitter.rate = Animated::constant(2.);
+    emitter.speed = Animated::constant(0.);
+    let prior_birth = emitter
+        .birth(
+            &sample.at_times(Default::default(), Default::default(), Default::default()),
+            0.,
+            Mat4::IDENTITY,
+            Vec3::ZERO,
+            0,
+        )
+        .unwrap();
+    let mut meshes = Assets::<Mesh>::default();
+    let mesh = meshes.add(Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    ));
+    let state = EmitterInstance {
+        entity: Entity::PLACEHOLDER,
+        mesh,
+        material: Handle::default(),
+        births: vec![prior_birth],
+        squirts: SquirtSchedule::default(),
+        appearances: Vec::new(),
+        order: Vec::new(),
+        fraction: 0.,
+        ordinal: 1,
+        previous_node: Mat4::IDENTITY,
+        pose_scratch: Vec::new(),
+        dropped: 0,
+        skipped_seconds: 0.,
+    };
+    let runtime = RuntimeAgeSprites {
+        emitters: vec![emitter],
+        ..Default::default()
+    };
+    let mut instances = AgeSpriteInstances {
+        emitters: vec![state],
+        previous_time: Some(0.),
+        previous_basis: Some(Mat4::IDENTITY),
+        ..Default::default()
+    };
+    let mut world = World::new();
+    let mut query = world.query::<&mut SpriteEmitter>();
+    let mut materials = Assets::<ModelMaterial>::default();
+    let nodes = [Mat4::from_translation(Vec3::X * 4.)];
+    let frame = EffectFrame {
+        traversal: Default::default(),
+        change: Default::default(),
+        root_visible: true,
+        pose: None,
+        selection: Default::default(),
+        time: 1.,
+        sample: &sample,
+        node_poses: &nodes,
+        node_visible: &[true],
+        basis_world: Mat4::IDENTITY,
+        camera_world: Some(Mat4::IDENTITY),
+    };
+    runtime.update(
+        &mut instances,
+        frame,
+        &mut meshes,
+        &mut query.query_mut(&mut world),
+        &mut materials,
+    );
+    let births = &instances.emitters[0].births;
+    assert_eq!(births.len(), 3);
+    assert_eq!(births[0].origin, Vec3::X * 2.);
+    // The halfway birth starts at x=2, then follows half of the remaining
+    // emitter displacement. The endpoint birth has no follow interval yet.
+    assert!((births[1].origin.x - 3.).abs() < 1e-5);
+    assert!((births[2].origin.x - 4.).abs() < 1e-5);
+}
+
+#[test]
+fn programmed_squirts_share_capacity_and_do_not_replay_on_pause_or_seek() {
+    let model = Model::empty("squirt sample").unwrap();
+    let program = AnimationProgram::compile(&model);
+    let mut programme = ProgrammedSprite::fixture();
+    programme.rate = Animated::constant(0.);
+    programme.squirt = Animated::constant(7);
+    programme.max_particles = 3;
+    let source = emitter();
+    let emitter = Emitter::programmed(
+        source.feature,
+        source.node,
+        0,
+        programme,
+        source.material,
+        Arc::new(SurfaceAnimation::default()),
+    );
+    let runtime = RuntimeAgeSprites {
+        emitters: vec![emitter],
+        ..Default::default()
+    };
+    let mut meshes = Assets::<Mesh>::default();
+    let mut materials = Assets::<ModelMaterial>::default();
+    let mut world = World::new();
+    let root = world.spawn_empty().id();
+    let mut queue = CommandQueue::default();
+    let mut instances = runtime.spawn(
+        &mut Commands::new(&mut queue, &world),
+        &mut meshes,
+        &mut materials,
+        root,
+    );
+    queue.apply(&mut world);
+    let mut query = world.query::<&mut SpriteEmitter>();
+    for (time, change) in [
+        (0., EffectChange::Continuous),
+        (0., EffectChange::Continuous),
+        (10., EffectChange::Seek),
+    ] {
+        let selection = AnimationSample {
+            clip_time: ModelTime::seconds(time).unwrap(),
+            ..Default::default()
+        };
+        let sample = program.sample(selection).unwrap();
+        runtime.update(
+            &mut instances,
+            EffectFrame {
+                traversal: Default::default(),
+                change,
+                root_visible: true,
+                pose: None,
+                selection,
+                time,
+                sample: &sample,
+                node_poses: &[Mat4::IDENTITY],
+                node_visible: &[true],
+                basis_world: Mat4::IDENTITY,
+                camera_world: Some(Mat4::IDENTITY),
+            },
+            &mut meshes,
+            &mut query.query_mut(&mut world),
+            &mut materials,
+        );
+        assert_eq!(instances.emitters[0].dropped, 4);
+        if time == 0. {
+            assert_eq!(instances.emitters[0].births.len(), 3);
+            assert_eq!(instances.emitters[0].appearances.len(), 3);
+        } else {
+            assert!(instances.emitters[0].births.is_empty());
+        }
+    }
 }

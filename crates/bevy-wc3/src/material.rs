@@ -1,8 +1,13 @@
 //! Direct semantic surface preparation for the Bevy PBR pipeline.
 mod animation;
 mod compile;
+mod model;
+mod programmed;
 #[path = "ribbon_material.rs"]
 mod ribbon_material;
+mod world;
+#[cfg(test)]
+use self::world::compile_world;
 use animation::layered_uv;
 pub(super) use animation::mesh_alpha_mode;
 use bevy::mesh::MeshVertexBufferLayoutRef;
@@ -18,18 +23,20 @@ use bevy::shader::ShaderRef;
 pub(crate) use compile::compile_material_with_images;
 use compile::rasterization;
 #[cfg(test)]
-use compile::{blend, compile_world, depth, legacy_combiner};
+use compile::{blend, depth};
+#[cfg(test)]
+use model::legacy_combiner;
 pub(crate) use ribbon_material::effect_state;
 use std::collections::HashMap;
 use std::sync::Arc;
 #[cfg(test)]
-use wc3::model::materials::world;
+use wc3::model::materials::world as world_surface;
 use wc3::model::materials::{layered, state::Lighting};
 use wc3::model::values::model::ParticleBlend;
 use wc3::model::{Animated, TextureId, TextureTransform};
 
 use super::mesh_animation::MeshAnimation;
-use super::mesh_attributes::specialize_extra_joints;
+use super::mesh_attributes::specialize_mesh_attributes;
 use super::textures::TextureImages;
 
 /// One authored draw pass, including any limits of its PBR interpretation.
@@ -77,6 +84,9 @@ pub struct ModelMaterialExtension {
     #[texture(108)]
     #[sampler(109)]
     environment: Option<Handle<Image>>,
+    #[texture(111)]
+    #[sampler(112)]
+    tertiary: Option<Handle<Image>>,
     #[uniform(110)]
     world: WorldUniform,
     blend: Option<Blend>,
@@ -109,6 +119,9 @@ impl Default for HdUniform {
 #[derive(Clone, Copy, Debug, ShaderType)]
 struct CombinerUniform {
     uv_transform: Mat3,
+    third_transform: Mat3,
+    coordinates: UVec4,
+    weights: Vec4,
     // x: enabled, y: first alpha, z: second alpha, w: RGB/alpha doubling.
     mode: UVec4,
     clip: Vec4,
@@ -117,6 +130,9 @@ impl Default for CombinerUniform {
     fn default() -> Self {
         Self {
             uv_transform: Mat3::IDENTITY,
+            third_transform: Mat3::IDENTITY,
+            coordinates: UVec4::ZERO,
+            weights: Vec4::ONE,
             mode: UVec4::ZERO,
             clip: Vec4::ZERO,
         }
@@ -172,6 +188,7 @@ impl Default for ModelMaterialExtension {
         Self {
             combiner: CombinerUniform::default(),
             secondary: None,
+            tertiary: None,
             hd: HdUniform::default(),
             orm: None,
             team_color: None,
@@ -190,11 +207,14 @@ pub struct ModelMaterialKey {
     blend: Option<Blend>,
     depth_test: bool,
     depth_write: Option<bool>,
+    generated_coordinates: bool,
 }
 
 impl From<&ModelMaterialExtension> for ModelMaterialKey {
     fn from(state: &ModelMaterialExtension) -> Self {
         Self {
+            generated_coordinates: state.combiner.coordinates.x != 0
+                || state.combiner.coordinates.y != 0,
             blend: state.blend,
             depth_test: state.depth_test,
             depth_write: state
@@ -252,7 +272,11 @@ impl MaterialExtension for ModelMaterialExtension {
         layout: &MeshVertexBufferLayoutRef,
         key: MaterialExtensionKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
-        specialize_extra_joints(descriptor, layout)?;
+        specialize_mesh_attributes(
+            descriptor,
+            layout,
+            key.bind_group_data.generated_coordinates,
+        )?;
         let state = key.bind_group_data;
         if let Some(depth) = &mut descriptor.depth_stencil {
             if !state.depth_test {
@@ -287,6 +311,9 @@ pub(crate) struct SurfaceAnimation {
     texture: Option<Animated<Option<TextureId>>>,
     transform: Option<TextureTransform>,
     secondary_transform: Option<TextureTransform>,
+    uv_scroll: [[f32; 2]; 2],
+    third_transform: Option<TextureTransform>,
+    input_weights: [Option<Animated<f32>>; 3],
     emissive_gain: Option<Animated<f32>>,
     emission: Option<Animated<[f32; 4]>>,
     emission_scale: f32,
