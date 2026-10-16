@@ -96,6 +96,11 @@ their geoset selections are united. Conflicting policies for that same resource
 are rejected before compilation. Distinct independently imported resources can
 carry separate appearances; rigid instances remain independent.
 
+Character animation and grip policy remain application choices. Select an authored
+weapon stance through `Playback`, and use `PoseOverrides` for a finger-pose layer,
+off-hand IK or gameplay pose controls. Equipping a weapon installs its authored
+socket placement; assembly does not select combat clips or close the fingers.
+
 ## Secondary motion
 
 Armor deformation from skeletal animation does not require a physics solver.

@@ -95,13 +95,18 @@ image FileDataIDs or atlas objects with explicit dimensions and ordered layers:
 ```json
 {
   "body": 921844,
-  "geosets": [0],
+  "geosets": [
+    0, 401, 501, 802, 902, 1002, 1102, 1301,
+    1801, 2002, 2201, 2301, 3202, 3301
+  ],
   "textures": {
     "1": {
       "width": 1024,
       "height": 512,
       "layers": [{"image": 997259, "destination": [0, 0, 1024, 512]}]
-    }
+    },
+    "9": {"width": 1, "height": 1, "clear": [0, 0, 0, 0], "layers": []},
+    "19": 3622959
   },
   "parts": [
     {"model": 1551025, "slot": "chest", "geosets": [401, 2201], "textures": {"2": 1550866}},
@@ -113,7 +118,13 @@ image FileDataIDs or atlas objects with explicit dimensions and ordered layers:
 The example uses external asset identities; game assets are not distributed with
 the crate. Atlas layers may specify a `source` crop and byte `opacity` as well as
 the destination `[x, y, width, height]`. The recipe is a resolved rendering input,
-not an item database. Applications can use `CharacterTables` or their own
+not an item database.
+
+Body selections must retain the palms and fingers needed
+beneath equipment cuffs; selecting a glove mesh alone does not restore omitted
+body geometry. The identifiers above belong to that specific body, rather than
+being defaults for other models. Applications can use `CharacterTables` or their
+own
 `CharacterDatabase` to produce the equivalent typed definition; see
 [characters and equipment](rendering/characters.md).
 
