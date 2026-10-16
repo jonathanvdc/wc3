@@ -17,11 +17,9 @@ use bevy::time::TimeUpdateStrategy;
 use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 use bevy_wc3::{
-    spawn_universal_model, PreparedUniversalModel, UniversalAnimationError, UniversalAssetSettings,
-    UniversalBakeSpace, UniversalCameraBinding, UniversalInstance, UniversalLod,
-    UniversalLodOverride, UniversalLodSettings, UniversalMaterial, UniversalModelAsset,
-    UniversalModelInstance, UniversalModelInstanceError, UniversalPlayback, UniversalPoseBaker,
-    UniversalPoseOptions, UniversalWorldSelection, Wc3BevyPlugin,
+    spawn_model, AssetSettings, BakeSpace, CameraBinding, Lod, LodOverride, LodSettings,
+    ModelAsset, ModelInstance, ModelInstanceError, ModelMaterial, ModelRig, Playback,
+    PlaybackError, PoseBaker, PoseOptions, PreparedModel, Wc3BevyPlugin, WorldSelection,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::env::args;
@@ -98,8 +96,8 @@ struct Options {
     times: Vec<f64>,
     benchmark_frames: Option<usize>,
     sequence: usize,
-    lod: UniversalLod,
-    lod_settings: UniversalLodSettings,
+    lod: Lod,
+    lod_settings: LodSettings,
     plays: Vec<PlaybackChange>,
     blend: Option<Duration>,
     fps: f64,
@@ -139,8 +137,8 @@ impl Options {
             times: vec![1.0],
             benchmark_frames: None,
             sequence: 0,
-            lod: UniversalLod::Fixed(0),
-            lod_settings: UniversalLodSettings::default(),
+            lod: Lod::Fixed(0),
+            lod_settings: LodSettings::default(),
             plays: Vec::new(),
             blend: None,
             fps: 60.0,
@@ -208,9 +206,9 @@ impl Options {
                 }
                 "--lod" => {
                     options.lod = if value == "auto" {
-                        UniversalLod::Automatic
+                        Lod::Automatic
                     } else {
-                        UniversalLod::Fixed(value.parse()?)
+                        Lod::Fixed(value.parse()?)
                     }
                 }
                 "--lod-bias" => options.lod_settings.quality_bias = value.parse()?,
@@ -307,7 +305,7 @@ impl Options {
         Ok(Some(options))
     }
 
-    fn camera(&self, model: &PreparedUniversalModel) -> CaptureResult<Transform> {
+    fn camera(&self, model: &PreparedModel) -> CaptureResult<Transform> {
         if let Some(index) = self.model_camera {
             if model.cameras().nth(index).is_none() {
                 return Err(format!("model camera {index} is out of range").into());
@@ -350,8 +348,8 @@ struct ScreenshotResult(Option<Result<(), String>>);
 
 fn replace_with_baked_pose(
     app: &mut App,
-    prepared: &PreparedUniversalModel,
-    baker: &mut UniversalPoseBaker,
+    prepared: &PreparedModel,
+    baker: &mut PoseBaker,
     root: Entity,
     camera: Entity,
     entities: &mut Vec<Entity>,
@@ -360,7 +358,7 @@ fn replace_with_baked_pose(
     for entity in entities.drain(..) {
         world.despawn(entity);
     }
-    let playback = world.get::<UniversalPlayback>(root).unwrap();
+    let playback = world.get::<Playback>(root).unwrap();
     let camera_world = world.get::<GlobalTransform>(camera).unwrap().to_matrix();
     let camera =
         Transform::from_matrix(prepared.model_to_bevy().to_matrix().inverse() * camera_world);
@@ -368,12 +366,12 @@ fn replace_with_baked_pose(
         prepared,
         world.resource::<Assets<Mesh>>(),
         world.resource::<Assets<SkinnedMeshInverseBindposes>>(),
-        UniversalPoseOptions {
+        PoseOptions {
             playback: Some(playback),
-            world_selection: world.get::<UniversalWorldSelection>(root),
+            world_selection: world.get::<WorldSelection>(root),
             camera: Some(camera),
             lod: Some(playback.lod),
-            space: UniversalBakeSpace::Bevy,
+            space: BakeSpace::Bevy,
             ..Default::default()
         },
     )?;
@@ -382,9 +380,7 @@ fn replace_with_baked_pose(
             continue;
         };
         let mesh = world.resource_mut::<Assets<Mesh>>().add(part.mesh);
-        let material = world
-            .resource_mut::<Assets<UniversalMaterial>>()
-            .add(material);
+        let material = world.resource_mut::<Assets<ModelMaterial>>().add(material);
         entities.push(
             world
                 .spawn((Mesh3d(mesh), MeshMaterial3d(material), Transform::IDENTITY))
@@ -416,7 +412,7 @@ fn capture(options: Options) -> CaptureResult<()> {
         .to_string_lossy()
         .into_owned();
     let mut app = App::new();
-    app.insert_resource(UniversalAssetSettings {
+    app.insert_resource(AssetSettings {
         resolver: Arc::new(ModelResolver {
             allow_loss: options.allow_loss,
             file_ids: options.file_ids.clone(),
@@ -475,7 +471,7 @@ fn capture(options: Options) -> CaptureResult<()> {
         .resource_mut::<Time<Virtual>>()
         .set_max_delta(Duration::from_secs(1));
     let assets = app.world().resource::<AssetServer>().clone();
-    let handle: Handle<UniversalModelAsset> = assets.load(path);
+    let handle: Handle<ModelAsset> = assets.load(path);
     let deadline = Instant::now() + TIMEOUT;
     loop {
         step(&mut app, Duration::ZERO)?;
@@ -491,7 +487,7 @@ fn capture(options: Options) -> CaptureResult<()> {
         .resource_scope(|world, mut meshes: Mut<Assets<Mesh>>| {
             world.resource_scope(
                 |world, mut binds: Mut<Assets<SkinnedMeshInverseBindposes>>| {
-                    let models = world.resource::<Assets<UniversalModelAsset>>();
+                    let models = world.resource::<Assets<ModelAsset>>();
                     let asset = models.get(&handle).unwrap();
                     let mut diagnostics = BTreeMap::new();
                     for diagnostic in asset.compiled.diagnostics() {
@@ -576,9 +572,9 @@ fn capture(options: Options) -> CaptureResult<()> {
     let root = app
         .world_mut()
         .resource_scope(|world, mut meshes: Mut<Assets<Mesh>>| {
-            world.resource_scope(|world, mut materials: Mut<Assets<UniversalMaterial>>| {
+            world.resource_scope(|world, mut materials: Mut<Assets<ModelMaterial>>| {
                 let mut commands = world.commands();
-                spawn_universal_model(
+                spawn_model(
                     &mut commands,
                     &mut meshes,
                     &mut materials,
@@ -588,30 +584,27 @@ fn capture(options: Options) -> CaptureResult<()> {
             })
         });
     app.world_mut().flush();
-    app.world_mut().entity_mut(root).insert((
-        options.lod,
-        UniversalLodOverride(options.lod_settings.clone()),
-    ));
+    app.world_mut()
+        .entity_mut(root)
+        .insert((options.lod, LodOverride(options.lod_settings.clone())));
     if let Some(index) = options.model_camera {
         let feature = prepared
             .cameras()
             .nth(index)
             .ok_or("model camera index out of range")?;
-        app.world_mut()
-            .entity_mut(camera)
-            .insert(UniversalCameraBinding {
-                fov_multiplier: options.camera_fov_multiplier,
-                ..UniversalCameraBinding::new(root, feature.id)
-            });
+        app.world_mut().entity_mut(camera).insert(CameraBinding {
+            fov_multiplier: options.camera_fov_multiplier,
+            ..CameraBinding::new(root, feature.id)
+        });
     }
     {
         let mut playback = app
             .world_mut()
-            .get_mut::<UniversalPlayback>(root)
+            .get_mut::<Playback>(root)
             .ok_or("Universal playback was not spawned")?;
         playback.clip = clips.get(options.sequence).map(|(id, _)| *id);
         playback.driving_camera = Some(camera);
-        if let UniversalLod::Fixed(level) = options.lod {
+        if let Lod::Fixed(level) = options.lod {
             playback.lod = level;
         }
     }
@@ -619,7 +612,7 @@ fn capture(options: Options) -> CaptureResult<()> {
     create_dir_all(&options.output)?;
     let mut elapsed = 0.;
     let mut next_play = 0;
-    let mut baker = UniversalPoseBaker::default();
+    let mut baker = PoseBaker::default();
     let mut baked_entities = Vec::new();
     for (index, &time) in options.times.iter().enumerate() {
         loop {
@@ -628,7 +621,7 @@ fn capture(options: Options) -> CaptureResult<()> {
                 .get(next_play)
                 .filter(|change| change.time <= elapsed + 1e-9 && change.time <= time + 1e-9)
             {
-                let mut playback = app.world_mut().get_mut::<UniversalPlayback>(root).unwrap();
+                let mut playback = app.world_mut().get_mut::<Playback>(root).unwrap();
                 let clip = clips[change.sequence].0;
                 if let Some(duration) = options.blend {
                     playback.play_with_blend(clip, duration);
@@ -652,14 +645,14 @@ fn capture(options: Options) -> CaptureResult<()> {
         settle(&mut app)?;
         if let Some(error) = app
             .world()
-            .get::<UniversalAnimationError>(root)
+            .get::<PlaybackError>(root)
             .and_then(|error| error.0.as_ref())
         {
             return Err(format!("Universal animation failed: {error}").into());
         }
         if let Some(camera_index) = options.model_camera {
-            let instance = app.world().get::<UniversalInstance>(root).unwrap();
-            let playback = app.world().get::<UniversalPlayback>(root).unwrap();
+            let instance = app.world().get::<ModelRig>(root).unwrap();
+            let playback = app.world().get::<Playback>(root).unwrap();
             let feature = prepared.cameras().nth(camera_index).unwrap();
             let sample = instance
                 .sample_camera(
@@ -822,10 +815,8 @@ fn step(app: &mut App, dt: Duration) -> CaptureResult<()> {
 fn settle(app: &mut App) -> CaptureResult<()> {
     let deadline = Instant::now() + TIMEOUT;
     let mut frames = 0;
-    let mut requests = app
-        .world_mut()
-        .query_filtered::<(), With<UniversalModelInstance>>();
-    let mut errors = app.world_mut().query::<&UniversalModelInstanceError>();
+    let mut requests = app.world_mut().query_filtered::<(), With<ModelInstance>>();
+    let mut errors = app.world_mut().query::<&ModelInstanceError>();
     loop {
         step(app, Duration::ZERO)?;
         if let Some(error) = errors.iter(app.world()).next() {
@@ -932,14 +923,11 @@ mod tests {
         ])
         .unwrap()
         .unwrap();
-        assert_eq!(options.lod, UniversalLod::Automatic);
+        assert_eq!(options.lod, Lod::Automatic);
         assert_eq!(options.lod_settings.quality_bias, 2.0);
         assert_eq!(options.lod_settings.minimum_level, 2);
         assert_eq!(options.lod_settings.thresholds, [300.0, 150.0]);
-        assert_eq!(
-            parse(&["--lod", "2"]).unwrap().unwrap().lod,
-            UniversalLod::Fixed(2)
-        );
+        assert_eq!(parse(&["--lod", "2"]).unwrap().unwrap().lod, Lod::Fixed(2));
         for arguments in [
             vec!["--lod", "bad"],
             vec!["--lod-bias", "NaN"],
@@ -1007,7 +995,7 @@ mod tests {
     #[test]
     fn authored_camera_selection_validates_index_before_loading_gpu() {
         let model = semantic::decode(include_bytes!("../tests/fixtures/cameras.mdl")).unwrap();
-        let compiled = bevy_wc3::compile_universal_model(&model, |_| None).unwrap();
+        let compiled = bevy_wc3::compile_model(&model, |_| None).unwrap();
         let model = compiled.prepare(
             &mut Assets::<Mesh>::default(),
             &mut Assets::<SkinnedMeshInverseBindposes>::default(),

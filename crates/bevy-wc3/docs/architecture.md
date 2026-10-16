@@ -8,23 +8,24 @@ native file version. The public facade lives in `src/lib.rs`, plugin registratio
 
 ## Compilation, preparation, and ownership
 
-`universal/assets.rs` loads native models and required companions through an
+`assets/model.rs` loads native models and required companions through an
 application resource resolver. It resolves role-specific image variants and compiles
-the semantic model before returning `UniversalModelAsset`. Assets retain compiled
+the semantic model before returning `ModelAsset`. Assets retain compiled
 definitions and dependency handles rather than the source graph.
 
-`universal/compiler.rs` assembles geometry, material, animation, feature, world, and
+`compiler.rs` assembles geometry, material, animation, feature, world, and
 effect interpreters. `geometry.rs` projects selected connectivity ranges and
 attribute domains, deduplicating complete compiled vertex records. Complete mesh
 outputs share assets when their attributes, indices, and topology agree.
-`material.rs` defines `ExtendedMaterial<StandardMaterial, UniversalMaterialExtension>`;
+`material.rs` defines `ExtendedMaterial<StandardMaterial, ModelMaterialExtension>`;
 `material/compile.rs` interprets surfaces and `material/animation.rs` samples their
 properties. `textures.rs` identifies role, color-space, and effective sampler requests.
 Unsupported semantics produce source-associated diagnostics or fail where no valid
 geometry interpretation exists.
 
-`CompiledUniversalModel::prepare` inserts unique meshes and inverse bind palettes
-into asset stores and returns `PreparedUniversalModel`. Source bytes and the graph
+`compiled.rs` owns the compiled definitions and shared asset preparation.
+`CompiledModel::prepare` inserts unique meshes and inverse bind palettes
+into asset stores and returns `PreparedModel`. Source bytes and the graph
 may be released before preparation. Mesh, bind, animation, and definition buffers
 remain shared. Constant materials share handles; animated materials remain private
 per instance and mark assets modified only when sampled values change.
@@ -66,10 +67,10 @@ supported light definitions have dedicated owned components.
 
 ## Effect record storage
 
-`universal/effects/` owns semantic emission, atlas sprites, age-driven sprites,
-model particles, and trails. Shared GPU transport under `effects/` handles record
-storage, extraction, upload, draw ordering, and shader-generated geometry without
-native model-record dependencies.
+`effects/` owns semantic emission, atlas sprites, age-driven sprites, model
+particles, and trails. Its `sprites/` and `trails/` modules provide shared GPU
+transport, with common record storage, extraction, upload, draw ordering, and
+shader-generated geometry without native model-record dependencies.
 
 Atlas sprites and trails retain immutable births in bounded ring storage. GPU
 updates upload changed birth ranges; per-view sorting uses separate indices. Ribbon

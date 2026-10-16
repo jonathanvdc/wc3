@@ -6,8 +6,7 @@ use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
 use bevy_wc3::{
-    UniversalAssetSettings, UniversalInstance, UniversalLod, UniversalLodSettings,
-    UniversalModelAsset, UniversalModelInstance, UniversalPlayback, Wc3BevyPlugin,
+    AssetSettings, Lod, LodSettings, ModelAsset, ModelInstance, ModelRig, Playback, Wc3BevyPlugin,
 };
 use std::sync::Arc;
 #[path = "support/resolver.rs"]
@@ -19,7 +18,7 @@ use std::path::PathBuf;
 #[derive(Resource)]
 struct Source {
     path: PathBuf,
-    handle: Handle<UniversalModelAsset>,
+    handle: Handle<ModelAsset>,
     tonemapping: Tonemapping,
 }
 
@@ -38,8 +37,8 @@ fn main() {
         .canonicalize()
         .expect("find model file");
     let mut resolver = ModelResolver::default();
-    let mut lod = UniversalLod::Fixed(0);
-    let mut lod_settings = UniversalLodSettings::default();
+    let mut lod = Lod::Fixed(0);
+    let mut lod_settings = LodSettings::default();
     let mut tonemapping = Tonemapping::None;
     let mut illuminance = 5_000.0;
     while let Some(option) = arguments.next() {
@@ -48,11 +47,9 @@ fn main() {
             match option.as_str() {
                 "--lod" => {
                     lod = if value == "auto" {
-                        UniversalLod::Automatic
+                        Lod::Automatic
                     } else {
-                        UniversalLod::Fixed(
-                            value.parse().expect("LOD must be auto or a level number"),
-                        )
+                        Lod::Fixed(value.parse().expect("LOD must be auto or a level number"))
                     }
                 }
                 "--lod-bias" => {
@@ -135,7 +132,7 @@ fn main() {
         .into_owned();
     App::new()
         .insert_resource(lod_settings)
-        .insert_resource(UniversalAssetSettings {
+        .insert_resource(AssetSettings {
             resolver: Arc::new(resolver),
         })
         .add_plugins((
@@ -149,7 +146,7 @@ fn main() {
             Startup,
             move |mut commands: Commands, assets: Res<AssetServer>| {
                 let handle = assets.load(filename.clone());
-                commands.spawn((UniversalModelInstance::new(handle.clone()), lod));
+                commands.spawn((ModelInstance::new(handle.clone()), lod));
                 commands.insert_resource(Source {
                     path: path.clone(),
                     handle,
@@ -171,7 +168,7 @@ fn main() {
 fn frame_model(
     mut commands: Commands,
     source: Res<Source>,
-    models: Res<Assets<UniversalModelAsset>>,
+    models: Res<Assets<ModelAsset>>,
     cameras: Query<Entity, With<OrbitCamera>>,
 ) {
     if !cameras.is_empty() {
@@ -235,10 +232,7 @@ fn orbit_camera(
     transform.look_at(orbit.target, Vec3::Y);
 }
 
-fn controls(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut animations: Query<(&UniversalInstance, &mut UniversalPlayback)>,
-) {
+fn controls(keys: Res<ButtonInput<KeyCode>>, mut animations: Query<(&ModelRig, &mut Playback)>) {
     if !keys.just_pressed(KeyCode::Space) {
         return;
     }

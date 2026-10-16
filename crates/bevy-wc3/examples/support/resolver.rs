@@ -1,6 +1,6 @@
 //! Model resource choices shared by the interactive viewer and capture tool.
 use bevy::asset::AssetPath;
-use bevy_wc3::{TextureRequest, UniversalPathResolver, UniversalResourceResolver};
+use bevy_wc3::{PathResolver, ResourceResolver, TextureRequest};
 use std::collections::HashMap;
 use wc3::model::conversion::{ImportOptions, LossPolicy, UnknownPolicy};
 use wc3::model::formats::wmo::Profile as WmoProfile;
@@ -14,7 +14,7 @@ pub struct ModelResolver {
     pub replaceables: HashMap<u32, String>,
     pub wmo_profile: Option<WmoProfile>,
 }
-impl UniversalResourceResolver for ModelResolver {
+impl ResourceResolver for ModelResolver {
     fn import_options(&self, _owner: &AssetPath<'_>) -> ImportOptions {
         if self.allow_loss {
             ImportOptions {
@@ -59,7 +59,7 @@ impl UniversalResourceResolver for ModelResolver {
                 })
                 .unwrap_or_default();
         }
-        UniversalPathResolver.candidates(resource, owner)
+        PathResolver.candidates(resource, owner)
     }
     fn wmo_profile(&self, _owner: &AssetPath<'_>) -> Option<WmoProfile> {
         self.wmo_profile

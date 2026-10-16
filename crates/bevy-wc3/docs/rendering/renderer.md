@@ -15,10 +15,10 @@ eight active influences and rejects larger distributions rather than truncating.
 Complete compiled mesh contents are interned so equivalent draws share GPU geometry,
 while different tangent bases, attributes, and indices remain distinct.
 Models convert declared axes and units into Bevy's frame beneath the application
-root. `UniversalDraw` preserves typed instance, mesh, material, draw-source, pass,
+root. `ModelDraw` preserves typed instance, mesh, material, draw-source, pass,
 and LOD identities.
 
-`UniversalPlayback` selects typed clips and controller programmes in seconds. Shared
+`Playback` selects typed clips and controller programmes in seconds. Shared
 clocks remain independently sampleable. Local-pose transitions retain signed scale
 and shortest-path quaternion rotation; surface and visibility properties sample the
 destination directly. One pose evaluator handles hierarchy, pivots, native billboard
@@ -27,13 +27,13 @@ conventions, camera anchoring, effect births, event poses, and offline baking. S
 
 Fixed or [automatic LOD](lod.md) selects authored geometry without recreating the
 rig. [Mesh color and opacity](geoset-animation.md) remain independent across passes.
-`UniversalPoseBaker` provides typed geometry/material snapshots without an ECS
+`PoseBaker` provides typed geometry/material snapshots without an ECS
 world; its limits are described in the [application
 guide](../usage.md#bake-a-static-pose).
 
 ## Materials and textures
 
-`UniversalMaterial` extends Bevy `StandardMaterial` with authored blend/depth states
+`ModelMaterial` extends Bevy `StandardMaterial` with authored blend/depth states
 and supported native combiners. Classic layered surfaces, common M2 combinations,
 basic WMO surfaces, M3 common layers, and known Diablo roles map into that pipeline.
 Complex combinations remain diagnostic fallbacks. Unlit and unfogged controls use

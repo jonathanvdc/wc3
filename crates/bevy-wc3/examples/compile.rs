@@ -2,7 +2,7 @@
 use bevy::ecs::world::{CommandQueue, World};
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
-use bevy_wc3::{compile_universal_model, spawn_universal_model, UniversalMaterial};
+use bevy_wc3::{compile_model, spawn_model, ModelMaterial};
 #[path = "support/model.rs"]
 mod semantic;
 use std::error::Error;
@@ -15,18 +15,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut queue = CommandQueue::default();
         let mut commands = Commands::new(&mut queue, &world);
         let mut meshes = Assets::<Mesh>::default();
-        let mut materials = Assets::<UniversalMaterial>::default();
+        let mut materials = Assets::<ModelMaterial>::default();
         let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-        let compiled = compile_universal_model(&model, |_| None)?;
+        let compiled = compile_model(&model, |_| None)?;
         let prepared = compiled.prepare(&mut meshes, &mut bindposes);
-        spawn_universal_model(
+        spawn_model(
             &mut commands,
             &mut meshes,
             &mut materials,
             &prepared,
             Transform::IDENTITY,
         );
-        spawn_universal_model(
+        spawn_model(
             &mut commands,
             &mut meshes,
             &mut materials,

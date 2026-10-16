@@ -2,7 +2,7 @@
 
 Semantic trails retain birth-time cross sections and build connected geometry on the
 GPU. Material passes share immutable section records while retaining distinct
-blend/depth and texture state. `UniversalRibbonEmitter` exposes source identity and
+blend/depth and texture state. `RibbonEmitter` exposes source identity and
 bounded simulation statistics.
 
 ## Cross sections and motion

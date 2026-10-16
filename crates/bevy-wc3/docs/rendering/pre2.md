@@ -38,7 +38,7 @@ remain incomplete and produce diagnostics.
 
 Each sprite emitter is bounded to 8,192 living particles. The CPU age path also
 bounds births and long-update integration intervals, reporting omitted births and
-skipped time through `UniversalParticleEmitter`. Budgets discard work rather than
+skipped time through `SpriteEmitter`. Budgets discard work rather than
 creating an unbounded catch-up queue. Root despawn removes simulation and render
 state. Hierarchy visibility gates rendering; effect activation controls births.
 

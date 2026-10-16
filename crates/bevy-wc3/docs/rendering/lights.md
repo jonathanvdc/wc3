@@ -1,7 +1,7 @@
 # Imported lights
 
 Common authored diffuse lights become ordinary Bevy lights and illuminate other Bevy
-assets as well as imported models. `UniversalLight` retains the complete supported
+assets as well as imported models. `ModelLight` retains the complete supported
 light definition, application enablement, and sampled ambient metadata. The model's
 node hierarchy controls placement and cleanup.
 
@@ -13,7 +13,7 @@ and shadow flags to Bevy point, directional, or spot components. Unknown kinds
 remain inspectable without an arbitrary substitute. M3 spot hot-spot/falloff
 controls map to bounded Bevy cone angles; exact native calibration is unverified.
 
-`UniversalLightSettings` on a model root configures power/range conversion and
+`ModelLightSettings` on a model root configures power/range conversion and
 suppression. Defaults are 1,000 lumens per point intensity unit, 10,000 lux per
 directional unit, range scale 1, fallback range 1,000, and shadows permitted. These
 are integration defaults, not calibrated physical conversions. Each child model has
@@ -22,7 +22,7 @@ scene units; Bevy light range does not scale with Transform.
 
 The animation system writes supported light color, power, range, cone, and shadow
 permission. Application-specific light radii, biases, render layers, and cascade
-settings remain available. Disable `UniversalLight.enabled` to suppress an
+settings remain available. Disable `ModelLight.enabled` to suppress an
 individual imported light. Removing the interpreter component leaves the ordinary
 Bevy light under application control, with hierarchy lifetime unchanged.
 
@@ -36,6 +36,6 @@ radius, and custom falloff/shadow-range controls are not reproduced.
 WMO Euler/cone calibration, cookies, flicker, and regional light-set activation
 remain uninterpreted. M3 separate specular response, decay law, and light LOD gates
 are not reproduced. WMO placement appearance retains interior illumination and
-linked-light information on `UniversalPlacementAppearance`; it is not multiplied
+linked-light information on `PlacementAppearance`; it is not multiplied
 into child albedo. Applications need region ambient/interior direction policy to
 interpret those controls without double-counting Bevy scene lights.

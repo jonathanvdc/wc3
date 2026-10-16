@@ -1,6 +1,6 @@
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::{Assets, Mesh};
-use bevy_wc3::compile_universal_model;
+use bevy_wc3::compile_model;
 use wc3::model::{NodeFeature, ParticleDetails, ParticleEmitter};
 
 #[path = "../examples/support/model.rs"]
@@ -12,7 +12,7 @@ fn classic_source_compiles_after_encoded_storage_is_released() {
     let model = semantic::decode(&bytes).unwrap();
     drop(bytes);
     assert_eq!(model.meshes().count(), 1);
-    let compiled = compile_universal_model(&model, |_| None).unwrap();
+    let compiled = compile_model(&model, |_| None).unwrap();
     drop(model);
     let mut meshes = Assets::<Mesh>::default();
     let prepared = compiled.prepare(
@@ -34,7 +34,7 @@ fn mdl_and_mdx_compile_equivalent_geometry_and_clocks() {
     ];
     let mut results = Vec::new();
     for model in models {
-        let compiled = compile_universal_model(&model, |_| None).unwrap();
+        let compiled = compile_model(&model, |_| None).unwrap();
         let mut meshes = Assets::<Mesh>::default();
         let prepared = compiled.prepare(
             &mut meshes,
@@ -81,7 +81,7 @@ fn particle_fixture_preserves_distinct_native_emitter_definitions() {
         })
         .collect();
     assert_eq!(emitters.len(), 2);
-    let compiled = compile_universal_model(&model, |_| None).unwrap();
+    let compiled = compile_model(&model, |_| None).unwrap();
     let prepared = compiled.prepare(
         &mut Assets::<Mesh>::default(),
         &mut Assets::<SkinnedMeshInverseBindposes>::default(),
@@ -111,7 +111,7 @@ fn semantic_compilation_retains_feature_identities_across_fixture_families() {
             .features()
             .map(|(id, feature)| (id, feature.node))
             .collect();
-        let compiled = compile_universal_model(&model, |_| None).unwrap();
+        let compiled = compile_model(&model, |_| None).unwrap();
         let prepared = compiled.prepare(
             &mut Assets::<Mesh>::default(),
             &mut Assets::<SkinnedMeshInverseBindposes>::default(),

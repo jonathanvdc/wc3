@@ -3,13 +3,13 @@
 The renderer compiles `Model<'_, Universal>` directly into Bevy assets and an
 independently animated hierarchy. Native MDLX, M2, WMO, M3, and Diablo adapters
 supply semantic models; none requires export to a Warcraft III runtime version.
-`UniversalModelInstance` loads file-backed models onto an application entity.
+`ModelInstance` loads file-backed models onto an application entity.
 
 ## Compilation and ownership
 
 Compilation borrows the graph, builds owned CPU meshes, and detaches animation
-buffers from their source. `CompiledUniversalModel::prepare` inserts shared meshes
-and inverse bind palettes into Bevy assets. `spawn_universal_model` creates an
+buffers from their source. `CompiledModel::prepare` inserts shared meshes
+and inverse bind palettes into Bevy assets. `spawn_model` creates an
 independently animated rig beneath an application-owned transform. The encoded
 source and semantic graph can be released after compilation.
 
@@ -51,7 +51,7 @@ rejects larger distributions without truncation.
 The model coordinate frame maps authored up and forward directions into Bevy's Y-up,
 negative-Z-forward frame. Declared meters-per-unit scales the entire model frame.
 Application transforms remain outside that conversion. The driving camera for
-billboards and camera anchoring is explicitly selected on `UniversalPlayback`.
+billboards and camera anchoring is explicitly selected on `Playback`.
 
 Playback uses seconds. `wc3` evaluates typed curves, while `AnimationProgram`
 indexes compiled channels by property destination. Clip aliases resolve their
@@ -62,7 +62,7 @@ through unrelated sequence keys. Playback uses the selected M3 clip’s authored
 can replace it with an explicit list, including an empty list; priority orders
 contributions, with list order breaking ties.
 
-`UniversalPoseOverrides` applies application-supplied local poses after authored
+`PoseOverrides` applies application-supplied local poses after authored
 animation. Removing an override resumes normal sampling. Physics, gameplay
 controllers, and solvers can use this boundary without replacing the renderer.
 
@@ -70,7 +70,7 @@ controllers, and solvers can use this boundary without replacing the renderer.
 
 Surfaces extend Bevy's standard material and lighting pipeline. Authored blend
 factors and independent depth-test/write controls specialize the GPU pipeline. A
-default `UniversalMaterialExtension` leaves a standalone `StandardMaterial`'s blend
+default `ModelMaterialExtension` leaves a standalone `StandardMaterial`'s blend
 and depth behavior intact; compiled model passes supply explicit overrides. Color,
 opacity, texture choice, and coordinate transforms animate on the same semantic
 clocks as node poses. Supported legacy M2 multiplication combinations sample
@@ -81,13 +81,13 @@ including animated bindings and Fresnel controls. The [Reforged material
 guide](reforged-materials.md) describes the shared PBR interpretation and its
 reflection approximation.
 
-`UniversalCompileOptions` selects typed material appearances. Draw-based looks and
+`CompileOptions` selects typed material appearances. Draw-based looks and
 Diablo slot alternatives retain their own identities. An ambiguous Diablo default
 requires an explicit selection; compilation does not choose the first material or
 variant.
 
 Portable, ambient/diffuse, WMO, and M3 lights expose ordinary Bevy scene lights and
-`UniversalLight` metadata. Root `UniversalLightSettings` controls conversion scales
+`ModelLight` metadata. Root `ModelLightSettings` controls conversion scales
 and suppression. Common diffuse color, intensity, range, and supported shadow flags
 animate with the instance. Authored ambient terms remain metadata; the renderer does
 not overwrite scene ambient lighting. Native WMO cone and orientation conventions,
@@ -96,13 +96,13 @@ separate specular response, decay law, and light LOD controls also remain availa
 without an exact lighting equivalent.
 
 Attachment points preserve identity namespaces, resource identity, and activation.
-`UniversalPlacementAppearance` retains complete WMO placement appearance. Its
+`PlacementAppearance` retains complete WMO placement appearance. Its
 interior direct illumination, linked-light and region controls remain application
 hooks; they are not multiplied into child albedo. Child models start their first
 clip and restart on activation, parent clip changes, or backwards parent traversal.
 
 Authored cameras can be sampled on request or bound to an application-owned
-perspective `Camera3d` through `UniversalCameraBinding`. Bindings select the model
+perspective `Camera3d` through `CameraBinding`. Bindings select the model
 root and camera `FeatureId`, and update lens and view before Bevy's camera update.
 They sample the current playback and pose overrides and resolve ordinary application
 transform hierarchies directly, avoiding a previous-frame rig pose or root
@@ -112,8 +112,8 @@ rejected, as are parents requiring a sheared local camera transform; invalid
 bindings retain their previous view. Camera feature IDs change when a source is
 decoded again, so bindings must be retargeted after asset replacement.
 
-`UniversalNode`, `UniversalDraw`, and feature metadata preserve semantic source
-identities. `PreparedUniversalModel::features` also exposes integration points whose
+`ModelNode`, `ModelDraw`, and feature metadata preserve semantic source
+identities. `PreparedModel::features` also exposes integration points whose
 visual interpreter is unavailable. These generic hooks retain IDs and kinds rather
 than complete owned unsupported payloads; inspect the graph during compilation when
 those definitions are required. Rendering diagnostics describe missing behavior and
@@ -134,7 +134,7 @@ its population or view changes. Motion evaluates gravity, wind, and linear drag
 analytically. Local particles follow the current emitter transform; world particles
 retain their birth frame. Paused, unchanged frames avoid mesh uploads.
 Living-particle, per-update birth, and long-update budgets bound CPU work;
-`UniversalParticleEmitter` exposes omitted work and current population.
+`SpriteEmitter` exposes omitted work and current population.
 
 M3 standard billboards interpret common distributions, velocity selectors,
 normalized three-stage appearance, and flipbook timing through the CPU transport.
@@ -156,7 +156,7 @@ produce diagnostics.
 ## Static worlds
 
 Prepared models expose world groups, portals, placement sets, regions, liquids, and
-authored fog and ambient definitions. `UniversalWorldSelection` can hide groups or
+authored fog and ambient definitions. `WorldSelection` can hide groups or
 select placement sets. The default is conservative; an explicit `ReachableFrom`
 policy follows portal connectivity. It does not perform portal occlusion or
 clipped-frustum culling. Visibility gates intersect these selections with authored
@@ -164,7 +164,7 @@ animation, material opacity, and LOD.
 
 Liquid grids preserve holes, native spacing, and absolute vertex heights. An
 authored material is interpreted through the standard material compiler. A liquid
-without a resolved material exposes its mesh and `UniversalWorldLiquidSurface`
+without a resolved material exposes its mesh and `WorldLiquidSurface`
 identity for an application material provider; the renderer does not infer a shader
 from an external liquid-type database. Environment sampling exposes regional fog and
 ambient weights without changing global Bevy lighting or fog. Native regional
@@ -172,8 +172,8 @@ lighting fidelity remains unverified.
 
 ## Native resources
 
-`UniversalModelLoader` imports native models and their required companions before
-direct compilation. Applications implement `UniversalResourceResolver` to map
+`ModelLoader` imports native models and their required companions before
+direct compilation. Applications implement `ResourceResolver` to map
 file-data IDs, namespaced resources, or paths into registered Bevy asset sources.
 The default resolver handles relative paths and tries literal, BLP, DDS, PNG, and
 TGA candidates beside the model before the asset root. Named asset sources and
@@ -181,9 +181,9 @@ authored filename case remain intact. `texture_resource` selects replacements by
 semantic identity, source-list index, and sample role; `texture_candidates`
 customizes lookup. `compile_options` selects authored material appearances. Required
 companion failures stop loading; missing optional images remain inspectable on
-`UniversalModelAsset`.
+`ModelAsset`.
 
-`UniversalResourceResolver::import_options` selects native conversion policy.
+`ResourceResolver::import_options` selects native conversion policy.
 Its default is strict preservation; accepting loss is an explicit provider choice,
 and retained conversion diagnostics identify dropped or approximated records.
 A permissive policy does not invent required resources or repair malformed data.

@@ -1,16 +1,16 @@
 # Authored cameras
 
-Authored views can be sampled through `UniversalInstance` or bound to an
+Authored views can be sampled through `ModelRig` or bound to an
 application-owned perspective `Camera3d`. Loading a model never creates or activates
 a view. Camera feature IDs come from the prepared model's `cameras()` iterator and
 belong to that decoded model identity.
 
 ## Bind a view
 
-`UniversalCameraBinding::new(model_root, camera_feature)` selects a root and typed
+`CameraBinding::new(model_root, camera_feature)` selects a root and typed
 camera feature. Its public `fov_multiplier` scales the authored vertical FOV; use
 0.75 explicitly for a portrait-style interpretation. Independently set
-`UniversalPlayback::driving_camera` to choose the view used by billboards and
+`Playback::driving_camera` to choose the view used by billboards and
 camera-anchored nodes.
 
 The binding owns camera transform and supported perspective lens fields. Activation,
@@ -21,7 +21,7 @@ view and produces a deduplicated warning.
 
 ## Sampling and scheduling
 
-`UniversalInstance::sample_camera` returns `SampledUniversalCamera` at current
+`ModelRig::sample_camera` returns `SampledCamera` at current
 playback clocks. `world_transform` maps its authored eye/target/up through the root,
 and `perspective_projection` interprets the lens. The live binding samples current
 animation and overrides directly rather than reading last frame's rig. Ordinary

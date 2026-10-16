@@ -1,6 +1,6 @@
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::{Assets, Mesh};
-use bevy_wc3::compile_universal_model;
+use bevy_wc3::compile_model;
 use wc3::model::{
     conversion::ImportOptions,
     formats::mdlx::{mdl::Read as _, Document, V1100},
@@ -37,7 +37,7 @@ fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources
         .unwrap()
         .value
         .widen::<Universal>();
-    let compiled = compile_universal_model(&model, |_| None).unwrap();
+    let compiled = compile_model(&model, |_| None).unwrap();
     let prepared = compiled.prepare(&mut meshes, &mut binds);
     assert_eq!(
         meshes.len(),
@@ -57,7 +57,7 @@ fn preparation_shares_identical_uv_meshes_and_preserves_distinct_tangent_sources
         .unwrap()
         .value
         .widen::<Universal>();
-    let compiled = compile_universal_model(&model, |_| None).unwrap();
+    let compiled = compile_model(&model, |_| None).unwrap();
     let _prepared = compiled.prepare(&mut meshes, &mut binds);
     assert_eq!(
         meshes.len(),

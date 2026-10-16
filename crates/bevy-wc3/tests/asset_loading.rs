@@ -2,7 +2,7 @@ use bevy::asset::{AssetApp, AssetPlugin, AssetServer};
 use bevy::image::{Image, ImageLoaderSettings};
 use bevy::prelude::{default, App, Assets, Handle};
 use bevy::tasks::{ComputeTaskPool, IoTaskPool, TaskPoolBuilder};
-use bevy_wc3::{BlpImageLoader, UniversalModelAsset, UniversalModelLoader, UniversalPathResolver};
+use bevy_wc3::{BlpImageLoader, ModelAsset, ModelLoader, PathResolver};
 use std::borrow::Cow;
 use std::fs;
 use std::sync::Arc;
@@ -57,19 +57,19 @@ fn asset_server_loads_mdx_and_mdl_files() {
         ..default()
     });
     app.init_asset::<Image>();
-    app.init_asset::<UniversalModelAsset>();
-    app.register_asset_loader(UniversalModelLoader::new(Arc::new(UniversalPathResolver)));
+    app.init_asset::<ModelAsset>();
+    app.register_asset_loader(ModelLoader::new(Arc::new(PathResolver)));
     app.init_asset_loader::<BlpImageLoader>();
-    let handles: [Handle<UniversalModelAsset>; 2] =
+    let handles: [Handle<ModelAsset>; 2] =
         ["quad.mdx", "quad.mdl"].map(|path| app.world().resource::<AssetServer>().load(path));
     wait_for(&mut app, |app| {
         handles.iter().all(|handle| {
             app.world()
-                .resource::<Assets<UniversalModelAsset>>()
+                .resource::<Assets<ModelAsset>>()
                 .contains(handle)
         })
     });
-    let assets = app.world().resource::<Assets<UniversalModelAsset>>();
+    let assets = app.world().resource::<Assets<ModelAsset>>();
     let mdx = assets.get(&handles[0]).unwrap();
     let mdl = assets.get(&handles[1]).unwrap();
     assert_eq!(
@@ -84,7 +84,7 @@ fn asset_server_loads_mdx_and_mdl_files() {
             .map(|(_, name)| name)
             .collect::<Vec<_>>()
     );
-    let bounds = |asset: &UniversalModelAsset| {
+    let bounds = |asset: &ModelAsset| {
         asset
             .compiled
             .rest_bounds()
@@ -137,10 +137,10 @@ fn asset_server_resolves_child_models_and_keeps_missing_slots() {
         ..default()
     });
     app.init_asset::<Image>();
-    app.init_asset::<UniversalModelAsset>();
-    app.register_asset_loader(UniversalModelLoader::new(Arc::new(UniversalPathResolver)));
+    app.init_asset::<ModelAsset>();
+    app.register_asset_loader(ModelLoader::new(Arc::new(PathResolver)));
     app.init_asset_loader::<BlpImageLoader>();
-    let handle: Handle<UniversalModelAsset> = app
+    let handle: Handle<ModelAsset> = app
         .world()
         .resource::<AssetServer>()
         .load("units/parent.mdl");
@@ -149,7 +149,7 @@ fn asset_server_resolves_child_models_and_keeps_missing_slots() {
             .resource::<AssetServer>()
             .is_loaded_with_dependencies(&handle)
     });
-    let assets = app.world().resource::<Assets<UniversalModelAsset>>();
+    let assets = app.world().resource::<Assets<ModelAsset>>();
     assert!(assets
         .get(&handle)
         .unwrap()
@@ -161,15 +161,13 @@ fn asset_server_resolves_child_models_and_keeps_missing_slots() {
     let server = app.world().resource::<AssetServer>();
     for path in ["units/weapon.mdl", "root.mdl", "units/spark.mdx"] {
         let child = server
-            .get_handle::<UniversalModelAsset>(path)
+            .get_handle::<ModelAsset>(path)
             .expect("selected child registered");
         assert!(assets.contains(&child), "child {path} loaded");
     }
+    assert!(server.get_handle::<ModelAsset>("spark.mdl").is_none());
     assert!(server
-        .get_handle::<UniversalModelAsset>("spark.mdl")
-        .is_none());
-    assert!(server
-        .get_handle::<UniversalModelAsset>("units/weapon.mdx")
+        .get_handle::<ModelAsset>("units/weapon.mdx")
         .is_none());
     fs::remove_dir_all(directory).unwrap();
 }

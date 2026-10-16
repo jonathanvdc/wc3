@@ -1,22 +1,22 @@
 # Animation and pose transitions
 
-`UniversalPlayback` selects typed clips and controller programmes with independent
+`Playback` selects typed clips and controller programmes with independent
 clip, authoring-timeline, and shared clocks in seconds. Native adapters preserve
 loop/clamp policy, aliases, and sequence intervals; the runtime samples properties
 through the semantic `AnimationProgram`.
 
 ## Playback controls
 
-Choose a `ClipId` from `PreparedUniversalModel::clips()`. `play` starts or restarts
+Choose a `ClipId` from `PreparedModel::clips()`. `play` starts or restarts
 it using the selected M3 sequence's authored blend duration or the model's default.
 `play_with_blend` accepts a `Duration`, and `play_immediately` requests no fade.
 Repeated play calls restart the clock, so
 issue them when the desired animation changes. Invalid selections become
-`UniversalAnimationError` during evaluation.
+`PlaybackError` during evaluation.
 
-`controllers` defaults to `UniversalControllerSelection::Authored`: selecting an
+`controllers` defaults to `ControllerSelection::Authored`: selecting an
 M3 clip evaluates its authored controller selection in source order. Use
-`UniversalControllerSelection::Explicit(programmes)` to replace that list;
+`ControllerSelection::Explicit(programmes)` to replace that list;
 `Explicit(Vec::new())` deliberately selects no controllers. These choices apply to
 node poses, materials, cameras, effect births, events, and offline pose baking.
 After model replacement, authored selections come from the replacement clip;

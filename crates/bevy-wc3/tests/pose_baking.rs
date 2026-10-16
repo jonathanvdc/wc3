@@ -1,8 +1,8 @@
 use bevy::mesh::{skinning::SkinnedMeshInverseBindposes, VertexAttributeValues};
 use bevy::prelude::*;
 use bevy_wc3::{
-    compile_universal_model, PreparedUniversalModel, UniversalBakeSpace, UniversalBakedSource,
-    UniversalPlayback, UniversalPoseBaker, UniversalPoseOptions, UniversalWorldSelection,
+    compile_model, BakeSpace, BakedSource, Playback, PoseBaker, PoseOptions, PreparedModel,
+    WorldSelection,
 };
 use wc3::model::formats::mdlx::animation::{Track, ValueKeyframe};
 use wc3::model::formats::mdlx::scene::{Bone, Node, NodeFlags};
@@ -17,7 +17,7 @@ fn prepare(
     source: &Document<'_, V800>,
     image: Option<Handle<Image>>,
 ) -> (
-    PreparedUniversalModel,
+    PreparedModel,
     Assets<Mesh>,
     Assets<SkinnedMeshInverseBindposes>,
 ) {
@@ -27,7 +27,7 @@ fn prepare(
         .widen::<Universal>();
     let mut meshes = Assets::default();
     let mut binds = Assets::default();
-    let compiled = compile_universal_model(&model, |_| image.clone()).unwrap();
+    let compiled = compile_model(&model, |_| image.clone()).unwrap();
     (compiled.prepare(&mut meshes, &mut binds), meshes, binds)
 }
 fn source() -> Document<'static, V800> {
@@ -39,8 +39,8 @@ fn positions(mesh: &Mesh) -> &[[f32; 3]] {
         .as_float3()
         .unwrap()
 }
-fn playback(prepared: &PreparedUniversalModel, local: f64, shared: f64) -> UniversalPlayback {
-    let mut value = UniversalPlayback::default();
+fn playback(prepared: &PreparedModel, local: f64, shared: f64) -> Playback {
+    let mut value = Playback::default();
     value.play(prepared.clips()[0].0);
     value.clip_time = local;
     value.timeline_time = local;
@@ -82,10 +82,10 @@ fn independent_clocks_pose_eight_influences_without_mutating_sources() {
     let part = prepared.parts().next().unwrap();
     let input = positions(meshes.get(part.mesh).unwrap()).to_vec();
     let state = playback(&prepared, 0.25, 0.75);
-    let mut baker = UniversalPoseBaker::default();
-    let options = UniversalPoseOptions {
+    let mut baker = PoseBaker::default();
+    let options = PoseOptions {
         playback: Some(&state),
-        space: UniversalBakeSpace::Authored,
+        space: BakeSpace::Authored,
         ..default()
     };
     let first = baker.bake(&prepared, &meshes, &binds, options).unwrap();
@@ -101,7 +101,7 @@ fn independent_clocks_pose_eight_influences_without_mutating_sources() {
         .mesh
         .contains_attribute(Mesh::ATTRIBUTE_JOINT_INDEX));
     assert_eq!(positions(meshes.get(part.mesh).unwrap()), input);
-    let UniversalBakedSource::Geometry(identity) = first.parts[0].source else {
+    let BakedSource::Geometry(identity) = first.parts[0].source else {
         panic!()
     };
     assert_eq!(identity.instance, part.source.instance);
@@ -112,7 +112,7 @@ fn snapshots_retain_image_handles_without_changing_shared_assets() {
     let mut images = Assets::<Image>::default();
     let image = images.add(Image::default());
     let (prepared, meshes, binds) = prepare(&source(), Some(image.clone()));
-    let baked = UniversalPoseBaker::default()
+    let baked = PoseBaker::default()
         .bake(&prepared, &meshes, &binds, default())
         .unwrap();
     assert_eq!(
@@ -143,13 +143,13 @@ fn mirrored_and_collapsed_scales_keep_finite_geometry() {
         let mut native = source();
         native.bones_mut().next().unwrap().node.scaling = Some(Track::constant(scale));
         let (prepared, meshes, binds) = prepare(&native, None);
-        let baked = UniversalPoseBaker::default()
+        let baked = PoseBaker::default()
             .bake(
                 &prepared,
                 &meshes,
                 &binds,
-                UniversalPoseOptions {
-                    space: UniversalBakeSpace::Authored,
+                PoseOptions {
+                    space: BakeSpace::Authored,
                     ..default()
                 },
             )
@@ -172,10 +172,10 @@ fn missing_assets_invalid_clocks_and_camera_requirements_are_errors() {
     let mut native = source();
     native.bones_mut().next().unwrap().node.flags = NodeFlags(8);
     let (prepared, mut meshes, binds) = prepare(&native, None);
-    let mut baker = UniversalPoseBaker::default();
+    let mut baker = PoseBaker::default();
     assert!(baker.bake(&prepared, &meshes, &binds, default()).is_err());
     let camera = Transform::from_xyz(0., -10., 5.).looking_at(Vec3::ZERO, Vec3::Z);
-    let options = UniversalPoseOptions {
+    let options = PoseOptions {
         camera: Some(camera),
         ..default()
     };
@@ -186,7 +186,7 @@ fn missing_assets_invalid_clocks_and_camera_requirements_are_errors() {
             &prepared,
             &meshes,
             &binds,
-            UniversalPoseOptions {
+            PoseOptions {
                 playback: Some(&state),
                 ..options
             }
@@ -221,10 +221,10 @@ fn world_group_selection_intersects_authored_surface_visibility() {
         .unwrap();
     let mut meshes = Assets::default();
     let mut binds = Assets::default();
-    let prepared = compile_universal_model(&model, |_| None)
+    let prepared = compile_model(&model, |_| None)
         .unwrap()
         .prepare(&mut meshes, &mut binds);
-    let mut baker = UniversalPoseBaker::default();
+    let mut baker = PoseBaker::default();
     assert!(
         baker
             .bake(&prepared, &meshes, &binds, default())
@@ -232,14 +232,14 @@ fn world_group_selection_intersects_authored_surface_visibility() {
             .parts[0]
             .visible
     );
-    let mut selection = UniversalWorldSelection::default();
+    let mut selection = WorldSelection::default();
     selection.hidden_groups.insert(GroupId { system, index: 0 });
     let pose = baker
         .bake(
             &prepared,
             &meshes,
             &binds,
-            UniversalPoseOptions {
+            PoseOptions {
                 world_selection: Some(&selection),
                 ..default()
             },
@@ -264,7 +264,7 @@ fn malformed_skin_and_normal_streams_are_rejected() {
                 mesh.remove_attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT);
             }
         }
-        assert!(UniversalPoseBaker::default()
+        assert!(PoseBaker::default()
             .bake(&prepared, &meshes, &binds, default())
             .is_err());
     }

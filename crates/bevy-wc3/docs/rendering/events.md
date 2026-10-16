@@ -1,8 +1,8 @@
 # Semantic model events
 
-`UniversalModelEvent` messages expose authored animation occurrences for gameplay.
+`ModelEvent` messages expose authored animation occurrences for gameplay.
 The renderer does not execute commands, resolve sound tables, or spawn gameplay
-effects. `UniversalEventSource` retains named actions, four-byte identifiers with
+effects. `EventSource` retains named actions, four-byte identifiers with
 data IDs, and typed engine commands as distinct payloads.
 
 ## Consume occurrences
@@ -14,8 +14,8 @@ occurrence time, and occurrence-time world transform.
 
 ```rust
 use bevy::prelude::*;
-use bevy_wc3::UniversalModelEvent;
-fn handle(mut events: MessageReader<UniversalModelEvent>) {
+use bevy_wc3::ModelEvent;
+fn handle(mut events: MessageReader<ModelEvent>) {
     for event in events.read() {
         // Interpret event.source and event.payload in application code.
     }
@@ -43,7 +43,7 @@ while a non-looping clip is clamped at its end.
 
 Each update emits at most 4,096 earliest occurrences per instance. A bounded
 chronological merge seeds one occurrence per active stream and only advances streams
-that are consumed. `UniversalEventDispatchStats` reports emitted and omitted counts
+that are consumed. `EventDispatchStats` reports emitted and omitted counts
 without enumerating every key in a long jump.
 
 ## Occurrence poses

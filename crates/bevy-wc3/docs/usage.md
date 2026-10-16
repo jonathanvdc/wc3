@@ -11,40 +11,40 @@ Place a model under a registered Bevy asset source and spawn its typed request:
 
 ```rust
 use bevy::prelude::*;
-use bevy_wc3::UniversalModelInstance;
+use bevy_wc3::ModelInstance;
 
-commands.spawn((UniversalModelInstance(asset_server.load("units/footman.mdx")),
+commands.spawn((ModelInstance(asset_server.load("units/footman.mdx")),
     Transform::default()));
 ```
 
-The request is replaced with `UniversalInstance` and `UniversalModelSource` after
-required dependencies load and geometry compiles. Querying `UniversalInstance`
+The request is replaced with `ModelRig` and `ModelSource` after
+required dependencies load and geometry compiles. Querying `ModelRig`
 therefore distinguishes ready models. Optional missing images and unsupported
 rendering behavior remain inspectable on the asset and compiled diagnostics.
 Required companion failures stop loading.
 
 Inspect Bevy's `AssetServer` load and recursive-dependency states for loader
-failures; `UniversalModelInstanceError` reports rejected instance requests such as
+failures; `ModelInstanceError` reports rejected instance requests such as
 cyclic dependencies, rather than duplicating asset-loader errors.
 
-Instances share prepared assets. Inserting another `UniversalModelInstance` on a
+Instances share prepared assets. Inserting another `ModelInstance` on a
 populated root replaces its renderer-owned subtree while preserving application
 children, numeric playback clocks, and compatible overrides. Asset changes rebuild
 instances. Typed identities belong to one decoded graph: clip and node selections
-migrate only through unique nonempty names, and `UniversalModelRebind` reports reset
+migrate only through unique nonempty names, and `ModelRebind` reports reset
 or migrated selections. Camera feature IDs need explicit application retargeting
 after replacement.
 
 Authored axes and meters-per-unit are converted beneath the application root.
 Application transforms use Bevy's Y-up coordinate frame. External children default
-to `ModelPlacementSpace::Authored`, cancelling their standalone frame conversion;
+to `PlacementSpace::Authored`, cancelling their standalone frame conversion;
 select `Physical` explicitly when a child should retain its own units and frame.
 
 ## Resolve resources and textures
 
-`UniversalResourceResolver` maps paths, namespaced resources, and file-data IDs to
-registered asset sources. Insert `UniversalAssetSettings` with the resolver before
-adding the plugin; `UniversalModelLoaderSettings` carries loader-managed dependency
+`ResourceResolver` maps paths, namespaced resources, and file-data IDs to
+registered asset sources. Insert `AssetSettings` with the resolver before
+adding the plugin; `ModelLoaderSettings` carries loader-managed dependency
 ancestry. The default path resolver checks beside the model before its
 asset root, trying the literal texture filename and BLP, DDS, PNG, and TGA
 candidates. Named sources remain intact. Applications can register MPQ sources
@@ -66,7 +66,7 @@ asset source. Only base-level pixels are uploaded; authored BLP mip chains are n
 Compatibility with real beta-game BLP0 assets remains unverified.
 
 Native imports preserve unsupported data strictly by default. Providers can
-override `UniversalResourceResolver::import_options` for an explicit loss policy.
+override `ResourceResolver::import_options` for an explicit loss policy.
 Accepted dropped or approximated native interpretations remain compiled
 diagnostics; permissive policy does not repair malformed references or resolve
 missing required companion files.
@@ -78,8 +78,8 @@ guide](rendering/universal.md) explains native adapter limits.
 
 ## Control animation
 
-`UniversalPlayback` uses seconds and typed `ClipId`/`ControllerId` selections.
-Obtain available clips from `UniversalInstance::model().clips()` and call `play`
+`Playback` uses seconds and typed `ClipId`/`ControllerId` selections.
+Obtain available clips from `ModelRig::model().clips()` and call `play`
 when the desired clip changes. `play` restarts the destination and uses the model's
 transition duration; `play_immediately` switches directly, and `play_with_blend`
 accepts an explicit `Duration`. A default standalone root samples authored rest
@@ -89,42 +89,42 @@ Set `paused` or `speed` to control advancement. `clip_time`, `timeline_time`, an
 `shared_time` can be independent. `seek(seconds)` skips events over the seek
 interval, while direct clock edits retain normal forward event traversal. `restart`
 resets clocks and includes start events again. Invalid typed selections produce
-`UniversalAnimationError` on evaluation. See [animation
+`PlaybackError` on evaluation. See [animation
 blending](rendering/animation-blending.md) and [events](rendering/events.md).
 
-`UniversalPoseOverrides` maps source `NodeId` to authored local transforms after
+`PoseOverrides` maps source `NodeId` to authored local transforms after
 animation sampling. Remove an override to resume authored animation. This is the
 integration boundary for gameplay, physics, and procedural solvers.
 
 ## Choose geometry quality and scene features
 
-`UniversalLod::Fixed` or `Automatic` selects authored geometry. Configure global
-`UniversalLodSettings`, or a root `UniversalLodOverride`, and inspect
-`UniversalLodState`. Automatic selection uses projected rest bounds, pixel
+`Lod::Fixed` or `Automatic` selects authored geometry. Configure global
+`LodSettings`, or a root `LodOverride`, and inspect
+`LodState`. Automatic selection uses projected rest bounds, pixel
 thresholds, quality bias, and hysteresis. It does not simplify geometry or reduce
 effect budgets. See [geometry LOD](rendering/lod.md).
 
-`UniversalLightSettings` on a root controls imported light power, range conversion,
+`ModelLightSettings` on a root controls imported light power, range conversion,
 and shadow permission. Imported lights remain ordinary Bevy lights and illuminate
-other assets. `UniversalLight` retains authored definitions and per-light
+other assets. `ModelLight` retains authored definitions and per-light
 suppression; scene ambient resources remain application-owned. See
 [lights](rendering/lights.md).
 
-`PreparedUniversalModel::features()` exposes typed feature/node identities and
+`PreparedModel::features()` exposes typed feature/node identities and
 kinds, including unsupported interpreters. Complete unsupported payloads are not
 retained as owned hook components; inspect the graph or provider compile-options
 callback when an application needs those definitions.
 
 ## Mount models on attachment points
 
-`UniversalAttachmentPoint` exposes identity, resource, and current activation on an
+`AttachmentPoint` exposes identity, resource, and current activation on an
 animated mount. Resolved external model references load automatically. Child
 instances start their first clip and restart when the mount activates, the parent
 changes clip, or parent time moves backwards. Their rigs and clocks remain
 independent. Hierarchy visibility gates rendered content; hidden parents do not
 implicitly pause every child animation clock.
 
-`UniversalPlacementAppearance` retains the complete authored placement appearance.
+`PlacementAppearance` retains the complete authored placement appearance.
 WMO placement RGB is interior illumination, not a generic albedo tint; the renderer
 does not multiply it into child color or overwrite scene lighting. Applications
 interpreting it also need interior/exterior region membership, ambient lighting,
@@ -139,47 +139,47 @@ model particles maintain explicit owner cleanup despite their detached motion; s
 ## Prepare custom model sources
 
 Import through `wc3::model::io::{mdlx,m2,wmo,m3,diablo}` as appropriate, widen to
-`Universal`, or author a Universal graph directly. `compile_universal_model` borrows
+`Universal`, or author a Universal graph directly. `compile_model` borrows
 the model and resolves image requests into owned runtime definitions. It does not
 export through a native model version.
 
 ```rust
-let compiled = compile_universal_model(&model, |request| resolve_image(request))?;
+let compiled = compile_model(&model, |request| resolve_image(request))?;
 let prepared = compiled.prepare(&mut meshes, &mut inverse_bindposes);
-let root = spawn_universal_model(&mut commands, &mut meshes, &mut materials,
+let root = spawn_model(&mut commands, &mut meshes, &mut materials,
     &prepared, Transform::default());
 ```
 
 The source graph and bytes may be released after compilation. Keep the prepared
 value to spawn repeatedly; drop the compiled value when its CPU mesh copies are no
-longer useful. `UniversalCompileOptions` selects typed material appearances and
+longer useful. `CompileOptions` selects typed material appearances and
 external child handles. Ambiguous slot-based appearances require an explicit
 selection rather than choosing an arbitrary first material.
 
 ## Bake a static pose
 
-`UniversalPoseBaker` freezes geometry and materials without an ECS world or GPU. It
+`PoseBaker` freezes geometry and materials without an ECS world or GPU. It
 borrows prepared mesh and inverse-bind assets, samples the same signed pose
 evaluator, and deforms up to eight influences. Resolved image handles remain
 unchanged; the baker does not rewrite images.
 
 ```rust
-let mut baker = UniversalPoseBaker::default();
+let mut baker = PoseBaker::default();
 let pose = baker.bake(&prepared, &meshes, &inverse_bindposes,
-    UniversalPoseOptions { playback: Some(&playback), ..default() })?;
+    PoseOptions { playback: Some(&playback), ..default() })?;
 ```
 
 Output includes every prepared geometry pass and generated liquid grid, with typed
 source identity, material snapshot, visibility, clocks, optional LOD selection, and
 posed bounds. Aggregate bounds cover visible surfaces. Default output includes the
-Bevy frame conversion; `UniversalBakeSpace::Authored` retains authored units.
+Bevy frame conversion; `BakeSpace::Authored` retains authored units.
 Camera-sensitive nodes require an explicit camera in authored coordinates.
 
-`UniversalPoseOptions::world_selection` intersects authored visibility with world
+`PoseOptions::world_selection` intersects authored visibility with world
 group/portal selection; absence uses the runtime default. Baking does not simulate
 transitions, events, effects, or external children. Invalid clocks, missing assets, and malformed skin streams return errors.
-`PreparedUniversalModel::parts()` exposes the undeformed shared mesh, material
-defaults, and the same `UniversalDraw` provenance used by live passes.
+`PreparedModel::parts()` exposes the undeformed shared mesh, material
+defaults, and the same `ModelDraw` provenance used by live passes.
 
 ## Integrate with application systems
 

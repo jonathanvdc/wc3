@@ -29,29 +29,29 @@ belong to each instance.
 
 ## Choose a policy and quality
 
-The plugin initializes `UniversalLodSettings` with `default_lod:
-UniversalLod::Fixed(0)`, so instances initially use the finest authored level
-available at or above zero. Add `UniversalLod::Automatic` to a root to opt that
+The plugin initializes `LodSettings` with `default_lod:
+Lod::Fixed(0)`, so instances initially use the finest authored level
+available at or above zero. Add `Lod::Automatic` to a root to opt that
 instance in, or insert an automatic preset resource to enable it globally. `low()`,
 `medium()`, and `high()` use quality biases of 0.5, 1, and 2 respectively. They all
 enable automatic selection; larger bias retains detailed geometry longer.
 
 Applications can customize the global resource or put a complete
-`UniversalLodOverride(UniversalLodSettings)` on an individual root. An explicit
-`UniversalLod` component takes precedence over the effective settings' default
+`LodOverride(LodSettings)` on an individual root. An explicit
+`Lod` component takes precedence over the effective settings' default
 policy. Overrides apply only to their root; attached models and model particles use
 the global configuration unless given their own override.
 
 ```rust
 use bevy::prelude::*;
-use bevy_wc3::{UniversalLod, UniversalLodOverride, UniversalLodSettings};
+use bevy_wc3::{Lod, LodOverride, LodSettings};
 
 // Configure after adding Wc3BevyPlugin, or insert before it is added.
-app.insert_resource(UniversalLodSettings::medium());
+app.insert_resource(LodSettings::medium());
 
 // Retain more detail on this instance, or force a particular authored level.
-commands.entity(root).insert(UniversalLodOverride(UniversalLodSettings::high()));
-commands.entity(other_root).insert(UniversalLod::Fixed(2));
+commands.entity(root).insert(LodOverride(LodSettings::high()));
+commands.entity(other_root).insert(Lod::Fixed(2));
 ```
 
 `thresholds` contains descending pixel diameters for transitions through the model's
@@ -72,7 +72,7 @@ to finer geometry at 276 pixels. Initial automatic selection uses unmodified
 boundaries; subsequent automatic frames use the dead band. Fixed selection and
 detail caps take effect immediately.
 
-Call `UniversalLodSettings::validate()` when accepting application or user input.
+Call `LodSettings::validate()` when accepting application or user input.
 Bias must be finite and positive, thresholds finite, positive, and strictly
 decreasing, and hysteresis finite and in `[0, 1)`. Invalid effective settings use
 the built-in defaults. An explicit root policy still applies in that fallback.
@@ -93,7 +93,7 @@ projections request the finest permitted level. Missing usable camera measuremen
 also fall back to that level.
 
 Automatic selection considers active 3D cameras with intersecting render layers.
-When `UniversalPlayback::driving_camera` is set, only that camera contributes;
+When `Playback::driving_camera` is set, only that camera contributes;
 otherwise the largest projected diameter across matching views is used. Missing
 usable measurements select the finest permitted level. Every view, including
 shadows, renders the same selected geometry; independent per-view selection is
@@ -108,6 +108,6 @@ node-pose scheduling contract in
 
 ## Inspection
 
-`UniversalLodState::selected_level()` exposes the current selection. The shared
+`LodState::selected_level()` exposes the current selection. The shared
 [viewer/capture tool](../tools.md) accepts fixed and automatic policy controls.
 Thresholds are configurable renderer policy rather than native game quality presets.

@@ -7,9 +7,8 @@ use bevy::prelude::*;
 use bevy::shader::Shader;
 use bevy::time::TimeUpdateStrategy;
 use bevy_wc3::{
-    compile_universal_model_with_options, spawn_universal_model, PreparedUniversalModel,
-    UniversalCompileOptions, UniversalMaterial, UniversalModelAsset, UniversalPlayback,
-    Wc3BevyPlugin,
+    compile_model_with_options, spawn_model, CompileOptions, ModelAsset, ModelMaterial, Playback,
+    PreparedModel, Wc3BevyPlugin,
 };
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
 use mdx::Write as _;
@@ -30,7 +29,7 @@ mod fixtures;
 
 struct Harness {
     app: App,
-    prepared: PreparedUniversalModel,
+    prepared: PreparedModel,
     roots: Vec<Entity>,
 }
 
@@ -57,7 +56,7 @@ impl Harness {
         let child_handle = child.then(|| {
             app.world()
                 .resource::<AssetServer>()
-                .load::<UniversalModelAsset>("attachment_capture_child.mdl")
+                .load::<ModelAsset>("attachment_capture_child.mdl")
         });
         if let Some(handle) = &child_handle {
             let deadline = Instant::now() + Duration::from_secs(30);
@@ -79,7 +78,7 @@ impl Harness {
         }
         let mut meshes = Assets::<Mesh>::default();
         let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-        let mut options = UniversalCompileOptions::default();
+        let mut options = CompileOptions::default();
         if let Some(handle) = child_handle {
             for (id, feature) in source.features() {
                 if matches!(&feature.payload, NodeFeature::Particle(ParticleEmitter::Simulated(value)) if matches!(value.details, ParticleDetails::Model(_)))
@@ -88,10 +87,10 @@ impl Harness {
                 }
             }
         }
-        let compiled = compile_universal_model_with_options(source, options, |_| None).unwrap();
+        let compiled = compile_model_with_options(source, options, |_| None).unwrap();
         let prepared = compiled.prepare(&mut meshes, &mut bindposes);
         app.insert_resource(meshes);
-        app.insert_resource(Assets::<UniversalMaterial>::default());
+        app.insert_resource(Assets::<ModelMaterial>::default());
         app.insert_resource(bindposes);
         let mut harness = Self {
             app,
@@ -104,7 +103,7 @@ impl Harness {
             harness
                 .roots
                 .iter()
-                .filter(|&&root| harness.app.world().get::<UniversalPlayback>(root).is_some())
+                .filter(|&&root| harness.app.world().get::<Playback>(root).is_some())
                 .count(),
             count
         );
@@ -115,11 +114,11 @@ impl Harness {
         self.app
             .world_mut()
             .resource_scope(|world, mut meshes: Mut<Assets<Mesh>>| {
-                world.resource_scope(|world, mut materials: Mut<Assets<UniversalMaterial>>| {
+                world.resource_scope(|world, mut materials: Mut<Assets<ModelMaterial>>| {
                     let mut queue = CommandQueue::default();
                     let mut commands = Commands::new(&mut queue, world);
                     for _ in 0..count {
-                        self.roots.push(spawn_universal_model(
+                        self.roots.push(spawn_model(
                             &mut commands,
                             &mut meshes,
                             &mut materials,
@@ -131,7 +130,7 @@ impl Harness {
                     if let Some((clip, _)) = self.prepared.clips().first() {
                         for &root in &self.roots {
                             world
-                                .get_mut::<UniversalPlayback>(root)
+                                .get_mut::<Playback>(root)
                                 .unwrap()
                                 .play_immediately(*clip);
                         }
@@ -192,11 +191,7 @@ fn runtime(c: &mut Criterion) {
                 b.iter(|| harness.step())
             });
             for &root in &harness.roots {
-                let mut playback = harness
-                    .app
-                    .world_mut()
-                    .get_mut::<UniversalPlayback>(root)
-                    .unwrap();
+                let mut playback = harness.app.world_mut().get_mut::<Playback>(root).unwrap();
                 playback.seek(0.5).unwrap();
                 playback.paused = true;
             }
@@ -208,7 +203,7 @@ fn runtime(c: &mut Criterion) {
                 harness
                     .app
                     .world_mut()
-                    .get_mut::<UniversalPlayback>(root)
+                    .get_mut::<Playback>(root)
                     .unwrap()
                     .paused = false;
             }
@@ -256,7 +251,7 @@ fn runtime(c: &mut Criterion) {
             }
             let baseline = harness.app.world().entities().len();
             if child {
-                let mut animations = harness.app.world_mut().query::<&UniversalPlayback>();
+                let mut animations = harness.app.world_mut().query::<&Playback>();
                 assert!(
                     animations.iter(harness.app.world()).count() > count,
                     "PREM child models must spawn"

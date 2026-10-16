@@ -1,7 +1,7 @@
 # Reforged DefaultUnit surfaces
 
 MDLX DefaultUnit materials combine diffuse, normal, surface, emissive, team-color,
-and reflection roles in `UniversalMaterial`. Native adapters normalize older
+and reflection roles in `ModelMaterial`. Native adapters normalize older
 six-layer forms into semantic roles before rendering. Unknown/Crystal shaders retain
 a diagnosed diffuse fallback; they do not receive DefaultUnit slot rules merely
 because they contain several textures.

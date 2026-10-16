@@ -1,10 +1,7 @@
 use bevy::ecs::world::CommandQueue;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
-use bevy_wc3::{
-    compile_universal_model, spawn_universal_model, UniversalCameraBinding, UniversalInstance,
-    UniversalMaterial, UniversalPlayback,
-};
+use bevy_wc3::{compile_model, spawn_model, CameraBinding, ModelMaterial, ModelRig, Playback};
 use wc3::model::{conversion::ImportOptions, io, profiles::Universal, NodeFeature};
 
 #[test]
@@ -24,20 +21,20 @@ fn spawned_instances_expose_authored_views_without_creating_bevy_cameras() {
     assert_eq!(cameras.len(), 2);
     let mut meshes = Assets::<Mesh>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-    let mut materials = Assets::<UniversalMaterial>::default();
-    let compiled = compile_universal_model(&source, |_| None).unwrap();
+    let mut materials = Assets::<ModelMaterial>::default();
+    let compiled = compile_model(&source, |_| None).unwrap();
     let prepared = compiled.prepare(&mut meshes, &mut bindposes);
     let mut world = World::new();
     let mut queue = CommandQueue::default();
     let mut commands = Commands::new(&mut queue, &world);
-    let first = spawn_universal_model(
+    let first = spawn_model(
         &mut commands,
         &mut meshes,
         &mut materials,
         &prepared,
         Transform::default(),
     );
-    let second = spawn_universal_model(
+    let second = spawn_model(
         &mut commands,
         &mut meshes,
         &mut materials,
@@ -46,19 +43,11 @@ fn spawned_instances_expose_authored_views_without_creating_bevy_cameras() {
     );
     queue.apply(&mut world);
     assert_eq!(world.query::<&Camera3d>().iter(&world).count(), 0);
-    world
-        .get_mut::<UniversalPlayback>(first)
-        .unwrap()
-        .seek(0.5)
-        .unwrap();
+    world.get_mut::<Playback>(first).unwrap().seek(0.5).unwrap();
     let sample = world
-        .get::<UniversalInstance>(first)
+        .get::<ModelRig>(first)
         .unwrap()
-        .sample_camera(
-            cameras[0],
-            world.get::<UniversalPlayback>(first).unwrap(),
-            1.,
-        )
+        .sample_camera(cameras[0], world.get::<Playback>(first).unwrap(), 1.)
         .unwrap()
         .unwrap();
     assert!(sample.eye.abs_diff_eq(Vec3::new(1.0, -10.0, 0.0), 1e-5));
@@ -67,21 +56,17 @@ fn spawned_instances_expose_authored_views_without_creating_bevy_cameras() {
         .up
         .abs_diff_eq(Vec3::new(0.5_f32.sqrt(), 0., 0.5_f32.sqrt()), 1e-5));
     let other = world
-        .get::<UniversalInstance>(second)
+        .get::<ModelRig>(second)
         .unwrap()
-        .sample_camera(
-            cameras[0],
-            world.get::<UniversalPlayback>(second).unwrap(),
-            1.,
-        )
+        .sample_camera(cameras[0], world.get::<Playback>(second).unwrap(), 1.)
         .unwrap()
         .unwrap();
     assert_eq!(other.eye, Vec3::new(0., -10., 0.));
     let lens = sample
         .perspective_projection(
-            UniversalCameraBinding {
+            CameraBinding {
                 fov_multiplier: 0.75,
-                ..UniversalCameraBinding::new(first, cameras[0])
+                ..CameraBinding::new(first, cameras[0])
             }
             .fov_multiplier,
         )

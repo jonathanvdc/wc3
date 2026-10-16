@@ -13,7 +13,7 @@ that use external database identities need an application resource resolver.
 
 ```rust,no_run
 use bevy::prelude::*;
-use bevy_wc3::{UniversalModelInstance, Wc3BevyPlugin};
+use bevy_wc3::{ModelInstance, Wc3BevyPlugin};
 
 fn main() {
     App::new()
@@ -23,7 +23,7 @@ fn main() {
 }
 
 fn setup(mut commands: Commands, assets: Res<AssetServer>) {
-    commands.spawn((UniversalModelInstance(assets.load("units/footman.mdx")),
+    commands.spawn((ModelInstance(assets.load("units/footman.mdx")),
         Transform::default()));
     commands.spawn((Camera3d::default(),
         Transform::from_xyz(0.0, 2.0, 4.0).looking_at(Vec3::Y, Vec3::Y)));
@@ -33,13 +33,13 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
 ```
 
 Model coordinates are converted to Bevy's Y-up frame and declared physical units.
-Adjust the camera to the model bounds. `UniversalInstance` appears on the root when
-loading finishes. Select a typed clip from `instance.model().clips()` through
-`UniversalPlayback::play`; default standalone playback samples the rest state.
+Adjust the camera to the model bounds. `ModelRig` appears on the root when
+loading finishes. Select a typed clip from `ModelRig::model().clips()` through
+`Playback::play`; default standalone playback samples the rest state.
 
 Meshes, bind palettes, and constant materials are shared. Rigs, clocks, animated
 materials, and effect populations remain independent. Replaceable images and
-file-data IDs are resolved through `UniversalResourceResolver`; native shader
+file-data IDs are resolved through `ResourceResolver`; native shader
 fallbacks and missing optional resources remain inspectable diagnostics.
 
 ## Documentation and tools

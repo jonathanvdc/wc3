@@ -1,16 +1,16 @@
 //! Render Universal semantic models through Bevy PBR.
 //!
 //! Add [`Wc3BevyPlugin`] beside Bevy's default plugins, then spawn
-//! [`UniversalModelInstance`] with a model asset handle. Native asset loading
+//! [`ModelInstance`] with a model asset handle. Native asset loading
 //! imports MDX/MDL, M2, WMO, M3 and Diablo sources into the same semantic renderer.
 //! Applications provide archive identities, external companions and image choices
-//! through [`UniversalResourceResolver`].
+//! through [`ResourceResolver`].
 //!
 //! ```no_run
 //! use bevy::prelude::*;
-//! use bevy_wc3::{UniversalModelInstance, Wc3BevyPlugin};
+//! use bevy_wc3::{ModelInstance, Wc3BevyPlugin};
 //! fn setup(mut commands: Commands, assets: Res<AssetServer>) {
-//!     commands.spawn(UniversalModelInstance::new(assets.load("units/footman.mdx")));
+//!     commands.spawn(ModelInstance::new(assets.load("units/footman.mdx")));
 //!     commands.spawn((Camera3d::default(),
 //!         Transform::from_xyz(0., 350., 650.).looking_at(Vec3::ZERO, Vec3::Y)));
 //!     commands.spawn(DirectionalLight::default());
@@ -19,43 +19,87 @@
 //!     .add_systems(Startup, setup);
 //! ```
 //!
-//! For in-memory graphs, use [`compile_universal_model`], prepare shared assets,
-//! and call [`spawn_universal_model`]. Each instance owns its playback, rig and
+//! For in-memory graphs, use [`compile_model`], prepare shared assets,
+//! and call [`spawn_model`]. Each instance owns its playback, rig and
 //! changing material state. The compiler reports unsupported interpretations
 //! through [`RenderDiagnostic`]; implemented behavior and fidelity limits are
 //! described in the repository's rendering guides.
 #![deny(missing_docs)]
 
 mod assets;
+mod baking;
+mod bounds;
+mod camera;
+mod compiled;
+mod compiler;
+mod coordinates;
 mod effects;
 mod error;
+mod events;
+mod features;
+mod geometry;
+mod hierarchy;
+mod instances;
+mod lod;
+mod material;
+mod mesh_animation;
+pub(crate) mod mesh_attributes;
+mod mesh_interner;
+mod placements;
 mod plugin;
+mod pose;
+mod runtime;
 mod schedule;
-mod universal;
+mod skin_bounds;
+mod textures;
+mod transition;
+mod world;
 
-pub use universal::{
-    compile_universal_model, compile_universal_model_with_options, spawn_universal_model,
-    texture_requests, world_volume_weight, CompiledUniversalModel, ModelPlacementSpace,
-    PreparedUniversalModel, RenderDiagnostic, SampledUniversalCamera, TextureColorSpace,
-    TextureImageKey, TextureRequest, TextureRole, UniversalAnimationError, UniversalAssetSettings,
-    UniversalAttachmentPoint, UniversalBakeSpace, UniversalBakedPart, UniversalBakedPose,
-    UniversalBakedSource, UniversalCameraBinding, UniversalCompileOptions,
-    UniversalControllerSelection, UniversalDoodadSet, UniversalDraw, UniversalDrawSource,
-    UniversalEventDispatchStats, UniversalEventProgram, UniversalEventSource, UniversalFeature,
-    UniversalInstance, UniversalLight, UniversalLightSettings, UniversalLod, UniversalLodOverride,
-    UniversalLodSettings, UniversalLodState, UniversalMaterial, UniversalMaterialExtension,
-    UniversalModelAsset, UniversalModelEvent, UniversalModelInstance, UniversalModelInstanceError,
-    UniversalModelLoader, UniversalModelLoaderSettings, UniversalModelParticleEmitter,
-    UniversalModelRebind, UniversalModelResourcePurpose, UniversalModelSource, UniversalNode,
-    UniversalParticleEmitter, UniversalPathResolver, UniversalPlacementAppearance,
-    UniversalPlayback, UniversalPoseBaker, UniversalPoseOptions, UniversalPoseOverrides,
-    UniversalPreparedPart, UniversalResourceResolver, UniversalRibbonEmitter,
-    UniversalWorldEnvironment, UniversalWorldEnvironmentSample, UniversalWorldGroup,
-    UniversalWorldLiquid, UniversalWorldLiquidSurface, UniversalWorldPortal, UniversalWorldRegion,
-    UniversalWorldSelection, WorldPortalPolicy,
+pub use assets::{
+    AssetSettings, BlpImageLoader, ModelAsset, ModelLoader, ModelLoaderSettings, PathResolver,
+    ResourcePurpose, ResourceResolver,
+};
+pub use baking::{
+    BakeSpace, BakedPart, BakedPose, BakedSource, PoseBaker, PoseOptions, PreparedPart,
+};
+pub use camera::CameraBinding;
+pub use compiled::{CompiledModel, DrawSource, PreparedModel, RenderDiagnostic};
+pub use compiler::{compile_model, compile_model_with_options, CompileOptions};
+pub use effects::{ModelEmitter, RibbonEmitter, SpriteEmitter};
+pub use error::ModelError;
+pub use events::{EventDispatchStats, EventProgram, EventSource, ModelEvent};
+pub use features::{
+    AttachmentPoint, ModelFeature, ModelLight, ModelLightSettings, PlacementAppearance,
+    SampledCamera,
+};
+pub use instances::{ModelInstance, ModelInstanceError, ModelRebind, ModelSource};
+pub use lod::{Lod, LodOverride, LodSettings, LodState};
+pub use material::{ModelMaterial, ModelMaterialExtension};
+pub use placements::PlacementSpace;
+pub use plugin::Wc3BevyPlugin;
+pub use runtime::{
+    spawn_model, ControllerSelection, ModelDraw, ModelNode, ModelRig, Playback, PlaybackError,
+    PoseOverrides,
+};
+pub use schedule::Wc3Systems;
+pub use textures::{
+    texture_requests, TextureColorSpace, TextureImageKey, TextureRequest, TextureRole,
+};
+pub use world::{
+    world_volume_weight, DoodadSet, WorldEnvironment, WorldEnvironmentSample, WorldGroup,
+    WorldLiquid, WorldLiquidSurface, WorldPortal, WorldPortalPolicy, WorldRegion, WorldSelection,
 };
 
-pub use assets::BlpImageLoader;
-pub use error::ModelError;
-pub use plugin::Wc3BevyPlugin;
-pub use schedule::Wc3Systems;
+pub(crate) use camera::animate_cameras;
+pub(crate) use effects::synchronize_model_particles;
+pub(crate) use features::restart_attachments;
+pub(crate) use instances::{invalidate_models, spawn_loaded_models, PreparedModelCache};
+pub(crate) use lod::update_lod;
+pub(crate) use runtime::{
+    advance_animation, animate_instances, apply_lod_visibility, dispatch_events, simulate_particles,
+};
+pub(crate) use skin_bounds::update_skin_bounds;
+pub(crate) use world::apply_world_selection;
+
+#[cfg(test)]
+mod tests;

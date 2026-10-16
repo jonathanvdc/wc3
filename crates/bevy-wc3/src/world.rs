@@ -1,0 +1,773 @@
+//! Owned static-world catalogs, conservative visibility, and authored liquid meshes.
+use bevy::asset::RenderAssetUsages;
+use bevy::mesh::{Indices, PrimitiveTopology};
+use bevy::prelude::*;
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::Arc;
+use wc3::model::controls::{
+    world::{AmbientId, DoodadSetId, FogId, GroupId, PortalId},
+    InstanceControls,
+};
+use wc3::model::scene::world::{
+    Ambient, Fog, GroupOptions, Liquid, LiquidVertex, PortalConnection, Volume,
+};
+use wc3::model::systems::{ModelMetadata, System};
+use wc3::model::{FeatureId, InstanceId, MaterialId, Model, NodeId, SystemId, TextureId};
+
+use super::Playback;
+use crate::ModelError;
+
+/// Explicit portal policy; the default keeps every potentially visible group.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum WorldPortalPolicy {
+    /// Draw all groups, relying on Bevy's geometry frustum culling.
+    #[default]
+    Conservative,
+    /// Restrict a system to groups connected to an application-selected group.
+    /// This is a reachability filter, not an occlusion or clipped-frustum solver.
+    ReachableFrom(GroupId),
+}
+
+/// Application selection for world groups and external placement sets.
+#[derive(Component, Clone, Debug, PartialEq, Eq)]
+pub struct WorldSelection {
+    /// Explicitly suppressed groups.
+    pub hidden_groups: HashSet<GroupId>,
+    /// Active placement sets; the default contains only the common set zero.
+    /// `None` explicitly includes all sets, including mutually exclusive variants.
+    /// Explicit selections always retain the common placement set.
+    pub doodad_sets: Option<HashSet<DoodadSetId>>,
+    /// Conservative default or explicit connectivity-based filtering.
+    pub portals: WorldPortalPolicy,
+}
+
+impl Default for WorldSelection {
+    fn default() -> Self {
+        Self {
+            hidden_groups: HashSet::new(),
+            doodad_sets: Some(HashSet::new()),
+            portals: WorldPortalPolicy::default(),
+        }
+    }
+}
+
+/// Named static-world visibility group in model coordinates.
+#[derive(Clone, Debug)]
+pub struct WorldGroup {
+    /// Semantic group identity.
+    pub id: GroupId,
+    /// Authored display name.
+    pub name: String,
+    /// Associated geometry placements, across authored detail levels.
+    pub instances: Arc<[InstanceId]>,
+    /// Conservative bounds, before the model coordinate-frame transform.
+    pub bounds: [[f32; 3]; 2],
+    /// Authored interior/exterior and baked-light controls.
+    pub options: GroupOptions,
+    /// Supplemental authored detail-level selection, when provided.
+    pub detail_selection: Option<u32>,
+}
+
+/// Portal data retained for application visibility solvers.
+#[derive(Clone, Debug)]
+pub struct WorldPortal {
+    /// Semantic portal identity.
+    pub id: PortalId,
+    /// Boundary polygon in model coordinates.
+    pub vertices: Arc<[[f32; 3]]>,
+    /// Authored plane equation.
+    pub plane: [f32; 4],
+    /// Unresolved supplemental adjustment retained without applying a guess.
+    pub adjustment: Option<[u32; 3]>,
+}
+
+/// Named external-placement selection set.
+#[derive(Clone, Debug)]
+pub struct DoodadSet {
+    /// Stable set identity.
+    pub id: DoodadSetId,
+    /// Authored name.
+    pub name: String,
+    /// External placement feature identities.
+    pub members: Arc<[FeatureId]>,
+}
+
+/// Environment data selected by a region; applications retain scene ownership.
+#[derive(Clone, Debug)]
+pub struct WorldRegion {
+    /// Geometry placement owning this region.
+    pub instance: InstanceId,
+    /// Placement hierarchy node.
+    pub node: NodeId,
+    /// Authored region description.
+    pub description: String,
+    /// Authored region visibility and lighting options.
+    pub options: GroupOptions,
+    /// Referenced environmental fogs.
+    pub fogs: Arc<[FogId]>,
+    /// Referenced ambient-light volumes.
+    pub ambients: Arc<[AmbientId]>,
+    /// Explicit region-level ambient override.
+    pub ambient_override: Option<[u8; 4]>,
+    /// Placement features visible within this region.
+    pub doodads: Arc<[FeatureId]>,
+    /// Region-local authored light references.
+    pub lights: Arc<[FeatureId]>,
+    /// Supplemental point-light references.
+    pub point_lights: Arc<[FeatureId]>,
+    /// Supplemental light-program references.
+    pub point_programs: Arc<[FeatureId]>,
+    /// Baked lightmap textures retained for an application interpreter.
+    pub lightmap_images: Arc<[TextureId]>,
+    /// Authored packed lightmap rectangle controls.
+    pub lightmap_rectangles: Arc<[[u8; 4]]>,
+    /// Authored outgoing portal relationships, preserving side/adjustment controls.
+    pub portals: Arc<[PortalConnection]>,
+}
+
+/// Generated static liquid surface, with resource and region identities intact.
+pub(crate) struct WorldLiquidMesh {
+    pub instance: InstanceId,
+    pub node: NodeId,
+    pub material: Option<MaterialId>,
+    pub liquid_type: u32,
+    pub ordinal: usize,
+    pub mesh: Mesh,
+}
+
+/// Semantic identity of a generated liquid entity, independent of mesh draw IDs.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct WorldLiquidSurface {
+    /// Owning world geometry placement.
+    pub instance: InstanceId,
+    /// Liquid ordinal within that region.
+    pub ordinal: usize,
+    /// Authored external liquid-type selector.
+    pub liquid_type: u32,
+    /// Selected authored material; absent requires an application material provider.
+    pub material: Option<MaterialId>,
+}
+
+/// Authored grid controls retained independently of generated render geometry.
+#[derive(Clone, Debug)]
+pub struct WorldLiquid {
+    /// Owning geometry region.
+    pub instance: InstanceId,
+    /// Grid ordinal within that region.
+    pub ordinal: usize,
+    /// External liquid-type database selector.
+    pub liquid_type: u32,
+    /// Authored grid vertex dimensions.
+    pub dimensions: [u32; 2],
+    /// Authored surface material, when supplied by the asset.
+    pub material: Option<MaterialId>,
+    /// Original model-space origin; vertex heights are absolute elevations.
+    pub position: [f32; 3],
+    /// Native WMO horizontal grid spacing used by the generated mesh.
+    pub grid_spacing: [f32; 2],
+    /// Original per-vertex flow or magma coordinate declarations.
+    pub vertices: Arc<[LiquidVertex]>,
+    /// Authored tile visibility and category bytes.
+    pub tiles: Arc<[u8]>,
+}
+
+/// Authored environmental catalog, available without modifying global scene state.
+#[derive(Clone, Debug)]
+pub struct WorldEnvironment {
+    /// Owning static-world system.
+    pub system: SystemId,
+    /// Fog volumes in stable authored order.
+    pub fogs: Arc<[Fog]>,
+    /// Ambient-light regions in stable authored order.
+    pub ambients: Arc<[Ambient]>,
+    /// Authored visibility boundary polygons for application culling solvers.
+    pub visibility_polygons: Arc<[Arc<[[f32; 3]]>]>,
+    /// Authored occluder plane equations.
+    pub occluders: Arc<[[f32; 4]]>,
+}
+
+/// Authored regional influences for an application's fog/lighting integration.
+#[derive(Clone, Debug, Default)]
+pub struct WorldEnvironmentSample {
+    /// Fog identities and boundary influence in authored order.
+    pub fogs: Vec<(FogId, f32)>,
+    /// Ambient identities and boundary influence in authored order.
+    pub ambients: Vec<(AmbientId, f32)>,
+}
+
+/// Detached WMO catalogs and precomputed selection relationships.
+#[derive(Clone, Default)]
+pub(crate) struct WorldRuntime {
+    pub ambient: Option<[u8; 4]>,
+    pub groups: Arc<[WorldGroup]>,
+    pub portals: Arc<[WorldPortal]>,
+    pub doodad_sets: Arc<[DoodadSet]>,
+    pub regions: Arc<[WorldRegion]>,
+    pub environments: Arc<[WorldEnvironment]>,
+    pub liquid_definitions: Arc<[WorldLiquid]>,
+    memberships: HashMap<InstanceId, Vec<GroupId>>,
+    feature_sets: HashMap<FeatureId, Vec<DoodadSetId>>,
+    feature_groups: HashMap<FeatureId, Vec<GroupId>>,
+    neighbors: HashMap<GroupId, Vec<GroupId>>,
+    placements: Vec<(InstanceId, NodeId, Option<u32>)>,
+    feature_nodes: Vec<(FeatureId, NodeId)>,
+}
+
+pub(crate) struct CompiledWorld {
+    pub runtime: WorldRuntime,
+    pub liquids: Vec<WorldLiquidMesh>,
+    pub diagnostics: Vec<String>,
+}
+
+impl WorldRuntime {
+    pub(crate) fn lod_levels(&self) -> impl Iterator<Item = u32> + '_ {
+        self.placements.iter().filter_map(|(_, _, lod)| *lod)
+    }
+    pub(crate) fn minimum_lod(&self) -> Option<u32> {
+        self.lod_levels().min()
+    }
+    pub(crate) fn environment_at(
+        &self,
+        position: Vec3,
+        selection: &WorldSelection,
+        region: Option<InstanceId>,
+    ) -> WorldEnvironmentSample {
+        let set_visible = |set: DoodadSetId| {
+            set.index == 0
+                || selection
+                    .doodad_sets
+                    .as_ref()
+                    .is_none_or(|sets| sets.contains(&set))
+        };
+        let region = region.and_then(|id| self.regions.iter().find(|region| region.instance == id));
+        let mut sample = WorldEnvironmentSample::default();
+        for environment in self.environments.iter() {
+            for (index, fog) in environment.fogs.iter().enumerate() {
+                let id = FogId {
+                    system: environment.system,
+                    index: index as u32,
+                };
+                if region.is_some_and(|region| !region.fogs.contains(&id))
+                    || fog.doodad_set.is_some_and(|set| !set_visible(set))
+                {
+                    continue;
+                }
+                let weight = if fog.infinite {
+                    1.
+                } else {
+                    world_volume_weight(&fog.volume, position)
+                };
+                if weight > 0. {
+                    sample.fogs.push((id, weight));
+                }
+            }
+            for (index, ambient) in environment.ambients.iter().enumerate() {
+                let id = AmbientId {
+                    system: environment.system,
+                    index: index as u32,
+                };
+                if region.is_some_and(|region| !region.ambients.contains(&id))
+                    || ambient.doodad_set.is_some_and(|set| !set_visible(set))
+                {
+                    continue;
+                }
+                let weight = if ambient.global {
+                    1.
+                } else {
+                    world_volume_weight(&ambient.volume, position)
+                };
+                if weight > 0. {
+                    sample.ambients.push((id, weight));
+                }
+            }
+        }
+        sample
+    }
+    pub(crate) fn compile(model: &Model<'_>) -> Result<CompiledWorld, ModelError> {
+        let mut runtime = Self {
+            ambient: match model.metadata() {
+                Some(ModelMetadata::Wmo(metadata)) => Some(metadata.ambient),
+                _ => None,
+            },
+            ..Default::default()
+        };
+        let mut groups = Vec::new();
+        let mut portals = Vec::new();
+        let mut sets = Vec::new();
+        let mut environments = Vec::new();
+        let mut diagnostics = Vec::new();
+        for (system, payload) in model.systems() {
+            let System::Wmo(world) = payload else {
+                continue;
+            };
+            for (index, group) in world.groups.iter().enumerate() {
+                let id = GroupId {
+                    system,
+                    index: index as u32,
+                };
+                for &instance in &group.instances {
+                    runtime.memberships.entry(instance).or_default().push(id);
+                }
+                runtime.neighbors.entry(id).or_default();
+                groups.push(WorldGroup {
+                    id,
+                    name: group.name.to_string(),
+                    instances: group.instances.clone().into(),
+                    bounds: group.bounds,
+                    options: group.options,
+                    detail_selection: group.detail_selection,
+                });
+            }
+            for (index, portal) in world.portals.iter().enumerate() {
+                portals.push(WorldPortal {
+                    id: PortalId {
+                        system,
+                        index: index as u32,
+                    },
+                    vertices: portal.vertices.iter().collect::<Vec<_>>().into(),
+                    plane: portal.plane,
+                    adjustment: portal.adjustment,
+                });
+            }
+            for (index, set) in world.doodad_sets.iter().enumerate() {
+                let id = DoodadSetId {
+                    system,
+                    index: index as u32,
+                };
+                for &feature in &set.members {
+                    runtime.feature_sets.entry(feature).or_default().push(id);
+                }
+                sets.push(DoodadSet {
+                    id,
+                    name: set.name.to_string(),
+                    members: set.members.clone().into(),
+                });
+            }
+            environments.push(WorldEnvironment {
+                system,
+                fogs: world.fogs.clone().into(),
+                ambients: world.ambient_volumes.clone().into(),
+                visibility_polygons: world
+                    .visibility
+                    .iter()
+                    .map(|polygon| polygon.iter().collect::<Vec<_>>().into())
+                    .collect::<Vec<_>>()
+                    .into(),
+                occluders: world.occluders.iter().collect::<Vec<_>>().into(),
+            });
+            if !world.portals.is_empty() {
+                diagnostics.push(format!("world system {system:?}: portal polygons and connectivity retained; default visibility is conservative, clipped-frustum portal/occluder culling is not enabled"));
+            }
+            if !world.fogs.is_empty() || !world.ambient_volumes.is_empty() {
+                diagnostics.push(format!("world system {system:?}: fog and ambient regions are exposed for application integration; global scene fog/ambient are not overwritten"));
+            }
+        }
+        let mut regions = Vec::new();
+        let mut liquid_definitions = Vec::new();
+        let mut liquids = Vec::new();
+        for (instance, placement) in model.instances() {
+            if runtime.memberships.contains_key(&instance)
+                || matches!(&placement.controls, Some(InstanceControls::Wmo(_)))
+            {
+                runtime
+                    .placements
+                    .push((instance, placement.node, placement.lod));
+            }
+            let Some(InstanceControls::Wmo(region)) = &placement.controls else {
+                continue;
+            };
+            for &group in runtime.memberships.get(&instance).into_iter().flatten() {
+                for &feature in region
+                    .doodads
+                    .iter()
+                    .chain(&region.lights)
+                    .chain(&region.point_lights)
+                    .chain(&region.point_programs)
+                {
+                    runtime
+                        .feature_groups
+                        .entry(feature)
+                        .or_default()
+                        .push(group);
+                }
+                for portal in &region.portals {
+                    // Bidirectional reachability deliberately overestimates visibility.
+                    // Side tests and unknown supplemental adjustments cannot safely
+                    // hide a connected group without a camera/frustum solver.
+                    runtime
+                        .neighbors
+                        .entry(group)
+                        .or_default()
+                        .push(portal.neighbor);
+                    runtime
+                        .neighbors
+                        .entry(portal.neighbor)
+                        .or_default()
+                        .push(group);
+                }
+            }
+            regions.push(WorldRegion {
+                instance,
+                node: placement.node,
+                description: region.description.to_string(),
+                options: region.options,
+                fogs: region.fogs.clone().into(),
+                ambients: region.ambients.clone().into(),
+                ambient_override: region.ambient_override,
+                doodads: region.doodads.clone().into(),
+                lights: region.lights.clone().into(),
+                point_lights: region.point_lights.clone().into(),
+                point_programs: region.point_programs.clone().into(),
+                lightmap_images: region.lightmap_images.clone().into(),
+                lightmap_rectangles: region.lightmap_rectangles.iter().collect::<Vec<_>>().into(),
+                portals: region.portals.clone().into(),
+            });
+            for (ordinal, liquid) in region.liquids.iter().enumerate() {
+                liquid_definitions.push(WorldLiquid {
+                    instance,
+                    ordinal,
+                    liquid_type: liquid.liquid_type,
+                    dimensions: liquid.dimensions,
+                    material: liquid.material,
+                    position: liquid.position,
+                    grid_spacing: [25.0 / 6.0; 2],
+                    vertices: liquid.vertices.iter().collect::<Vec<_>>().into(),
+                    tiles: liquid.tiles.iter().collect::<Vec<_>>().into(),
+                });
+                if let Some(mesh) = liquid_mesh(liquid, [25.0 / 6.0; 2])? {
+                    liquids.push(WorldLiquidMesh {
+                        instance,
+                        node: placement.node,
+                        material: liquid.material,
+                        liquid_type: liquid.liquid_type,
+                        ordinal,
+                        mesh,
+                    });
+                }
+                diagnostics.push(format!("world region {instance:?} liquid {ordinal}: authored heights/tile holes generate geometry at native WMO grid spacing; flow, database shading and animated liquid response need an application interpreter"));
+                if liquid.material.is_none() {
+                    diagnostics.push(format!("world region {instance:?} liquid {ordinal}: liquid type {} requires a material provider",liquid.liquid_type));
+                }
+            }
+            if !region.lightmap_images.is_empty() || !region.lightmap_rectangles.is_empty() {
+                diagnostics.push(format!("world region {instance:?}: baked lightmap resources/rectangles are exposed; lightmap shading requires an application interpreter"));
+            }
+            if region.implicit_liquid.is_some() {
+                diagnostics.push(format!(
+                    "world region {instance:?}: implicit liquid has no authored surface grid"
+                ));
+            }
+        }
+        for neighbors in runtime.neighbors.values_mut() {
+            neighbors.sort();
+            neighbors.dedup();
+        }
+        runtime.feature_nodes = model
+            .features()
+            .filter_map(|(id, feature)| {
+                (runtime.feature_sets.contains_key(&id) || runtime.feature_groups.contains_key(&id))
+                    .then_some((id, feature.node))
+            })
+            .collect();
+        runtime.groups = groups.into();
+        runtime.portals = portals.into();
+        runtime.doodad_sets = sets.into();
+        runtime.regions = regions.into();
+        runtime.environments = environments.into();
+        runtime.liquid_definitions = liquid_definitions.into();
+        Ok(CompiledWorld {
+            runtime,
+            liquids,
+            diagnostics,
+        })
+    }
+
+    /// Resolve an explicit policy once per instance/update, not once per draw.
+    pub(crate) fn visibility(&self, selection: &WorldSelection) -> WorldVisibility {
+        let reachable = if let WorldPortalPolicy::ReachableFrom(start) = selection.portals {
+            if self.neighbors.contains_key(&start) {
+                let mut visited = HashSet::from([start]);
+                let mut pending = VecDeque::from([start]);
+                while let Some(group) = pending.pop_front() {
+                    for &neighbor in &self.neighbors[&group] {
+                        if visited.insert(neighbor) {
+                            pending.push_back(neighbor);
+                        }
+                    }
+                }
+                Some((start.system, visited))
+            } else {
+                None
+            } // Unknown application selections cannot hide the whole model.
+        } else {
+            None
+        };
+        WorldVisibility {
+            hidden: selection.hidden_groups.clone(),
+            sets: selection.doodad_sets.clone(),
+            reachable,
+        }
+    }
+    pub(crate) fn instance_lod(&self, instance: InstanceId) -> Option<u32> {
+        self.placements
+            .iter()
+            .find(|(candidate, _, _)| *candidate == instance)
+            .and_then(|(_, _, lod)| *lod)
+    }
+    pub(crate) fn instance_visible(
+        &self,
+        instance: InstanceId,
+        selection: &WorldVisibility,
+    ) -> bool {
+        self.memberships
+            .get(&instance)
+            .is_none_or(|groups| groups.iter().any(|group| selection.group_visible(*group)))
+    }
+    pub(crate) fn feature_visible(&self, feature: FeatureId, selection: &WorldVisibility) -> bool {
+        self.feature_groups
+            .get(&feature)
+            .is_none_or(|groups| groups.iter().any(|group| selection.group_visible(*group)))
+            && self
+                .feature_sets
+                .get(&feature)
+                .is_none_or(|sets| sets.iter().any(|set| selection.set_visible(*set)))
+    }
+}
+
+pub(crate) struct WorldVisibility {
+    hidden: HashSet<GroupId>,
+    sets: Option<HashSet<DoodadSetId>>,
+    reachable: Option<(SystemId, HashSet<GroupId>)>,
+}
+impl WorldVisibility {
+    pub(crate) fn group_visible(&self, group: GroupId) -> bool {
+        !self.hidden.contains(&group)
+            && self
+                .reachable
+                .as_ref()
+                .is_none_or(|(system, groups)| group.system != *system || groups.contains(&group))
+    }
+    pub(crate) fn set_visible(&self, set: DoodadSetId) -> bool {
+        set.index == 0 || self.sets.as_ref().is_none_or(|sets| sets.contains(&set))
+    }
+}
+
+/// Region response at a point, expressed as an influence rather than scene mutation.
+/// Plane volumes use nonpositive interior half-spaces; boundary fades extend inward.
+pub fn world_volume_weight(volume: &Volume, position: Vec3) -> f32 {
+    match volume {
+        Volume::Sphere { center, radii } => {
+            let distance = position.distance(Vec3::from_array(*center));
+            if distance <= radii[0] {
+                1.
+            } else if radii[1] <= radii[0] {
+                0.
+            } else {
+                ((radii[1] - distance) / (radii[1] - radii[0])).clamp(0., 1.)
+            }
+        }
+        Volume::Planes { planes, fade } => {
+            let margin = planes
+                .iter()
+                .map(|plane| {
+                    let normal = Vec3::new(plane[0], plane[1], plane[2]);
+                    let length = normal.length();
+                    if length > 0. {
+                        -(normal.dot(position) + plane[3]) / length
+                    } else {
+                        f32::INFINITY
+                    }
+                })
+                .fold(f32::INFINITY, f32::min);
+            if *fade > 0. {
+                (margin / fade).clamp(0., 1.)
+            } else {
+                u8::from(margin >= 0.) as f32
+            }
+        }
+    }
+}
+
+fn liquid_mesh(liquid: &Liquid<'_>, spacing: [f32; 2]) -> Result<Option<Mesh>, ModelError> {
+    if spacing
+        .iter()
+        .any(|value| !value.is_finite() || *value <= 0.)
+        || liquid.position.iter().any(|value| !value.is_finite())
+        || liquid
+            .vertices
+            .iter()
+            .any(|value| !value.height().is_finite())
+    {
+        return Err(ModelError(
+            "world liquid coordinates must be finite with positive grid spacing".into(),
+        ));
+    }
+    let [width, height] = liquid.dimensions.map(|v| v as usize);
+    if width == 0 || height == 0 {
+        return Ok(None);
+    }
+    if width.checked_mul(height) != Some(liquid.vertices.len())
+        || width
+            .saturating_sub(1)
+            .checked_mul(height.saturating_sub(1))
+            != Some(liquid.tiles.len())
+    {
+        return Err(ModelError("world liquid grid cardinality mismatch".into()));
+    }
+    let mut positions = Vec::new();
+    let mut uv = Vec::new();
+    for y in 0..height {
+        for x in 0..width {
+            let vertex = liquid
+                .vertices
+                .get(y * width + x)
+                .ok_or_else(|| ModelError("missing world liquid vertex".into()))?;
+            positions.push([
+                liquid.position[0] + x as f32 * spacing[0],
+                liquid.position[1] + y as f32 * spacing[1],
+                vertex.height(),
+            ]);
+            // Use tile coordinates until the external liquid shader supplies a
+            // proven interpretation of flow/magma coordinate units.
+            uv.push([x as f32, y as f32]);
+        }
+    }
+    let mut indices = Vec::new();
+    for y in 0..height - 1 {
+        for x in 0..width - 1 {
+            let tile = liquid
+                .tiles
+                .get(y * (width - 1) + x)
+                .ok_or_else(|| ModelError("missing world liquid tile".into()))?;
+            if tile & 0x8 != 0 {
+                continue;
+            }
+            let a = (y * width + x) as u32;
+            let b = a + 1;
+            let d = a + width as u32;
+            let c = d + 1;
+            indices.extend([a, b, c, a, c, d]);
+        }
+    }
+    if indices.is_empty() {
+        return Ok(None);
+    }
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
+    mesh.insert_indices(Indices::U32(indices));
+    mesh.compute_normals();
+    let _ = mesh.generate_tangents();
+    Ok(Some(mesh))
+}
+
+/// Private visibility parents intersect world selection with authored animation.
+#[derive(Component)]
+pub(crate) struct WorldBindings {
+    runtime: Arc<WorldRuntime>,
+    gates: Vec<(Entity, WorldTarget)>,
+    selection: Option<WorldSelection>,
+    lod: Option<u32>,
+}
+#[derive(Clone, Copy)]
+enum WorldTarget {
+    Placement(InstanceId, Option<u32>),
+    Feature(FeatureId),
+}
+
+pub(crate) struct WorldParents {
+    pub placements: HashMap<InstanceId, Entity>,
+    pub features: HashMap<FeatureId, Entity>,
+}
+impl WorldRuntime {
+    pub(crate) fn spawn_gates(
+        self: &Arc<Self>,
+        commands: &mut Commands,
+        root: Entity,
+        nodes: &HashMap<NodeId, Entity>,
+    ) -> WorldParents {
+        let mut parents = WorldParents {
+            placements: HashMap::new(),
+            features: HashMap::new(),
+        };
+        let mut gates = Vec::new();
+        for &(id, node, lod) in &self.placements {
+            let gate = commands
+                .spawn((
+                    Name::new("World region visibility"),
+                    Transform::default(),
+                    Visibility::Inherited,
+                    ChildOf(nodes[&node]),
+                ))
+                .id();
+            parents.placements.insert(id, gate);
+            gates.push((gate, WorldTarget::Placement(id, lod)));
+        }
+        for &(id, node) in &self.feature_nodes {
+            let gate = commands
+                .spawn((
+                    Name::new("World placement visibility"),
+                    Transform::default(),
+                    Visibility::Inherited,
+                    ChildOf(nodes[&node]),
+                ))
+                .id();
+            parents.features.insert(id, gate);
+            gates.push((gate, WorldTarget::Feature(id)));
+        }
+        commands.entity(root).remove::<WorldBindings>();
+        if !gates.is_empty() {
+            commands
+                .entity(root)
+                .insert(WorldBindings {
+                    runtime: self.clone(),
+                    gates,
+                    selection: None,
+                    lod: None,
+                })
+                .insert_if_new(WorldSelection::default());
+        }
+        parents
+    }
+}
+
+/// Apply selection only when it or the authored detail level changes.
+pub(crate) fn apply_world_selection(
+    mut instances: Query<(&mut WorldBindings, &WorldSelection, &Playback)>,
+    mut visibility: Query<&mut Visibility>,
+) {
+    for (mut bindings, selection, playback) in &mut instances {
+        if bindings.selection.as_ref() == Some(selection) && bindings.lod == Some(playback.lod) {
+            continue;
+        }
+        let resolved = bindings.runtime.visibility(selection);
+        for &(entity, target) in &bindings.gates {
+            let enabled = match target {
+                WorldTarget::Placement(id, lod) => {
+                    lod.is_none_or(|level| level == playback.lod)
+                        && bindings.runtime.instance_visible(id, &resolved)
+                }
+                WorldTarget::Feature(id) => bindings.runtime.feature_visible(id, &resolved),
+            };
+            if let Ok(mut current) = visibility.get_mut(entity) {
+                let value = if enabled {
+                    Visibility::Inherited
+                } else {
+                    Visibility::Hidden
+                };
+                if *current != value {
+                    *current = value;
+                }
+            }
+        }
+        bindings.selection = Some(selection.clone());
+        bindings.lod = Some(playback.lod);
+    }
+}
+
+#[cfg(test)]
+#[path = "world_tests.rs"]
+mod tests;

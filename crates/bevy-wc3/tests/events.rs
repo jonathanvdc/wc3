@@ -7,16 +7,15 @@ use bevy::prelude::*;
 use bevy::shader::Shader;
 use bevy::time::TimeUpdateStrategy;
 use bevy_wc3::{
-    compile_universal_model, spawn_universal_model, UniversalMaterial, UniversalModelEvent,
-    UniversalPlayback, Wc3BevyPlugin, Wc3Systems,
+    compile_model, spawn_model, ModelEvent, ModelMaterial, Playback, Wc3BevyPlugin, Wc3Systems,
 };
 use std::time::Duration;
 use wc3::model::{conversion::ImportOptions, io, profiles::Universal};
 
 #[derive(Resource, Default)]
-struct Received(Vec<UniversalModelEvent>);
+struct Received(Vec<ModelEvent>);
 
-fn receive(mut events: MessageReader<UniversalModelEvent>, mut received: ResMut<Received>) {
+fn receive(mut events: MessageReader<ModelEvent>, mut received: ResMut<Received>) {
     received.0.extend(events.read().cloned());
 }
 
@@ -45,11 +44,11 @@ fn plugin_dispatches_public_messages_to_ordered_application_consumers() {
     .widen::<Universal>();
     let mut meshes = Assets::<Mesh>::default();
     let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
-    let mut materials = Assets::<UniversalMaterial>::default();
-    let compiled = compile_universal_model(&source, |_| None).unwrap();
+    let mut materials = Assets::<ModelMaterial>::default();
+    let compiled = compile_model(&source, |_| None).unwrap();
     let prepared = compiled.prepare(&mut meshes, &mut bindposes);
     let mut queue = CommandQueue::default();
-    let root = spawn_universal_model(
+    let root = spawn_model(
         &mut Commands::new(&mut queue, app.world()),
         &mut meshes,
         &mut materials,
@@ -58,7 +57,7 @@ fn plugin_dispatches_public_messages_to_ordered_application_consumers() {
     );
     queue.apply(app.world_mut());
     app.world_mut()
-        .get_mut::<UniversalPlayback>(root)
+        .get_mut::<Playback>(root)
         .unwrap()
         .play_immediately(prepared.clips()[0].0);
     app.update();
@@ -66,7 +65,7 @@ fn plugin_dispatches_public_messages_to_ordered_application_consumers() {
     assert_eq!(app.world().resource::<Received>().0[0].root, root);
     app.world_mut().resource_mut::<Received>().0.clear();
     app.world_mut()
-        .get_mut::<UniversalPlayback>(root)
+        .get_mut::<Playback>(root)
         .unwrap()
         .seek(0.2)
         .unwrap();
@@ -82,13 +81,5 @@ fn plugin_dispatches_public_messages_to_ordered_application_consumers() {
     assert_eq!(received[1].name.as_ref(), "Custom notification");
     assert_eq!(received[2].name.as_ref(), "SNDxUnresolved");
     assert!(received.iter().all(|event| event.occurrence_time == 0.25));
-    assert!(
-        (app.world()
-            .get::<UniversalPlayback>(root)
-            .unwrap()
-            .timeline_time
-            - 0.3)
-            .abs()
-            < 1e-12
-    );
+    assert!((app.world().get::<Playback>(root).unwrap().timeline_time - 0.3).abs() < 1e-12);
 }

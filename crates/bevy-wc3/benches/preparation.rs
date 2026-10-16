@@ -1,5 +1,5 @@
 use bevy::{mesh::skinning::SkinnedMeshInverseBindposes, prelude::*};
-use bevy_wc3::compile_universal_model;
+use bevy_wc3::compile_model;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
 use mdl::Write as _;
 use mdx::Write as _;
@@ -30,9 +30,9 @@ fn preparation(c: &mut Criterion) {
             (profile.geosets * profile.vertices) as u64,
         ));
         group.bench_function("compile", |b| {
-            b.iter(|| black_box(compile_universal_model(black_box(&source), |_| None).unwrap()))
+            b.iter(|| black_box(compile_model(black_box(&source), |_| None).unwrap()))
         });
-        let compiled = compile_universal_model(&source, |_| None).unwrap();
+        let compiled = compile_model(&source, |_| None).unwrap();
         group.bench_function("assets", |b| {
             b.iter_batched(
                 || {

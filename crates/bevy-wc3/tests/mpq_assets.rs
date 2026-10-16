@@ -3,7 +3,7 @@ use bevy::image::ImageLoader;
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool, TaskPoolBuilder};
 use bevy_mpq::{MpqAssetReader, OverlayAssetReader, OverlayMount};
-use bevy_wc3::{UniversalModelAsset, UniversalModelLoader, UniversalPathResolver};
+use bevy_wc3::{ModelAsset, ModelLoader, PathResolver};
 use std::borrow::Cow;
 use std::io::Cursor;
 use std::sync::Arc;
@@ -79,9 +79,9 @@ fn named_source_loads_recursive_models_and_images_across_archives() {
     app.add_plugins(AssetPlugin::default());
     app.init_asset::<Image>()
         .register_asset_loader(ImageLoader::new(default()));
-    app.init_asset::<UniversalModelAsset>()
-        .register_asset_loader(UniversalModelLoader::new(Arc::new(UniversalPathResolver)));
-    let handle: Handle<UniversalModelAsset> = app
+    app.init_asset::<ModelAsset>()
+        .register_asset_loader(ModelLoader::new(Arc::new(PathResolver)));
+    let handle: Handle<ModelAsset> = app
         .world()
         .resource::<AssetServer>()
         .load("map://units/parent.mdl");
@@ -101,12 +101,12 @@ fn named_source_loads_recursive_models_and_images_across_archives() {
         );
         sleep(Duration::from_millis(5));
     }
-    let models = app.world().resource::<Assets<UniversalModelAsset>>();
+    let models = app.world().resource::<Assets<ModelAsset>>();
     assert!(models.get(&handle).is_some());
     let server = app.world().resource::<AssetServer>();
     for path in ["map://units/child.mdl", "map://units/leaf.mdl"] {
         let child = server
-            .get_handle::<UniversalModelAsset>(path)
+            .get_handle::<ModelAsset>(path)
             .expect("child preserves named source");
         assert!(models.get(&child).is_some());
     }

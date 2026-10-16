@@ -5,16 +5,16 @@ MIT OR Apache-2.0. Keep this pinned attribution when changing local shaders.
 
 | Local file | Upstream source |
 | --- | --- |
-| `universal_material.wgsl` | [`bevy_pbr/src/render/pbr.wgsl`](https://github.com/bevyengine/bevy/blob/v0.19.1/crates/bevy_pbr/src/render/pbr.wgsl) |
-| `universal_material_prepass.wgsl` | [`bevy_pbr/src/render/pbr_prepass.wgsl`](https://github.com/bevyengine/bevy/blob/v0.19.1/crates/bevy_pbr/src/render/pbr_prepass.wgsl) |
+| `material.wgsl` | [`bevy_pbr/src/render/pbr.wgsl`](https://github.com/bevyengine/bevy/blob/v0.19.1/crates/bevy_pbr/src/render/pbr.wgsl) |
+| `material_prepass.wgsl` | [`bevy_pbr/src/render/pbr_prepass.wgsl`](https://github.com/bevyengine/bevy/blob/v0.19.1/crates/bevy_pbr/src/render/pbr_prepass.wgsl) |
 | `wc3_mesh.wgsl` | [`bevy_pbr/src/render/mesh.wgsl`](https://github.com/bevyengine/bevy/blob/v0.19.1/crates/bevy_pbr/src/render/mesh.wgsl) |
 | `wc3_prepass.wgsl` | [`bevy_pbr/src/prepass/prepass.wgsl`](https://github.com/bevyengine/bevy/blob/v0.19.1/crates/bevy_pbr/src/prepass/prepass.wgsl) |
 
 ## Local integration
 
-The Universal material extension preserves Bevy's PBR/light/post-processing
-stages. `universal_material.wgsl` evaluates supported native combiners and WMO
-baked-light interpretation; `universal_hd.wgsl` supplies DefaultUnit role sampling,
+The model material extension preserves Bevy's PBR/light/post-processing
+stages. `material.wgsl` evaluates supported native combiners and WMO
+baked-light interpretation; `hd.wgsl` supplies DefaultUnit role sampling,
 RG normal reconstruction, team masking, Fresnel, and environment approximation.
 The prepass fragment retains matching alpha/UV/normal interpretation.
 
@@ -22,10 +22,10 @@ The vertex entry points retain their filenames while serving Universal geometry.
 `extra_skinning.wgsl` shares the extra four joint influences between main and
 prepass paths, including previous-frame deformation for motion vectors. Shader
 locations 8 and 9 carry the second index/weight set when enabled by specialization.
-`universal/mesh_attributes.rs` defines the corresponding mesh attributes and
-`universal/material.rs` specializes their layouts.
+`mesh_attributes.rs` defines the corresponding mesh attributes and
+`material.rs` specializes their layouts.
 
-Extension binding declarations live with `UniversalMaterialExtension` and must
+Extension binding declarations live with `ModelMaterialExtension` and must
 match the WGSL uniform/texture declarations. These shaders do not replace global
 Bevy assets. Particle/ribbon transport has separate shader-generated geometry,
 record layouts, and material bindings. See the [material guide](../../docs/rendering/reforged-materials.md)

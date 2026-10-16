@@ -1,7 +1,7 @@
 //! Put an MDX and its textures under `assets/`, then run:
 //! `cargo run -p bevy-wc3 --example instances -- units/footman.mdx`.
 use bevy::prelude::*;
-use bevy_wc3::{UniversalModelInstance, Wc3BevyPlugin};
+use bevy_wc3::{ModelInstance, Wc3BevyPlugin};
 
 fn main() {
     App::new()
@@ -17,7 +17,7 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
     let model = assets.load(path);
     for x in [-150.0, 150.0] {
         commands.spawn((
-            UniversalModelInstance::new(model.clone()),
+            ModelInstance::new(model.clone()),
             Transform::from_xyz(x, 0.0, 0.0),
         ));
     }

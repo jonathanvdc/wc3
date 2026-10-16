@@ -34,7 +34,7 @@ resources must resolve through the application provider.
 ## Limits
 
 Each emitter is limited to 1,024 live child models and a bounded per-update birth
-budget. `UniversalModelParticleEmitter` exposes population, omitted births, and
+budget. `ModelEmitter` exposes population, omitted births, and
 skipped simulation time. Excess work is discarded rather than queued after a stall.
 This is a CPU hierarchy/model simulation and can cost substantially more than sprite
 particles at comparable populations.

@@ -7,7 +7,7 @@ evaluator across live poses, effect births, event occurrences, and offline bakin
 
 ## Driving camera
 
-Set `UniversalPlayback::driving_camera` explicitly on each camera-sensitive model
+Set `Playback::driving_camera` explicitly on each camera-sensitive model
 instance. There is no automatic main-camera or window-camera selection. Missing
 camera input leaves camera-dependent adjustments unavailable while ordinary
 animation can still evaluate. One instance has one resolved skeleton for all views;

@@ -4,13 +4,12 @@ use crate::effects::render::configure_effect_views;
 use crate::effects::sprites::ParticleRenderPlugin;
 use crate::effects::trails::RibbonRenderPlugin;
 use crate::schedule::{configure, Wc3Systems};
-use crate::universal::{
-    advance_universal_animation, animate_universal_cameras, animate_universal_instances,
-    apply_universal_lod_visibility, apply_universal_world_selection, dispatch_universal_events,
-    invalidate_universal_models, restart_universal_attachments, simulate_universal_particles,
-    spawn_loaded_universal_models, synchronize_model_particles, update_skin_bounds,
-    update_universal_lod, UniversalAssetSettings, UniversalLodSettings, UniversalMaterial,
-    UniversalModelAsset, UniversalModelEvent, UniversalModelLoader, UniversalPreparedCache,
+use crate::{
+    advance_animation, animate_cameras, animate_instances, apply_lod_visibility,
+    apply_world_selection, dispatch_events, invalidate_models, restart_attachments,
+    simulate_particles, spawn_loaded_models, synchronize_model_particles, update_lod,
+    update_skin_bounds, AssetSettings, LodSettings, ModelAsset, ModelEvent, ModelLoader,
+    ModelMaterial, PreparedModelCache,
 };
 use bevy::asset::embedded_asset;
 use bevy::camera::visibility::VisibilitySystems;
@@ -25,66 +24,58 @@ impl Plugin for Wc3BevyPlugin {
         embedded_asset!(app, "shaders/wc3_mesh.wgsl");
         embedded_asset!(app, "shaders/extra_skinning.wgsl");
         embedded_asset!(app, "shaders/wc3_prepass.wgsl");
-        embedded_asset!(app, "shaders/universal_material.wgsl");
-        embedded_asset!(app, "shaders/universal_hd.wgsl");
-        embedded_asset!(app, "shaders/universal_material_prepass.wgsl");
+        embedded_asset!(app, "shaders/material.wgsl");
+        embedded_asset!(app, "shaders/hd.wgsl");
+        embedded_asset!(app, "shaders/material_prepass.wgsl");
         embedded_asset!(app, "shaders/wc3_particle.wgsl");
         embedded_asset!(app, "shaders/wc3_ribbon.wgsl");
-        app.init_asset::<UniversalModelAsset>();
-        app.init_resource::<UniversalAssetSettings>();
-        let resolver = app
-            .world()
-            .resource::<UniversalAssetSettings>()
-            .resolver
-            .clone();
-        app.register_asset_loader(UniversalModelLoader::new(resolver));
+        app.init_asset::<ModelAsset>();
+        app.init_resource::<AssetSettings>();
+        let resolver = app.world().resource::<AssetSettings>().resolver.clone();
+        app.register_asset_loader(ModelLoader::new(resolver));
         app.init_asset_loader::<BlpImageLoader>();
-        app.init_resource::<UniversalPreparedCache>();
-        app.init_resource::<UniversalLodSettings>();
+        app.init_resource::<PreparedModelCache>();
+        app.init_resource::<LodSettings>();
         app.add_plugins((
-            MaterialPlugin::<UniversalMaterial>::default(),
+            MaterialPlugin::<ModelMaterial>::default(),
             ParticleRenderPlugin,
             RibbonRenderPlugin,
         ));
-        app.add_message::<UniversalModelEvent>();
+        app.add_message::<ModelEvent>();
         configure(app);
         app.add_systems(
             Update,
-            (invalidate_universal_models, spawn_loaded_universal_models)
+            (invalidate_models, spawn_loaded_models)
                 .chain()
                 .in_set(Wc3Systems::SpawnInstances),
         );
         app.add_systems(
             Update,
-            (advance_universal_animation, synchronize_model_particles)
+            (advance_animation, synchronize_model_particles)
                 .chain()
                 .in_set(Wc3Systems::AdvanceAnimation),
         );
         app.add_systems(
             PostUpdate,
-            animate_universal_cameras.in_set(Wc3Systems::AnimateCameras),
+            animate_cameras.in_set(Wc3Systems::AnimateCameras),
         );
         app.add_systems(
             PostUpdate,
-            (restart_universal_attachments, animate_universal_instances)
+            (restart_attachments, animate_instances)
                 .chain()
                 .in_set(Wc3Systems::EvaluateNodePoses),
         );
         app.add_systems(
             PostUpdate,
-            simulate_universal_particles.in_set(Wc3Systems::SimulateEffects),
+            simulate_particles.in_set(Wc3Systems::SimulateEffects),
         );
         app.add_systems(
             PostUpdate,
-            dispatch_universal_events.in_set(Wc3Systems::DispatchEvents),
+            dispatch_events.in_set(Wc3Systems::DispatchEvents),
         );
         app.add_systems(
             PostUpdate,
-            (
-                update_universal_lod,
-                apply_universal_lod_visibility,
-                apply_universal_world_selection,
-            )
+            (update_lod, apply_lod_visibility, apply_world_selection)
                 .chain()
                 .in_set(Wc3Systems::SelectLod),
         );
