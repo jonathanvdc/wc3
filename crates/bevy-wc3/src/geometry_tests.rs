@@ -310,3 +310,49 @@ fn many_small_draw_ranges_preserve_global_face_correspondence() {
         );
     }
 }
+
+#[test]
+fn third_texture_route_preserves_corner_domain_and_omits_unused_streams() {
+    let mut source = mesh(
+        &[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [1., 1., 0.]],
+        Topology::Triangles([[0, 1, 2], [2, 1, 3]].into_iter().collect()),
+    );
+    let third = [
+        [0., 0.],
+        [1., 0.],
+        [0., 1.],
+        [0.2, 0.8],
+        [0.8, 0.2],
+        [1., 1.],
+    ];
+    for (set, domain, values) in [
+        (0, AttributeDomain::Vertex, vec![[0., 0.]; 4]),
+        (1, AttributeDomain::Vertex, vec![[0.5, 0.5]; 4]),
+        (2, AttributeDomain::Corner, third.to_vec()),
+    ] {
+        source
+            .geometry
+            .attributes
+            .insert(Attribute {
+                semantic: AttributeSemantic::TexCoord(set),
+                domain,
+                values: AttributeValues::Vector2(values.into_iter().collect()),
+            })
+            .unwrap();
+    }
+    let id = source.add_primary_subset(0, 2);
+    let subset = source.subset(id).unwrap();
+    let parts = compile_geometry_with_uvs(&source, subset, 0, Some(1), Some(2)).unwrap();
+    assert_eq!(
+        parts[0].mesh.attribute(EXTRA_TEXCOORD),
+        Some(&VertexAttributeValues::Float32x2(third.to_vec()))
+    );
+    assert_ne!(third[2], third[3]);
+    let plain = compile_geometry(&source, subset, 0).unwrap();
+    assert!(plain[0].mesh.attribute(EXTRA_TEXCOORD).is_none());
+    assert!(plain[0].mesh.attribute(Mesh::ATTRIBUTE_UV_1).is_none());
+    let error = compile_geometry_with_uvs(&source, subset, 0, Some(1), Some(3))
+        .err()
+        .unwrap();
+    assert!(error.0.contains("texture coordinate set 3 is absent"));
+}

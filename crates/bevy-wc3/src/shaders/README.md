@@ -27,7 +27,8 @@ locations 8 and 9 carry the second index/weight set when enabled by specializati
 `material.rs` specializes their layouts. An optional third UV stream uses
 attribute and varying location 10. `model_io.wgsl` retains the pinned Bevy
 conditional output members, adds that stream, and explicitly converts ordinary
-fields back into Bevy's input type before calling its PBR functions.
+fields back into Bevy's input type before calling its PBR functions. Edge-opacity
+variants add a facing factor at varying location 11; ordinary variants omit it.
 
 Extension binding declarations live with `ModelMaterialExtension` and must
 match the WGSL uniform/texture declarations. These shaders do not replace global

@@ -141,10 +141,10 @@ pub fn compile_model_with_options(
             rest: node.transform,
             inheritance: node.inheritance,
             billboard: node.billboard,
-            billboard_convention: if matches!(node.controls, Some(NodeControls::Mdlx(_))) {
-                BillboardConvention::Warcraft3
-            } else {
-                BillboardConvention::Generic
+            billboard_convention: match node.controls {
+                Some(NodeControls::Mdlx(_)) => BillboardConvention::Warcraft3,
+                Some(NodeControls::M2(_)) => BillboardConvention::M2,
+                _ => BillboardConvention::Generic,
             },
             visible: node.visible,
             camera_anchored: node.camera_anchored,
@@ -169,6 +169,17 @@ pub fn compile_model_with_options(
         })
         .collect();
     let mut diagnostics = Vec::new();
+    for node in &nodes {
+        if node.billboard_convention == BillboardConvention::M2
+            && matches!(node.billboard, Billboard::Locked { enabled: true, .. })
+        {
+            diagnostics.push(RenderDiagnostic {
+                feature: None,
+                material: None,
+                message: format!("M2 node {:?} ({}) uses axis-locked billboarding; generic rotation locks approximate its native camera-frame behavior", node.id, node.name),
+            });
+        }
+    }
     for (id, clip) in model.clips() {
         if let Some(ClipControls::M2(controls)) = &clip.controls {
             if controls.blend_time != [0; 2] {
@@ -338,6 +349,7 @@ pub fn compile_model_with_options(
                     subset_id,
                     surface.coordinate,
                     surface.secondary_coordinate,
+                    surface.third_coordinate,
                     skin_id,
                 );
                 let meshes = if let Some(meshes) = geometry_cache.get(&key) {
@@ -348,6 +360,7 @@ pub fn compile_model_with_options(
                         &subset,
                         surface.coordinate,
                         surface.secondary_coordinate,
+                        surface.third_coordinate,
                     )?;
                     if let Some(id) = skin_id {
                         let skin = model

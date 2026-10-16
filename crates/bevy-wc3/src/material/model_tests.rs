@@ -29,8 +29,12 @@ fn compile(surface: &model_shader::ShaderPass<'_>) -> SurfacePass {
 
 #[test]
 fn programs_require_exact_input_counts_and_do_not_wrap_unknown_tables() {
-    for offset in 0..=17 {
-        let count = if matches!(offset, 3 | 9 | 17) { 3 } else { 2 };
+    for offset in (0..=21).chain([23, 24, 25, 32, 33, 34, 35]) {
+        let count = match offset {
+            3 | 9 | 17 | 18 | 20 | 24 => 3,
+            19 | 25 | 32 | 34 => 1,
+            _ => 2,
+        };
         assert!(program(0x8000 + offset, count).is_some());
         assert!(program(0x8000 + offset, count - 1).is_none());
         assert!(program(0x8000 + offset, count + 1).is_none());
@@ -111,11 +115,9 @@ fn explicit_environment_source_and_independent_weights_survive_compilation() {
 }
 
 #[test]
-fn unknown_coordinates_or_unroutable_third_input_report_fallback() {
+fn unknown_coordinates_or_programs_report_fallback() {
     for shader in [
         surface(0x8000, &[0, -2]),
-        surface(0x8003, &[0, 0, 1]),
-        surface(0x8003, &[0, 0, -1]),
         surface(0x8000, &[0]),
         surface(0x8024, &[0, 0]),
     ] {
@@ -141,4 +143,49 @@ fn shared_composition_shader_parses_and_validates() {
     Validator::new(ValidationFlags::all(), Capabilities::all())
         .validate(&module)
         .unwrap_or_else(|error| panic!("{error:?}"));
+}
+
+#[test]
+fn third_coordinates_keep_their_own_source_and_transform() {
+    let mut shader = surface(0x8014, &[0, -1, 1]);
+    shader.textures[2].coordinates.transform.translation = Animated::constant([0.2, 0.4, 0.]);
+    let pass = compile(&shader);
+    assert_eq!(pass.third_coordinate, Some(1));
+    assert_ne!(pass.state.combiner.third_transform, Mat3::IDENTITY);
+    assert!(pass.animation.third_transform.is_some());
+    shader.textures[2].coordinates.source = -1;
+    let generated = compile(&shader);
+    assert_eq!(generated.state.combiner.coordinates.w, 1);
+    assert_eq!(generated.state.combiner.third_transform, Mat3::IDENTITY);
+    assert!(generated.animation.third_transform.is_none());
+}
+
+#[test]
+fn edge_programs_are_explicit_and_keep_native_input_counts() {
+    for (offset, count) in [(19, 1), (21, 2), (25, 1), (33, 2), (34, 1), (35, 2)] {
+        let pass = compile(&surface(0x8000 + offset, &vec![0; count]));
+        assert_eq!(pass.state.combiner.clip.y, 1.);
+        assert!(pass.diagnostics.is_empty());
+    }
+    assert_eq!(
+        compile(&surface(0x8019, &[0])).state.combiner.coordinates.x,
+        1
+    );
+    for offset in [22, 26, 27, 28, 29, 30, 31, 36] {
+        assert!(program(0x8000 + offset, 3).is_none());
+    }
+}
+
+#[test]
+fn legacy_surplus_bindings_use_the_established_two_input_equation_with_diagnostics() {
+    for selector in [0x4011, 0x4013] {
+        let pass = compile(&surface(selector, &[0, 1, -2]));
+        assert_eq!(pass.state.combiner.coordinates.z, 2);
+        assert!(pass.third_coordinate.is_none());
+        assert!(pass
+            .diagnostics
+            .iter()
+            .any(|message| message.contains("surplus")));
+        assert_ne!(pass.state.combiner.mode.x, 0);
+    }
 }

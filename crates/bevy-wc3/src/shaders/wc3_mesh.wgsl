@@ -162,6 +162,11 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 #endif
     let view_position=(view.view_from_world*out.world_position).xyz;
     let view_normal=normalize((view.view_from_world*vec4(env_world_normal,0.0)).xyz);
+#ifdef MODEL_EDGE_FADE
+    let facing=max(dot(-normalize(view_position),view_normal),0.0);
+    out.edge_opacity=clamp(2.7*facing*facing-0.4,0.0,1.0);
+#endif
+    if combiner.coordinates.x!=0u || combiner.coordinates.y!=0u || combiner.coordinates.w==1u {
     let reflected=reflect(-normalize(view_position),view_normal)+vec3(0.0,0.0,1.0);
     let generated=0.5*reflected.xy/max(length(reflected),0.000001)+vec2(0.5);
 #ifdef VERTEX_UVS_A
@@ -170,6 +175,10 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 #ifdef VERTEX_UVS_B
     if combiner.coordinates.y!=0u {out.uv_b=generated;}
 #endif
+#ifdef VERTEX_UVS_C
+    if combiner.coordinates.w==1u {out.uv_c=generated;}
+#endif
+    }
 #endif
 #endif
 

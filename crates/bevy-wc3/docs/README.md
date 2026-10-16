@@ -40,7 +40,7 @@ then choose a topic:
 - [Geoset animation](rendering/geoset-animation.md): color, opacity,
   material sharing, isolation, and sampling.
 - [M2 materials](rendering/m2-materials.md): native texture combiners, generated
-  coordinates, opacity controls and PBR integration limits.
+  coordinates, weighted crossfades, edge opacity and PBR integration limits.
 - [Reforged materials](rendering/reforged-materials.md): texture roles,
   surface animation, UV sets, and Bevy shading integration.
 - [M3 materials](rendering/m3-materials.md): packed normals, basic occlusion,

@@ -85,7 +85,7 @@ coverage; focused guides state the implemented behavior and remaining limits.
 | Area | Current boundary |
 | --- | --- |
 | Geometry | More than eight skin influences fails; skinned bounds update conservatively from contributing joints. No generated simplification or per-view skeletal pose. |
-| Surfaces | Higher M2 table entries and three distinct coordinate routes, complex WMO combinations, many programmed M3 surfaces, and external Diablo shaders need additional interpretation. |
+| Surfaces | M2 guild, four-input and illumination/constant programmes, complex WMO combinations, many programmed M3 surfaces, and external Diablo shaders need additional interpretation. |
 | Scene features | Bevy lighting differs from native falloff and regional illumination. Unsupported feature hooks expose IDs/kinds, not complete owned definitions. |
 | Effects | Spline/bone generators, advanced M2 texture programmes and modulation-gain controls, and several programmed simulations remain unsupported; external effects need providers. |
 | Fidelity | Implemented motion, material, billboard, and native shader behavior is not a promise of exact game rendering. |

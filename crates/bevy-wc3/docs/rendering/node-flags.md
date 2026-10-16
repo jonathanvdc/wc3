@@ -25,8 +25,16 @@ Compensation retains instance placement and the node's own authored motion. Warc
 III native controls preserve their facing convention: full billboarding applies the
 native facing conversion and authored rotation, and takes precedence over axis
 locks. Otherwise X, then Y, then Z lock precedence applies; native X lock also
-changes local Z scale sign. Generic billboard conventions remain separate rather
-than assuming every model family uses Warcraft III's +X facing.
+changes local Z scale sign.
+
+M2 spherical billboards use their own native frame: geometry in the YZ plane faces
+the camera along +X, while native +Z follows camera up. Camera orientation replaces
+inherited rotation, then authored local rotation applies within that frame. The
+transformed pivot stays fixed and each inherited basis length is retained, including
+signed and collapsed scale factors. M2 axis locks still use generic rotation-lock
+approximations and emit a diagnostic; their native mirroring and camera-frame
+reconstruction are not implemented. Generic semantic billboards retain their +Z
+facing convention.
 
 Camera anchoring adds the driving camera position once along an inherited chain.
 Repeated anchored descendants account for the already inherited offset. It does not
@@ -35,8 +43,8 @@ itself force a node to face the camera.
 Signed factors retain mirrored scales. A collapsed parent axis cannot be inverted
 exactly; finite fallbacks keep it collapsed. Exception nodes that need affine
 compensation cannot preserve arbitrary shear in a single Bevy Transform. Exact
-native billboard appearance, particularly across other model families, remains
-unverified.
+native billboard appearance beyond the established facing and pivot rules remains
+unverified. M2 spherical orientation follows the driving camera frame.
 
 ## Occurrence-time evaluation
 

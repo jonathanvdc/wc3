@@ -49,6 +49,7 @@ pub(crate) struct SurfacePass {
     pub animation: SurfaceAnimation,
     pub state: ModelMaterialExtension,
     pub secondary_coordinate: Option<u32>,
+    pub third_coordinate: Option<u32>,
 }
 
 /// A semantic material retaining Bevy PBR shading and authored draw state.
@@ -124,6 +125,8 @@ impl Default for HdUniform {
 struct CombinerUniform {
     uv_transform: Mat3,
     third_transform: Mat3,
+    // xy: environment selectors; z: input count. Third route w:
+    // 0 = raw primary, 1 = environment, 2 = raw secondary, 3 = distinct stream.
     coordinates: UVec4,
     weights: Vec4,
     // x: enabled, y: first alpha, z: second alpha, w: RGB/alpha doubling.
@@ -232,14 +235,17 @@ pub struct ModelMaterialKey {
     depth_write: Option<bool>,
     generated_coordinates: bool,
     third_uv: bool,
+    edge_fade: bool,
 }
 
 impl From<&ModelMaterialExtension> for ModelMaterialKey {
     fn from(state: &ModelMaterialExtension) -> Self {
         Self {
-            third_uv: state.particle.mode.x != 0,
+            edge_fade: state.combiner.clip.y != 0.0,
+            third_uv: state.particle.mode.x != 0 || matches!(state.combiner.coordinates.w, 1 | 3),
             generated_coordinates: state.combiner.coordinates.x != 0
-                || state.combiner.coordinates.y != 0,
+                || state.combiner.coordinates.y != 0
+                || state.combiner.coordinates.w == 1,
             blend: state.blend,
             depth_test: state.depth_test,
             depth_write: state
@@ -300,9 +306,15 @@ impl MaterialExtension for ModelMaterialExtension {
         specialize_mesh_attributes(
             descriptor,
             layout,
-            key.bind_group_data.generated_coordinates,
+            key.bind_group_data.generated_coordinates || key.bind_group_data.edge_fade,
             key.bind_group_data.third_uv,
         )?;
+        if key.bind_group_data.edge_fade {
+            descriptor.vertex.shader_defs.push("MODEL_EDGE_FADE".into());
+            if let Some(fragment) = &mut descriptor.fragment {
+                fragment.shader_defs.push("MODEL_EDGE_FADE".into());
+            }
+        }
         let state = key.bind_group_data;
         if let Some(depth) = &mut descriptor.depth_stencil {
             if !state.depth_test {
@@ -371,6 +383,7 @@ impl Default for SurfacePass {
                 ..Default::default()
             },
             secondary_coordinate: None,
+            third_coordinate: None,
         }
     }
 }

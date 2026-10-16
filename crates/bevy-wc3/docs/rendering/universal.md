@@ -227,7 +227,7 @@ shader coverage for every family. MDLX common layers and effects, M2 common surf
 and age-driven sprites, WMO groups/basic surfaces/liquid grids, M3 common
 surfaces (including packed normals and constrained AO/specular), lights and selected programmes, and known Diablo roles each have separate
 interpretation limits. Native loading, generic geometry, and basic surface
-interpretation are separate capabilities from full game-specific rendering. Higher M2 shader-table entries and additional coordinate routes, complex WMO
+interpretation are separate capabilities from full game-specific rendering. M2 guild, four-input and illumination/constant programmes, complex WMO
 combiners, programmed M3 surfaces, external
 Diablo shaders, and external effect programmes require additional interpreters.
 These gaps appear in model diagnostics.

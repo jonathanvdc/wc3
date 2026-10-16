@@ -51,6 +51,14 @@ fn compose(a:vec4<f32>,b:vec4<f32>,c:vec4<f32>,tint:vec4<f32>) -> Composed {
                 if mode==16u {alpha+=b.a;}
             } else { emission=b.rgb*b.a; }
         }
+        case 18u: {
+            let color=mix(mix(a,b,clamp(weights.y,0.0,1.0)),c,clamp(weights.z,0.0,1.0));
+            rgb=color.rgb; alpha=color.a;
+        }
+        case 19u: {rgb=mix(mix(2.0*a.rgb*b.rgb,c.rgb,c.a),a.rgb,a.a);}
+        case 20u: {emission=b.rgb*(1.0-a.a); alpha=a.a+b.a;}
+        case 21u: {alpha=1.0;}
+        case 22u: {alpha=a.a;}
         default: {alpha=a.a;}
     }
     return Composed(vec4(tint.rgb*rgb,tint.a*alpha),emission);

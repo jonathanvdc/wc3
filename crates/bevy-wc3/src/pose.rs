@@ -14,6 +14,7 @@ pub(super) enum BillboardConvention {
     #[default]
     Generic,
     Warcraft3,
+    M2,
 }
 
 /// Signed authored factors accompany the affine transform, including collapsed axes.
@@ -220,7 +221,39 @@ pub(super) fn evaluate_pose(
         }
         let target = Quat::from_mat3(&camera.matrix3.into()).normalize();
         let next = match node.billboard {
-            Billboard::Spherical => target * Quat::from_array(pose.rotation.0).normalize(),
+            Billboard::Spherical => {
+                let authored = Quat::from_array(pose.rotation.0).normalize();
+                if node.billboard_convention == BillboardConvention::M2 {
+                    // Native billboard geometry lies in YZ: +X faces the camera,
+                    // +Y runs across the image, and +Z points up. Keep authored
+                    // animation after this frame conversion, independent of the
+                    // inherited rotation that the billboard replaces.
+                    let facing = Quat::from_xyzw(-0.5, -0.5, -0.5, 0.5);
+                    result.scale = Vec3::new(
+                        result
+                            .matrix
+                            .x_axis
+                            .truncate()
+                            .length()
+                            .copysign(result.scale.x),
+                        result
+                            .matrix
+                            .y_axis
+                            .truncate()
+                            .length()
+                            .copysign(result.scale.y),
+                        result
+                            .matrix
+                            .z_axis
+                            .truncate()
+                            .length()
+                            .copysign(result.scale.z),
+                    );
+                    target * facing * authored
+                } else {
+                    target * authored
+                }
+            }
             Billboard::Locked {
                 enabled: true,
                 x,

@@ -104,11 +104,21 @@ fn fragment(
         var uv2=vec2(0.0);
 #ifdef VERTEX_UVS_A
         uv0=(pbr_bindings::material.uv_transform*vec3(in.uv,1.0)).xy;
-        uv2=(combiner.third_transform*vec3(in.uv,1.0)).xy;
 #endif
 #ifdef VERTEX_UVS_B
         uv1=(combiner.uv_transform*vec3(in.uv_b,1.0)).xy;
 #endif
+    // Reuse raw coordinate streams while retaining an independent transform.
+#ifdef VERTEX_UVS_A
+    uv2=in.uv;
+#endif
+#ifdef VERTEX_UVS_B
+    if combiner.coordinates.w==2u {uv2=in.uv_b;}
+#endif
+#ifdef VERTEX_UVS_C
+    uv2=in.uv_c;
+#endif
+    uv2=(combiner.third_transform*vec3(uv2,1.0)).xy;
         var a=vec4(1.0);
         if (pbr_input.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT)!=0u {
             a=textureSample(pbr_bindings::base_color_texture,pbr_bindings::base_color_sampler,uv0);
@@ -142,6 +152,10 @@ fn fragment(
 #endif
         pbr_input.material.base_color=compose_particle(pbr_input.material.base_color,b,c,vec4(1.0));
     }
+
+#ifdef MODEL_EDGE_FADE
+    pbr_input.material.base_color.a*=in.edge_opacity;
+#endif
 
     if pbr_input.material.base_color.a < combiner.clip.x { discard; }
 

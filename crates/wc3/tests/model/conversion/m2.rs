@@ -1153,3 +1153,156 @@ fn zero_duration_global_tracks_are_typed_frozen_clocks_and_roundtrip_without_ret
         vec![0]
     );
 }
+
+fn material_routes(shader: u16, count: usize) -> m2::Bundle<'static, m2::Flat<m2::V256>> {
+    let mut source = native_triangle();
+    let core = source.model.core_mut();
+    core.global_sequences = ZeroVec::alloc_from_slice(&[1000]);
+    core.texture_combos = ZeroVec::alloc_from_slice(&vec![0; count]);
+    core.texture_weight_combos = ZeroVec::alloc_from_slice(&vec![u16::MAX; count]);
+    core.texture_transform_bone_map = ZeroVec::alloc_from_slice(&vec![7; count]);
+    core.texture_transform_combos =
+        ZeroVec::alloc_from_slice(&(0..count as u16).collect::<Vec<_>>());
+    core.texture_transforms = (0..count)
+        .map(|index| m2::records::TextureTransform {
+            translation: constant([10. * (index + 1) as f32, 0., 0.]),
+            rotation: constant([0., 0., 0., 1.]),
+            scaling: constant([1.; 3]),
+        })
+        .collect();
+    core.skins[0].batches[0].shader_id = shader;
+    core.skins[0].batches[0].texture_count = count as u16;
+    source
+}
+
+#[test]
+fn native_shader_routes_share_repeated_coordinate_animation() {
+    let source = material_routes(0x8003, 3);
+    let imported = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let surface = &imported.materials().next().unwrap().1.surface;
+    assert_eq!(
+        surface
+            .textures
+            .iter()
+            .map(|unit| unit.coordinates.source)
+            .collect::<Vec<_>>(),
+        [0, -1, 0]
+    );
+    assert_eq!(
+        surface.textures[0].coordinates.transform,
+        surface.textures[2].coordinates.transform
+    );
+    assert!(surface.textures[0]
+        .coordinates
+        .transform
+        .translation
+        .property
+        .is_some());
+    assert!(surface.textures[1]
+        .coordinates
+        .transform
+        .translation
+        .property
+        .is_none());
+    let native = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let reread = io::m2::import(&native, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let surface = &reread.materials().next().unwrap().1.surface;
+    assert_eq!(
+        surface.textures[0].coordinates.transform,
+        surface.textures[2].coordinates.transform
+    );
+    assert!(surface.textures[0]
+        .coordinates
+        .transform
+        .translation
+        .property
+        .is_some());
+}
+
+#[test]
+fn native_environment_then_t1_exports_the_active_transform_in_slot_zero() {
+    let source = material_routes(0x80, 2);
+    let imported = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let surface = &imported.materials().next().unwrap().1.surface;
+    assert_eq!(surface.textures[0].coordinates.source, -1);
+    assert_eq!(surface.textures[1].coordinates.source, 0);
+    let native = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let core = native.model.core();
+    let index = core.texture_transform_combos.get(0).unwrap() as usize;
+    let LegacyValues::Values(values) = &core.texture_transforms[index].translation.values else {
+        panic!("plain transform values expected")
+    };
+    assert_eq!(values.get(0), Some([10., 0., 0.]));
+}
+
+#[test]
+fn native_three_route_programme_uses_third_transform_for_uv1() {
+    let source = material_routes(0x8014, 3);
+    let imported = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let surface = &imported.materials().next().unwrap().1.surface;
+    assert_eq!(
+        surface
+            .textures
+            .iter()
+            .map(|unit| unit.coordinates.source)
+            .collect::<Vec<_>>(),
+        [0, -1, 1]
+    );
+    let native = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let core = native.model.core();
+    let index = core.texture_transform_combos.get(2).unwrap() as usize;
+    let LegacyValues::Values(values) = &core.texture_transforms[index].translation.values else {
+        panic!("plain transform values expected")
+    };
+    assert_eq!(values.get(0), Some([30., 0., 0.]));
+}
+
+#[test]
+fn native_export_rejects_independent_transforms_on_repeated_shader_routes() {
+    let source = material_routes(0x8003, 3);
+    let mut imported = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (id, material) = imported.materials().next().unwrap();
+    let mut surface = material.surface.clone();
+    surface.textures[2].coordinates.transform.translation = sm::Animated::constant([99., 0., 0.]);
+    imported
+        .edit(|draft| draft.set_material_surface(id, surface))
+        .unwrap();
+    assert!(io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).is_err());
+}
+
+#[test]
+fn native_export_rejects_coordinate_sources_incompatible_with_shader_routes() {
+    let source = material_routes(0x8014, 3);
+    let mut imported = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (id, material) = imported.materials().next().unwrap();
+    let mut surface = material.surface.clone();
+    surface.textures[2].coordinates.source = 0;
+    imported
+        .edit(|draft| draft.set_material_surface(id, surface))
+        .unwrap();
+    assert!(io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).is_err());
+}

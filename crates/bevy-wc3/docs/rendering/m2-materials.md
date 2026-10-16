@@ -17,14 +17,17 @@ unsupported. Generated coordinates use the animated/skinned normal and current
 view, bypassing texture transforms. Ordinary UV inputs retain independent
 animated transforms.
 
-The high-bit shader table currently interprets entries 0 through 17 and entry 23
-(selectors 32768 through 32785, and 32791). These cover environment modulation,
-masked additive contributions, texture interpolation and selected three-input
-glow compositions. Input counts must match the selected programme. Three-input
-entries 3, 9 and 17 currently require the third input to use the primary authored
-UV stream; it retains an independent transform. Other coordinate combinations,
-unknown table entries and unsupported input counts produce an explicit
-first-input fallback diagnostic instead of wrapping the table index.
+The high-bit shader table interprets entries 0 through 21, 23 through 25, and
+32 through 35. These include environment modulation, masked additive contributions,
+weighted three-texture crossfades, glow composition and edge opacity. Input counts
+must match the selected programme. Legacy selectors with surplus bindings use
+their established first-two-input equation and diagnose the unsampled bindings.
+All three interpreted inputs can select independent mesh coordinate streams or
+explicit environment coordinates and retain their own animated transforms. Native
+import resolves repeated routes into shared controls; see the [M2 conversion
+guide](../../../wc3/docs/m2.md#shader-coordinate-ownership).
+Unknown table entries and unsupported input counts produce an explicit first-input
+fallback diagnostic instead of wrapping the table index.
 
 Shader 32768 uses base-map alpha to interpolate between doubled environment
 modulation and the base diffuse color. That alpha is a texture-composition mask,
@@ -44,14 +47,26 @@ unconditionally multiplied into diffuse opacity.
 
 Material sampling updates assets only when an evaluated value changes. Texture
 count is uniform across a draw, and unused secondary/third image samples are
-skipped. Generated-coordinate layouts are specialized separately from ordinary
-UV layouts. Compiled meshes, source textures and unchanged material definitions
-retain the renderer's existing sharing behavior.
+skipped. Generated-coordinate and edge-opacity layouts are specialized separately
+from ordinary UV layouts. A third texture reuses the primary or secondary raw UV
+stream when possible, while retaining its own transform. Only distinct or generated
+third routes add a mesh stream. Coordinate choices participate in compiled mesh
+sharing; source textures and unchanged material definitions retain their sharing.
 
 ## Remaining interpretation limits
 
-Higher shader-table entries, three distinct coordinate routes, edge-fade and
-crossfade programmes still require additional interpretation. Environment and
-additive composition do not establish exact native lighting or transparent-pass
-ordering. Unsupported surfaces retain source-associated diagnostics; successful
-model loading alone does not establish shader coverage.
+Four-input masked crossfades, guild-colour programmes and the incompletely
+established illumination/constant programmes remain unsupported. Guild-style
+six-input batches retain a first-input fallback; they are not reduced to a
+three-input guild equation.
+
+Edge programmes interpolate a per-vertex facing factor,
+`clamp(2.7 * facing² - 0.4, 0, 1)`, into opacity. They use the skinned geometric
+normal and the current rendering view, including prepasses. They do not sample
+scene depth or provide soft intersections. The facing factor does not attenuate
+RGB. This opacity-only behavior and its interaction with native pass ordering
+remain unverified against the game.
+Environment and additive composition preserve Bevy lighting rather than native
+lighting. Controlled captures establish the implemented higher-table equations;
+they do not establish native visual fidelity for programmes without representative
+game assets.

@@ -7,6 +7,8 @@ use crate::model::materials::model_shader::{material_flags, rasterization};
 use crate::model::materials::state::PassState;
 use semantic::{Draw, Influence, M2Geometry, Mesh, MeshInstance, Skin, Topology};
 use zerovec::ZeroVec;
+#[path = "geometry_coordinates.rs"]
+mod coordinates;
 pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     nodes: &[semantic::NodeId],
@@ -162,6 +164,7 @@ where
                     },
                     ..Default::default()
                 };
+                let routes = coordinates::routes(batch.shader_id, batch.texture_count as usize);
                 for slot in 0..batch.texture_count as usize {
                     let texture = core
                         .texture_combos
@@ -181,10 +184,14 @@ where
                             })?),
                         },
                         coordinates: Coordinates {
-                            source: core
-                                .texture_transform_bone_map
-                                .get(batch.texture_coordinate_combo_index as usize + slot)
-                                .unwrap_or(0) as i16,
+                            source: routes.map_or_else(
+                                || {
+                                    core.texture_transform_bone_map
+                                        .get(batch.texture_coordinate_combo_index as usize + slot)
+                                        .unwrap_or(0) as i16
+                                },
+                                |routes| routes[slot].source,
+                            ),
                             transform: profile::TextureTransform::default(),
                         },
                         contribution: Animated::constant(1.),
@@ -259,9 +266,22 @@ where
                             }
                         }
                     }
+                    let transform_slot = if let Some(routes) = routes {
+                        let route = routes[slot];
+                        if route.transform.is_none()
+                            || routes[..slot]
+                                .iter()
+                                .any(|previous| previous.transform == route.transform)
+                        {
+                            continue;
+                        }
+                        route.transform.unwrap()
+                    } else {
+                        slot
+                    };
                     if let Some(transform) = core
                         .texture_transform_combos
-                        .get(batch.texture_transform_combo_index as usize + slot)
+                        .get(batch.texture_transform_combo_index as usize + transform_slot)
                         .and_then(|i| core.texture_transforms.get(i as usize))
                     {
                         let tr = profile::properties::TextureUnit(slot)
@@ -306,6 +326,18 @@ where
                                     Channel::Rotation(bind(c, g, ro.clone(), clocks)?),
                                 )?
                             }
+                        }
+                    }
+                }
+                if let Some(routes) = routes {
+                    for slot in 0..routes.len() {
+                        if let Some(owner) = routes[..slot]
+                            .iter()
+                            .position(|route| route.transform == routes[slot].transform)
+                            .filter(|_| routes[slot].transform.is_some())
+                        {
+                            surface.textures[slot].coordinates.transform =
+                                surface.textures[owner].coordinates.transform.clone();
                         }
                     }
                 }
@@ -559,6 +591,28 @@ where
                 .material(material_id)
                 .ok_or_else(|| Error::new("m2.material", "missing surface"))?;
             let surface = super::materials::surface(material, context)?;
+            let routes = coordinates::routes(surface.shader, surface.textures.len());
+            if let Some(routes) = routes {
+                for (slot, route) in routes.iter().enumerate() {
+                    if surface.textures[slot].coordinates.source != route.source {
+                        context.unsupported(
+                            "m2.material.coordinates",
+                            "shader coordinate route differs from the native programme",
+                        )?;
+                    }
+                    let conflicting_owner = routes[..slot]
+                        .iter()
+                        .position(|previous| previous.transform == route.transform)
+                        .filter(|owner| {
+                            route.transform.is_some()
+                                && surface.textures[slot].coordinates.transform
+                                    != surface.textures[*owner].coordinates.transform
+                        });
+                    if conflicting_owner.is_some() {
+                        context.unsupported("m2.material.transform", "native shader repeats one transform; independent input transforms require changing the shader")?;
+                    }
+                }
+            }
             let material_index = materials.len();
             materials.push(native::records::Material {
                 flags: MaterialFlags::from_bits_retain(
@@ -587,7 +641,16 @@ where
                     .copied()
                     .unwrap_or((u16::MAX, u16::MAX));
                 weights.push(indices.0);
-                transforms.push(indices.1)
+                let transform = routes.map_or(indices.1, |routes| {
+                    routes
+                        .iter()
+                        .position(|route| route.transform == Some(slot))
+                        .and_then(|owner| {
+                            controls.get(&material_id).and_then(|c| c.units.get(owner))
+                        })
+                        .map_or(u16::MAX, |indices| indices.1)
+                });
+                transforms.push(transform)
             }
             profile.batches.push(native::records::Batch {
                 flags: BatchFlags::from_bits_retain(surface.batch_flags.bits()),

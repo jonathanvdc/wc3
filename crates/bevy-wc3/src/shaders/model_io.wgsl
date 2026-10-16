@@ -1,6 +1,6 @@
 // Adapted from Bevy v0.19.1 forward_io.wgsl and prepass_io.wgsl.
 // Upstream license: MIT OR Apache-2.0. Keep conditional members synchronized.
-// This renderer adds one optional third UV varying without changing Bevy PBR IO.
+// Optional semantic varyings extend Bevy IO without changing its PBR inputs.
 #ifdef PREPASS_PIPELINE
 #import bevy_pbr::prepass_io
 struct VertexOutput {
@@ -45,6 +45,9 @@ struct VertexOutput {
 #ifdef VERTEX_UVS_C
     @location(10) uv_c: vec2<f32>,
 #endif
+#ifdef MODEL_EDGE_FADE
+    @location(11) edge_opacity: f32,
+#endif
 }
 #else
 #import bevy_pbr::forward_io
@@ -74,6 +77,9 @@ struct VertexOutput {
 #endif
 #ifdef VERTEX_UVS_C
     @location(10) uv_c: vec2<f32>,
+#endif
+#ifdef MODEL_EDGE_FADE
+    @location(11) edge_opacity: f32,
 #endif
 }
 #endif
@@ -145,6 +151,9 @@ fn from_bevy(in: prepass_io::VertexOutput) -> VertexOutput {
 #ifdef VERTEX_UVS_C
     out.uv_c=vec2(0.0);
 #endif
+#ifdef MODEL_EDGE_FADE
+    out.edge_opacity=1.0;
+#endif
     return out;
 }
 #endif
@@ -199,6 +208,9 @@ fn from_bevy(in: forward_io::VertexOutput) -> VertexOutput {
 #endif
 #ifdef VERTEX_UVS_C
     out.uv_c=vec2(0.0);
+#endif
+#ifdef MODEL_EDGE_FADE
+    out.edge_opacity=1.0;
 #endif
     return out;
 }

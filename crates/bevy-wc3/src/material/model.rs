@@ -16,9 +16,11 @@ struct Program {
     mode: UVec4,
     environment: [bool; 2],
     inputs: usize,
+    edge_fade: bool,
 }
 fn program(shader: u16, inputs: usize) -> Option<Program> {
     if shader & 0x8000 == 0 {
+        let inputs = inputs.min(2);
         let mode = if inputs == 2 && matches!(shader & 7, 3 | 7) {
             UVec4::new(
                 if shader & 7 == 3 { 16 } else { 17 },
@@ -33,6 +35,7 @@ fn program(shader: u16, inputs: usize) -> Option<Program> {
             mode,
             environment: [shader & 0x80 != 0, shader & 8 != 0],
             inputs,
+            edge_fade: false,
         });
     }
     let offset = shader & 0x7fff;
@@ -41,7 +44,8 @@ fn program(shader: u16, inputs: usize) -> Option<Program> {
         1 | 5 => (3, 2, offset == 1),
         2 => (4, 2, true),
         3 => (5, 3, true),
-        4 | 6 | 11 => (6, 2, offset != 6),
+        4 | 6 => (6, 2, offset != 6),
+        11 => (20, 2, true),
         7 => (7, 2, true),
         8 => (8, 2, true),
         9 => (9, 3, true),
@@ -49,14 +53,27 @@ fn program(shader: u16, inputs: usize) -> Option<Program> {
         12 => (11, 2, true),
         13 | 14 => (12, 2, offset == 13),
         16 => (13, 2, true),
-        17 => (14, 3, true),
+        17 | 24 => (14, 3, true),
+        18 => (18, 3, false),
+        19 | 25 | 34 => (22, 1, false),
+        20 => (19, 3, true),
+        21 | 35 => (1, 2, false),
+        32 => (21, 1, false),
+        33 => (1, 2, false),
         23 => (15, 2, false),
         _ => return None,
     };
     (inputs == count).then_some(Program {
-        mode: UVec4::new(mode, 0, 0, 0),
-        environment: [false, env],
+        mode: if matches!(offset, 21 | 35) {
+            UVec4::new(mode, 1, 1, 0)
+        } else if offset == 33 {
+            UVec4::new(mode, 1, 1, 1)
+        } else {
+            UVec4::new(mode, 0, 0, 0)
+        },
+        environment: [offset == 25, env && count > 1],
         inputs,
+        edge_fade: matches!(offset, 19 | 21 | 25 | 33 | 34 | 35),
     })
 }
 
@@ -98,15 +115,12 @@ pub(super) fn compile_model_shader(
     pass.material.base_color =
         Color::linear_rgba(color[0], color[1], color[2], surface.opacity.default);
     pass.material.depth_bias = surface.state.ordering as f32;
-    let supported = program(surface.shader, surface.textures.len()).filter(|_| {
+    let supported = program(surface.shader, surface.textures.len()).filter(|program| {
         surface
             .textures
             .iter()
+            .take(program.inputs)
             .all(|input| input.coordinates.source >= -1)
-            && (surface.textures.len() < 3
-                || (surface.textures[0].coordinates.source >= 0
-                    && surface.textures[2].coordinates.source
-                        == surface.textures[0].coordinates.source))
     });
     if let Some(first) = surface.textures.first() {
         pass.material.base_color_texture =
@@ -123,15 +137,18 @@ pub(super) fn compile_model_shader(
     }
     if let Some(program) = supported {
         pass.state.combiner.mode = program.mode;
+        pass.state.combiner.clip.y = if program.edge_fade { 1. } else { 0. };
         pass.state.combiner.coordinates.z = program.inputs as u32;
-        for (slot, input) in surface.textures.iter().enumerate() {
+        if program.inputs < surface.textures.len() {
+            pass.diagnostics.push("M2 legacy texture equation uses its first two inputs; surplus native bindings are retained but not sampled".into());
+        }
+        for (slot, input) in surface.textures.iter().take(program.inputs).enumerate() {
             pass.state.combiner.weights[slot] = input.contribution.default;
             pass.animation.input_weights[slot] = Some(input.contribution.clone());
-            let environment =
-                slot < 2 && (program.environment[slot] || input.coordinates.source == -1);
-            if slot < 2 {
-                pass.state.combiner.coordinates[slot] = u32::from(environment);
-            }
+            let environment = program.environment.get(slot).copied().unwrap_or(false)
+                || input.coordinates.source == -1;
+            let coordinate_flag = if slot == 2 { 3 } else { slot };
+            pass.state.combiner.coordinates[coordinate_flag] = u32::from(environment);
             if environment && slot == 0 {
                 pass.material.uv_transform = Affine2::IDENTITY;
                 pass.animation.transform = None;
@@ -149,13 +166,31 @@ pub(super) fn compile_model_shader(
                     pass.animation.secondary_transform = Some(input.coordinates.transform.clone());
                 }
             } else if slot == 2 {
+                let source = u32::try_from(input.coordinates.source).unwrap_or(0);
+                let route = if environment {
+                    1
+                } else if pass.state.combiner.coordinates.x == 0 && pass.coordinate == source {
+                    0
+                } else if pass.state.combiner.coordinates.y == 0
+                    && pass.secondary_coordinate == Some(source)
+                {
+                    2
+                } else {
+                    3
+                };
+                pass.state.combiner.coordinates.w = route;
+                if matches!(route, 1 | 3) {
+                    pass.third_coordinate = Some(source);
+                }
                 pass.state.tertiary =
                     image(model, input.image.texture, images, &mut pass.diagnostics)?;
-                let mut scratch = SurfacePass::default();
-                transform(&mut scratch, &input.coordinates.transform);
-                pass.state.combiner.third_transform = Mat3::from(scratch.material.uv_transform);
-                pass.diagnostics.extend(scratch.diagnostics);
-                pass.animation.third_transform = Some(input.coordinates.transform.clone());
+                if !environment {
+                    let mut scratch = SurfacePass::default();
+                    transform(&mut scratch, &input.coordinates.transform);
+                    pass.state.combiner.third_transform = Mat3::from(scratch.material.uv_transform);
+                    pass.diagnostics.extend(scratch.diagnostics);
+                    pass.animation.third_transform = Some(input.coordinates.transform.clone());
+                }
             }
         }
     } else if surface.shader != 0
@@ -170,3 +205,11 @@ pub(super) fn compile_model_shader(
 #[cfg(test)]
 #[path = "model_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "model_capture_tests.rs"]
+mod capture_tests;
+
+#[cfg(test)]
+#[path = "model_routes_tests.rs"]
+mod route_tests;

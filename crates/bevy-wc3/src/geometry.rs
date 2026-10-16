@@ -1,5 +1,5 @@
 //! Direct mesh projection, preserving face and corner attribute correspondence.
-use super::mesh_attributes::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT};
+use super::mesh_attributes::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT, EXTRA_TEXCOORD};
 use crate::ModelError;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{PrimitiveTopology, VertexAttributeValues};
@@ -262,7 +262,7 @@ pub(super) fn compile_geometry(
     subset: &DrawSubset,
     coordinate: u32,
 ) -> Result<Vec<GeometryPart>, ModelError> {
-    compile_geometry_with_uvs(mesh, subset, coordinate, None)
+    compile_geometry_with_uvs(mesh, subset, coordinate, None, None)
 }
 
 pub(super) fn compile_geometry_with_uvs(
@@ -270,6 +270,7 @@ pub(super) fn compile_geometry_with_uvs(
     subset: &DrawSubset,
     coordinate: u32,
     secondary: Option<u32>,
+    third: Option<u32>,
 ) -> Result<Vec<GeometryPart>, ModelError> {
     let topology = mesh
         .connectivity(subset.selection.connectivity)
@@ -329,6 +330,7 @@ pub(super) fn compile_geometry_with_uvs(
             let mut normals = Vec::new();
             let mut uvs = Vec::new();
             let mut secondary_uvs = Vec::new();
+            let mut third_uvs = Vec::new();
             let mut colors = Vec::new();
             let mut tangents = Vec::new();
             for &c in &corners {
@@ -342,15 +344,19 @@ pub(super) fn compile_geometry_with_uvs(
                 {
                     uvs.push(values.get(index).unwrap());
                 }
-                if let Some(coordinate) = secondary {
-                    if let Some((AttributeValues::Vector2(values), index)) =
-                        attribute(mesh, subset, &AttributeSemantic::TexCoord(coordinate), c)?
-                    {
-                        secondary_uvs.push(values.get(index).unwrap());
-                    } else {
-                        return Err(ModelError(format!(
-                            "texture coordinate set {coordinate} is absent"
-                        )));
+                for (coordinate, target) in
+                    [(secondary, &mut secondary_uvs), (third, &mut third_uvs)]
+                {
+                    if let Some(coordinate) = coordinate {
+                        if let Some((AttributeValues::Vector2(values), index)) =
+                            attribute(mesh, subset, &AttributeSemantic::TexCoord(coordinate), c)?
+                        {
+                            target.push(values.get(index).unwrap());
+                        } else {
+                            return Err(ModelError(format!(
+                                "texture coordinate set {coordinate} is absent"
+                            )));
+                        }
                     }
                 }
                 if let Some((AttributeValues::Vector4(values), index)) =
@@ -392,6 +398,9 @@ pub(super) fn compile_geometry_with_uvs(
             }
             if secondary.is_some() {
                 output.insert_attribute(Mesh::ATTRIBUTE_UV_1, secondary_uvs);
+            }
+            if third.is_some() {
+                output.insert_attribute(EXTRA_TEXCOORD, third_uvs);
             }
             if !uvs.is_empty() {
                 output.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
