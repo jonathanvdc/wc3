@@ -14,9 +14,13 @@ use wc3::model::{
 #[test]
 fn model_particles_share_editable_rate_speed_and_lifetime() {
     let resource = String::from("particles/spark.mdx");
+    let mut draft = wc3::model::Model::<wc3::model::profiles::Mdlx>::builder("resources");
+    let resource_id = draft.add_model_resource(wc3::model::PathResource::Path(Cow::Borrowed(
+        resource.as_bytes(),
+    )));
     let source = mdlx::Particle {
         details: ModelParticle {
-            resource: Cow::Borrowed(&resource),
+            resource: wc3::model::ParticleResource::Model(Some(resource_id)),
             longitude: Animated::constant(45.0),
             ..Default::default()
         },
@@ -41,11 +45,11 @@ fn model_particles_share_editable_rate_speed_and_lifetime() {
     let ParticleDetails::Model(details) = &definition.details else {
         panic!()
     };
-    assert!(matches!(&details.resource, Cow::Borrowed(_)));
+    assert_eq!(details.resource, source.details.resource);
     definition.emission.rate = ParticleScalar::Animated(Animated::constant(21.0));
     let restored = mdlx::Particle::try_from(definition).unwrap();
     assert_eq!(restored.emission.rate.default, 21.0);
-    assert_eq!(restored.details.resource.as_ptr(), resource.as_ptr());
+    assert_eq!(restored.details.resource, source.details.resource);
     assert_eq!(restored.details.longitude, source.details.longitude);
     assert_eq!(restored.motion.speed, source.motion.speed);
     assert_eq!(restored.lifetime.duration, source.lifetime.duration);

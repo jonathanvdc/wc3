@@ -4,7 +4,7 @@ use bevy_wc3::{PathResolver, ResourceResolver, TextureRequest};
 use std::collections::HashMap;
 use wc3::model::conversion::{ImportOptions, LossPolicy, UnknownPolicy};
 use wc3::model::formats::wmo::Profile as WmoProfile;
-use wc3::model::Resource as ModelResource;
+use wc3::model::{ImageResource, ResourceLocator as ModelResource};
 
 #[derive(Default)]
 pub struct ModelResolver {
@@ -32,17 +32,17 @@ impl ResourceResolver for ModelResolver {
         index: usize,
         request: &TextureRequest<'_, '_>,
         _owner: &AssetPath<'_>,
-    ) -> ModelResource<'static> {
+    ) -> ImageResource<'static> {
         let path = self.bitmaps.get(&index).or_else(|| {
-            if let ModelResource::Replaceable(id) = request.texture.resource {
-                self.replaceables.get(&id)
+            if let ImageResource::Replaceable(id) = request.resource {
+                self.replaceables.get(id)
             } else {
                 None
             }
         });
         path.map_or_else(
-            || request.texture.resource.clone().into_owned(),
-            |path| ModelResource::Path(path.as_bytes().to_vec().into()),
+            || request.resource.clone().into_owned(),
+            |path| ImageResource::Path(path.as_bytes().to_vec().into()),
         )
     }
     fn candidates(

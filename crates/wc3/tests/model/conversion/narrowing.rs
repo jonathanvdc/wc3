@@ -4,8 +4,8 @@ use wc3::model::formats::mdlx::{self, mdl::Read as _, mdx::Read as _, mdx::Write
 use wc3::model::io;
 use wc3::model::profiles::{Extends, Mdlx, Narrows, Universal, Wmo, M2, M3};
 use wc3::model::{
-    AppearanceSchema, DrawAppearanceSchema, DrawLooks, Look, Model, Resource, SingleLook, Texture,
-    UniversalAppearance,
+    AppearanceSchema, DrawAppearanceSchema, DrawLooks, Look, MdlxImageResource, Model, SingleLook,
+    Texture, UniversalAppearance,
 };
 
 #[test]
@@ -36,20 +36,20 @@ fn native_widening_and_narrowing_preserves_identities_and_borrowed_geometry() {
 #[test]
 fn resource_narrowing_moves_owned_paths_without_reallocating() {
     let mut builder = Model::<Mdlx>::builder("owned resource");
-    let mut texture = Texture::<Mdlx>::file("initial.blp");
-    texture.resource = Resource::Path(Cow::Owned(b"owned.blp".to_vec()));
-    let Resource::Path(path) = &texture.resource else {
-        unreachable!()
-    };
+    let path: Cow<'_, [u8]> = Cow::Owned(b"owned.blp".to_vec());
     let pointer = path.as_ptr();
-    let id = builder.add_texture(texture).unwrap();
+    let resource = builder.add_image_resource(MdlxImageResource::Path(path));
+    let id = builder.add_texture(Texture::new(resource)).unwrap();
     let asset = builder
         .finish()
         .unwrap()
         .widen::<Universal>()
         .try_narrow::<Mdlx>()
         .unwrap();
-    let Resource::Path(path) = &asset.texture(id).unwrap().resource else {
+    let MdlxImageResource::Path(path) = asset
+        .image_resource(asset.texture(id).unwrap().resource)
+        .unwrap()
+    else {
         unreachable!()
     };
     assert_eq!(path.as_ptr(), pointer);

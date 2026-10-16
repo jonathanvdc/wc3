@@ -3,7 +3,7 @@ use crate::assembly::TextureReplacement;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use wc3::model::{ClipId, NodeId, Resource, SocketIdentity};
+use wc3::model::{ClipId, NodeId, ResourceLocator, SocketIdentity};
 
 /// Sex category used by the game database when choosing character assets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -152,7 +152,7 @@ pub enum EquipmentBinding {
 #[derive(Clone, Debug)]
 pub struct ModelPart {
     /// Model resource identity.
-    pub model: Resource<'static>,
+    pub model: ResourceLocator<'static>,
     /// Rigid attachment or shared skeleton.
     pub binding: EquipmentBinding,
     /// Explicit source-to-character joint mappings, overriding automatic native matching.
@@ -170,7 +170,7 @@ pub struct ModelPart {
 }
 impl ModelPart {
     /// Creates a part with authored geometry, no replacement textures and strict native joint matching.
-    pub fn new(model: Resource<'static>, binding: EquipmentBinding) -> Self {
+    pub fn new(model: ResourceLocator<'static>, binding: EquipmentBinding) -> Self {
         Self {
             model,
             binding,
@@ -186,7 +186,7 @@ impl ModelPart {
 #[derive(Clone, Debug)]
 pub struct CharacterDefinition {
     /// Root character model resource.
-    pub model: Resource<'static>,
+    pub model: ResourceLocator<'static>,
     /// Exact visible native geosets, including hair/facial features and clothing.
     pub geosets: GeosetSelection,
     /// Native replacement categories; numeric identities remain build-defined.

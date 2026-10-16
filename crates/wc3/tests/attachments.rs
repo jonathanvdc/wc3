@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use wc3::model::profiles::{m3, mdlx, Universal};
 use wc3::model::{
     Animated, AnimationProgram, AnimationSample, Attachment, ChildModel, Model, MountTarget, Node,
-    NodeFeature, PlacementAppearance, Resource, Socket, SocketDefinition, SocketIdentity,
+    NodeFeature, PlacementAppearance, ResourceLocator, Socket, SocketDefinition, SocketIdentity,
 };
 
 #[test]
@@ -24,8 +24,10 @@ fn owned_attachment_preserves_native_identity_controls_and_activation() {
 
 #[test]
 fn native_child_mounts_retain_fractional_visibility_without_inventing_points() {
+    let mut model = Model::<Universal>::builder("child mounts");
+    let resource = model.add_model_resource(ResourceLocator::Path(Cow::Borrowed(b"weapon.mdx")));
     let native = mdlx::Attachment {
-        resource: Cow::Borrowed("weapon.mdx"),
+        resource,
         socket: SocketDefinition {
             identity: 3,
             visibility: Animated::constant(0.25),
@@ -34,7 +36,6 @@ fn native_child_mounts_retain_fractional_visibility_without_inventing_points() {
         appearance: (),
     };
     let attachment = Attachment::Child(native.into()).into_owned();
-    let mut model = Model::<Universal>::builder("child mounts");
     let node = model.add_node(Node::named("hand")).unwrap();
     let feature = model
         .add_feature(node, NodeFeature::Attachment(attachment.clone()))
@@ -48,12 +49,12 @@ fn native_child_mounts_retain_fractional_visibility_without_inventing_points() {
     let sample = animation.sample(AnimationSample::default()).unwrap();
     assert_eq!(attachment.visibility(&sample), 0.25);
     let restored = mdlx::Attachment::try_from(attachment.child().unwrap().clone()).unwrap();
-    assert_eq!(restored.resource, "weapon.mdx");
+    assert_eq!(restored.resource, resource);
     assert_eq!(restored.socket.identity, 3);
     assert_eq!(restored.socket.visibility.default, 0.25);
 
     let placement = Attachment::Child(ChildModel {
-        resource: Resource::Path(Cow::Borrowed(b"doodad.m2")),
+        resource,
         socket: None,
         appearance: PlacementAppearance::Unmodified,
     });

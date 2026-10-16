@@ -222,8 +222,8 @@ impl<'a> TryFrom<NodeFeature<'a>> for wmo::Node<'a> {
         }
     }
 }
-impl<'a> From<scene::Feature<'a>> for NodeFeature<'a> {
-    fn from(value: scene::Feature<'a>) -> Self {
+impl<'a> From<scene::Feature> for NodeFeature<'a> {
+    fn from(value: scene::Feature) -> Self {
         match value {
             scene::Feature::Camera(value) => Self::Camera(Camera::Portable(value)),
             scene::Feature::Light(value) => Self::Light(Light::Portable(value)),
@@ -234,7 +234,7 @@ impl<'a> From<scene::Feature<'a>> for NodeFeature<'a> {
         }
     }
 }
-impl<'a> TryFrom<NodeFeature<'a>> for scene::Feature<'a> {
+impl<'a> TryFrom<NodeFeature<'a>> for scene::Feature {
     type Error = Box<NodeFeature<'a>>;
     fn try_from(value: NodeFeature<'a>) -> Result<Self, Self::Error> {
         match value {

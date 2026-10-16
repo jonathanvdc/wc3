@@ -110,7 +110,7 @@ impl<T: Value> Bind for surface::Property<T> {
             owner,
             key: UniversalProperty::M3(PropertyField::Field(path.clone())),
         });
-        self.binding = Some(destination.clone().into());
+        self.binding = Some(destination.clone());
         bindings.register_mode(&destination, self.control.interpolation);
         bindings
             .entries

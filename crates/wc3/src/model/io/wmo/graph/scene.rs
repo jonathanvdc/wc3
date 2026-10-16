@@ -5,9 +5,10 @@ use crate::model::formats::wmo::records::{FlickerMode, LightKind, NewLightKind};
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::profiles::wmo as profile;
 use crate::model::profiles::Wmo;
+use crate::model::WorldImageResource;
 use crate::model::WorldPlacementAppearance;
 use crate::model::{Animated, FeatureId, ModelBuilder, Node, Quaternion};
-use crate::model::{ColorSpace, Resource, Sampler, Texture};
+use crate::model::{ColorSpace, ImageResource, Sampler, Texture};
 use std::borrow::Cow;
 
 pub(super) struct Identities {
@@ -68,8 +69,10 @@ pub(super) fn read<'a, 'data: 'a>(
                 let cookie = if row.cookie_file_id == 0 {
                     None
                 } else {
+                    let resource = builder
+                        .add_image_resource(WorldImageResource::FileDataId(row.cookie_file_id));
                     Some(builder.add_texture(Texture {
-                        resource: Resource::FileDataId(row.cookie_file_id),
+                        resource,
                         sampler: Sampler::default(),
                         color_space: ColorSpace::Unspecified,
                         controls: Default::default(),
@@ -199,11 +202,11 @@ pub(super) fn read<'a, 'data: 'a>(
                     })
                     .transpose()?;
                 let resource = if let Some(file) = file_id {
-                    Resource::FileDataId(file)
+                    ImageResource::FileDataId(file)
                 } else {
                     let bytes = crate::model::formats::wmo::resources::string_at(paths, selector)
                         .map_err(|error| Error::new("world.doodad", error.to_string()))?;
-                    Resource::Path(Cow::Borrowed(bytes))
+                    ImageResource::Path(Cow::Borrowed(bytes))
                 };
                 let mut node = Node::named(format!("Doodad {ordinal}"));
                 node.transform.translation = row.position;
@@ -218,6 +221,7 @@ pub(super) fn read<'a, 'data: 'a>(
                 } else {
                     None
                 };
+                let resource = builder.add_model_resource(resource.try_into()?);
                 let feature_id = builder.add_feature(
                     id,
                     profile::Node::Attachment(profile::Doodad {

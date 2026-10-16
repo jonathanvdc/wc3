@@ -65,6 +65,12 @@ impl<P: Profile> Model<'_, P> {
         let mut conflicting_types = false;
         let mut visit = |link| {
             missing |= match link {
+                Link::ImageResource(id) => !self.image_resources.contains_key(&id),
+                Link::ModelResource(id) => !self.model_resources.contains_key(&id),
+                Link::EffectResource(id) => !self.effect_resources.contains_key(&id),
+                Link::PhysicsResource(id) => !self.physics_resources.contains_key(&id),
+                Link::BoneOverrideResource(id) => !self.bone_override_resources.contains_key(&id),
+
                 Link::Model(id) => id != self.id,
                 Link::AppearanceSlot(id) => !self.appearance.contains_slot(id),
                 Link::SystemMember { system, member } => !self
@@ -117,6 +123,21 @@ impl<P: Profile> Model<'_, P> {
                 Link::System(id) => !self.systems.contains_key(&id),
             };
         };
+        for value in self.image_resources.values() {
+            value.visit_links(&mut visit);
+        }
+        for value in self.model_resources.values() {
+            value.visit_links(&mut visit);
+        }
+        for value in self.effect_resources.values() {
+            value.visit_links(&mut visit);
+        }
+        for value in self.physics_resources.values() {
+            value.visit_links(&mut visit);
+        }
+        for value in self.bone_override_resources.values() {
+            value.visit_links(&mut visit);
+        }
         for node in self.nodes.values() {
             node.parent.visit_links(&mut visit);
             node.controls.visit_links(&mut visit);
@@ -141,6 +162,7 @@ impl<P: Profile> Model<'_, P> {
             }
         }
         for (_, texture) in self.textures() {
+            texture.resource.visit_links(&mut visit);
             texture.controls.visit_links(&mut visit);
         }
         for skin in self.skins.values() {

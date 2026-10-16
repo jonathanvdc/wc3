@@ -3,9 +3,10 @@
 //! Views group features by their purpose. Typed alternatives retain authored simulation,
 //! projection, illumination, and resource semantics without allocating or converting values.
 use crate::model::profiles::{m2, m3, mdlx, wmo, Either, Unavailable};
+use crate::model::EffectResourceId;
 use crate::model::{
     scene, AimedCamera, AmbientDiffuseLight, Animated, Attachment, Camera, CameraConvention, Light,
-    NodeFeature, ParticleEmitter, Resource, RibbonEmitter,
+    NodeFeature, ParticleEmitter, RibbonEmitter,
 };
 use crate::model::{Axis, ChildModel, EventSource, Socket};
 use crate::model::{
@@ -60,10 +61,8 @@ pub enum AttachmentView<'view, 'data> {
     Socket(&'view Socket<'data>),
     /// Shared external resource placement definition.
     ChildDefinition(&'view ChildModel<'data>),
-    /// Complete External definition, retaining its authored semantics.
-    External(&'view scene::Attachment<'data>),
-    /// Complete Mdlx definition, retaining its authored semantics.
-    Path(&'view mdlx::Attachment<'data>),
+    /// Indexed socket and external child-model dependency.
+    External(&'view scene::Attachment),
     /// Complete Role definition, retaining its authored semantics.
     Role(&'view m2::Attachment),
     /// Complete Named definition, retaining its authored semantics.
@@ -74,10 +73,10 @@ pub enum AttachmentView<'view, 'data> {
 pub enum ParticlesView<'view, 'data> {
     /// Shared owned emitter definition.
     Definition(&'view ParticleDefinition<'data>),
-    /// Complete External definition, retaining its authored semantics.
-    External(&'view Resource<'data>),
+    /// Indexed socket and external child-model dependency.
+    External(&'view EffectResourceId),
     /// Complete Model definition, retaining its authored semantics.
-    Model(&'view mdlx::Particle<'data>),
+    Model(&'view mdlx::Particle),
     /// Complete Sprite definition, retaining its authored semantics.
     Sprite(&'view mdlx::Particle2),
     /// Complete Popcorn definition, retaining its authored semantics.
@@ -96,8 +95,8 @@ pub enum RibbonView<'view, 'data> {
     Trail(&'view TrailEmitter),
     /// Composed particle-age ribbon program.
     ProgrammedDefinition(&'view ProgrammedRibbon<'data>),
-    /// Complete External definition, retaining its authored semantics.
-    External(&'view Resource<'data>),
+    /// Indexed socket and external child-model dependency.
+    External(&'view EffectResourceId),
     /// Complete Mdlx definition, retaining its authored semantics.
     Segmented(&'view mdlx::Ribbon),
     /// Complete M2 definition, retaining its authored semantics.
@@ -146,9 +145,9 @@ pub enum FeatureView<'view, 'data> {
     /// Complete GeometryAnimation behavior.
     GeometryAnimation(&'view mdlx::GeometryAnimation),
     /// Complete Doodad behavior.
-    Doodad(&'view wmo::Doodad<'data>),
+    Doodad(&'view wmo::Doodad),
     /// Complete FaceActor behavior.
-    FaceActor(&'view Resource<'data>),
+    FaceActor(&'view EffectResourceId),
     /// Complete Extent behavior.
     Extent(&'view m3::ExtentBinding),
     /// Complete Projector behavior.
@@ -186,7 +185,7 @@ impl<'data> mdlx::Node<'data> {
             Self::ParticleProgram(value) => FeatureView::Particles(ParticlesView::Popcorn(value)),
             Self::Light(value) => FeatureView::Light(LightView::VisibleAmbientDiffuse(value)),
             Self::Camera(value) => FeatureView::Camera(CameraView::VerticalAim(value)),
-            Self::Attachment(value) => FeatureView::Attachment(AttachmentView::Path(value)),
+            Self::Attachment(value) => FeatureView::Attachment(AttachmentView::External(value)),
             Self::Event(value) => FeatureView::Event(EventView::Named(value)),
             Self::CollisionShape(value) => FeatureView::Collision(CollisionView::Primitive(value)),
 
@@ -316,7 +315,7 @@ impl<'data> m3::Feature<'data> {
         }
     }
 }
-impl<'data> FeatureSchema<'data> for scene::Feature<'data> {
+impl<'data> FeatureSchema<'data> for scene::Feature {
     fn feature(&self) -> FeatureView<'_, 'data> {
         match self {
             Self::Camera(value) => FeatureView::Camera(CameraView::Scene(value)),

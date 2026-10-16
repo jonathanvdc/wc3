@@ -10,8 +10,10 @@ use crate::model::values::model::{
     ParticleBlend, ParticleFlags as AgeDrivenFlags, ParticleGenerator, ParticleHeadTail,
 };
 use crate::model::values::programmed::*;
+use crate::model::ImageResourceId;
+use crate::model::ModelResourceId;
 use crate::model::{
-    Animated, FeatureId, Link, MaterialId, MeshId, Resource, TextureId, ValidateLinks, ZeroVec,
+    Animated, FeatureId, Link, MaterialId, MeshId, TextureId, ValidateLinks, ZeroVec,
 };
 use std::borrow::Cow;
 /// Animated scalar in the model's clock, retaining programmed reset values.
@@ -129,7 +131,7 @@ pub type ParticleDefinition<'a> = ParticleComposition<
 #[derive(Clone, Debug)]
 pub enum ParticleDetails<'a> {
     /// External-resource particles retaining their source emission-angle convention.
-    Model(ModelParticle<'a>),
+    Model(ModelParticle),
     /// Sprite particles with staged appearance and an atlas.
     Atlas(Box<AtlasParticle>),
     /// Particles with independently authored normalized-age curves.
@@ -137,17 +139,36 @@ pub enum ParticleDetails<'a> {
     /// Programmed simulation with secondary emitters and variation functions.
     Programmed(Box<ProgrammedParticle<'a>>),
 }
+/// Dependency instantiated by a Warcraft III resource particle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParticleResource {
+    /// Child model geometry and animation.
+    Model(Option<ModelResourceId>),
+    /// Image-based particle content.
+    Image(Option<ImageResourceId>),
+}
+impl Default for ParticleResource {
+    fn default() -> Self {
+        Self::Image(None)
+    }
+}
+impl ValidateLinks for ParticleResource {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        match self {
+            Self::Model(id) => id.visit_links(visitor),
+            Self::Image(id) => id.visit_links(visitor),
+        }
+    }
+}
 /// Simulation-specific controls composed with common emission, motion and lifetime.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ModelParticle<'a> {
+pub struct ModelParticle {
     /// Model or image resource instantiated per particle.
-    pub resource: Cow<'a, str>,
+    pub resource: ParticleResource,
     /// Source longitude control, retained even when the renderer does not consume it.
     pub longitude: Animated<f32>,
     /// Emission-cone latitude in radians for Warcraft III model particles.
     pub latitude: Animated<f32>,
-    /// Interpret the resource as a model.
-    pub model_resource: bool,
     /// Interpret the resource as a text image.
     pub text_resource: bool,
     /// Emitter controls with unresolved meanings.
@@ -199,7 +220,7 @@ pub struct AgeDrivenParticle<'a> {
     pub follow: [[f32; 2]; 2],
 
     /// Rendering controls.
-    pub rendering: AgeDrivenParticleRendering<'a>,
+    pub rendering: AgeDrivenParticleRendering,
     /// Shape controls.
     pub shape: AgeDrivenParticleShape<'a>,
 }
@@ -424,7 +445,7 @@ pub struct AtlasParticleShape {
 }
 /// Rendering controls shared independently of emitter timing.
 #[derive(Clone, Debug, PartialEq)]
-pub struct AgeDrivenParticleRendering<'a> {
+pub struct AgeDrivenParticleRendering {
     /// Particle compositing operation.
     pub blend: ParticleBlend,
     /// External particle-color table category.
@@ -436,9 +457,9 @@ pub struct AgeDrivenParticleRendering<'a> {
     /// baseline texture path rather than discarding an unknown programme.
     pub texture_program: Option<[u8; 2]>,
     /// Model geometry resource used for model particles.
-    pub model: Option<Resource<'a>>,
+    pub model: Option<ModelResourceId>,
     /// Resource containing child emitters.
-    pub child_model: Option<Resource<'a>>,
+    pub child_model: Option<ModelResourceId>,
     /// Render head, tail, or both.
     pub head_tail: ParticleHeadTail,
     /// Per-layer UV scales.
@@ -502,12 +523,12 @@ pub struct ProgrammedParticleGravity {
     pub magnitude: f32,
 }
 /// External-resource simulation with direction-based gravity and visibility.
-pub type ResourceParticle<'a> = ParticleComposition<
+pub type ResourceParticle = ParticleComposition<
     ParticleEmission<Animated<f32>, (), Animated<f32>, ()>,
     ParticleMotion<Animated<f32>, (), Animated<f32>>,
     ParticleLifetime<Animated<f32>, ()>,
     (),
-    ModelParticle<'a>,
+    ModelParticle,
 >;
 /// Atlas simulation with keyed burst selection and staged particle-age appearance.
 pub type AtlasParticles = ParticleComposition<

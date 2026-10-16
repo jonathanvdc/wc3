@@ -201,7 +201,7 @@ pub(super) fn image_role_with_sampler(
     if resolved.is_none() {
         diagnostics.push(format!(
             "texture {id:?} resource {:?} with role {role:?} is unresolved",
-            texture.resource
+            model.image_resource(texture.resource)
         ));
     }
     if let ColorSpace::Unknown(code) = texture.color_space {

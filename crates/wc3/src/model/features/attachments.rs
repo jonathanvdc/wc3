@@ -1,12 +1,12 @@
 //! Sockets and authored child models, composed independently.
+use crate::model::ModelResourceId;
 use std::any::TypeId;
 use std::borrow::Cow;
-use std::str::from_utf8;
 
-use crate::model::profiles::{m2, m3, mdlx, wmo, Universal};
+use crate::model::profiles::{m2, m3, wmo, Universal};
 use crate::model::{
     scene, Animated, FeatureId, FeatureKind, Link, ModelMount, MountTarget, NodeId, Property,
-    Resource, SampledAnimation, ScalarBinding, ValidateLinks,
+    SampledAnimation, ScalarBinding, ValidateLinks,
 };
 
 /// Sockets and authored child model references.
@@ -52,7 +52,7 @@ impl<'a> Attachment<'a> {
         match self {
             Self::Socket(point) => Attachment::Socket(point.into_owned()),
             Self::Child(value) => Attachment::Child(ChildModel {
-                resource: value.resource.into_owned(),
+                resource: value.resource,
                 socket: value.socket.map(Socket::into_owned),
                 appearance: value.appearance,
             }),
@@ -124,7 +124,7 @@ pub struct ChildModelDefinition<R, S, A> {
 
 /// Broad built-in external-placement vocabulary.
 pub type ChildModel<'a> =
-    ChildModelDefinition<Resource<'a>, Option<Socket<'a>>, PlacementAppearance>;
+    ChildModelDefinition<ModelResourceId, Option<Socket<'a>>, PlacementAppearance>;
 /// Child resource carrying an indexed socket with fractional visibility.
 pub type IndexedChildModel<R> =
     ChildModelDefinition<R, SocketDefinition<u32, Animated<f32>, ()>, ()>;
@@ -228,8 +228,8 @@ impl<'a> TryFrom<Socket<'a>> for m3::Attachment<'a> {
         }
     }
 }
-impl<'a> From<scene::Attachment<'a>> for ChildModel<'a> {
-    fn from(value: scene::Attachment<'a>) -> Self {
+impl<'a> From<scene::Attachment> for ChildModel<'a> {
+    fn from(value: scene::Attachment) -> Self {
         Self {
             resource: value.resource,
             socket: Some(Socket {
@@ -241,7 +241,7 @@ impl<'a> From<scene::Attachment<'a>> for ChildModel<'a> {
         }
     }
 }
-impl<'a> TryFrom<ChildModel<'a>> for scene::Attachment<'a> {
+impl<'a> TryFrom<ChildModel<'a>> for scene::Attachment {
     type Error = Box<ChildModel<'a>>;
     fn try_from(value: ChildModel<'a>) -> Result<Self, Self::Error> {
         match value {
@@ -267,42 +267,8 @@ impl<'a> TryFrom<ChildModel<'a>> for scene::Attachment<'a> {
         }
     }
 }
-impl<'a> From<mdlx::Attachment<'a>> for ChildModel<'a> {
-    fn from(value: mdlx::Attachment<'a>) -> Self {
-        scene::Attachment {
-            resource: Resource::Path(match value.resource {
-                Cow::Borrowed(path) => Cow::Borrowed(path.as_bytes()),
-                Cow::Owned(path) => Cow::Owned(path.into_bytes()),
-            }),
-            socket: value.socket,
-            appearance: (),
-        }
-        .into()
-    }
-}
-impl<'a> TryFrom<ChildModel<'a>> for mdlx::Attachment<'a> {
-    type Error = Box<ChildModel<'a>>;
-    fn try_from(value: ChildModel<'a>) -> Result<Self, Self::Error> {
-        if !matches!(&value.resource, Resource::Path(path) if from_utf8(path).is_ok()) {
-            return Err(Box::new(value));
-        }
-        let value = scene::Attachment::try_from(value)?;
-        let Resource::Path(path) = value.resource else {
-            unreachable!()
-        };
-        let resource = match path {
-            Cow::Borrowed(path) => Cow::Borrowed(from_utf8(path).expect("validated UTF-8")),
-            Cow::Owned(path) => Cow::Owned(String::from_utf8(path).expect("validated UTF-8")),
-        };
-        Ok(Self {
-            resource,
-            socket: value.socket,
-            appearance: (),
-        })
-    }
-}
-impl<'a> From<wmo::Doodad<'a>> for ChildModel<'a> {
-    fn from(value: wmo::Doodad<'a>) -> Self {
+impl<'a> From<wmo::Doodad> for ChildModel<'a> {
+    fn from(value: wmo::Doodad) -> Self {
         Self {
             resource: value.resource,
             socket: None,
@@ -314,7 +280,7 @@ impl<'a> From<wmo::Doodad<'a>> for ChildModel<'a> {
         }
     }
 }
-impl<'a> TryFrom<ChildModel<'a>> for wmo::Doodad<'a> {
+impl<'a> TryFrom<ChildModel<'a>> for wmo::Doodad {
     type Error = Box<ChildModel<'a>>;
     fn try_from(value: ChildModel<'a>) -> Result<Self, Self::Error> {
         match value {

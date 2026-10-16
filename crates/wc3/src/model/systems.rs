@@ -27,7 +27,7 @@ pub enum ModelMetadata<'a> {
     /// StarCraft II model behavior.
     M3(programmed_controls::ModelMetadata),
     /// World-model rendering and environment settings.
-    Wmo(world::ModelMetadata<'a>),
+    Wmo(world::ModelMetadata),
 }
 impl ValidateLinks for ModelMetadata<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {

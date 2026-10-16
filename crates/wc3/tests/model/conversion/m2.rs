@@ -133,6 +133,7 @@ fn particle_texture_programs_follow_the_material_prefix_and_round_trip() {
                 particle,
                 &textures,
                 &mut conversion::Context::export(&options),
+                &imported.value,
             )
             .unwrap_err();
             assert!(error.to_string().contains("standalone particle record"));
@@ -209,7 +210,7 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     assert_eq!(mesh.influences().joint_weights(0).unwrap()[0].weight, 1.);
     let texture = imported.value.textures().next().unwrap().1;
     assert!(
-        matches!(&texture.resource,sm::Resource::Path(Cow::Borrowed(path))if *path==b"textures/checker.blp")
+        matches!(imported.value.image_resource(texture.resource).unwrap(),sm::M2ImageResource::Path(Cow::Borrowed(path))if *path==b"textures/checker.blp")
     );
     let target = io::m2::plan::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
         .unwrap()
@@ -999,7 +1000,10 @@ fn replacement_texture_retains_its_separately_declared_filename() {
         .unwrap()
         .value;
     let texture = asset.textures().next().unwrap().1;
-    assert_eq!(texture.resource, sm::Resource::Replaceable(0x1234));
+    assert_eq!(
+        asset.image_resource(texture.resource).unwrap(),
+        &sm::M2ImageResource::Replaceable(0x1234)
+    );
     assert!(matches!(texture.controls.path, Some(Cow::Borrowed(_))));
     assert_eq!(
         texture.controls.path.as_deref(),

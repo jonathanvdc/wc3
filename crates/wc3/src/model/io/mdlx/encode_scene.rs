@@ -4,9 +4,12 @@ use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::materials::layered::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
-use crate::model::{Axis, FeatureId, MaterialId, MeshId, NodeId, TextureId};
+use crate::model::profiles::Mdlx;
+use crate::model::{Axis, FeatureId, MaterialId, MeshId, Model, NodeId, TextureId};
+use crate::model::{MdlxImageResource, ParticleResource, PathResource};
 use native::scene::Node;
 use std::collections::{BTreeMap, BTreeSet};
+use std::str::from_utf8;
 
 pub(super) fn write<'a, T: Dialect>(
     target: &mut native::Document<'a, T>,
@@ -104,8 +107,11 @@ pub(super) fn write<'a, T: Dialect>(
         }
         match source {
             profile::Node::Particle(source) => {
-                let mut record = native::ParticleEmitter::new(node, &source.details.resource)
-                    .map_err(|error| Error::new("particle.resource", error.to_string()))?;
+                let mut record = native::ParticleEmitter::new(
+                    node,
+                    particle_path(model, source.details.resource)?,
+                )
+                .map_err(|error| Error::new("particle.resource", error.to_string()))?;
                 macro_rules! a {
                     ($($field:ident).+) => {
                         encoder.value(
@@ -127,7 +133,10 @@ pub(super) fn write<'a, T: Dialect>(
                     "particle.visibility",
                 )?;
                 let mut flags = record.flags();
-                flags.set_emitter_uses_mdl(source.details.model_resource);
+                flags.set_emitter_uses_mdl(matches!(
+                    source.details.resource,
+                    ParticleResource::Model(_)
+                ));
                 flags.set_emitter_uses_tga(source.details.text_resource);
                 record.set_flags(flags);
                 particles.push(record);
@@ -240,9 +249,17 @@ pub(super) fn write<'a, T: Dialect>(
                 ribbons.push(record);
             }
             profile::Node::ParticleProgram(source) => {
-                let mut record =
-                    native::PopcornEmitter::new(node, &source.resource, &source.visibility_guide)
-                        .map_err(|error| Error::new("popcorn.resource", error.to_string()))?;
+                let mut record = native::PopcornEmitter::new(
+                    node,
+                    source
+                        .resource
+                        .map(|id| model.effect_resource(id).expect("validated effect"))
+                        .map(path_text)
+                        .transpose()?
+                        .unwrap_or(""),
+                    &source.visibility_guide,
+                )
+                .map_err(|error| Error::new("popcorn.resource", error.to_string()))?;
                 record.life_span = encoder.value(&source.life_span, Ok, "popcorn.life_span")?;
                 record.emission_rate =
                     encoder.value(&source.emission_rate, Ok, "popcorn.emission_rate")?;
@@ -264,9 +281,22 @@ pub(super) fn write<'a, T: Dialect>(
                 popcorn.push(record);
             }
             profile::Node::Attachment(source) => {
-                let mut record =
-                    native::Attachment::new(node, &source.resource, source.socket.identity)
-                        .map_err(|error| Error::new("attachment.resource", error.to_string()))?;
+                let mut record = native::Attachment::new(
+                    node,
+                    from_utf8(
+                        match model
+                            .model_resource(source.resource)
+                            .expect("validated model")
+                        {
+                            PathResource::Path(path) => path,
+                        },
+                    )
+                    .map_err(|_| {
+                        Error::new("attachment.resource", "attachment path must be UTF-8")
+                    })?,
+                    source.socket.identity,
+                )
+                .map_err(|error| Error::new("attachment.resource", error.to_string()))?;
                 record.visibility = super::encode_helpers::visibility(
                     &source.socket.visibility,
                     encoder,
@@ -394,4 +424,35 @@ pub(super) fn write<'a, T: Dialect>(
     }
     super::encode_helpers::controls(target, encoder, meshes)?;
     Ok(())
+}
+
+fn path_text<'a>(resource: &'a PathResource<'_>) -> Result<&'a str, Error> {
+    let PathResource::Path(path) = resource;
+    from_utf8(path).map_err(|_| {
+        Error::new(
+            "resources.path",
+            "Warcraft III resource paths must be UTF-8",
+        )
+    })
+}
+fn particle_path<'a>(
+    model: &'a Model<'_, Mdlx>,
+    resource: ParticleResource,
+) -> Result<&'a str, Error> {
+    match resource {
+        ParticleResource::Model(None) | ParticleResource::Image(None) => Ok(""),
+        ParticleResource::Model(Some(id)) => {
+            path_text(model.model_resource(id).expect("validated model"))
+        }
+        ParticleResource::Image(Some(id)) => {
+            match model.image_resource(id).expect("validated image") {
+                MdlxImageResource::Path(path) => from_utf8(path)
+                    .map_err(|_| Error::new("particle.resource", "particle path must be UTF-8")),
+                _ => Err(Error::new(
+                    "particle.resource",
+                    "resource particle requires an image path",
+                )),
+            }
+        }
+    }
 }

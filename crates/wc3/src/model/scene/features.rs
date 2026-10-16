@@ -1,26 +1,27 @@
 //! Logical cameras, illumination, resource systems, and attachments.
 use crate::model::features::IndexedChildModel;
-use crate::model::{Animated, Link, Resource, ValidateLinks};
+use crate::model::{Animated, Link, ValidateLinks};
+use crate::model::{EffectResourceId, ModelResourceId};
 /// A portable feature attached to a graph hierarchy node.
 #[derive(Clone, Debug)]
-pub enum Feature<'a> {
+pub enum Feature {
     /// Authored camera parameters.
     Camera(Box<Camera>),
     /// Authored illumination.
     Light(Box<Light>),
     /// External model attachment.
-    Attachment(Attachment<'a>),
+    Attachment(Attachment),
     /// External particle-system instance.
-    Particles(Resource<'a>),
+    Particles(EffectResourceId),
     /// External ribbon-system instance.
-    Ribbon(Resource<'a>),
+    Ribbon(EffectResourceId),
     /// External face-animation actor.
-    FaceActor(Resource<'a>),
+    FaceActor(EffectResourceId),
 }
-impl ValidateLinks for Feature<'_> {
+impl ValidateLinks for Feature {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
-            Self::Attachment(value) => value.socket.visibility.visit_links(visitor),
+            Self::Attachment(value) => value.visit_links(visitor),
             Self::Camera(value) => {
                 value.field_of_view.visit_links(visitor);
                 value.target.visit_links(visitor);
@@ -43,7 +44,9 @@ impl ValidateLinks for Feature<'_> {
                     }
                 }
             }
-            _ => {}
+            Self::Particles(value) | Self::Ribbon(value) | Self::FaceActor(value) => {
+                value.visit_links(visitor)
+            }
         }
     }
 }
@@ -99,4 +102,4 @@ pub struct Light {
     pub attenuation_coefficients: [Option<f32>; 3],
 }
 /// External attachment resource and animation visibility.
-pub type Attachment<'a> = IndexedChildModel<Resource<'a>>;
+pub type Attachment = IndexedChildModel<ModelResourceId>;

@@ -1,11 +1,13 @@
 //! Compile-time vocabulary of logical payloads; unrelated to native file revisions.
+use crate::model::EffectResourceId;
+use crate::model::ResourceLocator;
 use crate::model::{
     AppearanceSchema, BindingSchema, Bounds, Error, FeatureKind, FeatureProperty, GeometrySchema,
     Link, MaterialSurface, Model, ModelMetadata, NodeFeature, SkinId, SystemPayload, ValidateLinks,
 };
 use crate::model::{
-    Attachment, EventSource, FeatureSet, FeatureView, FeatureVocabulary, Light, ParticleEmitter,
-    Resource, RibbonEmitter,
+    Attachment, EventSource, FeatureSet, FeatureView, FeatureVocabulary, ImageResource, Light,
+    ParticleEmitter, RibbonEmitter,
 };
 use crate::model::{Camera, CameraConvention, FeatureSchema, OwnerId};
 use crate::model::{
@@ -83,6 +85,16 @@ impl<T: Clone + Debug + Send + Sync + ValidateLinks> ControlsPayload for T {}
 /// Implementations may use their own payload types. Implementing relationship traversal
 /// is mandatory: graph validation checks custom references exactly like built-in ones.
 pub trait Profile: Clone + Debug + 'static {
+    /// External image resource declarations admitted by this vocabulary.
+    type ImageResource<'a>: ControlsPayload;
+    /// External model resource declarations admitted by this vocabulary.
+    type ModelResource<'a>: ControlsPayload;
+    /// External effect resource declarations admitted by this vocabulary.
+    type EffectResource<'a>: ControlsPayload;
+    /// External physics resource declarations admitted by this vocabulary.
+    type PhysicsResource<'a>: ControlsPayload;
+    /// External boneoverride resource declarations admitted by this vocabulary.
+    type BoneOverrideResource<'a>: ControlsPayload;
     /// Structural animation-property vocabulary accepted by this profile.
     type Property: PropertyPayload;
     /// Complete material-assignment and appearance vocabulary.
@@ -212,6 +224,12 @@ impl<A: FeaturePayload, B: FeaturePayload> FeaturePayload for Either<A, B> {
 #[derive(Clone, Debug, Default)]
 pub struct Universal;
 impl Profile for Universal {
+    type ImageResource<'a> = ImageResource<'a>;
+    type ModelResource<'a> = ResourceLocator<'a>;
+    type EffectResource<'a> = ResourceLocator<'a>;
+    type PhysicsResource<'a> = ResourceLocator<'a>;
+    type BoneOverrideResource<'a> = ResourceLocator<'a>;
+
     type Property = UniversalProperty;
     type Appearance<'a> = UniversalAppearance<'a>;
     type Binding<'a> = UniversalBinding<'a>;
@@ -239,6 +257,19 @@ impl Profile for Universal {
 /// This is separate from approximate translation. Implementations must preserve meaning
 /// and borrowed storage, and must not discard fields or relationships.
 pub trait Extends<Source: Profile>: Profile {
+    /// Embeds image dependency declarations.
+    fn image_resource<'a>(value: Source::ImageResource<'a>) -> Self::ImageResource<'a>;
+    /// Embeds model dependency declarations.
+    fn model_resource<'a>(value: Source::ModelResource<'a>) -> Self::ModelResource<'a>;
+    /// Embeds effect dependency declarations.
+    fn effect_resource<'a>(value: Source::EffectResource<'a>) -> Self::EffectResource<'a>;
+    /// Embeds physics dependency declarations.
+    fn physics_resource<'a>(value: Source::PhysicsResource<'a>) -> Self::PhysicsResource<'a>;
+    /// Embeds boneoverride dependency declarations.
+    fn bone_override_resource<'a>(
+        value: Source::BoneOverrideResource<'a>,
+    ) -> Self::BoneOverrideResource<'a>;
+
     /// Embeds structural property selectors without changing their identity.
     fn property(value: Source::Property) -> Self::Property;
     /// Embeds the complete appearance vocabulary while preserving identities.
@@ -271,6 +302,24 @@ pub trait Extends<Source: Profile>: Profile {
     fn controller<'a>(value: Source::Controller<'a>) -> Self::Controller<'a>;
 }
 impl<P: Profile> Extends<P> for P {
+    fn image_resource<'a>(value: P::ImageResource<'a>) -> Self::ImageResource<'a> {
+        value
+    }
+    fn model_resource<'a>(value: P::ModelResource<'a>) -> Self::ModelResource<'a> {
+        value
+    }
+    fn effect_resource<'a>(value: P::EffectResource<'a>) -> Self::EffectResource<'a> {
+        value
+    }
+    fn physics_resource<'a>(value: P::PhysicsResource<'a>) -> Self::PhysicsResource<'a> {
+        value
+    }
+    fn bone_override_resource<'a>(
+        value: P::BoneOverrideResource<'a>,
+    ) -> Self::BoneOverrideResource<'a> {
+        value
+    }
+
     fn property(value: P::Property) -> Self::Property {
         value
     }
@@ -445,7 +494,7 @@ impl<'a> FeatureVocabulary<'a> for Universal {
     type GeometryAnimation = mdlx::GeometryAnimation;
     type CollisionShape = mdlx::Collision;
     type ParticleProgram = Box<mdlx::Popcorn<'a>>;
-    type FaceActor = Resource<'a>;
+    type FaceActor = EffectResourceId;
     type LightProgram = wmo::PointProgram;
     type Extent = Box<m3::ExtentBinding>;
     type ParticleCopy = Box<m3::ParticleCopy>;

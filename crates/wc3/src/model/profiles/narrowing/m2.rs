@@ -6,6 +6,32 @@ use crate::model::{
     System, TextureControls, UniversalAppearance, UniversalBinding,
 };
 impl Narrows<Universal> for M2 {
+    fn image_resource<'a>(
+        value: <Universal as Profile>::ImageResource<'a>,
+    ) -> Result<Self::ImageResource<'a>, Error> {
+        value.try_into()
+    }
+    fn model_resource<'a>(
+        value: <Universal as Profile>::ModelResource<'a>,
+    ) -> Result<Self::ModelResource<'a>, Error> {
+        value.try_into()
+    }
+    fn effect_resource<'a>(
+        _value: <Universal as Profile>::EffectResource<'a>,
+    ) -> Result<Self::EffectResource<'a>, Error> {
+        Err(incompatible("effect resource"))
+    }
+    fn physics_resource<'a>(
+        value: <Universal as Profile>::PhysicsResource<'a>,
+    ) -> Result<Self::PhysicsResource<'a>, Error> {
+        value.try_into()
+    }
+    fn bone_override_resource<'a>(
+        value: <Universal as Profile>::BoneOverrideResource<'a>,
+    ) -> Result<Self::BoneOverrideResource<'a>, Error> {
+        value.try_into()
+    }
+
     fn appearance<'a>(
         value: <Universal as Profile>::Appearance<'a>,
     ) -> Result<Self::Appearance<'a>, Error> {

@@ -108,6 +108,12 @@ impl<'a> FeatureVocabulary<'a> for LightsOnly {
     }
 }
 impl Profile for LightsOnly {
+    type ImageResource<'a> = wc3::model::profiles::Unavailable;
+    type ModelResource<'a> = wc3::model::profiles::Unavailable;
+    type EffectResource<'a> = wc3::model::profiles::Unavailable;
+    type PhysicsResource<'a> = wc3::model::profiles::Unavailable;
+    type BoneOverrideResource<'a> = wc3::model::profiles::Unavailable;
+
     type Property = <Mdlx as Profile>::Property;
     type Appearance<'a> = <Mdlx as Profile>::Appearance<'a>;
     type Binding<'a> = <Mdlx as Profile>::Binding<'a>;

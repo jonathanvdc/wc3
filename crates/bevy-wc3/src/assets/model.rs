@@ -31,8 +31,9 @@ use wc3::model::io::{
 };
 use wc3::model::{
     AddressMode, Attachment, FeatureId, Model, NodeFeature, ParticleDetails, ParticleEmitter,
-    Resource as ModelResource,
+    ResourceLocator as ModelResource,
 };
+use wc3::model::{ImageResource, ParticleResource};
 use wc3::visit_m2_model;
 
 /// Authored use of an optional child model.
@@ -204,8 +205,8 @@ pub trait ResourceResolver: Send + Sync + 'static {
         _index: usize,
         request: &TextureRequest<'_, '_>,
         _owner: &AssetPath<'_>,
-    ) -> ModelResource<'static> {
-        request.texture.resource.clone().into_owned()
+    ) -> ImageResource<'static> {
+        request.resource.clone().into_owned()
     }
     /// Image paths in lookup order, after application texture selection.
     ///
@@ -220,7 +221,11 @@ pub trait ResourceResolver: Send + Sync + 'static {
         owner: &AssetPath<'_>,
     ) -> Vec<AssetPath<'static>> {
         let resource = self.texture_resource(index, request, owner);
-        image_candidates(self.candidates(&resource, owner))
+        image_candidates(
+            resource
+                .try_into()
+                .map_or_else(|_| Vec::new(), |resource| self.candidates(&resource, owner)),
+        )
     }
     /// Candidate child models for an authored attachment or particle emitter.
     /// Missing optional children remain visible as integration diagnostics.
@@ -364,7 +369,7 @@ pub struct ModelAsset {
     /// Resolved image variants keyed by semantic identity and effective color space.
     pub images: HashMap<TextureImageKey, Handle<Image>>,
     /// Optional images requiring an application resource provider or override.
-    pub unresolved_images: Vec<ModelResource<'static>>,
+    pub unresolved_images: Vec<ImageResource<'static>>,
 }
 
 /// Resource-provider configuration installed before `Wc3BevyPlugin` is added.
@@ -477,21 +482,29 @@ async fn compile_loaded(
         let (purpose, resource) = match &feature.payload {
             NodeFeature::Attachment(Attachment::Child(value)) => (
                 ResourcePurpose::Attachment,
-                value.resource.clone().into_owned(),
+                model
+                    .model_resource(value.resource)
+                    .expect("validated model resource")
+                    .clone()
+                    .into_owned(),
             ),
             NodeFeature::Particle(ParticleEmitter::Simulated(value)) => {
                 let ParticleDetails::Model(definition) = &value.details else {
                     continue;
                 };
-                if !definition.model_resource
-                    || definition.text_resource
-                    || definition.resource.is_empty()
-                {
+                if definition.text_resource {
                     continue;
                 }
                 (
                     ResourcePurpose::Particle,
-                    ModelResource::Path(Cow::Owned(definition.resource.as_bytes().to_vec())),
+                    match definition.resource {
+                        ParticleResource::Model(Some(id)) => model
+                            .model_resource(id)
+                            .expect("validated particle model")
+                            .clone()
+                            .into_owned(),
+                        _ => continue,
+                    },
                 )
             }
             _ => continue,
@@ -560,9 +573,9 @@ async fn compile_loaded(
     let mut unresolved_images = Vec::new();
     for request in texture_requests(model) {
         let id = request.id;
-        let texture = request.texture;
+        let _texture = request.texture;
         let image_key = request.key();
-        let resource = texture.resource.clone().into_owned();
+        let resource = request.resource.clone().into_owned();
         let candidates = resolver.texture_candidates(indices[&id], &request, owner);
         let address_key = |mode| match mode {
             AddressMode::Repeat => 0u16,

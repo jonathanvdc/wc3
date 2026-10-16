@@ -2,15 +2,16 @@
 use crate::model::values::model::{
     PhysicsBodyKind, PhysicsGameFlags, PhysicsKind, PhysicsMotorMode,
 };
+use crate::model::PhysicsResourceId;
 use crate::model::ValueGroups;
-use crate::model::{Error, Link, NodeId, Resource, ValidateLinks, ZeroVec};
+use crate::model::{Error, Link, NodeId, ValidateLinks, ZeroVec};
 /// Physics simulation data, optionally supplied by an external resource.
 #[derive(Clone, Debug)]
 pub struct Physics<'a> {
     /// Simulation role.
     pub kind: PhysicsKind,
     /// External physics resource identity.
-    pub resource: Option<Resource<'a>>,
+    pub resource: Option<PhysicsResourceId>,
     /// Rigid bodies and their attached collision shapes.
     pub bodies: Vec<Body<'a>>,
     /// Constraints between body nodes.
@@ -206,6 +207,7 @@ impl ValidateLinks for Joint {
 }
 impl ValidateLinks for Physics<'_> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
+        self.resource.visit_links(v);
         self.bodies.visit_links(v);
         self.joints.visit_links(v);
         for (a, b) in &self.collision_pairs {

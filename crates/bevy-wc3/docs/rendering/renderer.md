@@ -46,6 +46,8 @@ game-specific pass ordering scheme.
 [DefaultUnit HD materials](reforged-materials.md) support normal/ORM, team color,
 emissive, Fresnel, and approximate reflection. Role-aware image requests preserve
 samplers and color-space distinctions without changing shared source images.
+Textures reference model-owned image declarations through typed handles; image
+requests expose the resolved declaration to the application.
 Resource replacement belongs to the application resolver; there is no implicit game
 database or team-selection policy. Materials share assets between instances when
 their compiled appearance is constant. Missing-channel bindings and scalar tracks
@@ -67,7 +69,9 @@ typed geometry choices and composed textures independently of game vocabulary.
 The [WoW adapter](characters.md) supplies native character interpretation. Authored rigid-body
 secondary motion is optional; native solver response remains approximate.
 
-Attachment mounts retain the complete semantic definition in `ModelAttachment`;
+Attachment mounts retain the semantic definition, including the typed child
+resource handle, in `ModelAttachment`; its separate resource field retains the
+resolved child declaration after the source model is released.
 `AttachmentState` contains sampled visibility and playback lifecycle state.
 Authored children and assembly parts share `ModelMount`, with explicit node or
 socket targets and authored or physical coordinate interpretation.

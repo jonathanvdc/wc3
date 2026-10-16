@@ -169,7 +169,7 @@ fn native_discovery_borrows_the_authored_definition() {
 
 #[test]
 fn unions_delegate_behavior_discovery() {
-    let feature: Either<mdlx::Node<'_>, scene::Feature<'_>> =
+    let feature: Either<mdlx::Node<'_>, scene::Feature> =
         Either::Right(scene::Feature::Camera(Box::default()));
     assert!(matches!(
         feature.feature(),

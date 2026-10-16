@@ -127,7 +127,7 @@ pub(in super::super) fn import<'a, 'data: 'a, D: Dialect>(
             .collect();
         output.push(Physics {
             kind,
-            resource: key.map(resource),
+            resource: key.map(|key| builder.add_physics_resource(resource(key))),
             bodies,
             joints: joints::joints(file, &placements)?,
             collision_pairs: Vec::new(),

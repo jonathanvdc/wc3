@@ -1,8 +1,10 @@
 //! Editable Warcraft III effects and scene features.
 use crate::model::values::layered::{GeometryAnimationFlags, PopcornFlags};
 use crate::model::AtlasParticles;
+use crate::model::EffectResourceId;
 use crate::model::GravityTrail;
 use crate::model::IndexedChildModel;
+use crate::model::ModelResourceId;
 use crate::model::ResourceParticle;
 use crate::model::{AimedCamera, AmbientDiffuseLight, PhotographicControls, VisibleLight};
 use crate::model::{Animated, MeshId};
@@ -25,7 +27,7 @@ pub struct GeometryAnimation {
     pub unclassified: GeometryAnimationFlags,
 }
 /// Resource-particle emitter parameters.
-pub type Particle<'a> = ResourceParticle<'a>;
+pub type Particle = ResourceParticle;
 /// Sprite-particle rendering selection.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Frames {
@@ -47,7 +49,7 @@ pub type Ribbon = GravityTrail;
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Popcorn<'a> {
     /// Effect resource path.
-    pub resource: Cow<'a, str>,
+    pub resource: Option<EffectResourceId>,
     /// Animation-name visibility rules with literal line breaks.
     pub visibility_guide: Cow<'a, str>,
     /// Particle lifetime.
@@ -93,7 +95,7 @@ pub type Light = AmbientDiffuseLight<LightKind, VisibleLight>;
 /// Authored camera with animated eye, target, roll, and photographic parameters.
 pub type Camera = AimedCamera<f32, PhotographicControls>;
 /// External model attachment.
-pub type Attachment<'a> = IndexedChildModel<Cow<'a, str>>;
+pub type Attachment = IndexedChildModel<ModelResourceId>;
 /// Events generated on a model or independent looping clock.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Events<'a> {

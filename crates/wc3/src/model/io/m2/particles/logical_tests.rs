@@ -1,11 +1,11 @@
 use super::*;
 use crate::model::io::ExportOptions;
 use crate::model::profiles::Universal;
-use crate::model::{Model, Texture};
+use crate::model::Model;
 
 fn texture() -> semantic::TextureId {
     Model::<Universal>::builder("particle geometry controls")
-        .add_texture(Texture::file("particle.blp"))
+        .add_file_texture("particle.blp")
         .unwrap()
 }
 
@@ -105,18 +105,33 @@ fn modern_geometry_selection_round_trips_style_flags_including_disabled() {
         native.flags.set_head(head);
         native.flags.set_tail(tail);
         native.flags.set_packed_gravity(true);
-        let logical = read(&native, &textures).unwrap();
+        let logical = read(
+            &native,
+            &textures,
+            &mut Model::<semantic::profiles::M2>::builder("particles"),
+        )
+        .unwrap();
         assert_eq!(logical.details.rendering.head_tail, selection);
-        let restored = write::<V274>(&logical, &textures, &mut Context::export(&options)).unwrap();
+        let restored = write::<V274>(
+            &logical,
+            &textures,
+            &mut Context::export(&options),
+            &Model::<semantic::profiles::M2>::empty("particles").unwrap(),
+        )
+        .unwrap();
         assert_eq!(restored.flags.head(), head);
         assert_eq!(restored.flags.tail(), tail);
         assert!(restored.flags.packed_gravity());
         assert_eq!(
-            read(&restored, &textures)
-                .unwrap()
-                .details
-                .rendering
-                .head_tail,
+            read(
+                &restored,
+                &textures,
+                &mut Model::<semantic::profiles::M2>::builder("particles")
+            )
+            .unwrap()
+            .details
+            .rendering
+            .head_tail,
             selection
         );
     }
@@ -128,13 +143,30 @@ fn edited_modern_geometry_selection_overrides_retained_style_bits() {
     let options = ExportOptions::default();
     let mut native = native::records::ParticleEmitter::<V274>::new(ModelFlags::default());
     native.flags.set_head(true);
-    let mut logical = read(&native, &textures).unwrap();
+    let mut logical = read(
+        &native,
+        &textures,
+        &mut Model::<semantic::profiles::M2>::builder("particles"),
+    )
+    .unwrap();
     logical.details.rendering.head_tail = GeometrySelection::Tail;
-    let restored = write::<V274>(&logical, &textures, &mut Context::export(&options)).unwrap();
+    let restored = write::<V274>(
+        &logical,
+        &textures,
+        &mut Context::export(&options),
+        &Model::<semantic::profiles::M2>::empty("particles").unwrap(),
+    )
+    .unwrap();
     assert!(!restored.flags.head());
     assert!(restored.flags.tail());
     logical.details.rendering.head_tail = GeometrySelection::Unknown(77);
-    assert!(write::<V274>(&logical, &textures, &mut Context::export(&options)).is_err());
+    assert!(write::<V274>(
+        &logical,
+        &textures,
+        &mut Context::export(&options),
+        &Model::<semantic::profiles::M2>::empty("particles").unwrap()
+    )
+    .is_err());
 }
 
 #[test]
@@ -144,12 +176,29 @@ fn legacy_geometry_byte_remains_authoritative_and_cannot_encode_disabled() {
     let mut native = native::records::ParticleEmitter::<V256>::new(ModelFlags::default());
     native.texture_scale.head_or_tail = ParticleHeadTail::Tail;
     native.flags.set_head(true);
-    let mut logical = read(&native, &textures).unwrap();
+    let mut logical = read(
+        &native,
+        &textures,
+        &mut Model::<semantic::profiles::M2>::builder("particles"),
+    )
+    .unwrap();
     assert_eq!(logical.details.rendering.head_tail, GeometrySelection::Tail);
-    let restored = write::<V256>(&logical, &textures, &mut Context::export(&options)).unwrap();
+    let restored = write::<V256>(
+        &logical,
+        &textures,
+        &mut Context::export(&options),
+        &Model::<semantic::profiles::M2>::empty("particles").unwrap(),
+    )
+    .unwrap();
     assert_eq!(restored.texture_scale.head_or_tail, ParticleHeadTail::Tail);
     logical.details.rendering.head_tail = GeometrySelection::Disabled;
-    let error = write::<V256>(&logical, &textures, &mut Context::export(&options)).unwrap_err();
+    let error = write::<V256>(
+        &logical,
+        &textures,
+        &mut Context::export(&options),
+        &Model::<semantic::profiles::M2>::empty("particles").unwrap(),
+    )
+    .unwrap_err();
     assert!(error.to_string().contains("cannot represent disabled"));
     assert_eq!(GeometrySelection::Disabled.legacy_code(), None);
 }

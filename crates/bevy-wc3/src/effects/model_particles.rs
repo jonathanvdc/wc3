@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::f32::consts::TAU;
 use wc3::model::{
     Animated, ClipId, FeatureId, Model, NodeFeature, NodeId, ParticleActivation, ParticleDetails,
-    ParticleEmitter, ParticleGravity, ParticleScalar, ParticleTrigger,
+    ParticleEmitter, ParticleGravity, ParticleResource, ParticleScalar, ParticleTrigger,
 };
 
 const CAPACITY: usize = 1024;
@@ -153,7 +153,7 @@ impl RuntimeModelParticles {
             };
             let mut diagnostic =
                 |message: &str| result.diagnostics.push((feature, message.to_owned()));
-            if !details.model_resource || details.text_resource {
+            if !matches!(details.resource, ParticleResource::Model(_)) || details.text_resource {
                 diagnostic("Model-particle image/text resources require a separate sprite interpretation and are not instantiated");
                 continue;
             }

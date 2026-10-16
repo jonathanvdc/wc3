@@ -4,12 +4,13 @@ use crate::model::profiles::m3;
 use crate::model::profiles::Unavailable;
 use crate::model::profiles::UniversalProperty;
 use crate::model::profiles::{self, Extends, NoControls, Profile, SurfacePayload, Universal};
+use crate::model::resources::PathResource;
 use crate::model::{
     Basis, Billboard, Channel, ClipControls, Clock, ColorSpace, DrawControls, Error,
     ExplicitBinding, FeatureKind, GeometrySchema as _, Inheritance, InstanceControls,
     Interpolation, LengthUnit, Link, M3Geometry, MaterialSurface, MeshControls, Model,
-    ModelMetadata, NodeControls, PropertyTarget, Resource, Sampler, SingleLook, SkinId, System,
-    Topology, Transform, UniversalAppearance, UniversalBinding, ValidateLinks, VertexInfluences,
+    ModelMetadata, NodeControls, PropertyTarget, Sampler, SingleLook, SkinId, System, Topology,
+    Transform, UniversalAppearance, UniversalBinding, ValidateLinks, VertexInfluences,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 use crate::model::{PropertyIdentityKey, PropertyPayload};
@@ -19,6 +20,12 @@ use std::str::from_utf8;
 #[derive(Clone, Debug, Default)]
 pub struct M3;
 impl Profile for M3 {
+    type ImageResource<'a> = PathResource<'a>;
+    type ModelResource<'a> = PathResource<'a>;
+    type EffectResource<'a> = Unavailable;
+    type PhysicsResource<'a> = Unavailable;
+    type BoneOverrideResource<'a> = Unavailable;
+
     type Property = PropertySelector;
     fn default_bounds() -> Option<crate::model::Bounds> {
         Some(Default::default())
@@ -498,8 +505,11 @@ impl Profile for M3 {
                     "sampling and transfer functions belong to M3 material layers, not independent texture declarations",
                 ));
             }
-            match &texture.resource {
-                Resource::Path(path)
+            match model
+                .image_resource(texture.resource)
+                .expect("validated image")
+            {
+                PathResource::Path(path)
                     if !path.is_empty() && from_utf8(path).is_ok() && !path.contains(&0) => {}
                 _ => {
                     return Err(Error::new(
@@ -539,6 +549,26 @@ impl profiles::m3::Feature<'_> {
     }
 }
 impl Extends<M3> for Universal {
+    fn image_resource<'a>(value: <M3 as Profile>::ImageResource<'a>) -> Self::ImageResource<'a> {
+        value.into()
+    }
+    fn model_resource<'a>(value: <M3 as Profile>::ModelResource<'a>) -> Self::ModelResource<'a> {
+        value.into()
+    }
+    fn effect_resource<'a>(value: <M3 as Profile>::EffectResource<'a>) -> Self::EffectResource<'a> {
+        match value {}
+    }
+    fn physics_resource<'a>(
+        value: <M3 as Profile>::PhysicsResource<'a>,
+    ) -> Self::PhysicsResource<'a> {
+        match value {}
+    }
+    fn bone_override_resource<'a>(
+        value: <M3 as Profile>::BoneOverrideResource<'a>,
+    ) -> Self::BoneOverrideResource<'a> {
+        match value {}
+    }
+
     fn property(value: <M3 as Profile>::Property) -> Self::Property {
         UniversalProperty::M3(value)
     }

@@ -8,6 +8,7 @@ use crate::model::formats::wmo::root::RootChunk;
 use crate::model::formats::wmo::{Bundle, Dialect, GroupKey, Root};
 use crate::model::profiles::Wmo;
 use crate::model::Model;
+use crate::model::WorldModelResource;
 
 pub(super) fn write<'a, D: Dialect>(
     asset: &'a Model<'_, Wmo>,
@@ -42,8 +43,8 @@ fn write_model<'a, D: Dialect>(
     root.header_mut().wmo_id = controls.id;
     root.header_mut().ambient_color = super::rgba(controls.ambient);
     if let Some(skybox) = controls.skybox.as_ref() {
-        match skybox {
-            crate::model::Resource::Path(bytes) => {
+        match model.model_resource(*skybox).expect("validated skybox") {
+            WorldModelResource::Path(bytes) => {
                 if bytes.contains(&0) {
                     return Err(Error::new(
                         "world.skybox",

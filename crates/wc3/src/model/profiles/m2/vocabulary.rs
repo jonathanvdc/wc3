@@ -3,7 +3,9 @@ use super::properties::Target as PropertySelector;
 use crate::model::profiles::Unavailable;
 use crate::model::profiles::UniversalProperty;
 use crate::model::profiles::{m2, Extends, NoControls, Profile, Universal};
+use crate::model::resources::{M2ImageResource, PathResource};
 use crate::model::Link;
+use crate::model::M2ResourceLocator;
 use crate::model::PropertyIdentityKey;
 use crate::model::{
     Basis, Bounds, ClipControls, DrawControls, DrawLooks, Error, FeatureKind, IdentityBinding,
@@ -15,6 +17,12 @@ use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 #[derive(Clone, Debug, Default)]
 pub struct M2;
 impl Profile for M2 {
+    type ImageResource<'a> = M2ImageResource<'a>;
+    type ModelResource<'a> = PathResource<'a>;
+    type EffectResource<'a> = Unavailable;
+    type PhysicsResource<'a> = M2ResourceLocator<'a>;
+    type BoneOverrideResource<'a> = M2ResourceLocator<'a>;
+
     type Property = PropertySelector;
     fn default_bounds() -> Option<Bounds> {
         Some(Default::default())
@@ -109,6 +117,26 @@ impl m2::ActorKind<'_> {
     }
 }
 impl Extends<M2> for Universal {
+    fn image_resource<'a>(value: <M2 as Profile>::ImageResource<'a>) -> Self::ImageResource<'a> {
+        value.into()
+    }
+    fn model_resource<'a>(value: <M2 as Profile>::ModelResource<'a>) -> Self::ModelResource<'a> {
+        value.into()
+    }
+    fn effect_resource<'a>(value: <M2 as Profile>::EffectResource<'a>) -> Self::EffectResource<'a> {
+        match value {}
+    }
+    fn physics_resource<'a>(
+        value: <M2 as Profile>::PhysicsResource<'a>,
+    ) -> Self::PhysicsResource<'a> {
+        value.into()
+    }
+    fn bone_override_resource<'a>(
+        value: <M2 as Profile>::BoneOverrideResource<'a>,
+    ) -> Self::BoneOverrideResource<'a> {
+        value.into()
+    }
+
     fn property(value: <M2 as Profile>::Property) -> Self::Property {
         UniversalProperty::M2(value)
     }

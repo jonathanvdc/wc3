@@ -3,8 +3,8 @@ use super::super::{failure, Chunk, ExportDialect};
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m2::{self as native, Bundle, Dialect, File};
 use crate::model::{
-    self as semantic, profiles::m2 as profile, profiles::M2 as M2Vocabulary, Model, ModelBuilder,
-    Node, NodeId, Resource, Transform,
+    self as semantic, profiles::m2 as profile, profiles::M2 as M2Vocabulary, M2ResourceLocator,
+    Model, ModelBuilder, Node, NodeId, Transform,
 };
 type Graph<'a> = Model<'a, M2Vocabulary>;
 type GraphBuilder<'a> = ModelBuilder<'a, M2Vocabulary>;

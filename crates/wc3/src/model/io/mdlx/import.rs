@@ -7,8 +7,8 @@ use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
 use crate::model::Model;
 use crate::model::{
-    AddressMode, Billboard, Bounds, Channel, Clip, Clock, Inheritance, Material, ModelBuilder,
-    Node, Quaternion, Resource, Sampler, SharedClock, Texture, TextureTransform, Time, Track,
+    AddressMode, Billboard, Bounds, Channel, Clip, Clock, ImageResource, Inheritance, Material,
+    ModelBuilder, Node, Quaternion, Sampler, SharedClock, Texture, TextureTransform, Time, Track,
 };
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -97,7 +97,7 @@ where
     let mut texture_ids = Vec::new();
     for texture in source.textures() {
         let resource = if texture.replaceable_id != 0 {
-            Resource::Replaceable(texture.replaceable_id)
+            ImageResource::Replaceable(texture.replaceable_id)
         } else {
             {
                 let bytes = texture.path.as_bytes();
@@ -105,9 +105,10 @@ where
                     .iter()
                     .position(|byte| *byte == 0)
                     .unwrap_or(bytes.len());
-                Resource::Path(S::bytes(&bytes[..end]))
+                ImageResource::Path(S::bytes(&bytes[..end]))
             }
         };
+        let resource = builder.add_image_resource(resource.try_into()?);
         texture_ids.push(builder.add_texture(Texture {
             controls: Default::default(),
             resource,

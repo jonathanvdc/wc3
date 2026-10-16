@@ -22,3 +22,8 @@ mod vocabulary;
 pub use vocabulary::M2;
 
 pub use crate::model::geometry::weighted_model::*;
+
+/// Image dependency declarations admitted by this profile.
+pub use crate::model::resources::M2ImageResource as ImageResource;
+/// External companion addresses admitted by this profile.
+pub use crate::model::resources::M2ResourceLocator as ResourceLocator;

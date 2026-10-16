@@ -252,17 +252,8 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
 }
 
 pub(super) fn resources(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
-    use crate::model::{ColorSpace, Resource, Sampler};
+    use crate::model::{ColorSpace, Sampler};
     for (_, texture) in value.textures() {
-        if !matches!(
-            texture.resource,
-            Resource::Path(_) | Resource::FileDataId(_) | Resource::EmbeddedImage { .. }
-        ) {
-            return Err(Error::new(
-                "world.textures.resource",
-                "world surfaces refer to filenames, database identities, or embedded lightmap images",
-            ));
-        }
         if texture.color_space != ColorSpace::Unspecified || texture.sampler != Sampler::default() {
             return Err(Error::new(
                 "world.textures.sampling",

@@ -7,7 +7,9 @@ use wc3::model::{Material, ModelBuilder};
 #[test]
 fn programmed_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion() {
     let mut builder = ModelBuilder::new("M3 layer samplers");
-    let mut source = Texture::file("shared.dds");
+    let mut source = Texture::new(builder.add_image_resource(wc3::model::ImageResource::Path(
+        "shared.dds".as_bytes().into(),
+    )));
     source.sampler = Sampler {
         u: AddressMode::Mirror,
         v: AddressMode::Mirror,
@@ -99,7 +101,9 @@ fn programmed_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion(
 #[test]
 fn world_surface_clamps_resolve_independent_variants_without_mutating_texture() {
     let mut builder = ModelBuilder::new("world samplers");
-    let mut texture = Texture::file("shared.png");
+    let mut texture = Texture::new(builder.add_image_resource(wc3::model::ImageResource::Path(
+        "shared.png".as_bytes().into(),
+    )));
     texture.sampler.u = AddressMode::Mirror;
     let texture = builder.add_texture(texture).unwrap();
     let mut materials = Vec::new();

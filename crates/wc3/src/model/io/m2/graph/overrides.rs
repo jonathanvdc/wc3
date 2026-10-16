@@ -1,15 +1,18 @@
 //! Sparse customization transforms are logical bone bindings, not saved encoded files.
 use super::*;
 use crate::model::io::materialize;
+use crate::model::M2ResourceLocator;
+use std::str::from_utf8;
 use zerovec::ZeroVec;
 pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     nodes: &[semantic::NodeId],
+    builder: &mut GraphBuilder<'a>,
 ) -> Result<Vec<profile::BoneOverride<'a>>, Error> {
     let mut values = Vec::new();
     for (key, file) in source.files() {
         if let File::Bone(file) = file {
-            let resource = Some(resource(key));
+            let resource = Some(builder.add_bone_override_resource(resource(key)));
             if file.indices.len() != file.matrices.len() {
                 return Err(Error::new(
                     "m2.bone_override",
@@ -39,6 +42,7 @@ pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     Ok(values)
 }
 pub(super) fn export<D: ExportDialect>(
+    model: &Graph<'_>,
     values: &[profile::BoneOverride<'_>],
     nodes: &[semantic::NodeId],
     bundle: &mut Bundle<'static, D>,
@@ -47,11 +51,14 @@ pub(super) fn export<D: ExportDialect>(
     let mut ids = Vec::new();
     for (index, value) in values.iter().enumerate() {
         let key = match &value.resource {
-            Some(value) => {
-                if let Resource::FileDataId(id) = value {
+            Some(id) => {
+                let value = model
+                    .bone_override_resource(*id)
+                    .expect("validated bone resource");
+                if let M2ResourceLocator::FileDataId(id) = value {
                     ids.push(*id);
                 }
-                file_key(value)?
+                file_key(value)
             }
             None => bundle.key.sibling(format!("{index:02}.bone")),
         };
@@ -89,35 +96,29 @@ pub(super) fn export<D: ExportDialect>(
     Ok(())
 }
 
-pub(super) fn resource<'a>(key: &'a native::FileKey) -> Resource<'a> {
+pub(super) fn resource<'a>(key: &'a native::FileKey) -> M2ResourceLocator<'a> {
     match key {
-        native::FileKey::Root => Resource::Root,
-        native::FileKey::FileId(id) => Resource::FileDataId(*id),
-        native::FileKey::Path(path) => Resource::Path(Cow::Borrowed(path.as_bytes())),
-        native::FileKey::RawPath(path) => Resource::Path(Cow::Borrowed(path)),
-        native::FileKey::Sibling { owner, suffix } => Resource::Relative {
+        native::FileKey::Root => M2ResourceLocator::Root,
+        native::FileKey::FileId(id) => M2ResourceLocator::FileDataId(*id),
+        native::FileKey::Path(path) => M2ResourceLocator::Path(Cow::Borrowed(path.as_bytes())),
+        native::FileKey::RawPath(path) => M2ResourceLocator::Path(Cow::Borrowed(path)),
+        native::FileKey::Sibling { owner, suffix } => M2ResourceLocator::Relative {
             owner: Box::new(resource(owner)),
             suffix: Cow::Borrowed(suffix),
         },
     }
 }
-pub(super) fn file_key(value: &Resource<'_>) -> Result<native::FileKey, Error> {
-    Ok(match value {
-        Resource::Root => native::FileKey::Root,
-        Resource::FileDataId(id) => native::FileKey::FileId(*id),
-        Resource::Path(bytes) => match std::str::from_utf8(bytes) {
+pub(super) fn file_key(value: &M2ResourceLocator<'_>) -> native::FileKey {
+    match value {
+        M2ResourceLocator::Root => native::FileKey::Root,
+        M2ResourceLocator::FileDataId(id) => native::FileKey::FileId(*id),
+        M2ResourceLocator::Path(bytes) => match from_utf8(bytes) {
             Ok(path) => native::FileKey::Path(path.to_owned()),
             Err(_) => native::FileKey::RawPath(bytes.to_vec()),
         },
-        Resource::Relative { owner, suffix } => native::FileKey::Sibling {
-            owner: Box::new(file_key(owner)?),
+        M2ResourceLocator::Relative { owner, suffix } => native::FileKey::Sibling {
+            owner: Box::new(file_key(owner)),
             suffix: suffix.to_string(),
         },
-        _ => {
-            return Err(Error::new(
-                "m2.resource",
-                "resource namespace has no companion identity",
-            ));
-        }
-    })
+    }
 }

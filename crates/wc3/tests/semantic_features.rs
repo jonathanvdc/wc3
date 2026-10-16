@@ -11,12 +11,21 @@ use wc3::model::{GravityTrailControls, TrailAppearance};
 
 #[test]
 fn complete_mdlx_feature_vocabulary_round_trips_through_universal() {
+    let mut draft = Model::<Mdlx>::builder("resources");
+    let particle = draft.add_model_resource(wc3::model::PathResource::Path(
+        b"particle.mdx".as_slice().into(),
+    ));
+    let effect = draft.add_effect_resource(wc3::model::PathResource::Path(
+        b"fire.pkfx".as_slice().into(),
+    ));
+    let attachment = draft.add_model_resource(wc3::model::PathResource::Path(
+        b"attachment.mdx".as_slice().into(),
+    ));
     let features = [
         mdlx::Node::GeometryAnimation(mdlx::GeometryAnimation::default()),
         mdlx::Node::Particle(mdlx::Particle {
             details: ModelParticle {
-                resource: Cow::Borrowed("particle.mdx"),
-                model_resource: true,
+                resource: wc3::model::ParticleResource::Model(Some(particle)),
                 ..Default::default()
             },
             emission: ParticleEmission {
@@ -73,7 +82,7 @@ fn complete_mdlx_feature_vocabulary_round_trips_through_universal() {
             ..Default::default()
         }),
         mdlx::Node::ParticleProgram(mdlx::Popcorn {
-            resource: Cow::Borrowed("fire.pkfx"),
+            resource: Some(effect),
             visibility_guide: Cow::Borrowed("Stand=on\nDeath=off"),
             scaling: true,
             ..Default::default()
@@ -103,12 +112,12 @@ fn complete_mdlx_feature_vocabulary_round_trips_through_universal() {
             ..Default::default()
         }),
         mdlx::Node::Attachment(mdlx::Attachment {
-            resource: Cow::Borrowed("attachment.mdx"),
+            resource: attachment,
+            appearance: (),
             socket: SocketDefinition {
                 identity: 17,
                 ..Default::default()
             },
-            ..Default::default()
         }),
         mdlx::Node::Event(mdlx::Events {
             name: Cow::Borrowed("SNDxFootstep"),
@@ -128,36 +137,16 @@ fn complete_mdlx_feature_vocabulary_round_trips_through_universal() {
 }
 
 #[test]
-fn feature_conversion_moves_owned_resource_paths() {
-    let resource = String::from("owned-particle.mdx");
-    let pointer = resource.as_ptr();
-    let source = mdlx::Node::Particle(mdlx::Particle {
-        details: ModelParticle {
-            resource: Cow::Owned(resource),
-            ..Default::default()
-        },
-        emission: ParticleEmission {
-            variation: (),
-            trigger: (),
-            ..Default::default()
-        },
-        motion: ParticleMotion {
-            variation: (),
-            ..Default::default()
-        },
-        lifetime: ParticleLifetime {
-            variation: (),
-            ..Default::default()
-        },
-        appearance: (),
-    });
-    let widened = <Universal as Extends<Mdlx>>::feature(source);
-    let restored = <Mdlx as Narrows<Universal>>::feature(widened).unwrap();
-    let mdlx::Node::Particle(particle) = restored else {
-        panic!("particle changed behavior")
-    };
-    assert!(matches!(particle.details.resource, Cow::Owned(_)));
-    assert_eq!(particle.details.resource.as_ptr(), pointer);
+fn resource_conversion_moves_owned_paths_and_preserves_handles() {
+    let path = b"owned-particle.mdx".to_vec();
+    let pointer = path.as_ptr();
+    let mut draft = Model::<Mdlx>::builder("resources");
+    let id = draft.add_model_resource(wc3::model::PathResource::Path(Cow::Owned(path)));
+    let widened = draft.finish().unwrap().widen::<Universal>();
+    let restored = widened.try_narrow::<Mdlx>().unwrap();
+    let wc3::model::PathResource::Path(path) = restored.model_resource(id).unwrap();
+    assert!(matches!(path, Cow::Owned(_)));
+    assert_eq!(path.as_ptr(), pointer);
 }
 
 #[test]
@@ -180,8 +169,15 @@ fn full_model_feature_identity_survives_widening_and_narrowing() {
 
 #[test]
 fn world_features_retain_light_relationship_categories() {
+    let resource = Model::<Wmo>::builder("resource").add_model_resource(
+        wc3::model::WorldModelResource::Path(b"tree.m2".as_slice().into()),
+    );
     let features = [
-        wmo::Node::Attachment(wmo::Doodad::default()),
+        wmo::Node::Attachment(wmo::Doodad {
+            resource,
+            socket: (),
+            appearance: Default::default(),
+        }),
         wmo::Node::Light(Box::new(wmo::Light {
             directional_terms: Some([([1., 2., 3.], 4.); 6]),
             modern: Some(wmo::ModernLight {
@@ -364,10 +360,14 @@ fn camera_narrowing_rejects_newly_authored_animation_on_static_field_of_view() {
 }
 
 #[test]
-fn external_attachments_narrow_by_resource_meaning_without_source_tags() {
-    use wc3::model::{scene, NodeFeature, Resource};
+fn external_attachment_conversion_preserves_its_resource_handle() {
+    use wc3::model::{scene, NodeFeature, ResourceLocator};
+    let mut draft = Model::<Universal>::builder("resources");
+    let resource = draft.add_model_resource(ResourceLocator::Path(Cow::Borrowed(
+        b"effects/attachment.mdx",
+    )));
     let source = scene::Feature::Attachment(scene::Attachment {
-        resource: Resource::Path(Cow::Borrowed(b"effects/attachment.mdx")),
+        resource,
         socket: SocketDefinition {
             visibility: Animated::constant(0.5),
             identity: 21,
@@ -380,25 +380,9 @@ fn external_attachments_narrow_by_resource_meaning_without_source_tags() {
     else {
         panic!("attachment changed behavior")
     };
-    assert_eq!(restored.resource, "effects/attachment.mdx");
-    assert!(matches!(restored.resource, Cow::Borrowed(_)));
+    assert_eq!(restored.resource, resource);
     assert_eq!(restored.socket.identity, 21);
     assert_eq!(restored.socket.visibility.default, 0.5);
-    for resource in [
-        Resource::Path(Cow::Borrowed(&[255])),
-        Resource::FileDataId(123),
-    ] {
-        let feature = NodeFeature::from(scene::Feature::Attachment(scene::Attachment {
-            resource,
-            socket: SocketDefinition {
-                visibility: Animated::constant(1.),
-                identity: 0,
-                control: (),
-            },
-            appearance: (),
-        }));
-        assert!(<Mdlx as Narrows<Universal>>::feature(feature).is_err());
-    }
 }
 
 #[test]

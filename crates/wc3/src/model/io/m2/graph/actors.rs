@@ -75,7 +75,7 @@ where
             visibility: Animated::constant(initial(&value.animate).unwrap_or(1) != 0),
         };
         let property = profile::properties::attachment::ENABLED.bind(feature);
-        attachment.visibility.binding = Some(property.clone().widen().into());
+        attachment.visibility.binding = Some(property.clone().widen());
         for (sequence, clip) in animation::sequences(clips) {
             let (start, _) = attachment_tables
                 .sequences
@@ -326,7 +326,7 @@ where
             format!("particle-{index}"),
         )?;
         let feature = builder.reserve_feature(node);
-        let mut particle = D::Layout::logical_particle(value, textures)?;
+        let mut particle = D::Layout::logical_particle(value, textures, builder)?;
         particle.details.rendering.texture_program = source.model.extensions().find_map(|chunk| {
             if let Chunk::TextureCombinerHints(programs) = chunk {
                 programs.get(core.materials.len() + index)
@@ -457,8 +457,8 @@ where
         let position = profile::properties::camera::POSITION.bind(feature);
         let target = profile::properties::camera::TARGET.bind(feature);
         let roll = profile::properties::camera::ROLL.bind(feature);
-        camera.eye_offset.binding = Some(position.clone().widen().into());
-        camera.target_offset.binding = Some(target.clone().widen().into());
+        camera.eye_offset.binding = Some(position.clone().widen());
+        camera.target_offset.binding = Some(target.clone().widen());
         camera.roll.binding = Some(roll.clone().widen().into());
         for (seq, clip) in animation::sequences(clips) {
             let (start, _) = tables

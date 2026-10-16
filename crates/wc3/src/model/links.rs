@@ -1,5 +1,7 @@
 //! Logical relationship traversal for checked graph construction.
-use crate::model::Resource;
+use crate::model::{
+    BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
+};
 use crate::model::{ClipId, ClockId, MaterialId, MeshId, ModelId, NodeId, SkinId, TextureId};
 use crate::model::{
     ControllerId, CurveValue, EventId, FeatureId, FeatureKind, GeometryKind, InstanceId,
@@ -10,6 +12,17 @@ use std::borrow::Cow;
 /// A relationship to another object in the semantic graph.
 #[derive(Clone, Debug)]
 pub enum Link {
+    /// External image dependency.
+    ImageResource(ImageResourceId),
+    /// External model dependency.
+    ModelResource(ModelResourceId),
+    /// External effect dependency.
+    EffectResource(EffectResourceId),
+    /// External physics dependency.
+    PhysicsResource(PhysicsResourceId),
+    /// External boneoverride dependency.
+    BoneOverrideResource(BoneOverrideResourceId),
+
     /// Another model in the containing collection.
     Model(ModelId),
     /// An identified occurrence in a programme.
@@ -294,9 +307,6 @@ impl ValidateLinks for u32 {
 impl ValidateLinks for Cow<'_, str> {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
-impl ValidateLinks for Resource<'_> {
-    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
-}
 
 impl ValidateLinks for i16 {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
@@ -309,4 +319,30 @@ impl ValidateLinks for i8 {
 }
 impl ValidateLinks for u16 {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+}
+
+impl ValidateLinks for ImageResourceId {
+    fn visit_links(&self, v: &mut dyn FnMut(Link)) {
+        v(Link::ImageResource(*self))
+    }
+}
+impl ValidateLinks for ModelResourceId {
+    fn visit_links(&self, v: &mut dyn FnMut(Link)) {
+        v(Link::ModelResource(*self))
+    }
+}
+impl ValidateLinks for EffectResourceId {
+    fn visit_links(&self, v: &mut dyn FnMut(Link)) {
+        v(Link::EffectResource(*self))
+    }
+}
+impl ValidateLinks for PhysicsResourceId {
+    fn visit_links(&self, v: &mut dyn FnMut(Link)) {
+        v(Link::PhysicsResource(*self))
+    }
+}
+impl ValidateLinks for BoneOverrideResourceId {
+    fn visit_links(&self, v: &mut dyn FnMut(Link)) {
+        v(Link::BoneOverrideResource(*self))
+    }
 }

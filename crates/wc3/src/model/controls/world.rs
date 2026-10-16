@@ -3,7 +3,8 @@ use crate::model::scene::world::{
     Ambient, DoodadSet, Fog, GroupOptions, Liquid, Portal, PortalConnection, WorldOptions,
 };
 use crate::model::values::world::GroupFlags2;
-use crate::model::{FeatureId, InstanceId, Resource, ZeroVec};
+use crate::model::{FeatureId, InstanceId, ZeroVec};
+use crate::model::{Link, ModelResourceId, ValidateLinks};
 use std::borrow::Cow;
 
 /// Identity of a world group in its owning world system.
@@ -154,9 +155,9 @@ pub struct WorldSystem<'a> {
 
 /// Model-wide world rendering and environment controls.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ModelMetadata<'a> {
+pub struct ModelMetadata {
     /// Optional background sky model resource.
-    pub skybox: Option<Resource<'a>>,
+    pub skybox: Option<ModelResourceId>,
     /// External world-model identifier.
     pub id: u32,
     /// World ambient color in RGBA order.
@@ -164,6 +165,8 @@ pub struct ModelMetadata<'a> {
     /// Root rendering and illumination behavior.
     pub options: WorldOptions,
 }
-impl crate::model::ValidateLinks for ModelMetadata<'_> {
-    fn visit_links(&self, _visitor: &mut dyn FnMut(crate::model::Link)) {}
+impl ValidateLinks for ModelMetadata {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.skybox.visit_links(visitor);
+    }
 }

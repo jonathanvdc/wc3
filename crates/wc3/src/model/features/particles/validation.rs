@@ -217,8 +217,10 @@ impl ValidateLinks for AtlasParticleShape {
         self.width.visit_links(v);
     }
 }
-impl ValidateLinks for AgeDrivenParticleRendering<'_> {
+impl ValidateLinks for AgeDrivenParticleRendering {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
+        self.model.visit_links(v);
+        self.child_model.visit_links(v);
         self.textures.visit_links(v);
         if !self.tail_length.is_finite() {
             v(Link::InvalidValue);
@@ -270,8 +272,9 @@ impl<D: ValidateLinks, V: ValidateLinks> ValidateLinks for ParticleLifetime<D, V
         self.variation.visit_links(v);
     }
 }
-impl ValidateLinks for ModelParticle<'_> {
+impl ValidateLinks for ModelParticle {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.resource.visit_links(visitor);
         self.longitude.visit_links(visitor);
         self.latitude.visit_links(visitor);
     }

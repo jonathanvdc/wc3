@@ -2,20 +2,29 @@
 use crate::model::profiles::M2;
 use crate::model::{Error, Model};
 pub(super) fn resources(resources: &Model<'_, M2>) -> Result<(), Error> {
-    use crate::model::{AddressMode, ColorSpace, Resource};
+    use crate::model::{AddressMode, ColorSpace, M2ImageResource};
     for (_, texture) in resources.textures() {
         if !matches!(
-            texture.resource,
-            Resource::Path(_)
-                | Resource::FileDataId(1..=u32::MAX)
-                | Resource::Replaceable(1..=u32::MAX)
+            resources
+                .image_resource(texture.resource)
+                .expect("validated image"),
+            M2ImageResource::Path(_)
+                | M2ImageResource::FileDataId(1..=u32::MAX)
+                | M2ImageResource::Replaceable(1..=u32::MAX)
         ) {
             return Err(Error::new(
                 "m2.texture.resource",
                 "textures require a filename, nonzero file-data key, or nonzero replacement category",
             ));
         }
-        if texture.controls.path.is_some() && matches!(texture.resource, Resource::Path(_)) {
+        if texture.controls.path.is_some()
+            && matches!(
+                resources
+                    .image_resource(texture.resource)
+                    .expect("validated image"),
+                M2ImageResource::Path(_)
+            )
+        {
             return Err(Error::new(
                 "m2.texture.path",
                 "the primary filename and alternate filename cannot both own the path declaration",

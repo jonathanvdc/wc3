@@ -4,8 +4,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use wc3::model::materials::{layered, programmed, world, SurfaceSet};
 use wc3::model::{
-    AddressMode, ColorSpace, Model, NodeFeature, ParticleDetails, ParticleEmitter, Sampler,
-    Texture, TextureId,
+    AddressMode, ColorSpace, ImageResource, Model, NodeFeature, ParticleDetails, ParticleEmitter,
+    Sampler, Texture, TextureId,
 };
 
 /// Purpose of one sampled image, independent of its resource identity.
@@ -59,8 +59,10 @@ pub struct TextureImageKey {
 pub struct TextureRequest<'view, 'data> {
     /// Texture identity used by material selection and animation.
     pub id: TextureId,
-    /// Complete resource, sampler and producer-specific declarations.
+    /// Image handle, sampler, and producer-specific texture declarations.
     pub texture: &'view Texture<'data>,
+    /// Image declaration resolved from the owning model.
+    pub resource: &'view ImageResource<'data>,
     /// Material purpose that selected an unspecified transfer function.
     pub role: TextureRole,
     /// Effective transfer function; established explicit declarations take precedence.
@@ -93,6 +95,9 @@ pub fn texture_requests<'view, 'data>(
             let request = TextureRequest {
                 id,
                 texture,
+                resource: model
+                    .image_resource(texture.resource)
+                    .expect("validated image resource"),
                 role,
                 color_space: TextureColorSpace::selected(texture.color_space, role),
                 sampler: sampler.unwrap_or(texture.sampler),

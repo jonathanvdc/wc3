@@ -14,9 +14,11 @@ independently animated rig beneath an application-owned transform. The encoded
 source and semantic graph can be released after compilation.
 
 The image callback receives a `TextureRequest` with the texture identity and
-complete semantic texture definition. Resource identity, sampler, color space, and
-producer controls remain available to the application. Two textures can name the
-same file while requiring different sampling or color interpretation. The native
+complete semantic texture definition. Its `resource` field exposes the image
+declaration resolved from the model-owned image table; the texture itself retains
+the typed image handle. Resource identity, sampler, color space, and producer
+controls remain available to the application. Two textures can share one image
+declaration while requiring different sampling or color interpretation. The native
 loader retains independently labeled image variants for those cases. An unspecified
 transfer function follows the material role: color samples use sRGB, while normal
 and numeric data maps use linear images. A texture used in both roles receives
@@ -98,8 +100,9 @@ separate specular response, decay law, and light LOD controls also remain availa
 without an exact lighting equivalent.
 
 `ModelAttachment` retains the complete semantic attachment definition, including
-socket identity namespaces, authored visibility, unresolved controls, child resource
-identity and WMO placement appearance. `AttachmentState` holds sampled visibility.
+socket identity namespaces, authored visibility, unresolved controls, the child
+resource handle, and WMO placement appearance. Its separate `resource` field
+retains the resolved, owned child declaration after the source graph is released. `AttachmentState` holds sampled visibility.
 The authored child's `ModelMount` describes its node or socket target
 independently of loading and playback policy. WMO interior direct illumination,
 linked-light and region controls remain application hooks; they are not multiplied into child albedo. Child models start their first

@@ -14,7 +14,8 @@ use wc3::blp::Blp;
 use wc3::model::conversion::{ImportOptions, LossPolicy, UnknownPolicy};
 use wc3::model::formats::m2::{Bundle, Chunked, FileKey, V274};
 use wc3::model::io::m2 as semantic_m2;
-use wc3::model::{Resource, SocketIdentity};
+use wc3::model::SocketIdentity;
+use wc3::model::{ImageResource, ResourceLocator};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -81,7 +82,7 @@ fn replacements(values: BTreeMap<u32, Replacement>) -> BTreeMap<u32, TextureRepl
         .into_iter()
         .map(|(slot, value)| {
             let value = match value {
-                Replacement::Image(id) => TextureReplacement::Image(Resource::FileDataId(id)),
+                Replacement::Image(id) => TextureReplacement::Image(ImageResource::FileDataId(id)),
                 Replacement::Atlas(atlas) => TextureReplacement::Atlas {
                     atlas: Atlas {
                         width: atlas.width,
@@ -92,7 +93,7 @@ fn replacements(values: BTreeMap<u32, Replacement>) -> BTreeMap<u32, TextureRepl
                         .layers
                         .into_iter()
                         .map(|layer| TextureLayer {
-                            resource: Resource::FileDataId(layer.image),
+                            resource: ImageResource::FileDataId(layer.image),
                             source: layer.source.map(rect),
                             destination: rect(layer.destination),
                             opacity: layer.opacity,
@@ -124,7 +125,7 @@ pub fn load(
         .into_iter()
         .map(|part| ModelPart {
             clips: Default::default(),
-            model: Resource::FileDataId(part.model),
+            model: ResourceLocator::FileDataId(part.model),
             binding: part
                 .attachment
                 .map_or(EquipmentBinding::SharedSkeleton, |role| {
@@ -142,7 +143,7 @@ pub fn load(
         parts.len()
     );
     let definition = CharacterDefinition {
-        model: Resource::FileDataId(recipe.body),
+        model: ResourceLocator::FileDataId(recipe.body),
         geosets: GeosetSelection {
             visible: recipe.geosets,
         },
@@ -224,14 +225,14 @@ pub fn load(
         for loss in &converted.report.issues {
             eprintln!("Character import {id}: {loss:?}");
         }
-        models.insert(Resource::FileDataId(id), converted.value.widen());
+        models.insert(ResourceLocator::FileDataId(id), converted.value.widen());
     }
     Ok(compile_character(
         &definition,
         &models,
         images,
         |resource| {
-            let Resource::FileDataId(id) = resource else {
+            let ImageResource::FileDataId(id) = resource else {
                 return Err(ModelError::new(format!(
                     "character image must have a FileDataID: {resource:?}"
                 )));

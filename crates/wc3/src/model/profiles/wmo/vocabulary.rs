@@ -2,6 +2,7 @@
 use crate::model::profiles::{
     wmo, Extends, NoControls, Profile, SurfacePayload, Unavailable, Universal,
 };
+use crate::model::resources::{WorldImageResource, WorldModelResource};
 use crate::model::Model;
 use crate::model::{
     DrawControls, Error, FeatureKind, InstanceControls, MaterialSurface, ModelMetadata, SingleLook,
@@ -13,12 +14,18 @@ use crate::model::{Link, PropertyIdentityKey};
 #[derive(Clone, Debug, Default)]
 pub struct Wmo;
 impl Profile for Wmo {
+    type ImageResource<'a> = WorldImageResource<'a>;
+    type ModelResource<'a> = WorldModelResource<'a>;
+    type EffectResource<'a> = Unavailable;
+    type PhysicsResource<'a> = Unavailable;
+    type BoneOverrideResource<'a> = Unavailable;
+
     type Property = Unavailable;
     type Appearance<'a> = SingleLook<'a>;
     type Binding<'a> = Unavailable;
     type Geometry<'a> = WmoGeometry<'a>;
     type Draw = Option<wmo::DrawControls>;
-    type ModelMetadata<'a> = wmo::ModelMetadata<'a>;
+    type ModelMetadata<'a> = wmo::ModelMetadata;
     type System<'a> = wmo::WorldSystem<'a>;
     type Surface<'a> = wmo::Material<'a>;
     type Feature<'a> = wmo::Node<'a>;
@@ -76,6 +83,28 @@ impl wmo::Node<'_> {
     }
 }
 impl Extends<Wmo> for Universal {
+    fn image_resource<'a>(value: <Wmo as Profile>::ImageResource<'a>) -> Self::ImageResource<'a> {
+        value.into()
+    }
+    fn model_resource<'a>(value: <Wmo as Profile>::ModelResource<'a>) -> Self::ModelResource<'a> {
+        value.into()
+    }
+    fn effect_resource<'a>(
+        value: <Wmo as Profile>::EffectResource<'a>,
+    ) -> Self::EffectResource<'a> {
+        match value {}
+    }
+    fn physics_resource<'a>(
+        value: <Wmo as Profile>::PhysicsResource<'a>,
+    ) -> Self::PhysicsResource<'a> {
+        match value {}
+    }
+    fn bone_override_resource<'a>(
+        value: <Wmo as Profile>::BoneOverrideResource<'a>,
+    ) -> Self::BoneOverrideResource<'a> {
+        match value {}
+    }
+
     fn property(value: <Wmo as Profile>::Property) -> Self::Property {
         match value {}
     }
@@ -131,7 +160,7 @@ impl Extends<Wmo> for Universal {
 impl<'a> FeatureVocabulary<'a> for Wmo {
     type Light = Box<wmo::Light>;
     type Camera = Unavailable;
-    type Attachment = wmo::Doodad<'a>;
+    type Attachment = wmo::Doodad;
     type Particle = Unavailable;
     type Ribbon = Unavailable;
     type Event = Unavailable;

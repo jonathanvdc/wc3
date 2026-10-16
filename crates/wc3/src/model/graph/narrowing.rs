@@ -21,6 +21,32 @@ impl<'a, P: Profile> Model<'a, P> {
         let clip = Q::clip;
         let controller = Q::controller;
         Ok(Model {
+            image_resources: self
+                .image_resources
+                .into_iter()
+                .map(|(id, value)| Ok((id, Q::image_resource(value)?)))
+                .collect::<Result<_, Error>>()?,
+            model_resources: self
+                .model_resources
+                .into_iter()
+                .map(|(id, value)| Ok((id, Q::model_resource(value)?)))
+                .collect::<Result<_, Error>>()?,
+            effect_resources: self
+                .effect_resources
+                .into_iter()
+                .map(|(id, value)| Ok((id, Q::effect_resource(value)?)))
+                .collect::<Result<_, Error>>()?,
+            physics_resources: self
+                .physics_resources
+                .into_iter()
+                .map(|(id, value)| Ok((id, Q::physics_resource(value)?)))
+                .collect::<Result<_, Error>>()?,
+            bone_override_resources: self
+                .bone_override_resources
+                .into_iter()
+                .map(|(id, value)| Ok((id, Q::bone_override_resource(value)?)))
+                .collect::<Result<_, Error>>()?,
+
             textures: self
                 .textures
                 .into_iter()

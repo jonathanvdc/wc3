@@ -10,7 +10,7 @@ use crate::{CompiledModel, DrawSelection, JointMap, ModelError, PartBinding};
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::{Assets, Image, Mat4, Mesh};
 use std::collections::{BTreeMap, HashSet};
-use wc3::model::{Model, NodeFeature, NodeId, Resource};
+use wc3::model::{ImageResource, Model, NodeFeature, NodeId, ResourceLocator};
 use wc3::model::{ModelMount, MountTarget, Transform as ModelTransform};
 
 #[derive(Clone, PartialEq, Eq)]
@@ -27,7 +27,7 @@ pub fn compile_character(
     definition: &CharacterDefinition,
     models: &Models<'_>,
     images: &mut Assets<Image>,
-    resolve_image: impl FnMut(&Resource<'static>) -> Result<RgbaImage, ModelError>,
+    resolve_image: impl FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
 ) -> Result<CompiledModel, ModelError> {
     definition
         .validate()
@@ -67,7 +67,7 @@ pub fn compile_character(
 }
 
 fn source(
-    resource: &Resource<'static>,
+    resource: &ResourceLocator<'static>,
     geosets: Option<&GeosetSelection>,
     replacements: &BTreeMap<u32, TextureReplacement>,
     models: &Models<'_>,
@@ -86,11 +86,16 @@ fn source(
         .transpose()?;
     let textures = model
         .textures()
-        .filter_map(|(id, texture)| match texture.resource {
-            Resource::Replaceable(category) => replacements
-                .get(&category)
-                .map(|replacement| (id, replacement.clone())),
-            _ => None,
+        .filter_map(|(id, texture)| {
+            match model
+                .image_resource(texture.resource)
+                .expect("validated image resource")
+            {
+                ImageResource::Replaceable(category) => replacements
+                    .get(category)
+                    .map(|replacement| (id, replacement.clone())),
+                _ => None,
+            }
         })
         .collect();
     Ok(Source {

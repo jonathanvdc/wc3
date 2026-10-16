@@ -4,7 +4,7 @@ use super::{Assembly, Models, PendingAssembly, PendingPart, RgbaImage, Source};
 use crate::{CompiledModel, ModelError, ModelPart, PartBinding};
 use bevy::prelude::{Assets, Image};
 use std::collections::HashMap;
-use wc3::model::{Model, Resource};
+use wc3::model::{ImageResource, Model};
 
 /// Compile a checked resource assembly with shared source decoding and typed replacements.
 /// Compatible repeated skinned sources are compiled once with united geometry.
@@ -14,7 +14,7 @@ pub fn compile_assembly(
     assembly: &Assembly,
     models: &Models<'_>,
     images: &mut Assets<Image>,
-    resolve_image: impl FnMut(&Resource<'static>) -> Result<RgbaImage, ModelError>,
+    resolve_image: impl FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
 ) -> Result<CompiledModel, ModelError> {
     let mut pending = PendingAssembly::new(assembly.root.clone());
     pending.parts = assembly
@@ -40,7 +40,7 @@ pub(crate) fn compile_with_bindings<B: Clone + PartialEq>(
     assembly: &PendingAssembly<B>,
     models: &Models<'_>,
     images: &mut Assets<Image>,
-    mut resolve_image: impl FnMut(&Resource<'static>) -> Result<RgbaImage, ModelError>,
+    mut resolve_image: impl FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
     is_skinned: impl Fn(&B) -> bool,
     mut resolve_binding: impl FnMut(
         &Model<'_>,

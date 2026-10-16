@@ -9,8 +9,9 @@ use crate::model::materials::world::WorldBlend;
 use crate::model::profiles::wmo as profile;
 use crate::model::profiles::Wmo;
 use crate::model::Model;
+use crate::model::WorldImageResource;
 use crate::model::{
-    ColorSpace, Material, MaterialId, ModelBuilder, Resource, Sampler, Texture, TextureId,
+    ColorSpace, ImageResource, Material, MaterialId, ModelBuilder, Sampler, Texture, TextureId,
 };
 use native::records::{BlendMode, MaterialTailField};
 use native::root::RootChunk;
@@ -55,7 +56,7 @@ pub(super) fn read<'a, 'data: 'a>(
         .transpose()?
         .unwrap_or_default();
     let mut output = Vec::new();
-    let mut textures = Vec::<(Resource<'a>, TextureId)>::new();
+    let mut textures = Vec::<(ImageResource<'a>, TextureId)>::new();
     for (index, row) in rows.iter().enumerate() {
         let mut bindings = Vec::new();
         for slot in 0..row.texture_slots() {
@@ -67,8 +68,10 @@ pub(super) fn read<'a, 'data: 'a>(
                     {
                         *id
                     } else {
+                        let image_resource =
+                            builder.add_image_resource(resource.clone().try_into()?);
                         let id = builder.add_texture(Texture {
-                            resource: resource.clone(),
+                            resource: image_resource,
                             controls: Default::default(),
                             color_space: ColorSpace::Unspecified,
                             sampler: Sampler::default(),
@@ -179,8 +182,11 @@ pub(super) fn write<'a, D: Dialect>(
         if !used.contains(&id) {
             continue;
         }
-        let value = match &texture.resource {
-            Resource::Path(path) => {
+        let value = match model
+            .image_resource(texture.resource)
+            .expect("validated image")
+        {
+            WorldImageResource::Path(path) => {
                 named = true;
                 let offset = u32::try_from(names.len())
                     .map_err(|_| Error::new("world.texture", "name table exceeds capacity"))?;
@@ -191,7 +197,7 @@ pub(super) fn write<'a, D: Dialect>(
                 names.push(0);
                 offset
             }
-            Resource::FileDataId(id) => match root.addressing() {
+            WorldImageResource::FileDataId(id) => match root.addressing() {
                 super::root_output::Addressing::PathsOrFileIds => {
                     file_ids = true;
                     *id
@@ -340,16 +346,16 @@ pub(super) fn write<'a, D: Dialect>(
 fn resource<'view, 'data: 'view>(
     source: &'view impl super::root_view::CommonRoot<'data>,
     selector: u32,
-) -> Result<Option<Resource<'view>>, Error> {
+) -> Result<Option<ImageResource<'view>>, Error> {
     if let Some(names) = source.common_chunks().find_map(|chunk| match chunk {
         RootChunk::TextureNames(names) => Some(names.as_bytes()),
         _ => None,
     }) {
         let bytes = native::resources::string_at(names, selector)
             .map_err(|error| Error::new("world.texture", error.to_string()))?;
-        Ok((!bytes.is_empty()).then_some(Resource::Path(Cow::Borrowed(bytes))))
+        Ok((!bytes.is_empty()).then_some(ImageResource::Path(Cow::Borrowed(bytes))))
     } else {
-        Ok((selector != 0).then_some(Resource::FileDataId(selector)))
+        Ok((selector != 0).then_some(ImageResource::FileDataId(selector)))
     }
 }
 
@@ -359,7 +365,7 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
 ) -> Result<Vec<MaterialId>, Error> {
     use native::legacy::RootChunk14;
     let mut result = Vec::new();
-    let mut textures = Vec::<(Resource<'view>, TextureId)>::new();
+    let mut textures = Vec::<(ImageResource<'view>, TextureId)>::new();
     for chunk in source.chunks() {
         if let RootChunk14::Materials(rows) = chunk {
             for row in rows.iter() {
@@ -374,8 +380,10 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
                         {
                             *id
                         } else {
+                            let image_resource =
+                                builder.add_image_resource(resource.clone().try_into()?);
                             let id = builder.add_texture(Texture {
-                                resource: resource.clone(),
+                                resource: image_resource,
                                 controls: Default::default(),
                                 color_space: ColorSpace::Unspecified,
                                 sampler: Sampler::default(),

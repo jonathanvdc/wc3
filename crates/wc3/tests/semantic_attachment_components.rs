@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 use wc3::model::profiles::{m2, m3, mdlx, wmo};
 use wc3::model::{
-    Animated, ChildModel, PlacementAppearance, Resource, Socket, SocketDefinition, SocketIdentity,
-    WorldPlacementAppearance,
+    Animated, ChildModel, PlacementAppearance, ResourceLocator, Socket, SocketDefinition,
+    SocketIdentity, WorldPlacementAppearance,
 };
 
 #[test]
@@ -35,9 +35,12 @@ fn attachment_points_share_activation_without_conflating_namespaces() {
 }
 
 #[test]
-fn external_attachment_keeps_resource_borrowing_and_visibility() {
+fn external_attachment_keeps_resource_identity_and_visibility() {
+    let mut draft = wc3::model::Model::<wc3::model::profiles::Mdlx>::builder("resources");
+    let resource =
+        draft.add_model_resource(wc3::model::PathResource::Path(Cow::Borrowed(b"weapon.mdx")));
     let source = mdlx::Attachment {
-        resource: Cow::Borrowed("weapon.mdx"),
+        resource,
         socket: SocketDefinition {
             identity: 42,
             visibility: Animated::constant(0.375),
@@ -46,47 +49,39 @@ fn external_attachment_keeps_resource_borrowing_and_visibility() {
         appearance: (),
     };
     let mut placement = ChildModel::from(source);
-    assert!(matches!(
-        placement.resource,
-        Resource::Path(Cow::Borrowed(b"weapon.mdx"))
-    ));
+    assert_eq!(placement.resource, resource);
     let point = placement.socket.as_mut().unwrap();
     let value = &mut point.visibility;
     value.default = 0.625;
     let recovered = mdlx::Attachment::try_from(placement).unwrap();
-    assert!(matches!(recovered.resource, Cow::Borrowed("weapon.mdx")));
+    assert_eq!(recovered.resource, resource);
     assert_eq!(recovered.socket.identity, 42);
     assert_eq!(recovered.socket.visibility.default, 0.625);
 }
 
 #[test]
-fn invalid_resource_narrowing_returns_the_complete_placement() {
-    let source = mdlx::Attachment {
-        resource: Cow::Owned("weapon.mdx".into()),
+fn attachment_conversion_preserves_handles_without_inspecting_resource_addresses() {
+    let mut draft = wc3::model::Model::<wc3::model::profiles::Universal>::builder("resources");
+    let resource = draft.add_model_resource(ResourceLocator::Path(Cow::Borrowed(&[0xff])));
+    let placement = ChildModel::from(mdlx::Attachment {
+        resource,
         socket: SocketDefinition {
             identity: 17,
             visibility: Animated::constant(0.5),
             control: (),
         },
         appearance: (),
-    };
-    let mut placement = ChildModel::from(source);
-    placement.resource = Resource::Path(Cow::Borrowed(&[0xff]));
-    let placement = *mdlx::Attachment::try_from(placement).unwrap_err();
-    assert!(matches!(
-        placement.resource,
-        Resource::Path(Cow::Borrowed([0xff]))
-    ));
-    assert!(matches!(
-        placement.socket.unwrap().identity,
-        SocketIdentity::Index(17)
-    ));
+    });
+    let recovered = mdlx::Attachment::try_from(placement).unwrap();
+    assert_eq!(recovered.resource, resource);
 }
 
 #[test]
 fn world_appearance_survives_rejected_attachment_export() {
+    let mut draft = wc3::model::Model::<wc3::model::profiles::Universal>::builder("resources");
+    let resource = draft.add_model_resource(ResourceLocator::Path(Cow::Borrowed(b"tree.m2")));
     let source = wmo::Doodad {
-        resource: Resource::Path(Cow::Borrowed(b"tree.m2")),
+        resource,
         socket: (),
         appearance: WorldPlacementAppearance {
             tint: wmo::DoodadTint::Color([1, 2, 3, 4]),

@@ -83,15 +83,19 @@ fn selectors_require_the_actual_feature_family_even_when_declared_by_a_field() {
     let node = builder.add_node(Node::named("attachment")).unwrap();
     let feature = builder.reserve_feature(node);
     let property = light::INTENSITY.bind(feature);
+    let resource = builder.add_model_resource(wc3::model::PathResource::Path(
+        b"child.mdx".as_slice().into(),
+    ));
     builder
         .set_feature(
             feature,
             MdlxFeature::Attachment(Attachment {
+                resource,
+                appearance: (),
                 socket: SocketDefinition {
                     visibility: Animated::new(1., property.clone()),
                     ..Default::default()
                 },
-                ..Default::default()
             }),
         )
         .unwrap();
@@ -188,6 +192,12 @@ impl FeaturePayload for ApplicationFeature {
     }
 }
 impl Profile for Application {
+    type ImageResource<'a> = wc3::model::PathResource<'a>;
+    type ModelResource<'a> = wc3::model::profiles::Unavailable;
+    type EffectResource<'a> = wc3::model::profiles::Unavailable;
+    type PhysicsResource<'a> = wc3::model::profiles::Unavailable;
+    type BoneOverrideResource<'a> = wc3::model::profiles::Unavailable;
+
     type Property = ApplicationProperty;
     type Appearance<'a> = <Universal as Profile>::Appearance<'a>;
     type Binding<'a> = <Universal as Profile>::Binding<'a>;

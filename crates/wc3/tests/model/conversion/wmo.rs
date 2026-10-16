@@ -3,7 +3,7 @@ use wc3::model::io;
 use wc3::model::{
     conversion::{self, ExportOptions, ImportOptions},
     formats::wmo::{self, Bundle, Dialect, FileKey, Group, GroupKey, Root},
-    Resource,
+    WorldImageResource,
 };
 use wmo::{codec::Array, group::GroupChunk, records as r, root::RootChunk};
 fn fixture<D: Dialect>() -> Bundle<'static, D> {
@@ -224,8 +224,10 @@ fn edited_geometry_rebuilds_native_companions() {
         .unwrap();
     assert_eq!(positions.get(0).unwrap().unwrap(), [0.25, 0.5, 0.75]);
     assert_eq!(
-        asset.textures().next().unwrap().1.resource,
-        Resource::FileDataId(123)
+        asset
+            .image_resource(asset.textures().next().unwrap().1.resource)
+            .unwrap(),
+        &WorldImageResource::FileDataId(123)
     );
 }
 

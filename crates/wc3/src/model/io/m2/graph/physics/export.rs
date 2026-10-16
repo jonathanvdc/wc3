@@ -158,12 +158,15 @@ fn export_one<D: ExportDialect>(
     };
     file.validate_with_bone_count(nodes.len())
         .map_err(failure)?;
-    if let Some(resource) = &physics.resource {
-        let key = file_key(resource)?;
-        if let Resource::FileDataId(id) = resource {
+    if let Some(id) = &physics.resource {
+        let resource = model
+            .physics_resource(*id)
+            .expect("validated physics resource");
+        let key = file_key(resource);
+        if let M2ResourceLocator::FileDataId(id) = resource {
             D::physics_id(&mut bundle.model, Some(*id), context)?;
         }
-        if !matches!(resource, Resource::FileDataId(_)) {
+        if !matches!(resource, M2ResourceLocator::FileDataId(_)) {
             D::physics_id(&mut bundle.model, None, context)?;
         }
         bundle.insert(key, File::Physics(file));

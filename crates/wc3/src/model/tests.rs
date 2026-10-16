@@ -1,4 +1,5 @@
 use crate::model::common::Borrowed as _;
+use crate::model::PathResource;
 use crate::model::*;
 use zerovec::ZeroVec;
 #[test]
@@ -241,6 +242,12 @@ fn application_vocabularies_participate_in_graph_validation() {
         }
     }
     impl Profile for Application {
+        type ImageResource<'a> = PathResource<'a>;
+        type ModelResource<'a> = crate::model::profiles::Unavailable;
+        type EffectResource<'a> = crate::model::profiles::Unavailable;
+        type PhysicsResource<'a> = crate::model::profiles::Unavailable;
+        type BoneOverrideResource<'a> = crate::model::profiles::Unavailable;
+
         type Property = profiles::Unavailable;
 
         type Appearance<'a> = UniversalAppearance<'a>;
@@ -259,7 +266,7 @@ fn application_vocabularies_participate_in_graph_validation() {
         type Controller<'a> = profiles::NoControls;
     }
     let mut first = ModelBuilder::<Application>::with_profile("application");
-    let texture = first.add_texture(Texture::file("custom.dds")).unwrap();
+    let texture = first.add_file_texture("custom.dds").unwrap();
     let material = first
         .add_material(Material::<Application> {
             name: "custom".into(),

@@ -5,7 +5,8 @@ use crate::model::conversion::{Context, Error};
 use crate::model::formats::wmo::legacy::{Material14, Root14, RootChunk14};
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::profiles::Wmo;
-use crate::model::{MaterialId, Model, Resource};
+use crate::model::WorldImageResource;
+use crate::model::{MaterialId, Model};
 use std::collections::{BTreeMap, BTreeSet};
 pub(super) fn write<'a>(
     model: &Model<'_, Wmo>,
@@ -28,8 +29,11 @@ pub(super) fn write<'a>(
         if !used.contains(&id) {
             continue;
         }
-        let selector = match &texture.resource {
-            Resource::Path(path) => {
+        let selector = match model
+            .image_resource(texture.resource)
+            .expect("validated image")
+        {
+            WorldImageResource::Path(path) => {
                 if path.contains(&0) {
                     return Err(Error::new(
                         "world.texture",

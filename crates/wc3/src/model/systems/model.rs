@@ -1,13 +1,12 @@
 //! Model collision, customization matrices, and independent texture programs.
 use super::model_physics::Physics;
-use crate::model::{
-    Animated, Bounds, Link, NodeId, Resource, TextureTransform, ValidateLinks, ZeroVec,
-};
+use crate::model::BoneOverrideResourceId;
+use crate::model::{Animated, Bounds, Link, NodeId, TextureTransform, ValidateLinks, ZeroVec};
 /// Sparse per-bone transform override supplied by a companion asset.
 #[derive(Clone, Debug)]
 pub struct BoneOverride<'a> {
     /// External companion resource identity.
-    pub resource: Option<Resource<'a>>,
+    pub resource: Option<BoneOverrideResourceId>,
     /// Bones receiving the matrices, in matching order.
     pub bones: Vec<NodeId>,
     /// Model-space override transforms.
@@ -47,6 +46,7 @@ pub struct Collision<'a> {
 }
 impl ValidateLinks for BoneOverride<'_> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
+        self.resource.visit_links(v);
         self.bones.visit_links(v)
     }
 }

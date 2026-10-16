@@ -525,14 +525,17 @@ fn attachment_mounts_retain_activation_when_baking() {
 
 #[test]
 fn resource_only_placement_is_not_an_attachment_point() {
-    use wc3::model::{Attachment, ChildModel, NodeFeature, PlacementAppearance, Resource};
+    use wc3::model::{Attachment, ChildModel, NodeFeature, PlacementAppearance};
     let (mut body, joint, _) = model(1.);
     let placement = body
         .edit(|builder| {
+            let resource = builder.add_model_resource(wc3::model::ResourceLocator::Path(
+                b"child.mdx".as_slice().into(),
+            ));
             builder.add_feature(
                 joint,
                 NodeFeature::Attachment(Attachment::Child(ChildModel {
-                    resource: Resource::Path(b"child.mdx".as_slice().into()),
+                    resource,
                     socket: None,
                     appearance: PlacementAppearance::Unmodified,
                 })),

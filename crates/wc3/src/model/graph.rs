@@ -8,6 +8,9 @@ use crate::model::{
     LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, ModelId, Node, NodeId, Skin, SkinId,
     SystemId, TextureTransform, TextureTransformId, Time,
 };
+use crate::model::{
+    BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
+};
 use crate::model::{Texture, TextureId};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -34,6 +37,11 @@ impl SharedClock {
 /// An encoding-independent model. All public access is immutable; edits are checked before publication.
 #[derive(Clone, Debug)]
 pub struct Model<'a, P: Profile = Universal> {
+    image_resources: BTreeMap<ImageResourceId, P::ImageResource<'a>>,
+    model_resources: BTreeMap<ModelResourceId, P::ModelResource<'a>>,
+    effect_resources: BTreeMap<EffectResourceId, P::EffectResource<'a>>,
+    physics_resources: BTreeMap<PhysicsResourceId, P::PhysicsResource<'a>>,
+    bone_override_resources: BTreeMap<BoneOverrideResourceId, P::BoneOverrideResource<'a>>,
     textures: BTreeMap<TextureId, Texture<'a, P>>,
     scope: Scope,
     id: ModelId,
@@ -60,6 +68,63 @@ pub struct Model<'a, P: Profile = Universal> {
     texture_transforms: BTreeMap<TextureTransformId, TextureTransform>,
 }
 impl<'a, P: Profile> Model<'a, P> {
+    /// Resolves a model-owned image dependency declaration.
+    pub fn image_resource(&self, id: ImageResourceId) -> Option<&P::ImageResource<'a>> {
+        self.image_resources.get(&id)
+    }
+    /// Iterates image dependency declarations in identity order.
+    pub fn image_resources(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (ImageResourceId, &P::ImageResource<'a>)> {
+        self.image_resources.iter().map(|(id, value)| (*id, value))
+    }
+    /// Resolves a model-owned model dependency declaration.
+    pub fn model_resource(&self, id: ModelResourceId) -> Option<&P::ModelResource<'a>> {
+        self.model_resources.get(&id)
+    }
+    /// Iterates model dependency declarations in identity order.
+    pub fn model_resources(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (ModelResourceId, &P::ModelResource<'a>)> {
+        self.model_resources.iter().map(|(id, value)| (*id, value))
+    }
+    /// Resolves a model-owned effect dependency declaration.
+    pub fn effect_resource(&self, id: EffectResourceId) -> Option<&P::EffectResource<'a>> {
+        self.effect_resources.get(&id)
+    }
+    /// Iterates effect dependency declarations in identity order.
+    pub fn effect_resources(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (EffectResourceId, &P::EffectResource<'a>)> {
+        self.effect_resources.iter().map(|(id, value)| (*id, value))
+    }
+    /// Resolves a model-owned physics dependency declaration.
+    pub fn physics_resource(&self, id: PhysicsResourceId) -> Option<&P::PhysicsResource<'a>> {
+        self.physics_resources.get(&id)
+    }
+    /// Iterates physics dependency declarations in identity order.
+    pub fn physics_resources(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (PhysicsResourceId, &P::PhysicsResource<'a>)> {
+        self.physics_resources
+            .iter()
+            .map(|(id, value)| (*id, value))
+    }
+    /// Resolves a model-owned boneoverride dependency declaration.
+    pub fn bone_override_resource(
+        &self,
+        id: BoneOverrideResourceId,
+    ) -> Option<&P::BoneOverrideResource<'a>> {
+        self.bone_override_resources.get(&id)
+    }
+    /// Iterates boneoverride dependency declarations in identity order.
+    pub fn bone_override_resources(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (BoneOverrideResourceId, &P::BoneOverrideResource<'a>)> {
+        self.bone_override_resources
+            .iter()
+            .map(|(id, value)| (*id, value))
+    }
     /// Resolves a texture identity in this model.
     pub fn texture(&self, id: TextureId) -> Option<&Texture<'a, P>> {
         self.textures.get(&id)

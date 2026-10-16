@@ -7,14 +7,14 @@ use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::{Assets, Handle, Image};
 use bevy::render::render_resource::TextureFormat;
 use std::collections::{BTreeMap, HashMap};
-use wc3::model::{AddressMode, Model, Resource, Sampler, TextureId};
+use wc3::model::{AddressMode, ImageResource, Model, Sampler, TextureId};
 pub(super) struct ImageCompiler<'a, F> {
     pub(super) images: &'a mut Assets<Image>,
     pub(super) resolve: &'a mut F,
-    pub(super) decoded: &'a mut HashMap<Resource<'static>, RgbaImage>,
+    pub(super) decoded: &'a mut HashMap<ImageResource<'static>, RgbaImage>,
 }
-impl<F: FnMut(&Resource<'static>) -> Result<RgbaImage, ModelError>> ImageCompiler<'_, F> {
-    fn decode(&mut self, resource: &Resource<'static>) -> Result<RgbaImage, ModelError> {
+impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCompiler<'_, F> {
+    fn decode(&mut self, resource: &ImageResource<'static>) -> Result<RgbaImage, ModelError> {
         if !self.decoded.contains_key(resource) {
             self.decoded
                 .insert(resource.clone(), (self.resolve)(resource)?);
@@ -77,7 +77,7 @@ impl<F: FnMut(&Resource<'static>) -> Result<RgbaImage, ModelError>> ImageCompile
                             })
                         }
                     }
-                    None => self.decode(&request.texture.resource.clone().into_owned()),
+                    None => self.decode(&request.resource.clone().into_owned()),
                 };
                 let pixels = match pixels {
                     Ok(pixels) => pixels,

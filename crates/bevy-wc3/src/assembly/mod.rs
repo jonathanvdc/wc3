@@ -10,15 +10,15 @@ pub use compile::compile_assembly;
 pub(crate) use compile::compile_with_bindings;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
-use wc3::model::{ClipId, Model, Resource, TextureId};
+use wc3::model::{ClipId, ImageResource, Model, ResourceLocator, TextureId};
 
 /// Models resolved from a coherent application resource provider.
-pub type Models<'data> = HashMap<Resource<'static>, Model<'data>>;
+pub type Models<'data> = HashMap<ResourceLocator<'static>, Model<'data>>;
 /// One source graph and its exact typed appearance choices.
 #[derive(Clone, Debug)]
 pub struct Source {
     /// Resource locating the source model.
-    pub model: Resource<'static>,
+    pub model: ResourceLocator<'static>,
     /// Geometry selection before compilation.
     pub draws: DrawSelection,
     /// Exact semantic textures to replace.
@@ -26,7 +26,7 @@ pub struct Source {
 }
 impl Source {
     /// Select all authored geometry without texture replacements.
-    pub fn new(model: Resource<'static>) -> Self {
+    pub fn new(model: ResourceLocator<'static>) -> Self {
         Self {
             model,
             draws: DrawSelection::default(),
@@ -114,7 +114,7 @@ pub trait Resolver<Selection> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TextureLayer {
     /// Source image resource.
-    pub resource: Resource<'static>,
+    pub resource: ImageResource<'static>,
     /// Source rectangle; absent means the full image.
     pub source: Option<PixelRect>,
     /// Destination atlas rectangle.
@@ -126,7 +126,7 @@ pub struct TextureLayer {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TextureReplacement {
     /// A decoded image from the provider.
-    Image(Resource<'static>),
+    Image(ImageResource<'static>),
     /// Explicit atlas geometry and layers.
     Atlas {
         /// Output dimensions and background.

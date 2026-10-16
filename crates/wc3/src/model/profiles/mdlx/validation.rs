@@ -119,17 +119,8 @@ fn validate_channel(channel: &Channel<'_, super::Mdlx>) -> Result<(), Error> {
 }
 
 pub(super) fn resources(value: &Model<'_, Mdlx>) -> Result<(), Error> {
-    use crate::model::{AddressMode, ColorSpace, Resource};
+    use crate::model::{AddressMode, ColorSpace};
     for (_, texture) in value.textures() {
-        if !matches!(
-            texture.resource,
-            Resource::Path(_) | Resource::Replaceable(_)
-        ) {
-            return Err(Error::new(
-                "textures.resource",
-                "Warcraft III texture definitions refer to filenames or replaceable categories",
-            ));
-        }
         if texture.color_space != ColorSpace::Unspecified {
             return Err(Error::new(
                 "textures.color_space",

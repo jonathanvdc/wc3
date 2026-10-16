@@ -16,7 +16,7 @@ use semantic::profiles::M2 as M2Vocabulary;
 pub(in super::super) type Graph<'a> = semantic::Model<'a, M2Vocabulary>;
 pub(in super::super) type GraphBuilder<'a> = semantic::ModelBuilder<'a, M2Vocabulary>;
 pub use export::plan;
-use semantic::{Animated, Channel, Node, Resource, SharedClock, Time};
+use semantic::{Animated, Channel, ImageResource, Node, SharedClock, Time};
 
 /// Imports an M2 bundle without a canonical intermediate encoding.
 pub fn import<'a, 'data: 'a, D: Dialect>(
@@ -85,22 +85,23 @@ where
             .and_then(|ids| ids.get(index))
             .filter(|id| *id != 0)
         {
-            Resource::FileDataId(id)
+            ImageResource::FileDataId(id)
         } else if texture.kind == TextureSource::File {
-            Resource::Path(Cow::Borrowed(path))
+            ImageResource::Path(Cow::Borrowed(path))
         } else {
-            Resource::Replaceable(texture.kind.raw())
+            ImageResource::Replaceable(texture.kind.raw())
         };
+        let image_resource = builder.add_image_resource(resource.clone().try_into()?);
         textures.push(builder.add_texture(semantic::Texture {
             controls: profile::TextureControls {
-                path: if !path.is_empty() && !matches!(resource, Resource::Path(_)) {
+                path: if !path.is_empty() && !matches!(resource, ImageResource::Path(_)) {
                     Some(Cow::Borrowed(path))
                 } else {
                     None
                 },
                 flags: profile::SupplementalTextureFlags::from_bits_retain(texture.flags.bits()),
             },
-            resource,
+            resource: image_resource,
             color_space: semantic::ColorSpace::Unspecified,
             sampler: semantic::Sampler {
                 u: if texture.flags.wrap_u() {
@@ -357,7 +358,7 @@ where
     if let Some(collision) = collision {
         builder.add_system(profile::System::Collision(collision))?;
     }
-    let overrides = overrides::import(source, &nodes)?;
+    let overrides = overrides::import(source, &nodes, &mut builder)?;
     if !overrides.is_empty() {
         builder.add_system(profile::System::BoneOverrides(overrides))?;
     }

@@ -11,11 +11,10 @@ use crate::model::formats::wmo::legacy::{
 use crate::model::formats::wmo::records::{GroupFlags2, GroupInfo, HeaderTailField, RootFlags};
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::formats::wmo::Classic;
-use crate::model::profiles::wmo::{
-    Group as WorldGroup, ModelMetadata, RegionControls, WorldSystem,
-};
+use crate::model::profiles::wmo::{Group as WorldGroup, RegionControls, WorldSystem};
 use crate::model::profiles::Wmo;
-use crate::model::{InstanceId, Model, Quaternion, Resource};
+use crate::model::WorldModelResource;
+use crate::model::{InstanceId, Model, Quaternion};
 use std::collections::BTreeMap;
 
 pub(super) fn alpha<'a>(
@@ -59,7 +58,7 @@ fn alpha_model<'a>(
     }
     root.header_mut().wmo_id = controls.id;
     root.header_mut().ambient_color = super::rgba(controls.ambient);
-    skybox(controls, &mut root, &mut context)?;
+    skybox(model, &mut root, &mut context)?;
     visibility::write(world, &mut root)?;
     environment::write(world, &mut root)?;
     let actors = encode_scene::write(model, world, &mut root, &mut context)?;
@@ -184,7 +183,7 @@ fn beta_model<'a>(
     flags.set_vertex_color_alpha_only(controls.options.vertex_color_alpha_only);
     flags.set_default_max_lod(controls.options.default_max_lod);
     root.header_mut().tail.set_flags(flags);
-    skybox(controls, &mut root, &mut context)?;
+    skybox(model, &mut root, &mut context)?;
     visibility::write(world, &mut root)?;
     environment::write(world, &mut root)?;
     let actors = encode_scene::write(model, world, &mut root, &mut context)?;
@@ -294,13 +293,13 @@ fn name(bytes: &mut Vec<u8>, name: &str) -> Result<u32, Error> {
     Ok(start)
 }
 fn skybox<'a>(
-    controls: &ModelMetadata<'_>,
+    model: &Model<'_, Wmo>,
     root: &mut impl RootOutput<'a, Classic>,
     context: &mut Context,
 ) -> Result<(), Error> {
-    if let Some(resource) = &controls.skybox {
-        match resource {
-            Resource::Path(path) => {
+    if let Some(resource) = &model.metadata().skybox {
+        match model.model_resource(*resource).expect("validated skybox") {
+            WorldModelResource::Path(path) => {
                 if path.contains(&0) {
                     return Err(Error::new(
                         "world.skybox",

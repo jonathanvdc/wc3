@@ -23,7 +23,10 @@ impl<'a> Reader<'a, '_> {
         if let Some(id) = self.textures.get(path) {
             return Ok(Some(*id));
         }
-        let id = self.builder.add_texture(sem::Texture::file(path))?;
+        let resource = self
+            .builder
+            .add_image_resource(sem::PathResource::Path(path.as_bytes().into()));
+        let id = self.builder.add_texture(sem::Texture::new(resource))?;
         self.textures.insert(path, id);
         Ok(Some(id))
     }

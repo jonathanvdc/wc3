@@ -7,7 +7,7 @@ use crate::model::formats::wmo::root::RootChunk;
 use crate::model::profiles::wmo::{ModelMetadata, WorldOptions, WorldSystem};
 use crate::model::profiles::Wmo;
 use crate::model::Model;
-use crate::model::{ModelBuilder, Resource};
+use crate::model::{ModelBuilder, WorldModelResource};
 use std::borrow::Cow;
 
 pub(super) fn alpha<'a>(
@@ -21,10 +21,11 @@ pub(super) fn alpha<'a>(
         super::handle_unknown(&mut context, FileKey::Root, unknown.tag)?;
     }
     let mut builder = ModelBuilder::<Wmo>::with_profile("World model");
+    let skybox = skybox(source).map(|value| builder.add_model_resource(value));
     builder.set_metadata(ModelMetadata {
         id: source.header().wmo_id,
         ambient: super::rgba(source.header().ambient_color),
-        skybox: skybox(source),
+        skybox,
         ..Default::default()
     });
     let materials = materials::read_alpha(source, &mut builder)?;
@@ -135,10 +136,11 @@ pub(super) fn beta<'a>(
     unknown.set_default_max_lod(false);
     unknown.set_has_group_lods(false);
     builder.set_bounds(Some(super::bounds(header.bounds)));
+    let skybox = skybox(&source.root).map(|value| builder.add_model_resource(value));
     builder.set_metadata(ModelMetadata {
         id: header.wmo_id,
         ambient: super::rgba(header.ambient_color),
-        skybox: skybox(&source.root),
+        skybox,
         options: WorldOptions {
             default_max_lod: flags.default_max_lod(),
             no_vertex_attenuation: flags.no_vertex_attenuation(),
@@ -228,7 +230,7 @@ pub(super) fn beta<'a>(
         report: context.report,
     })
 }
-fn skybox<'a, 'data: 'a>(source: &'a impl CommonRoot<'data>) -> Option<Resource<'a>> {
+fn skybox<'a, 'data: 'a>(source: &'a impl CommonRoot<'data>) -> Option<WorldModelResource<'a>> {
     source.common_chunks().find_map(|chunk| match chunk {
         RootChunk::SkyboxName(rows) => {
             let bytes = rows.as_bytes();
@@ -236,7 +238,7 @@ fn skybox<'a, 'data: 'a>(source: &'a impl CommonRoot<'data>) -> Option<Resource<
                 .iter()
                 .position(|value| *value == 0)
                 .unwrap_or(bytes.len());
-            Some(Resource::Path(Cow::Borrowed(&bytes[..end])))
+            Some(WorldModelResource::Path(Cow::Borrowed(&bytes[..end])))
         }
         _ => None,
     })

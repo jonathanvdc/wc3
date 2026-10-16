@@ -471,7 +471,7 @@ mod activation_tests {
             app.world().get::<ModelAttachment>(gate).is_some(),
             "equipment bypassed the authored attachment gate"
         );
-        let definition = &app.world().get::<ModelAttachment>(gate).unwrap().0;
+        let definition = &app.world().get::<ModelAttachment>(gate).unwrap().definition;
         assert_eq!(definition.socket().unwrap().control, Some(23));
         assert_eq!(definition.socket().unwrap().visibility.default, 1.);
         assert_eq!(

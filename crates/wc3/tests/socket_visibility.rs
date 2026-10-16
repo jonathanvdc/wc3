@@ -136,7 +136,6 @@ fn boolean_node_source_samples_through_scalar_binding() {
 
 #[test]
 fn native_scalar_export_rejects_converted_boolean_bindings_in_strict_mode() {
-    use std::borrow::Cow;
     use wc3::model::{
         conversion::ExportOptions,
         formats::mdlx::V800,
@@ -147,11 +146,14 @@ fn native_scalar_export_rejects_converted_boolean_bindings_in_strict_mode() {
     let mut builder = Model::<Mdlx>::builder("converted native scalar");
     let node = builder.add_node(Node::named("carrier")).unwrap();
     let source = node.visibility::<Mdlx>();
+    let resource = builder.add_model_resource(wc3::model::PathResource::Path(
+        b"child.mdx".as_slice().into(),
+    ));
     builder
         .add_feature(
             node,
             profile::Node::Attachment(profile::Attachment {
-                resource: Cow::Borrowed("child.mdx"),
+                resource,
                 socket: SocketDefinition {
                     identity: 0,
                     visibility: Animated {

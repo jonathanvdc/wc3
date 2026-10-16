@@ -208,7 +208,7 @@ where
                     if let Some(color) = core.colors.get(batch.color_index as usize) {
                         let rgb = profile::properties::COLOR.bind(material);
                         let alpha = profile::properties::OPACITY.bind(material);
-                        surface.color.binding = Some(rgb.clone().widen().into());
+                        surface.color.binding = Some(rgb.clone().widen());
                         surface.opacity.binding = Some(alpha.clone().widen().into());
                         for (seq, clip) in animation::sequences(clips) {
                             let (start, _) = tables
@@ -293,11 +293,9 @@ where
                         let sc = profile::properties::TextureUnit(slot)
                             .scale()
                             .bind(material);
-                        unit.coordinates.transform.translation.binding =
-                            Some(tr.clone().widen().into());
-                        unit.coordinates.transform.rotation.binding =
-                            Some(ro.clone().widen().into());
-                        unit.coordinates.transform.scale.binding = Some(sc.clone().widen().into());
+                        unit.coordinates.transform.translation.binding = Some(tr.clone().widen());
+                        unit.coordinates.transform.rotation.binding = Some(ro.clone().widen());
+                        unit.coordinates.transform.scale.binding = Some(sc.clone().widen());
                         for (seq, clip) in animation::sequences(clips) {
                             let (start, _) = tables
                                 .sequences

@@ -1,7 +1,7 @@
 //! Checked projection of shared components into constrained simulation vocabularies.
 use super::*;
-impl<'a> From<mdlx::Particle<'a>> for ParticleDefinition<'a> {
-    fn from(v: mdlx::Particle<'a>) -> Self {
+impl<'a> From<mdlx::Particle> for ParticleDefinition<'a> {
+    fn from(v: mdlx::Particle) -> Self {
         Self {
             emission: ParticleEmission {
                 rate: ParticleScalar::Animated(v.emission.rate),
@@ -23,7 +23,7 @@ impl<'a> From<mdlx::Particle<'a>> for ParticleDefinition<'a> {
         }
     }
 }
-impl<'a> TryFrom<ParticleDefinition<'a>> for mdlx::Particle<'a> {
+impl<'a> TryFrom<ParticleDefinition<'a>> for mdlx::Particle {
     type Error = Box<ParticleDefinition<'a>>;
     fn try_from(v: ParticleDefinition<'a>) -> Result<Self, Self::Error> {
         if !(matches!(&v.emission.rate, ParticleScalar::Animated(_))

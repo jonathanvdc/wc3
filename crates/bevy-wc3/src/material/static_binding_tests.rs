@@ -32,10 +32,9 @@ fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
         ..Default::default()
     };
     texture.coordinates.transform.translation.binding =
-        Some(unit.translation().bind(material).widen().into());
-    texture.coordinates.transform.rotation.binding =
-        Some(unit.rotation().bind(material).widen().into());
-    texture.coordinates.transform.scale.binding = Some(unit.scale().bind(material).widen().into());
+        Some(unit.translation().bind(material).widen());
+    texture.coordinates.transform.rotation.binding = Some(unit.rotation().bind(material).widen());
+    texture.coordinates.transform.scale.binding = Some(unit.scale().bind(material).widen());
     surface.textures.push(texture);
     builder
         .set_material(
@@ -144,9 +143,9 @@ fn pruning_visits_every_uv_transform_weight_and_hd_control() {
         binding: Some(material.opacity().into()),
     };
     let mut transform = TextureTransform::default();
-    transform.translation.binding = Some(node.translation().into());
-    transform.rotation.binding = Some(node.rotation().into());
-    transform.scale.binding = Some(node.scale().into());
+    transform.translation.binding = Some(node.translation());
+    transform.rotation.binding = Some(node.rotation());
+    transform.scale.binding = Some(node.scale());
     let texture = Animated {
         default: None,
         binding: Some(mdlx::properties::Layer(0).texture().bind(material).widen()),
@@ -346,7 +345,7 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
         },
         ..Default::default()
     };
-    unit.coordinates.transform.translation.binding = Some(node.translation().into());
+    unit.coordinates.transform.translation.binding = Some(node.translation());
     let surface = model_shader::ShaderPass {
         color: Animated::constant([1.; 3]),
         opacity: Animated::constant(1.),

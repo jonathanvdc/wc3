@@ -1,7 +1,7 @@
 use wc3::model::common::{IntoZeroVec, ZeroVec};
 use wc3::model::profiles::diablo::d3::{self, Geometry, NodeRole, VertexExtras, VertexStreams, D3};
 use wc3::model::profiles::{NoControls, Universal};
-use wc3::model::{Mesh, Model, Node, Resource, SnoNamespace, Texture};
+use wc3::model::{Mesh, Model, Node, SnoNamespace, SnoResource, Texture};
 
 fn triangle<'a>(positions: &'a [[f32; 3]]) -> Geometry<'a> {
     Geometry::new(
@@ -81,21 +81,22 @@ fn independent_binormals_and_auxiliary_colors_are_validated() {
 
 #[test]
 fn source_namespaces_do_not_alias_and_profiles_require_their_game() {
-    let d3 = Resource::Sno {
+    let d3 = SnoResource::Sno {
         namespace: SnoNamespace::Diablo3,
         group: 44,
         id: 7,
     };
-    let d4 = Resource::Sno {
+    let d4 = SnoResource::Sno {
         namespace: SnoNamespace::Diablo4,
         group: 44,
         id: 7,
     };
     assert_ne!(d3, d4);
     let mut builder = Model::<D3>::builder("wrong game");
+    let resource = builder.add_image_resource(d4);
     builder
         .add_texture(Texture {
-            resource: d4,
+            resource,
             controls: NoControls,
             color_space: Default::default(),
             sampler: Default::default(),
@@ -122,13 +123,14 @@ fn d4_resource_publication_requires_the_correct_game_namespace() {
         (SnoNamespace::Diablo3, false),
     ] {
         let mut builder = Model::<D4>::builder("resource");
+        let resource = builder.add_image_resource(SnoResource::Sno {
+            namespace,
+            group: 44,
+            id: 12,
+        });
         builder
             .add_texture(Texture {
-                resource: Resource::Sno {
-                    namespace,
-                    group: 44,
-                    id: 12,
-                },
+                resource,
                 controls: NoControls,
                 color_space: Default::default(),
                 sampler: Default::default(),

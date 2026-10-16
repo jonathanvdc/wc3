@@ -6,7 +6,9 @@ use crate::model::formats::wmo::root::RootChunk;
 use crate::model::formats::wmo::Dialect;
 use crate::model::profiles::wmo as profile;
 use crate::model::profiles::Wmo;
-use crate::model::{FeatureId, Model, Resource};
+use crate::model::WorldImageResource;
+use crate::model::WorldModelResource;
+use crate::model::{FeatureId, Model};
 use std::collections::BTreeMap;
 #[derive(Default)]
 pub(super) struct Indices {
@@ -76,15 +78,20 @@ pub(super) fn write<'a, D: Dialect>(
                     flags.set_cast_shadows(extra.shadows);
                     let cookie = extra
                         .cookie
-                        .map(
-                            |id| match &model.texture(id).expect("validated cookie").resource {
-                                Resource::FileDataId(value) => Ok(*value),
+                        .map(|id| {
+                            match model
+                                .image_resource(
+                                    model.texture(id).expect("validated cookie").resource,
+                                )
+                                .expect("validated image")
+                            {
+                                WorldImageResource::FileDataId(value) => Ok(*value),
                                 _ => Err(Error::new(
                                     "world.light.cookie",
                                     "light cookies require a database file identifier",
                                 )),
-                            },
-                        )
+                            }
+                        })
                         .transpose()?
                         .unwrap_or(0);
                     let row = records::NewLight {
@@ -193,8 +200,11 @@ pub(super) fn write<'a, D: Dialect>(
                         "native doodads store one uniform scale",
                     )?;
                 }
-                let selector = match &source.resource {
-                    Resource::FileDataId(file) => match root.addressing() {
+                let selector = match model
+                    .model_resource(source.resource)
+                    .expect("validated model")
+                {
+                    WorldModelResource::FileDataId(file) => match root.addressing() {
                         super::root_output::Addressing::PathsOrFileIds => {
                             file_mode = true;
                             let selector = u32::try_from(files.len())
@@ -211,7 +221,7 @@ pub(super) fn write<'a, D: Dialect>(
                             0
                         }
                     },
-                    Resource::Path(path) => {
+                    WorldModelResource::Path(path) => {
                         path_mode = true;
                         let selector = names.len() as u32;
                         if path.contains(&0) {
@@ -223,12 +233,6 @@ pub(super) fn write<'a, D: Dialect>(
                         names.extend_from_slice(path);
                         names.push(0);
                         selector
-                    }
-                    _ => {
-                        return Err(Error::new(
-                            "world.doodad.resource",
-                            "doodads require paths or database file identities",
-                        ));
                     }
                 };
                 if selector > 0xffffff {

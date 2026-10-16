@@ -25,10 +25,12 @@ mod spatial_queries;
 mod visibility;
 use crate::model::common::FileKey;
 use crate::model::conversion::{Context, Conversion, Error, ImportOptions, IssueKind};
+use crate::model::formats::wmo::root::RootChunk;
 use crate::model::formats::wmo::{Bundle, Dialect, GroupKey};
 use crate::model::profiles::wmo::{ModelMetadata, WorldOptions, WorldSystem};
 use crate::model::profiles::Wmo;
-use crate::model::{Bounds, ModelBuilder};
+use crate::model::{Bounds, ModelBuilder, WorldModelResource};
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 pub(super) fn import<'a, D: Dialect>(
@@ -62,6 +64,23 @@ pub(super) fn import<'a, D: Dialect>(
     unknown.set_vertex_color_alpha_only(false);
     unknown.set_default_max_lod(false);
     unknown.set_has_group_lods(false);
+    let skybox = source
+        .root
+        .chunks()
+        .find_map(|chunk| {
+            if let RootChunk::SkyboxName(bytes) = chunk {
+                let bytes = bytes.as_bytes();
+                Some(WorldModelResource::Path(Cow::Borrowed(
+                    &bytes[..bytes
+                        .iter()
+                        .position(|byte| *byte == 0)
+                        .unwrap_or(bytes.len())],
+                )))
+            } else {
+                None
+            }
+        })
+        .map(|value| builder.add_model_resource(value));
     builder.set_metadata(ModelMetadata {
         id: header.wmo_id,
         ambient: rgba(header.ambient_color),
@@ -73,19 +92,7 @@ pub(super) fn import<'a, D: Dialect>(
             vertex_color_alpha_only: flags.vertex_color_alpha_only(),
             unclassified: unknown.bits().into(),
         },
-        skybox: source.root.chunks().find_map(|chunk| {
-            if let crate::model::formats::wmo::root::RootChunk::SkyboxName(bytes) = chunk {
-                let bytes = bytes.as_bytes();
-                Some(crate::model::Resource::Path(std::borrow::Cow::Borrowed(
-                    &bytes[..bytes
-                        .iter()
-                        .position(|byte| *byte == 0)
-                        .unwrap_or(bytes.len())],
-                )))
-            } else {
-                None
-            }
-        }),
+        skybox,
     });
     let materials = materials::read(&source.root, &mut builder)?;
     let mut world = WorldSystem::default();
@@ -189,7 +196,7 @@ pub(super) fn import<'a, D: Dialect>(
                     })?;
                     catalog_index += 1;
                     group.name = if row.name_offset < 0 {
-                        std::borrow::Cow::Borrowed("")
+                        Cow::Borrowed("")
                     } else {
                         relationships::name(&source.root, row.name_offset as u32)?
                     };

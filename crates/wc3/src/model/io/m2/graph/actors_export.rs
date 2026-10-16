@@ -362,7 +362,7 @@ where
                 // The standalone record conversion rejects losing these fields.
                 let mut record = value.as_ref().clone();
                 record.details.rendering.texture_program = None;
-                let mut particle = V::write_logical_particle(&record, textures, context)?;
+                let mut particle = V::write_logical_particle(&record, textures, context, model)?;
                 particle.bone_id = u16::try_from(bone)
                     .map_err(|_| Error::new("m2.particle", "bone exceeds u16"))?;
                 particle.position = position;

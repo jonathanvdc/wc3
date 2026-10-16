@@ -70,7 +70,7 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
     let mut builder = ModelBuilder::new("DefaultUnit");
     let ids = from_fn::<_, 6, _>(|slot| {
         builder
-            .add_texture(Texture::file(
+            .add_file_texture(
                 [
                     "map-0.png",
                     "map-1.png",
@@ -79,7 +79,7 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
                     "map-4.png",
                     "map-5.png",
                 ][slot],
-            ))
+            )
             .unwrap()
     });
     let mut layer = layered::Layer {
@@ -167,7 +167,7 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
 #[test]
 fn unknown_layer_shader_does_not_infer_hd_data_roles() {
     let mut builder = ModelBuilder::new("unknown shader");
-    let texture = builder.add_texture(Texture::file("unknown.png")).unwrap();
+    let texture = builder.add_file_texture("unknown.png").unwrap();
     let mut layer = layered::Layer {
         shader: Some(55),
         ..Default::default()
@@ -216,8 +216,10 @@ fn layered_uv_rotation_and_scale_use_center_pivot() {
 #[test]
 fn same_resource_texture_variants_keep_independent_image_handles() {
     let mut builder = ModelBuilder::<Universal>::new("texture variants");
-    let srgb = builder.add_texture(Texture::file("shared.png")).unwrap();
-    let mut linear = Texture::file("shared.png");
+    let srgb = builder.add_file_texture("shared.png").unwrap();
+    let mut linear = Texture::new(builder.add_image_resource(wc3::model::ImageResource::Path(
+        "shared.png".as_bytes().into(),
+    )));
     linear.color_space = ColorSpace::Linear;
     let linear = builder.add_texture(linear).unwrap();
     let layers = [srgb, linear]
@@ -252,7 +254,7 @@ fn same_resource_texture_variants_keep_independent_image_handles() {
 #[test]
 fn m3_normal_and_diffuse_uses_of_one_image_select_distinct_interpretations() {
     let mut builder = ModelBuilder::<Universal>::new("normal interpretation");
-    let id = builder.add_texture(Texture::file("shared.png")).unwrap();
+    let id = builder.add_file_texture("shared.png").unwrap();
     let mut layer = programmed::TextureLayer::default();
     layer.binding.image = Some(id);
     let mut standard = programmed::Standard {

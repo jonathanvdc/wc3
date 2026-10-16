@@ -158,3 +158,37 @@ impl<K> AsULE for Id<K> {
         }
     }
 }
+
+/// External image dependency identity marker.
+pub enum ImageResourceObject {}
+/// Handle to a model-owned image dependency declaration.
+///
+/// Model dependencies cannot be used as image dependencies:
+/// ```compile_fail
+/// use wc3::model::{Model, ResourceLocator, Texture};
+/// use wc3::model::profiles::Universal;
+/// let mut draft = Model::<Universal>::builder("typed resources");
+/// let model = draft.add_model_resource(ResourceLocator::FileDataId(1));
+/// let texture = Texture::<Universal>::new(model);
+/// ```
+pub type ImageResourceId = Id<ImageResourceObject>;
+
+/// External model dependency identity marker.
+pub enum ModelResourceObject {}
+/// Handle to a model-owned model dependency declaration.
+pub type ModelResourceId = Id<ModelResourceObject>;
+
+/// External effect dependency identity marker.
+pub enum EffectResourceObject {}
+/// Handle to a model-owned effect dependency declaration.
+pub type EffectResourceId = Id<EffectResourceObject>;
+
+/// External physics dependency identity marker.
+pub enum PhysicsResourceObject {}
+/// Handle to a model-owned physics dependency declaration.
+pub type PhysicsResourceId = Id<PhysicsResourceObject>;
+
+/// External boneoverride dependency identity marker.
+pub enum BoneOverrideResourceObject {}
+/// Handle to a model-owned boneoverride dependency declaration.
+pub type BoneOverrideResourceId = Id<BoneOverrideResourceObject>;

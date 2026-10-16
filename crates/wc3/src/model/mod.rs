@@ -96,8 +96,7 @@ pub use node::*;
 pub use node_evaluation::*;
 pub mod materials;
 pub use materials::{
-    AddressMode, ColorSpace, Material, MaterialSurface, Resource, Sampler, SnoNamespace,
-    SurfaceSet, Texture,
+    AddressMode, ColorSpace, Material, MaterialSurface, Sampler, SurfaceSet, Texture,
 };
 mod links;
 pub use links::*;
@@ -156,3 +155,6 @@ pub use deformation::*;
 
 mod surface_evaluation;
 pub use surface_evaluation::*;
+
+pub mod resources;
+pub use resources::*;

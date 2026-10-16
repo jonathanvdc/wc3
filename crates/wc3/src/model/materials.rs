@@ -22,94 +22,9 @@ pub mod parameters;
 pub mod state;
 
 use crate::model::profiles::{Profile, SurfacePayload, Universal};
-use crate::model::{Error, Link, PropertyIdentityKey, ValidateLinks};
+use crate::model::{Error, ImageResourceId, Link, PropertyIdentityKey, ValidateLinks};
 use std::borrow::Cow;
 
-/// Game namespace of an external Diablo resource identity.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum SnoNamespace {
-    /// The producer supplied numeric keys without a game namespace.
-    #[default]
-    Unspecified,
-    /// Diablo III resource groups and identifiers.
-    Diablo3,
-    /// Diablo IV resource groups and identifiers.
-    Diablo4,
-}
-/// Resource identity interpreted by an application resolver, not by a file layout.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Resource<'a> {
-    /// No primary resource identity is declared.
-    Unspecified,
-    /// Unresolved caller-provided asset root.
-    Root,
-    /// Resource resolved relative to another logical asset identity.
-    Relative {
-        /// Identity supplying the filename stem.
-        owner: Box<Resource<'a>>,
-        /// Suffix appended to that stem.
-        suffix: Cow<'a, str>,
-    },
-    /// Native path spelling, including non-UTF-8 paths.
-    Path(Cow<'a, [u8]>),
-    /// World of Warcraft resource identity.
-    FileDataId(u32),
-    /// Diablo resource identity and resource group.
-    Sno {
-        /// Game whose resource group and identifier are addressed.
-        namespace: SnoNamespace,
-        /// Resource group.
-        group: i32,
-        /// Resource identity.
-        id: u32,
-    },
-    /// Application-provided replacement texture category.
-    Replaceable(u32),
-    /// Image bytes supplied with the authoring data, with no established encoding interpretation.
-    EmbeddedImage {
-        /// Authored image bytes, borrowed when available.
-        bytes: Cow<'a, [u8]>,
-    },
-    /// A logical resource with an explicit namespace.
-    Named {
-        /// Provider namespace.
-        namespace: Cow<'a, str>,
-        /// Provider identity.
-        name: Cow<'a, str>,
-    },
-}
-impl Resource<'_> {
-    /// Detaches the complete resource identity, including nested owners and raw paths.
-    pub fn into_owned(self) -> Resource<'static> {
-        match self {
-            Self::Unspecified => Resource::Unspecified,
-            Self::Root => Resource::Root,
-            Self::Relative { owner, suffix } => Resource::Relative {
-                owner: Box::new(owner.into_owned()),
-                suffix: Cow::Owned(suffix.into_owned()),
-            },
-            Self::Path(value) => Resource::Path(Cow::Owned(value.into_owned())),
-            Self::FileDataId(value) => Resource::FileDataId(value),
-            Self::Sno {
-                namespace,
-                group,
-                id,
-            } => Resource::Sno {
-                namespace,
-                group,
-                id,
-            },
-            Self::Replaceable(value) => Resource::Replaceable(value),
-            Self::EmbeddedImage { bytes } => Resource::EmbeddedImage {
-                bytes: Cow::Owned(bytes.into_owned()),
-            },
-            Self::Named { namespace, name } => Resource::Named {
-                namespace: Cow::Owned(namespace.into_owned()),
-                name: Cow::Owned(name.into_owned()),
-            },
-        }
-    }
-}
 /// Texture color interpretation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ColorSpace {
@@ -150,7 +65,7 @@ pub struct Texture<'a, P: Profile = Universal> {
     /// Additional owner-local behavior permitted by the vocabulary.
     pub controls: P::Texture<'a>,
     /// Resource identity.
-    pub resource: Resource<'a>,
+    pub resource: ImageResourceId,
     /// Color interpretation.
     pub color_space: ColorSpace,
     /// Default sampler.
@@ -163,10 +78,10 @@ impl<'a, P: Profile> Texture<'a, P> {
         self
     }
 
-    /// Creates a filename texture without copying a borrowed UTF-8 filename.
-    pub fn file(path: &'a str) -> Self {
+    /// Creates a texture referencing an image declared in the owning model.
+    pub fn new(resource: ImageResourceId) -> Self {
         Self {
-            resource: Resource::Path(Cow::Borrowed(path.as_bytes())),
+            resource,
             controls: Default::default(),
             color_space: ColorSpace::Unspecified,
             sampler: Sampler::default(),
@@ -227,12 +142,6 @@ impl<P: Profile> Material<'_, P> {
     }
 }
 
-impl Default for Resource<'_> {
-    fn default() -> Self {
-        Self::Path(Cow::Borrowed(&[]))
-    }
-}
-
 impl<
         D3: ValidateLinks,
         D4: ValidateLinks,
@@ -284,68 +193,5 @@ impl<
             Self::Programmed(value) => value.validate(),
             Self::World(value) => value.validate(),
         }
-    }
-}
-
-#[cfg(test)]
-mod resource_tests {
-    use super::*;
-
-    #[test]
-    fn detached_resource_keeps_nested_raw_paths_and_namespaces() {
-        let owned = {
-            let raw = vec![b'u', b'/', 0xff, b'.', b'm', b'2'];
-            let suffix = String::from("00.skin");
-            Resource::Relative {
-                owner: Box::new(Resource::Relative {
-                    owner: Box::new(Resource::Path(Cow::Borrowed(&raw))),
-                    suffix: Cow::Borrowed(".variant"),
-                }),
-                suffix: Cow::Borrowed(&suffix),
-            }
-            .into_owned()
-        };
-        let Resource::Relative { owner, suffix } = owned else {
-            panic!("relative identity lost")
-        };
-        assert_eq!(suffix, "00.skin");
-        let Resource::Relative { owner, suffix } = *owner else {
-            panic!("nested owner lost")
-        };
-        assert_eq!(suffix, ".variant");
-        assert_eq!(
-            *owner,
-            Resource::Path(Cow::Owned(vec![b'u', b'/', 0xff, b'.', b'm', b'2']))
-        );
-        let named = {
-            let namespace = String::from("archive");
-            let name = String::from("texture/body");
-            Resource::Named {
-                namespace: Cow::Borrowed(&namespace),
-                name: Cow::Borrowed(&name),
-            }
-            .into_owned()
-        };
-        assert_eq!(
-            named,
-            Resource::Named {
-                namespace: Cow::Borrowed("archive"),
-                name: Cow::Borrowed("texture/body")
-            }
-        );
-        let sno = Resource::Sno {
-            namespace: SnoNamespace::Diablo4,
-            group: 18,
-            id: 72,
-        }
-        .into_owned();
-        assert_eq!(
-            sno,
-            Resource::Sno {
-                namespace: SnoNamespace::Diablo4,
-                group: 18,
-                id: 72
-            }
-        );
     }
 }

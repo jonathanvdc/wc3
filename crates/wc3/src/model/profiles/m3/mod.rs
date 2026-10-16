@@ -28,3 +28,6 @@ mod vocabulary;
 pub use vocabulary::M3;
 
 pub use crate::model::geometry::programmed::*;
+
+/// Image dependency declarations admitted by this profile.
+pub use crate::model::resources::PathResource as ImageResource;

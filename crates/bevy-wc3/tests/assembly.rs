@@ -7,13 +7,13 @@ use bevy_wc3::assembly::{
 use bevy_wc3::{BakeSpace, ModelError, PartBinding, PoseBaker, PoseOptions};
 use wc3::model::materials::layered::{Layer, LayeredSurface};
 use wc3::model::{
-    Animated, Draw, GeometryData, Material, MaterialSurface, Mesh as ModelMesh, MeshInstance,
-    Model, ModelMount, MountTarget, Node, NodeId, Resource, Texture, TextureId,
+    Animated, Draw, GeometryData, ImageResource, Material, MaterialSurface, Mesh as ModelMesh,
+    MeshInstance, Model, ModelMount, MountTarget, Node, NodeId, ResourceLocator, TextureId,
     Transform as ModelTransform,
 };
 
-fn resource(name: &'static str) -> Resource<'static> {
-    Resource::Named {
+fn resource(name: &'static str) -> ResourceLocator<'static> {
+    ResourceLocator::Named {
         namespace: "workshop".into(),
         name: name.into(),
     }
@@ -21,7 +21,7 @@ fn resource(name: &'static str) -> Resource<'static> {
 fn model(textured: bool) -> (Model<'static>, NodeId, Option<TextureId>) {
     let mut builder = Model::builder("application-authored machine");
     let node = builder.add_node(Node::named("mounting frame")).unwrap();
-    let texture = textured.then(|| builder.add_texture(Texture::file("original.png")).unwrap());
+    let texture = textured.then(|| builder.add_file_texture("original.png").unwrap());
     let mut geometry =
         GeometryData::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]).unwrap();
     geometry.set_texture_coordinates(vec![[[0., 0.], [1., 0.], [0., 1.]].into_iter().collect()]);
@@ -88,7 +88,7 @@ impl Resolver<Configuration> for Workshop {
                         clear: [0; 4],
                     },
                     layers: vec![TextureLayer {
-                        resource: resource("paint"),
+                        resource: resource("paint").into(),
                         source: None,
                         destination: PixelRect {
                             x: 0,
@@ -139,7 +139,7 @@ fn application_defined_machine_configuration_compiles_without_native_character_m
     let mut images = Assets::default();
     let mut decodes = 0;
     let compiled = compile_assembly(&plan, &models, &mut images, |source| {
-        assert_eq!(*source, resource("paint"));
+        assert_eq!(*source, ImageResource::from(resource("paint")));
         decodes += 1;
         Ok(RgbaImage::new(1, 1, vec![240, 40, 20, 255]).unwrap())
     })

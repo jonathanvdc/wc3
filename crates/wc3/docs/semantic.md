@@ -32,11 +32,47 @@ an unrelated owner cannot satisfy a relationship. Graph identity is independent
 of native record ordering, so output codecs can reorder tables without changing
 which objects refer to one another.
 
-`Model<'data, P>` owns its graph, including texture definitions alongside
-materials and meshes. Materials and effects refer to those definitions by texture ID;
-`Model::texture` resolves them and `Model::textures` iterates the definitions.
-Cloning a model preserves its IDs and borrowed array storage while creating an
-independently editable copy of its definitions.
+`Model<'data, P>` owns its graph and separate dependency tables for images,
+external models, effects, physics, and bone overrides. Textures, materials, and
+meshes remain graph objects with their own IDs. A texture refers to an
+`ImageResourceId`; multiple textures can share that image declaration while
+choosing independent sampling and color interpretation. Child placements and
+skyboxes use `ModelResourceId`, while external effect instances use
+`EffectResourceId`. Each handle resolves only in its owning model through methods
+such as `image_resource` and `model_resource`; plural methods enumerate each table.
+
+Declare dependencies through `ModelBuilder::add_image_resource` and the
+corresponding methods for other kinds. Reusing a handle explicitly shares a
+declaration; adding an equal declaration creates an independent entry. The
+`set_*_resource` methods replace shared declarations without changing their IDs.
+Removing an entry leaves existing references invalid, so publication rejects the
+draft until those references are repaired. Model edits are transactional, and
+cloning preserves IDs and borrowed storage while creating independently editable
+tables. Handles remain stable across table edits and profile conversions; native
+codecs assign their own output indices.
+
+Resource payloads belong to the profile: `Profile::ImageResource`,
+`ModelResource`, `EffectResource`, `PhysicsResource`, and `BoneOverrideResource`
+select the admitted declarations. For example, MDLX images admit raw paths and
+replacement categories, while M2 images also admit file-data IDs. Unsupported
+resource kinds use `Unavailable`, making their tables necessarily empty.
+Universal images use `ImageResource`; external dependencies use
+`ResourceLocator`, which excludes image-only replacement categories and embedded
+bytes. Relative locators describe addressing expressions relative to another
+locator or the caller's root, rather than edges between table entries. Resolution
+remains an application responsibility.
+
+```rust
+use wc3::model::{Model, MdlxImageResource, Texture};
+use wc3::model::profiles::Mdlx;
+
+let mut draft = Model::<Mdlx>::builder("Shared image");
+let image = draft.add_image_resource(MdlxImageResource::Path(b"body.blp".as_slice().into()));
+let texture = draft.add_texture(Texture::new(image))?;
+let model = draft.finish()?;
+assert_eq!(model.texture(texture).unwrap().resource, image);
+Ok::<(), wc3::model::Error>(())
+```
 
 `Profile::ModelMetadata` selects declarations belonging to the complete model.
 Read them through `Model::metadata` and replace them through
@@ -51,7 +87,7 @@ those dependencies remains the application's responsibility.
 profiles in `model::profiles` include `Mdlx`, `M2`, `M3`, `Wmo`, `D3`, and `D4`.
 The default profile, `Universal`, accepts all built-in families. A profile selects
 complete geometry and joint-binding schemas, material surfaces, attached
-features, systems, appearance assignments, animation programs, and the controls
+features, systems, dependency declarations, appearance assignments, animation programs, and the controls
 carried directly by each owner.
 
 The shared definitions live directly in topic modules: `model::materials`,

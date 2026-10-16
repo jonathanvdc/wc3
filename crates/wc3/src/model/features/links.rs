@@ -142,11 +142,11 @@ impl NodeFeature<'_> {
             Self::OneBoneSolver(value) => value.visit_links(visitor),
             Self::ShadowBox(value) => value.visit_links(visitor),
             Self::ViewVolume(value) => value.visit_links(visitor),
-            Self::Particle(ParticleEmitter::Resource(_))
-            | Self::Ribbon(RibbonEmitter::Resource(_))
-            | Self::Event(EventSource::Named(_) | EventSource::Identifier(_))
-            | Self::CollisionShape(_)
-            | Self::FaceActor(_) => {}
+            Self::Particle(ParticleEmitter::Resource(value))
+            | Self::Ribbon(RibbonEmitter::Resource(value))
+            | Self::FaceActor(value) => value.visit_links(visitor),
+            Self::Event(EventSource::Named(_) | EventSource::Identifier(_))
+            | Self::CollisionShape(_) => {}
 
             Self::AtlasParticles(unavailable) | Self::PointLight(unavailable) => {
                 match *unavailable {}

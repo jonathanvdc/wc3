@@ -4,7 +4,7 @@ use super::super::{
 use super::layers::layer_uniform;
 use super::*;
 use std::sync::Arc;
-use wc3::model::{AnimationSample, Material, MaterialSurface, Texture};
+use wc3::model::{AnimationSample, Material, MaterialSurface};
 
 fn constant(color: [f32; 4]) -> programmed::TextureLayer {
     let mut layer = programmed::TextureLayer::default();
@@ -65,7 +65,7 @@ fn uv_transform_uses_authored_radians_center_and_pretiling_offset() {
 #[test]
 fn every_regular_role_has_a_fixed_physical_image_binding() {
     let mut builder = Model::builder("standard roles");
-    let texture = builder.add_texture(Texture::file("roles.dds")).unwrap();
+    let texture = builder.add_file_texture("roles.dds").unwrap();
     let mut layer = constant([1.; 4]);
     layer.binding.sampling.flags.set_color(false);
     layer.binding.image = Some(texture);
@@ -119,7 +119,7 @@ fn every_regular_role_has_a_fixed_physical_image_binding() {
 #[test]
 fn uv3_only_requests_its_raw_stream_and_pipeline_layout() {
     let mut builder = Model::builder("fourth UV");
-    let texture = builder.add_texture(Texture::file("uv.dds")).unwrap();
+    let texture = builder.add_file_texture("uv.dds").unwrap();
     let mut layer = constant([1.; 4]);
     layer.binding.image = Some(texture);
     layer.binding.sampling.flags.set_color(false);
@@ -182,9 +182,7 @@ fn unchanged_sampling_keeps_uniforms_and_team_settings_stable() {
 #[test]
 fn unresolved_coordinate_generators_skip_only_the_affected_role() {
     let mut builder = Model::builder("unsupported sampled coordinates");
-    let texture = builder
-        .add_texture(Texture::file("unsupported.dds"))
-        .unwrap();
+    let texture = builder.add_file_texture("unsupported.dds").unwrap();
     let model = builder.finish().unwrap();
     let mut surface = programmed::Standard::default();
     let mut layer = constant([1.; 4]);
@@ -239,7 +237,7 @@ fn effect_context_enables_external_color_without_changing_authored_mesh_state() 
 #[test]
 fn unresolved_images_use_white_diffuse_and_neutral_optional_roles() {
     let mut builder = Model::builder("unresolved roles");
-    let texture = builder.add_texture(Texture::file("missing.dds")).unwrap();
+    let texture = builder.add_file_texture("missing.dds").unwrap();
     let model = builder.finish().unwrap();
     let mut layer = constant([1.; 4]);
     layer.binding.sampling.flags.set_color(false);
@@ -284,7 +282,7 @@ fn unresolved_images_use_white_diffuse_and_neutral_optional_roles() {
 #[test]
 fn independent_image_roles_share_each_effective_native_wrap_sampler() {
     let mut builder = Model::builder("pooled standard sampling");
-    let texture = builder.add_texture(Texture::file("wrap.dds")).unwrap();
+    let texture = builder.add_file_texture("wrap.dds").unwrap();
     let mut layers = Vec::new();
     for (u, v) in [
         (false, false),
@@ -335,7 +333,7 @@ fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
     let material = builder.reserve_material();
     let property = material.opacity();
     let mut opacity = constant([1.; 4]);
-    opacity.binding.contribution.map_alpha.binding = Some(property.clone().into());
+    opacity.binding.contribution.map_alpha.binding = Some(property.clone());
     let mut surface = programmed::Standard::default();
     surface.opacity.primary = Some(opacity);
     builder

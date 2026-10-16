@@ -10,6 +10,7 @@ use wc3::model::{
     MaterialSurface, Mesh, MeshInstance, Node, NodeControls, Skin, Texture, UniversalBinding,
     ValueGroups,
 };
+use wc3::model::{ImageResource, ResourceLocator};
 
 fn model(name: &str, geosets: &[u16]) -> (Model<'static>, NodeId) {
     let mut builder = Model::builder(name.to_owned());
@@ -32,8 +33,10 @@ fn model(name: &str, geosets: &[u16]) -> (Model<'static>, NodeId) {
             UniversalBinding::Identity(IdentityBinding),
         ))
         .unwrap();
-    let mut texture = Texture::file("unused");
-    texture.resource = Resource::Replaceable(1);
+    let mut texture = Texture::new(
+        builder.add_image_resource(wc3::model::ImageResource::Path("unused".as_bytes().into())),
+    );
+    texture.resource = builder.add_image_resource(ImageResource::Replaceable(1));
     let texture = builder.add_texture(texture).unwrap();
     for geoset in geosets {
         let mut geometry =
@@ -80,13 +83,13 @@ fn model(name: &str, geosets: &[u16]) -> (Model<'static>, NodeId) {
 }
 fn definition() -> CharacterDefinition {
     CharacterDefinition {
-        model: Resource::FileDataId(1),
+        model: ResourceLocator::FileDataId(1),
         geosets: GeosetSelection {
             visible: [401].into_iter().collect(),
         },
         textures: BTreeMap::new(),
         parts: vec![EquipmentPart {
-            model: Resource::FileDataId(2),
+            model: ResourceLocator::FileDataId(2),
             binding: EquipmentBinding::SharedSkeleton,
             joints: BTreeMap::new(),
             retain_unmatched_joints: false,
@@ -101,8 +104,8 @@ fn assembly_selects_geosets_and_reuses_character_joint_for_armor() {
     let (body, joint) = model("body", &[0, 401]);
     let (armor, _) = model("armor", &[2201]);
     let models = HashMap::from([
-        (Resource::FileDataId(1), body),
-        (Resource::FileDataId(2), armor),
+        (ResourceLocator::FileDataId(1), body),
+        (ResourceLocator::FileDataId(2), armor),
     ]);
     let mut definition = definition();
     definition.textures.insert(
@@ -114,7 +117,7 @@ fn assembly_selects_geosets_and_reuses_character_joint_for_armor() {
                 clear: [0; 4],
             },
             layers: vec![TextureLayer {
-                resource: Resource::FileDataId(3),
+                resource: ImageResource::FileDataId(3),
                 source: None,
                 destination: PixelRect {
                     x: 0,
@@ -128,7 +131,7 @@ fn assembly_selects_geosets_and_reuses_character_joint_for_armor() {
     );
     definition.parts[0]
         .textures
-        .insert(1, TextureReplacement::Image(Resource::FileDataId(3)));
+        .insert(1, TextureReplacement::Image(ImageResource::FileDataId(3)));
     let mut images = Assets::default();
     let compiled = compile_character(&definition, &models, &mut images, |_| {
         Ok(RgbaImage::new(1, 1, vec![200, 100, 50, 255]).unwrap())
@@ -150,7 +153,7 @@ fn assembly_selects_geosets_and_reuses_character_joint_for_armor() {
 #[test]
 fn unresolved_armor_cannot_silently_produce_a_partial_character() {
     let (body, _) = model("body", &[401]);
-    let models = HashMap::from([(Resource::FileDataId(1), body)]);
+    let models = HashMap::from([(ResourceLocator::FileDataId(1), body)]);
     let result = compile_character(&definition(), &models, &mut Assets::default(), |_| {
         Ok(RgbaImage::new(1, 1, vec![255; 4]).unwrap())
     });
@@ -161,7 +164,7 @@ fn repeated_atlas_sources_are_decoded_once() {
     let mut calls = 0;
     let mut images = Assets::default();
     let layer = TextureLayer {
-        resource: Resource::FileDataId(3),
+        resource: ImageResource::FileDataId(3),
         source: None,
         destination: PixelRect {
             x: 0,
@@ -180,7 +183,7 @@ fn repeated_atlas_sources_are_decoded_once() {
         layers: vec![layer.clone(), layer],
     };
     let (body, _) = model("body", &[401]);
-    let models = HashMap::from([(Resource::FileDataId(1), body)]);
+    let models = HashMap::from([(ResourceLocator::FileDataId(1), body)]);
     let mut definition = definition();
     definition.parts.clear();
     definition.textures.insert(1, replacement);
@@ -215,8 +218,8 @@ fn hidden_hair_texture_is_optional_but_selected_missing_texture_is_an_error() {
         })
         .collect();
     body.edit(|draft| {
-        let mut texture = Texture::file("unused missing hair");
-        texture.resource = Resource::Replaceable(6);
+        let resource = draft.add_image_resource(ImageResource::Replaceable(6));
+        let texture = Texture::new(resource);
         let texture = draft.add_texture(texture)?;
         for (id, mut material) in hidden_materials {
             if let MaterialSurface::ModelShader(surface) = &mut material.surface {
@@ -227,12 +230,12 @@ fn hidden_hair_texture_is_optional_but_selected_missing_texture_is_an_error() {
         Ok(())
     })
     .unwrap();
-    let models = HashMap::from([(Resource::FileDataId(1), body)]);
+    let models = HashMap::from([(ResourceLocator::FileDataId(1), body)]);
     let mut definition = definition();
     definition.parts.clear();
     let mut requested_hair = false;
     compile_character(&definition, &models, &mut Assets::default(), |resource| {
-        if *resource == Resource::Replaceable(6) {
+        if *resource == ImageResource::Replaceable(6) {
             requested_hair = true;
             return Err(ModelError("missing selected hair texture".into()));
         }
@@ -242,7 +245,7 @@ fn hidden_hair_texture_is_optional_but_selected_missing_texture_is_an_error() {
     assert!(!requested_hair);
     definition.geosets.visible = [0].into_iter().collect();
     let result = compile_character(&definition, &models, &mut Assets::default(), |resource| {
-        if *resource == Resource::Replaceable(6) {
+        if *resource == ImageResource::Replaceable(6) {
             return Err(ModelError("missing selected hair texture".into()));
         }
         Ok(RgbaImage::new(1, 1, vec![255; 4]).unwrap())
@@ -267,8 +270,8 @@ fn collection_shared_by_chest_and_wrists_compiles_one_rig_with_union_of_geosets(
         })
         .unwrap();
     let models = HashMap::from([
-        (Resource::FileDataId(1), body),
-        (Resource::FileDataId(2), collection),
+        (ResourceLocator::FileDataId(1), body),
+        (ResourceLocator::FileDataId(2), collection),
     ]);
     let mut definition = definition();
     definition.parts[0].geosets = Some(GeosetSelection {
@@ -302,13 +305,13 @@ fn collection_policy_conflicts_fail_before_images_are_resolved() {
     let mut wrists = definition.parts[0].clone();
     wrists
         .textures
-        .insert(1, TextureReplacement::Image(Resource::FileDataId(99)));
+        .insert(1, TextureReplacement::Image(ImageResource::FileDataId(99)));
     definition.parts.push(wrists);
     let (body, _) = model("body", &[401]);
     let (part, _) = model("part", &[2201]);
     let models = HashMap::from([
-        (Resource::FileDataId(1), body),
-        (Resource::FileDataId(2), part),
+        (ResourceLocator::FileDataId(1), body),
+        (ResourceLocator::FileDataId(2), part),
     ]);
     let mut calls = 0;
     let error = compile_character(&definition, &models, &mut Assets::default(), |_| {
@@ -343,8 +346,8 @@ fn rigid_equipment_mounts_at_the_attachment_feature_and_preserves_its_pivot() {
         .unwrap();
     let (shoulder, _) = model("shoulder", &[2201]);
     let models = HashMap::from([
-        (Resource::FileDataId(1), body),
-        (Resource::FileDataId(2), shoulder),
+        (ResourceLocator::FileDataId(1), body),
+        (ResourceLocator::FileDataId(2), shoulder),
     ]);
     let mut recipe = definition();
     recipe.parts[0].binding = EquipmentBinding::Attachment(SocketIdentity::Role(6));

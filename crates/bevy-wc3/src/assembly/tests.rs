@@ -38,8 +38,10 @@ fn model() -> (Model<'static>, Vec<(InstanceId, DrawId)>) {
 #[test]
 fn compatible_union_preserves_hidden_geometry_and_all_selection() {
     let (model, ids) = model();
-    let models = [(Resource::FileDataId(1), model)].into_iter().collect();
-    let source = Source::new(Resource::FileDataId(1));
+    let models = [(ResourceLocator::FileDataId(1), model)]
+        .into_iter()
+        .collect();
+    let source = Source::new(ResourceLocator::FileDataId(1));
     let mut a = PendingPart::new(source.clone(), true);
     a.source.draws.hidden_instances.insert(ids[0].0);
     let mut b = PendingPart::new(source.clone(), true);
@@ -58,13 +60,16 @@ fn compatible_union_preserves_hidden_geometry_and_all_selection() {
 fn incompatible_shared_textures_fail_before_image_provider() {
     let (model, _) = model();
     let texture = Model::<Universal>::builder("foreign")
-        .add_texture(wc3::model::Texture::file("foreign"))
+        .add_file_texture("foreign")
         .unwrap();
-    let models = [(Resource::FileDataId(1), model)].into_iter().collect();
-    let mut source = Source::new(Resource::FileDataId(1));
-    source
-        .textures
-        .insert(texture, TextureReplacement::Image(Resource::FileDataId(99)));
+    let models = [(ResourceLocator::FileDataId(1), model)]
+        .into_iter()
+        .collect();
+    let mut source = Source::new(ResourceLocator::FileDataId(1));
+    source.textures.insert(
+        texture,
+        TextureReplacement::Image(ImageResource::FileDataId(99)),
+    );
     let assembly = Assembly::new(source);
     let mut calls = 0;
     let result = compile_assembly(&assembly, &models, &mut Assets::<Image>::default(), |_| {
@@ -78,11 +83,14 @@ fn incompatible_shared_textures_fail_before_image_provider() {
 fn only_repeated_skinned_sources_coalesce() {
     let (a, _) = model();
     let (b, _) = model();
-    let models = [(Resource::FileDataId(1), a), (Resource::FileDataId(2), b)]
-        .into_iter()
-        .collect();
-    let one = Source::new(Resource::FileDataId(1));
-    let two = Source::new(Resource::FileDataId(2));
+    let models = [
+        (ResourceLocator::FileDataId(1), a),
+        (ResourceLocator::FileDataId(2), b),
+    ]
+    .into_iter()
+    .collect();
+    let one = Source::new(ResourceLocator::FileDataId(1));
+    let two = Source::new(ResourceLocator::FileDataId(2));
     let assembly = PendingAssembly {
         root: one.clone(),
         parts: vec![

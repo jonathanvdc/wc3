@@ -1,5 +1,6 @@
 use super::*;
 use crate::assembly::{Atlas, PixelRect, TextureLayer};
+use wc3::model::{ImageResource, ResourceLocator};
 #[test]
 fn conflicting_customization_and_equipment_are_rejected_before_resolution() {
     let mut recipe = CharacterRecipe {
@@ -40,7 +41,7 @@ fn conflicting_customization_and_equipment_are_rejected_before_resolution() {
 #[test]
 fn checked_rectangles_reject_overflow_before_asset_work() {
     let definition = CharacterDefinition {
-        model: Resource::FileDataId(1),
+        model: ResourceLocator::FileDataId(1),
         geosets: GeosetSelection::default(),
         parts: vec![],
         textures: BTreeMap::from([(
@@ -52,7 +53,7 @@ fn checked_rectangles_reject_overflow_before_asset_work() {
                     clear: [0; 4],
                 },
                 layers: vec![TextureLayer {
-                    resource: Resource::FileDataId(2),
+                    resource: ImageResource::FileDataId(2),
                     source: None,
                     destination: PixelRect {
                         x: u32::MAX,

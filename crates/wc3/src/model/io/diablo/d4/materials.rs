@@ -8,7 +8,8 @@ use crate::model::profiles::diablo::d4::{
     ScalarValue, Shader, TextureInput, TextureSelection, VectorValue, D4,
 };
 use crate::model::profiles::NoControls;
-use crate::model::{Model, ModelBuilder, Resource, SnoNamespace, Texture};
+use crate::model::SnoResource;
+use crate::model::{Model, ModelBuilder, SnoNamespace, Texture};
 use zerovec::ZeroVec;
 
 pub(super) fn read_appearance(
@@ -76,7 +77,7 @@ pub(super) fn read_shader(
             let selection = if native.tex < 0 {
                 TextureSelection::Absent(native.tex)
             } else {
-                let resource = Resource::Sno {
+                let resource = SnoResource::Sno {
                     namespace: SnoNamespace::Diablo4,
                     group: 44,
                     id: native.tex as u32,
@@ -84,16 +85,19 @@ pub(super) fn read_shader(
                 let existing = model
                     .model()
                     .textures()
-                    .find(|(_, image)| image.resource == resource)
+                    .find(|(_, image)| model.image_resource(image.resource) == Some(&resource))
                     .map(|(id, _)| id);
                 TextureSelection::Image(match existing {
                     Some(id) => id,
-                    None => model.add_texture(Texture {
-                        resource,
-                        controls: NoControls,
-                        color_space: Default::default(),
-                        sampler: Default::default(),
-                    })?,
+                    None => {
+                        let image_resource = model.add_image_resource(resource);
+                        model.add_texture(Texture {
+                            resource: image_resource,
+                            controls: NoControls,
+                            color_space: Default::default(),
+                            sampler: Default::default(),
+                        })?
+                    }
                 })
             };
             Ok(TextureInput {
@@ -192,8 +196,11 @@ pub(super) fn write_shader(
             let tex = match input.image {
                 TextureSelection::Absent(code) if code < 0 => code,
                 TextureSelection::Image(id) => {
-                    match model.texture(id).map(|image| &image.resource) {
-                        Some(Resource::Sno {
+                    match model
+                        .texture(id)
+                        .and_then(|image| model.image_resource(image.resource))
+                    {
+                        Some(SnoResource::Sno {
                             namespace: SnoNamespace::Diablo4,
                             group: 44,
                             id,

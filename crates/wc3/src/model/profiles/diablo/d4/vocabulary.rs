@@ -1,10 +1,11 @@
 //! Diablo IV authoring vocabulary is independent of native SNO revisions.
 use super::{Appearance, Geometry, Material, MeshControls, ModelMetadata, NodeRole};
 use crate::model::profiles::{Extends, Narrows, NoControls, Profile, Unavailable, Universal};
+use crate::model::resources::SnoResource;
 use crate::model::{
     Basis, Billboard, Bounds, ColorSpace, Error, ExplicitBinding, Inheritance, LengthUnit,
-    MaterialSurface, Model, NodeControls, Resource, Sampler, SnoNamespace, Transform,
-    UniversalAppearance, UniversalBinding,
+    MaterialSurface, Model, NodeControls, Sampler, SnoNamespace, Transform, UniversalAppearance,
+    UniversalBinding,
 };
 use crate::model::{MeshControls as AnyMeshControls, ModelMetadata as AnyModelMetadata};
 
@@ -12,6 +13,12 @@ use crate::model::{MeshControls as AnyMeshControls, ModelMetadata as AnyModelMet
 #[derive(Clone, Debug, Default)]
 pub struct D4;
 impl Profile for D4 {
+    type ImageResource<'a> = SnoResource;
+    type ModelResource<'a> = SnoResource;
+    type EffectResource<'a> = SnoResource;
+    type PhysicsResource<'a> = Unavailable;
+    type BoneOverrideResource<'a> = Unavailable;
+
     type Property = Unavailable;
     type Appearance<'a> = Appearance;
     type Binding<'a> = ExplicitBinding<'a>;
@@ -162,8 +169,10 @@ impl Profile for D4 {
                 return Err(Error::new("d4.texture.controls", "image-level color-space and sampler overrides have no native Diablo IV material-resource mapping"));
             }
             if !matches!(
-                texture.resource,
-                Resource::Sno {
+                model
+                    .image_resource(texture.resource)
+                    .expect("validated image"),
+                SnoResource::Sno {
                     namespace: SnoNamespace::Diablo4,
                     ..
                 }
@@ -178,6 +187,26 @@ impl Profile for D4 {
     }
 }
 impl Extends<D4> for Universal {
+    fn image_resource<'a>(value: <D4 as Profile>::ImageResource<'a>) -> Self::ImageResource<'a> {
+        value.into()
+    }
+    fn model_resource<'a>(value: <D4 as Profile>::ModelResource<'a>) -> Self::ModelResource<'a> {
+        value.into()
+    }
+    fn effect_resource<'a>(value: <D4 as Profile>::EffectResource<'a>) -> Self::EffectResource<'a> {
+        value.into()
+    }
+    fn physics_resource<'a>(
+        value: <D4 as Profile>::PhysicsResource<'a>,
+    ) -> Self::PhysicsResource<'a> {
+        match value {}
+    }
+    fn bone_override_resource<'a>(
+        value: <D4 as Profile>::BoneOverrideResource<'a>,
+    ) -> Self::BoneOverrideResource<'a> {
+        match value {}
+    }
+
     fn property(value: <D4 as Profile>::Property) -> Self::Property {
         match value {}
     }
@@ -230,6 +259,37 @@ impl Extends<D4> for Universal {
     }
 }
 impl Narrows<Universal> for D4 {
+    fn image_resource<'a>(
+        value: <Universal as Profile>::ImageResource<'a>,
+    ) -> Result<Self::ImageResource<'a>, Error> {
+        value.try_into()
+    }
+    fn model_resource<'a>(
+        value: <Universal as Profile>::ModelResource<'a>,
+    ) -> Result<Self::ModelResource<'a>, Error> {
+        value.try_into()
+    }
+    fn effect_resource<'a>(
+        value: <Universal as Profile>::EffectResource<'a>,
+    ) -> Result<Self::EffectResource<'a>, Error> {
+        value.try_into()
+    }
+    fn physics_resource<'a>(
+        _value: <Universal as Profile>::PhysicsResource<'a>,
+    ) -> Result<Self::PhysicsResource<'a>, Error> {
+        Err(Error::new(
+            "resources",
+            "resource kind is unavailable in this profile",
+        ))
+    }
+    fn bone_override_resource<'a>(
+        _value: <Universal as Profile>::BoneOverrideResource<'a>,
+    ) -> Result<Self::BoneOverrideResource<'a>, Error> {
+        Err(Error::new(
+            "resources",
+            "resource kind is unavailable in this profile",
+        ))
+    }
     fn appearance<'a>(
         value: <Universal as Profile>::Appearance<'a>,
     ) -> Result<Self::Appearance<'a>, Error> {

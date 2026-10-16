@@ -2,6 +2,7 @@
 use super::properties::Target as PropertySelector;
 use crate::model::profiles::UniversalProperty;
 use crate::model::profiles::{mdlx, Extends, NoControls, Profile, Unavailable, Universal};
+use crate::model::resources::{MdlxImageResource, PathResource};
 use crate::model::Link;
 use crate::model::Model;
 use crate::model::PropertyIdentityKey;
@@ -22,9 +23,23 @@ use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 ///     surface: MaterialSurface::ModelShader(Box::default()),
 /// };
 /// ```
+///
+/// Image addresses are constrained by the profile as well:
+/// ```compile_fail
+/// use wc3::model::{Model, ImageResource};
+/// use wc3::model::profiles::Mdlx;
+/// let mut draft = Model::<Mdlx>::builder("invalid resource");
+/// draft.add_image_resource(ImageResource::FileDataId(42));
+/// ```
 #[derive(Clone, Debug, Default)]
 pub struct Mdlx;
 impl Profile for Mdlx {
+    type ImageResource<'a> = MdlxImageResource<'a>;
+    type ModelResource<'a> = PathResource<'a>;
+    type EffectResource<'a> = PathResource<'a>;
+    type PhysicsResource<'a> = Unavailable;
+    type BoneOverrideResource<'a> = Unavailable;
+
     type Property = PropertySelector;
     fn default_bounds() -> Option<crate::model::Bounds> {
         Some(Default::default())
@@ -63,6 +78,28 @@ impl mdlx::Node<'_> {
     }
 }
 impl Extends<Mdlx> for Universal {
+    fn image_resource<'a>(value: <Mdlx as Profile>::ImageResource<'a>) -> Self::ImageResource<'a> {
+        value.into()
+    }
+    fn model_resource<'a>(value: <Mdlx as Profile>::ModelResource<'a>) -> Self::ModelResource<'a> {
+        value.into()
+    }
+    fn effect_resource<'a>(
+        value: <Mdlx as Profile>::EffectResource<'a>,
+    ) -> Self::EffectResource<'a> {
+        value.into()
+    }
+    fn physics_resource<'a>(
+        value: <Mdlx as Profile>::PhysicsResource<'a>,
+    ) -> Self::PhysicsResource<'a> {
+        match value {}
+    }
+    fn bone_override_resource<'a>(
+        value: <Mdlx as Profile>::BoneOverrideResource<'a>,
+    ) -> Self::BoneOverrideResource<'a> {
+        match value {}
+    }
+
     fn property(value: <Mdlx as Profile>::Property) -> Self::Property {
         UniversalProperty::Mdlx(value)
     }
@@ -116,8 +153,8 @@ impl Extends<Mdlx> for Universal {
 impl<'a> FeatureVocabulary<'a> for Mdlx {
     type Light = mdlx::Light;
     type Camera = mdlx::Camera;
-    type Attachment = mdlx::Attachment<'a>;
-    type Particle = mdlx::Particle<'a>;
+    type Attachment = mdlx::Attachment;
+    type Particle = mdlx::Particle;
     type Ribbon = mdlx::Ribbon;
     type Event = mdlx::Events<'a>;
     type GeometryAnimation = mdlx::GeometryAnimation;

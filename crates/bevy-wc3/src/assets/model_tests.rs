@@ -332,11 +332,9 @@ fn write_m2_capture_fixture() {
 
 #[test]
 fn image_candidates_preserve_location_priority_case_and_asset_sources() {
-    use wc3::model::{ModelBuilder, Texture};
+    use wc3::model::ModelBuilder;
     let mut builder = ModelBuilder::new("image candidate order");
-    let id = builder
-        .add_texture(Texture::file("Textures\\Body.BLP"))
-        .unwrap();
+    let id = builder.add_file_texture("Textures\\Body.BLP").unwrap();
     let model = builder.finish().unwrap();
     let request = texture_requests(&model)
         .into_iter()
@@ -363,7 +361,7 @@ fn image_candidates_preserve_location_priority_case_and_asset_sources() {
     assert_eq!(
         PathResolver
             .candidates(
-                &request.texture.resource,
+                &request.resource.clone().try_into().unwrap(),
                 &AssetPath::parse("casc://Units/Unit.m2")
             )
             .len(),
@@ -385,12 +383,9 @@ impl ResourceResolver for TextureOverrides {
         index: usize,
         request: &TextureRequest<'_, '_>,
         _owner: &AssetPath<'_>,
-    ) -> ModelResource<'static> {
-        assert!(matches!(
-            request.texture.resource,
-            ModelResource::Replaceable(1)
-        ));
-        ModelResource::Path(Cow::Owned(format!("mapped{index}.blp").into_bytes()))
+    ) -> ImageResource<'static> {
+        assert!(matches!(request.resource, ImageResource::Replaceable(1)));
+        ImageResource::Path(Cow::Owned(format!("mapped{index}.blp").into_bytes()))
     }
 }
 

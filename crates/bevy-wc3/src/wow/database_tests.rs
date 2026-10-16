@@ -1,12 +1,12 @@
 use super::*;
 use crate::wow::{Customization, Equipment, GeosetSelection};
-use wc3::model::Resource;
+use wc3::model::ResourceLocator;
 fn tables() -> CharacterTables {
     CharacterTables {
         bodies: BTreeMap::from([(
             (4, Sex::Female),
             CharacterDefinition {
-                model: Resource::FileDataId(1),
+                model: ResourceLocator::FileDataId(1),
                 geosets: GeosetSelection {
                     visible: BTreeSet::from([0, 101, 401]),
                 },

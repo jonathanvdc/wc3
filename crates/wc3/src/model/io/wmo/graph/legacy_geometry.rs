@@ -11,9 +11,10 @@ use crate::model::profiles::wmo::{
     Group as WorldGroup, GroupOptions, Lighting, RegionControls, WorldSystem,
 };
 use crate::model::profiles::Wmo;
+use crate::model::WorldImageResource;
 use crate::model::{
-    ColorSpace, InstanceId, MaterialId, Mesh, MeshInstance, ModelBuilder, Node, Resource, Sampler,
-    SystemId, Texture, WmoGeometry,
+    ColorSpace, InstanceId, MaterialId, Mesh, MeshInstance, ModelBuilder, Node, Sampler, SystemId,
+    Texture, WmoGeometry,
 };
 use std::borrow::Cow;
 use zerovec::ZeroVec;
@@ -244,10 +245,12 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
             LegacyGroupChunk::LightMapData(rows) => {
                 for index in 0..rows.len() {
                     let image = &rows.as_bytes()[index * 32772..index * 32772 + 32768];
-                    region.lightmap_images.push(builder.add_texture(Texture {
-                        resource: Resource::EmbeddedImage {
+                    let image_resource =
+                        builder.add_image_resource(WorldImageResource::EmbeddedImage {
                             bytes: Cow::Borrowed(image),
-                        },
+                        });
+                    region.lightmap_images.push(builder.add_texture(Texture {
+                        resource: image_resource,
                         controls: Default::default(),
                         color_space: ColorSpace::Unspecified,
                         sampler: Sampler::default(),

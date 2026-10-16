@@ -14,7 +14,7 @@ use wc3::model::{
     AimedCamera, Attachment, Camera as ModelCamera, CameraConvention, ClipId, FeatureId,
     FeatureKind, IlluminationKind, Light as SemanticLight, LightActivation, Model, ModelMount,
     MountTarget, NodeFeature, NodeId, PlacementAppearance as SemanticPlacementAppearance,
-    SampledAnimation,
+    ResourceLocator, SampledAnimation,
 };
 
 /// Conversion controls on a model's animation root. Absence uses the defaults.
@@ -59,7 +59,12 @@ pub struct ModelFeature {
 
 /// Complete semantic attachment definition, including authored activation and appearance.
 #[derive(Component, Clone, Debug)]
-pub struct ModelAttachment(pub Attachment<'static>);
+pub struct ModelAttachment {
+    /// Authored attachment with its source graph identities.
+    pub definition: Attachment<'static>,
+    /// Owned child declaration, retained after the semantic model is released.
+    pub resource: Option<ResourceLocator<'static>>,
+}
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AttachmentClock {
@@ -115,6 +120,7 @@ enum CameraDefinition {
 struct AttachmentDefinition {
     feature: ModelFeature,
     definition: Attachment<'static>,
+    resource: Option<ResourceLocator<'static>>,
     model: Option<Handle<ModelAsset>>,
     placement: Option<ModelMount>,
     parent_basis: Transform,
@@ -212,6 +218,13 @@ impl RuntimeFeatures {
                 NodeFeature::Attachment(value) => result.attachments.push(AttachmentDefinition {
                     feature,
                     definition: value.clone().into_owned(),
+                    resource: value.child().map(|child| {
+                        model
+                            .model_resource(child.resource)
+                            .expect("validated attachment resource")
+                            .clone()
+                            .into_owned()
+                    }),
                     model: value.child().and_then(|_| children.get(&id).cloned()),
                     placement: value.mount(id, feature.node).map(|mut placement| {
                         placement.coordinates = placements.get(&id).copied().unwrap_or_default();
@@ -381,7 +394,10 @@ impl RuntimeFeatures {
                     visibility: 1.,
                     clock: None,
                 },
-                ModelAttachment(definition.definition.clone()),
+                ModelAttachment {
+                    definition: definition.definition.clone(),
+                    resource: definition.resource.clone(),
+                },
                 Transform::default(),
                 Visibility::default(),
                 ChildOf(parent),
@@ -670,6 +686,31 @@ impl RuntimeFeatures {
 mod tests {
     use super::*;
     use wc3::model::{Animated, AnimationProgram, AnimationSample, Node, PhotographicControls};
+    #[test]
+    fn compiled_attachments_own_their_resolved_child_declaration() {
+        let compiled = {
+            let path = b"child.mdx".to_vec();
+            let mut draft = Model::<Universal>::builder("child declaration");
+            let resource =
+                draft.add_model_resource(ResourceLocator::Path(std::borrow::Cow::Borrowed(&path)));
+            let node = draft.add_node(Node::named("child")).unwrap();
+            draft
+                .add_feature(
+                    node,
+                    NodeFeature::Attachment(Attachment::Child(wc3::model::ChildModel {
+                        resource,
+                        socket: None,
+                        appearance: wc3::model::PlacementAppearance::Unmodified,
+                    })),
+                )
+                .unwrap();
+            let model = draft.finish().unwrap();
+            RuntimeFeatures::compile(&model, &HashMap::new(), &HashMap::new())
+        };
+        assert!(
+            matches!(compiled.attachments[0].resource.as_ref(), Some(ResourceLocator::Path(std::borrow::Cow::Owned(path))) if path == b"child.mdx")
+        );
+    }
     #[test]
     fn aimed_camera_samples_offsets_and_roll_without_spawning_a_view() {
         let mut builder = Model::builder("authored camera");

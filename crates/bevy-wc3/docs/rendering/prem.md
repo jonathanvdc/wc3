@@ -2,7 +2,9 @@
 
 Model-particle emitters instantiate independent child models at sampled birth poses.
 MDLX model-based PREM imports use this path; image-based PREM and external
-effect-only resources require other interpreters. Child meshes and bind palettes
+effect-only resources require other interpreters. The semantic particle resource variant
+selects a typed model or image handle; an absent handle retains that authored
+mode without declaring a dependency. Child meshes and bind palettes
 share prepared assets while playback and changing materials remain independent.
 
 ## Emission and motion

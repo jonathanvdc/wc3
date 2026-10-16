@@ -1,6 +1,7 @@
 //! Typed M2 output planning and native graph construction.
 use super::animation::{encode, time_ms};
 use super::*;
+use crate::model::M2ImageResource;
 use zerovec::ZeroVec;
 
 /// Plans a typed M2 bundle, checking index limits, curves and resource identities.
@@ -128,17 +129,13 @@ where
     let textures: Vec<_> = asset.textures().map(|(id, _)| id).collect();
     let mut texture_ids = Vec::new();
     for (_, texture) in asset.textures() {
-        let (kind, path, id) = match &texture.resource {
-            Resource::Path(path) => (TextureSource::File, path.as_ref(), 0),
-            Resource::FileDataId(id) => (TextureSource::File, &[][..], *id),
-            Resource::Replaceable(id) => (TextureSource::from_raw(*id), &[][..], 0),
-            _ => {
-                context.unsupported(
-                    "m2.texture.resource",
-                    "resource namespace has no M2 equivalent",
-                )?;
-                (TextureSource::File, &[][..], 0)
-            }
+        let (kind, path, id) = match asset
+            .image_resource(texture.resource)
+            .expect("validated image")
+        {
+            M2ImageResource::Path(path) => (TextureSource::File, path.as_ref(), 0),
+            M2ImageResource::FileDataId(id) => (TextureSource::File, &[][..], *id),
+            M2ImageResource::Replaceable(id) => (TextureSource::from_raw(*id), &[][..], 0),
         };
         let path = texture.controls.path.as_deref().unwrap_or(path);
         let mut flags = TextureFlags::from_bits_retain(texture.controls.flags.bits());
@@ -360,7 +357,7 @@ where
     D::texture_ids(&mut bundle.model, texture_ids)?;
     for (_, system) in model.systems() {
         if let profile::System::BoneOverrides(values) = system {
-            overrides::export(values, &nodes, &mut bundle, &mut context)?;
+            overrides::export(model, values, &nodes, &mut bundle, &mut context)?;
         }
     }
     physics::export(model, &nodes, &mut bundle, &mut context)?;

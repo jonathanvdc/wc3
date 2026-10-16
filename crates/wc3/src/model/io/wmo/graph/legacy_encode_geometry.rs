@@ -12,6 +12,7 @@ use crate::model::formats::wmo::records::{
 use crate::model::formats::wmo::{RecordLayout, Write};
 use crate::model::profiles::wmo::{Lighting, Pass, RegionControls};
 use crate::model::profiles::Wmo;
+use crate::model::WorldImageResource;
 use crate::model::{InstanceId, LookId, MaterialId, Model, Topology};
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
@@ -449,7 +450,10 @@ fn write_lighting<'a, B: RecordLayout>(
             .iter()
             .map(|id| {
                 let texture = model.texture(*id).expect("validated image resource");
-                let crate::model::Resource::EmbeddedImage { bytes, .. } = &texture.resource else {
+                let WorldImageResource::EmbeddedImage { bytes, .. } = model
+                    .image_resource(texture.resource)
+                    .expect("validated image")
+                else {
                     return Err(Error::new(
                         "world.lightmap",
                         "historical lightmap requires embedded encoded image bytes",

@@ -45,6 +45,7 @@ impl Node<'_> {
     pub(crate) fn visit_profile_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
             Node::Attachment(doodad) => {
+                doodad.resource.visit_links(visitor);
                 if doodad
                     .appearance
                     .color_multiplier

@@ -3,7 +3,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use wc3::model::materials::SurfaceSet;
 use wc3::model::{
-    DrawId, InstanceId, Model, NodeControls, NodeFeature, NodeId, Resource, SocketIdentity,
+    DrawId, ImageResource, InstanceId, Model, NodeControls, NodeFeature, NodeId, SocketIdentity,
     TextureId,
 };
 
@@ -79,8 +79,11 @@ impl CharacterCatalog {
         }
         let mut replacement_textures: BTreeMap<u32, Vec<TextureId>> = BTreeMap::new();
         for (id, texture) in model.textures() {
-            if let Resource::Replaceable(category) = texture.resource {
-                replacement_textures.entry(category).or_default().push(id);
+            if let ImageResource::Replaceable(category) = model
+                .image_resource(texture.resource)
+                .expect("validated image resource")
+            {
+                replacement_textures.entry(*category).or_default().push(id);
             }
         }
         let mut attachments: BTreeMap<u32, Vec<NodeId>> = BTreeMap::new();

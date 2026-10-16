@@ -1,6 +1,7 @@
 //! Logical behaviors grouped by purpose rather than their source vocabulary.
 use crate::model::profiles::{m2, m3, mdlx, Profile, Universal};
-use crate::model::{Link, NodeId, Resource, ValidateLinks};
+use crate::model::EffectResourceId;
+use crate::model::{Link, NodeId, ValidateLinks};
 mod illumination;
 pub use illumination::*;
 mod cameras;
@@ -28,7 +29,7 @@ pub type NodeFeature<'a> = FeatureSet<'a, Universal>;
 #[derive(Clone, Debug)]
 pub enum ParticleEmitter<'a> {
     /// Instance of an externally defined effect resource.
-    Resource(Resource<'a>),
+    Resource(EffectResourceId),
     /// Authored emission, motion, lifetime, and particle-age appearance.
     Simulated(Box<ParticleDefinition<'a>>),
 }
@@ -36,7 +37,7 @@ pub enum ParticleEmitter<'a> {
 #[derive(Clone, Debug)]
 pub enum RibbonEmitter<'a> {
     /// Instance of an externally defined effect resource.
-    Resource(Resource<'a>),
+    Resource(EffectResourceId),
     /// Persistent sections with shared geometry, appearance, and rendering.
     Trail(Box<TrailEmitter>),
     /// Programmed geometry with particle-age appearance and forces.

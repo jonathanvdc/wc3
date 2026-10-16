@@ -6,9 +6,10 @@ use super::{
 use crate::model::profiles::{
     Extends, Narrows, NoControls, Profile, SurfacePayload, Unavailable, Universal,
 };
+use crate::model::resources::SnoResource;
 use crate::model::{
     Basis, Billboard, Bounds, Error, ExplicitBinding, Inheritance, LengthUnit, MaterialSurface,
-    Model, NodeControls, Resource, SnoNamespace, Transform, UniversalAppearance, UniversalBinding,
+    Model, NodeControls, SnoNamespace, Transform, UniversalAppearance, UniversalBinding,
 };
 use crate::model::{
     ClipControls as AnyClipControls, MeshControls as AnyMeshControls,
@@ -19,6 +20,12 @@ use crate::model::{
 #[derive(Clone, Debug, Default)]
 pub struct D3;
 impl Profile for D3 {
+    type ImageResource<'a> = SnoResource;
+    type ModelResource<'a> = SnoResource;
+    type EffectResource<'a> = SnoResource;
+    type PhysicsResource<'a> = Unavailable;
+    type BoneOverrideResource<'a> = Unavailable;
+
     type Property = Unavailable;
     type Appearance<'a> = Appearance<'a>;
     type Binding<'a> = ExplicitBinding<'a>;
@@ -146,10 +153,15 @@ impl Profile for D3 {
         Ok(())
     }
     fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
-        for (_, texture) in model.textures() {
+        for resource in model
+            .image_resources()
+            .map(|(_, value)| value)
+            .chain(model.model_resources().map(|(_, value)| value))
+            .chain(model.effect_resources().map(|(_, value)| value))
+        {
             if !matches!(
-                texture.resource,
-                Resource::Sno {
+                resource,
+                SnoResource::Sno {
                     namespace: SnoNamespace::Diablo3,
                     ..
                 }
@@ -169,6 +181,26 @@ impl SurfacePayload for Material<'_> {
     }
 }
 impl Extends<D3> for Universal {
+    fn image_resource<'a>(value: <D3 as Profile>::ImageResource<'a>) -> Self::ImageResource<'a> {
+        value.into()
+    }
+    fn model_resource<'a>(value: <D3 as Profile>::ModelResource<'a>) -> Self::ModelResource<'a> {
+        value.into()
+    }
+    fn effect_resource<'a>(value: <D3 as Profile>::EffectResource<'a>) -> Self::EffectResource<'a> {
+        value.into()
+    }
+    fn physics_resource<'a>(
+        value: <D3 as Profile>::PhysicsResource<'a>,
+    ) -> Self::PhysicsResource<'a> {
+        match value {}
+    }
+    fn bone_override_resource<'a>(
+        value: <D3 as Profile>::BoneOverrideResource<'a>,
+    ) -> Self::BoneOverrideResource<'a> {
+        match value {}
+    }
+
     fn property(value: <D3 as Profile>::Property) -> Self::Property {
         match value {}
     }
@@ -220,6 +252,37 @@ impl Extends<D3> for Universal {
     }
 }
 impl Narrows<Universal> for D3 {
+    fn image_resource<'a>(
+        value: <Universal as Profile>::ImageResource<'a>,
+    ) -> Result<Self::ImageResource<'a>, Error> {
+        value.try_into()
+    }
+    fn model_resource<'a>(
+        value: <Universal as Profile>::ModelResource<'a>,
+    ) -> Result<Self::ModelResource<'a>, Error> {
+        value.try_into()
+    }
+    fn effect_resource<'a>(
+        value: <Universal as Profile>::EffectResource<'a>,
+    ) -> Result<Self::EffectResource<'a>, Error> {
+        value.try_into()
+    }
+    fn physics_resource<'a>(
+        _value: <Universal as Profile>::PhysicsResource<'a>,
+    ) -> Result<Self::PhysicsResource<'a>, Error> {
+        Err(Error::new(
+            "resources",
+            "resource kind is unavailable in this profile",
+        ))
+    }
+    fn bone_override_resource<'a>(
+        _value: <Universal as Profile>::BoneOverrideResource<'a>,
+    ) -> Result<Self::BoneOverrideResource<'a>, Error> {
+        Err(Error::new(
+            "resources",
+            "resource kind is unavailable in this profile",
+        ))
+    }
     fn appearance<'a>(
         value: <Universal as Profile>::Appearance<'a>,
     ) -> Result<Self::Appearance<'a>, Error> {

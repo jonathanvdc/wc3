@@ -9,8 +9,9 @@ use crate::model::formats::mdlx::{
     TextureFlags,
 };
 use crate::model::profiles::Mdlx;
+use crate::model::MdlxImageResource;
 use crate::model::Model;
-use crate::model::{AddressMode, Billboard, NodeId, Quaternion, Resource};
+use crate::model::{AddressMode, Billboard, NodeId, Quaternion};
 use std::collections::BTreeMap;
 
 pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
@@ -73,16 +74,12 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     for (id, source) in asset.textures() {
         texture_ids.insert(id, textures.len() as u32);
         let metadata = &source.controls;
-        let path: &[u8] = match &source.resource {
-            Resource::Path(bytes) => bytes.as_ref(),
-            Resource::Replaceable(_) => metadata.fallback_path.as_ref(),
-            _ => {
-                context.unsupported(
-                    "texture.resource",
-                    "Warcraft III textures require a filename or replaceable category",
-                )?;
-                &[]
-            }
+        let path: &[u8] = match asset
+            .image_resource(source.resource)
+            .expect("validated image")
+        {
+            MdlxImageResource::Path(bytes) => bytes.as_ref(),
+            MdlxImageResource::Replaceable(_) => metadata.fallback_path.as_ref(),
         };
         if path.len() > 260 || path.contains(&0) {
             return Err(Error::new(
@@ -95,8 +92,11 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
         let mut field = [0u8; 260];
         field[..path.len()].copy_from_slice(path);
         value.path = FixedText::from_bytes(field);
-        if let Resource::Replaceable(category) = source.resource {
-            value.replaceable_id = category;
+        if let MdlxImageResource::Replaceable(category) = asset
+            .image_resource(source.resource)
+            .expect("validated image")
+        {
+            value.replaceable_id = *category;
         }
         value.flags = TextureFlags(metadata.unclassified.bits());
         if !matches!(source.sampler.u, AddressMode::Repeat | AddressMode::Clamp)

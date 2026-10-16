@@ -4,7 +4,8 @@ use crate::model::controls::world::{DoodadSetId, GroupId, PortalId};
 use crate::model::values::world::{
     AmbientFlags, FogFlags, GroupFlags, GroupFlags2, LightFlags, PortalFlags, WorldFlags,
 };
-use crate::model::{Animated, FeatureId, MaterialId, Resource, TextureId, ZeroVec};
+use crate::model::ModelResourceId;
+use crate::model::{Animated, FeatureId, MaterialId, TextureId, ZeroVec};
 use crate::model::{ChildModelDefinition, WorldPlacementAppearance};
 use std::borrow::Cow;
 
@@ -81,7 +82,7 @@ pub struct DoodadSet<'a> {
     pub control: u32,
 }
 /// External resource placement and authored tint.
-pub type Doodad<'a> = ChildModelDefinition<Resource<'a>, (), WorldPlacementAppearance>;
+pub type Doodad = ChildModelDefinition<ModelResourceId, (), WorldPlacementAppearance>;
 /// Color alpha and light selection are distinct authored tint behaviors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DoodadTint {

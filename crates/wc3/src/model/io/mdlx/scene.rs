@@ -14,6 +14,7 @@ use crate::model::{
 use crate::model::{Axis, SocketDefinition};
 use crate::model::{Clock, ClockId, Event, MaterialId, ModelBuilder, NodeId, TextureId, Time};
 use crate::model::{GravityTrailControls, LayeredTrailRendering, TrailAppearance, TrailGeometry};
+use crate::model::{MdlxImageResource, ParticleResource, PathResource};
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
 
@@ -61,10 +62,35 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         {
             let payload = profile::Node::Particle(profile::Particle {
                 details: ModelParticle {
-                    resource: S::text(source.path.text()),
+                    resource: if flags.emitter_uses_mdl() {
+                        ParticleResource::Model((!source.path.text().is_empty()).then(|| {
+                            decoder
+                                .builder
+                                .add_model_resource(PathResource::Path(S::bytes(
+                                    source
+                                        .path
+                                        .as_bytes()
+                                        .split(|byte| *byte == 0)
+                                        .next()
+                                        .unwrap_or_default(),
+                                )))
+                        }))
+                    } else {
+                        ParticleResource::Image((!source.path.text().is_empty()).then(|| {
+                            decoder
+                                .builder
+                                .add_image_resource(MdlxImageResource::Path(S::bytes(
+                                    source
+                                        .path
+                                        .as_bytes()
+                                        .split(|byte| *byte == 0)
+                                        .next()
+                                        .unwrap_or_default(),
+                                )))
+                        }))
+                    },
                     longitude: a!(longitude, LONGITUDE),
                     latitude: a!(latitude, LATITUDE),
-                    model_resource: flags.emitter_uses_mdl(),
                     text_resource: flags.emitter_uses_tga(),
                     unclassified: Default::default(),
                 },
@@ -252,7 +278,22 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             let flags = source.flags();
             {
                 let payload = profile::Node::ParticleProgram(profile::Popcorn {
-                    resource: S::text(source.path.text()),
+                    resource: if source.path.text().is_empty() {
+                        None
+                    } else {
+                        Some(
+                            decoder
+                                .builder
+                                .add_effect_resource(PathResource::Path(S::bytes(
+                                    source
+                                        .path
+                                        .as_bytes()
+                                        .split(|byte| *byte == 0)
+                                        .next()
+                                        .unwrap_or_default(),
+                                ))),
+                        )
+                    },
                     visibility_guide: S::text(source.visibility_guide.text()),
                     life_span: a!(life_span, LIFE_SPAN),
                     emission_rate: a!(emission_rate, EMISSION_RATE),
@@ -282,7 +323,16 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         let feature = decoder.builder.reserve_feature(id);
         {
             let payload = profile::Node::Attachment(profile::Attachment {
-                resource: S::text(source.path.text()),
+                resource: decoder
+                    .builder
+                    .add_model_resource(PathResource::Path(S::bytes(
+                        source
+                            .path
+                            .as_bytes()
+                            .split(|byte| *byte == 0)
+                            .next()
+                            .unwrap_or_default(),
+                    ))),
                 appearance: (),
                 socket: SocketDefinition {
                     identity: source.id,

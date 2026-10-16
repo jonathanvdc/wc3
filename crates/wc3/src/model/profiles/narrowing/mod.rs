@@ -9,6 +9,27 @@ mod wmo;
 /// Implementations must preserve every accepted authored value and relationship.
 /// Returning an error is required when an exact projection is unavailable.
 pub trait Narrows<Source: Profile>: Profile {
+    /// Projects image dependency declarations exactly.
+    fn image_resource<'a>(
+        value: Source::ImageResource<'a>,
+    ) -> Result<Self::ImageResource<'a>, Error>;
+    /// Projects model dependency declarations exactly.
+    fn model_resource<'a>(
+        value: Source::ModelResource<'a>,
+    ) -> Result<Self::ModelResource<'a>, Error>;
+    /// Projects effect dependency declarations exactly.
+    fn effect_resource<'a>(
+        value: Source::EffectResource<'a>,
+    ) -> Result<Self::EffectResource<'a>, Error>;
+    /// Projects physics dependency declarations exactly.
+    fn physics_resource<'a>(
+        value: Source::PhysicsResource<'a>,
+    ) -> Result<Self::PhysicsResource<'a>, Error>;
+    /// Projects boneoverride dependency declarations exactly.
+    fn bone_override_resource<'a>(
+        value: Source::BoneOverrideResource<'a>,
+    ) -> Result<Self::BoneOverrideResource<'a>, Error>;
+
     /// Projects structural selectors when their exact vocabulary is supported.
     fn property(value: Source::Property) -> Result<Self::Property, Error> {
         Self::Property::from_identity(&value.identity().to_owned())
@@ -47,6 +68,28 @@ pub trait Narrows<Source: Profile>: Profile {
     fn controller<'a>(value: Source::Controller<'a>) -> Result<Self::Controller<'a>, Error>;
 }
 impl<P: Profile> Narrows<P> for P {
+    fn image_resource<'a>(value: P::ImageResource<'a>) -> Result<Self::ImageResource<'a>, Error> {
+        Ok(value)
+    }
+    fn model_resource<'a>(value: P::ModelResource<'a>) -> Result<Self::ModelResource<'a>, Error> {
+        Ok(value)
+    }
+    fn effect_resource<'a>(
+        value: P::EffectResource<'a>,
+    ) -> Result<Self::EffectResource<'a>, Error> {
+        Ok(value)
+    }
+    fn physics_resource<'a>(
+        value: P::PhysicsResource<'a>,
+    ) -> Result<Self::PhysicsResource<'a>, Error> {
+        Ok(value)
+    }
+    fn bone_override_resource<'a>(
+        value: P::BoneOverrideResource<'a>,
+    ) -> Result<Self::BoneOverrideResource<'a>, Error> {
+        Ok(value)
+    }
+
     fn property(value: P::Property) -> Result<Self::Property, Error> {
         Ok(value)
     }

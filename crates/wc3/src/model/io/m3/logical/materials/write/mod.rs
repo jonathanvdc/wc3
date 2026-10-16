@@ -3,7 +3,8 @@ use super::super::animation::AnimationIds;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::m3::logical::Graph;
-use crate::model::{profiles::m3 as surface, MaterialId, Resource, TextureId};
+use crate::model::PathResource;
+use crate::model::{profiles::m3 as surface, MaterialId, TextureId};
 use native::{Envelope, Ref};
 use std::collections::BTreeMap;
 use std::str::from_utf8;
@@ -31,13 +32,13 @@ impl<'model, 'source, 'out, 'draft, E: Envelope> Writer<'model, 'source, 'out, '
             .model
             .texture(id)
             .ok_or_else(|| Error::new("m3.texture", "texture handle is missing"))?;
-        match &texture.resource {
-            Resource::Path(bytes) => from_utf8(bytes)
+        match self
+            .model
+            .image_resource(texture.resource)
+            .expect("validated image")
+        {
+            PathResource::Path(bytes) => from_utf8(bytes)
                 .map_err(|_| Error::new("m3.texture.path", "M3 texture names must be UTF-8")),
-            _ => Err(Error::new(
-                "m3.texture.resource",
-                "M3 texture layer requires a path resource",
-            )),
         }
     }
     fn layer(

@@ -7,6 +7,7 @@ impl Node<'_> {
         match self {
             Node::GeometryAnimation(value) => fields!(value; mesh,opacity,color),
             Node::Particle(value) => {
+                value.details.resource.visit_links(visitor);
                 value.emission.rate.visit_links(visitor);
                 value.motion.gravity.visit_links(visitor);
                 value.details.longitude.visit_links(visitor);
@@ -36,6 +37,7 @@ impl Node<'_> {
                 value.controls.visibility.visit_links(visitor);
             }
             Node::ParticleProgram(value) => {
+                value.resource.visit_links(visitor);
                 fields!(value; life_span,emission_rate,speed,color,opacity,visibility)
             }
             Node::Light(value) => {
@@ -65,7 +67,7 @@ impl Node<'_> {
                 value.convention.focal_length.visit_links(visitor);
                 value.convention.f_stop.visit_links(visitor)
             }
-            Node::Attachment(value) => value.socket.visibility.visit_links(visitor),
+            Node::Attachment(value) => value.visit_links(visitor),
             Node::Event(_) => {}
             Node::CollisionShape(_) => {}
 

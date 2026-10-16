@@ -1,12 +1,16 @@
 //! Transactional graph construction and editing.
 use crate::model::ids::Scope;
 use crate::model::profiles::{Profile, Universal};
+use crate::model::PathResource;
 use crate::model::{
     AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, Clock, ClockId, Controller,
     ControllerId, DrawAppearanceSchema, DrawSubsetId, Error, Event, EventId, FeatureId, InstanceId,
     LengthUnit, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Model,
     ModelId, Node, NodeId, SharedClock, Skin, SkinId, SystemId, Texture, TextureId,
     TextureTransform, TextureTransformId,
+};
+use crate::model::{
+    BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -28,6 +32,156 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
             pending_controllers: BTreeSet::new(),
         }
     }
+    /// Adds an independent image dependency declaration.
+    pub fn add_image_resource(&mut self, value: P::ImageResource<'a>) -> ImageResourceId {
+        let id = self.model.scope.allocate();
+        self.model.image_resources.insert(id, value);
+        id
+    }
+    /// Resolves a image dependency in the draft.
+    pub fn image_resource(&self, id: ImageResourceId) -> Option<&P::ImageResource<'a>> {
+        self.model.image_resource(id)
+    }
+    /// Replaces a shared image declaration without changing its identity.
+    pub fn set_image_resource(
+        &mut self,
+        id: ImageResourceId,
+        value: P::ImageResource<'a>,
+    ) -> Result<(), Error> {
+        *self
+            .model
+            .image_resources
+            .get_mut(&id)
+            .ok_or_else(|| Error::new("resources", "unknown identity"))? = value;
+        Ok(())
+    }
+    /// Removes a declaration; publication rejects any remaining references to it.
+    pub fn remove_image_resource(&mut self, id: ImageResourceId) -> Option<P::ImageResource<'a>> {
+        self.model.image_resources.remove(&id)
+    }
+    /// Adds an independent model dependency declaration.
+    pub fn add_model_resource(&mut self, value: P::ModelResource<'a>) -> ModelResourceId {
+        let id = self.model.scope.allocate();
+        self.model.model_resources.insert(id, value);
+        id
+    }
+    /// Resolves a model dependency in the draft.
+    pub fn model_resource(&self, id: ModelResourceId) -> Option<&P::ModelResource<'a>> {
+        self.model.model_resource(id)
+    }
+    /// Replaces a shared model declaration without changing its identity.
+    pub fn set_model_resource(
+        &mut self,
+        id: ModelResourceId,
+        value: P::ModelResource<'a>,
+    ) -> Result<(), Error> {
+        *self
+            .model
+            .model_resources
+            .get_mut(&id)
+            .ok_or_else(|| Error::new("resources", "unknown identity"))? = value;
+        Ok(())
+    }
+    /// Removes a declaration; publication rejects any remaining references to it.
+    pub fn remove_model_resource(&mut self, id: ModelResourceId) -> Option<P::ModelResource<'a>> {
+        self.model.model_resources.remove(&id)
+    }
+    /// Adds an independent effect dependency declaration.
+    pub fn add_effect_resource(&mut self, value: P::EffectResource<'a>) -> EffectResourceId {
+        let id = self.model.scope.allocate();
+        self.model.effect_resources.insert(id, value);
+        id
+    }
+    /// Resolves a effect dependency in the draft.
+    pub fn effect_resource(&self, id: EffectResourceId) -> Option<&P::EffectResource<'a>> {
+        self.model.effect_resource(id)
+    }
+    /// Replaces a shared effect declaration without changing its identity.
+    pub fn set_effect_resource(
+        &mut self,
+        id: EffectResourceId,
+        value: P::EffectResource<'a>,
+    ) -> Result<(), Error> {
+        *self
+            .model
+            .effect_resources
+            .get_mut(&id)
+            .ok_or_else(|| Error::new("resources", "unknown identity"))? = value;
+        Ok(())
+    }
+    /// Removes a declaration; publication rejects any remaining references to it.
+    pub fn remove_effect_resource(
+        &mut self,
+        id: EffectResourceId,
+    ) -> Option<P::EffectResource<'a>> {
+        self.model.effect_resources.remove(&id)
+    }
+    /// Adds an independent physics dependency declaration.
+    pub fn add_physics_resource(&mut self, value: P::PhysicsResource<'a>) -> PhysicsResourceId {
+        let id = self.model.scope.allocate();
+        self.model.physics_resources.insert(id, value);
+        id
+    }
+    /// Resolves a physics dependency in the draft.
+    pub fn physics_resource(&self, id: PhysicsResourceId) -> Option<&P::PhysicsResource<'a>> {
+        self.model.physics_resource(id)
+    }
+    /// Replaces a shared physics declaration without changing its identity.
+    pub fn set_physics_resource(
+        &mut self,
+        id: PhysicsResourceId,
+        value: P::PhysicsResource<'a>,
+    ) -> Result<(), Error> {
+        *self
+            .model
+            .physics_resources
+            .get_mut(&id)
+            .ok_or_else(|| Error::new("resources", "unknown identity"))? = value;
+        Ok(())
+    }
+    /// Removes a declaration; publication rejects any remaining references to it.
+    pub fn remove_physics_resource(
+        &mut self,
+        id: PhysicsResourceId,
+    ) -> Option<P::PhysicsResource<'a>> {
+        self.model.physics_resources.remove(&id)
+    }
+    /// Adds an independent boneoverride dependency declaration.
+    pub fn add_bone_override_resource(
+        &mut self,
+        value: P::BoneOverrideResource<'a>,
+    ) -> BoneOverrideResourceId {
+        let id = self.model.scope.allocate();
+        self.model.bone_override_resources.insert(id, value);
+        id
+    }
+    /// Resolves a boneoverride dependency in the draft.
+    pub fn bone_override_resource(
+        &self,
+        id: BoneOverrideResourceId,
+    ) -> Option<&P::BoneOverrideResource<'a>> {
+        self.model.bone_override_resource(id)
+    }
+    /// Replaces a shared boneoverride declaration without changing its identity.
+    pub fn set_bone_override_resource(
+        &mut self,
+        id: BoneOverrideResourceId,
+        value: P::BoneOverrideResource<'a>,
+    ) -> Result<(), Error> {
+        *self
+            .model
+            .bone_override_resources
+            .get_mut(&id)
+            .ok_or_else(|| Error::new("resources", "unknown identity"))? = value;
+        Ok(())
+    }
+    /// Removes a declaration; publication rejects any remaining references to it.
+    pub fn remove_bone_override_resource(
+        &mut self,
+        id: BoneOverrideResourceId,
+    ) -> Option<P::BoneOverrideResource<'a>> {
+        self.model.bone_override_resources.remove(&id)
+    }
     /// Identity reserved for this model before publication.
     pub fn id(&self) -> ModelId {
         self.model.id()
@@ -43,6 +197,11 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         let id = scope.allocate();
         Self {
             model: Model {
+                image_resources: BTreeMap::new(),
+                model_resources: BTreeMap::new(),
+                effect_resources: BTreeMap::new(),
+                physics_resources: BTreeMap::new(),
+                bone_override_resources: BTreeMap::new(),
                 textures: BTreeMap::new(),
                 scope,
                 id,
@@ -604,6 +763,15 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         let id = self.model.scope.allocate();
         self.model.materials.insert(id, value);
         Ok(id)
+    }
+    /// Declares a path image and a texture using its default interpretation.
+    pub fn add_file_texture(&mut self, path: &'a str) -> Result<TextureId, Error>
+    where
+        P::ImageResource<'a>: From<PathResource<'a>>,
+    {
+        let resource =
+            self.add_image_resource(PathResource::Path(Cow::Borrowed(path.as_bytes())).into());
+        self.add_texture(Texture::new(resource))
     }
     /// Adds a texture resource to the draft; publication validates its values and relationships.
     pub fn add_texture(&mut self, value: Texture<'a, P>) -> Result<TextureId, Error> {

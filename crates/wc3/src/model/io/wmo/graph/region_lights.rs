@@ -1,4 +1,5 @@
 //! Region-local lights and activation membership independent of native table offsets.
+
 use super::rgba;
 use crate::model::conversion::Error;
 use crate::model::formats::wmo::group::GroupChunk;
@@ -6,7 +7,8 @@ use crate::model::formats::wmo::records;
 use crate::model::formats::wmo::{Dialect, Group};
 use crate::model::profiles::wmo::{self, RegionControls};
 use crate::model::profiles::Wmo;
-use crate::model::{ColorSpace, FeatureId, Model, ModelBuilder, Node, Resource, Sampler, Texture};
+use crate::model::WorldImageResource;
+use crate::model::{ColorSpace, FeatureId, Model, ModelBuilder, Node, Sampler, Texture};
 use std::collections::BTreeMap;
 pub(super) fn read<'a, D: Dialect>(
     source: &'a Group<'_, D>,
@@ -50,8 +52,10 @@ pub(super) fn read<'a, D: Dialect>(
                 let cookie = if row.texture_file_id == 0 {
                     None
                 } else {
+                    let image_resource = builder
+                        .add_image_resource(WorldImageResource::FileDataId(row.texture_file_id));
                     Some(builder.add_texture(Texture {
-                        resource: Resource::FileDataId(row.texture_file_id),
+                        resource: image_resource,
                         controls: Default::default(),
                         color_space: ColorSpace::Unspecified,
                         sampler: Sampler::default(),
@@ -153,8 +157,11 @@ pub(super) fn write<'a, D: Dialect>(
         let node = model.node(feature.node).expect("validated program anchor");
         absolute(node)?;
         let cookie = source.cookie.map_or(Ok(0), |id| {
-            match &model.texture(id).expect("validated cookie").resource {
-                Resource::FileDataId(id) => Ok(*id),
+            match model
+                .image_resource(model.texture(id).expect("validated cookie").resource)
+                .expect("validated image")
+            {
+                WorldImageResource::FileDataId(id) => Ok(*id),
                 _ => Err(Error::new(
                     "world.region.program.cookie",
                     "native cookie requires a database identity",

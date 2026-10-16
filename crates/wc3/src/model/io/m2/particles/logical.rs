@@ -1,7 +1,7 @@
 //! Native particle fields mapped directly into independent authoring state.
 use super::*;
 use crate::model::io::{materialize, owned};
-use crate::model::{self as semantic, profiles::m2 as profile, Animated, Curve, Resource, Time};
+use crate::model::{self as semantic, profiles::m2 as profile, Animated, Curve, Time};
 use crate::model::{
     AgeDrivenParticle, AgeDrivenParticleRendering, AgeDrivenParticleShape, ParticleEmission,
     ParticleLifetime, ParticleMotion,
@@ -195,6 +195,7 @@ impl LogicalAge for native::records::LegacyParticleLifetime {
 pub(super) fn read<'a, 'data: 'a, V: ModelLayout>(
     value: &'a native::records::ParticleEmitter<'data, V>,
     textures: &[semantic::TextureId],
+    builder: &mut semantic::ModelBuilder<'a, semantic::profiles::M2>,
 ) -> Result<profile::Particle<'a>, Error>
 where
     V::Header: HeaderFields,
@@ -235,10 +236,11 @@ where
                 .ok_or_else(|| Error::new("m2.particle.texture", "missing texture resource"))
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let resource = |path: &'a ZeroVec<'data, u8>| {
+    let mut resource = |path: &'a ZeroVec<'data, u8>| {
         let bytes = path.as_bytes();
         let bytes = bytes.strip_suffix(&[0]).unwrap_or(bytes);
-        (!bytes.is_empty()).then_some(Resource::Path(Cow::Borrowed(bytes)))
+        (!bytes.is_empty())
+            .then(|| builder.add_model_resource(semantic::PathResource::Path(Cow::Borrowed(bytes))))
     };
     let spline = &value.spline_points;
     Ok(profile::Particle {
@@ -353,6 +355,7 @@ pub(super) fn write<V: ModelLayout>(
     payload: &profile::Particle<'_>,
     textures: &[semantic::TextureId],
     context: &mut Context,
+    model: &semantic::Model<'_, semantic::profiles::M2>,
 ) -> Result<native::records::ParticleEmitter<'static, V>, Error>
 where
     V::Header: HeaderFields,
@@ -398,18 +401,20 @@ where
         )
         .map_err(|_| Error::new("m2.particle.texture", "texture index exceeds u16"))?
     };
-    let filename = |resource: &Option<Resource<'_>>| -> Result<ZeroVec<'static, u8>, Error> {
-        match resource {
-            None => Ok(ZeroVec::new()),
-            Some(Resource::Path(path)) => Ok(ZeroVec::alloc_from_slice(
-                &path.iter().copied().chain([0]).collect::<Vec<_>>(),
-            )),
-            _ => Err(Error::new(
-                "m2.particle.model",
-                "particle model requires a filename identity",
-            )),
-        }
-    };
+    let filename =
+        |resource: &Option<semantic::ModelResourceId>| -> Result<ZeroVec<'static, u8>, Error> {
+            match resource {
+                None => Ok(ZeroVec::new()),
+                Some(id) => {
+                    let semantic::PathResource::Path(path) = model
+                        .model_resource(*id)
+                        .ok_or_else(|| Error::new("m2.particle.model", "missing model resource"))?;
+                    Ok(ZeroVec::alloc_from_slice(
+                        &path.iter().copied().chain([0]).collect::<Vec<_>>(),
+                    ))
+                }
+            }
+        };
     value.particle_model_filename = filename(&payload.details.rendering.model)?;
     value.child_model_filename = filename(&payload.details.rendering.child_model)?;
     value.kind = HeaderFields::make(
