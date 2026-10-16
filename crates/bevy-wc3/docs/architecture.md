@@ -14,8 +14,9 @@ the semantic model before returning `ModelAsset`. Assets retain compiled
 definitions and dependency handles rather than the source graph.
 
 `compiler.rs` assembles geometry, material, animation, feature, world, and
-effect interpreters. `geometry.rs` projects selected connectivity ranges and
-attribute domains, deduplicating complete compiled vertex records. Complete mesh
+effect interpreters. `wc3` projects selected connectivity ranges and attribute
+domains; `geometry.rs` converts those streams into Bevy meshes and packs GPU joint
+attributes. The renderer deduplicates complete compiled vertex records. Complete mesh
 outputs share assets when their attributes, indices, and topology agree. Each
 skinned geometry part retains only palette slots used by its positive vertex
 weights, remapping both influence streams together with joint identities and
@@ -57,12 +58,21 @@ overrides migrate through unique names, with observable reset counts.
 
 ## Pose, surfaces, and hooks
 
-`runtime/` owns independent clocks and evaluation state. `pose.rs` composes a
-parent-first affine hierarchy while retaining signed rotation and scale factors,
+`runtime/` owns independent clocks and evaluation state. `Model::prepare_pose` in
+`wc3` resolves node order and channel masks once. `pose.rs` adapts its shared
+`PoseNode` and `PoseBehavior` evaluation to Bevy transforms and occurrence sampling.
+The evaluator composes a parent-first affine hierarchy while retaining signed
+rotation and scale factors,
 including collapsed axes. Ordinary hierarchy preserves shear; exception nodes
 requiring inheritance or camera compensation use finite factor-based transforms.
 Live poses, effect births, camera sampling, event occurrence poses, and `baking.rs`
-share the evaluator. Optional authored secondary motion in `physics.rs` runs after
+share the evaluator. CPU baking also delegates skin-matrix construction and
+position/normal/tangent deformation to `wc3`. Live rendering retains its prepared
+traversal and per-instance buffers and continues to deform geometry on the GPU.
+Surface tint and UV calculations use the shared semantic operations; Bevy material
+transport, image handles, and native shader interpretation remain here. Offline
+consumers can use the [same operations directly](../../wc3/docs/evaluation.md).
+Optional authored secondary motion in `physics.rs` runs after
 sampled local poses and before final ECS transforms are published. The default
 path does not allocate physics buffers. Mounted models evaluate parent-first, and
 inherited forces use the current carrier pose in the same frame.

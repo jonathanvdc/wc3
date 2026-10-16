@@ -38,7 +38,8 @@ the addressing and editing rules of the native document.
 The [model guide](docs/semantic.md) explains authoring profiles, graph
 relationships, shared resource ownership, and checked edits. The
 [import and export guide](docs/conversion.md) explains the native boundary and
-its representability policies.
+its representability policies. The [evaluation guide](docs/evaluation.md) covers
+Bevy-independent pose sampling, draw projection, deformation, and surface values.
 
 For Warcraft III model loading, animation, and rendering in Bevy, see the
 companion [`bevy-wc3`](../bevy-wc3/README.md) crate.

@@ -1,6 +1,8 @@
 use super::super::features::{AttachmentQuery, LightQuery, ModelLightSettings};
 use super::super::hierarchy::{current_world, model_world, HierarchyData};
-use super::super::pose::{evaluate_pose, hierarchical, local_transform, EvaluatedPose};
+use super::super::pose::{
+    as_transform, evaluate_pose, hierarchical, local_transform, EvaluatedPose,
+};
 use super::super::{ModelMaterial, WorldLiquidSurface};
 use super::mounts::MountedModel;
 use super::{
@@ -11,7 +13,6 @@ use bevy::ecs::query::QueryItem;
 use bevy::math::Affine3A;
 use bevy::prelude::*;
 use std::collections::HashMap;
-use wc3::model::profiles::Universal;
 use wc3::model::{ClipId, Transform as ModelTransform};
 
 #[derive(Default)]
@@ -342,30 +343,7 @@ pub(crate) fn animate_instances(
                     .0
                     .get(&node.id)
                     .copied()
-                    .unwrap_or_else(|| ModelTransform {
-                        translation: if node.channels.translation {
-                            sample
-                                .property(&node.id.translation::<Universal>())
-                                .unwrap_or(node.rest.translation)
-                        } else {
-                            node.rest.translation
-                        },
-                        rotation: if node.channels.rotation {
-                            sample
-                                .property(&node.id.rotation::<Universal>())
-                                .unwrap_or(node.rest.rotation)
-                        } else {
-                            node.rest.rotation
-                        },
-                        scale: if node.channels.scale {
-                            sample
-                                .property(&node.id.scale::<Universal>())
-                                .unwrap_or(node.rest.scale)
-                        } else {
-                            node.rest.scale
-                        },
-                        pivot: node.rest.pivot,
-                    });
+                    .unwrap_or_else(|| node.sample(&sample));
                 let pose = if overrides.0.contains_key(&node.id) {
                     pose
                 } else {
@@ -384,13 +362,8 @@ pub(crate) fn animate_instances(
                 );
                 let matrix = evaluated[index].matrix;
                 poses[index] = matrix;
-                let node_visible = (if node.channels.visibility {
-                    sample
-                        .property(&node.id.visibility::<Universal>())
-                        .unwrap_or(node.visible)
-                } else {
-                    node.visible
-                }) && node.parent.is_none_or(|parent| visible[parent]);
+                let node_visible = node.sample_visibility(&sample)
+                    && node.parent.is_none_or(|parent| visible[parent]);
                 visible[index] = node_visible;
                 if let Ok((mut transform, mut visibility)) = output.get_mut(nodes[index]) {
                     // Physics consumes the authored cache first; publish only
@@ -400,7 +373,7 @@ pub(crate) fn animate_instances(
                         let value = if hierarchical(node) {
                             local_transform(pose)
                         } else {
-                            evaluated[index].as_transform()
+                            as_transform(evaluated[index])
                         };
                         if *transform != value {
                             *transform = value;
@@ -464,7 +437,7 @@ pub(crate) fn animate_instances(
                         let value = if hierarchical(node) {
                             local_transform(pose)
                         } else {
-                            evaluated[index].as_transform()
+                            as_transform(evaluated[index])
                         };
                         if *transform != value {
                             *transform = value;

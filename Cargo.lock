@@ -5785,6 +5785,7 @@ dependencies = [
  "criterion",
  "explode",
  "flate2",
+ "glam",
  "half",
  "image",
  "jpeg-encoder",

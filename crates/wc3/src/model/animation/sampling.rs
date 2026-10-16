@@ -719,6 +719,31 @@ fn validate_interval(interval: Option<(Time, Time)>) -> Result<(), Error> {
     Ok(())
 }
 
+/// Typed property access shared by ordinary and occurrence-time animation samples.
+/// Consumers can evaluate poses and surfaces without changing the selected programmes.
+pub trait PropertySample<P: Profile = Universal> {
+    /// Samples an override, returning `None` when no selected channel writes it.
+    fn property<T: ChannelValue>(&self, property: &Property<T, P>) -> Option<T>;
+    /// Samples an animated value with its authored fallback.
+    fn animated<T: ChannelValue>(&self, value: &Animated<T, P>) -> T {
+        value
+            .property
+            .as_ref()
+            .and_then(|p| self.property(p))
+            .unwrap_or(value.default)
+    }
+}
+impl<P: Profile> PropertySample<P> for SampledAnimation<'_, '_, P> {
+    fn property<T: ChannelValue>(&self, property: &Property<T, P>) -> Option<T> {
+        self.property(property)
+    }
+}
+impl<P: Profile> PropertySample<P> for RetimedAnimation<'_, '_, '_, P> {
+    fn property<T: ChannelValue>(&self, property: &Property<T, P>) -> Option<T> {
+        self.property(property)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

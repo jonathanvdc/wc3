@@ -8,7 +8,7 @@ use super::geometry::{apply_skin, compile_geometry_with_color, whole_geometry};
 use super::lod::LodDefinition;
 use super::material::compile_materials_with_images;
 use super::material::mesh_alpha_mode;
-use super::mesh_animation::{MeshAnimation, MeshMaterialState};
+use super::mesh_animation::{multiply, state as mesh_state, MeshAnimation, MeshMaterialState};
 use super::mesh_interner::MeshInterner;
 use super::placements::PlacementSpace;
 use super::pose::BillboardConvention;
@@ -35,8 +35,8 @@ use wc3::model::systems::System;
 use wc3::model::{
     AnimationProgram, Attachment, Billboard, Camera as ModelCamera, ClipControls, FeatureId,
     Light as SemanticLight, Link, MaterialId, MaterialSelection, MeshControls, Model, NodeControls,
-    NodeFeature, ParticleDetails, ParticleEmitter, PropertyTarget, RibbonEmitter, SkinId,
-    TextureId, ValidateLinks,
+    NodeFeature, ParticleDetails, ParticleEmitter, PoseLayout, PropertyTarget, RibbonEmitter,
+    SkinId, TextureId, ValidateLinks,
 };
 
 fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
@@ -73,25 +73,9 @@ fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
 }
 
 pub(crate) fn node_order(nodes: &[RuntimeNode]) -> Result<Vec<usize>, ModelError> {
-    let mut order = Vec::with_capacity(nodes.len());
-    let mut children = vec![Vec::new(); nodes.len()];
-    for (index, node) in nodes.iter().enumerate() {
-        if let Some(parent) = node.parent {
-            children[parent].push(index);
-        } else {
-            order.push(index);
-        }
-    }
-    let mut cursor = 0;
-    while cursor < order.len() {
-        let parent = order[cursor];
-        order.extend(&children[parent]);
-        cursor += 1;
-    }
-    if order.len() != nodes.len() {
-        return Err(ModelError("model hierarchy contains a cycle".into()));
-    }
-    Ok(order)
+    PoseLayout::new(nodes.to_vec())
+        .map(|layout| layout.into_parts().1)
+        .map_err(|error| ModelError(error.to_string()))
 }
 
 /// Application-selected authored state used during immutable model compilation.
@@ -136,26 +120,10 @@ pub fn compile_model_with_options(
         .enumerate()
         .map(|(index, (id, _))| (id, index))
         .collect();
-    let nodes: Vec<_> = model
-        .nodes()
-        .map(|(id, node)| RuntimeNode {
-            id,
-            name: node.name.to_string(),
-            parent: node.parent.map(|id| node_map[&id]),
-            rest: node.transform,
-            channels: targets.node_channels(id),
-            inheritance: node.inheritance,
-            billboard: node.billboard,
-            billboard_convention: match node.controls {
-                Some(NodeControls::Mdlx(_)) => BillboardConvention::Warcraft3,
-                Some(NodeControls::M2(_)) => BillboardConvention::M2,
-                _ => BillboardConvention::Generic,
-            },
-            visible: node.visible,
-            camera_anchored: node.camera_anchored,
-        })
-        .collect();
-    let order = node_order(&nodes)?;
+    let layout = model
+        .prepare_pose()
+        .map_err(|error| ModelError(error.to_string()))?;
+    let (nodes, order) = layout.into_parts();
     let mut skins = Vec::new();
     let mut skin_cache: HashMap<(SkinId, Vec<usize>), usize> = HashMap::new();
     let mut diagnostics = Vec::new();
@@ -441,7 +409,9 @@ pub fn compile_model_with_options(
                         world_state,
                         mesh_state: mesh_animation
                             .get(&instance.mesh)
-                            .map_or(MeshMaterialState::Plain, |value| value.state(instance.mesh)),
+                            .map_or(MeshMaterialState::Plain, |value| {
+                                mesh_state(value, instance.mesh)
+                            }),
                         pass,
                         node: node_map[&instance.node],
                         skin: *skin,
@@ -451,7 +421,8 @@ pub fn compile_model_with_options(
                             base: {
                                 let mut material = surface.material.clone();
                                 if let Some(value) = mesh_animation.get(&instance.mesh) {
-                                    material.base_color = value.apply_defaults(material.base_color);
+                                    material.base_color =
+                                        multiply(material.base_color, value.defaults());
                                     material.alpha_mode = mesh_alpha_mode(
                                         material.alpha_mode,
                                         value.default_opacity(),

@@ -362,7 +362,7 @@ fn m2_spherical_billboards_preserve_authored_rotation_pivot_and_basis_lengths() 
 
 #[test]
 fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
-    use crate::compiled::NodeChannels;
+    use wc3::model::NodeChannels;
     use wc3::model::{Clip, Controller, SharedClock};
     let mut builder = Model::builder("node channel inventory");
     let parent = builder.add_node(Node::named("animated parent")).unwrap();

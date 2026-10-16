@@ -1,5 +1,6 @@
 //! Explicit coordinate conventions for logical spatial values.
-use crate::model::Error;
+use crate::model::{Error, Model};
+use glam::{Mat3, Mat4, Vec3};
 /// Direction along a coordinate axis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Axis {
@@ -95,5 +96,54 @@ impl LengthUnit {
             )),
             _ => Ok(()),
         }
+    }
+}
+
+impl Axis {
+    /// Unit vector along this signed axis.
+    pub fn vector(self) -> Vec3 {
+        use Vec3;
+        match self {
+            Self::PositiveX => Vec3::X,
+            Self::NegativeX => Vec3::NEG_X,
+            Self::PositiveY => Vec3::Y,
+            Self::NegativeY => Vec3::NEG_Y,
+            Self::PositiveZ => Vec3::Z,
+            Self::NegativeZ => Vec3::NEG_Z,
+        }
+    }
+}
+impl Basis {
+    /// Coordinate conversion retaining handedness, including reflections.
+    pub fn conversion_to(self, target: Self) -> Mat4 {
+        let frame = |basis: Self| {
+            let up = basis.up.vector();
+            let forward = basis.forward.vector();
+            let right = match basis.handedness {
+                Handedness::Right => forward.cross(up),
+                Handedness::Left => up.cross(forward),
+            };
+            Mat3::from_cols(right, up, -forward).transpose()
+        };
+        Mat4::from_mat3(frame(target).transpose() * frame(self))
+    }
+}
+impl Model<'_> {
+    /// Converts authored coordinates to an explicit basis and physical unit.
+    /// Unspecified units use a numerical scale of one meter per unit.
+    pub fn coordinate_transform(&self, target: Basis, units: LengthUnit) -> Result<Mat4, Error> {
+        let meters = |unit| match unit {
+            LengthUnit::Unspecified => 1.,
+            LengthUnit::MetersPerUnit(value) => value,
+        };
+        units.validate()?;
+        let scale = (meters(self.units()) / meters(units)) as f32;
+        if !scale.is_finite() || scale <= 0. {
+            return Err(Error::new(
+                "units",
+                "physical scale cannot be represented by f32 transforms",
+            ));
+        }
+        Ok(self.basis().conversion_to(target) * Mat4::from_scale(Vec3::splat(scale)))
     }
 }

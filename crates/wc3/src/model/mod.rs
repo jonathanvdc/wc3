@@ -57,8 +57,8 @@ pub use rotation::*;
 pub mod animation;
 pub use animation::{
     curves::*, properties::*, Animated, AnimationProgram, AnimationSample, Channel, ChannelValue,
-    Clip, Clock, Controller, Event, Interpolation, RetimedAnimation, SampledAnimation,
-    SampledTrack, Time, Track,
+    Clip, Clock, Controller, Event, Interpolation, PropertySample, RetimedAnimation,
+    SampledAnimation, SampledTrack, Time, Track,
 };
 mod playback_controls;
 pub use playback_controls::*;
@@ -91,7 +91,9 @@ pub use geometry::{
     MeshInstance, NodeInfluence, Skin, Topology, VertexInfluences,
 };
 mod node;
+mod node_evaluation;
 pub use node::*;
+pub use node_evaluation::*;
 pub mod materials;
 pub use materials::{
     AddressMode, ColorSpace, Material, MaterialSurface, Resource, Sampler, SnoNamespace,
@@ -142,3 +144,15 @@ pub mod conversion;
 pub mod formats;
 /// Native document import and export.
 pub mod io;
+
+mod geometry_projection;
+pub use geometry_projection::*;
+
+mod pose_layout;
+pub use pose_layout::*;
+
+mod deformation;
+pub use deformation::*;
+
+mod surface_evaluation;
+pub use surface_evaluation::*;

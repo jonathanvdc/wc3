@@ -12,6 +12,7 @@ keywords = ["warcraft", "mdx", "mdl", "model", "binary"]
 categories = ["parser-implementations", "game-development"]
 
 [dependencies]
+glam = { version = "0.32.1", default-features = false, features = ["std"] }
 half = { version = "2.7", default-features = false }
 zerovec = { version = "0.11.8", features = ["alloc", "derive"] }
 md5 = "0.8"
@@ -75,3 +76,7 @@ required-features = ["blp-encode"]
 [[example]]
 name = "tex_to_png"
 required-features = ["tex-decode"]
+
+[[bench]]
+name = "evaluation"
+harness = false

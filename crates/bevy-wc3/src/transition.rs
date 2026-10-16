@@ -1,6 +1,5 @@
 //! Dense local-pose transitions, applied before hierarchy and camera corrections.
-use bevy::prelude::*;
-use wc3::model::{Quaternion, Transform as ModelTransform};
+use wc3::model::Transform as ModelTransform;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct TransitionRequest {
@@ -36,21 +35,7 @@ impl TransitionView<'_> {
             return destination;
         };
         let t = (self.elapsed / self.duration).clamp(0., 1.) as f32;
-        ModelTransform {
-            translation: Vec3::from_array(source.translation)
-                .lerp(Vec3::from_array(destination.translation), t)
-                .to_array(),
-            rotation: Quaternion(
-                Quat::from_array(source.rotation.0)
-                    .normalize()
-                    .slerp(Quat::from_array(destination.rotation.0).normalize(), t)
-                    .to_array(),
-            ),
-            scale: Vec3::from_array(source.scale)
-                .lerp(Vec3::from_array(destination.scale), t)
-                .to_array(),
-            pivot: destination.pivot,
-        }
+        source.blend(destination, t)
     }
 }
 impl TransitionState {

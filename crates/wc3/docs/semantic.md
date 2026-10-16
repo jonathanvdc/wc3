@@ -2,6 +2,8 @@
 
 `wc3::model` describes model meaning independently of file layout.
 Use it to inspect relationships, author changes, or prepare a native export.
+The [evaluation guide](evaluation.md) describes pose sampling, editable draw
+projection, and surface evaluation for offline tools and renderer integrations.
 The MDLX, M2, M3, WMO, and Diablo codecs remain the APIs for their encoded records
 and supporting documents. A semantic graph contains actual authoring values;
 it does not retain a native model as its backing representation.

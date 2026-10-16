@@ -1,7 +1,9 @@
 use super::super::events::{EventDispatchStats, EventState};
 use super::super::lod::LodState;
 use super::super::mesh_animation::MeshMaterialState;
-use super::super::pose::{evaluate_pose, hierarchical, local_transform, EvaluatedPose};
+use super::super::pose::{
+    as_transform, evaluate_pose, hierarchical, local_transform, EvaluatedPose,
+};
 use super::super::skin_bounds::SkinBounds;
 use super::super::transition::TransitionState;
 use super::super::{ModelMaterial, PreparedModel, WorldLiquidSurface};
@@ -77,7 +79,7 @@ pub(crate) fn populate_model(
                     if hierarchical(node) {
                         local_transform(node.rest)
                     } else {
-                        evaluated[index].as_transform()
+                        as_transform(evaluated[index])
                     },
                     if visible[index] {
                         Visibility::Inherited

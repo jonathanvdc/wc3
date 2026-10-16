@@ -17,6 +17,8 @@ applications that need explicit control over scheduling or preparation.
 - [Architecture](architecture.md): semantic loading and preparation, shared and per-instance
   state, renderer modules, effect record storage, and the `Wc3Systems` scheduling
   contract.
+- [CPU model evaluation](../../wc3/docs/evaluation.md): shared pose, geometry, and
+  surface operations for offline consumers without Bevy assets.
 - API reference: `cargo doc -p bevy-wc3 --no-deps --open`.
 
 ## Rendering

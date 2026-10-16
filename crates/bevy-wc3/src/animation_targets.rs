@@ -1,7 +1,6 @@
 //! Shared node-channel presence and conservative material constant analysis.
-use crate::compiled::NodeChannels;
 use std::collections::{HashMap, HashSet};
-use wc3::model::{Animated, Channel, Interpolation, Model, NodeId, Property, PropertyTarget};
+use wc3::model::{Animated, Channel, Interpolation, Model, Property, PropertyTarget};
 
 pub(crate) struct AnimationTargets {
     targets: HashSet<PropertyTarget>,
@@ -49,15 +48,6 @@ impl AnimationTargets {
         Self {
             targets,
             scalar_constants,
-        }
-    }
-
-    pub(crate) fn node_channels(&self, node: NodeId) -> NodeChannels {
-        NodeChannels {
-            translation: self.targets.contains(&PropertyTarget::Translation(node)),
-            rotation: self.targets.contains(&PropertyTarget::Rotation(node)),
-            scale: self.targets.contains(&PropertyTarget::Scale(node)),
-            visibility: self.targets.contains(&PropertyTarget::Visibility(node)),
         }
     }
 

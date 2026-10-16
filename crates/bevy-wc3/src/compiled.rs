@@ -6,7 +6,6 @@ use crate::lod::LodDefinition;
 use crate::material::SurfaceAnimation;
 use crate::mesh_animation::MeshMaterialState;
 use crate::physics::{PhysicsBodyInfo, PhysicsDefinition};
-use crate::pose::BillboardConvention;
 use crate::world::WorldRuntime;
 use crate::{
     DoodadSet, ModelFeature, ModelMaterial, WorldEnvironment, WorldEnvironmentSample, WorldGroup,
@@ -19,8 +18,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use wc3::model::systems::model_physics::Joint;
 use wc3::model::{
-    AnimationProgram, Billboard, ClipId, ControllerId, DrawId, FeatureId, FeatureKind, Inheritance,
-    InstanceId, MaterialId, MeshId, NodeId, Transform as ModelTransform,
+    AnimationProgram, ClipId, ControllerId, DrawId, FeatureId, FeatureKind, InstanceId, MaterialId,
+    MeshId, NodeId,
 };
 /// An observable limitation attached to its semantic source identity.
 #[derive(Clone, Debug)]
@@ -36,28 +35,7 @@ pub struct RenderDiagnostic {
 pub(crate) type MaterialCacheKey = (MaterialId, usize, MeshMaterialState, [u32; 4]);
 pub(crate) type MaterialCache = HashMap<MaterialCacheKey, Handle<ModelMaterial>>;
 
-/// Authored node properties with a channel in any playback programme.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct NodeChannels {
-    pub(crate) translation: bool,
-    pub(crate) rotation: bool,
-    pub(crate) scale: bool,
-    pub(crate) visibility: bool,
-}
-
-#[derive(Clone)]
-pub(crate) struct RuntimeNode {
-    pub(crate) id: NodeId,
-    pub(crate) name: String,
-    pub(crate) parent: Option<usize>,
-    pub(crate) rest: ModelTransform,
-    pub(crate) channels: NodeChannels,
-    pub(crate) inheritance: Inheritance,
-    pub(crate) billboard: Billboard,
-    pub(crate) billboard_convention: BillboardConvention,
-    pub(crate) visible: bool,
-    pub(crate) camera_anchored: bool,
-}
+pub(crate) use wc3::model::PoseNode as RuntimeNode;
 
 #[derive(Clone)]
 pub(crate) struct RuntimeSkin<B> {

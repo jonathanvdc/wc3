@@ -5,7 +5,7 @@ use bevy::ecs::world::CommandQueue;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use wc3::model::conversion::ImportOptions;
 use wc3::model::io::mdlx;
-use wc3::model::{AnimationSample, Channel, Clock, Curve, Time as ModelTime, Track};
+use wc3::model::{AnimationSample, Channel, Clock, Curve, Model, Time as ModelTime, Track};
 
 fn source() -> Model<'static> {
     mdlx::decode_mdl(
@@ -59,7 +59,7 @@ fn common_mesh_targets_override_feature_values_and_equal_constants_share_keys() 
     let constant = states.remove(&mesh).unwrap();
     assert!(!constant.is_animated());
     let other_mesh = model.meshes().nth(1).unwrap().0;
-    assert_eq!(constant.state(mesh), constant.state(other_mesh));
+    assert_eq!(state(&constant, mesh), state(&constant, other_mesh));
     model
         .edit(|builder| {
             builder.add_timeline_channel(Channel::Vector3(Track {

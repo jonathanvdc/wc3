@@ -6,8 +6,8 @@ use crate::animation_targets::AnimationTargets;
 use bevy::math::Affine2;
 use bevy::prelude::*;
 use std::array::from_fn;
-use wc3::model::TextureTransform;
 use wc3::model::{Animated, SampledAnimation};
+use wc3::model::{SurfaceColor, TextureTransform};
 
 impl HdAnimation {
     fn is_animated(&self) -> bool {
@@ -343,48 +343,24 @@ impl SurfaceAnimation {
             || !self.pass_weights.is_empty()
             || self.mesh.is_some()
         {
-            let rgb = self.color.as_ref().map(|v| sample.animated(v));
-            let rgba = self.rgba.as_ref().map(|v| sample.animated(v));
             let current = self
                 .untinted
                 .unwrap_or_else(|| material.base_color.to_linear());
-            let rgb = rgb.or(rgba.map(|v| [v[0], v[1], v[2]])).unwrap_or([
-                current.red,
-                current.green,
-                current.blue,
-            ]);
-            let alpha = self
-                .opacity
-                .as_ref()
-                .map(|v| sample.animated(v))
-                .unwrap_or_else(|| {
-                    if self.rgba.is_none() && self.weight.is_none() {
-                        self.unweighted_opacity.unwrap_or(current.alpha)
-                    } else {
-                        1.
-                    }
-                })
-                * rgba.map_or(1.0, |v| v[3])
-                * self
-                    .weight
-                    .as_ref()
-                    .map(|v| sample.animated(v))
-                    .unwrap_or(1.0)
-                * self
-                    .pass_weights
-                    .iter()
-                    .map(|value| sample.animated(value))
-                    .product::<f32>();
             let tint = self
                 .mesh
                 .as_ref()
                 .map_or([1.; 4], |mesh| mesh.sample(sample));
-            let next = Color::linear_rgba(
-                rgb[0] * tint[0],
-                rgb[1] * tint[1],
-                rgb[2] * tint[2],
-                alpha * tint[3],
-            );
+            let rgba = SurfaceColor {
+                color: self.color.as_ref(),
+                rgba: self.rgba.as_ref(),
+                opacity: self.opacity.as_ref(),
+                weight: self.weight.as_ref(),
+                pass_weights: &self.pass_weights,
+                fallback: current.to_f32_array(),
+                unweighted_opacity: self.unweighted_opacity,
+            }
+            .sample(sample, tint);
+            let next = Color::linear_rgba(rgba[0], rgba[1], rgba[2], rgba[3]);
             if material.base_color != next {
                 material.base_color = next;
                 changed = true;
@@ -461,29 +437,8 @@ impl SurfaceAnimation {
 }
 
 fn sampled_transform(sample: &SampledAnimation<'_, '_>, transform: &TextureTransform) -> Affine2 {
-    let translation = sample.animated(&transform.translation);
-    let scale = sample.animated(&transform.scale);
-    let rotation = Quat::from_array(sample.animated(&transform.rotation).0);
-    let (_, _, z) = rotation.to_euler(EulerRot::XYZ);
-    Affine2::from_scale_angle_translation(
-        Vec2::new(scale[0], scale[1]),
-        z,
-        Vec2::new(translation[0], translation[1]),
-    )
+    transform.affine(sample, false)
 }
-
 pub(super) fn layered_uv(translation: [f32; 3], rotation: [f32; 4], scale: [f32; 3]) -> Affine2 {
-    let center = Vec3::new(0.5, 0.5, 0.);
-    let matrix = Mat4::from_translation(Vec3::from_array(translation) + center)
-        * Mat4::from_scale_rotation_translation(
-            Vec3::from_array(scale),
-            Quat::from_array(rotation).normalize(),
-            Vec3::ZERO,
-        )
-        * Mat4::from_translation(-center);
-    Affine2::from_cols(
-        matrix.x_axis.truncate().truncate(),
-        matrix.y_axis.truncate().truncate(),
-        matrix.w_axis.truncate().truncate(),
-    )
+    TextureTransform::centered_affine(translation, rotation, scale)
 }

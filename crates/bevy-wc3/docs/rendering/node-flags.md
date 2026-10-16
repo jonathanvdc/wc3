@@ -1,6 +1,6 @@
 # Node transforms and camera controls
 
-The renderer evaluates semantic local poses parent-first and retains full affine
+The renderer uses `wc3::model::PoseBehavior` to evaluate semantic local poses parent-first and retains full affine
 matrices alongside signed rotation and scale factors. Ordinary hierarchy preserves
 shear. Pivots, selective inheritance, billboarding, and camera anchoring share one
 evaluator across live poses, effect births, event occurrences, and offline baking.

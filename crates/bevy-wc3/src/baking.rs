@@ -10,7 +10,7 @@ use bevy::camera::primitives::{Aabb, MeshAabb};
 use bevy::mesh::{skinning::SkinnedMeshInverseBindposes, VertexAttributeValues};
 use bevy::prelude::*;
 use std::collections::HashMap;
-use wc3::model::{profiles::Universal, Transform as ModelTransform};
+use wc3::model::{skin_matrices, DeformableGeometry};
 
 /// Borrowed geometry-pass inputs retained by a prepared model.
 pub struct PreparedPart<'a> {
@@ -169,30 +169,7 @@ impl PoseBaker {
                 .overrides
                 .and_then(|overrides| overrides.0.get(&node.id))
                 .copied()
-                .unwrap_or_else(|| ModelTransform {
-                    translation: if node.channels.translation {
-                        sample
-                            .property(&node.id.translation::<Universal>())
-                            .unwrap_or(node.rest.translation)
-                    } else {
-                        node.rest.translation
-                    },
-                    rotation: if node.channels.rotation {
-                        sample
-                            .property(&node.id.rotation::<Universal>())
-                            .unwrap_or(node.rest.rotation)
-                    } else {
-                        node.rest.rotation
-                    },
-                    scale: if node.channels.scale {
-                        sample
-                            .property(&node.id.scale::<Universal>())
-                            .unwrap_or(node.rest.scale)
-                    } else {
-                        node.rest.scale
-                    },
-                    pivot: node.rest.pivot,
-                });
+                .unwrap_or_else(|| node.sample(&sample));
             self.poses[index] = evaluate_pose(
                 node,
                 pose,
@@ -200,13 +177,8 @@ impl PoseBaker {
                     .map_or_else(EvaluatedPose::default, |parent| self.poses[parent]),
                 camera,
             );
-            self.visible[index] = (if node.channels.visibility {
-                sample
-                    .property(&node.id.visibility::<Universal>())
-                    .unwrap_or(node.visible)
-            } else {
-                node.visible
-            }) && node.parent.is_none_or(|parent| self.visible[parent]);
+            self.visible[index] = node.sample_visibility(&sample)
+                && node.parent.is_none_or(|parent| self.visible[parent]);
         }
         let default_selection = WorldSelection::default();
         let world_visibility = prepared
@@ -442,103 +414,58 @@ fn bake_mesh(
             _ => return Err(ModelError("malformed pose skin attribute pair".into())),
         }
     }
-    transforms.clear();
-    transforms.reserve(positions.len());
-    for vertex in 0..positions.len() {
-        let mut matrix = Mat4::ZERO;
-        for (indices, weights) in [
-            (Mesh::ATTRIBUTE_JOINT_INDEX, Mesh::ATTRIBUTE_JOINT_WEIGHT),
-            (EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT),
-        ] {
-            if let (
-                Some(VertexAttributeValues::Uint16x4(indices)),
-                Some(VertexAttributeValues::Float32x4(weights)),
-            ) = (mesh.attribute(indices), mesh.attribute(weights))
-            {
-                let indices = indices
-                    .get(vertex)
-                    .ok_or_else(|| ModelError("short pose skin indices".into()))?;
-                let weights = weights
-                    .get(vertex)
-                    .ok_or_else(|| ModelError("short pose skin weights".into()))?;
-                for (&index, &weight) in indices.iter().zip(weights) {
-                    if weight > 0.0 {
-                        matrix += *joints
-                            .get(index as usize)
-                            .ok_or_else(|| ModelError("invalid pose joint index".into()))?
-                            * weight;
-                    }
+    if mesh.contains_attribute(Mesh::ATTRIBUTE_JOINT_INDEX) {
+        let rows = (0..positions.len()).map(|vertex| {
+            [
+                (Mesh::ATTRIBUTE_JOINT_INDEX, Mesh::ATTRIBUTE_JOINT_WEIGHT),
+                (EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT),
+            ]
+            .into_iter()
+            .flat_map(move |(indices, weights)| {
+                match (mesh.attribute(indices), mesh.attribute(weights)) {
+                    (
+                        Some(VertexAttributeValues::Uint16x4(indices)),
+                        Some(VertexAttributeValues::Float32x4(weights)),
+                    ) => Some(
+                        indices[vertex]
+                            .into_iter()
+                            .zip(weights[vertex])
+                            .map(|(id, weight)| (usize::from(id), weight)),
+                    ),
+                    _ => None,
                 }
-            }
-        }
-        // Use the same weighted matrix sum as the GPU skinning shader.
-        transforms.push(if mesh.contains_attribute(Mesh::ATTRIBUTE_JOINT_INDEX) {
-            matrix
-        } else {
-            placement
+                .into_iter()
+                .flatten()
+            })
         });
+        skin_matrices(rows, joints, transforms).map_err(|error| ModelError(error.to_string()))?;
+    } else {
+        transforms.clear();
+        transforms.resize(positions.len(), placement);
     }
     let mut baked = mesh.clone();
-    let positions: Vec<_> = positions
-        .iter()
-        .zip(transforms.iter())
-        .map(|(position, matrix)| {
-            matrix
-                .transform_point3(Vec3::from_array(*position))
-                .to_array()
-        })
-        .collect();
-    if positions
-        .iter()
-        .any(|position| !Vec3::from_array(*position).is_finite())
-    {
-        return Err(ModelError("nonfinite posed positions".into()));
+    let mut positions = positions.to_vec();
+    let mut normals = match mesh.attribute(Mesh::ATTRIBUTE_NORMAL) {
+        Some(VertexAttributeValues::Float32x3(values)) => values.clone(),
+        _ => Vec::new(),
+    };
+    let mut tangents = match mesh.attribute(Mesh::ATTRIBUTE_TANGENT) {
+        Some(VertexAttributeValues::Float32x4(values)) => values.clone(),
+        _ => Vec::new(),
+    };
+    DeformableGeometry {
+        positions: &mut positions,
+        normals: &mut normals,
+        tangents: &mut tangents,
     }
+    .deform(transforms)
+    .map_err(|error| ModelError(error.to_string()))?;
     baked.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    if let Some(VertexAttributeValues::Float32x3(normals)) = mesh.attribute(Mesh::ATTRIBUTE_NORMAL)
-    {
-        baked.insert_attribute(
-            Mesh::ATTRIBUTE_NORMAL,
-            normals
-                .iter()
-                .zip(transforms.iter())
-                .map(|(normal, matrix)| {
-                    if matrix.determinant().abs() <= 1e-12 {
-                        Vec3::ZERO
-                    } else {
-                        matrix
-                            .inverse()
-                            .transpose()
-                            .transform_vector3(Vec3::from_array(*normal))
-                            .normalize_or_zero()
-                    }
-                    .to_array()
-                })
-                .collect::<Vec<_>>(),
-        );
+    if mesh.contains_attribute(Mesh::ATTRIBUTE_NORMAL) {
+        baked.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     }
-    if let Some(VertexAttributeValues::Float32x4(tangents)) =
-        mesh.attribute(Mesh::ATTRIBUTE_TANGENT)
-    {
-        baked.insert_attribute(
-            Mesh::ATTRIBUTE_TANGENT,
-            tangents
-                .iter()
-                .zip(transforms.iter())
-                .map(|(tangent, matrix)| {
-                    let sign = if matrix.determinant() < 0.0 {
-                        -1.0
-                    } else {
-                        1.0
-                    };
-                    matrix
-                        .transform_vector3(Vec3::from_slice(&tangent[..3]))
-                        .normalize_or_zero()
-                        .extend(tangent[3] * sign)
-                        .to_array()
-                })
-                .collect::<Vec<_>>(),
-        );
+    if mesh.contains_attribute(Mesh::ATTRIBUTE_TANGENT) {
+        baked.insert_attribute(Mesh::ATTRIBUTE_TANGENT, tangents);
     }
     for attribute in [
         Mesh::ATTRIBUTE_JOINT_INDEX,

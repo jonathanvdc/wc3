@@ -24,7 +24,7 @@ and LOD identities.
 `Playback` selects typed clips and controller programmes in seconds. Shared
 clocks remain independently sampleable. Local-pose transitions retain signed scale
 and shortest-path quaternion rotation; surface and visibility properties sample the
-destination directly. One pose evaluator handles hierarchy, pivots, native billboard
+destination directly. The shared `wc3` pose evaluator handles hierarchy, pivots, native billboard
 conventions, camera anchoring, effect births, event poses, and offline baking. See
 [animation](animation-blending.md) and [node transforms](node-flags.md).
 
