@@ -29,10 +29,11 @@ fn compile(surface: &model_shader::ShaderPass<'_>) -> SurfacePass {
 
 #[test]
 fn programs_require_exact_input_counts_and_do_not_wrap_unknown_tables() {
-    for offset in (0..=21).chain([23, 24, 25, 32, 33, 34, 35]) {
+    for offset in (0..=28).chain([32, 33, 34, 35]) {
         let count = match offset {
-            3 | 9 | 17 | 18 | 20 | 24 => 3,
+            3 | 9 | 17 | 18 | 20 | 24 | 26 | 28 => 3,
             19 | 25 | 32 | 34 => 1,
+            22 => 4,
             _ => 2,
         };
         assert!(program(0x8000 + offset, count).is_some());
@@ -171,7 +172,7 @@ fn edge_programs_are_explicit_and_keep_native_input_counts() {
         compile(&surface(0x8019, &[0])).state.combiner.coordinates.x,
         1
     );
-    for offset in [22, 26, 27, 28, 29, 30, 31, 36] {
+    for offset in [29, 30, 31, 36] {
         assert!(program(0x8000 + offset, 3).is_none());
     }
 }
@@ -188,4 +189,56 @@ fn legacy_surplus_bindings_use_the_established_two_input_equation_with_diagnosti
             .any(|message| message.contains("surplus")));
         assert_ne!(pass.state.combiner.mode.x, 0);
     }
+}
+
+#[test]
+fn legacy_guild_programmes_use_external_palettes_and_reject_six_input_layouts() {
+    let palette = model_shader::GuildPalette {
+        background: [0.2, 0.3, 0.4],
+        emblem: [0.5, 0.6, 0.7],
+        border: [0.8, 0.9, 1.],
+    };
+    for (index, mode, coordinates) in [
+        (26, 24, vec![0, 1, 0]),
+        (27, 25, vec![0, 1]),
+        (28, 26, vec![0, 1, 0]),
+    ] {
+        let mut shader = surface(0x8000 + index, &coordinates);
+        shader.guild_palette = palette;
+        let pass = compile(&shader);
+        assert_eq!(pass.state.combiner.mode.x, mode);
+        assert_eq!(
+            pass.state.combiner.guild_background,
+            Vec4::new(0.2, 0.3, 0.4, 1.)
+        );
+        assert_eq!(
+            pass.state.combiner.guild_emblem,
+            Vec4::new(0.5, 0.6, 0.7, 1.)
+        );
+        assert_eq!(
+            pass.state.combiner.guild_border,
+            Vec4::new(0.8, 0.9, 1., 1.)
+        );
+        assert!(pass.diagnostics.is_empty());
+        assert!(!pass.animation.is_animated());
+    }
+    let six = compile(&surface(0x801c, &[0, 1, 0, 0, 1, 0]));
+    assert_eq!(six.state.combiner.mode.x, 0);
+    assert!(six
+        .diagnostics
+        .iter()
+        .any(|message| message.contains("approximated")));
+}
+
+#[test]
+fn unknown_legacy_selector_controls_do_not_silently_use_a_known_equation() {
+    for bit in 8..14 {
+        let pass = compile(&surface(1 << bit, &[0]));
+        assert_eq!(pass.state.combiner.mode.x, 0);
+        assert!(pass
+            .diagnostics
+            .iter()
+            .any(|message| message.contains("approximated")));
+    }
+    assert!(program(0x4011, 2).is_some());
 }

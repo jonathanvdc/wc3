@@ -42,6 +42,7 @@ fn quad(selector: u16, count: u16, patterned: bool) -> m2::Bundle<'static, m2::F
         } else {
             "tertiary.tga"
         },
+        "pattern.tga",
     ]
     .into_iter()
     .map(|path| Texture {
@@ -54,10 +55,10 @@ fn quad(selector: u16, count: u16, patterned: bool) -> m2::Bundle<'static, m2::F
         flags: MaterialFlags::from_bits_retain(7),
         blending_mode: BlendMode::Alpha,
     }]);
-    core.texture_combos = ZeroVec::alloc_from_slice(&[0, 1, 2]);
-    core.texture_weight_combos = ZeroVec::alloc_from_slice(&[u16::MAX; 3]);
-    core.texture_transform_combos = ZeroVec::alloc_from_slice(&[u16::MAX; 3]);
-    core.texture_transform_bone_map = ZeroVec::alloc_from_slice(&[0, 0, 1]);
+    core.texture_combos = ZeroVec::alloc_from_slice(&[0, 1, 2, 3]);
+    core.texture_weight_combos = ZeroVec::alloc_from_slice(&[u16::MAX; 4]);
+    core.texture_transform_combos = ZeroVec::alloc_from_slice(&[u16::MAX; 4]);
+    core.texture_transform_bone_map = ZeroVec::alloc_from_slice(&[0, 0, 1, 1]);
     core.skins = vec![SkinProfile {
         vertices: ZeroVec::alloc_from_slice(&[0, 1, 2, 3]),
         indices: ZeroVec::alloc_from_slice(&[0, 1, 2, 0, 2, 3]),
@@ -118,8 +119,12 @@ fn write_native_material_capture_fixtures() {
         (19, 1),
         (20, 3),
         (21, 2),
+        (22, 4),
         (24, 3),
         (25, 1),
+        (26, 3),
+        (27, 2),
+        (28, 3),
         (32, 1),
         (33, 2),
         (34, 1),
@@ -131,6 +136,16 @@ fn write_native_material_capture_fixtures() {
         write(&path, bundle.encode().unwrap().model).unwrap();
         println!("{path}");
     }
+    let mut masked = quad(22, 4, false);
+    masked.model.core_mut().materials = ZeroVec::alloc_from_slice(&[Material {
+        flags: MaterialFlags::from_bits_retain(7),
+        blending_mode: BlendMode::AlphaKey,
+    }]);
+    write(
+        format!("{directory}/shader-22-mask.m2"),
+        masked.encode().unwrap().model,
+    )
+    .unwrap();
     let mut primary_route = quad(17, 3, true);
     primary_route.model.core_mut().texture_transform_bone_map =
         ZeroVec::alloc_from_slice(&[0, 0, 0]);

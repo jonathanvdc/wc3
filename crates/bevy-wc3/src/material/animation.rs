@@ -141,11 +141,14 @@ impl SurfaceAnimation {
             .iter()
             .flatten()
             .any(|v| v.property.is_some())
-            || self.third_transform.as_ref().is_some_and(|t| {
-                t.translation.property.is_some()
-                    || t.rotation.property.is_some()
-                    || t.scale.property.is_some()
-            })
+            || [&self.third_transform, &self.fourth_transform]
+                .into_iter()
+                .flatten()
+                .any(|t| {
+                    t.translation.property.is_some()
+                        || t.rotation.property.is_some()
+                        || t.scale.property.is_some()
+                })
             || self.uv_scroll.iter().flatten().any(|v| *v != 0.)
             || self.hd.as_ref().is_some_and(HdAnimation::is_animated)
             || self.mesh.as_ref().is_some_and(MeshAnimation::is_animated)
@@ -224,6 +227,12 @@ impl SurfaceAnimation {
         if let Some(transform) = &self.third_transform {
             changed |= replace(
                 &mut material.extension.combiner.third_transform,
+                Mat3::from(sampled_transform(sample, transform)),
+            );
+        }
+        if let Some(transform) = &self.fourth_transform {
+            changed |= replace(
+                &mut material.extension.combiner.fourth_transform,
                 Mat3::from(sampled_transform(sample, transform)),
             );
         }

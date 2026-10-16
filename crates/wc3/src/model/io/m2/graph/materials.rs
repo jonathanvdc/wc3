@@ -22,6 +22,12 @@ where
     let mut controls = BTreeMap::new();
     for (id, material) in model.materials() {
         let surface = surface(material, context)?;
+        if surface.guild_palette != profile::GuildPalette::default() {
+            context.unsupported(
+                "m2.material.guild_palette",
+                "application guild colours have no native M2 encoding",
+            )?;
+        }
         let color = i16::try_from(core.colors.len())
             .map_err(|_| Error::new("m2.material.color", "too many color controls"))?;
         core.colors.push(native::records::ColorAnimation {

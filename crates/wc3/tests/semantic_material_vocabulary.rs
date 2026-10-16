@@ -235,3 +235,21 @@ fn image_source_vocabularies_can_supply_graph_relationships() {
     });
     assert!(found);
 }
+
+#[test]
+fn guild_palette_defaults_are_neutral_and_nonfinite_settings_are_rejected() {
+    use wc3::model::materials::model_shader::GuildPalette;
+    let mut shader = ShaderPass::<CheckedPass>::default();
+    assert_eq!(
+        shader.guild_palette,
+        GuildPalette {
+            background: [1.; 3],
+            emblem: [1.; 3],
+            border: [1.; 3],
+        }
+    );
+    shader.guild_palette.emblem[1] = f32::NAN;
+    assert!(shader.validate().is_err());
+    shader.guild_palette.emblem[1] = 0.5;
+    shader.validate().unwrap();
+}

@@ -9,7 +9,7 @@ response, especially effects described by native shaders as specular.
 
 ## Shader selectors and coordinates
 
-Legacy selectors support one input and the common two-input multiplication,
+Modern low-bit selectors support one input and the common two-input multiplication,
 addition and alpha combinations. The environment bits and explicit coordinate
 source `-1` select view-space sphere environment mapping. Nonnegative sources
 select the declared mesh coordinate stream; other negative sources remain
@@ -17,13 +17,15 @@ unsupported. Generated coordinates use the animated/skinned normal and current
 view, bypassing texture transforms. Ordinary UV inputs retain independent
 animated transforms.
 
-The high-bit shader table interprets entries 0 through 21, 23 through 25, and
-32 through 35. These include environment modulation, masked additive contributions,
-weighted three-texture crossfades, glow composition and edge opacity. Input counts
+The high-bit shader table interprets entries 0 through 28 and 32 through 35. The [programme inventory](m2-programmes.md) lists every established
+entry, resource requirement and unresolved family. These include environment modulation, masked additive contributions,
+weighted and masked crossfades, guild composition, glow and edge opacity. Input counts
 must match the selected programme. Legacy selectors with surplus bindings use
 their established first-two-input equation and diagnose the unsampled bindings.
-All three interpreted inputs can select independent mesh coordinate streams or
-explicit environment coordinates and retain their own animated transforms. Native
+Supported inputs retain independent transforms and can select mesh streams or
+established environment coordinates. Four-input masking reuses at most three raw
+coordinate streams; a fourth environment route or four distinct raw streams
+produces a diagnosed fallback. The native UV0/UV0/UV0/UV1 routing is supported. Native
 import resolves repeated routes into shared controls; see the [M2 conversion
 guide](../../../wc3/docs/m2.md#shader-coordinate-ownership).
 Unknown table entries and unsupported input counts produce an explicit first-input
@@ -38,15 +40,19 @@ and shadow vertex layouts.
 
 ## Animation and opacity
 
-Surface RGB, opacity, all three input weights and UV transforms sample the
+Surface RGB, opacity, up to four input weights and UV transforms sample the
 model's selected animation programmes. The first input's weight normally
 multiplies global opacity. Batch flag `0x40` suppresses that opacity multiplier
 while retaining the weight as an independent shader control. Secondary and third
 weights affect the particular equations that author them; they are not
 unconditionally multiplied into diffuse opacity.
 
+Guild colours are explicit application settings with neutral white defaults.
+Palettes can be supplied on the semantic pass or changed through the live material
+API described in the [programme inventory](m2-programmes.md#resource-and-api-requirements).
+
 Material sampling updates assets only when an evaluated value changes. Texture
-count is uniform across a draw, and unused secondary/third image samples are
+count is uniform across a draw, and unused additional image samples are
 skipped. Generated-coordinate and edge-opacity layouts are specialized separately
 from ordinary UV layouts. A third texture reuses the primary or secondary raw UV
 stream when possible, while retaining its own transform. Only distinct or generated
@@ -55,10 +61,11 @@ sharing; source textures and unchanged material definitions retain their sharing
 
 ## Remaining interpretation limits
 
-Four-input masked crossfades, guild-colour programmes and the incompletely
-established illumination/constant programmes remain unsupported. Guild-style
-six-input batches retain a first-input fallback; they are not reduced to a
-three-input guild equation.
+Illumination and constant programmes, the modern six-binding guild resource layout,
+and special projective/waterfall families remain unsupported. Historical
+combiner and blend-override normalization also remains unresolved. The
+[programme inventory](m2-programmes.md) defines these boundaries and their missing
+information.
 
 Edge programmes interpolate a per-vertex facing factor,
 `clamp(2.7 * facing² - 0.4, 0, 1)`, into opacity. They use the skinned geometric

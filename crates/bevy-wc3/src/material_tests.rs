@@ -382,3 +382,33 @@ fn unknown_blending_does_not_silently_claim_opaque_support() {
     assert_eq!(pass.material.alpha_mode, AlphaMode::Blend);
     assert!(pass.diagnostics[0].contains("999"));
 }
+
+#[test]
+fn live_guild_palette_updates_uniforms_without_changing_pipeline_identity() {
+    let palette = GuildPalette {
+        background: [0.2, 0.4, 0.8],
+        emblem: [2., 0.5, 0.1],
+        border: [0.1, 0.2, 0.3],
+    };
+    let mut material = ModelMaterialExtension::default();
+    assert_eq!(material.guild_palette(), None);
+    assert!(!material.set_guild_palette(palette).unwrap());
+    for mode in 24..=26 {
+        material.combiner.mode.x = mode;
+        let before = ModelMaterialKey::from(&material);
+        assert_eq!(material.guild_palette(), Some(GuildPalette::default()));
+        assert!(material.set_guild_palette(palette).unwrap());
+        assert_eq!(material.guild_palette(), Some(palette));
+        let after = ModelMaterialKey::from(&material);
+        assert_eq!(before.generated_coordinates, after.generated_coordinates);
+        assert_eq!(before.third_uv, after.third_uv);
+        assert_eq!(before.blend, after.blend);
+        for invalid in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let mut invalid_palette = palette;
+            invalid_palette.border[2] = invalid;
+            assert!(material.set_guild_palette(invalid_palette).is_err());
+            assert_eq!(material.guild_palette(), Some(palette));
+        }
+        material.set_guild_palette(GuildPalette::default()).unwrap();
+    }
+}

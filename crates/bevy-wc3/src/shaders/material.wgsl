@@ -37,7 +37,7 @@
 #import bevy_pbr::decal::forward::get_forward_decal_info
 #endif
 
-#import "embedded://bevy_wc3/shaders/combiner.wgsl"::{combiner,secondary,secondary_sampler,tertiary,tertiary_sampler,compose}
+#import "embedded://bevy_wc3/shaders/combiner.wgsl"::{combiner,secondary,secondary_sampler,tertiary,tertiary_sampler,fourth,fourth_sampler,compose}
 struct World { flags: vec4<u32>, };
 @group(#{MATERIAL_BIND_GROUP}) @binding(110) var<uniform> world: World;
 #import bevy_pbr::pbr_bindings
@@ -104,6 +104,7 @@ fn fragment(
         var uv2=vec2(0.0);
 #ifdef VERTEX_UVS_A
         uv0=(pbr_bindings::material.uv_transform*vec3(in.uv,1.0)).xy;
+    uv1=(combiner.uv_transform*vec3(in.uv,1.0)).xy;
 #endif
 #ifdef VERTEX_UVS_B
         uv1=(combiner.uv_transform*vec3(in.uv_b,1.0)).xy;
@@ -116,9 +117,25 @@ fn fragment(
     if combiner.coordinates.w==2u {uv2=in.uv_b;}
 #endif
 #ifdef VERTEX_UVS_C
-    uv2=in.uv_c;
+    if combiner.coordinates.w==1u || combiner.coordinates.w==3u {uv2=in.uv_c;}
 #endif
     uv2=(combiner.third_transform*vec3(uv2,1.0)).xy;
+    var d=vec4(1.0);
+    if combiner.coordinates.z>3u {
+    var uv3=vec2(0.0);
+#ifdef VERTEX_UVS_A
+    uv3=in.uv;
+#endif
+#ifdef VERTEX_UVS_B
+    if combiner.additional_coordinates.x==2u {uv3=in.uv_b;}
+#endif
+#ifdef VERTEX_UVS_C
+    if combiner.additional_coordinates.x==3u {uv3=in.uv_c;}
+#endif
+    uv3=(combiner.fourth_transform*vec3(uv3,1.0)).xy;
+    d=textureSample(fourth,fourth_sampler,uv3);
+    }
+
         var a=vec4(1.0);
         if (pbr_input.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT)!=0u {
             a=textureSample(pbr_bindings::base_color_texture,pbr_bindings::base_color_sampler,uv0);
@@ -131,7 +148,7 @@ fn fragment(
 #ifdef VERTEX_COLORS
         tint*=in.color;
 #endif
-        let combined=compose(a,b,c,tint);
+        let combined=compose(a,b,c,d,tint);
         pbr_input.material.base_color=combined.color;
         if (pbr_input.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_UNLIT_BIT)!=0u {
             pbr_input.material.base_color=vec4(combined.color.rgb+combined.emission,combined.color.a);

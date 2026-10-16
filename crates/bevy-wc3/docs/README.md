@@ -41,6 +41,8 @@ then choose a topic:
   material sharing, isolation, and sampling.
 - [M2 materials](rendering/m2-materials.md): native texture combiners, generated
   coordinates, weighted crossfades, edge opacity and PBR integration limits.
+- [M2 programme inventory](rendering/m2-programmes.md): complete known shader-table
+  coverage, texture and palette requirements, and bounded unresolved families.
 - [Reforged materials](rendering/reforged-materials.md): texture roles,
   surface animation, UV sets, and Bevy shading integration.
 - [M3 materials](rendering/m3-materials.md): packed normals, basic occlusion,

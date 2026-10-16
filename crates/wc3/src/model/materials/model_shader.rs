@@ -26,6 +26,38 @@ pub type TextureUnit<T = TextureTransform> = TextureBinding<
     FrameSampling,
     Animated<f32>,
 >;
+/// Application-supplied linear RGB multipliers for legacy guild programmes.
+///
+/// These colours are external presentation settings, not values authored in an
+/// M2 file. Native imports use white; native export cannot retain a changed palette.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GuildPalette {
+    /// Cloth background multiplier.
+    pub background: [f32; 3],
+    /// Emblem multiplier, blended by the emblem texture alpha.
+    pub emblem: [f32; 3],
+    /// Border multiplier, blended by the border texture alpha.
+    pub border: [f32; 3],
+}
+impl GuildPalette {
+    /// Whether all linear RGB multipliers are finite.
+    pub fn is_finite(self) -> bool {
+        self.background
+            .iter()
+            .chain(&self.emblem)
+            .chain(&self.border)
+            .all(|value| value.is_finite())
+    }
+}
+impl Default for GuildPalette {
+    fn default() -> Self {
+        Self {
+            background: [1.; 3],
+            emblem: [1.; 3],
+            border: [1.; 3],
+        }
+    }
+}
 /// Complete logical shader pass. Table addresses are replaced with graph bindings.
 #[derive(Clone, Debug)]
 pub struct ShaderPass<'a, I = TextureUnit> {
@@ -44,6 +76,8 @@ pub struct ShaderPass<'a, I = TextureUnit> {
     pub color: Animated<[f32; 3]>,
     /// Animated surface opacity multiplier.
     pub opacity: Animated<f32>,
+    /// External colours used by legacy guild shader programmes.
+    pub guild_palette: GuildPalette,
     /// Ordered shader texture inputs.
     pub textures: Vec<I>,
     /// Optional user-authored shader label.
@@ -128,6 +162,12 @@ impl<I: ShaderInput> SurfacePayload for ShaderPass<'_, I> {
             .any(|(ordinal, input)| input.supports_property(key, ordinal))
     }
     fn validate(&self) -> Result<(), Error> {
+        if !self.guild_palette.is_finite() {
+            return Err(Error::new(
+                "m2.material.guild_palette",
+                "guild colours must be finite",
+            ));
+        }
         self.textures.iter().try_for_each(ShaderInput::validate)
     }
 }
@@ -142,6 +182,7 @@ impl<I> Default for ShaderPass<'_, I> {
             state: PassState::default(),
             color: Animated::default(),
             opacity: Animated::default(),
+            guild_palette: GuildPalette::default(),
             textures: Vec::new(),
             label: Cow::Borrowed(""),
         }

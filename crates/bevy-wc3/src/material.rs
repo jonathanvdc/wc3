@@ -10,6 +10,7 @@ mod ribbon_material;
 mod world;
 #[cfg(test)]
 use self::world::compile_world;
+use crate::ModelError;
 use animation::layered_uv;
 pub(super) use animation::mesh_alpha_mode;
 use bevy::mesh::MeshVertexBufferLayoutRef;
@@ -33,7 +34,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 #[cfg(test)]
 use wc3::model::materials::world as world_surface;
-use wc3::model::materials::{layered, state::Lighting};
+use wc3::model::materials::{layered, model_shader::GuildPalette, state::Lighting};
 use wc3::model::values::model::ParticleBlend;
 use wc3::model::{Animated, TextureId, TextureTransform};
 
@@ -90,6 +91,9 @@ pub struct ModelMaterialExtension {
     #[texture(111)]
     #[sampler(112)]
     tertiary: Option<Handle<Image>>,
+    #[texture(114)]
+    #[sampler(115)]
+    fourth: Option<Handle<Image>>,
     #[uniform(110)]
     world: WorldUniform,
     #[uniform(113)]
@@ -97,6 +101,34 @@ pub struct ModelMaterialExtension {
     blend: Option<Blend>,
     depth_test: bool,
     depth_write: Option<bool>,
+}
+
+impl ModelMaterialExtension {
+    /// Current application palette for a guild programme, or `None` for other surfaces.
+    pub fn guild_palette(&self) -> Option<GuildPalette> {
+        matches!(self.combiner.mode.x, 24..=26).then(|| GuildPalette {
+            background: self.combiner.guild_background.truncate().to_array(),
+            emblem: self.combiner.guild_emblem.truncate().to_array(),
+            border: self.combiner.guild_border.truncate().to_array(),
+        })
+    }
+
+    /// Update guild colours in an existing Bevy material without recompiling it.
+    ///
+    /// Returns `false` for a non-guild surface. Non-finite values are rejected
+    /// without changing the material. Multipliers are linear RGB and may exceed one.
+    pub fn set_guild_palette(&mut self, palette: GuildPalette) -> Result<bool, ModelError> {
+        if !palette.is_finite() {
+            return Err(ModelError::new("guild colours must be finite"));
+        }
+        if self.guild_palette().is_none() {
+            return Ok(false);
+        }
+        self.combiner.guild_background = Vec3::from_array(palette.background).extend(1.);
+        self.combiner.guild_emblem = Vec3::from_array(palette.emblem).extend(1.);
+        self.combiner.guild_border = Vec3::from_array(palette.border).extend(1.);
+        Ok(true)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, ShaderType)]
@@ -125,10 +157,16 @@ impl Default for HdUniform {
 struct CombinerUniform {
     uv_transform: Mat3,
     third_transform: Mat3,
+    fourth_transform: Mat3,
+    // x: fourth route, using the same raw-stream selectors as coordinates.w.
+    additional_coordinates: UVec4,
     // xy: environment selectors; z: input count. Third route w:
     // 0 = raw primary, 1 = environment, 2 = raw secondary, 3 = distinct stream.
     coordinates: UVec4,
     weights: Vec4,
+    guild_background: Vec4,
+    guild_emblem: Vec4,
+    guild_border: Vec4,
     // x: enabled, y: first alpha, z: second alpha, w: RGB/alpha doubling.
     mode: UVec4,
     clip: Vec4,
@@ -143,8 +181,13 @@ impl Default for CombinerUniform {
         Self {
             uv_transform: Mat3::IDENTITY,
             third_transform: Mat3::IDENTITY,
+            fourth_transform: Mat3::IDENTITY,
+            additional_coordinates: UVec4::ZERO,
             coordinates: UVec4::ZERO,
             weights: Vec4::ONE,
+            guild_background: Vec4::ONE,
+            guild_emblem: Vec4::ONE,
+            guild_border: Vec4::ONE,
             mode: UVec4::ZERO,
             clip: Vec4::ZERO,
         }
@@ -214,6 +257,7 @@ impl Default for ModelMaterialExtension {
             combiner: CombinerUniform::default(),
             secondary: None,
             tertiary: None,
+            fourth: None,
             hd: HdUniform::default(),
             orm: None,
             team_color: None,
@@ -242,7 +286,9 @@ impl From<&ModelMaterialExtension> for ModelMaterialKey {
     fn from(state: &ModelMaterialExtension) -> Self {
         Self {
             edge_fade: state.combiner.clip.y != 0.0,
-            third_uv: state.particle.mode.x != 0 || matches!(state.combiner.coordinates.w, 1 | 3),
+            third_uv: state.particle.mode.x != 0
+                || (matches!(state.combiner.coordinates.w, 1 | 3)
+                    || state.combiner.additional_coordinates.x == 3),
             generated_coordinates: state.combiner.coordinates.x != 0
                 || state.combiner.coordinates.y != 0
                 || state.combiner.coordinates.w == 1,
@@ -351,7 +397,8 @@ pub(crate) struct SurfaceAnimation {
     secondary_transform: Option<TextureTransform>,
     uv_scroll: [[f32; 2]; 2],
     third_transform: Option<TextureTransform>,
-    input_weights: [Option<Animated<f32>>; 3],
+    fourth_transform: Option<TextureTransform>,
+    input_weights: [Option<Animated<f32>>; 4],
     emissive_gain: Option<Animated<f32>>,
     emission: Option<Animated<[f32; 4]>>,
     emission_scale: f32,

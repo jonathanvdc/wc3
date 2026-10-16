@@ -639,8 +639,10 @@ fn cached_skin_cannot_be_reused_by_an_owner_with_a_different_layout() {
 fn model_event_leaves_inherit_skeleton_storage_flags_and_animation_ids() {
     use wc3::model::formats::m2::records::Event;
     let mut model = skeleton_model();
-    let mut event = Event::<V272>::default();
-    event.identifier = *b"$FR0";
+    let mut event = Event::<V272> {
+        identifier: *b"$FR0",
+        ..Default::default()
+    };
     // Reading this external offset as an inline core address would see MD20's
     // magic followed by its version: decreasing, meaningless timestamps.
     event

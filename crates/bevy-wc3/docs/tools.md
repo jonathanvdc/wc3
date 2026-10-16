@@ -75,6 +75,13 @@ vertex alpha, dropped births, and skipped simulation time beside each capture.
 These counters help distinguish simulation and visibility problems; inspect the
 images to assess appearance.
 
+For M2 guild materials, `--guild-palette 0.2,0.4,0.8:1,0.8,0.1:0.1,0.2,0.3`
+sets background, emblem, and border multipliers in linear RGB. All three triples
+are required and must be finite; values above one are accepted. These application
+colours apply to both live and baked material assets before rendering or timing.
+Other materials retain their appearance. Applications can update the same palette
+through `ModelMaterialExtension::set_guild_palette` on their Bevy material assets.
+
 Use `--bake-pose` to render static meshes and material snapshots from the offline
 baker at each capture time. The same camera, textures, authored LOD selection,
 lighting, and prepass options apply, making paired captures useful for comparing

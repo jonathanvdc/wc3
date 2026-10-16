@@ -1306,3 +1306,60 @@ fn native_export_rejects_coordinate_sources_incompatible_with_shader_routes() {
         .unwrap();
     assert!(io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).is_err());
 }
+
+#[test]
+fn application_guild_palettes_survive_profile_changes_but_require_export_loss_policy() {
+    let source = material_routes(0x801a, 3);
+    let mut imported = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (id, material) = imported.materials().next().unwrap();
+    let mut surface = material.surface.clone();
+    assert_eq!(surface.guild_palette, mp::GuildPalette::default());
+    surface.guild_palette.background = [0.25, 0.5, 0.75];
+    imported
+        .edit(|draft| draft.set_material_surface(id, surface))
+        .unwrap();
+    let broad = imported.clone().widen::<sm::profiles::Universal>();
+    let narrowed = broad.try_narrow::<sm::profiles::M2>().unwrap();
+    assert_eq!(
+        narrowed
+            .materials()
+            .next()
+            .unwrap()
+            .1
+            .surface
+            .guild_palette
+            .background,
+        [0.25, 0.5, 0.75]
+    );
+    let error =
+        io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).unwrap_err();
+    assert!(error.to_string().contains("guild"));
+    let planned = io::m2::plan::<m2::Flat<m2::V256>>(
+        &imported,
+        &ExportOptions {
+            loss_policy: LossPolicy::Drop,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let exported = planned.execute().unwrap();
+    assert!(exported
+        .report
+        .issues
+        .iter()
+        .any(|issue| issue.path == "m2.material.guild_palette"));
+    let roundtrip = io::m2::import(&exported.value, &ImportOptions::default()).unwrap();
+    assert_eq!(
+        roundtrip
+            .value
+            .materials()
+            .next()
+            .unwrap()
+            .1
+            .surface
+            .guild_palette,
+        mp::GuildPalette::default()
+    );
+}

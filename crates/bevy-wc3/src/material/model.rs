@@ -20,6 +20,9 @@ struct Program {
 }
 fn program(shader: u16, inputs: usize) -> Option<Program> {
     if shader & 0x8000 == 0 {
+        if shader & !0x40ff != 0 {
+            return None;
+        }
         let inputs = inputs.min(2);
         let mode = if inputs == 2 && matches!(shader & 7, 3 | 7) {
             UVec4::new(
@@ -60,7 +63,10 @@ fn program(shader: u16, inputs: usize) -> Option<Program> {
         21 | 35 => (1, 2, false),
         32 => (21, 1, false),
         33 => (1, 2, false),
+        22 => (23, 4, false),
         23 => (15, 2, false),
+        26 | 28 => (if offset == 26 { 24 } else { 26 }, 3, false),
+        27 => (25, 2, false),
         _ => return None,
     };
     (inputs == count).then_some(Program {
@@ -89,6 +95,30 @@ pub(super) fn legacy_combiner(shader: u16, inputs: usize) -> Option<UVec4> {
         u32::from(inputs == 2 && lower != 0 && lower != 6),
         u32::from(inputs == 2 && matches!(lower, 4 | 6)),
     ))
+}
+
+// Four samples need at most three raw streams. Reuse authored coordinates before
+// requesting another stream, independently of each sample's animated transform.
+fn fourth_route(surface: &model_shader::ShaderPass<'_>) -> Option<u32> {
+    let inputs = &surface.textures;
+    let source = inputs.get(3)?.coordinates.source;
+    if source < 0 {
+        return None;
+    }
+    if source == inputs[0].coordinates.source {
+        return Some(0);
+    }
+    if source == inputs[1].coordinates.source {
+        return Some(2);
+    }
+    let third = inputs[2].coordinates.source;
+    if source == third
+        || (third >= 0
+            && (third == inputs[0].coordinates.source || third == inputs[1].coordinates.source))
+    {
+        return Some(3);
+    }
+    None
 }
 
 pub(super) fn compile_model_shader(
@@ -121,6 +151,7 @@ pub(super) fn compile_model_shader(
             .iter()
             .take(program.inputs)
             .all(|input| input.coordinates.source >= -1)
+            && (program.inputs < 4 || fourth_route(surface).is_some())
     });
     if let Some(first) = surface.textures.first() {
         pass.material.base_color_texture =
@@ -137,6 +168,10 @@ pub(super) fn compile_model_shader(
     }
     if let Some(program) = supported {
         pass.state.combiner.mode = program.mode;
+        let palette = surface.guild_palette;
+        pass.state.combiner.guild_background = Vec3::from_array(palette.background).extend(1.);
+        pass.state.combiner.guild_emblem = Vec3::from_array(palette.emblem).extend(1.);
+        pass.state.combiner.guild_border = Vec3::from_array(palette.border).extend(1.);
         pass.state.combiner.clip.y = if program.edge_fade { 1. } else { 0. };
         pass.state.combiner.coordinates.z = program.inputs as u32;
         if program.inputs < surface.textures.len() {
@@ -147,15 +182,22 @@ pub(super) fn compile_model_shader(
             pass.animation.input_weights[slot] = Some(input.contribution.clone());
             let environment = program.environment.get(slot).copied().unwrap_or(false)
                 || input.coordinates.source == -1;
-            let coordinate_flag = if slot == 2 { 3 } else { slot };
-            pass.state.combiner.coordinates[coordinate_flag] = u32::from(environment);
+            if slot < 3 {
+                let coordinate_flag = if slot == 2 { 3 } else { slot };
+                pass.state.combiner.coordinates[coordinate_flag] = u32::from(environment);
+            }
             if environment && slot == 0 {
                 pass.material.uv_transform = Affine2::IDENTITY;
                 pass.animation.transform = None;
             }
             if slot == 1 {
-                pass.secondary_coordinate =
-                    Some(u32::try_from(input.coordinates.source).unwrap_or(0));
+                let source = u32::try_from(input.coordinates.source).unwrap_or(0);
+                if environment
+                    || pass.state.combiner.coordinates.x != 0
+                    || source != pass.coordinate
+                {
+                    pass.secondary_coordinate = Some(source);
+                }
                 pass.state.secondary =
                     image(model, input.image.texture, images, &mut pass.diagnostics)?;
                 if !environment {
@@ -191,6 +233,19 @@ pub(super) fn compile_model_shader(
                     pass.diagnostics.extend(scratch.diagnostics);
                     pass.animation.third_transform = Some(input.coordinates.transform.clone());
                 }
+            } else if slot == 3 {
+                let route = fourth_route(surface).expect("validated fourth coordinate route");
+                pass.state.combiner.additional_coordinates.x = route;
+                if route == 3 && pass.third_coordinate.is_none() {
+                    pass.third_coordinate = Some(input.coordinates.source as u32);
+                }
+                pass.state.fourth =
+                    image(model, input.image.texture, images, &mut pass.diagnostics)?;
+                let mut scratch = SurfacePass::default();
+                transform(&mut scratch, &input.coordinates.transform);
+                pass.state.combiner.fourth_transform = Mat3::from(scratch.material.uv_transform);
+                pass.diagnostics.extend(scratch.diagnostics);
+                pass.animation.fourth_transform = Some(input.coordinates.transform.clone());
             }
         }
     } else if surface.shader != 0

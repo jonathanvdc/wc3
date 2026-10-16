@@ -33,6 +33,7 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use wc3::model::formats::wmo::Profile as WmoProfile;
+use wc3::model::materials::model_shader::GuildPalette;
 #[path = "support/character.rs"]
 mod character;
 #[path = "support/resolver.rs"]
@@ -46,6 +47,7 @@ const HELP: &str = "Usage: capture MODEL OUTPUT_DIR [options]
 Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --character-recipe PATH  Assemble a resolved modern M2 character recipe (JSON)
   --particle-stats      Report sprite populations and omitted simulation work at each capture
+  --guild-palette RGB:RGB:RGB  Linear background, emblem and border RGB multipliers
   --physics             Enable authored rigid-body secondary motion
   --allow-loss          Explicitly discard unsupported native data, retaining diagnostics
   --wmo-profile NAME    classic, legion, bfa, shadowlands-pre92, shadowlands, dragonflight, warwithin
@@ -97,6 +99,7 @@ struct Options {
     bake_pose: bool,
     prepasses: bool,
     particle_stats: bool,
+    guild_palette: Option<GuildPalette>,
     bevy_reference: bool,
     no_default_light: bool,
     tonemapping: Tonemapping,
@@ -141,6 +144,7 @@ impl Options {
             bake_pose: false,
             prepasses: false,
             particle_stats: false,
+            guild_palette: None,
             bevy_reference: false,
             no_default_light: false,
             tonemapping: Tonemapping::None,
@@ -214,6 +218,7 @@ impl Options {
                         _ => return Err("tonemapping must be none or tony-mcmapface".into()),
                     };
                 }
+                "--guild-palette" => options.guild_palette = Some(parse_guild_palette(&value)?),
                 "--illuminance" => options.illuminance = value.parse()?,
                 "--times" => {
                     options.times = value.split(',').map(str::parse).collect::<Result<_, _>>()?
@@ -374,6 +379,21 @@ fn physics_counts(model: &PreparedModel) -> (usize, usize) {
             (bodies + child_bodies, joints + child_joints)
         },
     )
+}
+
+fn parse_guild_palette(value: &str) -> CaptureResult<GuildPalette> {
+    let colors = value
+        .split(':')
+        .map(parse_vector)
+        .collect::<CaptureResult<Vec<_>>>()?;
+    let [background, emblem, border]: [Vec3; 3] = colors
+        .try_into()
+        .map_err(|_| "guild palette requires background:emblem:border RGB triples")?;
+    Ok(GuildPalette {
+        background: background.to_array(),
+        emblem: emblem.to_array(),
+        border: border.to_array(),
+    })
 }
 
 fn parse_vector(value: &str) -> CaptureResult<Vec3> {
@@ -753,6 +773,13 @@ fn capture(options: Options) -> CaptureResult<()> {
             )?;
             settle(&mut app)?;
         }
+        if let Some(palette) = options.guild_palette {
+            let mut materials = app.world_mut().resource_mut::<Assets<ModelMaterial>>();
+            for (_, material) in materials.iter_mut() {
+                material.extension.set_guild_palette(palette)?;
+            }
+            settle(&mut app)?;
+        }
         if let Some(frames) = options.benchmark_frames {
             benchmark_pose(&mut app, &options, index, time, frames)?;
         }
@@ -977,6 +1004,31 @@ mod semantic;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn guild_palette_requires_three_complete_finite_linear_rgb_colors() {
+        let options = parse(&["--guild-palette", "0.2,0.4,0.8:2,0.5,0.1:0.1,0.2,0.3"])
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            options.guild_palette,
+            Some(GuildPalette {
+                background: [0.2, 0.4, 0.8],
+                emblem: [2., 0.5, 0.1],
+                border: [0.1, 0.2, 0.3],
+            })
+        );
+        for value in [
+            "1,1,1",
+            "1,1,1:1,1,1",
+            "1,1:1,1,1:1,1,1",
+            "1,1,1:NaN,1,1:1,1,1",
+            "1,1,1:1,1,1:1,1,inf",
+            "1,1,1:1,1,1:1,1,1:1,1,1",
+        ] {
+            assert!(parse(&["--guild-palette", value]).is_err(), "{value}");
+        }
+    }
 
     fn parse(options: &[&str]) -> CaptureResult<Option<Options>> {
         Options::parse(
