@@ -12,6 +12,9 @@ The compiler projects authored draw ranges, topology, and vertex/face/corner/
 whole-mesh attributes into shared Bevy meshes. Complete vertex records retain
 seams. Explicit and identity inverse binds remain distinct; skinning accepts up to
 eight active influences and rejects larger distributions rather than truncating.
+Each draw uses a compact palette containing its contributing joints, with matching
+inverse binds. This reduces repeated skin preparation without removing authored
+nodes or changing deformation.
 Complete compiled mesh contents are interned so equivalent draws share GPU geometry,
 while different tangent bases, attributes, and indices remain distinct.
 Models convert declared axes and units into Bevy's frame beneath the application
@@ -44,7 +47,10 @@ game-specific pass ordering scheme.
 emissive, Fresnel, and approximate reflection. Role-aware image requests preserve
 samplers and color-space distinctions without changing shared source images.
 Resource replacement belongs to the application resolver; there is no implicit game
-database or team-selection policy.
+database or team-selection policy. Materials share assets between instances when
+their compiled appearance is constant. Missing-channel bindings and scalar tracks
+that always equal their authored defaults preserve sharing; changing UV transforms
+and other animated appearance retain independent instance state.
 
 WMO surfaces support established layered diffuse/emissive programmes, independent
 UV streams and scroll clocks, and generated reflection coordinates. Separate

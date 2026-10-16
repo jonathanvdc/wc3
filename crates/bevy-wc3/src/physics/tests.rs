@@ -357,6 +357,7 @@ fn composition_remaps_parent_bodies_and_constraints_to_shared_host_body() {
             name: "composed".into(),
             parent: None,
             rest: ModelTransform::default(),
+            channels: Default::default(),
             inheritance: Default::default(),
             billboard: Default::default(),
             billboard_convention: Default::default(),
@@ -383,6 +384,7 @@ fn composition_body_offset_includes_rest_correction_anchors() {
     let make = |id, parent, x| RuntimeNode {
         id,
         name: "corrected".into(),
+        channels: Default::default(),
         parent,
         rest: ModelTransform {
             translation: [x, 0., 0.],

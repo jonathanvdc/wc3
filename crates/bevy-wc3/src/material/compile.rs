@@ -2,9 +2,9 @@
 use super::super::textures::{is_default_unit, TextureImages, TextureRole};
 use super::model::compile_model_shader;
 use super::programmed::compile_programmed_with_targets;
-use super::targets::AnimationTargets;
 use super::world::compile_world;
 use super::{layered_uv, Blend, HdAnimation, ModelMaterial, SurfacePass};
+use crate::animation_targets::AnimationTargets;
 use crate::error::ModelError;
 use bevy::material::OpaqueRendererMethod;
 use bevy::math::Affine2;
@@ -36,11 +36,11 @@ pub(crate) fn compile_materials_with_images(
     model: &Model<'_, Universal>,
     ids: impl IntoIterator<Item = MaterialId>,
     images: Arc<TextureImages>,
+    targets: &AnimationTargets,
 ) -> Result<HashMap<MaterialId, Vec<SurfacePass>>, ModelError> {
-    let targets = AnimationTargets::new(model);
     ids.into_iter()
         .map(|id| {
-            compile_material(model, id, &images, &targets, &mut Vec::new())
+            compile_material(model, id, &images, targets, &mut Vec::new())
                 .map(|passes| (id, passes))
         })
         .collect()
@@ -84,18 +84,22 @@ fn compile_material(
                         pass.animation.unweighted_opacity.get_or_insert(alpha);
                         pass.animation.pass_weights.push(Animated {
                             default: section.map_multiplier.initial,
-                            property: section
-                                .map_multiplier
-                                .binding
-                                .clone()
-                                .filter(|_| targets.contains(&section.map_multiplier.binding)),
+                            property: section.map_multiplier.binding.clone().filter(|_| {
+                                targets.scalar_changes(
+                                    section.map_multiplier.initial,
+                                    &section.map_multiplier.binding,
+                                )
+                            }),
                         });
                         pass.material
                             .base_color
                             .set_alpha(alpha * section.map_multiplier.initial);
                         pass.material.depth_bias = composite.priority as f32;
                         if section.map_multiplier.initial != 1.
-                            || targets.contains(&section.map_multiplier.binding)
+                            || targets.scalar_changes(
+                                section.map_multiplier.initial,
+                                &section.map_multiplier.binding,
+                            )
                         {
                             if let AlphaMode::Mask(cutoff) = pass.material.alpha_mode {
                                 pass.state.combiner.clip.x = cutoff;
@@ -140,6 +144,7 @@ fn compile_material(
         }
     };
     for pass in &mut passes {
+        pass.animation.prune_static_bindings(targets);
         pass.animation.images = images.color_images().clone();
         for diagnostic in &mut pass.diagnostics {
             *diagnostic = format!("material {id:?} ({}): {diagnostic}", material.name);

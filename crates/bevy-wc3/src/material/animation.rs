@@ -2,11 +2,12 @@
 use super::super::{mesh_animation::MeshAnimation, textures::TextureRole};
 use super::world::scrolling_transform;
 use super::{HdAnimation, ModelMaterial, SurfaceAnimation};
+use crate::animation_targets::AnimationTargets;
 use bevy::math::Affine2;
 use bevy::prelude::*;
 use std::array::from_fn;
-use wc3::model::SampledAnimation;
 use wc3::model::TextureTransform;
+use wc3::model::{Animated, SampledAnimation};
 
 impl HdAnimation {
     fn is_animated(&self) -> bool {
@@ -124,6 +125,58 @@ pub(crate) fn mesh_alpha_mode(authored: AlphaMode, opacity: f32) -> AlphaMode {
 }
 
 impl SurfaceAnimation {
+    /// A semantic binding may exist without any channel in the model. Such a
+    /// binding evaluates to its own default and needs no instance-owned asset.
+    pub(super) fn prune_static_bindings(&mut self, targets: &AnimationTargets) {
+        fn retain<T>(value: &mut Option<Animated<T>>, targets: &AnimationTargets) {
+            if let Some(value) = value {
+                targets.retain(&mut value.property);
+            }
+        }
+        retain(&mut self.color, targets);
+        retain(&mut self.rgba, targets);
+        for value in [&mut self.opacity, &mut self.weight, &mut self.emissive_gain]
+            .into_iter()
+            .flatten()
+        {
+            targets.retain_scalar(value);
+        }
+        retain(&mut self.texture, targets);
+        retain(&mut self.emission, targets);
+        for value in &mut self.pass_weights {
+            targets.retain_scalar(value);
+        }
+        for value in self.input_weights.iter_mut().flatten() {
+            targets.retain_scalar(value);
+        }
+        for transform in [
+            &mut self.transform,
+            &mut self.secondary_transform,
+            &mut self.third_transform,
+            &mut self.fourth_transform,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            targets.retain(&mut transform.translation.property);
+            targets.retain(&mut transform.rotation.property);
+            targets.retain(&mut transform.scale.property);
+        }
+        if let Some(hd) = &mut self.hd {
+            for slot in &mut hd.slots {
+                retain(slot, targets);
+            }
+            if let Some(gain) = &mut hd.gain {
+                targets.retain_scalar(gain);
+            }
+            if let Some(fresnel) = &mut hd.fresnel {
+                targets.retain(&mut fresnel.color.property);
+                targets.retain_scalar(&mut fresnel.opacity);
+                targets.retain_scalar(&mut fresnel.team_color);
+            }
+        }
+    }
+
     /// Procedural material motion needs clock updates even without any channels.
     pub(crate) fn uses_shared_time(&self) -> bool {
         self.uv_scroll.iter().flatten().any(|v| *v != 0.)

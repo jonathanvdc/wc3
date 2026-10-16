@@ -303,7 +303,10 @@ impl CompiledModel {
                             ancestor = source.nodes[index].parent;
                         }
                         if ancestor.is_none() {
-                            return Err(ModelError(format!("weighted equipment joint {:?} has no host binding or bound ancestor", source.nodes[joint].id)));
+                            return Err(ModelError(format!(
+                                "weighted equipment joint {:?} has no host binding or bound ancestor",
+                                source.nodes[joint].id
+                            )));
                         }
                     }
                     (*transform, None)
@@ -320,6 +323,7 @@ impl CompiledModel {
                 name: "part coordinate frame".into(),
                 parent,
                 rest: transform(frame)?,
+                channels: Default::default(),
                 inheritance: Inheritance::default(),
                 billboard: Billboard::None,
                 billboard_convention: Default::default(),
@@ -355,6 +359,7 @@ impl CompiledModel {
                         + rotation * (scale * pivot))
                         .to_array();
                     node.rest.pivot = pivot.to_array();
+                    node.channels = Default::default();
                     node.billboard = Billboard::None;
                     node.camera_anchored = false;
                     node.inheritance = Inheritance::default();

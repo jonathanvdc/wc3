@@ -170,15 +170,27 @@ impl PoseBaker {
                 .and_then(|overrides| overrides.0.get(&node.id))
                 .copied()
                 .unwrap_or_else(|| ModelTransform {
-                    translation: sample
-                        .property(&node.id.translation::<Universal>())
-                        .unwrap_or(node.rest.translation),
-                    rotation: sample
-                        .property(&node.id.rotation::<Universal>())
-                        .unwrap_or(node.rest.rotation),
-                    scale: sample
-                        .property(&node.id.scale::<Universal>())
-                        .unwrap_or(node.rest.scale),
+                    translation: if node.channels.translation {
+                        sample
+                            .property(&node.id.translation::<Universal>())
+                            .unwrap_or(node.rest.translation)
+                    } else {
+                        node.rest.translation
+                    },
+                    rotation: if node.channels.rotation {
+                        sample
+                            .property(&node.id.rotation::<Universal>())
+                            .unwrap_or(node.rest.rotation)
+                    } else {
+                        node.rest.rotation
+                    },
+                    scale: if node.channels.scale {
+                        sample
+                            .property(&node.id.scale::<Universal>())
+                            .unwrap_or(node.rest.scale)
+                    } else {
+                        node.rest.scale
+                    },
                     pivot: node.rest.pivot,
                 });
             self.poses[index] = evaluate_pose(
@@ -188,10 +200,13 @@ impl PoseBaker {
                     .map_or_else(EvaluatedPose::default, |parent| self.poses[parent]),
                 camera,
             );
-            self.visible[index] = sample
-                .property(&node.id.visibility::<Universal>())
-                .unwrap_or(node.visible)
-                && node.parent.is_none_or(|parent| self.visible[parent]);
+            self.visible[index] = (if node.channels.visibility {
+                sample
+                    .property(&node.id.visibility::<Universal>())
+                    .unwrap_or(node.visible)
+            } else {
+                node.visible
+            }) && node.parent.is_none_or(|parent| self.visible[parent]);
         }
         let default_selection = WorldSelection::default();
         let world_visibility = prepared

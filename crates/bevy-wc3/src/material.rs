@@ -4,7 +4,6 @@ mod bindings;
 mod compile;
 mod model;
 mod particle;
-mod targets;
 pub(crate) use particle::{particle_material_layers, ParticleComposition};
 mod programmed;
 use programmed::layers::{ProgrammedAnimation, ProgrammedUniform};
@@ -561,3 +560,7 @@ impl Default for SurfacePass {
 #[cfg(test)]
 #[path = "material_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "material/static_binding_tests.rs"]
+mod static_binding_tests;

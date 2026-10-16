@@ -26,6 +26,7 @@
 //! described in the repository's rendering guides.
 #![deny(missing_docs)]
 
+mod animation_targets;
 /// Resource-driven model assembly with application-defined appearance selection.
 pub mod assembly;
 mod assets;

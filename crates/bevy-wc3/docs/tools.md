@@ -211,7 +211,9 @@ There is no animation throttling. Compare these settings at a fixed count rather
 than attributing every extra pass to animation.
 
 Each invocation writes JSON with steady-state throughput, update latency
-percentiles, main/render scheduling windows and available render-pass diagnostics.
+percentiles, main/render scheduling windows, extraction CPU time and available
+render-pass diagnostics. Extraction measures entity synchronization and copying
+render inputs; it excludes waiting for the render thread.
 Offscreen rendering has no swapchain to bound queued GPU work. Submission fences
 limit this example to three outstanding frames while preserving CPU/render/GPU
 overlap. Warmup work is fully drained before measurement. A terminal GPU drain

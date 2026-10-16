@@ -1,5 +1,5 @@
 //! Fixed standard-shader roles and owned animation evaluation.
-use super::super::targets::AnimationTargets;
+use crate::animation_targets::AnimationTargets;
 use bevy::math::{Affine2, Mat2, Mat3, UVec4, Vec2, Vec4};
 use bevy::render::render_resource::ShaderType;
 use wc3::model::materials::programmed::{Property, TextureLayer};
@@ -107,9 +107,9 @@ pub(super) fn animated_layer(
     let c = &layer.binding.contribution;
     let t = &layer.binding.coordinates.transform;
     let animated = targets.contains(&c.color.binding)
-        || targets.contains(&c.map_alpha.binding)
-        || targets.contains(&c.rgb_multiply.binding)
-        || targets.contains(&c.rgb_add.binding)
+        || targets.scalar_changes(c.map_alpha.initial, &c.map_alpha.binding)
+        || targets.scalar_changes(c.rgb_multiply.initial, &c.rgb_multiply.binding)
+        || targets.scalar_changes(c.rgb_add.initial, &c.rgb_add.binding)
         || targets.contains(&t.uv_offset.binding)
         || targets.contains(&t.uv_angle.binding)
         || targets.contains(&t.uv_tiling.binding);
@@ -119,9 +119,9 @@ pub(super) fn animated_layer(
     let mut layer = layer.clone();
     let c = &mut layer.binding.contribution;
     targets.retain(&mut c.color.binding);
-    targets.retain(&mut c.map_alpha.binding);
-    targets.retain(&mut c.rgb_multiply.binding);
-    targets.retain(&mut c.rgb_add.binding);
+    targets.retain_scalar_binding(c.map_alpha.initial, &mut c.map_alpha.binding);
+    targets.retain_scalar_binding(c.rgb_multiply.initial, &mut c.rgb_multiply.binding);
+    targets.retain_scalar_binding(c.rgb_add.initial, &mut c.rgb_add.binding);
     let t = &mut layer.binding.coordinates.transform;
     targets.retain(&mut t.uv_offset.binding);
     targets.retain(&mut t.uv_angle.binding);

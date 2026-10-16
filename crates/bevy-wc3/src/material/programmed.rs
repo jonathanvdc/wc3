@@ -3,8 +3,8 @@ use std::array::from_fn;
 pub(super) mod layers;
 mod samplers;
 use super::compile::{blend, image_role_with_sampler};
-use super::targets::AnimationTargets;
 use super::SurfacePass;
+use crate::animation_targets::AnimationTargets;
 use crate::textures::{programmed_sampler, TextureImages, TextureRole};
 use crate::ModelError;
 use bevy::material::OpaqueRendererMethod;
@@ -181,7 +181,7 @@ pub(super) fn compile_programmed_with_targets(
             .take(8)
             .cloned()
             .map(|mut weight| {
-                targets.retain(&mut weight.binding);
+                targets.retain_scalar_binding(weight.initial, &mut weight.binding);
                 weight
             })
             .collect(),

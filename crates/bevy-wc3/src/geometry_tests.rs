@@ -438,3 +438,49 @@ fn fourth_uv_preserves_corner_rows_without_allocating_unused_streams() {
     let parts = compile_geometry(&source, subset, 0).unwrap();
     assert!(!parts[0].mesh.contains_attribute(FOURTH_TEXCOORD));
 }
+
+#[test]
+fn compact_skin_remaps_both_streams_and_ignores_vertices_outside_part() {
+    use wc3::model::{GeometryInfluences, Influence, Model, Node, ValueGroups};
+    let mut builder = Model::<Universal>::builder("joint identities");
+    let joints: Vec<_> = (0..16)
+        .map(|i| builder.add_node(Node::named(format!("joint {i}"))).unwrap())
+        .collect();
+    let mut geometry = GeometryData::triangles([[0.; 3]; 3], [[0, 1, 2]]).unwrap();
+    let selected = [14, 2, 10, 4, 12, 6, 8, 0];
+    geometry.influences = GeometryInfluences::Variable(ValueGroups::from_rows([
+        selected
+            .map(|joint| Influence {
+                joint,
+                weight: 0.125,
+            })
+            .to_vec(),
+        vec![Influence {
+            joint: 15,
+            weight: 1.,
+        }],
+        vec![Influence {
+            joint: 15,
+            weight: 1.,
+        }],
+    ]));
+    let source = ModelMesh::new(geometry);
+    let mut part = GeometryPart {
+        mesh: Mesh::new(PrimitiveTopology::PointList, RenderAssetUsages::default()),
+        vertices: vec![0],
+    };
+    let palette = apply_skin(&mut part, &source, &joints).unwrap();
+    assert_eq!(palette, [0, 2, 4, 6, 8, 10, 12, 14]);
+    assert_eq!(
+        part.mesh.attribute(Mesh::ATTRIBUTE_JOINT_INDEX),
+        Some(&VertexAttributeValues::Uint16x4(vec![[7, 1, 5, 2]]))
+    );
+    assert_eq!(
+        part.mesh.attribute(EXTRA_JOINT_INDEX),
+        Some(&VertexAttributeValues::Uint16x4(vec![[6, 3, 4, 0]]))
+    );
+    assert_eq!(
+        part.mesh.attribute(EXTRA_JOINT_WEIGHT),
+        Some(&VertexAttributeValues::Float32x4(vec![[0.125; 4]]))
+    );
+}

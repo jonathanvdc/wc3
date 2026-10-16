@@ -182,3 +182,159 @@ fn world_draw_materials_separate_lighting_classes_and_preserve_source_colors() {
     };
     assert_eq!(values.get(0), Some([0.5, 0.5, 0.5, 0.]));
 }
+
+#[test]
+fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
+    use crate::{BakeSpace, PoseBaker, PoseOptions};
+    use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
+    use bevy::mesh::VertexAttributeValues;
+    use wc3::model::{
+        Draw, ExplicitBinding, GeometryData, GeometryInfluences, IdentityBinding, Influence, Skin,
+        UniversalBinding,
+    };
+
+    for explicit in [false, true] {
+        let mut builder = Model::<Universal>::builder("compact palettes");
+        let joints: Vec<_> = (0..12)
+            .map(|i| builder.add_node(Node::named(format!("joint {i}"))).unwrap())
+            .collect();
+        let matrices: Vec<_> = (0..12)
+            .map(|i| Mat4::from_translation(Vec3::X * i as f32).to_cols_array_2d())
+            .collect();
+        let binding = if explicit {
+            UniversalBinding::Explicit(ExplicitBinding::new(matrices.clone()).unwrap())
+        } else {
+            UniversalBinding::Identity(IdentityBinding)
+        };
+        let skin = builder
+            .add_skin(Skin::new(joints.clone(), binding))
+            .unwrap();
+        // An authored skin not referenced by geometry must not allocate a runtime palette.
+        builder
+            .add_skin(Skin::new(
+                joints.clone(),
+                UniversalBinding::Identity(IdentityBinding),
+            ))
+            .unwrap();
+        let mut geometry = GeometryData::triangles(
+            [
+                [0., 0., 0.],
+                [1., 0., 0.],
+                [0., 1., 0.],
+                [0., 0., 0.],
+                [1., 0., 0.],
+                [0., 1., 0.],
+            ],
+            [[0, 1, 2], [3, 4, 5]],
+        )
+        .unwrap();
+        geometry.influences = GeometryInfluences::Four(
+            (0..6)
+                .map(|i| {
+                    [
+                        Influence {
+                            joint: if i < 3 { 3 } else { 8 },
+                            weight: 1.,
+                        },
+                        Influence {
+                            joint: 11,
+                            weight: 0.,
+                        },
+                        Influence {
+                            joint: 11,
+                            weight: 0.,
+                        },
+                        Influence {
+                            joint: 11,
+                            weight: 0.,
+                        },
+                    ]
+                })
+                .collect(),
+        );
+        let mut mesh = ModelMesh::new(geometry);
+        let first = mesh.add_primary_subset(0, 1);
+        let second = mesh.add_primary_subset(1, 1);
+        let mesh = builder.add_mesh(mesh).unwrap();
+        let material = builder
+            .add_material(SemanticMaterial {
+                name: "two passes".into(),
+                surface: MaterialSurface::Layered(Box::new(LayeredSurface {
+                    layers: vec![Layer::default(), Layer::default()],
+                    ..Default::default()
+                })),
+            })
+            .unwrap();
+        let mut instance = MeshInstance::new(joints[0], mesh);
+        instance.skin = Some(skin);
+        instance.draws = vec![
+            Draw::new(first, Default::default()),
+            Draw::new(second, Default::default()),
+        ];
+        builder
+            .add_instance_with_materials(instance, vec![material; 2])
+            .unwrap();
+        let model = builder.finish().unwrap();
+        let compiled = compile_model(&model, |_| None).unwrap();
+        assert_eq!(compiled.nodes.len(), 12);
+        assert_eq!(compiled.skins.len(), 2);
+        assert_eq!(compiled.draws.len(), 4);
+        for (draw_index, draw) in compiled.draws.iter().enumerate() {
+            let slot = if draw_index < 2 { 3 } else { 8 };
+            let palette = &compiled.skins[draw.skin.unwrap()];
+            assert_eq!(palette.joints, vec![slot]);
+            let expected = if explicit {
+                Mat4::from_cols_array_2d(&matrices[slot])
+            } else {
+                Mat4::IDENTITY
+            };
+            assert_eq!(palette.binds.as_ref(), &[expected]);
+            let Some(VertexAttributeValues::Uint16x4(indices)) =
+                draw.mesh.attribute(Mesh::ATTRIBUTE_JOINT_INDEX)
+            else {
+                panic!("joint indices absent")
+            };
+            assert!(indices.iter().all(|indices| *indices == [0; 4]));
+            assert_eq!(
+                draw.mesh
+                    .skinned_mesh_bounds()
+                    .unwrap()
+                    .aabb_index_to_joint_index[0]
+                    .0,
+                0
+            );
+        }
+        assert_eq!(compiled.draws[0].skin, compiled.draws[1].skin);
+        let mut meshes = Assets::default();
+        let mut binds = Assets::<SkinnedMeshInverseBindposes>::default();
+        let prepared = compiled.prepare(&mut meshes, &mut binds);
+        let baked = PoseBaker::default()
+            .bake(
+                &prepared,
+                &meshes,
+                &binds,
+                PoseOptions {
+                    space: BakeSpace::Authored,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        for (index, part) in baked.parts.iter().enumerate() {
+            let Some(VertexAttributeValues::Float32x3(positions)) =
+                part.mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+            else {
+                panic!("positions absent")
+            };
+            let translation = if explicit {
+                if index < 2 {
+                    3.
+                } else {
+                    8.
+                }
+            } else {
+                0.
+            };
+            assert_eq!(positions[0], [translation, 0., 0.]);
+        }
+    }
+}

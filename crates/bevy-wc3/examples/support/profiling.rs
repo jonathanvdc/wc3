@@ -37,6 +37,13 @@ struct Clock(Option<Instant>);
 
 pub fn install(app: &mut App) {
     let shared = Shared::default();
+    let mut extract = app.sub_app_mut(RenderApp).take_extract().unwrap();
+    let extraction = shared.clone();
+    app.sub_app_mut(RenderApp).set_extract(move |main, render| {
+        let clock = Clock(Some(Instant::now()));
+        extract(main, render);
+        finish(&clock, &extraction, "extract_cpu_ms");
+    });
     app.insert_resource(shared.clone())
         .init_resource::<Clock>()
         .add_systems(First, start)

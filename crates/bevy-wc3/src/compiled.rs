@@ -36,12 +36,22 @@ pub struct RenderDiagnostic {
 pub(crate) type MaterialCacheKey = (MaterialId, usize, MeshMaterialState, [u32; 4]);
 pub(crate) type MaterialCache = HashMap<MaterialCacheKey, Handle<ModelMaterial>>;
 
+/// Authored node properties with a channel in any playback programme.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct NodeChannels {
+    pub(crate) translation: bool,
+    pub(crate) rotation: bool,
+    pub(crate) scale: bool,
+    pub(crate) visibility: bool,
+}
+
 #[derive(Clone)]
 pub(crate) struct RuntimeNode {
     pub(crate) id: NodeId,
     pub(crate) name: String,
     pub(crate) parent: Option<usize>,
     pub(crate) rest: ModelTransform,
+    pub(crate) channels: NodeChannels,
     pub(crate) inheritance: Inheritance,
     pub(crate) billboard: Billboard,
     pub(crate) billboard_convention: BillboardConvention,

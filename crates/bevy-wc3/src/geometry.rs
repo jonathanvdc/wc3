@@ -466,13 +466,10 @@ pub(super) fn apply_skin(
     part: &mut GeometryPart,
     source: &ModelMesh<'_>,
     joints: &[NodeId],
-) -> Result<(), ModelError> {
+) -> Result<Vec<usize>, ModelError> {
     let rows = source.influences();
-    let mut indices = Vec::new();
-    let mut weights = Vec::new();
-    let mut extra_indices = Vec::new();
-    let mut extra_weights = Vec::new();
-    let mut has_extra = false;
+    let mut contributions = Vec::with_capacity(part.vertices.len());
+    let mut palette = Vec::new();
     for &vertex in &part.vertices {
         let values = match rows.get(vertex) {
             None => Vec::new(),
@@ -498,20 +495,37 @@ pub(super) fn apply_skin(
                 active.len()
             )));
         }
-        let mut ids = [0u16; 4];
-        let mut ws = [0f32; 4];
-        let mut extra_ids = [0u16; 4];
-        let mut extra_ws = [0f32; 4];
         let sum: f32 = active.iter().map(|(_, w)| w).sum();
         if sum <= 0. {
             return Err(ModelError(
                 "skinned vertex has no positive joint contribution".into(),
             ));
         }
-        for (slot, (joint, weight)) in active.into_iter().enumerate() {
+        for &(joint, _) in &active {
             if joint >= joints.len() {
                 return Err(ModelError("joint contribution exceeds skin palette".into()));
             }
+            palette.push(joint);
+        }
+        contributions.push((active, sum));
+    }
+    palette.sort_unstable();
+    palette.dedup();
+    if palette.len() > usize::from(u16::MAX) + 1 {
+        return Err(ModelError("compiled skin palette exceeds u16".into()));
+    }
+    let mut indices = Vec::with_capacity(contributions.len());
+    let mut weights = Vec::with_capacity(contributions.len());
+    let mut extra_indices = Vec::with_capacity(contributions.len());
+    let mut extra_weights = Vec::with_capacity(contributions.len());
+    let mut has_extra = false;
+    for (active, sum) in contributions {
+        let mut ids = [0u16; 4];
+        let mut ws = [0f32; 4];
+        let mut extra_ids = [0u16; 4];
+        let mut extra_ws = [0f32; 4];
+        for (slot, (joint, weight)) in active.into_iter().enumerate() {
+            let joint = palette.binary_search(&joint).expect("collected skin joint");
             let id =
                 u16::try_from(joint).map_err(|_| ModelError("skin palette exceeds u16".into()))?;
             if slot < 4 {
@@ -542,7 +556,7 @@ pub(super) fn apply_skin(
         part.mesh
             .insert_attribute(EXTRA_JOINT_WEIGHT, extra_weights);
     }
-    Ok(())
+    Ok(palette)
 }
 
 #[cfg(test)]

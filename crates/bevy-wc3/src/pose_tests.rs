@@ -359,3 +359,138 @@ fn m2_spherical_billboards_preserve_authored_rotation_pivot_and_basis_lengths() 
         assert_eq!(actual.scale.to_array().map(f32::is_sign_negative), signs);
     }
 }
+
+#[test]
+fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
+    use crate::compiled::NodeChannels;
+    use wc3::model::{Clip, Controller, SharedClock};
+    let mut builder = Model::builder("node channel inventory");
+    let parent = builder.add_node(Node::named("animated parent")).unwrap();
+    let child = builder
+        .add_node(
+            Node::named("static child")
+                .with_parent(parent)
+                .with_transform(ModelTransform {
+                    translation: [0., 1., 0.],
+                    ..Default::default()
+                })
+                .unwrap(),
+        )
+        .unwrap();
+    let times = [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()];
+    builder
+        .add_timeline_channel(Channel::Vector3(Track {
+            target: parent.translation(),
+            clock: Clock::Timeline,
+            curve: Curve::linear(times, [[0.; 3], [2., 0., 0.]]).unwrap(),
+        }))
+        .unwrap();
+    let shared = builder
+        .add_clock(SharedClock::Repeating {
+            period: Time::seconds(1.).unwrap(),
+        })
+        .unwrap();
+    builder
+        .add_shared_channel(Channel::Rotation(Track {
+            target: parent.rotation(),
+            clock: Clock::Shared(shared),
+            curve: Curve::linear(
+                times,
+                [
+                    Quaternion::default(),
+                    Quaternion(Quat::from_rotation_z(FRAC_PI_2).to_array()),
+                ],
+            )
+            .unwrap(),
+        }))
+        .unwrap();
+    builder
+        .add_clip(Clip::named("initial empty").with_duration(times[1]))
+        .unwrap();
+    let clip = builder
+        .add_clip(Clip::named("late scale").with_duration(times[1]))
+        .unwrap();
+    builder
+        .add_channel(
+            clip,
+            Channel::Vector3(Track {
+                target: parent.scale(),
+                clock: Clock::Clip,
+                curve: Curve::linear(times, [[1.; 3], [3.; 3]]).unwrap(),
+            }),
+        )
+        .unwrap();
+    let controller = builder.add_controller(Controller::default()).unwrap();
+    builder
+        .add_controller_channel(
+            controller,
+            Channel::Boolean(Track {
+                target: parent.visibility(),
+                clock: Clock::Timeline,
+                curve: Curve::step(times, [true, false]).unwrap(),
+            }),
+        )
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let compiled = compile_model(&model, |_| None).unwrap();
+    let parent_index = compiled
+        .nodes
+        .iter()
+        .position(|node| node.id == parent)
+        .unwrap();
+    let child_index = compiled
+        .nodes
+        .iter()
+        .position(|node| node.id == child)
+        .unwrap();
+    assert_eq!(
+        compiled.nodes[parent_index].channels,
+        NodeChannels {
+            translation: true,
+            rotation: true,
+            scale: true,
+            visibility: true
+        }
+    );
+    assert_eq!(
+        compiled.nodes[child_index].channels,
+        NodeChannels::default()
+    );
+    let time = Time::seconds(0.5).unwrap();
+    let controllers = [controller];
+    let sample = compiled
+        .animation
+        .sample(AnimationSample {
+            clip: Some(clip),
+            controllers: &controllers,
+            clip_time: time,
+            timeline_time: time,
+            shared_time: time,
+            ..Default::default()
+        })
+        .unwrap();
+    let retimed = sample.at_times(time, time, time);
+    let overrides = HashMap::new();
+    let context = PoseContext {
+        nodes: &compiled.nodes,
+        transition: None,
+        overrides: &overrides,
+        camera: None,
+    };
+    let mut scratch = Vec::new();
+    let (matrix, visible) = context.sample_node(child_index, &retimed, &mut scratch);
+    let expected = Mat4::from_scale_rotation_translation(
+        Vec3::splat(2.),
+        Quat::from_rotation_z(FRAC_PI_2 * 0.5),
+        Vec3::X,
+    ) * Mat4::from_translation(Vec3::Y);
+    assert!(matrix.abs_diff_eq(expected, 1e-5));
+    assert!(visible);
+    let end = Time::seconds(1.).unwrap();
+    let retimed = sample.at_times(time, end, time);
+    let (_, visible) = context.sample_node(child_index, &retimed, &mut scratch);
+    assert!(
+        !visible,
+        "controller visibility still propagates through static children"
+    );
+}

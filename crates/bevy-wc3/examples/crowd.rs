@@ -186,11 +186,12 @@ fn main() -> Result<()> {
                 compiled.prepare(&mut meshes, &mut binds)
             })
     };
-    let clip = prepared
+    let (clip, clip_name) = prepared
         .clips()
         .get(options.sequence)
-        .ok_or("sequence out of range")?
-        .0;
+        .ok_or("sequence out of range")?;
+    let clip = *clip;
+    let clip_name = clip_name.clone();
     let target = app
         .world_mut()
         .resource_mut::<Assets<Image>>()
@@ -349,7 +350,7 @@ fn main() -> Result<()> {
     let adapter = app.world().resource::<RenderAdapterInfo>();
     let features = app.world().resource::<RenderDevice>().features();
     let report = serde_json::json!({
-        "characters":options.count,"animated":!options.frozen,"prepasses":options.prepasses,"shadows":options.shadows,
+        "sequence_index":options.sequence,"sequence_name":clip_name,"characters":options.count,"animated":!options.frozen,"prepasses":options.prepasses,"shadows":options.shadows,
         "lod_policy":format!("{:?}",options.lod),"visible_triangle_references":visible_triangles,"resolution":[1280,720],"msaa_samples":4,"frames":options.frames,"warmup_frames":options.warmup,
         "preparation_frames":preparation_frames,"rendering_diagnostics":diagnostics,"import_loss_accepted":options.allow_loss,"fixed_simulation_hz":60,"wall_ms_per_frame_including_terminal_drain":elapsed*1000./options.frames as f64,
         "update_wall":summary(frames),"adapter":format!("{} / {:?} / {:?}",adapter.name,adapter.backend,adapter.device_type),"device_features":format!("{features:?}"),

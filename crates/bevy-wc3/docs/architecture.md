@@ -16,7 +16,12 @@ definitions and dependency handles rather than the source graph.
 `compiler.rs` assembles geometry, material, animation, feature, world, and
 effect interpreters. `geometry.rs` projects selected connectivity ranges and
 attribute domains, deduplicating complete compiled vertex records. Complete mesh
-outputs share assets when their attributes, indices, and topology agree.
+outputs share assets when their attributes, indices, and topology agree. Each
+skinned geometry part retains only palette slots used by its positive vertex
+weights, remapping both influence streams together with joint identities and
+inverse binds. Geometry parts using the same source skin and retained slots share
+compiled palettes; the authored skeleton remains available for attachments,
+overrides and animation.
 `material.rs` defines `ExtendedMaterial<StandardMaterial, ModelMaterialExtension>`;
 `material/compile.rs` interprets surfaces and `material/animation.rs` samples their
 properties. `textures.rs` identifies role, color-space, and effective sampler requests.
@@ -36,7 +41,14 @@ schemas through `assembly::Resolver<Selection>`.
 into asset stores and returns `PreparedModel`. Source bytes and the graph
 may be released before preparation. Mesh, bind, animation, and definition buffers
 remain shared. Constant materials share handles; animated materials remain private
-per instance and mark assets modified only when sampled values change.
+per instance and mark assets modified only when sampled values change. Compilation
+indexes channel destinations across timeline, shared-clock, clip and controller
+programmes. Bindings without channels, and scalar tracks proven to equal their
+authored default in every programme, do not require private material assets.
+Multi-key spline curves remain animated. Per-node channel flags also avoid querying
+static transform and visibility properties during live evaluation, occurrence
+sampling and baking. These flags retain every authored node and allow overrides and transitions
+to use the same evaluator.
 
 `instances.rs` caches prepared source assets, waits for required dependencies,
 rejects cyclic ownership, and populates application roots. Replacements remove only

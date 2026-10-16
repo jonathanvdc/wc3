@@ -128,15 +128,27 @@ impl PoseContext<'_> {
                 .get(&node.id)
                 .copied()
                 .unwrap_or_else(|| ModelTransform {
-                    translation: sample
-                        .property(&node.id.translation::<Universal>())
-                        .unwrap_or(node.rest.translation),
-                    rotation: sample
-                        .property(&node.id.rotation::<Universal>())
-                        .unwrap_or(node.rest.rotation),
-                    scale: sample
-                        .property(&node.id.scale::<Universal>())
-                        .unwrap_or(node.rest.scale),
+                    translation: if node.channels.translation {
+                        sample
+                            .property(&node.id.translation::<Universal>())
+                            .unwrap_or(node.rest.translation)
+                    } else {
+                        node.rest.translation
+                    },
+                    rotation: if node.channels.rotation {
+                        sample
+                            .property(&node.id.rotation::<Universal>())
+                            .unwrap_or(node.rest.rotation)
+                    } else {
+                        node.rest.rotation
+                    },
+                    scale: if node.channels.scale {
+                        sample
+                            .property(&node.id.scale::<Universal>())
+                            .unwrap_or(node.rest.scale)
+                    } else {
+                        node.rest.scale
+                    },
                     pivot: node.rest.pivot,
                 });
             let pose = if self.overrides.contains_key(&node.id) {
@@ -145,9 +157,13 @@ impl PoseContext<'_> {
                 self.transition.map_or(pose, |view| view.blend(index, pose))
             };
             evaluated = evaluate_pose(node, pose, evaluated, self.camera);
-            visible &= sample
-                .property(&node.id.visibility::<Universal>())
-                .unwrap_or(node.visible);
+            visible &= if node.channels.visibility {
+                sample
+                    .property(&node.id.visibility::<Universal>())
+                    .unwrap_or(node.visible)
+            } else {
+                node.visible
+            };
         }
         (evaluated.matrix, visible)
     }

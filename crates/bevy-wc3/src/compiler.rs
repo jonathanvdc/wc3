@@ -19,6 +19,7 @@ use super::world_lighting::{illumination, ColorAdjustment};
 use super::{
     CompiledModel, DrawSource, ModelAsset, ModelMaterial, RenderDiagnostic, TextureRequest,
 };
+use crate::animation_targets::AnimationTargets;
 use crate::compiled::{ClipTiming, RuntimeDraw, RuntimeLiquid, RuntimeNode, RuntimeSkin};
 use crate::composition::DrawSelection;
 use crate::physics::PhysicsDefinition;
@@ -129,6 +130,7 @@ pub fn compile_model_with_options(
     mut resolve_image: impl FnMut(TextureRequest<'_, '_>) -> Option<Handle<Image>>,
 ) -> Result<CompiledModel, ModelError> {
     model.validate().map_err(|e| ModelError(e.to_string()))?;
+    let targets = AnimationTargets::new(model);
     let node_map: HashMap<_, _> = model
         .nodes()
         .enumerate()
@@ -141,6 +143,7 @@ pub fn compile_model_with_options(
             name: node.name.to_string(),
             parent: node.parent.map(|id| node_map[&id]),
             rest: node.transform,
+            channels: targets.node_channels(id),
             inheritance: node.inheritance,
             billboard: node.billboard,
             billboard_convention: match node.controls {
@@ -153,23 +156,8 @@ pub fn compile_model_with_options(
         })
         .collect();
     let order = node_order(&nodes)?;
-    let skin_map: HashMap<SkinId, _> = model
-        .skins()
-        .enumerate()
-        .map(|(index, (id, _))| (id, index))
-        .collect();
-    let skins = model
-        .skins()
-        .map(|(_, skin)| RuntimeSkin {
-            joints: skin.joints.iter().map(|id| node_map[id]).collect(),
-            binds: skin
-                .inverse_bind()
-                .iter()
-                .map(|matrix| Mat4::from_cols_array_2d(&matrix))
-                .collect::<Vec<_>>()
-                .into(),
-        })
-        .collect();
+    let mut skins = Vec::new();
+    let mut skin_cache: HashMap<(SkinId, Vec<usize>), usize> = HashMap::new();
     let mut diagnostics = Vec::new();
     for (id, node) in model.nodes() {
         if let Some(NodeControls::M3(M3NodeRole::Bone(controls))) = &node.controls {
@@ -288,6 +276,7 @@ pub fn compile_model_with_options(
                 .then_some(id)
         }),
         images.clone(),
+        &targets,
     )?;
     for (&id, passes) in &materials {
         for pass in passes {
@@ -380,7 +369,7 @@ pub fn compile_model_with_options(
                 let meshes = if let Some(meshes) = geometry_cache.get(&key) {
                     meshes
                 } else {
-                    let mut parts = compile_geometry_with_color(
+                    let parts = compile_geometry_with_color(
                         source,
                         &subset,
                         surface.coordinate,
@@ -395,22 +384,47 @@ pub fn compile_model_with_options(
                                 .map_or(color, |adjustment| adjustment.color(vertex, color))
                         },
                     )?;
-                    if let Some(id) = skin_id {
-                        let skin = model
-                            .skin(id)
-                            .ok_or_else(|| ModelError("instance skin is absent".into()))?;
-                        for part in &mut parts {
-                            apply_skin(part, source, &skin.joints)?;
-                            compile_skin_bounds(&mut part.mesh)?;
-                        }
-                    }
                     let parts = parts
                         .into_iter()
                         .map(|mut part| {
+                            let compact_skin = if let Some(id) = skin_id {
+                                let skin = model
+                                    .skin(id)
+                                    .ok_or_else(|| ModelError("instance skin is absent".into()))?;
+                                let retained = apply_skin(&mut part, source, &skin.joints)?;
+                                let next = skins.len();
+                                let index = *skin_cache
+                                    .entry((id, retained.clone()))
+                                    .or_insert_with(|| {
+                                        let binds = skin.inverse_bind();
+                                        skins.push(RuntimeSkin {
+                                            joints: retained
+                                                .iter()
+                                                .map(|&slot| node_map[&skin.joints[slot]])
+                                                .collect(),
+                                            binds: retained
+                                                .iter()
+                                                .map(|&slot| {
+                                                    Mat4::from_cols_array_2d(
+                                                        &binds
+                                                            .get(slot)
+                                                            .expect("validated bind slot"),
+                                                    )
+                                                })
+                                                .collect::<Vec<_>>()
+                                                .into(),
+                                        });
+                                        next
+                                    });
+                                compile_skin_bounds(&mut part.mesh)?;
+                                Some(index)
+                            } else {
+                                None
+                            };
                             part.mesh.merge_duplicate_vertices().map_err(|e| {
                                 ModelError(format!("cannot index compiled mesh: {e}"))
                             })?;
-                            Ok(mesh_interner.intern(part.mesh))
+                            Ok((mesh_interner.intern(part.mesh), compact_skin))
                         })
                         .collect::<Result<Vec<_>, ModelError>>()?;
                     geometry_cache.entry(key).or_insert(parts)
@@ -418,7 +432,7 @@ pub fn compile_model_with_options(
                 let mut extension = surface.state.clone();
                 let (ambient, lighting) = illumination(model, instance, draw_controls, material_id);
                 let world_state = extension.set_world_illumination(ambient, lighting);
-                for mesh in meshes {
+                for (mesh, skin) in meshes {
                     draws.push(RuntimeDraw {
                         instance: instance_id,
                         source: draw_source,
@@ -430,7 +444,7 @@ pub fn compile_model_with_options(
                             .map_or(MeshMaterialState::Plain, |value| value.state(instance.mesh)),
                         pass,
                         node: node_map[&instance.node],
-                        skin: skin_id.map(|id| skin_map[&id]),
+                        skin: *skin,
                         lod: instance.lod,
                         mesh: mesh.clone(),
                         material: ModelMaterial {
