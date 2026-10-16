@@ -1,4 +1,5 @@
 use super::*;
+use crate::assembly::{Atlas, PixelRect, TextureLayer};
 #[test]
 fn conflicting_customization_and_equipment_are_rejected_before_resolution() {
     let mut recipe = CharacterRecipe {

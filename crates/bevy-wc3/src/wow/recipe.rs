@@ -1,4 +1,5 @@
-use super::{Atlas, CharacterCatalog, PixelRect};
+use super::CharacterCatalog;
+use crate::assembly::TextureReplacement;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -139,33 +140,8 @@ impl GeosetSelection {
             .collect())
     }
 }
-/// One image contribution to a texture replacement; order is back-to-front.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TextureLayer {
-    /// Image resource resolved through the application's asset provider.
-    pub resource: Resource<'static>,
-    /// Source pixel region; absent means the entire decoded source image.
-    pub source: Option<PixelRect>,
-    /// Destination pixel region in the composed atlas.
-    pub destination: PixelRect,
-    /// Additional opacity, 255 for unchanged source alpha.
-    pub opacity: u8,
-}
-/// A replacement slot is either a direct image or an explicit composed atlas.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TextureReplacement {
-    /// Direct resource replacement for hair, skin, equipment or other native slot.
-    Image(Resource<'static>),
-    /// Database-selected atlas geometry and ordered source images.
-    Atlas {
-        /// Final dimensions and initial pixel value.
-        atlas: Atlas,
-        /// Back-to-front image layers.
-        layers: Vec<TextureLayer>,
-    },
-}
 /// How a separately loaded model participates in the character hierarchy.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EquipmentBinding {
     /// Rigid equipment follows the native attachment point's authored frame.
     Attachment(AttachmentIdentity<'static>),
@@ -175,8 +151,6 @@ pub enum EquipmentBinding {
 /// One resolved armor, shoulder, weapon, cape or auxiliary model.
 #[derive(Clone, Debug)]
 pub struct ModelPart {
-    /// Slot that owns this part; a slot may produce several parts.
-    pub slot: EquipmentSlot,
     /// Model resource identity.
     pub model: Resource<'static>,
     /// Rigid attachment or shared skeleton.
@@ -196,9 +170,8 @@ pub struct ModelPart {
 }
 impl ModelPart {
     /// Creates a part with authored geometry, no replacement textures and strict native joint matching.
-    pub fn new(slot: EquipmentSlot, model: Resource<'static>, binding: EquipmentBinding) -> Self {
+    pub fn new(model: Resource<'static>, binding: EquipmentBinding) -> Self {
         Self {
-            slot,
             model,
             binding,
             joints: BTreeMap::new(),
@@ -229,41 +202,9 @@ impl CharacterDefinition {
             .values()
             .chain(self.parts.iter().flat_map(|part| part.textures.values()))
         {
-            if let TextureReplacement::Atlas { atlas, layers } = replacement {
-                if atlas.width == 0
-                    || atlas.height == 0
-                    || (atlas.width as usize)
-                        .checked_mul(atlas.height as usize)
-                        .and_then(|pixels| pixels.checked_mul(4))
-                        .is_none_or(|bytes| bytes > isize::MAX as usize)
-                {
-                    return Err(RecipeError::InvalidAtlas);
-                }
-                for layer in layers {
-                    if layer.source.is_some_and(|source| {
-                        source.width == 0
-                            || source.height == 0
-                            || source.x.checked_add(source.width).is_none()
-                            || source.y.checked_add(source.height).is_none()
-                    }) {
-                        return Err(RecipeError::InvalidAtlas);
-                    }
-                    let rect = layer.destination;
-                    if rect.width == 0
-                        || rect.height == 0
-                        || rect
-                            .x
-                            .checked_add(rect.width)
-                            .is_none_or(|end| end > atlas.width)
-                        || rect
-                            .y
-                            .checked_add(rect.height)
-                            .is_none_or(|end| end > atlas.height)
-                    {
-                        return Err(RecipeError::InvalidAtlas);
-                    }
-                }
-            }
+            replacement
+                .validate()
+                .map_err(|_| RecipeError::InvalidAtlas)?;
         }
         Ok(())
     }

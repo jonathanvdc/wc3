@@ -108,7 +108,7 @@ impl Display for AtlasError {
     }
 }
 impl Error for AtlasError {}
-fn pixel_len(width: u32, height: u32) -> Result<usize, AtlasError> {
+pub(super) fn pixel_len(width: u32, height: u32) -> Result<usize, AtlasError> {
     if width == 0 || height == 0 {
         return Err(AtlasError::Dimensions);
     }
@@ -118,7 +118,7 @@ fn pixel_len(width: u32, height: u32) -> Result<usize, AtlasError> {
         .filter(|n| *n <= isize::MAX as usize)
         .ok_or(AtlasError::Dimensions)
 }
-fn valid(rect: PixelRect, width: u32, height: u32) -> bool {
+pub(super) fn valid(rect: PixelRect, width: u32, height: u32) -> bool {
     rect.width > 0
         && rect.height > 0
         && rect

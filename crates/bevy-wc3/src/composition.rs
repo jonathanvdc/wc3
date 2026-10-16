@@ -19,7 +19,7 @@ use wc3::model::{
 };
 
 /// Geometry choices independent of animation, materials, and automatic LOD.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct DrawSelection {
     /// Explicit allowed draws. `None` retains every authored draw.
     pub draws: Option<HashSet<DrawId>>,
@@ -40,7 +40,7 @@ impl DrawSelection {
 /// Scoped identities are checked during composition. Equal ordinal positions or
 /// display names never imply a binding. Unmapped descendant joints remain local
 /// equipment bones; a weighted joint without a mapped ancestor is rejected.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct JointMap(BTreeMap<NodeId, NodeId>);
 impl JointMap {
     /// Construct a mapping, rejecting conflicting bindings of a source joint.
@@ -74,7 +74,7 @@ impl JointMap {
 }
 
 /// Relationship of a component model to a character or other carrying rig.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PartBinding {
     /// Preserve the part's skeleton beneath one host node.
     Rigid {

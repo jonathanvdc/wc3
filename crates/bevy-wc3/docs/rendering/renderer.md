@@ -54,8 +54,9 @@ material/tint alpha. Native lighting fidelity remains unverified.
 
 ## Scene features and effects
 
-[Character composition](characters.md) combines shared-skeleton armor, rigid
-mounted parts, geometry choices and composed body textures. Authored rigid-body
+[Model assembly](assembly.md) combines shared skeletons, rigid mounted parts,
+typed geometry choices and composed textures independently of game vocabulary.
+The [WoW adapter](characters.md) supplies native character interpretation. Authored rigid-body
 secondary motion is optional; native solver response remains approximate.
 
 Attachment mounts retain source identities, resources, activation, and complete

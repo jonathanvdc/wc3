@@ -156,14 +156,14 @@ longer useful. `CompileOptions` selects typed material appearances and
 external child handles. Ambiguous slot-based appearances require an explicit
 selection rather than choosing an arbitrary first material.
 
-## Compose characters and equipment
+## Compose models and appearances
 
 `CompiledModel::compose` combines independently compiled components into a reusable
-character definition. A `PartBinding::Skinned` supplies an explicit `JointMap` and
+model definition. A `PartBinding::Skinned` supplies an explicit `JointMap` and
 part-to-host rest transform. Mapped joints reuse the host skeleton; inverse binds
 retain the equipment's authored rest space. Unmatched weighted joints must descend
 from a mapped joint, so extra chains can animate without silently creating another
-character skeleton. `PartBinding::Rigid` retains an independent child model beneath
+host skeleton. `PartBinding::Rigid` retains an independent child model beneath
 a selected host node and can instantiate the same source asset more than once.
 `PartBinding::Attachment` addresses a typed attachment feature and also follows
 its authored activation gate; use this binding for equipment on attachment points.
@@ -175,12 +175,17 @@ Explicit clip mappings synchronize a child's clip to host seconds; independent
 rigid clips retain their own clocks while following host pause and playback rate.
 Controller-driven skinned parts require matching authored timeline origins.
 
-For WoW, `wow::CharacterRecipe` resolves through a build-specific database adapter
-into `CharacterDefinition`. `wow::compile_character` applies body/equipment geoset
-choices, texture replacements and atlas layers, native joint matching, and rigid
-attachment roles. `DrawSelection` also lets generic applications select authored
-geometry before material and texture resolution. The [character guide](rendering/characters.md)
-describes table adapters, explicit overrides and matching failures.
+For resource-driven setup, `assembly::Assembly` contains root and component
+sources, typed draw selections, exact texture replacements and explicit bindings.
+`assembly::compile_assembly` resolves images and compiles the complete plan.
+Applications can implement `assembly::Resolver<Selection>` for their own typed
+configuration schema. Atlas composition and repeated-source compilation happen
+once during setup; see [model assembly](rendering/assembly.md).
+
+The optional `wow::compile_character` adapter translates native character geosets,
+texture categories and joint-matching rules into that same pipeline. Its race,
+body-category and inventory vocabulary stays within the adapter. See
+[WoW characters](rendering/characters.md) for those interpretation rules.
 
 Add `PhysicsSimulation` to the root to enable authored secondary motion. Rigid
 components inherit simulation settings unless the application overrides them.

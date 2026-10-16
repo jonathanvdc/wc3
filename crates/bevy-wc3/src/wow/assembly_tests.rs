@@ -1,5 +1,7 @@
 use super::*;
-use crate::wow::{Atlas, EquipmentSlot, ModelPart as EquipmentPart, TextureLayer};
+use crate::assembly::{Atlas, PixelRect, RgbaImage, TextureLayer, TextureReplacement};
+use crate::wow::ModelPart as EquipmentPart;
+use std::collections::HashMap;
 use wc3::model::controls::model::BoneControls;
 use wc3::model::materials::bindings::ImageSelection;
 use wc3::model::materials::model_shader::{ShaderPass, TextureUnit};
@@ -84,7 +86,6 @@ fn definition() -> CharacterDefinition {
         },
         textures: BTreeMap::new(),
         parts: vec![EquipmentPart {
-            slot: EquipmentSlot::Chest,
             model: Resource::FileDataId(2),
             binding: EquipmentBinding::SharedSkeleton,
             joints: BTreeMap::new(),
@@ -153,22 +154,12 @@ fn unresolved_armor_cannot_silently_produce_a_partial_character() {
     let result = compile_character(&definition(), &models, &mut Assets::default(), |_| {
         Ok(RgbaImage::new(1, 1, vec![255; 4]).unwrap())
     });
-    assert!(result.err().unwrap().0.contains("missing equipment model"));
+    assert!(result.err().unwrap().0.contains("missing assembly model"));
 }
 #[test]
 fn repeated_atlas_sources_are_decoded_once() {
     let mut calls = 0;
     let mut images = Assets::default();
-    let mut decoded = HashMap::new();
-    let mut resolve = |_: &Resource<'static>| {
-        calls += 1;
-        RgbaImage::new(1, 1, vec![255, 0, 0, 255]).map_err(|error| ModelError(error.to_string()))
-    };
-    let mut compiler = ImageCompiler {
-        images: &mut images,
-        resolve: &mut resolve,
-        decoded: &mut decoded,
-    };
     let layer = TextureLayer {
         resource: Resource::FileDataId(3),
         source: None,
@@ -188,9 +179,25 @@ fn repeated_atlas_sources_are_decoded_once() {
         },
         layers: vec![layer.clone(), layer],
     };
+    let (body, _) = model("body", &[401]);
+    let models = HashMap::from([(Resource::FileDataId(1), body)]);
+    let mut definition = definition();
+    definition.parts.clear();
+    definition.textures.insert(1, replacement);
+    let compiled = compile_character(&definition, &models, &mut images, |_| {
+        calls += 1;
+        Ok(RgbaImage::new(1, 1, vec![255, 0, 0, 255]).unwrap())
+    })
+    .unwrap();
+    let handle = compiled.draws[0]
+        .material
+        .base
+        .base_color_texture
+        .as_ref()
+        .unwrap();
     assert_eq!(
-        compiler.replacement(&replacement).unwrap().pixels(),
-        &[255, 0, 0, 255]
+        images.get(handle).unwrap().data.as_deref(),
+        Some(&[255, 0, 0, 255][..])
     );
     assert_eq!(calls, 1);
 }
@@ -268,7 +275,6 @@ fn collection_shared_by_chest_and_wrists_compiles_one_rig_with_union_of_geosets(
         visible: [2201].into_iter().collect(),
     });
     let mut wrist = definition.parts[0].clone();
-    wrist.slot = EquipmentSlot::Wrists;
     wrist.geosets = Some(GeosetSelection {
         visible: [801].into_iter().collect(),
     });
@@ -294,40 +300,25 @@ fn collection_shared_by_chest_and_wrists_compiles_one_rig_with_union_of_geosets(
 fn collection_policy_conflicts_fail_before_images_are_resolved() {
     let mut definition = definition();
     let mut wrists = definition.parts[0].clone();
-    wrists.slot = EquipmentSlot::Wrists;
     wrists
         .textures
         .insert(1, TextureReplacement::Image(Resource::FileDataId(99)));
     definition.parts.push(wrists);
+    let (body, _) = model("body", &[401]);
+    let (part, _) = model("part", &[2201]);
+    let models = HashMap::from([
+        (Resource::FileDataId(1), body),
+        (Resource::FileDataId(2), part),
+    ]);
     let mut calls = 0;
-    let error = compile_character(&definition, &HashMap::new(), &mut Assets::default(), |_| {
+    let error = compile_character(&definition, &models, &mut Assets::default(), |_| {
         calls += 1;
         Ok(RgbaImage::new(1, 1, vec![255; 4]).unwrap())
     })
     .err()
     .unwrap();
     assert_eq!(calls, 0);
-    assert!(error.0.contains("shared-skeleton collection"));
-    assert!(error.0.contains("incompatible replacement textures"));
-    assert!(error.0.contains("Chest") && error.0.contains("Wrists"));
-}
-
-#[test]
-fn coalescing_preserves_all_geometry_and_keeps_distinct_resources_separate() {
-    let definition = definition();
-    let mut chest = definition.parts[0].clone();
-    chest.geosets = Some(GeosetSelection {
-        visible: [2201].into_iter().collect(),
-    });
-    let mut wrists = chest.clone();
-    wrists.slot = EquipmentSlot::Wrists;
-    wrists.geosets = None;
-    let mut other = chest.clone();
-    other.model = Resource::FileDataId(3);
-    let parts = coalesce_parts(&[chest, wrists, other]).unwrap();
-    assert_eq!(parts.len(), 2);
-    assert!(parts[0].geosets.is_none());
-    assert_eq!(parts[1].model, Resource::FileDataId(3));
+    assert!(error.0.contains("incompatible"));
 }
 
 #[test]

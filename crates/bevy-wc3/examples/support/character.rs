@@ -1,9 +1,8 @@
 //! Explicit, resolved modern WoW character recipes for the shared capture tool.
 use bevy::prelude::{Assets, Image};
+use bevy_wc3::assembly::{Atlas, Models, PixelRect, RgbaImage, TextureLayer, TextureReplacement};
 use bevy_wc3::wow::{
-    compile_character, Atlas, CharacterDefinition, CharacterModels, EquipmentBinding,
-    EquipmentSlot, GeosetSelection, ModelPart, PixelRect, RgbaImage, TextureLayer,
-    TextureReplacement,
+    compile_character, CharacterDefinition, EquipmentBinding, GeosetSelection, ModelPart,
 };
 use bevy_wc3::{CompiledModel, ModelError};
 use serde::Deserialize;
@@ -33,7 +32,9 @@ struct Recipe {
 #[serde(deny_unknown_fields)]
 struct Part {
     model: u32,
-    slot: String,
+    /// Optional application label; it has no rendering or inventory semantics.
+    #[serde(rename = "slot")]
+    _label: Option<String>,
     /// Absence selects validated shared-skeleton deformation.
     attachment: Option<u32>,
     geosets: Option<BTreeSet<u16>>,
@@ -103,26 +104,6 @@ fn replacements(values: BTreeMap<u32, Replacement>) -> BTreeMap<u32, TextureRepl
         })
         .collect()
 }
-fn equipment_slot(name: &str) -> Result<EquipmentSlot> {
-    match name {
-        "head" => Ok(EquipmentSlot::Head),
-        "shoulders" => Ok(EquipmentSlot::Shoulders),
-        "shirt" => Ok(EquipmentSlot::Shirt),
-        "chest" => Ok(EquipmentSlot::Chest),
-        "waist" => Ok(EquipmentSlot::Waist),
-        "legs" => Ok(EquipmentSlot::Legs),
-        "feet" => Ok(EquipmentSlot::Feet),
-        "wrists" => Ok(EquipmentSlot::Wrists),
-        "hands" => Ok(EquipmentSlot::Hands),
-        "back" => Ok(EquipmentSlot::Back),
-        "tabard" => Ok(EquipmentSlot::Tabard),
-        "main_hand" => Ok(EquipmentSlot::MainHand),
-        "off_hand" => Ok(EquipmentSlot::OffHand),
-        "ranged" => Ok(EquipmentSlot::Ranged),
-        _ => Err(format!("unknown character equipment slot: {name}").into()),
-    }
-}
-
 /// Loads FileDataID-named companions from `asset_root/filedata`, or the root itself.
 /// This capture recipe deliberately accepts only chunked version 274 M2 documents.
 /// Other native layouts continue through the ordinary capture asset loader.
@@ -141,23 +122,20 @@ pub fn load(
     let parts = recipe
         .parts
         .into_iter()
-        .map(|part| {
-            Ok(ModelPart {
-                clips: Default::default(),
-                slot: equipment_slot(&part.slot)?,
-                model: Resource::FileDataId(part.model),
-                binding: part
-                    .attachment
-                    .map_or(EquipmentBinding::SharedSkeleton, |role| {
-                        EquipmentBinding::Attachment(AttachmentIdentity::Role(role))
-                    }),
-                joints: BTreeMap::new(),
-                retain_unmatched_joints: false,
-                geosets: part.geosets.map(|visible| GeosetSelection { visible }),
-                textures: replacements(part.textures),
-            })
+        .map(|part| ModelPart {
+            clips: Default::default(),
+            model: Resource::FileDataId(part.model),
+            binding: part
+                .attachment
+                .map_or(EquipmentBinding::SharedSkeleton, |role| {
+                    EquipmentBinding::Attachment(AttachmentIdentity::Role(role))
+                }),
+            joints: BTreeMap::new(),
+            retain_unmatched_joints: false,
+            geosets: part.geosets.map(|visible| GeosetSelection { visible }),
+            textures: replacements(part.textures),
         })
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Vec<_>>();
     eprintln!(
         "Assembling character {} with {} model parts",
         recipe.body,
@@ -241,7 +219,7 @@ pub fn load(
                 .map_err(|error| format!("character model {id} conversion: {error}").into())
         })
         .collect::<Result<Vec<_>>>()?;
-    let mut models = CharacterModels::new();
+    let mut models = Models::new();
     for (id, converted) in model_ids.into_iter().zip(converted) {
         for loss in &converted.report.issues {
             eprintln!("Character import {id}: {loss:?}");
@@ -302,8 +280,16 @@ mod tests {
     }
 
     #[test]
-    fn recipe_rejects_unknown_fields_and_equipment_slots() {
+    fn recipe_rejects_unknown_fields() {
         assert!(serde_json::from_str::<Recipe>(r#"{"body":1,"geosets":[],"geoset":401}"#).is_err());
-        assert!(equipment_slot("sholders").is_err());
+        assert!(serde_json::from_str::<Part>(r#"{"model":2,"inventory_slot":"head"}"#).is_err());
+    }
+
+    #[test]
+    fn part_labels_are_optional_and_do_not_restrict_rendered_parts() {
+        let unlabeled: Part = serde_json::from_str(r#"{"model":2}"#).unwrap();
+        let labeled: Part = serde_json::from_str(r#"{"model":3,"slot":"antenna"}"#).unwrap();
+        assert_eq!(unlabeled._label, None);
+        assert_eq!(labeled._label.as_deref(), Some("antenna"));
     }
 }

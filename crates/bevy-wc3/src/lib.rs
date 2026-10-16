@@ -26,6 +26,8 @@
 //! described in the repository's rendering guides.
 #![deny(missing_docs)]
 
+/// Resource-driven model assembly with application-defined appearance selection.
+pub mod assembly;
 mod assets;
 mod baking;
 mod bounds;

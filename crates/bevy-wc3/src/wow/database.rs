@@ -1,7 +1,8 @@
 use super::{
     CharacterDatabase, CharacterDefinition, CharacterRecipe, EquipmentSlot, ModelPart, RecipeError,
-    Sex, TextureLayer, TextureReplacement,
+    Sex,
 };
+use crate::assembly::{TextureLayer, TextureReplacement};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Explicit visibility change over a table-defined set of mutually exclusive geosets.

@@ -1,0 +1,106 @@
+# Model assembly
+
+The `bevy_wc3::assembly` module builds reusable model assemblies from imported or
+application-authored semantic graphs. A character with equipment, a modular robot
+and a building with attached machinery use the same assembly operations. The
+application owns the vocabulary used to choose those resources and appearances.
+
+## Resolve application choices
+
+`Resolver<Selection>` accepts an application-defined selection type and
+the available `Models`. Applications can use their own enums, identifiers,
+body variants, collections of components or continuous parameters. The resolver
+translates those choices into supported semantic geometry, images and bindings;
+the renderer supplies no race, sex, customization-slot or inventory schema.
+
+Load or author the required models before resolving graph-scoped identities.
+`Models` maps resource identities to `Model<Universal>` values. An
+`Assembly` has a root `Source` and an ordered list of `Part`s.
+Each source selects its model resource, a `DrawSelection`, and exact `TextureId`
+replacements. Each part supplies a `PartBinding` and optional host-to-part clip
+mappings. Public assembly plans use concrete `PartBinding` values, so their
+attachment and skeleton relationships are explicit.
+
+For example, a resolver can attach a sensor resource to an application-selected
+node without introducing an inventory slot:
+
+```rust
+use bevy_wc3::assembly::{compile_assembly, Assembly, Part, Source};
+use bevy_wc3::PartBinding;
+
+let mut plan = Assembly::new(Source::new(chassis_resource));
+plan.parts.push(Part::new(Source::new(sensor_resource), PartBinding::Rigid {
+    parent: mounting_node,
+    transform: mounting_transform,
+}));
+let compiled = compile_assembly(&plan, &models, &mut images, decode_image)?;
+```
+
+The [WoW adapter](characters.md) is one application of this machinery. It interprets
+native geoset groups, replacement categories and bone identities before entering
+the same assembly compiler. Its character database vocabulary is optional.
+
+## Select geometry and images
+
+`DrawSelection` chooses typed draws and suppresses complete instances. Its default
+retains authored geometry. Assembly validation rejects draw, instance and texture
+identities that do not belong to the selected source graph. The compiler resolves
+materials and images for selected geometry, together with retained scene features
+and effects; a hidden hair draw therefore does not require its unused image.
+
+`TextureReplacement::Image` replaces one semantic texture with a decoded resource.
+`TextureReplacement::Atlas` defines dimensions, a clear color and ordered
+`TextureLayer` contributions. Layers carry resource identities, optional source
+crops, destination rectangles and byte opacity. The generic compiler targets
+`TextureId`s directly, so it does not infer native replacement categories.
+
+`compose_atlas` applies checked source-over composition in the decoded sRGB byte
+domain, including source and destination alpha, with nearest-neighbor scaling.
+Invalid dimensions, pixel storage and rectangles are errors. Image callbacks
+supply `RgbaImage` values; source decoding is cached within an assembly compilation.
+Role-dependent color space and sampler interpretations receive separate Bevy
+images. Atlas composition happens during setup, rather than animation updates.
+
+## Bind components
+
+`PartBinding::Rigid` retains a component's independent rig beneath a host `NodeId`.
+`PartBinding::Attachment` follows a `FeatureId` attachment point and its authored
+activation gate. Their transforms map component-authored coordinates into the
+carrying node's frame. The component's standalone axis/unit conversion is removed;
+applications supply an appropriate transform when physical placement needs a
+different conversion.
+
+`PartBinding::Skinned` supplies an explicit `JointMap` and part-to-host rest
+transform. Mapped joints reuse the host skeleton, while corrected inverse binds
+retain the source bind space. Additional weighted joints must descend from a
+mapped joint. Extra chains, effects and nested rigid children remain available.
+No generic bone-name, joint-index or native checksum matching is inferred.
+
+Clip mappings use host seconds without stretching curves. Independently animated
+rigid components follow the host's pause state and playback rate. Controller-driven
+skinned parts require matching authored timeline origins. `PoseBaker` includes
+composed components and attachment activation; explicit mounted playback snapshots
+can supply independent child clocks.
+
+## Compile and reuse
+
+`compile_assembly` accepts the resolved plan, semantic model map, Bevy image store
+and decoded-image callback. It validates selections, compiles sources, resolves
+bindings and returns a `CompiledModel`. Prepare and spawn it with the ordinary
+renderer APIs. Failed setup returns no partial assembly; images already inserted
+remain available in the asset store.
+
+Compatible skinned parts that refer to the same resource coalesce into one rig
+with united geometry selections. Bindings, texture replacements and clip maps must
+agree. Conflicting policies fail explicitly. Repeated identical rigid sources
+reuse compiled geometry, and preparation shares meshes and inverse-bind palettes
+across occurrences. Live rigs retain independent state. Reuse compiled and
+prepared assemblies across instances to amortize setup work.
+
+`PreparedModel::mounts()` and `ModelRig::mounts()` expose corresponding component
+definitions and live roots. `PoseOverrides` provides application pose control.
+`PhysicsSimulation` enables supported authored rigid-body secondary motion, with
+settings inherited by rigid components unless overridden. Native physics coverage
+and approximations are described in the [WoW guide](characters.md#secondary-motion).
+Assembly itself introduces no additional simulation or shading pipeline; all parts
+continue through Bevy PBR, lighting, skinning and the renderer's existing limits.

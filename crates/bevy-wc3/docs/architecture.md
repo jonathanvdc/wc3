@@ -27,8 +27,11 @@ geometry interpretation exists.
 `composition.rs` validates rest-space joint bindings and combines skinned equipment
 with the host rig. Rigid component definitions retain independent animation and
 physics state. Shared preparation interns mesh and inverse-bind handles across the
-whole composition. `wow/` resolves database-selected geometry and texture recipes
-before invoking this same compiler and composition path.
+whole composition. `assembly/` owns resource plans, typed selections, atlas
+composition, image caching and source compilation without game vocabulary.
+`wow/` translates native geosets, replacement categories and joint-matching
+instructions into that pipeline. Applications can supply their own selection
+schemas through `assembly::Resolver<Selection>`.
 `CompiledModel::prepare` inserts unique meshes and inverse bind palettes
 into asset stores and returns `PreparedModel`. Source bytes and the graph
 may be released before preparation. Mesh, bind, animation, and definition buffers

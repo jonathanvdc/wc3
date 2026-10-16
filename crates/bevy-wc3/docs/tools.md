@@ -88,7 +88,9 @@ body identity. Add `--physics` for authored secondary motion, or `--bake-pose` f
 static composition snapshots; these modes cannot be combined.
 
 A resolved JSON recipe names the body, visible native geosets, texture replacement
-categories and model parts. A part with `attachment` uses that native M2 role;
+categories and model parts. The optional part `slot` is an arbitrary application
+label, such as `chest` or `antenna`; it does not select an inventory slot or affect
+rendering. A part with `attachment` uses that native M2 role;
 without one it uses checked shared-skeleton matching. Texture values are either
 image FileDataIDs or atlas objects with explicit dimensions and ordered layers:
 
@@ -118,14 +120,16 @@ image FileDataIDs or atlas objects with explicit dimensions and ordered layers:
 The example uses external asset identities; game assets are not distributed with
 the crate. Atlas layers may specify a `source` crop and byte `opacity` as well as
 the destination `[x, y, width, height]`. The recipe is a resolved rendering input,
-not an item database.
+not an item database. Its native geoset and replacement-category choices belong to
+the WoW adapter. Applications composing arbitrary models use the format-independent
+`assembly::Assembly` plan, whose texture atlases and part bindings do not require
+WoW inventory or native geoset concepts.
 
 Body selections must retain the palms and fingers needed
 beneath equipment cuffs; selecting a glove mesh alone does not restore omitted
 body geometry. The identifiers above belong to that specific body, rather than
 being defaults for other models. Applications can use `CharacterTables` or their
-own
-`CharacterDatabase` to produce the equivalent typed definition; see
+own `CharacterDatabase` to produce the equivalent typed definition; see
 [characters and equipment](rendering/characters.md).
 
 ## Compare rendering behavior
