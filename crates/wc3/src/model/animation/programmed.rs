@@ -1,18 +1,17 @@
 //! Logical M3 properties values.
 use crate::model as semantic;
 use crate::model::values::programmed::{AnimationFlags, Interpolation};
+use crate::model::Construct;
 
-/// M3 property values and their semantic animation binding.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Property<T> {
+/// M3 animated slots with native reset values and control metadata.
+#[derive(Clone, Debug, Construct, PartialEq)]
+pub struct Property<T: semantic::Animatable> {
     /// Value used before a curve overrides this property.
-    pub initial: T,
+    pub value: semantic::Animated<T>,
     /// Value used when the property resets.
     pub reset: T,
     /// Editable native animation controls, independent of storage layout.
     pub control: AnimationControl,
-    /// Common graph destination when this property participates in animation.
-    pub binding: Option<semantic::Property<T>>,
 }
 
 /// M3 animation-reference controls with no storage addresses.

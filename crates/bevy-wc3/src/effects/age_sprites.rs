@@ -23,7 +23,7 @@ use wc3::model::values::model::{
 use wc3::model::{
     Animated, ClipId, Curve, CurveValue, FeatureId, MaterialId, Model, NodeFeature, NodeId,
     ParticleActivation, ParticleAgeCurves, ParticleAppearance, ParticleDetails, ParticleEmitter,
-    ParticleGravity, ParticleScalar, ParticleTrigger, RetimedAnimation, Texture, Time as ModelTime,
+    ParticleGravity, ParticleScalar, ParticleTrigger, Texture, Time as ModelTime, ValueSample,
 };
 
 const MAX_PARTICLES: usize = 8192;
@@ -45,23 +45,28 @@ pub struct SpriteEmitter {
 }
 
 #[derive(Clone)]
-struct Emitter {
-    feature: FeatureId,
-    node: NodeId,
-    node_index: usize,
-    rate: Animated<f32>,
-    rate_variation: f32,
+struct AgeDrivenControls {
     activation: ParticleActivation,
-    speed: Animated<f32>,
     speed_variation: Animated<f32>,
     gravity: ParticleGravity,
-    lifespan: Animated<f32>,
     lifespan_variation: Animated<f32>,
     vertical: Animated<f32>,
     horizontal: Animated<f32>,
     width: Animated<f32>,
     length: Animated<f32>,
     z_source: Animated<f32>,
+}
+
+#[derive(Clone)]
+struct Emitter {
+    feature: FeatureId,
+    node: NodeId,
+    node_index: usize,
+    rate: Animated<f32>,
+    rate_variation: f32,
+    controls: Option<AgeDrivenControls>,
+    speed: Animated<f32>,
+    lifespan: Animated<f32>,
     generator: ParticleGenerator,
     flags: ParticleFlags,
     drag: f32,
@@ -174,7 +179,7 @@ fn particle_image<'a>(
 
 fn scalar(value: &ParticleScalar) -> Option<Animated<f32>> {
     if let ParticleScalar::Animated(value) = value {
-        Some(value.clone())
+        Some(*value)
     } else {
         None
     }
@@ -251,7 +256,7 @@ impl RuntimeAgeSprites {
                 continue;
             };
             if let ParticleDetails::Programmed(details) = &definition.details {
-                let programme = match ProgrammedSprite::compile(definition) {
+                let programme = match ProgrammedSprite::compile(definition, model) {
                     Ok((programme, diagnostics)) => {
                         result
                             .diagnostics
@@ -443,17 +448,19 @@ impl RuntimeAgeSprites {
                 node_index: node_indices[&value.node],
                 rate,
                 rate_variation: definition.emission.variation,
-                activation: definition.emission.activation.clone(),
                 speed,
-                speed_variation,
-                gravity: definition.motion.gravity.clone(),
                 lifespan,
-                lifespan_variation,
-                vertical: details.shape.vertical_range.clone(),
-                horizontal: details.shape.horizontal_range.clone(),
-                width: details.shape.area_width.clone(),
-                length: details.shape.area_length.clone(),
-                z_source: details.shape.z_source.clone(),
+                controls: Some(AgeDrivenControls {
+                    activation: definition.emission.activation.clone(),
+                    speed_variation,
+                    gravity: definition.motion.gravity.clone(),
+                    lifespan_variation,
+                    vertical: details.shape.vertical_range,
+                    horizontal: details.shape.horizontal_range,
+                    width: details.shape.area_width,
+                    length: details.shape.area_length,
+                    z_source: details.shape.z_source,
+                }),
                 generator: details.shape.generator,
                 flags: details.flags,
                 drag: details.drag.max(0.),
@@ -708,18 +715,27 @@ impl RuntimeAgeSprites {
                         .unwrap_or(true)
                 };
                 let active = if visible && !ended {
-                    match &emitter.activation {
-                        ParticleActivation::Boolean(value) => {
-                            if sample.animated(value) {
-                                1.
-                            } else {
-                                0.
+                    if emitter.programmed.is_some() {
+                        1.
+                    } else {
+                        match &emitter
+                            .controls
+                            .as_ref()
+                            .expect("age-driven controls")
+                            .activation
+                        {
+                            ParticleActivation::Boolean(value) => {
+                                if sample.animated(value) {
+                                    1.
+                                } else {
+                                    0.
+                                }
                             }
+                            ParticleActivation::Fractional(value) => {
+                                sample.animated(value).clamp(0., 1.)
+                            }
+                            ParticleActivation::Programmed => 0.,
                         }
-                        ParticleActivation::Fractional(value) => {
-                            sample.animated(value).clamp(0., 1.)
-                        }
-                        ParticleActivation::Programmed => 0.,
                     }
                 } else {
                     0.
@@ -982,19 +998,11 @@ impl Emitter {
             feature,
             node,
             node_index,
-            rate: programme.rate.clone(),
+            rate: programme.rate,
             rate_variation: 0.,
-            activation: ParticleActivation::Boolean(Animated::constant(true)),
-            speed: programme.speed.clone(),
-            speed_variation: Animated::constant(0.),
-            gravity: ParticleGravity::Vector(Animated::constant([0., 0., programme.gravity])),
-            lifespan: programme.lifetime.clone(),
-            lifespan_variation: Animated::constant(0.),
-            vertical: Animated::constant(0.),
-            horizontal: Animated::constant(0.),
-            width: Animated::constant(0.),
-            length: Animated::constant(0.),
-            z_source: Animated::constant(0.),
+            controls: None,
+            speed: programme.speed,
+            lifespan: programme.lifetime,
             generator: ParticleGenerator::Plane,
             flags,
             drag: 0.,
@@ -1016,7 +1024,7 @@ impl Emitter {
     #[cfg(test)]
     fn birth(
         &self,
-        sample: &RetimedAnimation<'_, '_, '_>,
+        sample: &impl ValueSample,
         time: f64,
         node: Mat4,
         inherited: Vec3,
@@ -1027,7 +1035,7 @@ impl Emitter {
     }
     fn birth_in(
         &self,
-        sample: &RetimedAnimation<'_, '_, '_>,
+        sample: &impl ValueSample,
         time: f64,
         node: Mat4,
         basis: Mat4,
@@ -1035,14 +1043,6 @@ impl Emitter {
         ordinal: u64,
     ) -> Option<(Birth, Option<BirthAppearance>)> {
         if !node.is_finite() || node.determinant() == 0. {
-            return None;
-        }
-        let enabled = match &self.activation {
-            ParticleActivation::Boolean(value) => sample.animated(value),
-            ParticleActivation::Fractional(value) => sample.animated(value) > 0.,
-            ParticleActivation::Programmed => false,
-        };
-        if !enabled {
             return None;
         }
         let mut seed = self.seed ^ ordinal.wrapping_mul(0xd6e8feb86659fd93);
@@ -1069,15 +1069,24 @@ impl Emitter {
                 Some(BirthAppearance::Programmed(birth.appearance)),
             ));
         }
+        let controls = self.controls.as_ref().expect("age-driven emitter controls");
+        let enabled = match &controls.activation {
+            ParticleActivation::Boolean(value) => sample.animated(value),
+            ParticleActivation::Fractional(value) => sample.animated(value) > 0.,
+            ParticleActivation::Programmed => false,
+        };
+        if !enabled {
+            return None;
+        }
         let lifetime = sample.animated(&self.lifespan)
-            + signed(&mut seed) * sample.animated(&self.lifespan_variation);
+            + signed(&mut seed) * sample.animated(&controls.lifespan_variation);
         if !lifetime.is_finite() || lifetime <= 0. {
             return None;
         }
         let speed = sample.animated(&self.speed)
-            * (1. + signed(&mut seed) * sample.animated(&self.speed_variation));
-        let vertical = sample.animated(&self.vertical);
-        let horizontal = sample.animated(&self.horizontal);
+            * (1. + signed(&mut seed) * sample.animated(&controls.speed_variation));
+        let vertical = sample.animated(&controls.vertical);
+        let horizontal = sample.animated(&controls.horizontal);
         let theta = signed(&mut seed) * vertical;
         let phi = signed(&mut seed) * horizontal;
         let mut direction = if self.generator == ParticleGenerator::Sphere {
@@ -1093,8 +1102,8 @@ impl Emitter {
                 theta.cos(),
             )
         };
-        let width = sample.animated(&self.width);
-        let length = sample.animated(&self.length);
+        let width = sample.animated(&controls.width);
+        let length = sample.animated(&controls.length);
         let origin = match self.generator {
             ParticleGenerator::Plane => Vec3::new(
                 signed(&mut seed) * length * 0.5,
@@ -1107,7 +1116,7 @@ impl Emitter {
             }
             _ => return None,
         };
-        let z_source = sample.animated(&self.z_source);
+        let z_source = sample.animated(&controls.z_source);
         let aimed = if self.generator == ParticleGenerator::Plane {
             z_source > 0.001
         } else {
@@ -1121,7 +1130,7 @@ impl Emitter {
         if !aimed && self.generator == ParticleGenerator::Sphere && self.flags.sphere_up() {
             direction = Vec3::Z;
         }
-        let gravity = match &self.gravity {
+        let gravity = match &controls.gravity {
             ParticleGravity::Directional(v) => Vec3::NEG_Z * sample.animated(v),
             ParticleGravity::Vector(v) => Vec3::from(sample.animated(v)),
             _ => Vec3::ZERO,

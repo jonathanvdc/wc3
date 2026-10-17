@@ -17,7 +17,8 @@ use wc3::model::materials::program::MaterialStep;
 use wc3::model::materials::state::{BlendOperations, Lighting, Operation};
 use wc3::model::materials::{diablo3, mdlx};
 use wc3::model::profiles::Universal;
-use wc3::model::{Animated, MaterialId, Model, Sampler, Texture, TextureTransform};
+use wc3::model::Values;
+use wc3::model::{MaterialId, Model, Sampler, Texture, TextureTransform};
 
 #[cfg(test)]
 pub(crate) fn compile_material_with_images(
@@ -85,28 +86,17 @@ fn compile_material(
                     for pass in &mut section_passes {
                         let alpha = pass.material.base_color.alpha();
                         pass.animation.unweighted_opacity.get_or_insert(alpha);
-                        pass.animation.pass_weights.push(Animated {
-                            default: section.map_multiplier.initial,
-                            binding: section
-                                .map_multiplier
-                                .binding
-                                .clone()
-                                .filter(|_| {
-                                    targets.scalar_changes(
-                                        section.map_multiplier.initial,
-                                        &section.map_multiplier.binding,
-                                    )
-                                })
-                                .map(Into::into),
-                        });
+                        pass.animation
+                            .pass_weights
+                            .push(section.map_multiplier.value);
                         pass.material
                             .base_color
-                            .set_alpha(alpha * section.map_multiplier.initial);
+                            .set_alpha(alpha * model.values()[section.map_multiplier.value]);
                         pass.material.depth_bias = composite.priority as f32;
-                        if section.map_multiplier.initial != 1.
+                        if model.values()[section.map_multiplier.value] != 1.
                             || targets.scalar_changes(
-                                section.map_multiplier.initial,
-                                &section.map_multiplier.binding,
+                                model.values()[section.map_multiplier.value],
+                                &section.map_multiplier.value,
                             )
                         {
                             if let AlphaMode::Mask(cutoff) = pass.material.alpha_mode {
@@ -269,10 +259,10 @@ pub(super) fn depth(pass: &mut SurfacePass, test: Operation, write: Operation) {
     pass.state.depth_write = Some(!write.is_bypassed());
 }
 
-pub(super) fn transform(pass: &mut SurfacePass, transform: &TextureTransform) {
-    let translation = transform.translation.default;
-    let scale = transform.scale.default;
-    let rotation = Quat::from_array(transform.rotation.default.0);
+pub(super) fn transform(pass: &mut SurfacePass, transform: &TextureTransform, values: &Values) {
+    let translation = values[transform.translation];
+    let scale = values[transform.scale];
+    let rotation = Quat::from_array(values[transform.rotation].0);
     let (x, y, z) = rotation.to_euler(EulerRot::XYZ);
     pass.material.uv_transform = Affine2::from_scale_angle_translation(
         Vec2::new(scale[0], scale[1]),
@@ -326,20 +316,24 @@ fn compile_mdlx(
     );
     depth(&mut pass, raster.depth.test, raster.depth.write);
     pass.coordinate = binding.coordinates.source;
-    pass.material.base_color = Color::linear_rgba(1.0, 1.0, 1.0, opacity.default);
+    pass.material.base_color = Color::linear_rgba(1.0, 1.0, 1.0, model.values()[*opacity]);
     if hd_inputs.is_none() {
-        pass.material.base_color_texture =
-            image(model, binding.image.default, images, &mut pass.diagnostics)?;
+        pass.material.base_color_texture = image(
+            model,
+            model.values()[binding.image],
+            images,
+            &mut pass.diagnostics,
+        )?;
     }
-    pass.animation.opacity = Some(opacity.clone());
-    pass.animation.texture = Some(binding.image.clone());
-    pass.animation.emissive_gain = emissive_gain.clone();
+    pass.animation.opacity = Some(*opacity);
+    pass.animation.texture = Some(binding.image);
+    pass.animation.emissive_gain = *emissive_gain;
     pass.material.depth_bias = declaration.priority_plane as f32;
     let uv = &binding.coordinates.transform;
     pass.material.uv_transform = layered_uv(
-        uv.translation.default,
-        uv.rotation.default.0,
-        uv.scale.default,
+        model.values()[uv.translation],
+        model.values()[uv.rotation].0,
+        model.values()[uv.scale],
     );
     pass.animation.centered_transform = true;
     pass.animation.transform = Some(uv.clone());
@@ -349,10 +343,10 @@ fn compile_mdlx(
     }
     if let Some(hd_inputs) = hd_inputs {
         let mut slots = from_fn(|_| None);
-        slots[0] = Some(binding.image.clone());
+        slots[0] = Some(binding.image);
         for slot in &hd_inputs.textures {
             if let Some(binding) = slots.get_mut(slot.slot as usize) {
-                *binding = Some(slot.binding.image.clone());
+                *binding = Some(slot.binding.image);
             } else {
                 pass.diagnostics.push(format!(
                     "DefaultUnit texture slot {} is unsupported",
@@ -369,7 +363,7 @@ fn compile_mdlx(
                 };
                 image_role(
                     model,
-                    binding.default,
+                    model.values()[*binding],
                     role,
                     &images.slot(slot as u32),
                     &mut pass.diagnostics,
@@ -379,14 +373,14 @@ fn compile_mdlx(
         let hd = HdAnimation {
             slots,
             fresnel: hd_inputs.fresnel.clone(),
-            gain: emissive_gain.clone(),
+            gain: *emissive_gain,
             images: images.clone(),
         };
         let mut compiled = ModelMaterial {
             base: pass.material,
             extension: pass.state,
         };
-        hd.apply(None, &mut compiled);
+        hd.apply(model.values(), &mut compiled);
         compiled.base.reflectance = StandardMaterial::default().reflectance;
         pass.material = compiled.base;
         pass.state = compiled.extension;
@@ -415,7 +409,11 @@ fn compile_mdlx(
         .as_ref()
         .filter(|_| pass.animation.hd.is_none())
     {
-        pass.material.emissive = LinearRgba::rgb(gain.default, gain.default, gain.default);
+        pass.material.emissive = LinearRgba::rgb(
+            model.values()[*gain],
+            model.values()[*gain],
+            model.values()[*gain],
+        );
         pass.material.emissive_texture = pass.material.base_color_texture.clone();
     }
     Ok(pass)

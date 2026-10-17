@@ -8,8 +8,9 @@ use wc3::model::profiles::Universal;
 use wc3::model::{
     AnimationSample, Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Basis,
     Channel, Clock, Curve, DeformableGeometry, GeometryData, LengthUnit, Mesh, MeshAppearance,
-    Model, ModelPose, Node, PoseInputs, PoseLayout, PrimitiveKind, Time, Track, Transform,
+    Model, ModelPose, PoseInputs, PoseLayout, PrimitiveKind, Time, Track, Transform,
 };
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 fn time(seconds: f64) -> Time {
     Time::seconds(seconds).unwrap()
@@ -26,12 +27,13 @@ fn building() -> Model<'static> {
 
 #[test]
 fn standing_snapshot_retains_bindings_and_supports_editable_geometry_without_images() {
+    let mut slot_values = SlotValues::default();
     let mut model = building();
     let root = model.nodes().iter().next().unwrap().0;
     model
         .edit(|draft| {
             draft.add_timeline_channel(Channel::Vector3(Track {
-                target: root.translation(),
+                target: draft.model().node(root).unwrap().transform.translation,
                 clock: Clock::Timeline,
                 curve: Curve::linear([time(0.), time(1.)], [[0.; 3], [0., 0., 4.]])?,
             }))
@@ -41,7 +43,7 @@ fn standing_snapshot_retains_bindings_and_supports_editable_geometry_without_ima
     let sample = model
         .animation_sample(AnimationSample {
             timeline_time: time(0.5),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     let pose = layout.evaluate(&sample, PoseInputs::default()).unwrap();
@@ -60,10 +62,13 @@ fn standing_snapshot_retains_bindings_and_supports_editable_geometry_without_ima
                 .unwrap();
             let material = model.material(material_id).unwrap();
             let surface = LayeredSurface::try_from(material.surface.clone()).unwrap();
-            let frozen = surface.sampled(&sample);
-            let texture = frozen.layers[0].binding.image.default.unwrap();
+            let frozen = sample.evaluate();
+            let texture = frozen[surface.layers[0].binding.image].unwrap();
             assert!(model.image_resource(texture.resource).is_some());
-            assert!(frozen.layers[0].binding.image.binding.is_none());
+            assert_eq!(
+                sample.animated(&surface.layers[0].binding.image),
+                frozen[surface.layers[0].binding.image]
+            );
             let tint = appearances
                 .get(&instance.mesh)
                 .map_or([1.; 4], |v| v.sample(&sample));
@@ -139,19 +144,23 @@ fn projection_carries_application_face_and_corner_fields_across_triangulation() 
 
 #[test]
 fn repeated_pose_sampling_reuses_buffers_and_retimed_sampling_preserves_overrides() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::builder("hierarchy");
-    let root = builder.add_node(Node::named("root")).unwrap();
-    let child = builder
-        .add_node(Node::named("child").with_parent(root))
-        .unwrap();
+    let root = builder.add_named_node("root").unwrap();
+    let definition = builder.new_node("child").with_parent(root);
+    let child = builder.add_node(definition).unwrap();
     builder
         .add_timeline_channel(Channel::Vector3(Track {
-            target: root.translation(),
+            target: builder.model().node(root).unwrap().transform.translation,
             clock: Clock::Timeline,
             curve: Curve::linear([time(0.), time(1.)], [[0.; 3], [4., 0., 0.]]).unwrap(),
         }))
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let layout = model.prepare_pose().unwrap();
     let sample = model.animation_sample(AnimationSample::default()).unwrap();
     let mut output = ModelPose::default();
@@ -172,7 +181,7 @@ fn repeated_pose_sampling_reuses_buffers_and_retimed_sampling_preserves_override
         root,
         Transform {
             translation: [7., 0., 0.],
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
     )]);
     layout
@@ -180,7 +189,7 @@ fn repeated_pose_sampling_reuses_buffers_and_retimed_sampling_preserves_override
             &retimed,
             PoseInputs {
                 overrides: Some(&overrides),
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
             &mut output,
         )
@@ -194,7 +203,7 @@ fn repeated_pose_sampling_reuses_buffers_and_retimed_sampling_preserves_override
             &sample,
             PoseInputs {
                 camera: Some(Affine3A::from_scale(Vec3::ZERO)),
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             }
         )
         .is_err());
@@ -238,7 +247,7 @@ fn cpu_skinning_keeps_more_than_eight_influences() {
     use wc3::model::{GeometryInfluences, Influence, ValueGroups};
     let mut builder = Model::<Universal>::builder("many joints");
     let joints: Vec<_> = (0..9)
-        .map(|i| builder.add_node(Node::named(format!("joint {i}"))).unwrap())
+        .map(|i| builder.add_named_node(format!("joint {i}")).unwrap())
         .collect();
     let mut mesh: Mesh<'static> = Mesh::new(
         GeometryData::triangles(
@@ -269,28 +278,36 @@ fn cpu_skinning_keeps_more_than_eight_influences() {
 
 #[test]
 fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
-    use wc3::model::profiles::mdlx::properties::Layer;
-    use wc3::model::{Animated, SurfaceColor, TextureTransform};
+    let mut slot_values = SlotValues::default();
+
+    use wc3::model::{SurfaceColor, TextureTransform};
     let mut model = building();
     let material_id = model.materials().iter().next().unwrap().0;
-    let opacity = Layer(0).opacity().bind(material_id).widen();
-    let selection = Layer(0).texture().bind(material_id).widen();
+    let opacity = LayeredSurface::try_from(model.material(material_id).unwrap().surface.clone())
+        .unwrap()
+        .layers[0]
+        .opacity;
+    let selection = LayeredSurface::try_from(model.material(material_id).unwrap().surface.clone())
+        .unwrap()
+        .layers[0]
+        .binding
+        .image;
     let texture = model.sampled_images()[0];
     let mut material = model.material(material_id).unwrap().clone();
     let mut surface = LayeredSurface::try_from(material.surface.clone()).unwrap();
-    surface.layers[0].opacity = Animated::new(1., opacity.clone());
-    surface.layers[0].binding.image = Animated::new(Some(texture), selection.clone());
+    surface.layers[0].opacity = opacity;
+    surface.layers[0].binding.image = selection;
     material.surface = surface.try_into().unwrap();
     model
         .edit(|draft| {
             draft.set_material(material_id, material)?;
             draft.add_timeline_channel(Channel::Scalar(Track {
-                target: opacity.clone(),
+                target: opacity,
                 clock: Clock::Timeline,
                 curve: Curve::linear([time(0.), time(1.)], [0.2, 0.8])?,
             }))?;
             draft.add_timeline_channel(Channel::OptionalTexture(Track {
-                target: selection.clone(),
+                target: selection,
                 clock: Clock::Timeline,
                 curve: Curve::step([time(0.), time(1.)], [None, Some(texture)])?,
             }))
@@ -299,17 +316,18 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
     let sample = model
         .animation_sample(AnimationSample {
             timeline_time: time(0.5),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     let mut source =
         LayeredSurface::try_from(model.material(material_id).unwrap().surface.clone()).unwrap();
-    source.layers[0].opacity = Animated::new(1., opacity);
-    source.layers[0].binding.image = Animated::new(Some(texture), selection);
-    let frozen = source.sampled(&sample);
-    assert!((frozen.layers[0].opacity.default - 0.5).abs() < 1e-6);
-    assert_eq!(frozen.layers[0].binding.image.default, None);
-    assert!(frozen.layers[0].opacity.binding.is_none());
+    source.layers[0].opacity = opacity;
+    source.layers[0].binding.image = selection;
+    let frozen_values = sample.evaluate();
+    let frozen = source.clone();
+    assert!((frozen_values[frozen.layers[0].opacity] - 0.5).abs() < 1e-6);
+    assert_eq!(frozen_values[frozen.layers[0].binding.image], None);
+    assert_eq!(frozen.layers[0].opacity, source.layers[0].opacity);
     assert_eq!(frozen.layers[0].state, source.layers[0].state);
     assert_eq!(
         frozen.layers[0].binding.coordinates,
@@ -318,23 +336,27 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
     let color = SurfaceColor {
         opacity: Some(&source.layers[0].opacity),
         fallback: [0.8, 0.6, 0.4, 1.],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     assert_eq!(
         color.sample(&sample, [0.5, 1., 1., 0.5]),
         [0.4, 0.6, 0.4, 0.25]
     );
     let transform = TextureTransform {
-        scale: Animated::constant([2., 2., 1.]),
-        ..Default::default()
+        scale: slot_values.add([2., 2., 1.]),
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let origin = Vec2::ZERO;
     assert_eq!(
-        transform.affine(&sample, false).transform_point2(origin),
+        transform
+            .affine(&slot_values, false)
+            .transform_point2(origin),
         origin
     );
     assert_eq!(
-        transform.affine(&sample, true).transform_point2(origin),
+        transform
+            .affine(&slot_values, true)
+            .transform_point2(origin),
         Vec2::splat(-0.5)
     );
 }

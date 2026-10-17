@@ -35,8 +35,8 @@ use wc3::model::systems::System;
 use wc3::model::{
     AnimationProgram, Attachment, Billboard, Camera as ModelCamera, ClipControls, FeatureId,
     Light as SemanticLight, Link, MaterialId, MaterialSelection, MeshControls, Model, NodeControls,
-    NodeFeature, ParticleDetails, ParticleEmitter, PoseLayout, PropertyTarget, RibbonEmitter,
-    SkinId, Texture, ValidateLinks,
+    NodeFeature, ParticleDetails, ParticleEmitter, PoseLayout, RibbonEmitter, SkinId, Texture,
+    ValidateLinks,
 };
 
 fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
@@ -566,26 +566,12 @@ pub fn compile_model_with_options(
             .controllers()
             .iter()
             .any(|(_, controller)| !controller.channels.is_empty());
-    let pose_animated = model
-        .timeline_channels()
-        .iter()
-        .chain(model.shared_channels())
-        .chain(model.clips().iter().flat_map(|(_, clip)| clip.channels()))
-        .chain(
-            model
-                .controllers()
-                .iter()
-                .flat_map(|(_, controller)| &controller.channels),
-        )
-        .any(|channel| {
-            matches!(
-                channel.target(),
-                PropertyTarget::Translation(_)
-                    | PropertyTarget::Rotation(_)
-                    | PropertyTarget::Scale(_)
-                    | PropertyTarget::Visibility(_)
-            )
-        });
+    let pose_animated = nodes.iter().any(|node| {
+        node.channels.translation
+            || node.channels.rotation
+            || node.channels.scale
+            || node.channels.visibility
+    });
     let camera_sensitive = nodes.iter().any(|node| {
         node.camera_anchored
             || !matches!(

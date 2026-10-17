@@ -59,6 +59,7 @@ mod tests {
     use super::*;
     use bevy::asset::RenderAssetUsages;
     use bevy::mesh::PrimitiveTopology;
+
     fn mesh() -> Mesh {
         let mut mesh = Mesh::new(
             PrimitiveTopology::TriangleList,

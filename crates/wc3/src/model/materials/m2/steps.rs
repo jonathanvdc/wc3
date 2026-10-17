@@ -5,10 +5,11 @@ use crate::model::profiles::m2::properties::Target;
 use crate::model::profiles::SurfacePayload;
 use crate::model::values::model::{BatchFlags, BlendMode};
 use crate::model::{Animated, Error, Link, PropertyIdentityKey, PropertyPayload, ValidateLinks};
+use crate::model::{Construct, Values};
 use std::borrow::Cow;
 
 /// Shared M2 draw declarations and animated surface multipliers.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct MaterialDeclaration<'a> {
     /// Established batch behavior and retained extension bits.
     pub batch_flags: BatchFlags,
@@ -33,7 +34,7 @@ pub enum AdditiveOpacity {
     DiffuseAndEmission,
 }
 /// Inputs for the M2 Diffuse equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct DiffuseMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -43,7 +44,7 @@ pub struct DiffuseMaterialStep<'a> {
     pub use_texture_alpha: bool,
 }
 /// Inputs for the M2 Modulate equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ModulateMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -61,7 +62,7 @@ pub struct ModulateMaterialStep<'a> {
     pub unused_inputs: Vec<TextureUnit>,
 }
 /// Inputs for the M2 Additive equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct AdditiveMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -75,7 +76,7 @@ pub struct AdditiveMaterialStep<'a> {
     pub unused_inputs: Vec<TextureUnit>,
 }
 /// Inputs for the M2 MaskedDoubledModulation equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct MaskedDoubledModulationMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -85,7 +86,7 @@ pub struct MaskedDoubledModulationMaterialStep<'a> {
     pub modulation: TextureUnit,
 }
 /// Inputs for the M2 OpaqueAdditiveAlpha equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct OpaqueAdditiveAlphaMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -95,7 +96,7 @@ pub struct OpaqueAdditiveAlphaMaterialStep<'a> {
     pub emission: TextureUnit,
 }
 /// Inputs for the M2 InverseMaskedOpaqueAdditiveAlpha equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct InverseMaskedOpaqueAdditiveAlphaMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -105,7 +106,7 @@ pub struct InverseMaskedOpaqueAdditiveAlphaMaterialStep<'a> {
     pub emission: TextureUnit,
 }
 /// Inputs for the M2 MaskedDoubledModulationGlow equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct MaskedDoubledModulationGlowMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -117,7 +118,7 @@ pub struct MaskedDoubledModulationGlowMaterialStep<'a> {
     pub glow: TextureUnit,
 }
 /// Inputs for the M2 ModulatedAdditiveAlpha equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ModulatedAdditiveAlphaMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -127,7 +128,7 @@ pub struct ModulatedAdditiveAlphaMaterialStep<'a> {
     pub emission: TextureUnit,
 }
 /// Inputs for the M2 InverseMaskedModulatedAdditiveAlpha equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct InverseMaskedModulatedAdditiveAlphaMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -137,7 +138,7 @@ pub struct InverseMaskedModulatedAdditiveAlphaMaterialStep<'a> {
     pub emission: TextureUnit,
 }
 /// Inputs for the M2 DoubleAlphaInterpolation equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct DoubleAlphaInterpolationMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -147,7 +148,7 @@ pub struct DoubleAlphaInterpolationMaterialStep<'a> {
     pub replacement: TextureUnit,
 }
 /// Inputs for the M2 DoubledModulationInterpolation equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct DoubledModulationInterpolationMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -159,7 +160,7 @@ pub struct DoubledModulationInterpolationMaterialStep<'a> {
     pub replacement: TextureUnit,
 }
 /// Inputs for the M2 WeightedOpaqueAdditiveAlpha equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct WeightedOpaqueAdditiveAlphaMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -169,7 +170,7 @@ pub struct WeightedOpaqueAdditiveAlphaMaterialStep<'a> {
     pub emission: TextureUnit,
 }
 /// Inputs for the M2 ModulatedAdditiveInverseMask equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ModulatedAdditiveInverseMaskMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -179,7 +180,7 @@ pub struct ModulatedAdditiveInverseMaskMaterialStep<'a> {
     pub emission: TextureUnit,
 }
 /// Inputs for the M2 MaskedModulation equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct MaskedModulationMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -189,7 +190,7 @@ pub struct MaskedModulationMaterialStep<'a> {
     pub modulation: TextureUnit,
 }
 /// Inputs for the M2 WeightedModulatedAdditiveAlpha equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct WeightedModulatedAdditiveAlphaMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -199,7 +200,7 @@ pub struct WeightedModulatedAdditiveAlphaMaterialStep<'a> {
     pub emission: TextureUnit,
 }
 /// Inputs for the M2 WeightedModulationAdditive equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct WeightedModulationAdditiveMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -209,7 +210,7 @@ pub struct WeightedModulationAdditiveMaterialStep<'a> {
     pub modulation: TextureUnit,
 }
 /// Inputs for the M2 MaskedDoubledModulationAlpha equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct MaskedDoubledModulationAlphaMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -221,7 +222,7 @@ pub struct MaskedDoubledModulationAlphaMaterialStep<'a> {
     pub unshaded: TextureUnit,
 }
 /// Inputs for the M2 DualCrossfade equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct DualCrossfadeMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -233,7 +234,7 @@ pub struct DualCrossfadeMaterialStep<'a> {
     pub second: TextureUnit,
 }
 /// Inputs for the M2 FacingOpacity equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct FacingOpacityMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -241,7 +242,7 @@ pub struct FacingOpacityMaterialStep<'a> {
     pub diffuse: TextureUnit,
 }
 /// Inputs for the M2 DoubledModulationDoubleInterpolation equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct DoubledModulationDoubleInterpolationMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -253,7 +254,7 @@ pub struct DoubledModulationDoubleInterpolationMaterialStep<'a> {
     pub replacement: TextureUnit,
 }
 /// Inputs for the M2 ModulatedFacingOpacity equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ModulatedFacingOpacityMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -263,7 +264,7 @@ pub struct ModulatedFacingOpacityMaterialStep<'a> {
     pub modulation: TextureUnit,
 }
 /// Inputs for the M2 MaskedDualCrossfade equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct MaskedDualCrossfadeMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -277,7 +278,7 @@ pub struct MaskedDualCrossfadeMaterialStep<'a> {
     pub alpha_mask: TextureUnit,
 }
 /// Inputs for the M2 AlphaInterpolation equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct AlphaInterpolationMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -287,7 +288,7 @@ pub struct AlphaInterpolationMaterialStep<'a> {
     pub replacement: TextureUnit,
 }
 /// Inputs for the M2 Guild equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct GuildMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -301,7 +302,7 @@ pub struct GuildMaterialStep<'a> {
     pub palette: GuildPalette,
 }
 /// Inputs for the M2 GuildEmblem equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct GuildEmblemMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -313,7 +314,7 @@ pub struct GuildEmblemMaterialStep<'a> {
     pub palette: GuildPalette,
 }
 /// Inputs for the M2 OpaqueGuild equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct OpaqueGuildMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -327,7 +328,7 @@ pub struct OpaqueGuildMaterialStep<'a> {
     pub palette: GuildPalette,
 }
 /// Inputs for the M2 DiffuseWithoutTextureAlpha equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct DiffuseWithoutTextureAlphaMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -335,7 +336,7 @@ pub struct DiffuseWithoutTextureAlphaMaterialStep<'a> {
     pub diffuse: TextureUnit,
 }
 /// Inputs for the M2 DoubledModulatedFacingOpacity equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct DoubledModulatedFacingOpacityMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -345,7 +346,7 @@ pub struct DoubledModulatedFacingOpacityMaterialStep<'a> {
     pub modulation: TextureUnit,
 }
 /// Inputs for the M2 DepthModulatedFacingOpacity equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct DepthModulatedFacingOpacityMaterialStep<'a> {
     /// Draw state and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -355,7 +356,7 @@ pub struct DepthModulatedFacingOpacityMaterialStep<'a> {
     pub modulation: TextureUnit,
 }
 /// An uninterpreted selector or incompatible input contract.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct UnresolvedMaterialStep<'a> {
     /// Draw declarations and animated surface response.
     pub declaration: MaterialDeclaration<'a>,
@@ -430,9 +431,9 @@ pub enum MaterialStep<'a> {
     /// Retained uninterpreted shader inputs.
     Unresolved(UnresolvedMaterialStep<'a>),
 }
-impl Default for MaterialStep<'_> {
-    fn default() -> Self {
-        Self::Unresolved(UnresolvedMaterialStep::default())
+impl Construct for MaterialStep<'_> {
+    fn construct(values: &mut Values) -> Self {
+        Self::Unresolved(Construct::construct(values))
     }
 }
 impl<'a> MaterialStep<'a> {

@@ -6,24 +6,27 @@ use std::collections::HashMap;
 use wc3::model::controls::model::BoneControls;
 use wc3::model::materials::bindings::ImageSelection;
 use wc3::model::materials::program::MaterialStep;
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 use wc3::model::{
-    Animated, Draw, GeometryData, GeometryInfluences, IdentityBinding, Influence, Material,
-    MaterialSurface, Mesh, MeshInstance, Node, NodeControls, Skin, Texture, UniversalBinding,
-    ValueGroups,
+    Draw, GeometryData, GeometryInfluences, IdentityBinding, Influence, Material, MaterialSurface,
+    Mesh, MeshInstance, Node, NodeControls, Skin, Texture, UniversalBinding, ValueGroups,
 };
 use wc3::model::{ImageResource, ResourceLocator};
 
 fn model(name: &str, geosets: &[u16]) -> (Model<'static>, NodeId) {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::builder(name.to_owned());
     let joints: Vec<_> = (0..8)
         .map(|i| {
             builder
-                .add_node(Node::named(format!("matching bone{i}")).with_controls(Some(
-                    NodeControls::M2(BoneControls {
-                        name_crc: 100 + i,
-                        ..Default::default()
-                    }),
-                )))
+                .add_node(
+                    Node::named(format!("matching bone{i}"), &mut slot_values).with_controls(Some(
+                        NodeControls::M2(BoneControls {
+                            name_crc: 100 + i,
+                            ..SlotConstruct::construct(&mut slot_values)
+                        }),
+                    )),
+                )
                 .unwrap()
         })
         .collect();
@@ -60,26 +63,36 @@ fn model(name: &str, geosets: &[u16]) -> (Model<'static>, NodeId) {
                     textures: vec![TextureUnit {
                         image: ImageSelection {
                             texture: Some(texture),
-                            ..Default::default()
+                            ..SlotConstruct::construct(&mut slot_values)
                         },
-                        contribution: Animated::constant(1.),
-                        ..Default::default()
+                        contribution: slot_values.add(1.),
+                        ..SlotConstruct::construct(&mut slot_values)
                     }],
-                    color: Animated::constant([1.; 3]),
-                    opacity: Animated::constant(1.),
-                    ..Default::default()
+                    color: slot_values.add([1.; 3]),
+                    opacity: slot_values.add(1.),
+                    ..SlotConstruct::construct(&mut slot_values)
                 }),
             })
             .unwrap();
         let mut instance = MeshInstance::new(joint, mesh);
         instance.skin = Some(skin);
         instance.selection_group = u32::from(*geoset);
-        instance.draws.push(Draw::new(subset, Default::default()));
+        instance.draws.push(Draw::new(
+            subset,
+            SlotConstruct::construct(&mut slot_values),
+        ));
         builder
             .add_instance_with_materials(instance, vec![material])
             .unwrap();
     }
-    (builder.finish().unwrap(), joint)
+    (
+        {
+            builder.import_values(&slot_values).unwrap();
+            builder.finish()
+        }
+        .unwrap(),
+        joint,
+    )
 }
 fn definition() -> CharacterDefinition {
     CharacterDefinition {
@@ -262,14 +275,21 @@ fn hidden_hair_texture_is_optional_but_selected_missing_texture_is_an_error() {
 
 #[test]
 fn collection_shared_by_chest_and_wrists_compiles_one_rig_with_union_of_geosets() {
+    let mut slot_values = SlotValues::default();
     let (body, joint) = model("body", &[401]);
     let (mut collection, armor_joint) = model("collection", &[2201, 801]);
     // Retained helpers/anchors make duplicate source scopes a real collision,
     // even when the visible subsets and their body-joint matches are disjoint.
     collection
         .edit(|builder| {
-            builder.add_node(Node::named("collection helper").with_parent(armor_joint))?;
-            Ok(())
+            let edit_result = (|| {
+                builder.add_node(
+                    Node::named("collection helper", &mut slot_values).with_parent(armor_joint),
+                )?;
+                Ok(())
+            })();
+            builder.import_values(&slot_values)?;
+            edit_result
         })
         .unwrap();
     let models = HashMap::from([
@@ -329,6 +349,7 @@ fn collection_policy_conflicts_fail_before_images_are_resolved() {
 
 #[test]
 fn rigid_equipment_mounts_at_the_attachment_feature_and_preserves_its_pivot() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::{Attachment, Socket, SocketIdentity};
 
     let (mut body, joint) = model("body", &[401]);
@@ -336,15 +357,19 @@ fn rigid_equipment_mounts_at_the_attachment_feature_and_preserves_its_pivot() {
     node.transform.pivot = [1., 2., 3.];
     let point = body
         .edit(|builder| {
-            builder.set_node(joint, node)?;
-            builder.add_feature(
-                joint,
-                NodeFeature::Attachment(Attachment::Socket(Socket {
-                    identity: SocketIdentity::Role(6),
-                    visibility: Animated::constant(0.),
-                    control: None,
-                })),
-            )
+            let edit_result = (|| {
+                builder.set_node(joint, node)?;
+                builder.add_feature(
+                    joint,
+                    NodeFeature::Attachment(Attachment::Socket(Socket {
+                        identity: SocketIdentity::Role(6),
+                        visibility: slot_values.add(0.),
+                        control: None,
+                    })),
+                )
+            })();
+            builder.import_values(&slot_values)?;
+            edit_result
         })
         .unwrap();
     let (shoulder, _) = model("shoulder", &[2201]);

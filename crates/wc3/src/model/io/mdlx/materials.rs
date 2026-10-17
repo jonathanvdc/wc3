@@ -8,12 +8,14 @@ use crate::model::materials::mdlx::{AlphaAdditiveEncoding, LayerOptions};
 use crate::model::materials::state::{DepthState, Lighting, Operation, PassState};
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::mdlx::{Blend, Fresnel, Layer, Material, Shading, TextureSlot};
-use crate::model::{Animated, MaterialId, Quaternion, Texture, TextureTransform};
+use crate::model::{Construct, Values};
+use crate::model::{MaterialId, Quaternion, Texture, TextureTransform};
 
 pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
     source: &'source native::Material<'_, V>,
     textures: &[Texture],
     transforms: &[&native::TextureAnimation<'_>],
+    values: &mut Values,
 ) -> Result<Material<'a>, Error> {
     let texture = |index: u32| {
         if index == u32::MAX {
@@ -41,47 +43,47 @@ pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
         unresolved.set_no_depth_test(false);
         unresolved.set_no_depth_set(false);
         let fresnel = layer.try_fresnel().ok().map(|value| Fresnel {
-            color: Animated::constant(value.color.value().copied().unwrap_or_default()),
-            opacity: Animated::constant(value.opacity.value().copied().unwrap_or_default()),
-            team_color: Animated::constant(value.team_color.value().copied().unwrap_or_default()),
+            color: values.add(value.color.value().copied().unwrap_or_default()),
+            opacity: values.add(value.opacity.value().copied().unwrap_or_default()),
+            team_color: values.add(value.team_color.value().copied().unwrap_or_default()),
         });
         let mut slots = Vec::new();
         for slot in layer.try_texture_slots().unwrap_or_default() {
             slots.push(TextureSlot {
                 slot: slot.texture_type,
                 binding: TextureBinding {
-                    image: Animated::constant(texture(
+                    image: values.add(texture(
                         slot.texture_id.value().copied().unwrap_or_default(),
                     )?),
-                    ..Default::default()
+                    ..Construct::construct(values)
                 },
             });
         }
         layers.push(Layer {
             binding: TextureBinding {
-                image: Animated::constant(texture(
+                image: values.add(texture(
                     layer.texture_id.value().copied().unwrap_or_default(),
                 )?),
                 coordinates: Coordinates {
                     source: layer.coordinate_id,
                     transform: if layer.texture_animation_id == u32::MAX {
-                        TextureTransform::default()
+                        Construct::construct(values)
                     } else {
                         transforms
                             .get(layer.texture_animation_id as usize)
                             .ok_or_else(|| {
                                 Error::new("material.texture_transform", "transform does not exist")
                             })?;
-                        TextureTransform::default()
+                        Construct::construct(values)
                     },
                 },
-                ..Default::default()
+                ..Construct::construct(values)
             },
-            opacity: Animated::constant(layer.alpha.value().copied().unwrap_or_default()),
+            opacity: values.add(layer.alpha.value().copied().unwrap_or_default()),
             emissive_gain: layer
                 .try_emissive_gain()
                 .ok()
-                .map(|value| Animated::constant(value.value().copied().unwrap_or_default())),
+                .map(|value| values.add(value.value().copied().unwrap_or_default())),
             fresnel,
             shader: layer.try_shader_type().ok().map(|value| value.id()),
             textures: slots,
@@ -147,7 +149,7 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
     id: MaterialId,
     decoder: &mut Decoder<'a, '_>,
 ) -> Result<Material<'a>, Error> {
-    let mut material = read::<_, S>(source, textures, transforms)?;
+    let mut material = read::<_, S>(source, textures, transforms, decoder.builder.values_mut())?;
     let owner = id;
     for (index, (source, layer)) in source.layers.iter().zip(&mut material.layers).enumerate() {
         let layer_key = profile::properties::Layer(index);

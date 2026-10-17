@@ -65,17 +65,9 @@ impl<'a, P: Profile> Model<'a, P> {
                 .into_iter()
                 .map(|(id, value)| Ok((id, system(value)?)))
                 .collect::<Result<_, Error>>()?,
-            timeline_channels: self
-                .timeline_channels
-                .into_iter()
-                .map(|channel| channel.map_profile(Q::property))
-                .collect::<Result<_, Error>>()?,
+            timeline_channels: self.timeline_channels.into_iter().collect(),
             timeline_events: self.timeline_events,
-            shared_channels: self
-                .shared_channels
-                .into_iter()
-                .map(|channel| channel.map_profile(Q::property))
-                .collect::<Result<_, Error>>()?,
+            shared_channels: self.shared_channels.into_iter().collect(),
             shared_events: self.shared_events,
             appearance: appearance(self.appearance)?,
             skins: self
@@ -172,7 +164,7 @@ impl<'a, P: Profile> Model<'a, P> {
                         id,
                         AttachedFeature {
                             node,
-                            payload: feature(payload)?,
+                            payload: feature(payload, &self.values)?,
                         },
                     ))
                 })
@@ -197,10 +189,7 @@ impl<'a, P: Profile> Model<'a, P> {
                             name,
                             duration,
                             looping,
-                            channels: channels
-                                .into_iter()
-                                .map(|channel| channel.map_profile(Q::property))
-                                .collect::<Result<_, Error>>()?,
+                            channels: channels.into_iter().collect(),
                             events,
                             controls: clip(controls)?,
                         },
@@ -267,16 +256,14 @@ impl<'a, P: Profile> Model<'a, P> {
                             name,
                             priority,
                             concurrent,
-                            channels: channels
-                                .into_iter()
-                                .map(|channel| channel.map_profile(Q::property))
-                                .collect::<Result<_, Error>>()?,
+                            channels: channels.into_iter().collect(),
                             events,
                             controls: controller(controls)?,
                         },
                     ))
                 })
                 .collect::<Result<_, Error>>()?,
+            values: self.values,
         })
     }
 }

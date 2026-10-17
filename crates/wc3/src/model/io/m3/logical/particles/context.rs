@@ -18,6 +18,7 @@ pub(in crate::model::io::m3::logical) struct Reader<'view, 'data, 'draft, E: Env
     pub projectors: &'draft [FeatureId],
     pub materials: &'draft [MaterialId],
     pub meshes: &'draft [MeshId],
+    pub builder: &'draft mut super::super::GraphBuilder<'view>,
     pub bindings: &'draft mut Bindings,
     pub context: &'draft mut Context,
 }
@@ -27,7 +28,7 @@ impl<'view, E: Envelope> Reader<'view, '_, '_, E> {
         path: &FieldPath,
         value: nr::AnimationValue<T>,
     ) -> surface::Property<T> {
-        let mut result = anim(value);
+        let mut result = anim(value, self.builder.values_mut());
         bindings::field(
             &mut result,
             OwnerId::Feature(self.owner),
@@ -41,7 +42,7 @@ impl<'view, E: Envelope> Reader<'view, '_, '_, E> {
         path: &FieldPath,
         value: nr::AnimationValue<[u8; 4]>,
     ) -> surface::Property<[f32; 4]> {
-        let mut result = color(value);
+        let mut result = color(value, self.builder.values_mut());
         bindings::field(
             &mut result,
             OwnerId::Feature(self.owner),
@@ -55,7 +56,7 @@ impl<'view, E: Envelope> Reader<'view, '_, '_, E> {
         path: &FieldPath,
         value: nr::AnimationValue<nr::FixedBytes<4>>,
     ) -> surface::Property<[f32; 4]> {
-        let mut result = fixed_color(value);
+        let mut result = fixed_color(value, self.builder.values_mut());
         bindings::field(
             &mut result,
             OwnerId::Feature(self.owner),

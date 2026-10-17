@@ -1,6 +1,7 @@
 //! Editable Warcraft III effects and scene features.
 use crate::model::values::layered::{GeometryAnimationFlags, PopcornFlags};
 use crate::model::AtlasParticles;
+use crate::model::Construct;
 use crate::model::EffectResourceId;
 use crate::model::GravityTrail;
 use crate::model::IndexedChildModel;
@@ -11,7 +12,7 @@ use crate::model::{Animated, MeshId};
 use std::borrow::Cow;
 
 /// Opacity, tint, and shadow behavior for one geometry controller.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct GeometryAnimation {
     /// Geometry controlled by this feature.
     pub mesh: Option<MeshId>,
@@ -46,7 +47,7 @@ pub type Particle2 = AtlasParticles;
 /// Ribbon trail generation parameters.
 pub type Ribbon = GravityTrail;
 /// External PopcornFX resource and authored input properties.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct Popcorn<'a> {
     /// Effect resource path.
     pub resource: Option<EffectResourceId>,

@@ -6,9 +6,8 @@ use super::super::{
 use super::{blocks::Blocks, AnimationId, AnimationIds};
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
-use crate::model::profiles::{Universal, M3};
 use crate::model::{
-    profiles::m3 as surface, Channel, Clock, Interpolation, NodeId, PropertyTarget, Time,
+    profiles::m3 as surface, Channel, Clock, Interpolation, NodeId, Time, ValueSlot,
 };
 use native::{Envelope, Ref};
 use std::collections::{BTreeSet, HashMap};
@@ -47,22 +46,22 @@ pub(super) fn text<E: Envelope>(
         .collect();
     Ok(append(document, &rows)?.cast())
 }
-fn target(value: &Target) -> &PropertyTarget {
+fn target(value: &Target) -> ValueSlot {
     match value {
-        Target::Scalar(p) => p.target(),
-        Target::Vector2(p) => p.target(),
-        Target::Vector3(p) => p.target(),
-        Target::Vector4(p) => p.target(),
-        Target::Unsigned(p) => p.target(),
-        Target::Unsigned16(p) => p.target(),
-        Target::Rotation(p) => p.target(),
-        Target::Signed(p) => p.target(),
-        Target::Byte(p) => p.target(),
-        Target::Bytes4(p) => p.target(),
-        Target::Unsigned4(p) => p.target(),
+        Target::Scalar(p) => p.slot(),
+        Target::Vector2(p) => p.slot(),
+        Target::Vector3(p) => p.slot(),
+        Target::Vector4(p) => p.slot(),
+        Target::Unsigned(p) => p.slot(),
+        Target::Unsigned16(p) => p.slot(),
+        Target::Rotation(p) => p.slot(),
+        Target::Signed(p) => p.slot(),
+        Target::Byte(p) => p.slot(),
+        Target::Bytes4(p) => p.slot(),
+        Target::Unsigned4(p) => p.slot(),
     }
 }
-fn interpolation(channel: &Channel<'_, M3>) -> Interpolation {
+fn interpolation(channel: &Channel<'_>) -> Interpolation {
     match channel {
         Channel::Scalar(t) => t.curve.interpolation(),
         Channel::Vector2(t) => t.curve.interpolation(),
@@ -90,14 +89,14 @@ pub(in crate::model::io::m3::logical) fn prepare(
     let mut original = HashMap::new();
     for (id, values) in existing.entries {
         for value in values {
-            original.insert(target(&value).clone(), id);
+            original.insert(target(&value), id);
         }
     }
     for (_, controller) in model.controllers() {
         for block in &controller.controls.blocks {
             reserved.insert(block.source_id);
             for target in &block.targets {
-                original.insert(target.clone(), block.source_id);
+                original.insert(*target, block.source_id);
             }
         }
     }
@@ -111,7 +110,7 @@ pub(in crate::model::io::m3::logical) fn prepare(
         );
     }
     let mut next = reserved.last().copied().unwrap_or(0).checked_add(1);
-    let mut ids = AnimationIds::new();
+    let mut ids = AnimationIds::new(model.values());
     let mut claimed = HashMap::new();
     for (_, program) in model.controllers() {
         for channel in &program.channels {
@@ -126,7 +125,7 @@ pub(in crate::model::io::m3::logical) fn prepare(
                     continue;
                 }
             };
-            if let Some(previous) = ids.get(&channel.target().clone().widen::<Universal>()) {
+            if let Some(previous) = ids.get(&channel.target()) {
                 if previous.interpolation != mode {
                     context.unsupported(
                         "m3.animation.interpolation",
@@ -136,7 +135,7 @@ pub(in crate::model::io::m3::logical) fn prepare(
                 continue;
             }
             let id = if let Some(id) = original
-                .get(&channel.target().clone().widen::<Universal>())
+                .get(&channel.target())
                 .copied()
                 .filter(|id| *id != 0)
                 .filter(|id| !claimed.contains_key(id))
@@ -149,14 +148,14 @@ pub(in crate::model::io::m3::logical) fn prepare(
                 id
             };
             ids.insert(
-                channel.target().clone().widen::<Universal>(),
+                channel.target(),
                 AnimationId {
                     id,
                     interpolation: mode,
                     keyed: true,
                 },
             );
-            claimed.insert(id, channel.target().clone().widen::<Universal>());
+            claimed.insert(id, channel.target());
         }
     }
     if !model.shared_channels().is_empty() || !model.shared_events().is_empty() {
@@ -208,8 +207,8 @@ pub(in crate::model::io::m3::logical) fn write<E: Envelope>(
                 context.unsupported("m3.animation.clock", "controller uses a foreign clock")?;
                 continue;
             }
-            if native_controls.is_some_and(|c|c.blocks.iter().any(|b|b.encoding==surface::KeyEncoding::Extent&&b.extents.iter().any(|id|model.feature(*id).is_some_and(|f|matches!(&f.payload,surface::Feature::Extent(binding)if channel.target()==binding.minimum.target()||channel.target()==binding.maximum.target()||channel.target()==binding.radius.target()))))){continue}
-            let Some(identity) = ids.get(&channel.target().clone().widen::<Universal>()) else {
+            if native_controls.is_some_and(|c|c.blocks.iter().any(|b|b.encoding==surface::KeyEncoding::Extent&&b.extents.iter().any(|id|model.feature(*id).is_some_and(|f|matches!(&f.payload,surface::Feature::Extent(binding)if channel.target()==binding.minimum.slot()||channel.target()==binding.maximum.slot()||channel.target()==binding.radius.slot()))))){continue}
+            let Some(identity) = ids.get(&channel.target()) else {
                 context.unsupported(
                     "m3.animation.destination",
                     "channel lacks a native property identity",
@@ -226,7 +225,7 @@ pub(in crate::model::io::m3::logical) fn write<E: Envelope>(
             let block = native_controls.and_then(|c| {
                 c.blocks
                     .iter()
-                    .find(|b| b.targets.iter().any(|target| target == channel.target()))
+                    .find(|b| b.targets.iter().any(|target| *target == channel.target()))
             });
             if let Some(selector) = blocks.add(
                 document,

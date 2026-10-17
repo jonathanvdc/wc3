@@ -117,10 +117,29 @@ where
     for (_, attached) in model.features() {
         if !matches!(attached.payload, profile::ActorKind::Camera(_)) {
             let node = model.node(attached.node).unwrap();
-            let animated=model.clips().iter().flat_map(|(_,clip)|clip.channels().iter()).chain(model.shared_channels().iter()).any(|channel|match channel{semantic::Channel::Vector3(t)=>matches!(t.target.target(),semantic::PropertyTarget::Translation(id)|semantic::PropertyTarget::Scale(id)if *id==attached.node),semantic::Channel::Rotation(t)=>matches!(t.target.target(),semantic::PropertyTarget::Rotation(id)if *id==attached.node),_=>false});
+            let animated = model
+                .clips()
+                .iter()
+                .flat_map(|(_, clip)| clip.channels().iter())
+                .chain(model.shared_channels().iter())
+                .any(|channel| match channel {
+                    semantic::Channel::Vector3(t) => {
+                        t.target == node.transform.translation || t.target == node.transform.scale
+                    }
+                    semantic::Channel::Rotation(t) => t.target == node.transform.rotation,
+                    _ => false,
+                });
             if (animated
-                || node.transform.rotation != semantic::Quaternion::default()
-                || node.transform.scale != [1.; 3])
+                || *model
+                    .values()
+                    .get(node.transform.rotation)
+                    .expect("validated slot")
+                    != semantic::Quaternion::default()
+                || *model
+                    .values()
+                    .get(node.transform.scale)
+                    .expect("validated slot")
+                    != [1.; 3])
                 && !nodes.contains(&attached.node)
             {
                 nodes.push(attached.node);
@@ -293,7 +312,7 @@ where
         bone.name_crc = NameCrcField::make(data.map_or(0, |b| b.name_crc), &mut context)?;
         bone.translation = encode(
             model,
-            &id.translation(),
+            &node.transform.translation,
             &starts,
             &mut globals,
             &mut context,
@@ -301,7 +320,7 @@ where
         )?;
         bone.scale = encode(
             model,
-            &id.scale(),
+            &node.transform.scale,
             &starts,
             &mut globals,
             &mut context,
@@ -309,27 +328,56 @@ where
         )?;
         bone.rotation = encode(
             model,
-            &id.rotation(),
+            &node.transform.rotation,
             &starts,
             &mut globals,
             &mut context,
             |v, c| RotationComponents::encode(v.components(), c, "m2.bone.rotation"),
         )?;
-        if node.transform.translation != [0.; 3] {
+        if *model
+            .values()
+            .get(node.transform.translation)
+            .expect("validated slot")
+            != [0.; 3]
+        {
             ensure_constant(
                 &mut bone.translation,
-                node.transform.translation,
+                *model
+                    .values()
+                    .get(node.transform.translation)
+                    .expect("validated slot"),
                 &mut globals,
             )
         }
-        if node.transform.scale != [1.; 3] {
-            ensure_constant(&mut bone.scale, node.transform.scale, &mut globals)
+        if *model
+            .values()
+            .get(node.transform.scale)
+            .expect("validated slot")
+            != [1.; 3]
+        {
+            ensure_constant(
+                &mut bone.scale,
+                *model
+                    .values()
+                    .get(node.transform.scale)
+                    .expect("validated slot"),
+                &mut globals,
+            )
         }
-        if node.transform.rotation != semantic::Quaternion::default() {
+        if *model
+            .values()
+            .get(node.transform.rotation)
+            .expect("validated slot")
+            != semantic::Quaternion::default()
+        {
             ensure_constant(
                 &mut bone.rotation,
                 RotationComponents::encode(
-                    node.transform.rotation.components(),
+                    model
+                        .values()
+                        .get(node.transform.rotation)
+                        .expect("validated slot")
+                        .components(),
                     &mut context,
                     "m2.bone.rotation",
                 )?,

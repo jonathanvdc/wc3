@@ -1,5 +1,6 @@
 //! Direct native timelines and checked logical animation programs.
-use crate::model::{profiles::m3 as surface, PropertyTarget};
+use crate::model::Values;
+use crate::model::{profiles::m3 as surface, ValueSlot};
 use std::collections::HashMap;
 
 /// Native identity assigned to a logical animated destination.
@@ -9,7 +10,29 @@ pub(super) struct AnimationId {
     pub interpolation: surface::values::Interpolation,
     pub keyed: bool,
 }
-pub(super) type AnimationIds = HashMap<PropertyTarget, AnimationId>;
+pub(super) struct AnimationIds {
+    pub values: Values,
+    entries: HashMap<ValueSlot, AnimationId>,
+}
+impl AnimationIds {
+    fn new(values: &Values) -> Self {
+        Self {
+            values: values.clone(),
+            entries: HashMap::new(),
+        }
+    }
+}
+impl std::ops::Deref for AnimationIds {
+    type Target = HashMap<ValueSlot, AnimationId>;
+    fn deref(&self) -> &Self::Target {
+        &self.entries
+    }
+}
+impl std::ops::DerefMut for AnimationIds {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.entries
+    }
+}
 
 mod blocks;
 mod events;

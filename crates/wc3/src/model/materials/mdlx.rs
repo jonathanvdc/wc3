@@ -10,6 +10,7 @@ use crate::model::TextureTransform;
 use crate::model::{
     Animated, Error, Link, PropertyIdentityKey, PropertyPayload, Texture, ValidateLinks,
 };
+use crate::model::{Construct, Values};
 use std::{borrow::Cow, fmt::Debug};
 
 /// Blending performed by a Warcraft III material layer.
@@ -48,7 +49,7 @@ pub struct TextureSlot {
     pub binding: TextureBinding<Animated<Option<Texture>>>,
 }
 /// Fresnel controls for a material pass.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct Fresnel {
     /// Edge color in RGB order.
     pub color: Animated<[f32; 3]>,
@@ -59,7 +60,7 @@ pub struct Fresnel {
 }
 /// A native-profile Warcraft III layer, preserving the complete input vocabulary.
 /// Universal material programs interpret it into a shader-specific [`MaterialStep`].
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct Layer {
     /// Color composition and rasterization applied by this pass.
     pub state: PassState<Blend, Shading>,
@@ -209,7 +210,7 @@ pub struct MaterialDeclaration {
 }
 
 /// Inputs and draw state shared by the classic and Reforged default shaders.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct MaterialInputs {
     /// Composition and rasterization for this step.
     pub state: PassState<Blend, Shading>,
@@ -221,7 +222,7 @@ pub struct MaterialInputs {
     pub emissive_gain: Option<Animated<f32>>,
 }
 /// A classic Warcraft III texture-composition step.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ClassicMaterialStep {
     /// Shader inputs and rendering state.
     pub inputs: MaterialInputs,
@@ -229,7 +230,7 @@ pub struct ClassicMaterialStep {
     pub declaration: MaterialDeclaration,
 }
 /// A Reforged DefaultUnit shader step.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ReforgedDefaultMaterialStep {
     /// Primary image, opacity, emissive gain, and rendering state.
     pub inputs: MaterialInputs,
@@ -241,7 +242,7 @@ pub struct ReforgedDefaultMaterialStep {
     pub fresnel: Option<Fresnel>,
 }
 /// An uninterpreted shader declaration, retaining all authored inputs.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct UnresolvedMaterialStep<'a> {
     /// Uninterpreted material shader name.
     pub shader_name: Cow<'a, str>,
@@ -260,9 +261,9 @@ pub enum MaterialStep<'a> {
     /// A shader or input combination without an interpreted vocabulary.
     Unresolved(UnresolvedMaterialStep<'a>),
 }
-impl Default for MaterialStep<'_> {
-    fn default() -> Self {
-        Self::Classic(ClassicMaterialStep::default())
+impl Construct for MaterialStep<'_> {
+    fn construct(values: &mut Values) -> Self {
+        Self::Classic(Construct::construct(values))
     }
 }
 impl<'a> From<Layer> for MaterialStep<'a> {
@@ -343,8 +344,8 @@ impl<'a> MaterialStep<'a> {
         Layer {
             state: inputs.state,
             binding: inputs.binding.clone(),
-            opacity: inputs.opacity.clone(),
-            emissive_gain: inputs.emissive_gain.clone(),
+            opacity: inputs.opacity,
+            emissive_gain: inputs.emissive_gain,
             shader,
             textures,
             fresnel,

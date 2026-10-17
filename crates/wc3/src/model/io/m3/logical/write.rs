@@ -3,6 +3,7 @@ use super::animation::AnimationIds;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::profiles::m3::Property;
+use crate::model::Animatable;
 use native::{Envelope, Ref};
 pub(super) fn append<
     E: Envelope,
@@ -21,14 +22,11 @@ pub(super) fn append<
         .map_err(|e| Error::new("m3.write", e.to_string()))?;
     Ok(Ref::from_section(count, id.index()))
 }
-pub(super) fn animated<T: Clone>(
+pub(super) fn animated<T: Animatable + Clone>(
     property: &Property<T>,
     ids: &AnimationIds,
 ) -> nr::AnimationValue<T> {
-    let mapped = property
-        .binding
-        .as_ref()
-        .and_then(|binding| ids.get(binding.target()));
+    let mapped = ids.get(&property.value.slot());
     nr::AnimationValue {
         interpolation: nr::Interpolation::from_raw(
             mapped
@@ -44,8 +42,8 @@ pub(super) fn animated<T: Clone>(
                 },
         ),
         animation_id: mapped.map_or(property.control.source_id, |x| x.id),
-        initial_value: property.initial.clone(),
-        null_value: property.reset.clone(),
+        initial_value: *ids.values.get(property.value).expect("validated slot"),
+        null_value: property.reset,
         reserved: property.control.reserved,
     }
 }

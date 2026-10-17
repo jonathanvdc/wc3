@@ -74,14 +74,14 @@ fn spherical_restriction_preserves_rotation_and_clamped_intervals() {
 fn typed_restriction_retains_clock_and_target() {
     use crate::model::{profiles::Universal, Clock, Material, Model};
     let mut builder = Model::<Universal>::builder("crop");
-    let material = builder
+    let _material = builder
         .add_material(Material {
             name: "".into(),
             surface: Default::default(),
         })
         .unwrap();
     let track = Track {
-        target: material.opacity::<Universal>(),
+        target: builder.add_value(0f32),
         curve: Curve::from_samples(
             [Time::seconds(-1.).unwrap(), Time::seconds(2.).unwrap()],
             [0f32, 3.],

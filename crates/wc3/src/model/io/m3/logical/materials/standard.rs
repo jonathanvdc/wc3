@@ -55,8 +55,8 @@ where
         light_map_layer,
         ambient_occlusion_layer,
         material_class: surface::values::MaterialClass::from_raw((r.material_class).raw()),
-        parallax_height: anim(r.parallax_height),
-        motion_blur_amount: anim(r.motion_blur_amount),
+        parallax_height: anim(r.parallax_height, reader.builder.values_mut()),
+        motion_blur_amount: anim(r.motion_blur_amount, reader.builder.values_mut()),
         diffuse: diffuse_layer,
         layer_blend: surface::values::LayerBlendOp::from_raw(r.layer_blend_mode.raw()),
         specular: SurfaceContribution {
@@ -106,7 +106,7 @@ where
                     .resolve::<nr::AnimationValueReal>(r.normal_blend_factors.value().cast())
                     .map_err(read_error)?
                     .iter()
-                    .map(|r| r.map(|r| anim(r.value)))
+                    .map(|r| r.map(|r| anim(r.value, reader.builder.values_mut())))
                     .collect::<Result<Vec<_>, _>>()
                     .map_err(read_error)?,
             ),

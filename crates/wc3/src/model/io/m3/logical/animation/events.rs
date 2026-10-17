@@ -3,7 +3,7 @@ use super::super::GraphBuilder;
 use crate::model::conversion::Error;
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::{
-    profiles::m3 as surface, Clock, ControllerId, Event, EventId, FeatureId, Node, NodeId, Time,
+    profiles::m3 as surface, Clock, ControllerId, Event, EventId, FeatureId, NodeId, Time,
 };
 use native::Envelope;
 use std::collections::BTreeMap;
@@ -77,7 +77,7 @@ pub(super) fn read<'a, E: Envelope>(
                     let owner = if let Some(anchor) = anchor {
                         anchor
                     } else {
-                        builder.add_node(Node::named(""))?
+                        builder.add_named_node("")?
                     };
                     let payload = surface::EventCommand {
                         event_type: row.event_type,

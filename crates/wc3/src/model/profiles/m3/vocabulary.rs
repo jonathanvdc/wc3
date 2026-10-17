@@ -7,12 +7,12 @@ use crate::model::profiles::Unavailable;
 use crate::model::profiles::UniversalProperty;
 use crate::model::profiles::{self, Extends, Profile, SurfacePayload, Universal};
 use crate::model::resources::PathResource;
+use crate::model::Values;
 use crate::model::{
     Basis, Billboard, Channel, ClipControls, Clock, DrawControls, Error, ExplicitBinding,
     FeatureKind, GeometrySchema as _, Inheritance, InstanceControls, Interpolation, LengthUnit,
-    Link, M3Geometry, MeshControls, Model, ModelMetadata, NodeControls, PropertyTarget, SingleLook,
-    SkinId, System, Topology, Transform, UniversalAppearance, UniversalBinding, ValidateLinks,
-    VertexInfluences,
+    Link, M3Geometry, MeshControls, Model, ModelMetadata, NodeControls, SingleLook, SkinId, System,
+    Topology, Transform, UniversalAppearance, UniversalBinding, ValidateLinks, VertexInfluences,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 use crate::model::{PropertyIdentityKey, PropertyPayload};
@@ -50,6 +50,7 @@ impl Profile for M3 {
     type Clip<'a> = profiles::m3::SequenceControls<'a>;
     type Controller<'a> = profiles::m3::ControllerControls<'a>;
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
+        model.validate_animation_consumers()?;
         if model.bounds().is_none() {
             return Err(Error::new(
                 "model.bounds",
@@ -110,7 +111,7 @@ impl Profile for M3 {
             if matches!(node.controls, profiles::m3::NodeRole::ModelSpace)
                 && (!node.name.is_empty()
                     || node.parent.is_some()
-                    || node.transform != Transform::default()
+                    || node.transform.defaults(model.values()) != Transform::default()
                     || node.inheritance != Inheritance::default()
                     || node.billboard != Billboard::None)
             {
@@ -127,13 +128,13 @@ impl Profile for M3 {
                     ));
                 }
             }
-            if node.transform.pivot != [0.; 3] {
+            if node.transform.defaults(model.values()).pivot != [0.; 3] {
                 return Err(Error::new(
                     "m3.node.pivot",
                     "M3 transforms have no separate pivot",
                 ));
             }
-            if !node.visible || node.camera_anchored {
+            if model.values().get(node.visible) != Some(&true) || node.camera_anchored {
                 return Err(Error::new(
                     "m3.node",
                     "M3 has no generic visibility or camera-origin control",
@@ -180,18 +181,6 @@ impl Profile for M3 {
                     return Err(Error::new(
                         "m3.controller.interpolation",
                         "M3 property headers encode held or linear keys without cubic tangent controls",
-                    ));
-                }
-                if !matches!(
-                    channel.target(),
-                    PropertyTarget::Translation(_)
-                        | PropertyTarget::Rotation(_)
-                        | PropertyTarget::Scale(_)
-                        | PropertyTarget::Profile { .. }
-                ) {
-                    return Err(Error::new(
-                        "m3.controller.target",
-                        "this common destination has no M3 property header",
                     ));
                 }
             }
@@ -600,8 +589,8 @@ impl Extends<M3> for Universal {
     fn surface<'a>(value: <M3 as Profile>::Surface<'a>) -> Self::Surface<'a> {
         value.into()
     }
-    fn feature<'a>(value: <M3 as Profile>::Feature<'a>) -> Self::Feature<'a> {
-        value.into()
+    fn feature<'a>(value: <M3 as Profile>::Feature<'a>, values: &mut Values) -> Self::Feature<'a> {
+        crate::model::features::FromFeature::from_feature(value, values)
     }
     fn node<'a>(value: <M3 as Profile>::Node<'a>) -> Self::Node<'a> {
         Some(NodeControls::M3(value))

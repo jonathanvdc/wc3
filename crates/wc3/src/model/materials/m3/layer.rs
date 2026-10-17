@@ -2,9 +2,10 @@
 use super::Property;
 use crate::model::materials::bindings::{Coordinates, TextureBinding};
 use crate::model::values::programmed::{ColorChannel, FresnelMode, LayerFlags, UvMappingMode};
+use crate::model::{Construct, Values};
 use crate::model::{ImageResourceId, Link, ValidateLinks};
 /// Animated 2D, 3D, and triplanar coordinate program.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct CoordinateTransform {
     /// Controls UV offset through its animation value.
     pub uv_offset: Property<[f32; 2]>,
@@ -26,7 +27,7 @@ pub struct CoordinateTransform {
     pub uv_density: u32,
 }
 /// Noise, flipbook, and video playback controls for one sampled image.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct SamplingProgram {
     /// Sets layer flags (wrap, flipbook, video, etc.).
     pub flags: LayerFlags,
@@ -60,7 +61,7 @@ pub struct SamplingProgram {
     pub current_frame: Property<u16>,
 }
 /// Channel selection and animated sampled-color contribution.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ColorContribution {
     /// Controls color tint through its animation value.
     pub color: Property<[f32; 4]>,
@@ -74,7 +75,7 @@ pub struct ColorContribution {
     pub map_alpha: Property<f32>,
 }
 /// A programmed shader input, retaining independently authored Fresnel behavior.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct TextureLayer {
     /// Identifies this input within the shader setup.
     pub id: u32,
@@ -135,4 +136,30 @@ impl ValidateLinks for ColorContribution {
 
 impl ValidateLinks for UvMappingMode {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
+}
+
+impl Construct for Coordinates<UvMappingMode, CoordinateTransform> {
+    fn construct(values: &mut Values) -> Self {
+        Self {
+            source: Default::default(),
+            transform: Construct::construct(values),
+        }
+    }
+}
+impl Construct
+    for TextureBinding<
+        Option<ImageResourceId>,
+        Coordinates<UvMappingMode, CoordinateTransform>,
+        SamplingProgram,
+        ColorContribution,
+    >
+{
+    fn construct(values: &mut Values) -> Self {
+        Self {
+            image: None,
+            coordinates: Construct::construct(values),
+            sampling: Construct::construct(values),
+            contribution: Construct::construct(values),
+        }
+    }
 }

@@ -6,6 +6,7 @@ use super::{
     TerrainMaterialStep, TextureLayer, VolumeMaterialStep, VolumeNoiseMaterialStep,
 };
 use crate::model::profiles::m3::properties::{Field, FieldPath, FieldSegment};
+use crate::model::Animatable;
 
 pub(crate) enum PropertyMut<'a> {
     Scalar(&'a mut Property<f32>),
@@ -15,7 +16,7 @@ pub(crate) enum PropertyMut<'a> {
     Unsigned(&'a mut Property<u32>),
     Unsigned16(&'a mut Property<u16>),
 }
-pub(crate) trait PropertyValue: Sized {
+pub(crate) trait PropertyValue: Animatable + Sized {
     fn as_mut(value: &mut Property<Self>) -> PropertyMut<'_>;
 }
 macro_rules! property_values {

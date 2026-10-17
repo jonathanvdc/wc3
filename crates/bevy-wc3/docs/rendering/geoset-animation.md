@@ -20,11 +20,11 @@ directly during local-pose transitions.
 ## Ownership
 
 Constant passes share a material only when their compiled state, including static
-mesh tint, agrees. Animated bindings retain private assets per instance. Unchanged
+mesh tint, agrees. Changing animated slots retain private assets per instance. Unchanged
 samples do not mark material assets modified. Meshes and bind palettes remain
 shared. Application edits to a shared material affect every user of that handle;
 clone and assign an asset explicitly when independent customization is needed.
-Authored animation continues to own its bound properties.
+Authored animation continues to supply the corresponding slot values.
 
 MDLX fixed BGR color storage is handled by its codec; semantic colors and keyed RGB
 remain RGB. Bone GeosetAnimId does not select material tint. Dedicated DropShadow

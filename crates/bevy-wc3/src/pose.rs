@@ -100,7 +100,7 @@ impl PoseContext<'_> {
 }
 
 #[cfg(test)]
-use wc3::model::{profiles::Universal, Billboard};
+use wc3::model::Billboard;
 #[cfg(test)]
 #[path = "pose_tests.rs"]
 mod tests;

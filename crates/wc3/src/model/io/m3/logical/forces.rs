@@ -41,10 +41,10 @@ pub(super) fn force<'a, E: Envelope>(
                     unknown: r.unknown,
                     flags: surface::values::ForceFlags(r.flags.bits()),
                     local_channels: surface::values::ForceChannels(r.local_channels.bits()),
-                    strength: anim(r.strength),
-                    width: anim(r.width),
-                    height: anim(r.height),
-                    length: anim(r.length),
+                    strength: anim(r.strength, builder.values_mut()),
+                    width: anim(r.width, builder.values_mut()),
+                    height: anim(r.height, builder.values_mut()),
+                    length: anim(r.length, builder.values_mut()),
                 };
                 bindings::field(
                     &mut payload.strength,
@@ -106,12 +106,12 @@ pub(super) fn warp<'a, E: Envelope>(
         let mut payload = surface::Warp {
             warp_type: r.warp_type,
             unknown: r.unknown,
-            radius: anim(r.radius),
-            height: anim(r.height),
-            strength: anim(r.strength),
-            angular: anim(r.angular),
-            axial: anim(r.axial),
-            radial: anim(r.radial),
+            radius: anim(r.radius, builder.values_mut()),
+            height: anim(r.height, builder.values_mut()),
+            strength: anim(r.strength, builder.values_mut()),
+            angular: anim(r.angular, builder.values_mut()),
+            axial: anim(r.axial, builder.values_mut()),
+            radial: anim(r.radial, builder.values_mut()),
         };
         bindings::field(
             &mut payload.radius,

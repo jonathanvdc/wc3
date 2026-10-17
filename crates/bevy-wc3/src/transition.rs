@@ -116,6 +116,7 @@ impl TransitionState {
 }
 #[cfg(test)]
 mod tests {
+
     use super::*;
     #[test]
     fn transitions_snapshot_latest_local_pose_and_preserve_destination_pivot() {

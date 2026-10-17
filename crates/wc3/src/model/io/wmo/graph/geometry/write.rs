@@ -48,7 +48,9 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
         context.unsupported("world.group.historical_lighting", "selected modern group layout cannot encode historical baked-light resources or lighting windows")?;
     }
     let node = model.node(instance.node).expect("validated placement node");
-    if node.transform != crate::model::Transform::default() || node.parent.is_some() {
+    if node.transform.defaults(model.values()) != crate::model::Transform::default()
+        || node.parent.is_some()
+    {
         context.unsupported(
             "world.group.transform",
             "group transforms need static geometry baking before native encoding",

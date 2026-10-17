@@ -133,9 +133,9 @@ mod tests {
                 }
             }
             let mut builder = Model::<Mdlx>::builder("curve restriction");
-            let node = builder.reserve_node();
-            let track: SemanticTrack<'_, Quaternion, Mdlx> = SemanticTrack {
-                target: node.rotation(),
+            let _node = builder.reserve_node();
+            let track: SemanticTrack<'_, Quaternion> = SemanticTrack {
+                target: builder.add_value(Quaternion::IDENTITY),
                 curve,
                 clock: Clock::Clip,
             };

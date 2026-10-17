@@ -1,12 +1,18 @@
 use super::super::{compile_model, PoseOverrides};
 use super::*;
 use wc3::model::profiles::Universal;
-use wc3::model::{Model, Node, NodeId, Transform as ModelTransform};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Model, NodeId, Transform as ModelTransform};
 
 fn fixture() -> (ModelAsset, NodeId) {
+    let slot_values = SlotValues::default();
     let mut builder = Model::builder("lifecycle");
-    let node = builder.add_node(Node::named("node")).unwrap();
-    let model = builder.finish().unwrap();
+    let node = builder.add_named_node("node").unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     (
         ModelAsset {
             compiled: compile_model(&model, |_| None).unwrap(),
@@ -44,6 +50,7 @@ fn populated_source_retains_a_strong_asset_handle() {
 }
 #[test]
 fn modified_assets_repopulate_and_preserve_playback_and_application_children() {
+    let mut slot_values = SlotValues::default();
     let mut app = app();
     let (asset, node) = fixture();
     let handle = app
@@ -58,7 +65,7 @@ fn modified_assets_repopulate_and_preserve_playback_and_application_children() {
             Playback {
                 shared_time: 3.,
                 paused: true,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
         ))
         .id();
@@ -190,6 +197,7 @@ fn mounted_frame_correction_preserves_root_and_cached_basis_across_reload() {
 
 #[test]
 fn separately_decoded_replacement_rebinds_clip_and_pose_scoped_identities() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::conversion::ImportOptions;
     use wc3::model::io::mdlx;
     use wc3::model::Controller;
@@ -247,7 +255,7 @@ fn separately_decoded_replacement_rebinds_clip_and_pose_scoped_identities() {
         .add(new_asset);
     let pose = ModelTransform {
         translation: [4., 5., 6.],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let root = app
         .world_mut()
@@ -260,7 +268,7 @@ fn separately_decoded_replacement_rebinds_clip_and_pose_scoped_identities() {
                 shared_time: 9.,
                 paused: true,
                 speed: 0.3,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
             PoseOverrides(HashMap::from([(old_node, pose)])),
         ))
@@ -310,6 +318,7 @@ fn separately_decoded_replacement_rebinds_clip_and_pose_scoped_identities() {
 
 #[test]
 fn ambiguous_names_reset_selection_and_remove_pose_overrides() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::Clip;
     let prepare = |clips: &[&str], nodes: &[&str]| {
         let mut builder = Model::builder("ambiguous rebind");
@@ -317,9 +326,13 @@ fn ambiguous_names_reset_selection_and_remove_pose_overrides() {
             builder.add_clip(Clip::named((*name).to_owned())).unwrap();
         }
         for name in nodes {
-            builder.add_node(Node::named((*name).to_owned())).unwrap();
+            builder.add_named_node((*name).to_owned()).unwrap();
         }
-        let model = builder.finish().unwrap();
+        let model = {
+            builder.import_values(&slot_values).unwrap();
+            builder.finish()
+        }
+        .unwrap();
         compile_model(&model, |_| None)
             .unwrap()
             .prepare(&mut Assets::default(), &mut Assets::default())
@@ -328,7 +341,7 @@ fn ambiguous_names_reset_selection_and_remove_pose_overrides() {
     let new = prepare(&["Fallback", "Selected", "Selected"], &["anchor", "anchor"]);
     let mut playback = Playback {
         clip: Some(old.clips[0].0),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let overrides = PoseOverrides(HashMap::from([(
         old.nodes[0].id,
@@ -344,6 +357,7 @@ fn ambiguous_names_reset_selection_and_remove_pose_overrides() {
 
 #[test]
 fn failed_asset_and_dependency_requests_remain_observable_and_valid_replacement_recovers() {
+    let mut slot_values = SlotValues::default();
     use super::super::ModelLoader;
     use bevy::asset::{AssetApp, AssetPlugin};
     use std::{
@@ -372,7 +386,7 @@ fn failed_asset_and_dependency_requests_remain_observable_and_valid_replacement_
         MinimalPlugins,
         AssetPlugin {
             file_path: directory.to_string_lossy().into_owned(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
     ));
     app.init_asset::<ModelAsset>();

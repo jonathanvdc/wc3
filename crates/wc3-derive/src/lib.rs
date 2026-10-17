@@ -294,3 +294,60 @@ pub fn derive_wmo_value(input: TokenStream) -> TokenStream {
     )
     .into()
 }
+
+/// Constructs semantic model values while allocating their animation slots.
+#[proc_macro_derive(Construct)]
+pub fn derive_construct(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let syn::Data::Struct(data) = input.data else {
+        return syn::Error::new_spanned(input.ident, "Construct requires a struct")
+            .to_compile_error()
+            .into();
+    };
+    let name = input.ident;
+    let mut generics = input.generics;
+    for field in &data.fields {
+        let ty = if let syn::Type::Array(array) = &field.ty {
+            &*array.elem
+        } else {
+            &field.ty
+        };
+        generics
+            .make_where_clause()
+            .predicates
+            .push(syn::parse_quote!(#ty: ::wc3::model::Construct));
+    }
+    let (implementation, arguments, bounds) = generics.split_for_impl();
+    let expression = |field: &syn::Field| {
+        if matches!(&field.ty, syn::Type::Array(_)) {
+            quote::quote!(::std::array::from_fn(|_| {
+                ::wc3::model::Construct::construct(values)
+            }))
+        } else {
+            quote::quote!(::wc3::model::Construct::construct(values))
+        }
+    };
+    let construction = match &data.fields {
+        syn::Fields::Named(fields) => {
+            let fields = fields.named.iter().map(|field| {
+                let name = &field.ident;
+                let value = expression(field);
+                quote::quote!(#name: #value)
+            });
+            quote::quote!(Self { #(#fields,)* })
+        }
+        syn::Fields::Unnamed(fields) => {
+            let fields = fields.unnamed.iter().map(expression);
+            quote::quote!(Self(#(#fields,)*))
+        }
+        syn::Fields::Unit => quote::quote!(Self),
+    };
+    quote::quote! {
+        impl #implementation ::wc3::model::Construct for #name #arguments #bounds {
+            fn construct(values: &mut ::wc3::model::Values) -> Self {
+                #construction
+            }
+        }
+    }
+    .into()
+}

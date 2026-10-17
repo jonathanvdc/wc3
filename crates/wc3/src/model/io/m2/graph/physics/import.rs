@@ -38,12 +38,16 @@ pub(in super::super) fn import<'a, 'data: 'a, D: Dialect>(
             let bone = *nodes
                 .get(body.bone as usize)
                 .ok_or_else(|| Error::new("physics.body.bone", "bone is absent"))?;
-            let node = Node::named(format!("physics-body-{index}"))
+            let node = builder
+                .new_node(format!("physics-body-{index}"))
                 .with_parent(bone)
-                .with_transform(Transform {
-                    translation: body.position,
-                    ..Transform::default()
-                })?;
+                .with_transform(
+                    Transform {
+                        translation: body.position,
+                        ..Transform::default()
+                    },
+                    builder.values_mut(),
+                )?;
             placements.push(builder.add_node(node)?);
         }
         let mut bodies = Vec::new();

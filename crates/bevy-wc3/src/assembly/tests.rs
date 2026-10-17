@@ -4,13 +4,15 @@ use bevy::prelude::{Assets, Image};
 use std::collections::HashSet;
 use wc3::model::materials::mdlx::LayeredSurface;
 use wc3::model::profiles::Universal;
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 use wc3::model::{
-    Draw, DrawId, GeometryData, InstanceId, Material, MaterialSurface, Mesh, MeshInstance, Node,
+    Draw, DrawId, GeometryData, InstanceId, Material, MaterialSurface, Mesh, MeshInstance,
 };
 
 fn model() -> (Model<'static>, Vec<(InstanceId, DrawId)>) {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::builder("generic assembly geometry");
-    let node = builder.add_node(Node::named("root")).unwrap();
+    let node = builder.add_named_node("root").unwrap();
     let material = builder
         .add_material(Material {
             name: "generic".into(),
@@ -26,7 +28,7 @@ fn model() -> (Model<'static>, Vec<(InstanceId, DrawId)>) {
         let subset = mesh.add_primary_subset(0, 1);
         let mesh = builder.add_mesh(mesh).unwrap();
         let mut instance = MeshInstance::new(node, mesh);
-        let draw = Draw::new(subset, Default::default());
+        let draw = Draw::new(subset, SlotConstruct::construct(&mut slot_values));
         let draw_id = draw.id();
         instance.draws.push(draw);
         let instance_id = builder
@@ -34,7 +36,14 @@ fn model() -> (Model<'static>, Vec<(InstanceId, DrawId)>) {
             .unwrap();
         ids.push((instance_id, draw_id));
     }
-    (builder.finish().unwrap(), ids)
+    (
+        {
+            builder.import_values(&slot_values).unwrap();
+            builder.finish()
+        }
+        .unwrap(),
+        ids,
+    )
 }
 #[test]
 fn compatible_union_preserves_hidden_geometry_and_all_selection() {
@@ -105,8 +114,9 @@ fn only_repeated_skinned_sources_coalesce() {
 
 #[test]
 fn replacements_distinguish_identical_inputs_before_resolved_images_are_shared() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::mdlx::Layer;
-    use wc3::model::Animated;
+
     let (mut model, _) = model();
     let material = model.materials().iter().next().unwrap().0;
     let first = model
@@ -114,17 +124,18 @@ fn replacements_distinguish_identical_inputs_before_resolved_images_are_shared()
             let first = draft.add_file_texture("source.png")?;
             let second = first;
             let layers = [first, second].map(|image| {
-                let mut layer = Layer::default();
-                layer.binding.image = Animated::constant(Some(image));
+                let mut layer = Layer::construct(&mut slot_values);
+                layer.binding.image = slot_values.add(Some(image));
                 layer
             });
             draft.set_material_surface(
                 material,
                 MaterialSurface::try_from(LayeredSurface {
                     layers: layers.into(),
-                    ..Default::default()
+                    ..SlotConstruct::construct(&mut slot_values)
                 })?,
             )?;
+            draft.import_values(&slot_values)?;
             Ok(first)
         })
         .unwrap();
@@ -171,45 +182,48 @@ fn replacements_distinguish_identical_inputs_before_resolved_images_are_shared()
 
 #[test]
 fn input_replacement_survives_sampler_edits_and_animated_selection() {
+    let mut slot_values = SlotValues::default();
     use bevy::image::{ImageAddressMode, ImageSampler};
     use wc3::model::materials::mdlx::Layer;
-    use wc3::model::profiles::mdlx::properties;
-    use wc3::model::{AddressMode, Animated, AnimationSample, Channel, Clock, Curve, Time, Track};
+
+    use wc3::model::{AddressMode, AnimationSample, Channel, Clock, Curve, Time, Track};
     let (mut model, _) = model();
     let material = model.materials().iter().next().unwrap().0;
     let time = |value| Time::seconds(value).unwrap();
     let first = model
         .edit(|draft| {
-            let first = draft.add_file_texture("first.png")?;
-            let mut second = draft.add_file_texture("second.png")?;
-            second.sampler.u = AddressMode::Mirror;
-            let layers = (0..2)
-                .map(|index| {
-                    let mut layer = Layer::default();
-                    layer.binding.image = Animated::new(
-                        Some(first),
-                        properties::Layer(index).texture().bind(material),
-                    );
-                    layer.binding.coordinates.transform.translation =
-                        Animated::constant([0.25, 0., 0.]);
-                    layer
-                })
-                .collect::<Vec<_>>();
-            draft.set_material_surface(
-                material,
-                MaterialSurface::try_from(LayeredSurface {
-                    layers,
-                    ..Default::default()
-                })?,
-            )?;
-            for index in 0..2 {
-                draft.add_timeline_channel(Channel::OptionalTexture(Track {
-                    target: properties::Layer(index).texture().bind(material).widen(),
-                    clock: Clock::Timeline,
-                    curve: Curve::step([time(0.), time(1.)], [Some(first), Some(second)])?,
-                }))?;
-            }
-            Ok(first)
+            let edit_result = (|| {
+                let first = draft.add_file_texture("first.png")?;
+                let mut second = draft.add_file_texture("second.png")?;
+                second.sampler.u = AddressMode::Mirror;
+                let layers = (0..2)
+                    .map(|_index| {
+                        let mut layer = Layer::construct(&mut slot_values);
+                        layer.binding.image = slot_values.add(Some(first));
+                        layer.binding.coordinates.transform.translation =
+                            slot_values.add([0.25, 0., 0.]);
+                        layer
+                    })
+                    .collect::<Vec<_>>();
+                let targets: Vec<_> = layers.iter().map(|layer| layer.binding.image).collect();
+                draft.set_material_surface(
+                    material,
+                    MaterialSurface::try_from(LayeredSurface {
+                        layers,
+                        ..SlotConstruct::construct(&mut slot_values)
+                    })?,
+                )?;
+                for target in targets {
+                    draft.add_timeline_channel(Channel::OptionalTexture(Track {
+                        target,
+                        clock: Clock::Timeline,
+                        curve: Curve::step([time(0.), time(1.)], [Some(first), Some(second)])?,
+                    }))?;
+                }
+                Ok(first)
+            })();
+            draft.import_values(&slot_values)?;
+            edit_result
         })
         .unwrap();
     let resource = ResourceLocator::FileDataId(1);
@@ -241,7 +255,7 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
     let sample = model
         .animation_sample(AnimationSample {
             timeline_time: time(1.),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     for draw in &compiled.draws {

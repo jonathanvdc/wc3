@@ -41,6 +41,7 @@ pub(super) fn import<'view, E: Envelope>(
                 })?;
                 let owner = builder.reserve_feature(node);
                 let mut reader = Reader {
+                    builder: &mut *builder,
                     source,
                     owner,
                     particles: &[],

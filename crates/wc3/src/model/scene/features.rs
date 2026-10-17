@@ -1,5 +1,6 @@
 //! Logical cameras, illumination, resource systems, and attachments.
 use crate::model::features::IndexedChildModel;
+use crate::model::Construct;
 use crate::model::{Animated, Link, ValidateLinks};
 use crate::model::{EffectResourceId, ModelResourceId};
 /// A portable feature attached to a graph hierarchy node.
@@ -51,7 +52,7 @@ impl ValidateLinks for Feature {
     }
 }
 /// Camera and photographic parameters with explicit optional values.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Construct)]
 pub struct Camera {
     /// Authored field of view in radians.
     pub field_of_view: Animated<f32>,
@@ -82,7 +83,7 @@ pub enum LightKind {
     Unknown(u32),
 }
 /// Light emission, range, cone, and shadow parameters.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Construct)]
 pub struct Light {
     /// Illumination behavior.
     pub kind: LightKind,

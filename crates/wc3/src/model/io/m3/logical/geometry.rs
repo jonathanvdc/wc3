@@ -15,7 +15,7 @@ use crate::model::io::m3::logical::GraphBuilder;
 use crate::model::profiles::m3::{self as surface, UvEncoding};
 use crate::model::ExplicitBinding;
 use crate::model::{
-    Bounds, Draw, Influence, M3Geometry, MaterialId, Mesh, MeshId, MeshInstance, Node, Skin,
+    Bounds, Draw, Influence, M3Geometry, MaterialId, Mesh, MeshId, MeshInstance, Skin,
 };
 use native::Envelope;
 use std::collections::BTreeSet;
@@ -246,7 +246,7 @@ pub(super) fn read<'a, E: Envelope>(
                     let placement = match placement {
                         Some(node) => node,
                         None => {
-                            let node = builder.add_node(Node::named(""))?;
+                            let node = builder.add_named_node("")?;
                             placement = Some(node);
                             node
                         }

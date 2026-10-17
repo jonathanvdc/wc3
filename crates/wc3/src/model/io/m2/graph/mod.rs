@@ -16,7 +16,7 @@ use semantic::profiles::M2 as M2Vocabulary;
 pub(in super::super) type Graph<'a> = semantic::Model<'a, M2Vocabulary>;
 pub(in super::super) type GraphBuilder<'a> = semantic::ModelBuilder<'a, M2Vocabulary>;
 pub use export::plan;
-use semantic::{Animated, Channel, ImageResource, Node, SharedClock, Texture, Time};
+use semantic::{Animated, Channel, ImageResource, SharedClock, Texture, Time};
 
 /// Imports an M2 bundle without a canonical intermediate encoding.
 pub fn import<'a, 'data: 'a, D: Dialect>(
@@ -124,7 +124,7 @@ where
     let (owner, bones) = source.bones().map_err(failure)?;
     let nodes: Vec<_> = bones.iter().map(|_| builder.reserve_node()).collect();
     for (index, bone) in bones.iter().enumerate() {
-        let mut node = Node::named(format!("bone-{index}"));
+        let mut node = builder.new_node(format!("bone-{index}"));
         if bone.parent_bone_id >= 0 {
             node.parent = Some(
                 *nodes
@@ -280,8 +280,24 @@ where
         }
         for (bone_index, bone) in bones.iter().enumerate() {
             for (target, track) in [
-                (nodes[bone_index].translation(), &bone.translation),
-                (nodes[bone_index].scale(), &bone.scale),
+                (
+                    builder
+                        .model()
+                        .node(nodes[bone_index])
+                        .unwrap()
+                        .transform
+                        .translation,
+                    &bone.translation,
+                ),
+                (
+                    builder
+                        .model()
+                        .node(nodes[bone_index])
+                        .unwrap()
+                        .transform
+                        .scale,
+                    &bone.scale,
+                ),
             ] {
                 if let Some((curve, global)) =
                     curve::<D, [f32; 3], [f32; 3]>(source, track, owner, index, start, |v| v)?
@@ -295,10 +311,16 @@ where
                     semantic::Quaternion(v.floats())
                 })?
             {
+                let rotation = builder
+                    .model()
+                    .node(nodes[bone_index])
+                    .unwrap()
+                    .transform
+                    .rotation;
                 animation::insert(
                     &mut builder,
                     Some(id),
-                    Channel::Rotation(bind(curve, global, nodes[bone_index].rotation(), &clocks)?),
+                    Channel::Rotation(bind(curve, global, rotation, &clocks)?),
                 )?
             }
         }
@@ -306,8 +328,19 @@ where
     if clips.is_empty() {
         for (index, bone) in bones.iter().enumerate() {
             for (target, track) in [
-                (nodes[index].translation(), &bone.translation),
-                (nodes[index].scale(), &bone.scale),
+                (
+                    builder
+                        .model()
+                        .node(nodes[index])
+                        .unwrap()
+                        .transform
+                        .translation,
+                    &bone.translation,
+                ),
+                (
+                    builder.model().node(nodes[index]).unwrap().transform.scale,
+                    &bone.scale,
+                ),
             ] {
                 if track.base.global_sequence != u16::MAX {
                     if let Some((c, g)) =
@@ -325,10 +358,16 @@ where
                 if let Some((c, g)) = curve(source, &bone.rotation, owner, 0, 0, |v| {
                     semantic::Quaternion(v.floats())
                 })? {
+                    let rotation = builder
+                        .model()
+                        .node(nodes[index])
+                        .unwrap()
+                        .transform
+                        .rotation;
                     animation::insert(
                         &mut builder,
                         None,
-                        Channel::Rotation(bind(c, g, nodes[index].rotation(), &clocks)?),
+                        Channel::Rotation(bind(c, g, rotation, &clocks)?),
                     )?
                 }
             }

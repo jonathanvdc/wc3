@@ -4,6 +4,7 @@ use crate::model::controls::world::{DoodadSetId, GroupId, PortalId};
 use crate::model::values::world::{
     AmbientFlags, FogFlags, GroupFlags, GroupFlags2, LightFlags, PortalFlags, WorldFlags,
 };
+use crate::model::Construct;
 use crate::model::ModelResourceId;
 use crate::model::{Animated, FeatureId, MaterialId, Texture, ZeroVec};
 use crate::model::{ChildModelDefinition, WorldPlacementAppearance};
@@ -113,7 +114,7 @@ pub enum LightKind {
     Unknown(i32),
 }
 /// Complete world light parameters.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct Light {
     /// Illumination behavior.
     pub kind: LightKind,

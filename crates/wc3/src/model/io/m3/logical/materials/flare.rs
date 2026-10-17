@@ -69,10 +69,10 @@ where
         rows: r.rows,
         distance_fade: r.distance_fade,
         lib_name: string(source, r.lib_name.value())?,
-        intensity: anim(r.intensity),
-        color: fixed_color(r.color.value()),
-        hdr: anim(r.hdr.value()),
-        size: anim(r.size.value()),
+        intensity: anim(r.intensity, reader.builder.values_mut()),
+        color: fixed_color(r.color.value(), reader.builder.values_mut()),
+        hdr: anim(r.hdr.value(), reader.builder.values_mut()),
+        size: anim(r.size.value(), reader.builder.values_mut()),
     })
 }
 

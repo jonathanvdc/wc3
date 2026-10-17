@@ -1,7 +1,7 @@
 //! Reusable hierarchy indexing and allocation-free pose output.
 use crate::model::{
-    Billboard, BillboardConvention, Error, EvaluatedPose, Inheritance, Model, NodeControls, NodeId,
-    PoseBehavior, PropertySample, PropertyTarget, Skin, Transform as ModelTransform,
+    Animated, AnimatedTransform, Billboard, BillboardConvention, Error, EvaluatedPose, Inheritance,
+    Model, NodeControls, NodeId, PoseBehavior, Skin, Transform as ModelTransform, ValueSample,
 };
 use glam::{Affine3A, Mat4};
 use std::collections::{HashMap, HashSet};
@@ -29,6 +29,10 @@ pub struct PoseNode {
     pub parent: Option<usize>,
     /// Authored local rest transform.
     pub rest: ModelTransform,
+    /// Slot identities read by this hierarchy node.
+    pub transform: AnimatedTransform,
+    /// Visibility slot.
+    pub visibility: Animated<bool>,
     /// Presence of channels across all authored programmes.
     pub channels: NodeChannels,
     /// Components inherited from the parent.
@@ -56,40 +60,18 @@ impl PoseNode {
     }
     /// Samples local animation without hierarchy composition or application overrides.
     #[inline]
-    pub fn sample(&self, sample: &impl PropertySample) -> ModelTransform {
+    pub fn sample(&self, sample: &impl ValueSample) -> ModelTransform {
         ModelTransform {
-            translation: if self.channels.translation {
-                sample
-                    .property(&self.id.translation())
-                    .unwrap_or(self.rest.translation)
-            } else {
-                self.rest.translation
-            },
-            rotation: if self.channels.rotation {
-                sample
-                    .property(&self.id.rotation())
-                    .unwrap_or(self.rest.rotation)
-            } else {
-                self.rest.rotation
-            },
-            scale: if self.channels.scale {
-                sample.property(&self.id.scale()).unwrap_or(self.rest.scale)
-            } else {
-                self.rest.scale
-            },
+            translation: sample.animated(&self.transform.translation),
+            rotation: sample.animated(&self.transform.rotation),
+            scale: sample.animated(&self.transform.scale),
             pivot: self.rest.pivot,
         }
     }
     /// Samples this node's local visibility; parent visibility is evaluated separately.
     #[inline]
-    pub fn sample_visibility(&self, sample: &impl PropertySample) -> bool {
-        if self.channels.visibility {
-            sample
-                .property(&self.id.visibility())
-                .unwrap_or(self.visible)
-        } else {
-            self.visible
-        }
+    pub fn sample_visibility(&self, sample: &impl ValueSample) -> bool {
+        sample.animated(&self.visibility)
     }
 }
 /// Immutable resolved hierarchy, reusable for independently sampled model instances.
@@ -163,7 +145,7 @@ impl PoseLayout {
     /// Samples a hierarchy into a new output. Use `evaluate_into` for repeated playback.
     pub fn evaluate(
         &self,
-        sample: &impl PropertySample,
+        sample: &impl ValueSample,
         inputs: PoseInputs<'_>,
     ) -> Result<ModelPose, Error> {
         let mut output = ModelPose::default();
@@ -174,7 +156,7 @@ impl PoseLayout {
     /// Missing driving cameras leave camera-dependent adjustments unapplied.
     pub fn evaluate_into(
         &self,
-        sample: &impl PropertySample,
+        sample: &impl ValueSample,
         inputs: PoseInputs<'_>,
         output: &mut ModelPose,
     ) -> Result<(), Error> {
@@ -220,7 +202,7 @@ impl Model<'_> {
                     .iter()
                     .flat_map(|(_, controller)| &controller.channels),
             )
-            .map(|channel| channel.target().clone())
+            .map(|channel| channel.target())
             .collect();
         let indices: HashMap<_, _> = self
             .nodes()
@@ -235,12 +217,14 @@ impl Model<'_> {
                     id,
                     name: node.name.to_string(),
                     parent: node.parent.map(|id| indices[&id]),
-                    rest: node.transform,
+                    rest: node.transform.defaults(self.values()),
+                    transform: node.transform,
+                    visibility: node.visible,
                     channels: NodeChannels {
-                        translation: targets.contains(&PropertyTarget::Translation(id)),
-                        rotation: targets.contains(&PropertyTarget::Rotation(id)),
-                        scale: targets.contains(&PropertyTarget::Scale(id)),
-                        visibility: targets.contains(&PropertyTarget::Visibility(id)),
+                        translation: targets.contains(&node.transform.translation.slot()),
+                        rotation: targets.contains(&node.transform.rotation.slot()),
+                        scale: targets.contains(&node.transform.scale.slot()),
+                        visibility: targets.contains(&node.visible.slot()),
                     },
                     inheritance: node.inheritance,
                     billboard: node.billboard,
@@ -249,7 +233,7 @@ impl Model<'_> {
                         Some(NodeControls::M2(_)) => BillboardConvention::M2,
                         _ => BillboardConvention::Generic,
                     },
-                    visible: node.visible,
+                    visible: *self.values().get(node.visible).expect("validated slot"),
                     camera_anchored: node.camera_anchored,
                 })
                 .collect(),

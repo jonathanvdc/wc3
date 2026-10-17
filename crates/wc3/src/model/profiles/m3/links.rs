@@ -11,6 +11,7 @@ use super::{
     TextureLayer, TurretBehavior, VariationControl, ViewVolume, VolumeMaterialStep,
     VolumeNoiseMaterialStep, Warp,
 };
+use crate::model::Animatable;
 use crate::model::{CurveValue, FeatureKind, GeometryKind, Link, Quaternion, ValidateLinks};
 
 impl ValidateLinks for Projector {
@@ -905,15 +906,15 @@ impl ValidateLinks for VolumeNoiseMaterialStep {
     }
 }
 
-impl<T: CurveValue + 'static> ValidateLinks for Property<T> {
+impl<T: Animatable + CurveValue + 'static> ValidateLinks for Property<T> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        if !self.initial.is_valid() || !reset_valid(&self.reset, self.control.flags.bits()) {
+        if !reset_valid(&self.reset, self.control.flags.bits()) {
             visitor(Link::InvalidValue);
         }
-        self.binding.visit_links(visitor);
+        self.value.visit_links(visitor);
     }
 }
-impl<T: CurveValue + 'static> ValidateLinks for PropertyControl<T> {
+impl<T: Animatable + CurveValue + 'static> ValidateLinks for PropertyControl<T> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if !reset_valid(&self.reset, self.control.flags.bits()) {
             visitor(Link::InvalidValue);

@@ -1,7 +1,6 @@
 //! Typed native key block construction from authored logical curves.
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
-use crate::model::profiles::M3;
 use crate::model::{profiles::m3 as surface, Channel, Clock, Interpolation, Quaternion, Time};
 use native::{Envelope, Ref};
 
@@ -97,7 +96,7 @@ impl Blocks {
     pub(super) fn add<E: Envelope>(
         &mut self,
         document: &mut native::Container<'_, E>,
-        channel: &Channel<'_, M3>,
+        channel: &Channel<'_>,
         origin: Time,
         end: Time,
         controls: Option<&surface::BlockControls>,

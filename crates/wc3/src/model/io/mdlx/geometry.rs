@@ -10,7 +10,7 @@ use crate::model::profiles::Mdlx;
 use crate::model::ValueGroups;
 use crate::model::{
     Bounds, ClipId, ClockId, Draw, Influence, JointInfluences, MaterialId, MdlxGeometry, Mesh,
-    MeshInstance, ModelBuilder, Node, NodeId, Skin,
+    MeshInstance, ModelBuilder, NodeId, Skin,
 };
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
@@ -173,7 +173,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         let mesh_id = builder.add_mesh(value)?;
         meshes.push(mesh_id);
         let skin = builder.add_skin(Skin::identity(nodes.to_vec()))?;
-        let placement = builder.add_node(Node::named("Geometry"))?;
+        let placement = builder.add_named_node("Geometry")?;
         placements.push(placement);
         let material = *materials
             .get(mesh.material_id as usize)
@@ -236,7 +236,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             let placement = if mesh.is_some() {
                 placements[source.geoset_id as usize]
             } else {
-                decoder.builder.add_node(Node::named("GeometryAnimation"))?
+                decoder.builder.add_named_node("GeometryAnimation")?
             };
             let feature = decoder.builder.reserve_feature(placement);
             let owner = feature;

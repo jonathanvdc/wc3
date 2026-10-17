@@ -24,7 +24,10 @@ fn anchor(
                 "feature requires an exported anchor bone",
             )
         })?;
-    Ok((parent as u32, value.transform.translation))
+    Ok((
+        parent as u32,
+        value.transform.defaults(model.values()).translation,
+    ))
 }
 pub(super) fn export<V>(
     model: &Graph<'_>,
@@ -72,7 +75,7 @@ where
             profile::ActorKind::Light(value) => {
                 let placement = model.node(attached.node).unwrap();
                 let (bone, position) = if placement.parent.is_none() {
-                    (-1, placement.transform.translation)
+                    (-1, placement.transform.defaults(model.values()).translation)
                 } else {
                     let (b, p) = anchor(model, attached.node, nodes)?;
                     (
@@ -260,7 +263,7 @@ where
                 let placement = model.node(attached.node).unwrap();
                 let mut camera = native::records::Camera::<V>::new();
                 camera.kind = CameraKind::from_raw(value.convention.raw());
-                camera.position_base = placement.transform.translation;
+                camera.position_base = placement.transform.defaults(model.values()).translation;
                 camera.target_position_base = value.target;
                 camera.near_clip = value.clipping[0];
                 camera.far_clip = value.clipping[1];

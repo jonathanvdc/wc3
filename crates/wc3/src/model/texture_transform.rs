@@ -1,5 +1,6 @@
 //! Input-owned, animated texture-coordinate transformations.
 use crate::model::{Animated, Link, Quaternion, ValidateLinks};
+use crate::model::{Construct, Values};
 /// An animated coordinate transform owned by one material input.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextureTransform {
@@ -10,12 +11,12 @@ pub struct TextureTransform {
     /// Coordinate scaling before sampling.
     pub scale: Animated<[f32; 3]>,
 }
-impl Default for TextureTransform {
-    fn default() -> Self {
+impl Construct for TextureTransform {
+    fn construct(values: &mut Values) -> Self {
         Self {
-            translation: Animated::constant([0.; 3]),
-            rotation: Animated::constant(Quaternion::IDENTITY),
-            scale: Animated::constant([1.; 3]),
+            translation: values.add([0.; 3]),
+            rotation: values.add(Quaternion::IDENTITY),
+            scale: values.add([1.; 3]),
         }
     }
 }

@@ -15,8 +15,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use wc3::model::profiles::Universal;
 use wc3::model::{
-    Billboard, ClipId, DrawId, Inheritance, InstanceId, Model, ModelMount, MountTarget, Node,
-    NodeId, PropertyTarget, Quaternion, Transform as ModelTransform,
+    AnimatedTransform, AnimationProgram, Billboard, ClipId, DrawId, Inheritance, InstanceId, Model,
+    ModelMount, MountTarget, NodeId, Quaternion, Transform as ModelTransform,
 };
 
 /// Geometry choices independent of animation, materials, and automatic LOD.
@@ -319,14 +319,23 @@ impl CompiledModel {
             finite_frame(frame)?;
             let mut nodes = output.nodes.to_vec();
             let frame_index = nodes.len();
+            let rest = transform(frame)?;
+            let definition = identities
+                .new_node("part coordinate frame")
+                .with_transform(rest, identities.values_mut())
+                .map_err(|e| ModelError(e.to_string()))?;
+            let slots = definition.transform;
+            let visibility = definition.visible;
             let frame_id = identities
-                .add_node(Node::named("part coordinate frame"))
+                .add_node(definition)
                 .map_err(|e| ModelError(e.to_string()))?;
             nodes.push(RuntimeNode {
                 id: frame_id,
                 name: "part coordinate frame".into(),
                 parent,
-                rest: transform(frame)?,
+                rest,
+                transform: slots,
+                visibility,
                 channels: Default::default(),
                 inheritance: Inheritance::default(),
                 billboard: Billboard::None,
@@ -363,6 +372,8 @@ impl CompiledModel {
                         + rotation * (scale * pivot))
                         .to_array();
                     node.rest.pivot = pivot.to_array();
+                    node.transform = AnimatedTransform::new(node.rest, identities.values_mut());
+                    node.visibility = identities.add_value(node.visible);
                     node.channels = Default::default();
                     node.billboard = Billboard::None;
                     node.camera_anchored = false;
@@ -425,6 +436,19 @@ impl CompiledModel {
                 .map(|(i, node)| (node.id, nodes[frame_map[i]].id))
                 .collect();
             let bound_ids: HashSet<_> = mapped.keys().map(|&i| source.nodes[i].id).collect();
+            let bound_slots: HashSet<_> = source
+                .nodes
+                .iter()
+                .filter(|node| bound_ids.contains(&node.id))
+                .flat_map(|node| {
+                    [
+                        node.transform.translation.slot(),
+                        node.transform.rotation.slot(),
+                        node.transform.scale.slot(),
+                        node.visibility.slot(),
+                    ]
+                })
+                .collect();
             let clip_pairs: Vec<_> = part
                 .clips
                 .iter()
@@ -434,13 +458,7 @@ impl CompiledModel {
                 output
                     .animation
                     .compose(&source.animation, &clip_pairs, |channel| {
-                        match channel.target() {
-                            PropertyTarget::Translation(id)
-                            | PropertyTarget::Rotation(id)
-                            | PropertyTarget::Scale(id)
-                            | PropertyTarget::Visibility(id) => !bound_ids.contains(id),
-                            _ => true,
-                        }
+                        !bound_slots.contains(&channel.target())
                     })
                     .map_err(|e| ModelError(e.to_string()))?,
             );
@@ -560,6 +578,13 @@ impl CompiledModel {
                 }
             }
         }
+        let frames = identities.finish().map_err(|e| ModelError(e.to_string()))?;
+        output.animation = Arc::new(
+            output
+                .animation
+                .compose(&AnimationProgram::compile(&frames), &[], |_| true)
+                .map_err(|e| ModelError(e.to_string()))?,
+        );
         Ok(output)
     }
 }

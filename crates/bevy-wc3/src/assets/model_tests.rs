@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 fn app(directory: &Path) -> App {
     app_with_resolver(directory, Arc::new(PathResolver))
@@ -353,24 +354,29 @@ fn write_m2_capture_fixture() {
 
 #[test]
 fn image_candidates_preserve_location_priority_case_and_asset_sources() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::ModelBuilder;
     let mut builder = ModelBuilder::new("image candidate order");
     let id = builder.add_file_texture("Textures\\Body.BLP").unwrap();
-    let mut layer = wc3::model::materials::mdlx::Layer::default();
-    layer.binding.image = wc3::model::Animated::constant(Some(id));
+    let mut layer = wc3::model::materials::mdlx::Layer::construct(&mut slot_values);
+    layer.binding.image = slot_values.add(Some(id));
     builder
         .add_material(wc3::model::Material {
             name: "image input".into(),
             surface: wc3::model::MaterialSurface::try_from(
                 wc3::model::materials::mdlx::LayeredSurface {
                     layers: vec![layer],
-                    ..Default::default()
+                    ..SlotConstruct::construct(&mut slot_values)
                 },
             )
             .unwrap(),
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let request = texture_requests(&model)
         .into_iter()
         .find(|request| request.texture == id)

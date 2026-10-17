@@ -3,7 +3,8 @@ use super::animation::AnimationIds;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::records as nr;
 use crate::model::io::m3::logical::Graph;
-use crate::model::{profiles::m3 as surface, Billboard, Inheritance, NodeId, Property};
+use crate::model::{profiles::m3 as surface, Billboard, Inheritance, NodeId};
+use crate::model::{Animatable, Animated};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) struct Skeleton {
@@ -13,10 +14,10 @@ pub(super) struct Skeleton {
     pub inverse_bind: Vec<nr::InitialReference>,
     pub skin_bone_count: u32,
 }
-fn value<T: Clone>(
+fn value<T: Animatable + Clone>(
     initial: T,
     controls: Option<&surface::PropertyControl<T>>,
-    binding: Property<T>,
+    binding: Animated<T>,
     ids: &AnimationIds,
 ) -> nr::AnimationValue<T> {
     let (mut interpolation, mut flags, mut id, reset, reserved) = match controls {
@@ -24,18 +25,12 @@ fn value<T: Clone>(
             c.control.interpolation,
             c.control.flags.bits(),
             c.control.source_id,
-            c.reset.clone(),
+            c.reset,
             c.control.reserved,
         ),
-        None => (
-            surface::values::Interpolation::Constant,
-            0,
-            0,
-            initial.clone(),
-            0,
-        ),
+        None => (surface::values::Interpolation::Constant, 0, 0, initial, 0),
     };
-    if let Some(mapped) = ids.get(binding.target()) {
+    if let Some(mapped) = ids.get(&binding.slot()) {
         interpolation = mapped.interpolation;
         id = mapped.id;
         if mapped.keyed {
@@ -51,16 +46,19 @@ fn value<T: Clone>(
         reserved,
     }
 }
-fn scalar<T: Clone>(r: &surface::Property<T>, ids: &AnimationIds) -> nr::AnimationValue<T> {
+fn scalar<T: Animatable + Clone>(
+    r: &surface::Property<T>,
+    ids: &AnimationIds,
+) -> nr::AnimationValue<T> {
     let mut value = nr::AnimationValue {
         interpolation: nr::Interpolation::from_raw(r.control.interpolation.raw()),
         flags: nr::AnimationFlags(r.control.flags.bits()),
         animation_id: r.control.source_id,
-        initial_value: r.initial.clone(),
-        null_value: r.reset.clone(),
+        initial_value: *ids.values.get(r.value).expect("validated slot"),
+        null_value: r.reset,
         reserved: r.control.reserved,
     };
-    if let Some(mapped) = r.binding.as_ref().and_then(|p| ids.get(p.target())) {
+    if let Some(mapped) = ids.get(&r.value.slot()) {
         value.interpolation = nr::Interpolation::from_raw(mapped.interpolation.raw());
         value.animation_id = mapped.id;
         if mapped.keyed {
@@ -161,7 +159,7 @@ pub(super) fn prepare(
         if node.transform.pivot != [0.; 3] {
             context.unsupported("m3.node.pivot", "M3 bones have no independent pivot")?;
         }
-        if !node.visible || node.camera_anchored {
+        if model.values().get(node.visible) != Some(&true) || node.camera_anchored {
             context.unsupported(
                 "m3.node.behavior",
                 "M3 bones cannot encode general node visibility or camera anchoring",
@@ -192,9 +190,12 @@ pub(super) fn prepare(
             )?,
         }
         let rotation = value(
-            node.transform.rotation,
+            *model
+                .values()
+                .get(node.transform.rotation)
+                .expect("validated slot"),
             control.map(|c| &c.rotation),
-            id.rotation(),
+            node.transform.rotation,
             ids,
         );
         bones.push(nr::Bone {
@@ -204,9 +205,12 @@ pub(super) fn prepare(
             parent_index: node.parent.map(|p| indices[&p] as u16).unwrap_or(u16::MAX),
             padding: control.map_or(0, |c| c.reserved),
             position: value(
-                node.transform.translation,
+                *model
+                    .values()
+                    .get(node.transform.translation)
+                    .expect("validated slot"),
                 control.map(|c| &c.position),
-                id.translation(),
+                node.transform.translation,
                 ids,
             ),
             rotation: nr::AnimationValue {
@@ -218,9 +222,12 @@ pub(super) fn prepare(
                 reserved: rotation.reserved,
             },
             scale: value(
-                node.transform.scale,
+                *model
+                    .values()
+                    .get(node.transform.scale)
+                    .expect("validated slot"),
                 control.map(|c| &c.scale),
-                id.scale(),
+                node.transform.scale,
                 ids,
             ),
             batching: control

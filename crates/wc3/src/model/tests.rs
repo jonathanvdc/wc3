@@ -1,28 +1,33 @@
 use crate::model::common::Borrowed as _;
 use crate::model::PathResource;
+use crate::model::Values as SlotValues;
 use crate::model::*;
 use zerovec::ZeroVec;
 #[test]
 fn foreign_graph_handles_are_rejected() {
     let mut first = ModelBuilder::new("first");
-    let parent = first.add_node(Node::named("parent")).unwrap();
+    let parent = first.add_named_node("parent").unwrap();
     first.finish().unwrap();
     let mut second = ModelBuilder::new("second");
-    second
-        .add_node(Node::named("child").with_parent(parent))
-        .unwrap();
+    let child = second.new_node("child").with_parent(parent);
+    second.add_node(child).unwrap();
     assert!(second.finish().is_err());
 }
 
 #[test]
 fn forward_parents_are_resolved_and_cycles_rejected() {
+    let slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("model");
     let parent = builder.reserve_node();
-    builder
-        .add_node(Node::named("child").with_parent(parent))
-        .unwrap();
-    builder.set_node(parent, Node::named("parent")).unwrap();
-    let mut model = builder.finish().unwrap();
+    let child = builder.new_node("child").with_parent(parent);
+    builder.add_node(child).unwrap();
+    let definition = builder.new_node("parent");
+    builder.set_node(parent, definition).unwrap();
+    let mut model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let child = model
         .nodes()
         .iter()
@@ -36,13 +41,18 @@ fn forward_parents_are_resolved_and_cycles_rejected() {
 
 #[test]
 fn borrowing_survives_graph_construction_and_clone() {
+    let slot_values = SlotValues::default();
     let positions = ZeroVec::alloc_from_slice(&[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]);
     let faces = [[0, 1, 2]];
     let mut builder = ModelBuilder::new("triangle");
     let id = builder
         .add_mesh(Mesh::triangles(positions.as_borrowed(), faces.as_slice()))
         .unwrap();
-    let graph = builder.finish().unwrap();
+    let graph = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let clone = graph.clone();
     assert_eq!(
         clone.mesh(id).unwrap().positions().as_bytes().as_ptr(),
@@ -59,11 +69,16 @@ fn owned_array_detachment_shares_storage() {
 
 #[test]
 fn invalid_geometry_never_enters_a_published_model() {
+    let slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("bad geometry");
     builder
         .add_mesh(Mesh::triangles([[0., 0., 0.]], [[0, 1, 2]]))
         .unwrap();
-    assert!(builder.finish().is_err());
+    assert!({
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .is_err());
 }
 
 #[test]
@@ -78,8 +93,8 @@ fn cloned_branches_allocate_distinct_new_identities() {
     let original = Model::standalone("original");
     let mut a = original.clone();
     let mut b = original;
-    let a_id = a.edit(|draft| draft.add_node(Node::named("a"))).unwrap();
-    let b_id = b.edit(|draft| draft.add_node(Node::named("b"))).unwrap();
+    let a_id = a.edit(|draft| draft.add_named_node("a")).unwrap();
+    let b_id = b.edit(|draft| draft.add_named_node("b")).unwrap();
     assert_ne!(a_id, b_id);
     assert!(a.node(b_id).is_none());
 }
@@ -91,38 +106,18 @@ fn graph_can_cross_thread_boundaries() {
 }
 
 #[test]
-fn incompatible_structural_property_bindings_are_rejected() {
-    let mut builder = ModelBuilder::new("ambiguous property");
-    let clip = builder.add_clip(Clip::named("clip")).unwrap();
-    let node = builder.add_node(Node::named("owner")).unwrap();
-    builder
-        .add_channel(
-            clip,
-            Channel::Scalar(Track {
-                target: Property::new(PropertyTarget::Translation(node)),
-                curve: Curve::from_samples([Time::default()], [1f32], Interpolation::Step).unwrap(),
-                clock: Clock::Clip,
-            }),
-        )
-        .unwrap();
-    builder
-        .add_channel(
-            clip,
-            Channel::Vector3(Track {
-                target: Property::new(PropertyTarget::Translation(node)),
-                curve: Curve::from_samples([Time::default()], [[1f32; 3]], Interpolation::Step)
-                    .unwrap(),
-                clock: Clock::Clip,
-            }),
-        )
-        .unwrap();
-    assert!(builder.finish().is_err());
+fn scalar_and_vector_slots_cannot_alias() {
+    let mut values = Values::default();
+    let scalar = values.add(1f32);
+    let vector = values.add([1f32; 3]);
+    assert_ne!(scalar.slot(), vector.slot());
 }
 
 #[test]
 fn complete_material_looks_resolve_independently() {
+    let slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("looks");
-    let node = builder.add_node(Node::named("root")).unwrap();
+    let node = builder.add_named_node("root").unwrap();
     let mesh = builder
         .add_mesh(Mesh::triangles(
             [[0f32; 3], [1., 0., 0.], [0., 1., 0.]],
@@ -170,7 +165,11 @@ fn complete_material_looks_resolve_independently() {
             }],
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     assert_eq!(model.material_for_draw(instance, draw, None).unwrap(), base);
     assert_eq!(
         model.material_for_draw(instance, draw, Some(look)).unwrap(),
@@ -181,6 +180,7 @@ fn complete_material_looks_resolve_independently() {
 
 #[test]
 fn typed_vocabulary_widening_preserves_ids_and_borrowed_storage() {
+    let slot_values = SlotValues::default();
     use crate::model::profiles::{Mdlx, Universal};
     let positions = ZeroVec::alloc_from_slice(&[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]);
     let faces = [[0, 1, 2]];
@@ -193,7 +193,11 @@ fn typed_vocabulary_widening_preserves_ids_and_borrowed_storage() {
             surface: profiles::mdlx::Material::default(),
         })
         .unwrap();
-    let narrow = builder.finish().unwrap();
+    let narrow = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let universal = narrow.widen::<Universal>();
     assert!(universal
         .material(material)
@@ -289,11 +293,17 @@ fn application_vocabularies_participate_in_graph_validation() {
 
 #[test]
 fn native_identity_bindings_widen_without_allocating_matrices() {
+    let slot_values = SlotValues::default();
     use profiles::{Mdlx, Universal};
     let mut builder = Model::<Mdlx>::builder("rig");
-    let joint = builder.add_node(Node::named("joint")).unwrap();
+    let joint = builder.add_named_node("joint").unwrap();
     let skin = builder.add_skin(Skin::identity(vec![joint])).unwrap();
-    let universal = builder.finish().unwrap().widen::<Universal>();
+    let universal = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap()
+    .widen::<Universal>();
     assert!(matches!(
         universal.skin(skin).unwrap().binding,
         UniversalBinding::Identity(_)
@@ -306,37 +316,57 @@ fn native_identity_bindings_widen_without_allocating_matrices() {
 
 #[test]
 fn explicit_joint_bindings_check_palette_cardinality() {
+    let slot_values = SlotValues::default();
     use profiles::M3;
     let mut builder = Model::<M3>::builder("rig");
-    let joint = builder.add_node(Node::named("joint")).unwrap();
+    let joint = builder.add_named_node("joint").unwrap();
     let binding = ExplicitBinding::new(Vec::<BindMatrix>::new()).unwrap();
     builder.add_skin(Skin::new(vec![joint], binding)).unwrap();
-    assert!(builder.finish().is_err());
+    assert!({
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .is_err());
 }
 
 #[test]
 fn absolute_timeline_does_not_require_a_playback_clip() {
+    let slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("timeline");
-    let node = builder.add_node(Node::named("animated")).unwrap();
+    let node = builder.add_named_node("animated").unwrap();
     builder
         .add_timeline_channel(Channel::Vector3(Track {
-            target: node.translation(),
+            target: builder.model().node(node).unwrap().transform.translation,
             curve: Curve::from_samples([Time::default()], [[1., 2., 3.]], Interpolation::Step)
                 .unwrap(),
             clock: Clock::Timeline,
         }))
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     assert_eq!(model.clips().len(), 0);
     assert_eq!(model.timeline_channels().len(), 1);
 }
 
 #[test]
 fn native_single_appearance_cannot_publish_alternative_looks() {
+    let slot_values = SlotValues::default();
     let mut draft = Model::<profiles::Mdlx>::builder("native");
     assert_eq!(draft.model().looks().len(), 1);
     assert!(draft.add_look(Look::default()).is_err());
-    assert_eq!(draft.finish().unwrap().looks().len(), 1);
+    assert_eq!(
+        {
+            draft.import_values(&slot_values).unwrap();
+            draft.finish()
+        }
+        .unwrap()
+        .looks()
+        .len(),
+        1
+    );
 }
 
 #[test]

@@ -13,7 +13,7 @@ use crate::model::profiles::wmo::{
 use crate::model::profiles::Wmo;
 use crate::model::WorldImageResource;
 use crate::model::{
-    ColorSpace, InstanceId, MaterialId, Mesh, MeshInstance, ModelBuilder, Node, Sampler, SystemId,
+    ColorSpace, InstanceId, MaterialId, Mesh, MeshInstance, ModelBuilder, Sampler, SystemId,
     Texture, WmoGeometry,
 };
 use std::borrow::Cow;
@@ -391,7 +391,7 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
         }
     }
 
-    let node = builder.add_node(Node::named(format!("Group {index}")))?;
+    let node = builder.add_named_node(format!("Group {index}"))?;
     if header.flags.has_liquid() && region.liquids.is_empty() {
         region.implicit_liquid = Some(header.liquid_type);
     }

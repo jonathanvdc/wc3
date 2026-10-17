@@ -1,6 +1,7 @@
 //! Compile-time vocabulary of logical payloads; unrelated to native file revisions.
 use crate::model::EffectResourceId;
 use crate::model::ResourceLocator;
+use crate::model::Values;
 use crate::model::{
     AppearanceSchema, BindingSchema, Bounds, Error, FeatureKind, FeatureProperty, GeometrySchema,
     Link, MaterialSurface, Model, ModelMetadata, NodeFeature, SkinId, SystemPayload, ValidateLinks,
@@ -282,7 +283,7 @@ pub trait Extends<Source: Profile>: Profile {
     /// Embeds a surface without changing its meaning.
     fn surface<'a>(value: Source::Surface<'a>) -> Self::Surface<'a>;
     /// Embeds an attached feature without changing its meaning.
-    fn feature<'a>(value: Source::Feature<'a>) -> Self::Feature<'a>;
+    fn feature<'a>(value: Source::Feature<'a>, values: &mut Values) -> Self::Feature<'a>;
     /// Embeds node controls without changing meaning.
     fn node<'a>(value: Source::Node<'a>) -> Self::Node<'a>;
     /// Embeds mesh controls without changing meaning.
@@ -339,7 +340,7 @@ impl<P: Profile> Extends<P> for P {
     fn surface<'a>(value: P::Surface<'a>) -> Self::Surface<'a> {
         value
     }
-    fn feature<'a>(value: P::Feature<'a>) -> Self::Feature<'a> {
+    fn feature<'a>(value: P::Feature<'a>, _values: &mut Values) -> Self::Feature<'a> {
         value
     }
     fn node<'a>(value: <P as Profile>::Node<'a>) -> Self::Node<'a> {

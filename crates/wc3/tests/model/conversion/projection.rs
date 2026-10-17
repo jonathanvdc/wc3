@@ -3,18 +3,19 @@ use wc3::model::conversion::{Context, ExportOptions};
 use wc3::model::io::geometry;
 use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, Draw,
-    GeometryData, InstanceId, Material, Mesh, MeshId, MeshInstance, Model, ModelBuilder, Node,
-    Topology,
+    GeometryData, InstanceId, Material, Mesh, MeshId, MeshInstance, Model, ModelBuilder, Topology,
 };
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 fn fixture() -> (Model<'static>, MeshId, InstanceId) {
+    let mut slot_values = SlotValues::default();
     let mut draft = ModelBuilder::new("seams");
-    let node = draft.add_node(Node::named("placement")).unwrap();
+    let node = draft.add_named_node("placement").unwrap();
     let first = draft
         .add_material(
             Material {
                 name: "".into(),
-                surface: Default::default(),
+                surface: SlotConstruct::construct(&mut slot_values),
             }
             .named("first"),
         )
@@ -23,7 +24,7 @@ fn fixture() -> (Model<'static>, MeshId, InstanceId) {
         .add_material(
             Material {
                 name: "".into(),
-                surface: Default::default(),
+                surface: SlotConstruct::construct(&mut slot_values),
             }
             .named("second"),
         )
@@ -54,7 +55,7 @@ fn fixture() -> (Model<'static>, MeshId, InstanceId) {
             ]
             .try_into()
             .unwrap(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         }))
         .unwrap();
     let mut instance = MeshInstance::new(node, mesh);
@@ -65,7 +66,15 @@ fn fixture() -> (Model<'static>, MeshId, InstanceId) {
     let instance = draft
         .add_instance_with_materials(instance, vec![first, second])
         .unwrap();
-    (draft.finish().unwrap(), mesh, instance)
+    (
+        {
+            draft.import_values(&slot_values).unwrap();
+            draft.finish()
+        }
+        .unwrap(),
+        mesh,
+        instance,
+    )
 }
 
 #[test]

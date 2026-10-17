@@ -24,7 +24,7 @@ where
                     let r = r.map_err(read_error)?;
                     Ok(surface::CompositeSection {
                         material: reader.material(r.material_index)?,
-                        map_multiplier: anim(r.map_multiplier),
+                        map_multiplier: anim(r.map_multiplier, reader.builder.values_mut()),
                     })
                 })
                 .collect::<Result<Vec<_>, Error>>()?,

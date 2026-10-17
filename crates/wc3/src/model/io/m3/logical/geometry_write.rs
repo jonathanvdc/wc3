@@ -76,7 +76,7 @@ pub(super) fn write<'view, 'source: 'view, E: Envelope>(
         let node = model
             .node(instance.node)
             .ok_or_else(|| Error::new("m3.geometry.node", "placement node is absent"))?;
-        if node.parent.is_some() || node.transform != Default::default() {
+        if node.parent.is_some() || node.transform.defaults(model.values()) != Default::default() {
             return Err(Error::new(
                 "m3.geometry.placement",
                 "native geometry requires identity placement; transform baking is a semantic translation",

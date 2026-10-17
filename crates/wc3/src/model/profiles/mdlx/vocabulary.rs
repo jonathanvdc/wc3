@@ -6,6 +6,7 @@ use crate::model::resources::{MdlxImageResource, PathResource};
 use crate::model::Link;
 use crate::model::Model;
 use crate::model::PropertyIdentityKey;
+use crate::model::Values;
 use crate::model::{
     ClipControls, Error, FeatureKind, IdentityBinding, MaterialSurface, MdlxGeometry, MeshControls,
     ModelMetadata, NodeControls, PropertyPayload, SingleLook, UniversalAppearance,
@@ -125,8 +126,11 @@ impl Extends<Mdlx> for Universal {
     fn surface<'a>(value: <Mdlx as Profile>::Surface<'a>) -> Self::Surface<'a> {
         MaterialSurface::try_from(value).expect("validated MDLX surface")
     }
-    fn feature<'a>(value: <Mdlx as Profile>::Feature<'a>) -> Self::Feature<'a> {
-        value.into()
+    fn feature<'a>(
+        value: <Mdlx as Profile>::Feature<'a>,
+        values: &mut Values,
+    ) -> Self::Feature<'a> {
+        crate::model::features::FromFeature::from_feature(value, values)
     }
     fn node<'a>(value: <Mdlx as Profile>::Node<'a>) -> Self::Node<'a> {
         Some(NodeControls::Mdlx(value))

@@ -3,7 +3,6 @@ use super::super::GraphBuilder;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::materialize;
-use crate::model::profiles::M3;
 use crate::model::{
     profiles::m3 as surface, Channel, Clock, ControllerId, Curve, FeatureId, Interpolation, Time,
     Track,
@@ -90,16 +89,16 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                 continue;
             }
         };
-        let minimum = binding.minimum.clone();
-        let maximum = binding.maximum.clone();
-        let radius = binding.radius.clone();
+        let minimum = binding.minimum;
+        let maximum = binding.maximum;
+        let radius = binding.radius;
         let min_rows = extents.clone();
         let max_rows = extents.clone();
         let radius_rows = extents.clone();
         builder.add_controller_channel(
             layer,
             Channel::Vector3(Track {
-                target: minimum.clone().try_narrow::<M3>()?,
+                target: minimum,
                 curve: Curve::from_samples(
                     time_values.clone(),
                     materialize(min_rows.len(), move |i| {
@@ -113,7 +112,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
         builder.add_controller_channel(
             layer,
             Channel::Vector3(Track {
-                target: maximum.clone().try_narrow::<M3>()?,
+                target: maximum,
                 curve: Curve::from_samples(
                     time_values.clone(),
                     materialize(max_rows.len(), move |i| {
@@ -127,7 +126,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
         builder.add_controller_channel(
             layer,
             Channel::Scalar(Track {
-                target: radius.clone().try_narrow::<M3>()?,
+                target: radius,
                 curve: Curve::from_samples(
                     time_values.clone(),
                     materialize(radius_rows.len(), move |i| {

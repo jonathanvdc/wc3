@@ -1,10 +1,9 @@
 //! Logical material properties bind to typed graph destinations, never section addresses.
 use crate::model::materials::m3::properties::{MaterialProperties, PropertyMut};
-use crate::model::profiles::m3::properties::Target as PropertyField;
 use crate::model::profiles::m3::properties::{Field, FieldPath};
-use crate::model::profiles::UniversalProperty;
+use crate::model::Animatable;
 use crate::model::{
-    profiles::m3 as surface, OwnerId, Property as Destination, PropertyTarget, Quaternion,
+    profiles::m3 as surface, Animated as Destination, OwnerId, Quaternion, ValueSlot,
 };
 use std::collections::{BTreeMap, HashMap};
 #[derive(Clone, Debug)]
@@ -24,9 +23,9 @@ pub(super) enum Target {
 #[derive(Default)]
 pub(super) struct Bindings {
     pub entries: BTreeMap<u32, Vec<Target>>,
-    pub modes: HashMap<PropertyTarget, surface::values::Interpolation>,
+    pub modes: HashMap<ValueSlot, surface::values::Interpolation>,
 }
-pub(super) trait Value {
+pub(super) trait Value: Animatable {
     fn target(value: Destination<Self>) -> Target
     where
         Self: Sized;
@@ -87,13 +86,12 @@ impl Value for [u32; 4] {
     }
 }
 impl Bindings {
-    pub fn register_mode<T>(
+    pub fn register_mode<T: Animatable>(
         &mut self,
         destination: &Destination<T>,
         interpolation: surface::values::Interpolation,
     ) {
-        self.modes
-            .insert(destination.target().clone(), interpolation);
+        self.modes.insert(destination.slot(), interpolation);
     }
     pub fn register<T: Value>(&mut self, source_id: u32, destination: Destination<T>) {
         self.entries
@@ -106,12 +104,8 @@ trait Bind {
     fn bind(&mut self, owner: OwnerId, path: &FieldPath, bindings: &mut Bindings);
 }
 impl<T: Value> Bind for surface::Property<T> {
-    fn bind(&mut self, owner: OwnerId, path: &FieldPath, bindings: &mut Bindings) {
-        let destination = Destination::new(PropertyTarget::Profile {
-            owner,
-            key: UniversalProperty::M3(PropertyField::Field(path.clone())),
-        });
-        self.binding = Some(destination.clone());
+    fn bind(&mut self, _owner: OwnerId, _path: &FieldPath, bindings: &mut Bindings) {
+        let destination = self.value;
         bindings.register_mode(&destination, self.control.interpolation);
         bindings
             .entries

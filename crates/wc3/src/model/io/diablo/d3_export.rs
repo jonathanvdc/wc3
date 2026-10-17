@@ -118,7 +118,7 @@ pub(super) fn plan_with_animations(
             },
             transform0: native_transform(c.bind_pose)?,
             transform1: native_transform(c.inverse_bind_pose)?,
-            transform2: native_transform(node.transform)?,
+            transform2: native_transform(node.transform.defaults(asset.values()))?,
             transform3: native_transform(c.alternate_bind_pose)?,
             transform4: native_transform(c.inverse_alternate_bind_pose)?,
             particle: c.particle,
@@ -132,7 +132,9 @@ pub(super) fn plan_with_animations(
             name: original_name,
         } = &node.controls
         {
-            if node.transform.scale != [1.; 3] || node.transform.pivot != [0.; 3] {
+            if node.transform.defaults(asset.values()).scale != [1.; 3]
+                || node.transform.defaults(asset.values()).pivot != [0.; 3]
+            {
                 return Err(Error::new(
                     "d3.hardpoint",
                     "native hardpoint requires rigid transform",
@@ -156,8 +158,8 @@ pub(super) fn plan_with_animations(
                     })?,
                 },
                 transform: native::RigidTransform {
-                    rotation: node.transform.rotation.0,
-                    translation: node.transform.translation,
+                    rotation: node.transform.defaults(asset.values()).rotation.0,
+                    translation: node.transform.defaults(asset.values()).translation,
                 },
             });
         }

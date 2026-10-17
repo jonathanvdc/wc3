@@ -10,8 +10,7 @@ use crate::model::profiles::diablo::d3::{
     ModelMetadata, NodeRole, Slot, D3,
 };
 use crate::model::{
-    Bounds, ExplicitBinding, Material, MeshInstance, Model, Node, NodeId, Quaternion, Skin,
-    Transform,
+    Bounds, ExplicitBinding, Material, MeshInstance, Model, NodeId, Quaternion, Skin, Transform,
 };
 use std::{array::from_fn, borrow::Cow, str::from_utf8};
 #[path = "d3_animation.rs"]
@@ -95,7 +94,10 @@ fn import_appearance<'a>(
     unsupported(root, &mut context)?;
     let mut builder = Model::<D3>::builder("");
     builder.set_bounds(Some(bounds(root.bounds)));
-    let model_frame = builder.add_node(Node::named("").with_controls(NodeRole::ModelSpace))?;
+    let model_frame = {
+        let definition = builder.new_node("").with_controls(NodeRole::ModelSpace);
+        builder.add_node(definition)
+    }?;
     let bone_ids: Vec<_> = root.bones.iter().map(|_| builder.reserve_node()).collect();
     builder.set_metadata(read_controls(root, &bone_ids)?);
     for (i, bone) in root.bones.iter().enumerate() {
@@ -105,7 +107,8 @@ fn import_appearance<'a>(
                 "bone collision shapes and constraints have no logical physics representation",
             )?;
         }
-        let mut node = Node::named(text(&bone.name)?)
+        let mut node = builder
+            .new_node(text(&bone.name)?)
             .with_controls(NodeRole::Bone(Box::new(BoneControls {
                 bind_pose: transform(bone.transform0),
                 inverse_bind_pose: transform(bone.transform1),
@@ -116,7 +119,7 @@ fn import_appearance<'a>(
                 sphere_radius: bone.sphere.radius,
                 particle: bone.particle,
             })))
-            .with_transform(transform(bone.transform2))?;
+            .with_transform(transform(bone.transform2), builder.values_mut())?;
         node.parent = parent(bone.parent_index, &bone_ids)?;
         builder.set_node(bone_ids[i], node)?;
     }
@@ -136,15 +139,19 @@ fn import_appearance<'a>(
         )
     };
     for hardpoint in root.hardpoints.iter() {
-        let mut node = Node::named(text_owned(&hardpoint.name)?)
+        let mut node = builder
+            .new_node(text_owned(&hardpoint.name)?)
             .with_controls(NodeRole::Hardpoint {
                 name: Cow::Owned(text_owned(&hardpoint.name)?),
             })
-            .with_transform(Transform {
-                translation: hardpoint.transform.translation,
-                rotation: Quaternion(hardpoint.transform.rotation),
-                ..Default::default()
-            })?;
+            .with_transform(
+                Transform {
+                    translation: hardpoint.transform.translation,
+                    rotation: Quaternion(hardpoint.transform.rotation),
+                    ..Default::default()
+                },
+                builder.values_mut(),
+            )?;
         node.parent = parent(hardpoint.bone_index, &bone_ids)?;
         builder.add_node(node)?;
     }

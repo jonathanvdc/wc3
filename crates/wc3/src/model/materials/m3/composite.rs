@@ -1,5 +1,6 @@
 //! Logical M3 composite values.
 use super::Property;
+use crate::model::Construct;
 use crate::model::MaterialId;
 
 /// Editable M3 CompositeSection values.
@@ -12,7 +13,7 @@ pub struct CompositeSection {
 }
 
 /// Editable M3 CompositeMaterialStep values.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct CompositeMaterialStep {
     /// Sets render priority (lower = earlier).
     pub priority: u32,

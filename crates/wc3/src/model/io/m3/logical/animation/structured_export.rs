@@ -8,6 +8,7 @@ use super::{
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::profiles::M3;
+use crate::model::ValueSlot;
 use crate::model::{profiles::m3 as surface, Channel, Controller, NodeId, Time};
 use native::Envelope;
 
@@ -217,17 +218,16 @@ pub(super) fn add<E: Envelope>(
                         "structured block references another feature kind",
                     ));
                 };
-                let matching = |target: &crate::model::PropertyTarget| {
-                    clip.channels.iter().find(|c| c.target() == target)
-                };
+                let matching =
+                    |target: ValueSlot| clip.channels.iter().find(|c| c.target() == target);
                 let (
                     Some(Channel::Vector3(minimum)),
                     Some(Channel::Vector3(maximum)),
                     Some(Channel::Scalar(radius)),
                 ) = (
-                    matching(binding.minimum.target()),
-                    matching(binding.maximum.target()),
-                    matching(binding.radius.target()),
+                    matching(binding.minimum.slot()),
+                    matching(binding.maximum.slot()),
+                    matching(binding.radius.slot()),
                 )
                 else {
                     context.unsupported(
@@ -268,7 +268,7 @@ pub(super) fn add<E: Envelope>(
                     )?;
                     continue;
                 }
-                if let Some(identity) = ids.get(binding.minimum.target()) {
+                if let Some(identity) = ids.get(&binding.minimum.slot()) {
                     if !extent_ids.contains(&identity.id) {
                         extent_ids.push(identity.id);
                     }

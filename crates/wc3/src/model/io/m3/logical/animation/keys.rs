@@ -3,8 +3,7 @@ use super::super::bindings::Target;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::materialize;
-use crate::model::profiles::M3;
-use crate::model::{profiles::m3 as surface, EventId, FeatureId, PropertyTarget};
+use crate::model::{profiles::m3 as surface, EventId, FeatureId, ValueSlot};
 use crate::model::{Channel, Clock, Curve, Interpolation, Quaternion, Time, Track};
 use native::Envelope;
 
@@ -16,7 +15,7 @@ pub(super) fn controls<E: Envelope>(
     controller: &nr::SubTrackContainer<nr::V4>,
     selector: u32,
     source_id: u32,
-    targets: Vec<PropertyTarget>,
+    targets: Vec<ValueSlot>,
     events: Vec<EventId>,
     extents: Vec<FeatureId>,
 ) -> Result<surface::BlockControls, Error> {
@@ -75,7 +74,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
     target: &Target,
     mode: Interpolation,
     context: &mut Context,
-) -> Result<Option<Channel<'a, M3>>, Error> {
+) -> Result<Option<Channel<'a>>, Error> {
     let index = (selector & 0xffff) as usize;
     macro_rules! keys {
         ($block:ty, $reference:expr, $record:ty, $convert:expr, $target:pat => $property:expr, $channel:ident) => {{
@@ -116,7 +115,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                     mode,
                 )?;
                 Some(Channel::$channel(Track {
-                    target: $property.clone().try_narrow::<M3>()?,
+                    target: *$property,
                     curve,
                     clock: Clock::Timeline,
                 }))

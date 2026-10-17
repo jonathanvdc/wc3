@@ -65,7 +65,7 @@ use wc3::model::{Model, Node};
 use wc3::model::profiles::Mdlx;
 
 let mut draft = Model::<Mdlx>::builder("Example");
-let root = draft.add_node(Node::named("Root"))?;
+let root = draft.add_named_node("Root")?;
 let model = draft.finish()?;
 assert_eq!(model.node(root).unwrap().name, "Root");
 # Ok::<(), wc3::model::Error>(())

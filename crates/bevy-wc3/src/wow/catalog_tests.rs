@@ -1,12 +1,14 @@
 use super::*;
-use wc3::model::{ModelBuilder, Node};
+use wc3::model::ModelBuilder;
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 fn catalog(records: &[(u32, i32, [f32; 3])]) -> CharacterCatalog {
+    let mut slot_values = SlotValues::default();
     let mut builder: ModelBuilder<'static> = Model::builder("bone catalog fixture");
     let bones = records
         .iter()
         .enumerate()
         .map(|(i, (crc, key, pivot))| {
-            let node = builder.add_node(Node::named(format!("bone{i}"))).unwrap();
+            let node = builder.add_named_node(format!("bone{i}")).unwrap();
             BoneIdentity {
                 node,
                 name_crc: *crc,
@@ -18,7 +20,7 @@ fn catalog(records: &[(u32, i32, [f32; 3])]) -> CharacterCatalog {
         .collect();
     CharacterCatalog {
         bones,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     }
 }
 #[test]

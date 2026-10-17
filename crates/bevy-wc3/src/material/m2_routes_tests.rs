@@ -1,10 +1,11 @@
 use super::super::ModelMaterialKey;
 use super::*;
 use crate::material::native_fixtures::m2;
-use wc3::model::Animated;
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 #[test]
 fn third_input_reuses_raw_streams_with_its_own_transform() {
+    let mut slot_values = SlotValues::default();
     for (sources, route, stream) in [
         ([0, 1, 0], 0, None),
         ([0, 1, 1], 2, None),
@@ -16,15 +17,23 @@ fn third_input_reuses_raw_streams_with_its_own_transform() {
             textures: sources
                 .into_iter()
                 .map(|source| {
-                    let mut input = m2::TextureUnit::default();
+                    let mut input = m2::TextureUnit::construct(&mut slot_values);
                     input.coordinates.source = source;
                     input
                 })
                 .collect(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         };
-        shader.textures[2].coordinates.transform.translation = Animated::constant([0.25, 0.5, 0.]);
-        let model = Model::builder("coordinate routes").finish().unwrap();
+        shader.textures[2].coordinates.transform.translation = slot_values.add([0.25, 0.5, 0.]);
+        let model = {
+            let mut draft = Model::<wc3::model::profiles::Universal>::builder("coordinate routes");
+            draft.import_values(&slot_values).unwrap();
+            draft.finish().unwrap()
+        };
+        let mut model = model.clone();
+        model
+            .edit(|builder| builder.import_values(&slot_values))
+            .unwrap();
         let pass = compile_m2(&model, &shader.clone().into(), &TextureImages::default()).unwrap();
         assert!(pass.diagnostics.is_empty());
         assert_eq!(pass.state.combiner.coordinates.w, route);
@@ -44,6 +53,7 @@ fn third_input_reuses_raw_streams_with_its_own_transform() {
 
 #[test]
 fn masked_crossfade_reuses_streams_and_keeps_mask_transform() {
+    let mut slot_values = SlotValues::default();
     for (sources, expected_route, expected_stream) in [
         ([0, 0, 0, 1], 3, Some(1)),
         ([0, 1, 0, 1], 2, None),
@@ -55,16 +65,25 @@ fn masked_crossfade_reuses_streams_and_keeps_mask_transform() {
             textures: sources
                 .into_iter()
                 .map(|source| {
-                    let mut input = m2::TextureUnit::default();
+                    let mut input = m2::TextureUnit::construct(&mut slot_values);
                     input.coordinates.source = source;
                     input
                 })
                 .collect(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         };
-        shader.textures[3].coordinates.transform.translation = Animated::constant([0.25, 0.5, 0.]);
-        shader.textures[3].contribution = Animated::constant(0.4);
-        let model = Model::builder("masked crossfade routes").finish().unwrap();
+        shader.textures[3].coordinates.transform.translation = slot_values.add([0.25, 0.5, 0.]);
+        shader.textures[3].contribution = slot_values.add(0.4);
+        let model = {
+            let mut draft =
+                Model::<wc3::model::profiles::Universal>::builder("masked crossfade routes");
+            draft.import_values(&slot_values).unwrap();
+            draft.finish().unwrap()
+        };
+        let mut model = model.clone();
+        model
+            .edit(|builder| builder.import_values(&slot_values))
+            .unwrap();
         let pass = compile_m2(&model, &shader.clone().into(), &TextureImages::default()).unwrap();
         assert!(pass.diagnostics.is_empty());
         assert_eq!(pass.state.combiner.mode.x, 23);
@@ -79,7 +98,12 @@ fn masked_crossfade_reuses_streams_and_keeps_mask_transform() {
 
 #[test]
 fn masked_crossfade_rejects_missing_surplus_and_unrepresentable_inputs() {
-    let model = Model::builder("invalid crossfade").finish().unwrap();
+    let mut slot_values = SlotValues::default();
+    let model = {
+        let mut draft = Model::<wc3::model::profiles::Universal>::builder("invalid crossfade");
+        draft.import_values(&slot_values).unwrap();
+        draft.finish().unwrap()
+    };
     for sources in [
         vec![0, 0, 0],
         vec![0; 5],
@@ -92,13 +116,17 @@ fn masked_crossfade_rejects_missing_surplus_and_unrepresentable_inputs() {
             textures: sources
                 .into_iter()
                 .map(|source| {
-                    let mut input = m2::TextureUnit::default();
+                    let mut input = m2::TextureUnit::construct(&mut slot_values);
                     input.coordinates.source = source;
                     input
                 })
                 .collect(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         };
+        let mut model = model.clone();
+        model
+            .edit(|builder| builder.import_values(&slot_values))
+            .unwrap();
         let pass = compile_m2(&model, &shader.clone().into(), &TextureImages::default()).unwrap();
         assert_eq!(pass.state.combiner.mode.x, 0);
         assert_eq!(pass.diagnostics.len(), 1);
@@ -107,7 +135,12 @@ fn masked_crossfade_rejects_missing_surplus_and_unrepresentable_inputs() {
 
 #[test]
 fn shared_primary_and_secondary_coordinates_avoid_duplicate_vertex_streams() {
-    let model = Model::builder("shared UV streams").finish().unwrap();
+    let mut slot_values = SlotValues::default();
+    let model = {
+        let mut draft = Model::<wc3::model::profiles::Universal>::builder("shared UV streams");
+        draft.import_values(&slot_values).unwrap();
+        draft.finish().unwrap()
+    };
     for (shader, sources, secondary) in [
         (0x8005, vec![0, 0], None),
         (0x8016, vec![0, 0, 0, 1], None),
@@ -119,13 +152,17 @@ fn shared_primary_and_secondary_coordinates_avoid_duplicate_vertex_streams() {
             textures: sources
                 .into_iter()
                 .map(|source| {
-                    let mut input = m2::TextureUnit::default();
+                    let mut input = m2::TextureUnit::construct(&mut slot_values);
                     input.coordinates.source = source;
                     input
                 })
                 .collect(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         };
+        let mut model = model.clone();
+        model
+            .edit(|builder| builder.import_values(&slot_values))
+            .unwrap();
         let pass = compile_m2(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
         assert_eq!(pass.secondary_coordinate, secondary);
     }

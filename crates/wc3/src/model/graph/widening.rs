@@ -1,18 +1,18 @@
 //! Infallible payload embeddings preserve identities and encoded storage.
 use crate::model::profiles::{Extends, Profile};
+use crate::model::Values;
 use crate::model::{
     AttachedFeature, Clip, Controller, Dependencies, Draw, Material, Mesh, MeshInstance, Model,
     Node, Skin,
 };
 struct PayloadMap<'a, P: Profile, Q: Profile> {
-    property: fn(P::Property) -> Q::Property,
     appearance: fn(P::Appearance<'a>) -> Q::Appearance<'a>,
     geometry: fn(P::Geometry<'a>) -> Q::Geometry<'a>,
     binding: fn(P::Binding<'a>) -> Q::Binding<'a>,
     model: fn(P::ModelMetadata<'a>) -> Q::ModelMetadata<'a>,
     system: fn(P::System<'a>) -> Q::System<'a>,
     map_surface: fn(P::Surface<'a>) -> Q::Surface<'a>,
-    feature: fn(P::Feature<'a>) -> Q::Feature<'a>,
+    feature: fn(P::Feature<'a>, &mut Values) -> Q::Feature<'a>,
     node: fn(P::Node<'a>) -> Q::Node<'a>,
     mesh: fn(P::Mesh<'a>) -> Q::Mesh<'a>,
     instance: fn(P::Instance<'a>) -> Q::Instance<'a>,
@@ -24,7 +24,6 @@ impl<'a, P: Profile> Model<'a, P> {
     /// Embeds the complete graph into a containing vocabulary without copying array storage.
     pub fn widen<Q: Extends<P>>(self) -> Model<'a, Q> {
         self.map_payloads(PayloadMap {
-            property: Q::property,
             appearance: Q::appearance,
             geometry: Q::geometry,
             binding: Q::binding,
@@ -40,7 +39,7 @@ impl<'a, P: Profile> Model<'a, P> {
             controller: Q::controller,
         })
     }
-    fn map_payloads<Q: Extends<P>>(self, maps: PayloadMap<'a, P, Q>) -> Model<'a, Q> {
+    fn map_payloads<Q: Extends<P>>(mut self, maps: PayloadMap<'a, P, Q>) -> Model<'a, Q> {
         Model {
             dependencies: Dependencies {
                 images: self
@@ -86,25 +85,9 @@ impl<'a, P: Profile> Model<'a, P> {
                 .into_iter()
                 .map(|(id, value)| (id, (maps.system)(value)))
                 .collect(),
-            timeline_channels: self
-                .timeline_channels
-                .into_iter()
-                .map(|channel| {
-                    channel
-                        .map_profile(|key| Ok((maps.property)(key)))
-                        .expect("infallible property embedding")
-                })
-                .collect(),
+            timeline_channels: self.timeline_channels.into_iter().collect(),
             timeline_events: self.timeline_events,
-            shared_channels: self
-                .shared_channels
-                .into_iter()
-                .map(|channel| {
-                    channel
-                        .map_profile(|key| Ok((maps.property)(key)))
-                        .expect("infallible property embedding")
-                })
-                .collect(),
+            shared_channels: self.shared_channels.into_iter().collect(),
             shared_events: self.shared_events,
             appearance: (maps.appearance)(self.appearance),
             skins: self
@@ -200,7 +183,7 @@ impl<'a, P: Profile> Model<'a, P> {
                         id,
                         AttachedFeature {
                             node,
-                            payload: (maps.feature)(payload),
+                            payload: (maps.feature)(payload, &mut self.values),
                         },
                     )
                 })
@@ -225,14 +208,7 @@ impl<'a, P: Profile> Model<'a, P> {
                             name,
                             duration,
                             looping,
-                            channels: channels
-                                .into_iter()
-                                .map(|channel| {
-                                    channel
-                                        .map_profile(|key| Ok((maps.property)(key)))
-                                        .expect("infallible property embedding")
-                                })
-                                .collect(),
+                            channels: channels.into_iter().collect(),
                             events,
                             controls: (maps.clip)(controls),
                         },
@@ -297,20 +273,14 @@ impl<'a, P: Profile> Model<'a, P> {
                             name,
                             priority,
                             concurrent,
-                            channels: channels
-                                .into_iter()
-                                .map(|channel| {
-                                    channel
-                                        .map_profile(|key| Ok((maps.property)(key)))
-                                        .expect("infallible property embedding")
-                                })
-                                .collect(),
+                            channels: channels.into_iter().collect(),
                             events,
                             controls: (maps.controller)(controls),
                         },
                     )
                 })
                 .collect(),
+            values: self.values,
         }
     }
 }

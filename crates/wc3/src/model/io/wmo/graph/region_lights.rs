@@ -7,6 +7,7 @@ use crate::model::formats::wmo::records;
 use crate::model::formats::wmo::{Dialect, Group};
 use crate::model::profiles::wmo::{self, RegionControls};
 use crate::model::profiles::Wmo;
+use crate::model::Values;
 use crate::model::WorldImageResource;
 use crate::model::{ColorSpace, FeatureId, Model, ModelBuilder, Node, Sampler, Texture};
 use std::collections::BTreeMap;
@@ -19,8 +20,10 @@ pub(super) fn read<'a, D: Dialect>(
         if let GroupChunk::PointLights(rows) = chunk {
             for row in rows.iter() {
                 let row = row.map_err(error)?;
-                let mut node = Node::named("Region point light");
-                node.transform.translation = row.position;
+                let node = builder.new_node("Region point light");
+                builder
+                    .values_mut()
+                    .set(node.transform.translation, row.position)?;
                 let node = builder.add_node(node)?;
                 region.point_lights.push(builder.add_feature(
                     node,
@@ -61,8 +64,10 @@ pub(super) fn read<'a, D: Dialect>(
                         sampler: Sampler::default(),
                     })
                 };
-                let mut node = Node::named("Region point-light program");
-                node.transform.translation = row.position;
+                let node = builder.new_node("Region point-light program");
+                builder
+                    .values_mut()
+                    .set(node.transform.translation, row.position)?;
                 let node = builder.add_node(node)?;
                 region.point_programs.push(builder.add_feature(
                     node,
@@ -133,12 +138,12 @@ pub(super) fn write<'a, D: Dialect>(
             ));
         };
         let node = model.node(feature.node).expect("validated light anchor");
-        absolute(node)?;
+        absolute(node, model.values())?;
         indices.insert(*id, points.len() as u32);
         points.push(records::PointLight {
             reserved_header: source.control,
             color_bgra: rgba(source.color),
-            position: node.transform.translation,
+            position: node.transform.defaults(model.values()).translation,
             intensity: source.intensity,
             attenuation_start: source.attenuation[0],
             attenuation_end: source.attenuation[1],
@@ -155,7 +160,7 @@ pub(super) fn write<'a, D: Dialect>(
             ));
         };
         let node = model.node(feature.node).expect("validated program anchor");
-        absolute(node)?;
+        absolute(node, model.values())?;
         let cookie = source.cookie.map_or(Ok(0), |id| {
             match model.image_resource(id.resource).expect("validated image") {
                 WorldImageResource::FileDataId(id) => Ok(*id),
@@ -173,7 +178,7 @@ pub(super) fn write<'a, D: Dialect>(
                 )
             })?,
             color_bgra: rgba(source.color),
-            position: node.transform.translation,
+            position: node.transform.defaults(model.values()).translation,
             attenuation_start: source.attenuation[0],
             attenuation_end: source.attenuation[1],
             intensity: source.intensity,
@@ -235,10 +240,10 @@ fn sets(
         })
         .collect()
 }
-fn absolute(node: &Node<'_, Wmo>) -> Result<(), Error> {
+fn absolute(node: &Node<'_, Wmo>, values: &Values) -> Result<(), Error> {
     if node.parent.is_some()
-        || node.transform.rotation != Default::default()
-        || node.transform.scale != [1.; 3]
+        || node.transform.defaults(values).rotation != Default::default()
+        || node.transform.defaults(values).scale != [1.; 3]
     {
         return Err(Error::new(
             "world.region.light.transform",

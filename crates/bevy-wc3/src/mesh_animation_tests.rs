@@ -60,15 +60,25 @@ fn common_mesh_targets_override_feature_values_and_equal_constants_share_keys() 
     assert!(!constant.is_animated());
     let other_mesh = model.meshes().iter().nth(1).unwrap().0;
     assert_eq!(state(&constant, mesh), state(&constant, other_mesh));
+    let definition = model
+        .features()
+        .values()
+        .find_map(|feature| match &feature.payload {
+            wc3::model::NodeFeature::GeometryAnimation(value) if value.mesh == Some(mesh) => {
+                Some(value.clone())
+            }
+            _ => None,
+        })
+        .unwrap();
     model
         .edit(|builder| {
             builder.add_timeline_channel(Channel::Vector3(Track {
-                target: mesh.color(),
+                target: definition.color,
                 clock: Clock::Timeline,
                 curve: Curve::linear([time(0.), time(1.)], [[0.2, 0.4, 0.6], [0.4, 0.6, 0.8]])?,
             }))?;
             builder.add_timeline_channel(Channel::Scalar(Track {
-                target: mesh.opacity(),
+                target: definition.opacity,
                 clock: Clock::Timeline,
                 curve: Curve::linear([time(0.), time(1.)], [0.5, 1.])?,
             }))

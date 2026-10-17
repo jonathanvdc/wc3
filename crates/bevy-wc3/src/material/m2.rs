@@ -138,11 +138,15 @@ pub(super) fn compile_m2(
     let raster = &declaration.state.rasterization;
     rasterization(&mut pass, raster.faces, raster.lighting);
     depth(&mut pass, raster.depth.test, raster.depth.write);
-    let color = declaration.color.default;
-    pass.animation.color = Some(declaration.color.clone());
-    pass.animation.opacity = Some(declaration.opacity.clone());
-    pass.material.base_color =
-        Color::linear_rgba(color[0], color[1], color[2], declaration.opacity.default);
+    let color = model.values()[declaration.color];
+    pass.animation.color = Some(declaration.color);
+    pass.animation.opacity = Some(declaration.opacity);
+    pass.material.base_color = Color::linear_rgba(
+        color[0],
+        color[1],
+        color[2],
+        model.values()[declaration.opacity],
+    );
     pass.material.depth_bias = declaration.state.ordering as f32;
     let supported = program(surface).filter(|program| {
         inputs
@@ -155,13 +159,13 @@ pub(super) fn compile_m2(
         pass.material.base_color_texture =
             image(model, first.image.texture, images, &mut pass.diagnostics)?;
         pass.coordinate = u32::try_from(first.coordinates.source).unwrap_or(0);
-        transform(&mut pass, &first.coordinates.transform);
+        transform(&mut pass, &first.coordinates.transform, model.values());
         pass.animation.transform = Some(first.coordinates.transform.clone());
         if declaration.batch_flags.bits() & 0x40 == 0 {
-            pass.animation.weight = Some(first.contribution.clone());
-            pass.material
-                .base_color
-                .set_alpha(declaration.opacity.default * first.contribution.default);
+            pass.animation.weight = Some(first.contribution);
+            pass.material.base_color.set_alpha(
+                model.values()[declaration.opacity] * model.values()[first.contribution],
+            );
         }
     }
     if let Some(program) = supported {
@@ -176,8 +180,8 @@ pub(super) fn compile_m2(
             pass.diagnostics.push("M2 legacy texture equation uses its first two inputs; surplus native bindings are retained but not sampled".into());
         }
         for (slot, input) in inputs.iter().take(program.inputs).enumerate() {
-            pass.state.combiner.weights[slot] = input.contribution.default;
-            pass.animation.input_weights[slot] = Some(input.contribution.clone());
+            pass.state.combiner.weights[slot] = model.values()[input.contribution];
+            pass.animation.input_weights[slot] = Some(input.contribution);
             let environment = program.environment.get(slot).copied().unwrap_or(false)
                 || input.coordinates.source == -1;
             if slot < 3 {
@@ -204,7 +208,7 @@ pub(super) fn compile_m2(
                 )?;
                 if !environment {
                     let mut scratch = SurfacePass::default();
-                    transform(&mut scratch, &input.coordinates.transform);
+                    transform(&mut scratch, &input.coordinates.transform, model.values());
                     pass.state.combiner.uv_transform = Mat3::from(scratch.material.uv_transform);
                     pass.diagnostics.extend(scratch.diagnostics);
                     pass.animation.secondary_transform = Some(input.coordinates.transform.clone());
@@ -234,7 +238,7 @@ pub(super) fn compile_m2(
                 )?;
                 if !environment {
                     let mut scratch = SurfacePass::default();
-                    transform(&mut scratch, &input.coordinates.transform);
+                    transform(&mut scratch, &input.coordinates.transform, model.values());
                     pass.state.combiner.third_transform = Mat3::from(scratch.material.uv_transform);
                     pass.diagnostics.extend(scratch.diagnostics);
                     pass.animation.third_transform = Some(input.coordinates.transform.clone());
@@ -252,7 +256,7 @@ pub(super) fn compile_m2(
                     &mut pass.diagnostics,
                 )?;
                 let mut scratch = SurfacePass::default();
-                transform(&mut scratch, &input.coordinates.transform);
+                transform(&mut scratch, &input.coordinates.transform, model.values());
                 pass.state.combiner.fourth_transform = Mat3::from(scratch.material.uv_transform);
                 pass.diagnostics.extend(scratch.diagnostics);
                 pass.animation.fourth_transform = Some(input.coordinates.transform.clone());

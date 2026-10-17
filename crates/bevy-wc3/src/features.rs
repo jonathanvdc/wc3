@@ -6,7 +6,6 @@ use super::{ModelAsset, ModelInstance, ModelRig, Playback};
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
-use wc3::model::profiles::Universal;
 use wc3::model::scene::world::LightKind as WorldLightKind;
 use wc3::model::scene::{Camera as PortableCamera, LightKind};
 use wc3::model::values::programmed::LightKind as ProgrammedLightKind;
@@ -126,7 +125,7 @@ struct AttachmentDefinition {
     parent_basis: Transform,
 }
 impl AttachmentDefinition {
-    fn visibility(&self, sample: &SampledAnimation<'_, '_, Universal>) -> f32 {
+    fn visibility(&self, sample: &SampledAnimation<'_, '_>) -> f32 {
         self.definition.visibility(sample)
     }
 }
@@ -295,7 +294,7 @@ impl RuntimeFeatures {
     pub(crate) fn attachment_active(
         &self,
         id: FeatureId,
-        sample: &SampledAnimation<'_, '_, Universal>,
+        sample: &SampledAnimation<'_, '_>,
     ) -> bool {
         self.attachments
             .iter()
@@ -514,36 +513,16 @@ impl RuntimeFeatures {
                         [0.; 2],
                     ),
                     SemanticLight::Specular(light) => (
-                        light
-                            .diffuse_color
-                            .binding
-                            .as_ref()
-                            .and_then(|property| sample.property(property))
-                            .unwrap_or(light.diffuse_color.initial),
-                        light
-                            .intensity_multiplier
-                            .binding
-                            .as_ref()
-                            .and_then(|property| sample.property(property))
-                            .unwrap_or(light.intensity_multiplier.initial),
+                        sample.animated(&light.diffuse_color.value),
+                        sample.animated(&light.intensity_multiplier.value),
                         light.attenuation_end,
                         1.,
                         light.flags.shadows(),
                         [0.; 3],
                         0.,
                         [
-                            light
-                                .hot_spot
-                                .binding
-                                .as_ref()
-                                .and_then(|property| sample.property(property))
-                                .unwrap_or(light.hot_spot.initial),
-                            light
-                                .falloff
-                                .binding
-                                .as_ref()
-                                .and_then(|property| sample.property(property))
-                                .unwrap_or(light.falloff.initial),
+                            sample.animated(&light.hot_spot.value),
+                            sample.animated(&light.falloff.value),
                         ],
                     ),
                 };
@@ -684,16 +663,19 @@ impl RuntimeFeatures {
 
 #[cfg(test)]
 mod tests {
+    use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+
     use super::*;
-    use wc3::model::{Animated, AnimationProgram, AnimationSample, Node, PhotographicControls};
+    use wc3::model::{AnimationProgram, AnimationSample, PhotographicControls};
     #[test]
     fn compiled_attachments_own_their_resolved_child_declaration() {
+        let slot_values = SlotValues::default();
         let compiled = {
             let path = b"child.mdx".to_vec();
-            let mut draft = Model::<Universal>::builder("child declaration");
+            let mut draft = Model::<wc3::model::profiles::Universal>::builder("child declaration");
             let resource =
                 draft.add_model_resource(ResourceLocator::Path(std::borrow::Cow::Borrowed(&path)));
-            let node = draft.add_node(Node::named("child")).unwrap();
+            let node = draft.add_named_node("child").unwrap();
             draft
                 .add_feature(
                     node,
@@ -704,7 +686,11 @@ mod tests {
                     })),
                 )
                 .unwrap();
-            let model = draft.finish().unwrap();
+            let model = {
+                draft.import_values(&slot_values).unwrap();
+                draft.finish()
+            }
+            .unwrap();
             RuntimeFeatures::compile(&model, &HashMap::new(), &HashMap::new())
         };
         assert!(
@@ -713,26 +699,31 @@ mod tests {
     }
     #[test]
     fn aimed_camera_samples_offsets_and_roll_without_spawning_a_view() {
+        let mut slot_values = SlotValues::default();
         let mut builder = Model::builder("authored camera");
-        let node = builder.add_node(Node::named("camera anchor")).unwrap();
+        let node = builder.add_named_node("camera anchor").unwrap();
         let feature = builder
             .add_feature(
                 node,
                 NodeFeature::Camera(ModelCamera::Aimed(Box::new(AimedCamera {
-                    eye_offset: Animated::constant([1., 0., 0.]),
+                    eye_offset: slot_values.add([1., 0., 0.]),
                     target: [0., 10., 0.],
-                    target_offset: Animated::constant([0., 0., 2.]),
-                    field_of_view: Animated::constant(1.),
+                    target_offset: slot_values.add([0., 0., 2.]),
+                    field_of_view: slot_values.add(1.),
                     clipping: [0.1, 100.],
-                    roll: Animated::constant(0.),
+                    roll: slot_values.add(0.),
                     convention: CameraConvention::Vertical(Box::new(PhotographicControls {
-                        visibility: Animated::constant(1.),
-                        ..Default::default()
+                        visibility: slot_values.add(1.),
+                        ..SlotConstruct::construct(&mut slot_values)
                     })),
                 }))),
             )
             .unwrap();
-        let model = builder.finish().unwrap();
+        let model = {
+            builder.import_values(&slot_values).unwrap();
+            builder.finish()
+        }
+        .unwrap();
         let features = RuntimeFeatures::compile(&model, &HashMap::new(), &HashMap::new());
         let program = AnimationProgram::compile(&model);
         let sample = program.sample(AnimationSample::default()).unwrap();
@@ -759,21 +750,23 @@ mod imported_light_tests {
     use wc3::model::animation::programmed::Property;
     use wc3::model::scene::{programmed, world};
     use wc3::model::values::programmed::LightFlags;
-    use wc3::model::{Animated, AnimationProgram, AnimationSample, Node};
+    use wc3::model::{AnimationProgram, AnimationSample};
+    use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
     #[test]
     fn world_and_programmed_diffuse_lights_use_bevy_components_without_global_ambient() {
+        let mut slot_values = SlotValues::default();
         let mut builder = Model::builder("imported lights");
-        let node = builder.add_node(Node::named("anchor")).unwrap();
+        let node = builder.add_named_node("anchor").unwrap();
         builder
             .add_feature(
                 node,
                 NodeFeature::Light(SemanticLight::World(Box::new(world::Light {
                     kind: WorldLightKind::Point,
-                    color: Animated::constant([0.2, 0.4, 0.8, 0.]),
-                    intensity: Animated::constant(2.),
+                    color: slot_values.add([0.2, 0.4, 0.8, 0.]),
+                    intensity: slot_values.add(2.),
                     use_attenuation: true,
                     attenuation: [1., 8.],
-                    ..Default::default()
+                    ..SlotConstruct::construct(&mut slot_values)
                 }))),
             )
             .unwrap();
@@ -786,24 +779,28 @@ mod imported_light_tests {
                     lod_cut: 0,
                     shadow_lod_cut: 0,
                     diffuse_color: Property {
-                        initial: [0.3, 0.5, 0.7],
-                        ..Default::default()
+                        value: slot_values.add([0.3, 0.5, 0.7]),
+                        ..SlotConstruct::construct(&mut slot_values)
                     },
                     intensity_multiplier: Property {
-                        initial: 3.,
-                        ..Default::default()
+                        value: slot_values.add(3.),
+                        ..SlotConstruct::construct(&mut slot_values)
                     },
-                    specular_color: Default::default(),
-                    specular_multiplier: Default::default(),
-                    decay: Default::default(),
+                    specular_color: SlotConstruct::construct(&mut slot_values),
+                    specular_multiplier: SlotConstruct::construct(&mut slot_values),
+                    decay: SlotConstruct::construct(&mut slot_values),
                     attenuation_end: 12.,
-                    attenuation_start: Default::default(),
-                    hot_spot: Default::default(),
-                    falloff: Default::default(),
+                    attenuation_start: SlotConstruct::construct(&mut slot_values),
+                    hot_spot: SlotConstruct::construct(&mut slot_values),
+                    falloff: SlotConstruct::construct(&mut slot_values),
                 }))),
             )
             .unwrap();
-        let model = builder.finish().unwrap();
+        let model = {
+            builder.import_values(&slot_values).unwrap();
+            builder.finish()
+        }
+        .unwrap();
         let features = RuntimeFeatures::compile(&model, &HashMap::new(), &HashMap::new());
         let animation = AnimationProgram::compile(&model);
         let mut app = App::new();
@@ -920,6 +917,7 @@ fn observe_attachment_clock(
 #[cfg(test)]
 mod attachment_lifecycle_tests {
     use super::*;
+
     #[test]
     fn inactive_mounts_restart_only_on_activation_or_parent_backwards_traversal() {
         let mut point = AttachmentState {

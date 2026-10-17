@@ -108,7 +108,7 @@ impl ColorAdjustment {
                 uncertain = true;
                 break;
             };
-            if node.transform != Transform::default()
+            if node.transform.defaults(model.values()) != Transform::default()
                 || node.billboard != Billboard::None
                 || node.camera_anchored
             {

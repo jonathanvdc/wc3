@@ -8,11 +8,17 @@ use wc3::model::{
     formats::m3::{self, records as nr},
     profiles::{m3 as surface, M3},
 };
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 pub(super) fn asset() -> Model<'static, M3> {
+    let mut slot_values = SlotValues::default();
     let mut builder = sem::Model::<M3>::builder("Triangle");
-    let node = builder
-        .add_node(sem::Node::named("Root").with_controls(surface::BoneControls::default()))
-        .unwrap();
+    let node = {
+        let definition = builder
+            .new_node("Root")
+            .with_controls(surface::BoneControls::construct(&mut slot_values));
+        builder.add_node(definition)
+    }
+    .unwrap();
     let influences = (vec![
         [
             sem::Influence {
@@ -49,7 +55,7 @@ pub(super) fn asset() -> Model<'static, M3> {
         .add_material(sem::Material {
             name: Cow::Borrowed("Solid"),
             surface: surface::MaterialStep::Standard(
-                (surface::StandardMaterialStep::default()).into(),
+                (surface::StandardMaterialStep::construct(&mut slot_values)).into(),
             ),
         })
         .unwrap();
@@ -65,7 +71,11 @@ pub(super) fn asset() -> Model<'static, M3> {
             sem::ExplicitBinding::new((vec![identity]).into_zero_vec()).unwrap(),
         ))
         .unwrap();
-    let frame = builder.add_node(sem::Node::named("")).unwrap();
+    let frame = {
+        let definition = builder.new_node("");
+        builder.add_node(definition)
+    }
+    .unwrap();
     let mut instance = sem::MeshInstance::new(frame, mesh);
     instance.skin = Some(skin);
     instance.draws.push(sem::Draw::new(
@@ -78,14 +88,14 @@ pub(super) fn asset() -> Model<'static, M3> {
     let controller = builder
         .add_controller(sem::Controller {
             name: Cow::Borrowed("Movement"),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     builder
         .add_controller_channel(
             controller,
             sem::Channel::Vector3(sem::Track {
-                target: node.translation(),
+                target: builder.model().node(node).unwrap().transform.translation,
                 clock: sem::Clock::Timeline,
                 curve: sem::Curve::linear(
                     (vec![
@@ -106,7 +116,11 @@ pub(super) fn asset() -> Model<'static, M3> {
         controllers: vec![controller],
     });
     builder.add_clip(clip).unwrap();
-    builder.finish().unwrap()
+    {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap()
 }
 pub(super) fn approximate() -> ExportOptions {
     ExportOptions {
@@ -209,13 +223,15 @@ fn standard_controls_remain_active_after_geometry_edit() {
 }
 #[test]
 fn dormant_standard_and_hair_surfaces_are_authored_materials() {
+    let mut slot_values = SlotValues::default();
     let mut asset = asset();
     let hair = surface::HairMaterialStep {
         shift_primary: 0.25,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     asset
         .edit(|builder| {
+            builder.import_values(&slot_values)?;
             builder.add_material(sem::Material {
                 name: Cow::Borrowed("Dormant hair"),
                 surface: surface::MaterialStep::Hair((hair).into()),
@@ -290,6 +306,7 @@ fn native_profile_rejects_coordinate_metadata_that_cannot_round_trip() {
 
 #[test]
 fn unknown_sections_and_vertex_qualifiers_require_explicit_drop() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::conversion::{IssueKind, UnknownPolicy};
     let original = asset();
     let source = io::m3::plan::<m3::StarCraft2>(&original, &approximate())
@@ -311,7 +328,7 @@ fn unknown_sections_and_vertex_qualifiers_require_explicit_drop() {
         &source,
         &ImportOptions {
             unknown: UnknownPolicy::Drop,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
     )
     .unwrap();
@@ -346,6 +363,7 @@ fn unknown_sections_and_vertex_qualifiers_require_explicit_drop() {
 
 #[test]
 fn contribution_groups_round_trip_sparse_slots_and_arbitrary_normal_weights() {
+    let mut slot_values = SlotValues::default();
     let mut asset = asset();
     let (id, material) = asset.materials().iter().next().unwrap();
     let mut material = material.clone();
@@ -357,21 +375,24 @@ fn contribution_groups_round_trip_sparse_slots_and_arbitrary_normal_weights() {
     standard.emissive.parameters = 3.5;
     standard.emissive.input.secondary.input = Some(surface::TextureLayer {
         id: 71,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     });
     standard.normals.primary.mask = Some(surface::TextureLayer {
         id: 81,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     });
     standard.normals.weights = (0..5)
         .map(|index| surface::Property {
-            initial: index as f32 * 0.2,
+            value: slot_values.add(index as f32 * 0.2),
             reset: index as f32 * 0.1,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .collect();
     asset
-        .edit(|builder| builder.set_material(id, material))
+        .edit(|builder| {
+            builder.import_values(&slot_values)?;
+            builder.set_material(id, material)
+        })
         .unwrap();
     let native = io::m3::plan::<m3::StarCraft2>(&asset, &approximate())
         .unwrap()
@@ -401,7 +422,7 @@ fn contribution_groups_round_trip_sparse_slots_and_arbitrary_normal_weights() {
     assert_eq!(standard.normals.primary.mask.as_ref().unwrap().id, 81);
     assert_eq!(standard.normals.weights.len(), 5);
     for (index, weight) in standard.normals.weights.iter().enumerate() {
-        assert_eq!(weight.initial, index as f32 * 0.2);
+        assert_eq!(imported.values()[weight.value], index as f32 * 0.2);
         assert_eq!(weight.reset, index as f32 * 0.1);
     }
 }

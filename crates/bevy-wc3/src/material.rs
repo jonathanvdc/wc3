@@ -503,6 +503,7 @@ impl MaterialExtension for ModelMaterialExtension {
 /// Owned bindings shared by instances; sampling allocates no texture tables.
 #[derive(Clone, Default)]
 pub(crate) struct SurfaceAnimation {
+    animated: bool,
     untinted: Option<LinearRgba>,
     untinted_alpha_mode: Option<AlphaMode>,
     mesh: Option<MeshAnimation>,

@@ -3,7 +3,8 @@ use bevy::ecs::world::CommandQueue;
 use std::f32::consts::TAU;
 use wc3::model::profiles::Universal;
 use wc3::model::{AnimationProgram, AnimationSample};
-fn emitter() -> Emitter {
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+fn emitter(slot_values: &mut SlotValues) -> Emitter {
     let mut builder = Model::<Universal>::builder("particle identity");
     let node = builder.reserve_node();
     let feature = builder.reserve_feature(node);
@@ -12,19 +13,21 @@ fn emitter() -> Emitter {
         feature,
         node,
         node_index: 0,
-        rate: Animated::constant(10.),
+        rate: slot_values.add(10.),
         rate_variation: 0.,
-        activation: ParticleActivation::Boolean(Animated::constant(true)),
-        speed: Animated::constant(10.),
-        speed_variation: Animated::constant(0.1),
-        gravity: ParticleGravity::Directional(Animated::constant(0.)),
-        lifespan: Animated::constant(2.),
-        lifespan_variation: Animated::constant(0.),
-        vertical: Animated::constant(0.5),
-        horizontal: Animated::constant(TAU),
-        width: Animated::constant(0.),
-        length: Animated::constant(0.),
-        z_source: Animated::constant(0.),
+        controls: Some(AgeDrivenControls {
+            activation: ParticleActivation::Boolean(slot_values.add(true)),
+            speed_variation: slot_values.add(0.1),
+            gravity: ParticleGravity::Directional(slot_values.add(0.)),
+            lifespan_variation: slot_values.add(0.),
+            vertical: slot_values.add(0.5),
+            horizontal: slot_values.add(TAU),
+            width: slot_values.add(0.),
+            length: slot_values.add(0.),
+            z_source: slot_values.add(0.),
+        }),
+        speed: slot_values.add(10.),
+        lifespan: slot_values.add(2.),
         generator: ParticleGenerator::Plane,
         flags,
         drag: 0.,
@@ -48,36 +51,16 @@ fn emitter() -> Emitter {
 }
 #[test]
 fn birth_randomness_is_a_function_of_emitter_and_ordinal() {
-    let model = Model::empty("sample").unwrap();
-    let program = AnimationProgram::compile(&model);
-    let sample = program.sample(AnimationSample::default()).unwrap();
-    let emitter = emitter();
+    let mut slot_values = SlotValues::default();
+    let emitter = emitter(&mut slot_values);
     let first = emitter
-        .birth(
-            &sample.at_times(Default::default(), Default::default(), Default::default()),
-            1.,
-            Mat4::IDENTITY,
-            Vec3::ZERO,
-            17,
-        )
+        .birth(&slot_values, 1., Mat4::IDENTITY, Vec3::ZERO, 17)
         .unwrap();
     let repeated = emitter
-        .birth(
-            &sample.at_times(Default::default(), Default::default(), Default::default()),
-            1.,
-            Mat4::IDENTITY,
-            Vec3::ZERO,
-            17,
-        )
+        .birth(&slot_values, 1., Mat4::IDENTITY, Vec3::ZERO, 17)
         .unwrap();
     let next = emitter
-        .birth(
-            &sample.at_times(Default::default(), Default::default(), Default::default()),
-            1.,
-            Mat4::IDENTITY,
-            Vec3::ZERO,
-            18,
-        )
+        .birth(&slot_values, 1., Mat4::IDENTITY, Vec3::ZERO, 18)
         .unwrap();
     assert_eq!(first.velocity, repeated.velocity);
     assert_eq!(first.spin, repeated.spin);
@@ -85,30 +68,16 @@ fn birth_randomness_is_a_function_of_emitter_and_ordinal() {
 }
 #[test]
 fn local_particles_keep_local_origins_while_world_births_detach() {
-    let model = Model::empty("sample").unwrap();
-    let program = AnimationProgram::compile(&model);
-    let sample = program.sample(AnimationSample::default()).unwrap();
-    let mut emitter = emitter();
+    let mut slot_values = SlotValues::default();
+    let mut emitter = emitter(&mut slot_values);
     let node = Mat4::from_translation(Vec3::X * 10.);
     let world = emitter
-        .birth(
-            &sample.at_times(Default::default(), Default::default(), Default::default()),
-            0.,
-            node,
-            Vec3::ZERO,
-            0,
-        )
+        .birth(&slot_values, 0., node, Vec3::ZERO, 0)
         .unwrap();
     assert_eq!(world.origin, Vec3::X * 10.);
     emitter.flags.set_attached(true);
     let local = emitter
-        .birth(
-            &sample.at_times(Default::default(), Default::default(), Default::default()),
-            0.,
-            node,
-            Vec3::ZERO,
-            0,
-        )
+        .birth(&slot_values, 0., node, Vec3::ZERO, 0)
         .unwrap();
     assert_eq!(local.origin, Vec3::ZERO);
     assert_eq!(
@@ -119,19 +88,11 @@ fn local_particles_keep_local_origins_while_world_births_detach() {
 }
 #[test]
 fn analytic_drag_matches_exponential_velocity_and_displacement() {
-    let model = Model::empty("sample").unwrap();
-    let program = AnimationProgram::compile(&model);
-    let sample = program.sample(AnimationSample::default()).unwrap();
-    let mut emitter = emitter();
+    let mut slot_values = SlotValues::default();
+    let mut emitter = emitter(&mut slot_values);
     emitter.drag = 2.;
     let mut birth = emitter
-        .birth(
-            &sample.at_times(Default::default(), Default::default(), Default::default()),
-            0.,
-            Mat4::IDENTITY,
-            Vec3::ZERO,
-            0,
-        )
+        .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
     birth.velocity = Vec3::X * 10.;
     birth.acceleration = Vec3::ZERO;
@@ -141,11 +102,9 @@ fn analytic_drag_matches_exponential_velocity_and_displacement() {
 }
 #[test]
 fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
-    let model = Model::empty("sample").unwrap();
-    let program = AnimationProgram::compile(&model);
-    let sample = program.sample(AnimationSample::default()).unwrap();
-    let mut emitter = emitter();
-    emitter.speed = Animated::constant(0.);
+    let mut slot_values = SlotValues::default();
+    let mut emitter = emitter(&mut slot_values);
+    emitter.speed = slot_values.add(0.);
     emitter.appearance.alpha = Some(
         Curve::linear(
             [
@@ -157,13 +116,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         .unwrap(),
     );
     let birth = emitter
-        .birth(
-            &sample.at_times(Default::default(), Default::default(), Default::default()),
-            0.,
-            Mat4::IDENTITY,
-            Vec3::ZERO,
-            0,
-        )
+        .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
     let mut state = EmitterInstance {
         mesh: Handle::default(),
@@ -180,16 +133,21 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         dropped: 0,
         skipped_seconds: 0.,
     };
+    let mut builder = Model::<Universal>::builder("effect sample");
+    builder.import_values(&slot_values).unwrap();
+    let model = builder.finish().unwrap();
+    let program = AnimationProgram::compile(&model);
+    let sample = program.sample(AnimationSample::default()).unwrap();
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::default(),
     );
     let frame = EffectFrame {
-        traversal: Default::default(),
-        change: Default::default(),
+        traversal: SlotConstruct::construct(&mut slot_values),
+        change: SlotConstruct::construct(&mut slot_values),
         root_visible: true,
         pose: None,
-        selection: Default::default(),
+        selection: SlotConstruct::construct(&mut slot_values),
         time: 1.,
         sample: &sample,
         node_poses: &[Mat4::IDENTITY],
@@ -240,15 +198,15 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
     let mut world = World::new();
     let mut query_state = world.query::<&mut SpriteEmitter>();
     let mut materials = Assets::<ModelMaterial>::default();
-    emitter.rate = Animated::constant(0.);
+    emitter.rate = emitter.speed;
     let runtime = RuntimeAgeSprites {
         emitters: vec![emitter],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let mut instances = AgeSpriteInstances {
         emitters: vec![state],
         previous_time: Some(0.),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     runtime.update(
         &mut instances,
@@ -270,13 +228,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         "empty-to-empty must not rewrite resident attributes"
     );
     let mut expired = runtime.emitters[0]
-        .birth(
-            &sample.at_times(Default::default(), Default::default(), Default::default()),
-            -10.,
-            Mat4::IDENTITY,
-            Vec3::ZERO,
-            0,
-        )
+        .birth(&slot_values, -10., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
     expired.lifetime = 1.;
     instances.emitters[0].births.push(expired);
@@ -304,6 +256,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
 
 #[test]
 fn programmed_appearance_storage_preserves_compact_m2_stride_and_retires_in_lockstep() {
+    let mut slot_values = SlotValues::default();
     let birth_size = std::mem::size_of::<Birth>();
     let appearance_size = std::mem::size_of::<ProgrammedAppearance>();
     let inline_size = std::mem::size_of::<(Birth, Option<ProgrammedAppearance>)>();
@@ -312,12 +265,9 @@ fn programmed_appearance_storage_preserves_compact_m2_stride_and_retires_in_lock
     );
     assert!(birth_size <= 96, "M2 birth records must remain compact");
     assert!(inline_size > birth_size * 2);
-    let model = Model::empty("appearance retirement").unwrap();
-    let program = AnimationProgram::compile(&model);
-    let sample = program.sample(AnimationSample::default()).unwrap();
-    let sample = sample.at_times(Default::default(), Default::default(), Default::default());
-    let birth = emitter()
-        .birth(&sample, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+    let emitter = emitter(&mut slot_values);
+    let birth = emitter
+        .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
     let mut state = EmitterInstance {
         mesh: Handle::default(),
@@ -392,7 +342,8 @@ fn programmed_appearance_storage_preserves_compact_m2_stride_and_retires_in_lock
 
 #[test]
 fn emitter_follow_interpolates_speed_knots_and_preserves_local_motion() {
-    let mut emitter = emitter();
+    let mut slot_values = SlotValues::default();
+    let mut emitter = emitter(&mut slot_values);
     emitter.follow = [[2., 0.25], [6., 0.75]];
     let translated = |distance| Mat4::from_translation(Vec3::X * distance);
     assert_eq!(
@@ -431,22 +382,19 @@ fn emitter_follow_interpolates_speed_knots_and_preserves_local_motion() {
 
 #[test]
 fn world_particles_follow_only_translation_after_their_birth() {
-    let model = Model::empty("follow sample").unwrap();
+    let mut slot_values = SlotValues::default();
+    let mut emitter = emitter(&mut slot_values);
+    emitter.follow = [[0., 0.5], [1., 0.5]];
+    emitter.rate = slot_values.add(2.);
+    emitter.speed = slot_values.add(0.);
+    let prior_birth = emitter
+        .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .unwrap();
+    let mut builder = Model::<Universal>::builder("effect sample");
+    builder.import_values(&slot_values).unwrap();
+    let model = builder.finish().unwrap();
     let program = AnimationProgram::compile(&model);
     let sample = program.sample(AnimationSample::default()).unwrap();
-    let mut emitter = emitter();
-    emitter.follow = [[0., 0.5], [1., 0.5]];
-    emitter.rate = Animated::constant(2.);
-    emitter.speed = Animated::constant(0.);
-    let prior_birth = emitter
-        .birth(
-            &sample.at_times(Default::default(), Default::default(), Default::default()),
-            0.,
-            Mat4::IDENTITY,
-            Vec3::ZERO,
-            0,
-        )
-        .unwrap();
     let mut meshes = Assets::<Mesh>::default();
     let mesh = meshes.add(Mesh::new(
         PrimitiveTopology::TriangleList,
@@ -469,24 +417,24 @@ fn world_particles_follow_only_translation_after_their_birth() {
     };
     let runtime = RuntimeAgeSprites {
         emitters: vec![emitter],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let mut instances = AgeSpriteInstances {
         emitters: vec![state],
         previous_time: Some(0.),
         previous_basis: Some(Mat4::IDENTITY),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let mut world = World::new();
     let mut query = world.query::<&mut SpriteEmitter>();
     let mut materials = Assets::<ModelMaterial>::default();
     let nodes = [Mat4::from_translation(Vec3::X * 4.)];
     let frame = EffectFrame {
-        traversal: Default::default(),
-        change: Default::default(),
+        traversal: SlotConstruct::construct(&mut slot_values),
+        change: SlotConstruct::construct(&mut slot_values),
         root_visible: true,
         pose: None,
-        selection: Default::default(),
+        selection: SlotConstruct::construct(&mut slot_values),
         time: 1.,
         sample: &sample,
         node_poses: &nodes,
@@ -512,13 +460,12 @@ fn world_particles_follow_only_translation_after_their_birth() {
 
 #[test]
 fn programmed_passes_share_population_capacity_pause_and_seek() {
-    let model = Model::empty("squirt sample").unwrap();
-    let program = AnimationProgram::compile(&model);
-    let mut programme = ProgrammedSprite::fixture();
-    programme.rate = Animated::constant(0.);
-    programme.squirt = Animated::constant(7);
+    let mut slot_values = SlotValues::default();
+    let mut programme = ProgrammedSprite::fixture(&mut slot_values);
+    programme.rate = slot_values.add(0.);
+    programme.squirt = slot_values.add(7);
     programme.max_particles = 3;
-    let mut source = emitter();
+    let mut source = emitter(&mut slot_values);
     let mut second = source.passes[0].clone();
     second.material = super::super::programmed::no_shadow_material();
     second.material.base.base_color = Color::BLACK;
@@ -527,8 +474,13 @@ fn programmed_passes_share_population_capacity_pause_and_seek() {
     let emitter = Emitter::programmed(source.feature, source.node, 0, programme, source.passes);
     let runtime = RuntimeAgeSprites {
         emitters: vec![emitter],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
+    let mut builder = Model::<Universal>::builder("effect sample");
+    builder.import_values(&slot_values).unwrap();
+    let model = builder.finish().unwrap();
+    let program = AnimationProgram::compile(&model);
+    let sample = program.sample(AnimationSample::default()).unwrap();
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<ModelMaterial>::default();
     let mut world = World::new();
@@ -574,13 +526,12 @@ fn programmed_passes_share_population_capacity_pause_and_seek() {
     ] {
         let selection = AnimationSample {
             clip_time: ModelTime::seconds(time).unwrap(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         };
-        let sample = program.sample(selection).unwrap();
         runtime.update(
             &mut instances,
             EffectFrame {
-                traversal: Default::default(),
+                traversal: SlotConstruct::construct(&mut slot_values),
                 change,
                 root_visible: true,
                 pose: None,
@@ -613,60 +564,57 @@ fn programmed_passes_share_population_capacity_pause_and_seek() {
 
 #[test]
 fn semantic_gravity_is_independent_of_the_emitter_bone_and_scalar_packing_flags() {
-    let model = Model::empty("gravity").unwrap();
-    let sample = model.animation_sample(AnimationSample::default()).unwrap();
-    let retimed = sample.at_times(Default::default(), Default::default(), Default::default());
-    let mut emitter = emitter();
+    let mut slot_values = SlotValues::default();
+    let mut emitter = emitter(&mut slot_values);
     emitter.flags.set_packed_gravity(true);
-    emitter.gravity = ParticleGravity::Vector(Animated::constant([1., -2., 3.]));
+    emitter.controls.as_mut().unwrap().gravity =
+        ParticleGravity::Vector(slot_values.add([1., -2., 3.]));
     let node =
         Mat4::from_scale_rotation_translation(Vec3::splat(4.), Quat::from_rotation_x(1.2), Vec3::X);
     let basis = Mat4::from_rotation_y(0.7);
     let (birth, _) = emitter
-        .birth_in(&retimed, 0., node, basis, Vec3::ZERO, 0)
+        .birth_in(&slot_values, 0., node, basis, Vec3::ZERO, 0)
         .unwrap();
     assert!(birth
         .acceleration
         .abs_diff_eq(basis.transform_vector3(Vec3::new(1., -2., 3.)), 1e-6));
     emitter.flags.set_attached(true);
     let (birth, _) = emitter
-        .birth_in(&retimed, 0., node, basis, Vec3::ZERO, 0)
+        .birth_in(&slot_values, 0., node, basis, Vec3::ZERO, 0)
         .unwrap();
     assert_eq!(birth.acceleration, Vec3::new(1., -2., 3.));
 }
 
 #[test]
 fn sphere_and_plane_use_distinct_polar_axes_and_head_flags_do_not_aim_velocity() {
-    let model = Model::empty("directions").unwrap();
-    let sample = model.animation_sample(AnimationSample::default()).unwrap();
-    let retimed = sample.at_times(Default::default(), Default::default(), Default::default());
-    let mut emitter = emitter();
-    emitter.vertical = Animated::constant(0.);
-    emitter.horizontal = Animated::constant(0.);
-    emitter.speed = Animated::constant(2.);
-    emitter.speed_variation = Animated::constant(0.);
-    emitter.width = Animated::constant(1.);
-    emitter.length = Animated::constant(1.);
+    let mut slot_values = SlotValues::default();
+    let mut emitter = emitter(&mut slot_values);
+    emitter.controls.as_mut().unwrap().vertical = slot_values.add(0.);
+    emitter.controls.as_mut().unwrap().horizontal = slot_values.add(0.);
+    emitter.speed = slot_values.add(2.);
+    emitter.controls.as_mut().unwrap().speed_variation = slot_values.add(0.);
+    emitter.controls.as_mut().unwrap().width = slot_values.add(1.);
+    emitter.controls.as_mut().unwrap().length = slot_values.add(1.);
     emitter.flags.set_head(true);
     let plane = emitter
-        .birth(&retimed, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
     assert_eq!(plane.velocity, Vec3::Z * 2.);
     emitter.generator = ParticleGenerator::Sphere;
     let sphere = emitter
-        .birth(&retimed, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
     assert_eq!(sphere.origin, Vec3::X);
     assert_eq!(sphere.velocity, Vec3::X * 2.);
     emitter.flags.set_sphere_up(true);
     let up = emitter
-        .birth(&retimed, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
     assert_eq!(up.origin, Vec3::X);
     assert_eq!(up.velocity, Vec3::Z * 2.);
-    emitter.z_source = Animated::constant(1.);
+    emitter.controls.as_mut().unwrap().z_source = slot_values.add(1.);
     let aimed = emitter
-        .birth(&retimed, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
     assert!(aimed
         .velocity
@@ -709,7 +657,8 @@ fn additional_uvs_preserve_primary_atlas_and_remain_independent() {
 
 #[test]
 fn bone_size_inheritance_is_opt_in_and_uniform() {
-    let mut emitter = emitter();
+    let mut slot_values = SlotValues::default();
+    let mut emitter = emitter(&mut slot_values);
     let basis = Mat4::from_scale(Vec3::splat(2.));
     let node = basis * Mat4::from_scale(Vec3::new(3., 7., 9.));
     assert_eq!(emitter.particle_scale(node, basis), [2.; 2]);
@@ -719,14 +668,12 @@ fn bone_size_inheritance_is_opt_in_and_uniform() {
 
 #[test]
 fn native_uniform_scale_variation_preserves_aspect_ratio() {
-    let model = Model::empty("scale variation").unwrap();
-    let sample = model.animation_sample(AnimationSample::default()).unwrap();
-    let retimed = sample.at_times(Default::default(), Default::default(), Default::default());
-    let mut emitter = emitter();
+    let mut slot_values = SlotValues::default();
+    let mut emitter = emitter(&mut slot_values);
     emitter.appearance.scale_variation = [0.4, 0.9];
     for seed in 0..16 {
         let birth = emitter
-            .birth(&retimed, 0., Mat4::IDENTITY, Vec3::ZERO, seed)
+            .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, seed)
             .unwrap();
         assert_eq!(birth.scale_variation[0], birth.scale_variation[1]);
         assert!((0.6..=1.4).contains(&birth.scale_variation[0]));

@@ -254,6 +254,7 @@ impl<T: SampleValue> Curve<'_, T> {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     fn time(value: f64) -> Time {
         Time::seconds(value).unwrap()

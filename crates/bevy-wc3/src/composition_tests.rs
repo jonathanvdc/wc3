@@ -3,21 +3,26 @@ use crate::{compile_model, BakeSpace, Playback, PoseBaker, PoseOptions};
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::{
-    Animated, Channel, Clip, Clock, Curve, Draw, ExplicitBinding, GeometryData, GeometryInfluences,
+    Channel, Clip, Clock, Curve, Draw, ExplicitBinding, GeometryData, GeometryInfluences,
     Influence, Material, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node as ModelNode,
     Quaternion, Skin, Time, Track, UniversalBinding,
 };
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 use wc3::model::{ModelMount, MountTarget, Transform as ModelTransform};
 
 fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::<Universal>::builder("bound triangle");
     let joint = builder
         .add_node(
-            ModelNode::named("joint")
-                .with_transform(ModelTransform {
-                    translation: [rest, 0., 0.],
-                    ..Default::default()
-                })
+            ModelNode::named("joint", &mut slot_values)
+                .with_transform(
+                    ModelTransform {
+                        translation: [rest, 0., 0.],
+                        ..SlotConstruct::construct(&mut slot_values)
+                    },
+                    &mut slot_values,
+                )
                 .unwrap(),
         )
         .unwrap();
@@ -70,17 +75,20 @@ fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
             name: "plain".into(),
             surface: MaterialSurface::try_from(LayeredSurface {
                 layers: vec![Layer {
-                    opacity: Animated::constant(1.),
-                    ..Default::default()
+                    opacity: slot_values.add(1.),
+                    ..SlotConstruct::construct(&mut slot_values)
                 }],
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             })
             .unwrap(),
         })
         .unwrap();
     let mut instance = MeshInstance::new(joint, mesh);
     instance.skin = Some(skin);
-    instance.draws.push(Draw::new(subset, Default::default()));
+    instance.draws.push(Draw::new(
+        subset,
+        SlotConstruct::construct(&mut slot_values),
+    ));
     builder
         .add_instance_with_materials(instance, vec![material])
         .unwrap();
@@ -91,7 +99,7 @@ fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
         .add_channel(
             clip,
             Channel::Rotation(Track {
-                target: joint.rotation(),
+                target: builder.model().node(joint).unwrap().transform.rotation,
                 curve: Curve::linear(
                     [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
                     [
@@ -104,7 +112,15 @@ fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
             }),
         )
         .unwrap();
-    (builder.finish().unwrap(), joint, clip)
+    (
+        {
+            builder.import_values(&slot_values).unwrap();
+            builder.finish()
+        }
+        .unwrap(),
+        joint,
+        clip,
+    )
 }
 fn position(model: &CompiledModel, clip: ClipId, time: f64, part: usize) -> Vec3 {
     let mut meshes = Assets::<Mesh>::default();
@@ -192,6 +208,7 @@ fn binding_failures_are_atomic_and_never_guess_joint_ordinals() {
 }
 #[test]
 fn rigid_equipment_uses_mount_frame_and_can_sync_its_clip() {
+    let mut slot_values = SlotValues::default();
     let (body, joint, clip) = model(1.);
     let (armor, _, armor_clip) = model(3.);
     let body = compile_model(&body, |_| None).unwrap();
@@ -202,7 +219,7 @@ fn rigid_equipment_uses_mount_frame_and_can_sync_its_clip() {
             target: MountTarget::Node(joint),
             transform: ModelTransform {
                 translation: Vec3::Y.to_array(),
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
             ..ModelMount::new(MountTarget::Node(joint))
         }),
@@ -215,6 +232,7 @@ fn rigid_equipment_uses_mount_frame_and_can_sync_its_clip() {
 
 #[test]
 fn mapped_attachment_anchor_retains_source_pivot_and_rest_space() {
+    let mut slot_values = SlotValues::default();
     use crate::pose::{local_matrix, PoseContext};
     use wc3::model::{AnimationSample, Attachment, NodeFeature, Socket, SocketIdentity};
     let (host, joint, clip) = model(1.);
@@ -223,15 +241,19 @@ fn mapped_attachment_anchor_retains_source_pivot_and_rest_space() {
     source_node.transform.pivot = [0., 0., 2.];
     let feature = source
         .edit(|builder| {
-            builder.set_node(source_joint, source_node)?;
-            builder.add_feature(
-                source_joint,
-                NodeFeature::Attachment(Attachment::Socket(Socket {
-                    identity: SocketIdentity::Role(11),
-                    visibility: Animated::constant(1.),
-                    control: None,
-                })),
-            )
+            let edit_result = (|| {
+                builder.set_node(source_joint, source_node)?;
+                builder.add_feature(
+                    source_joint,
+                    NodeFeature::Attachment(Attachment::Socket(Socket {
+                        identity: SocketIdentity::Role(11),
+                        visibility: slot_values.add(1.),
+                        control: None,
+                    })),
+                )
+            })();
+            builder.import_values(&slot_values)?;
+            edit_result
         })
         .unwrap();
     let host = compile_model(&host, |_| None).unwrap();
@@ -270,7 +292,7 @@ fn mapped_attachment_anchor_retains_source_pivot_and_rest_space() {
         .animation
         .sample(AnimationSample {
             clip: Some(clip),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     let sampled = pose
@@ -291,6 +313,7 @@ fn mapped_attachment_anchor_retains_source_pivot_and_rest_space() {
 
 #[test]
 fn repeated_rigid_parts_share_geometry_and_skinned_subassemblies_retain_mounts() {
+    let mut slot_values = SlotValues::default();
     let (host, joint, clip) = model(1.);
     let (source, source_joint, _) = model(3.);
     let (gem, _, _) = model(0.5);
@@ -319,7 +342,7 @@ fn repeated_rigid_parts_share_geometry_and_skinned_subassemblies_retain_mounts()
                     target: MountTarget::Node(joint),
                     transform: ModelTransform {
                         translation: Vec3::Y.to_array(),
-                        ..Default::default()
+                        ..SlotConstruct::construct(&mut slot_values)
                     },
                     ..ModelMount::new(MountTarget::Node(joint))
                 }),
@@ -343,7 +366,7 @@ fn repeated_rigid_parts_share_geometry_and_skinned_subassemblies_retain_mounts()
             &binds,
             PoseOptions {
                 playback: Some(&playback),
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
         )
         .unwrap();
@@ -361,6 +384,7 @@ fn repeated_rigid_parts_share_geometry_and_skinned_subassemblies_retain_mounts()
 
 #[test]
 fn mounted_baking_accepts_independent_clock_snapshots() {
+    let mut slot_values = SlotValues::default();
     let (host, joint, clip) = model(1.);
     let (part, _, part_clip) = model(3.);
     let host = compile_model(&host, |_| None).unwrap();
@@ -387,7 +411,7 @@ fn mounted_baking_accepts_independent_clock_snapshots() {
                 playback: Some(&host_playback),
                 mounted_playback: Some(&clocks),
                 space: BakeSpace::Authored,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
         )
         .unwrap();
@@ -410,6 +434,7 @@ fn mounted_baking_accepts_independent_clock_snapshots() {
 
 #[test]
 fn mapped_controller_clips_activate_part_programmes_on_checked_host_timeline() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::controls::playback::{
         ControllerSelection as AuthoredControllers, SequenceControls,
     };
@@ -426,31 +451,38 @@ fn mapped_controller_clips_activate_part_programmes_on_checked_host_timeline() {
     let (mut source, source_joint, part_clip) = model(3.);
     let (controller, extra) = source
         .edit(|builder| {
-            let extra = builder.add_node(ModelNode::named("extra").with_parent(source_joint))?;
-            let controller = builder.add_controller(Controller::default())?;
-            builder.add_controller_channel(
-                controller,
-                Channel::Vector3(Track {
-                    target: extra.translation(),
-                    curve: Curve::linear(
-                        [Time::seconds(1.)?, Time::seconds(2.)?],
-                        [[0., 0., 0.], [2., 0., 0.]],
-                    )?,
-                    clock: Clock::Timeline,
-                }),
-            )?;
-            let mut controls = controls();
-            if let Some(ClipControls::M3(value)) = &mut controls {
-                value.selection = Some(AuthoredControllers {
-                    name: "armor".into(),
-                    controllers: vec![controller],
-                });
-            }
-            builder.set_clip_controls(part_clip, controls)?;
-            Ok((controller, extra))
+            let edit_result = (|| {
+                let extra = builder.add_node(
+                    ModelNode::named("extra", &mut slot_values).with_parent(source_joint),
+                )?;
+                let controller = builder.add_controller(Controller::default())?;
+                builder.add_controller_channel(
+                    controller,
+                    Channel::Vector3(Track {
+                        target: builder.model().node(extra).unwrap().transform.translation,
+                        curve: Curve::linear(
+                            [Time::seconds(1.)?, Time::seconds(2.)?],
+                            [[0., 0., 0.], [2., 0., 0.]],
+                        )?,
+                        clock: Clock::Timeline,
+                    }),
+                )?;
+                let mut controls = controls();
+                if let Some(ClipControls::M3(value)) = &mut controls {
+                    value.selection = Some(AuthoredControllers {
+                        name: "armor".into(),
+                        controllers: vec![controller],
+                    });
+                }
+                builder.set_clip_controls(part_clip, controls)?;
+                Ok((controller, extra))
+            })();
+            builder.import_values(&slot_values)?;
+            edit_result
         })
         .unwrap();
     let host = compile_model(&host, |_| None).unwrap();
+    let extra_slot = source.node(extra).unwrap().transform.translation;
     let source = compile_model(&source, |_| None).unwrap();
     let mut part = ModelPart::new(
         &source,
@@ -473,25 +505,26 @@ fn mapped_controller_clips_activate_part_programmes_on_checked_host_timeline() {
         .animation
         .sample(playback.selection(&prepared).unwrap())
         .unwrap();
-    assert_eq!(sample.property(&extra.translation()), Some([1., 0., 0.]));
+    assert_eq!(sample.override_value(&extra_slot), Some([1., 0., 0.]));
 }
 
 #[test]
 fn attachment_mounts_retain_activation_when_baking() {
-    use wc3::model::{
-        Animated, Attachment as ModelAttachment, NodeFeature, Socket, SocketIdentity,
-    };
+    let mut slot_values = SlotValues::default();
+    use wc3::model::{Attachment as ModelAttachment, NodeFeature, Socket, SocketIdentity};
     let (mut body, joint, clip) = model(1.);
     let point = body
         .edit(|builder| {
-            builder.add_feature(
+            let edit_result = builder.add_feature(
                 joint,
                 NodeFeature::Attachment(ModelAttachment::Socket(Socket {
                     identity: SocketIdentity::Role(6),
-                    visibility: Animated::constant(0.),
+                    visibility: slot_values.add(0.),
                     control: None,
                 })),
-            )
+            );
+            builder.import_values(&slot_values)?;
+            edit_result
         })
         .unwrap();
     let (armor, _, _) = model(3.);
@@ -515,7 +548,7 @@ fn attachment_mounts_retain_activation_when_baking() {
             &binds,
             PoseOptions {
                 playback: Some(&playback),
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
         )
         .unwrap();
@@ -562,6 +595,7 @@ fn resource_only_placement_is_not_an_attachment_point() {
 
 #[test]
 fn physical_placements_preserve_child_units_and_up_axis() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::{Axis, Basis, CoordinatePolicy, Handedness, LengthUnit};
     let (mut body, joint, clip) = model(1.);
     body.edit(|builder| {
@@ -584,7 +618,7 @@ fn physical_placements_preserve_child_units_and_up_axis() {
     let part = compile_model(&part, |_| None).unwrap();
     let offset = ModelTransform {
         translation: [2., 3., 4.],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let physical = body
         .compose([ModelPart::new(

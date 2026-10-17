@@ -86,44 +86,15 @@ pub(super) fn camera<V: FormatVersion>(
     }
     let mut record = native::Camera::<V>::new(&graph_node.name)
         .map_err(|error| Error::new("camera.name", error.to_string()))?;
-    record.position = graph_node.transform.translation;
+    record.position = encoder.constant(graph_node.transform.translation);
     record.target_position = source.target;
     record.field_of_view = source.field_of_view;
     record.near_clip = source.clipping[0];
     record.far_clip = source.clipping[1];
-    record.translation = source
-        .eye_offset
-        .binding
-        .as_ref()
-        .map(|property| encoder.track(property, Ok, "camera.eye_offset"))
-        .transpose()?
-        .flatten()
-        .or_else(|| {
-            (source.eye_offset.default != [0.; 3])
-                .then(|| native::animation::Track::constant(source.eye_offset.default))
-        });
-    record.target_translation = source
-        .target_offset
-        .binding
-        .as_ref()
-        .map(|property| encoder.track(property, Ok, "camera.target_offset"))
-        .transpose()?
-        .flatten()
-        .or_else(|| {
-            (source.target_offset.default != [0.; 3])
-                .then(|| native::animation::Track::constant(source.target_offset.default))
-        });
-    record.rotation = source
-        .roll
-        .binding
-        .as_ref()
-        .map(|property| encoder.track(property, Ok, "camera.roll"))
-        .transpose()?
-        .flatten()
-        .or_else(|| {
-            (source.roll.default != 0.)
-                .then(|| native::animation::Track::constant(source.roll.default))
-        });
+    record.translation = encoder.optional(source.eye_offset, Ok, [0.; 3], "camera.eye_offset")?;
+    record.target_translation =
+        encoder.optional(source.target_offset, Ok, [0.; 3], "camera.target_offset")?;
+    record.rotation = encoder.optional(source.roll, Ok, 0., "camera.roll")?;
     record.visibility = super::encode_helpers::visibility(
         &source.convention.visibility,
         encoder,
@@ -132,15 +103,9 @@ pub(super) fn camera<V: FormatVersion>(
     macro_rules! lens {
         ($field:ident) => {
             if let Some(value) = &source.convention.$field {
-                record.$field = value
-                    .binding
-                    .as_ref()
-                    .map(|property| {
-                        encoder.track(property, Ok, concat!("camera.", stringify!($field)))
-                    })
-                    .transpose()?
-                    .flatten()
-                    .or_else(|| Some(native::animation::Track::constant(value.default)));
+                record.$field = encoder
+                    .track(value, Ok, concat!("camera.", stringify!($field)))?
+                    .or_else(|| Some(native::animation::Track::constant(encoder.constant(*value))));
             }
         };
     }

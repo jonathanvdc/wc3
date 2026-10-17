@@ -1,4 +1,5 @@
 use super::*;
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 fn policy() -> ColorAdjustment {
     ColorAdjustment {
@@ -103,6 +104,7 @@ fn authored_context(
     adjusted: bool,
     translation: [f32; 3],
 ) -> (Model<'static>, MeshInstance<'static>) {
+    let mut slot_values = SlotValues::default();
     use wc3::model::controls::world::{
         Group, GroupId, ModelMetadata as WorldMetadata, PortalId, RegionControls, WorldSystem,
     };
@@ -114,12 +116,14 @@ fn authored_context(
         ambient: [20, 40, 60, 255],
         options: WorldOptions {
             vertex_color_alpha_only: true,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     })));
-    let mut node = Node::named("group");
-    node.transform.translation = translation;
+    let node = Node::named("group", &mut slot_values);
+    slot_values
+        .set(node.transform.translation, translation)
+        .unwrap();
     let node = builder.add_node(node).unwrap();
     let mut mesh = Mesh::new(
         GeometryData::triangles([[0., 0., 0.], [0., 0., 2.], [0., 1., 0.]], [[0, 1, 2]]).unwrap(),
@@ -134,18 +138,18 @@ fn authored_context(
             groups: vec![Group {
                 options: GroupOptions {
                     exterior: true,
-                    ..Default::default()
+                    ..SlotConstruct::construct(&mut slot_values)
                 },
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             }],
             portals: vec![Portal {
                 vertices: [[-1., -1., 0.], [1., -1., 0.], [1., 1., 0.], [-1., 1., 0.]]
                     .into_iter()
                     .collect(),
                 plane: [0., 0., 1., 0.],
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             }],
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         }))
         .unwrap();
     let mut instance = MeshInstance::new(node, mesh);
@@ -153,7 +157,7 @@ fn authored_context(
         subset,
         Some(DrawControls::Wmo(WorldDraw {
             lighting: Lighting::Transition,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })),
     ));
     instance.controls = Some(InstanceControls::Wmo(Box::new(RegionControls {
@@ -163,11 +167,18 @@ fn authored_context(
             side,
             adjusted_plane: adjusted,
             skip_viewer: false,
-            unclassified: Default::default(),
+            unclassified: SlotConstruct::construct(&mut slot_values),
         }],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     })));
-    (builder.finish().unwrap(), instance)
+    (
+        {
+            builder.import_values(&slot_values).unwrap();
+            builder.finish()
+        }
+        .unwrap(),
+        instance,
+    )
 }
 #[test]
 fn constructor_uses_authored_transition_draws_and_portal_connectivity() {

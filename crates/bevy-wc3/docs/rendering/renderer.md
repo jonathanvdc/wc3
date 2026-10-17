@@ -56,7 +56,7 @@ requests expose the selected value and resolved declaration to the application;
 equal resolved resources, samplers, and transfer functions share GPU images.
 Resource replacement belongs to the application resolver; there is no implicit game
 database or team-selection policy. Materials share assets between instances when
-their compiled appearance is constant. Missing-channel bindings and scalar tracks
+their compiled appearance is constant. Unanimated slots and scalar tracks
 that always equal their authored defaults preserve sharing; changing UV transforms
 and other animated appearance retain independent instance state.
 

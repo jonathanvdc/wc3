@@ -165,11 +165,8 @@ pub(super) fn compile_m3_with_targets(
             .weights
             .iter()
             .take(8)
+            .filter(|&weight| targets.scalar(&weight.value))
             .cloned()
-            .map(|mut weight| {
-                targets.retain_scalar_binding(weight.initial, &mut weight.binding);
-                weight
-            })
             .collect(),
     };
     let mut samplers = SamplerPool::default();
@@ -203,7 +200,7 @@ pub(super) fn compile_m3_with_targets(
         if layer.binding.sampling.flags.color() && matches!(slot, 8 | 9 | 11) {
             pass.diagnostics.push(format!("M3 standard normal role {slot} decodes authored constant AG values; native constant-normal parity remains unverified"));
         }
-        let uniform = layer_uniform(layer, route, None);
+        let uniform = layer_uniform(layer, route, model.values());
         pass.state.m3.layers[slot] = uniform;
         animations.layers[slot] = layers::animated_layer(layer, targets);
         if !layer.binding.sampling.flags.color() {
@@ -269,7 +266,7 @@ pub(super) fn compile_m3_with_targets(
     }
     pass.state.m3_samplers = samplers.images();
     for (index, weight) in surface.normals.weights.iter().take(8).enumerate() {
-        pass.state.m3.normal_weights[index / 4][index % 4] = weight.initial;
+        pass.state.m3.normal_weights[index / 4][index % 4] = model.values()[weight.value];
     }
     if surface.normals.weights.len() > 8 {
         pass.diagnostics.push("M3 normal blending has more than eight weights; the standard shader evaluates its first eight native mask channels".into());
@@ -336,7 +333,9 @@ fn diagnose_layer(
     diagnostics: &mut Vec<String>,
 ) {
     let transform = &layer.binding.coordinates.transform;
-    if transform.uv_angle.initial[..2] != [0.; 2] || targets.contains(&transform.uv_angle.binding) {
+    if targets.values[transform.uv_angle.value][..2] != [0.; 2]
+        || targets.contains(&transform.uv_angle.value)
+    {
         diagnostics.push(format!("M3 standard role {slot} evaluates Z UV rotation; authored XY rotation is not interpreted"));
     }
     if transform.uv_source_related != u32::MAX {

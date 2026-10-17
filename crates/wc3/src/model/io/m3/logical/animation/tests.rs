@@ -4,16 +4,18 @@ use crate::model::io::owned;
 use crate::model::{
     conversion::{Context, ExportOptions},
     formats::m3::{self as native, records as nr},
-    profiles::M3,
-    Channel, Clip, Clock, Controller, Curve, Interpolation, Node, Quaternion, Time, Track,
+    Channel, Clip, Clock, Controller, Curve, Interpolation, Quaternion, Time, Track,
 };
+use crate::model::{Construct as SlotConstruct, Values as SlotValues};
 use zerovec::ZeroVec;
 
 #[test]
 fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Graph::builder("integer controller");
     let node = builder.reserve_node();
-    let batching = surface::properties::BATCHING.bind(node).widen();
+    let batching = builder.add_value(1u32);
+    let definition = builder.new_node("bone");
     let controls = surface::BoneControls {
         source_id: 0,
         extra_flags: Default::default(),
@@ -21,31 +23,30 @@ fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
         position: surface::PropertyControl {
             reset: [0.; 3],
             control: Default::default(),
-            binding: Some(node.translation()),
+            binding: Some(definition.transform.translation),
         },
         rotation: surface::PropertyControl {
             reset: Quaternion::default(),
             control: Default::default(),
-            binding: Some(node.rotation()),
+            binding: Some(definition.transform.rotation),
         },
         scale: surface::PropertyControl {
             reset: [1.; 3],
             control: Default::default(),
-            binding: Some(node.scale()),
+            binding: Some(definition.transform.scale),
         },
         batching: surface::Property {
-            initial: 1,
+            value: batching,
             reset: 0,
             control: surface::AnimationControl {
                 source_id: 42,
                 interpolation: surface::values::Interpolation::Linear,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
-            binding: Some(batching.clone()),
         },
     };
     builder
-        .set_node(node, Node::<M3>::named("bone").with_controls(controls))
+        .set_node(node, definition.with_controls(controls))
         .unwrap();
     let clip = builder
         .add_clip(Clip::named("exact").with_duration(Time::seconds(1.).unwrap()))
@@ -53,7 +54,7 @@ fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
     let controller = builder
         .add_controller(Controller {
             name: "program".into(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     let selection = surface::SequenceControls {
@@ -61,14 +62,14 @@ fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
             name: "exact".into(),
             controllers: vec![controller],
         }),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     builder.set_clip_controls(clip, selection).unwrap();
     builder
         .add_controller_channel(
             controller,
             Channel::Unsigned(Track {
-                target: batching.clone().try_narrow::<M3>().unwrap(),
+                target: batching,
                 curve: Curve::from_samples(
                     owned(vec![Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()]),
                     owned(vec![16_777_217, u32::MAX]),
@@ -79,11 +80,15 @@ fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
             }),
         )
         .unwrap();
-    let graph = builder.finish().unwrap();
+    let graph = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let options = ExportOptions::default();
     let mut context = Context::export(&options);
     let ids = prepare(&graph, &mut context).unwrap();
-    assert_eq!(ids[batching.target()].id, 42);
+    assert_eq!(ids[&batching.slot()].id, 42);
     let mut document = native::Container::<native::Md34>::new();
     let program = write(&graph, &mut document, &ids, &[node], &mut context).unwrap();
     let controller = document
@@ -123,6 +128,7 @@ fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
 
 #[test]
 fn unselected_program_and_orphan_keys_remain_editable() {
+    let mut slot_values = SlotValues::default();
     use super::super::bindings::Bindings;
     use crate::model::conversion::{Context, ImportOptions};
     use crate::model::profiles::m3::{ControllerControls, OrderedKeys, UnboundBlock, UnboundKeys};
@@ -152,12 +158,16 @@ fn unselected_program_and_orphan_keys_remain_editable() {
                         keys: UnboundKeys::Unsigned32(keys),
                     },
                 ],
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
-    let graph = builder.finish().unwrap();
+    let graph = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let options = ExportOptions::default();
     let mut context = Context::export(&options);
     let ids = prepare(&graph, &mut context).unwrap();
@@ -168,7 +178,7 @@ fn unselected_program_and_orphan_keys_remain_editable() {
         sub_track_collections: program.controllers,
         animation_groups: program.groups,
         animation_states: program.states,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let root = export::append(&mut document, &[root]).unwrap();
     document.set_root(root);
@@ -203,9 +213,10 @@ fn unselected_program_and_orphan_keys_remain_editable() {
 
 #[test]
 fn event_blocks_select_occurrences_instead_of_command_features() {
-    use crate::model::{Event, Node};
+    let mut slot_values = SlotValues::default();
+    use crate::model::Event;
     let mut builder = Graph::builder("event groups");
-    let frame = builder.add_node(Node::named("")).unwrap();
+    let frame = builder.add_named_node("").unwrap();
     let command = builder
         .add_feature(
             frame,
@@ -225,7 +236,7 @@ fn event_blocks_select_occurrences_instead_of_command_features() {
     let controller = builder
         .add_controller(Controller {
             name: "events".into(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     let mut events = Vec::new();
@@ -263,11 +274,15 @@ fn event_blocks_select_occurrences_instead_of_command_features() {
                         end: Time::seconds(1.).unwrap(),
                     })
                     .collect(),
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
         )
         .unwrap();
-    let graph = builder.finish().unwrap();
+    let graph = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let mut document = native::Container::<native::Md34>::new();
     let options = ExportOptions::default();
     let mut context = Context::export(&options);
@@ -301,13 +316,14 @@ fn event_blocks_select_occurrences_instead_of_command_features() {
 
 #[test]
 fn named_selection_libraries_and_legacy_sequence_controls_roundtrip_independently() {
+    let mut slot_values = SlotValues::default();
     use super::super::bindings::Bindings;
     use crate::model::conversion::ImportOptions;
     let mut builder = Graph::builder("selection libraries");
     let controller = builder
         .add_controller(Controller {
             name: "pool".into(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     let controls = surface::SequenceControls {
@@ -317,7 +333,7 @@ fn named_selection_libraries_and_legacy_sequence_controls_roundtrip_independentl
             name: "group name".into(),
             controllers: vec![controller],
         }),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let mut clip = Clip::named("clip name").with_duration(Time::seconds(1.).unwrap());
     clip.controls = controls;
@@ -330,7 +346,11 @@ fn named_selection_libraries_and_legacy_sequence_controls_roundtrip_independentl
             },
         ]))
         .unwrap();
-    let graph = builder.finish().unwrap();
+    let graph = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let options = ExportOptions::default();
     let mut context = Context::export(&options);
     let ids = prepare(&graph, &mut context).unwrap();
@@ -350,7 +370,7 @@ fn named_selection_libraries_and_legacy_sequence_controls_roundtrip_independentl
         sub_track_collections: program.controllers,
         animation_groups: program.groups,
         animation_states: program.states,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let reference = export::append(&mut document, &[root]).unwrap();
     document.set_root(reference);

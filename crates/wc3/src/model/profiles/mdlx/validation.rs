@@ -1,7 +1,8 @@
 //! Authoring limits inherent to Warcraft III rather than a particular native dialect.
 use super::Mdlx;
-use crate::model::{Billboard, Channel, Error, Interpolation, Model, PropertyTarget, Transform};
+use crate::model::{Billboard, Channel, Error, Interpolation, Model, Transform};
 pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
+    value.validate_animation_consumers()?;
     if value.bounds().is_none()
         && (!value.name().is_empty()
             || !value.metadata().animation_file.is_empty()
@@ -52,11 +53,11 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
         let mesh = value.mesh(instance.mesh).expect("validated geometry");
         if !mesh.influences().is_empty() {
             let anchor = value.node(instance.node).expect("validated placement");
-            let animated = value.timeline_channels().iter().chain(value.shared_channels()).any(|channel| {
-                matches!(channel.target(), PropertyTarget::Translation(node) | PropertyTarget::Rotation(node) | PropertyTarget::Scale(node) if *node == instance.node)
-            });
+            let animated = value.is_animated(anchor.transform.translation)
+                || value.is_animated(anchor.transform.rotation)
+                || value.is_animated(anchor.transform.scale);
             if anchor.parent.is_some()
-                || anchor.transform != Transform::default()
+                || anchor.transform.defaults(value.values()) != Transform::default()
                 || anchor.billboard != Billboard::None
                 || anchor.camera_anchored
                 || animated
@@ -69,7 +70,7 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
         }
     }
     for (_, node) in value.nodes() {
-        if !node.visible {
+        if value.values().get(node.visible) != Some(&true) || value.is_animated(node.visible) {
             return Err(Error::new(
                 "nodes.visible",
                 "Warcraft III hierarchy nodes have no static hidden state",
@@ -78,20 +79,7 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
     }
     Ok(())
 }
-fn validate_channel(channel: &Channel<'_, super::Mdlx>) -> Result<(), Error> {
-    if matches!(
-        channel.target(),
-        PropertyTarget::Visibility(_)
-            | PropertyTarget::MaterialOpacity(_)
-            | PropertyTarget::MaterialTexture(..)
-            | PropertyTarget::MeshColor(_)
-            | PropertyTarget::MeshOpacity(_)
-    ) {
-        return Err(Error::new(
-            "animation.target",
-            "Warcraft III binds these behaviors through material layers or attached effect definitions",
-        ));
-    }
+fn validate_channel(channel: &Channel<'_>) -> Result<(), Error> {
     let mode = match channel {
         Channel::Scalar(track) => track.curve.interpolation(),
         Channel::Vector3(track) => track.curve.interpolation(),

@@ -1,21 +1,24 @@
 use std::borrow::Cow;
 use wc3::model::profiles::{Mdlx, Universal, M2};
 use wc3::model::{
-    Attachment, ChildModel, ImageResource, M2ImageResource, MdlxImageResource, Model, Node,
-    NodeFeature, PathResource, PlacementAppearance, ResourceLocator, Texture,
+    Attachment, ChildModel, ImageResource, M2ImageResource, MdlxImageResource, Model, NodeFeature,
+    PathResource, PlacementAppearance, ResourceLocator, Texture,
 };
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 fn use_texture(draft: &mut wc3::model::ModelBuilder<'_, Universal>, texture: Texture) {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::mdlx::{Layer, LayeredSurface};
-    use wc3::model::{Animated, Material, MaterialSurface};
-    let mut layer = Layer::default();
-    layer.binding.image = Animated::constant(Some(texture));
+    use wc3::model::{Material, MaterialSurface};
+    let mut layer = Layer::construct(&mut slot_values);
+    layer.binding.image = slot_values.add(Some(texture));
+    draft.import_values(&slot_values).unwrap();
     draft
         .add_material(Material {
             name: "input".into(),
             surface: MaterialSurface::try_from(LayeredSurface {
                 layers: vec![layer],
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             })
             .unwrap(),
         })
@@ -24,6 +27,7 @@ fn use_texture(draft: &mut wc3::model::ModelBuilder<'_, Universal>, texture: Tex
 
 #[test]
 fn image_sharing_is_explicit_and_edits_are_transactional() {
+    let slot_values = SlotValues::default();
     let mut draft = Model::<Universal>::builder("shared image");
     let image = draft.add_image_resource(ImageResource::Path(b"body.blp".as_slice().into()));
     let first = Texture::new(image);
@@ -32,7 +36,11 @@ fn image_sharing_is_explicit_and_edits_are_transactional() {
     use_texture(&mut draft, second);
     let independent = draft.add_image_resource(ImageResource::Path(b"body.blp".as_slice().into()));
     assert_ne!(image, independent);
-    let mut model = draft.finish().unwrap();
+    let mut model = {
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .unwrap();
     let original = model.clone();
     model
         .edit(|draft| {
@@ -57,11 +65,16 @@ fn image_sharing_is_explicit_and_edits_are_transactional() {
 
 #[test]
 fn resource_handles_require_the_owning_table_and_removed_slots_are_not_reused() {
+    let slot_values = SlotValues::default();
     let mut foreign = Model::<Universal>::builder("foreign");
     let image = foreign.add_image_resource(ImageResource::Path(b"foreign.blp".as_slice().into()));
     let mut draft = Model::<Universal>::builder("invalid");
     use_texture(&mut draft, Texture::new(image));
-    assert!(draft.finish().is_err());
+    assert!({
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .is_err());
 
     let mut draft = Model::<Universal>::builder("removed");
     let removed = draft.add_image_resource(ImageResource::Path(b"old.blp".as_slice().into()));
@@ -69,16 +82,21 @@ fn resource_handles_require_the_owning_table_and_removed_slots_are_not_reused() 
     let replacement = draft.add_image_resource(ImageResource::Path(b"new.blp".as_slice().into()));
     assert_ne!(removed, replacement);
     use_texture(&mut draft, Texture::new(removed));
-    assert!(draft.finish().is_err());
+    assert!({
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .is_err());
 }
 
 #[test]
 fn child_model_handles_are_checked_at_publication() {
+    let slot_values = SlotValues::default();
     let mut foreign = Model::<Universal>::builder("foreign");
     let resource =
         foreign.add_model_resource(ResourceLocator::Path(b"child.mdx".as_slice().into()));
     let mut draft = Model::<Universal>::builder("invalid child");
-    let node = draft.add_node(Node::named("child")).unwrap();
+    let node = draft.add_named_node("child").unwrap();
     draft
         .add_feature(
             node,
@@ -89,15 +107,25 @@ fn child_model_handles_are_checked_at_publication() {
             })),
         )
         .unwrap();
-    assert!(draft.finish().is_err());
+    assert!({
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .is_err());
 }
 
 #[test]
 fn profile_conversion_preserves_unreferenced_declarations_and_borrowed_paths() {
+    let slot_values = SlotValues::default();
     let bytes = b"unreferenced.mdx";
     let mut draft = Model::<Mdlx>::builder("borrowed");
     let id = draft.add_model_resource(PathResource::Path(Cow::Borrowed(bytes)));
-    let model = draft.finish().unwrap().widen::<Universal>();
+    let model = {
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .unwrap()
+    .widen::<Universal>();
     assert!(
         matches!(model.model_resource(id), Some(ResourceLocator::Path(Cow::Borrowed(path))) if path.as_ptr() == bytes.as_ptr())
     );
@@ -138,9 +166,14 @@ fn narrowing_checks_unused_resources_and_nested_companion_addresses() {
 
 #[test]
 fn unused_resource_values_are_validated() {
+    let slot_values = SlotValues::default();
     let mut draft = Model::<M2>::builder("invalid image");
     draft.add_image_resource(M2ImageResource::FileDataId(0));
-    assert!(draft.finish().is_err());
+    assert!({
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .is_err());
 }
 
 #[test]
@@ -211,15 +244,20 @@ fn resource_particle_modes_round_trip_with_present_and_absent_dependencies() {
 
 #[test]
 fn typed_collections_preserve_order_and_reject_foreign_identities() {
+    let slot_values = SlotValues::default();
     let mut draft = Model::<Mdlx>::builder("tables");
-    let first = draft.add_node(Node::named("first")).unwrap();
-    let second = draft.add_node(Node::named("second")).unwrap();
+    let first = draft.add_named_node("first").unwrap();
+    let second = draft.add_named_node("second").unwrap();
     let image = draft.add_image_resource(MdlxImageResource::Path(b"body.blp".as_slice().into()));
     let mut foreign = Model::<Mdlx>::builder("foreign");
-    let foreign_node = foreign.add_node(Node::named("foreign")).unwrap();
+    let foreign_node = foreign.add_named_node("foreign").unwrap();
     let foreign_image =
         foreign.add_image_resource(MdlxImageResource::Path(b"body.blp".as_slice().into()));
-    let model = draft.finish().unwrap();
+    let model = {
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .unwrap();
     assert_eq!(model.nodes().len(), 2);
     assert_eq!(model.nodes().keys().collect::<Vec<_>>(), [first, second]);
     assert_eq!(

@@ -7,7 +7,7 @@ use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
 use crate::model::{
     AddressMode, Billboard, Bounds, Channel, Clip, Clock, ImageResource, Inheritance, Material,
-    ModelBuilder, Node, Quaternion, Sampler, SharedClock, Texture, Time, Track,
+    ModelBuilder, Quaternion, Sampler, SharedClock, Texture, Time, Track,
 };
 use crate::model::{MdlxImageResource, Model, TextureControls};
 use std::borrow::Cow;
@@ -57,7 +57,7 @@ where
     }
     let pivots = source.pivot_points();
     for (node, id) in source_nodes.iter().zip(&ids) {
-        let mut value = Node::named(S::text(node.name.text()));
+        let mut value = builder.new_node(S::text(node.name.text()));
         value.parent = if node.parent_id == u32::MAX {
             None
         } else {
@@ -143,7 +143,8 @@ where
     let transforms: Vec<_> = source.texture_animations().collect();
     let mut material_ids = Vec::new();
     for material in source.materials() {
-        let mut surface = materials::read::<_, S>(material, &texture_ids, &transforms)?;
+        let mut surface =
+            materials::read::<_, S>(material, &texture_ids, &transforms, builder.values_mut())?;
         if surface.has_unexecuted_declarations() {
             context.unsupported(
                 "material.empty_declarations",
@@ -262,9 +263,24 @@ where
                 }
             };
         }
-        channel!(node.translation, id.translation(), Vector3, |value| value);
-        channel!(node.rotation, id.rotation(), Rotation, Quaternion);
-        channel!(node.scaling, id.scale(), Vector3, |value| value);
+        channel!(
+            node.translation,
+            builder.model().node(*id).unwrap().transform.translation,
+            Vector3,
+            |value| value
+        );
+        channel!(
+            node.rotation,
+            builder.model().node(*id).unwrap().transform.rotation,
+            Rotation,
+            Quaternion
+        );
+        channel!(
+            node.scaling,
+            builder.model().node(*id).unwrap().transform.scale,
+            Vector3,
+            |value| value
+        );
     }
     {
         let mut decoder = super::animation::Decoder {

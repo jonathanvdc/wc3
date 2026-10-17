@@ -14,8 +14,10 @@ fn placement<'a>(
     position: [f32; 3],
     name: String,
 ) -> Result<semantic::NodeId, Error> {
-    let mut node = Node::named(name);
-    node.transform.translation = position;
+    let mut node = builder.new_node(name);
+    builder
+        .values_mut()
+        .set(node.transform.translation, position)?;
     if let Some(bone) = bone {
         node.parent = Some(
             *nodes
@@ -41,8 +43,7 @@ where
     let tables = sequence_tables(source, &source.key)?;
     macro_rules! bind_field {
         ($node:ident,$actor:ident,$field:expr,$key:ident,$native:expr,$variant:ident,$map:expr) => {{
-            let property = profile::properties::$actor::$key.bind($node);
-            $field.binding = Some(property.clone().widen().into());
+            let property = $field;
             for (seq, clip) in animation::sequences(clips) {
                 let (start, _) = tables
                     .sequences
@@ -69,13 +70,12 @@ where
             format!("attachment-{index}"),
         )?;
         let feature = builder.reserve_feature(node);
-        let mut attachment = profile::Attachment {
+        let attachment = profile::Attachment {
             identity: value.id,
             control: (),
-            visibility: Animated::constant(initial(&value.animate).unwrap_or(1) != 0),
+            visibility: builder.add_value(initial(&value.animate).unwrap_or(1) != 0),
         };
-        let property = profile::properties::attachment::ENABLED.bind(feature);
-        attachment.visibility.binding = Some(property.clone().widen());
+        let property = attachment.visibility;
         for (sequence, clip) in animation::sequences(clips) {
             let (start, _) = attachment_tables
                 .sequences
@@ -97,7 +97,7 @@ where
                 animation::insert(
                     builder,
                     clip,
-                    Channel::Boolean(bind(curve, global, property.clone(), clocks)?),
+                    Channel::Boolean(bind(curve, global, property, clocks)?),
                 )?;
             }
         }
@@ -112,21 +112,21 @@ where
             format!("light-{index}"),
         )?;
         let feature = builder.reserve_feature(node);
-        let mut light = profile::Light {
+        let light = profile::Light {
             kind: profile::values::LightKind::from_raw(value.kind.raw()),
             ambient: LightEmission {
-                color: Animated::constant(initial(&value.ambient_color).unwrap_or([0.; 3])),
-                intensity: Animated::constant(initial(&value.ambient_intensity).unwrap_or(0.)),
+                color: builder.add_value(initial(&value.ambient_color).unwrap_or([0.; 3])),
+                intensity: builder.add_value(initial(&value.ambient_intensity).unwrap_or(0.)),
             },
             diffuse: LightEmission {
-                color: Animated::constant(initial(&value.diffuse_color).unwrap_or([0.; 3])),
-                intensity: Animated::constant(initial(&value.diffuse_intensity).unwrap_or(0.)),
+                color: builder.add_value(initial(&value.diffuse_color).unwrap_or([0.; 3])),
+                intensity: builder.add_value(initial(&value.diffuse_intensity).unwrap_or(0.)),
             },
             attenuation: [
-                Animated::constant(initial(&value.attenuation_start).unwrap_or(0.)),
-                Animated::constant(initial(&value.attenuation_end).unwrap_or(0.)),
+                builder.add_value(initial(&value.attenuation_start).unwrap_or(0.)),
+                builder.add_value(initial(&value.attenuation_end).unwrap_or(0.)),
             ],
-            activation: Animated::constant(initial(&value.visibility).unwrap_or(1) != 0),
+            activation: builder.add_value(initial(&value.visibility).unwrap_or(1) != 0),
         };
         bind_field!(
             feature,
@@ -207,8 +207,8 @@ where
                 .materials
                 .get(index as usize)
                 .ok_or_else(|| Error::new("m2.ribbon.material", "missing material"))?;
-            materials.push(
-                builder.add_material(semantic::Material {
+            materials.push({
+                let definition = semantic::Material {
                     name: Cow::Borrowed(""),
                     surface: profile::MaterialStep::from_native(
                         0,
@@ -224,22 +224,23 @@ where
                                 ),
                                 ordering: 0,
                             },
-                            ..Default::default()
+                            ..builder.construct()
                         },
                         Vec::new(),
                         Default::default(),
                     )
                     .into(),
-                })?,
-            )
+                };
+                builder.add_material(definition)
+            }?)
         }
         let tail = D::Layout::ribbon_tail(&value.modern);
         let feature = builder.reserve_feature(node);
-        let mut ribbon = profile::Ribbon {
+        let ribbon = profile::Ribbon {
             controls: AngleTrailControls {
                 id: value.id,
                 angle: value.gravity,
-                enabled: Animated::constant(initial(&value.visibility).unwrap_or(1) != 0),
+                enabled: builder.add_value(initial(&value.visibility).unwrap_or(1) != 0),
                 priority_plane: tail[0],
                 color_index: tail[1] as i8,
                 texture_transform: None,
@@ -258,17 +259,16 @@ where
                 materials,
             },
             appearance: TrailAppearance {
-                color: Animated::constant(initial(&value.color).unwrap_or([1.; 3])),
-                opacity: Animated::constant(
-                    f32::from(initial(&value.alpha).unwrap_or(32767)) / 32767.,
-                ),
+                color: builder.add_value(initial(&value.color).unwrap_or([1.; 3])),
+                opacity: builder
+                    .add_value(f32::from(initial(&value.alpha).unwrap_or(32767)) / 32767.),
                 atlas: [value.texture_rows, value.texture_columns],
-                texture_slot: Animated::constant(initial(&value.texture_slot).unwrap_or(0)),
+                texture_slot: builder.add_value(initial(&value.texture_slot).unwrap_or(0)),
             },
             geometry: TrailGeometry {
                 axis: Axis::PositiveZ,
-                height_above: Animated::constant(initial(&value.height_above).unwrap_or(0.)),
-                height_below: Animated::constant(initial(&value.height_below).unwrap_or(0.)),
+                height_above: builder.add_value(initial(&value.height_above).unwrap_or(0.)),
+                height_below: builder.add_value(initial(&value.height_below).unwrap_or(0.)),
             },
             emission_rate: value.edges_per_second,
             lifetime: value.edge_lifetime,
@@ -457,29 +457,26 @@ where
             format!("camera-{index}"),
         )?;
         let feature = builder.reserve_feature(node);
-        let mut camera = profile::Camera {
+        let camera = profile::Camera {
             convention: profile::values::CameraKind::from_raw(value.kind.raw()),
             field_of_view: D::Layout::logical_fov(source, value, feature, clips, clocks, builder)?,
             clipping: [value.near_clip, value.far_clip],
             target: value.target_position_base,
-            eye_offset: Animated::constant([0.; 3]),
-            target_offset: Animated::constant([0.; 3]),
-            roll: Animated::constant(0.),
+            eye_offset: builder.add_value([0.; 3]),
+            target_offset: builder.add_value([0.; 3]),
+            roll: builder.add_value(0.),
         };
-        let position = profile::properties::camera::POSITION.bind(feature);
-        let target = profile::properties::camera::TARGET.bind(feature);
-        let roll = profile::properties::camera::ROLL.bind(feature);
-        camera.eye_offset.binding = Some(position.clone().widen());
-        camera.target_offset.binding = Some(target.clone().widen());
-        camera.roll.binding = Some(roll.clone().widen().into());
+        let position = camera.eye_offset;
+        let target = camera.target_offset;
+        let roll = camera.roll;
         for (seq, clip) in animation::sequences(clips) {
             let (start, _) = tables
                 .sequences
                 .get(seq)
                 .map_or((0, 0), |s| s.timing.window());
             for (property, track) in [
-                (position.clone(), &value.positions),
-                (target.clone(), &value.target_positions),
+                (position, &value.positions),
+                (target, &value.target_positions),
             ] {
                 if let Some((c, g)) = animation::spline_curve(source, track, seq, start)? {
                     animation::insert(
@@ -490,11 +487,7 @@ where
                 }
             }
             if let Some((c, g)) = animation::spline_curve(source, &value.roll, seq, start)? {
-                animation::insert(
-                    builder,
-                    clip,
-                    Channel::Scalar(bind(c, g, roll.clone(), clocks)?),
-                )?;
+                animation::insert(builder, clip, Channel::Scalar(bind(c, g, roll, clocks)?))?;
             }
         }
         builder.set_feature(feature, profile::ActorKind::Camera(camera))?;

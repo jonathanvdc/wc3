@@ -2,7 +2,7 @@
 use crate::model::animation::programmed::AnimationControl;
 use crate::model::values::programmed::SequenceFlags;
 use crate::model::{
-    Bounds, ControllerId, EventId, FeatureId, Link, Property, PropertyTarget, Time, ValidateLinks,
+    Animated, Bounds, ControllerId, EventId, FeatureId, Link, Time, ValidateLinks, ValueSlot,
 };
 use bitfield::bitfield;
 use std::borrow::Cow;
@@ -111,7 +111,7 @@ pub struct BlockControls {
     /// Source animation identity; shared identities can bind several properties.
     pub source_id: u32,
     /// Logical destinations driven by this key block.
-    pub targets: Vec<PropertyTarget>,
+    pub targets: Vec<ValueSlot>,
     /// Exact controller-owned occurrences selected by a structured event block.
     pub events: Vec<EventId>,
     /// Extent feature driven by a structured bounds block.
@@ -146,18 +146,16 @@ pub struct EventCommand<'a> {
 pub struct ExtentBinding {
     /// Detail level owning a declared mesh extent; absence denotes an unbound controller property.
     pub detail_level: Option<u32>,
-    /// Static authored extent before animation evaluates.
-    pub initial: Bounds,
     /// Extent used when the native animation controller resets.
     pub reset: Bounds,
     /// Source property identity and controller behavior.
     pub control: AnimationControl,
     /// Animated minimum corner of the spatial bounds.
-    pub minimum: Property<[f32; 3]>,
+    pub minimum: Animated<[f32; 3]>,
     /// Animated maximum corner of the spatial bounds.
-    pub maximum: Property<[f32; 3]>,
+    pub maximum: Animated<[f32; 3]>,
     /// Animated sphere radius associated with these bounds.
-    pub radius: Property<f32>,
+    pub radius: Animated<f32>,
 }
 
 impl ValidateLinks for EventCommand<'_> {
@@ -174,7 +172,7 @@ impl ValidateLinks for EventCommand<'_> {
 }
 impl ValidateLinks for ExtentBinding {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        if self.initial.validate().is_err() || self.reset.validate().is_err() {
+        if self.reset.validate().is_err() {
             visitor(Link::InvalidValue);
         }
         self.minimum.visit_links(visitor);
@@ -211,19 +209,7 @@ impl ValidateLinks for BlockControls {
         self.events.visit_links(visitor);
         self.extents.visit_links(visitor);
         for target in &self.targets {
-            match target {
-                PropertyTarget::Translation(id)
-                | PropertyTarget::Rotation(id)
-                | PropertyTarget::Scale(id)
-                | PropertyTarget::Visibility(id) => id.visit_links(visitor),
-                PropertyTarget::MaterialOpacity(id) | PropertyTarget::MaterialTexture(id, _) => {
-                    id.visit_links(visitor)
-                }
-                PropertyTarget::MeshColor(id) | PropertyTarget::MeshOpacity(id) => {
-                    id.visit_links(visitor)
-                }
-                PropertyTarget::Profile { owner, .. } => owner.visit_links(visitor),
-            }
+            visitor(Link::Value(*target));
         }
     }
 }

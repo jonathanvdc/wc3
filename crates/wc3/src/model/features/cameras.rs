@@ -1,6 +1,8 @@
 //! Shared aimed cameras keep projection conventions explicit.
+use crate::model::features::{FromFeature, TryFromFeature};
 use crate::model::profiles::{m2, m3, mdlx};
 use crate::model::{scene, Animated, Link, ValidateLinks};
+use crate::model::{Construct, Values};
 use m2::values::CameraKind;
 /// Complete authored camera models.
 #[derive(Clone, Debug)]
@@ -13,7 +15,7 @@ pub enum Camera<'a> {
     Optical(Box<m3::Camera<'a>>),
 }
 /// Shared model-space aim and displacement components.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct AimedCamera<F = Animated<f32>, C = CameraConvention> {
     /// Eye displacement from the carrying node's rest translation.
     pub eye_offset: Animated<[f32; 3]>,
@@ -39,7 +41,7 @@ pub enum CameraConvention {
     Diagonal(CameraKind),
 }
 /// Visibility and optional photographic parameters.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct PhotographicControls {
     /// Camera visibility multiplier.
     pub visibility: Animated<f32>,
@@ -50,13 +52,13 @@ pub struct PhotographicControls {
     /// Photographic aperture f-stop.
     pub f_stop: Option<Animated<f32>>,
 }
-impl From<mdlx::Camera> for AimedCamera {
-    fn from(v: mdlx::Camera) -> Self {
+impl FromFeature<mdlx::Camera> for AimedCamera {
+    fn from_feature(v: mdlx::Camera, values: &mut Values) -> Self {
         Self {
             eye_offset: v.eye_offset,
             target: v.target,
             target_offset: v.target_offset,
-            field_of_view: Animated::constant(v.field_of_view),
+            field_of_view: values.add(v.field_of_view),
             clipping: v.clipping,
             roll: v.roll,
             convention: CameraConvention::Vertical(Box::new(v.convention)),
@@ -76,12 +78,9 @@ impl From<m2::Camera> for AimedCamera {
         }
     }
 }
-impl TryFrom<AimedCamera> for mdlx::Camera {
+impl TryFromFeature<AimedCamera> for mdlx::Camera {
     type Error = Box<AimedCamera>;
-    fn try_from(v: AimedCamera) -> Result<Self, Self::Error> {
-        if v.field_of_view.binding.is_some() {
-            return Err(Box::new(v));
-        }
+    fn try_from_feature(v: AimedCamera, values: &Values) -> Result<Self, Self::Error> {
         let CameraConvention::Vertical(control) = v.convention else {
             return Err(Box::new(v));
         };
@@ -89,7 +88,7 @@ impl TryFrom<AimedCamera> for mdlx::Camera {
             eye_offset: v.eye_offset,
             target: v.target,
             target_offset: v.target_offset,
-            field_of_view: v.field_of_view.default,
+            field_of_view: *values.get(v.field_of_view).expect("validated source slot"),
             clipping: v.clipping,
             roll: v.roll,
             convention: *control,

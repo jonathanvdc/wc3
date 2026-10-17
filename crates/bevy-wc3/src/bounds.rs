@@ -145,6 +145,7 @@ mod tests {
     use super::*;
     use bevy::asset::RenderAssetUsages;
     use bevy::mesh::PrimitiveTopology;
+
     #[test]
     fn rest_skin_bounds_evaluate_the_extra_four_influences() {
         let mut mesh = Mesh::new(PrimitiveTopology::PointList, RenderAssetUsages::default());

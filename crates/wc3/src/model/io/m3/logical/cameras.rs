@@ -64,20 +64,38 @@ pub(super) fn read<'a, E: Envelope>(
                             .optional()
                             .zip(r.reserved_1.optional())
                             .map(|(a, b)| [a, b]),
-                        far: r.far_clip.optional().map(anim),
-                        near: r.near_clip.optional().map(anim),
-                        start: r.near_falloff_start.optional().map(anim),
-                        end: r.near_falloff_end.optional().map(anim),
+                        far: r
+                            .far_clip
+                            .optional()
+                            .map(|value| anim(value, builder.values_mut())),
+                        near: r
+                            .near_clip
+                            .optional()
+                            .map(|value| anim(value, builder.values_mut())),
+                        start: r
+                            .near_falloff_start
+                            .optional()
+                            .map(|value| anim(value, builder.values_mut())),
+                        end: r
+                            .near_falloff_end
+                            .optional()
+                            .map(|value| anim(value, builder.values_mut())),
                         mode: r.dof_type.optional(),
-                        f_stop: r.bokeh_f_stop.optional().map(anim),
-                        maximum_circle: r.bokeh_max_co_c_diameter.optional().map(anim),
+                        f_stop: r
+                            .bokeh_f_stop
+                            .optional()
+                            .map(|value| anim(value, builder.values_mut())),
+                        maximum_circle: r
+                            .bokeh_max_co_c_diameter
+                            .optional()
+                            .map(|value| anim(value, builder.values_mut())),
                     })?,
-                    field_of_view: anim(r.field_of_view),
-                    shadow_clip_distance: anim(r.shadow_clip_distance),
-                    focus_distance: anim(r.focus_distance),
-                    far_focus_range: anim(r.far_focus_range),
-                    near_focus_range: anim(r.near_focus_range),
-                    dof_amount: anim(r.dof_amount),
+                    field_of_view: anim(r.field_of_view, builder.values_mut()),
+                    shadow_clip_distance: anim(r.shadow_clip_distance, builder.values_mut()),
+                    focus_distance: anim(r.focus_distance, builder.values_mut()),
+                    far_focus_range: anim(r.far_focus_range, builder.values_mut()),
+                    near_focus_range: anim(r.near_focus_range, builder.values_mut()),
+                    dof_amount: anim(r.dof_amount, builder.values_mut()),
                 };
                 bindings::field(
                     &mut camera.field_of_view,

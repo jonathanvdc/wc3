@@ -52,15 +52,20 @@ pub(super) fn write<'a, D: Dialect>(
         }
         match &feature.payload {
             profile::Node::Light(source) => {
-                if source.color.binding.is_some() || source.intensity.binding.is_some() {
+                if model.is_animated(source.color) || model.is_animated(source.intensity) {
                     context.unsupported(
                         "world.light.animation",
                         "root light tables encode constant color and intensity",
                     )?;
                 }
-                let color = color(source.color.default, context)?;
+                let color = color(
+                    *model.values().get(source.color).expect("validated slot"),
+                    context,
+                )?;
                 if let Some(extra) = &source.modern {
-                    if node.transform.rotation != crate::model::Quaternion::default() {
+                    if node.transform.defaults(model.values()).rotation
+                        != crate::model::Quaternion::default()
+                    {
                         context.unsupported("world.light.rotation","native modern light Euler axis order is not established for quaternion translation")?;
                     }
                     let kind = match source.kind {
@@ -101,11 +106,14 @@ pub(super) fn write<'a, D: Dialect>(
                             })
                         })?,
                         inner_color: color,
-                        position: node.transform.translation,
+                        position: node.transform.defaults(model.values()).translation,
                         rotation: extra.orientation,
                         attenuation_start: source.attenuation[0],
                         attenuation_end: source.attenuation[1],
-                        intensity: source.intensity.default,
+                        intensity: *model
+                            .values()
+                            .get(source.intensity)
+                            .expect("validated slot"),
                         outer_color: super::rgba(extra.outer_color),
                         blend_start: extra.color_blend[0],
                         blend_end: extra.color_blend[1],
@@ -179,9 +187,16 @@ pub(super) fn write<'a, D: Dialect>(
                         use_attenuation: u8::from(source.use_attenuation),
                         padding: [padding[0], padding[1]],
                         color,
-                        position: node.transform.translation,
-                        intensity: source.intensity.default,
-                        rotation: node.transform.rotation.components(),
+                        position: node.transform.defaults(model.values()).translation,
+                        intensity: *model
+                            .values()
+                            .get(source.intensity)
+                            .expect("validated slot"),
+                        rotation: node
+                            .transform
+                            .defaults(model.values())
+                            .rotation
+                            .components(),
                         attenuation_start: source.attenuation[0],
                         attenuation_end: source.attenuation[1],
                     });
@@ -189,8 +204,10 @@ pub(super) fn write<'a, D: Dialect>(
             }
             profile::Node::PointLight(_) | profile::Node::LightProgram(_) => {}
             profile::Node::Attachment(source) => {
-                if node.transform.scale[1] != node.transform.scale[0]
-                    || node.transform.scale[2] != node.transform.scale[0]
+                if node.transform.defaults(model.values()).scale[1]
+                    != node.transform.defaults(model.values()).scale[0]
+                    || node.transform.defaults(model.values()).scale[2]
+                        != node.transform.defaults(model.values()).scale[0]
                 {
                     context.unsupported(
                         "world.doodad.scale",
@@ -275,9 +292,13 @@ pub(super) fn write<'a, D: Dialect>(
                 multipliers.push(source.appearance.color_multiplier);
                 doodads.push(records::DoodadDef {
                     name_and_flags: reference,
-                    position: node.transform.translation,
-                    rotation: node.transform.rotation.components(),
-                    scale: node.transform.scale[0],
+                    position: node.transform.defaults(model.values()).translation,
+                    rotation: node
+                        .transform
+                        .defaults(model.values())
+                        .rotation
+                        .components(),
+                    scale: node.transform.defaults(model.values()).scale[0],
                     color,
                 });
             }

@@ -6,36 +6,26 @@ use wc3::model::profiles::m2::properties;
 use wc3::model::profiles::{mdlx, Universal};
 use wc3::model::{
     AnimationSample, Channel, Clip, Clock, Controller, Curve, Material, MaterialId,
-    MaterialSurface, Model, ModelBuilder, Node, NodeId, SharedClock, Time as ModelTime, Track,
+    MaterialSurface, Model, ModelBuilder, SharedClock, Time as ModelTime, Track,
 };
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 #[test]
 fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::<Universal>::builder("bound constant M2 material");
     let material = builder.reserve_material();
     let mut surface = m2::Material {
-        color: Animated {
-            default: [0.2, 0.4, 0.6],
-            binding: Some(properties::COLOR.bind(material).widen()),
-        },
-        opacity: Animated {
-            default: 0.75,
-            binding: Some(properties::OPACITY.bind(material).widen().into()),
-        },
-        ..Default::default()
+        color: slot_values.add([0.2, 0.4, 0.6]),
+        opacity: slot_values.add(0.75),
+        ..SlotConstruct::construct(&mut slot_values)
     };
-    let unit = properties::TextureUnit(0);
-    let mut texture: m2::TextureUnit = m2::TextureUnit {
-        contribution: Animated {
-            default: 0.8,
-            binding: Some(unit.weight().bind(material).widen().into()),
-        },
-        ..Default::default()
+    let _unit = properties::TextureUnit(0);
+    let texture: m2::TextureUnit = m2::TextureUnit {
+        contribution: slot_values.add(0.8),
+        ..SlotConstruct::construct(&mut slot_values)
     };
-    texture.coordinates.transform.translation.binding =
-        Some(unit.translation().bind(material).widen());
-    texture.coordinates.transform.rotation.binding = Some(unit.rotation().bind(material).widen());
-    texture.coordinates.transform.scale.binding = Some(unit.scale().bind(material).widen());
+
     surface.textures.push(texture);
     builder
         .set_material(
@@ -46,7 +36,11 @@ fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
             },
         )
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let mut pass =
         compile_material_with_images(&model, material, Arc::new(TextureImages::default()))
             .unwrap()
@@ -67,13 +61,18 @@ fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
 
 #[test]
 fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_controller() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::<Universal>::builder("all channel owners");
     let nodes: Vec<_> = (0..5)
-        .map(|i| builder.add_node(Node::named(format!("node {i}"))).unwrap())
+        .map(|i| builder.add_named_node(format!("node {i}")).unwrap())
         .collect();
-    let track = |node: NodeId, clock| {
+    let translations: Vec<_> = nodes
+        .iter()
+        .map(|id| builder.model().node(*id).unwrap().transform.translation)
+        .collect();
+    let track = |target, clock| {
         Channel::Vector3(Track {
-            target: node.translation(),
+            target,
             clock,
             curve: Curve::linear(
                 [
@@ -86,7 +85,7 @@ fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_controller()
         })
     };
     builder
-        .add_timeline_channel(track(nodes[0], Clock::Timeline))
+        .add_timeline_channel(track(translations[0], Clock::Timeline))
         .unwrap();
     let clock = builder
         .add_clock(SharedClock::Repeating {
@@ -94,7 +93,7 @@ fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_controller()
         })
         .unwrap();
     builder
-        .add_shared_channel(track(nodes[1], Clock::Shared(clock)))
+        .add_shared_channel(track(translations[1], Clock::Shared(clock)))
         .unwrap();
     let clip = builder
         .add_clip(
@@ -102,55 +101,59 @@ fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_controller()
         )
         .unwrap();
     builder
-        .add_channel(clip, track(nodes[2], Clock::Clip))
+        .add_channel(clip, track(translations[2], Clock::Clip))
         .unwrap();
     let controller = builder.add_controller(Controller::default()).unwrap();
     builder
-        .add_controller_channel(controller, track(nodes[3], Clock::Timeline))
+        .add_controller_channel(controller, track(translations[3], Clock::Timeline))
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let targets = AnimationTargets::new(&model);
     for (index, node) in nodes.into_iter().enumerate() {
         let mut animation = SurfaceAnimation {
-            color: Some(Animated {
-                default: [0.25; 3],
-                binding: Some(node.translation()),
-            }),
-            ..Default::default()
+            color: Some(model.node(node).unwrap().transform.translation),
+            ..SlotConstruct::construct(&mut slot_values)
         };
         animation.prune_static_bindings(&targets);
         assert_eq!(animation.is_animated(), index < 4);
-        assert_eq!(animation.color.unwrap().default, [0.25; 3]);
+        assert_eq!(
+            animation.color.unwrap(),
+            model.node(node).unwrap().transform.translation
+        );
     }
 }
 
 #[test]
 fn pruning_visits_every_uv_transform_weight_and_hd_control() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::<Universal>::builder("nested runtime bindings");
-    let node = builder.add_node(Node::named("untracked")).unwrap();
+    let node = builder.add_named_node("untracked").unwrap();
     let material = builder.reserve_material();
     builder
         .set_material(
             material,
             Material {
                 name: "owner".into(),
-                surface: Default::default(),
+                surface: SlotConstruct::construct(&mut slot_values),
             },
         )
         .unwrap();
-    let model = builder.finish().unwrap();
-    let scalar = || Animated {
-        default: 0.375,
-        binding: Some(material.opacity().into()),
-    };
-    let mut transform = TextureTransform::default();
-    transform.translation.binding = Some(node.translation());
-    transform.rotation.binding = Some(node.rotation());
-    transform.scale.binding = Some(node.scale());
-    let texture = Animated {
-        default: None,
-        binding: Some(mdlx::properties::Layer(0).texture().bind(material).widen()),
-    };
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
+    let scalar_slot = slot_values.add(0.375);
+    let scalar = || scalar_slot;
+    let mut transform = TextureTransform::construct(&mut slot_values);
+    transform.translation = model.node(node).unwrap().transform.translation;
+    transform.rotation = model.node(node).unwrap().transform.rotation;
+    transform.scale = model.node(node).unwrap().transform.scale;
+    let texture = slot_values.add(None);
     let mut animation = SurfaceAnimation {
         opacity: Some(scalar()),
         weight: Some(scalar()),
@@ -161,41 +164,39 @@ fn pruning_visits_every_uv_transform_weight_and_hd_control() {
         third_transform: Some(transform.clone()),
         fourth_transform: Some(transform),
         emissive_gain: Some(scalar()),
-        texture: Some(texture.clone()),
+        texture: Some(texture),
         hd: Some(HdAnimation {
-            slots: std::array::from_fn(|_| Some(texture.clone())),
+            slots: std::array::from_fn(|_| Some(texture)),
             gain: Some(scalar()),
             fresnel: Some(mdlx::Fresnel {
-                color: Animated {
-                    default: [0.2; 3],
-                    binding: Some(node.translation()),
-                },
+                color: slot_values.add([0.2; 3]),
                 opacity: scalar(),
                 team_color: scalar(),
             }),
             images: Arc::default(),
         }),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
-    assert!(animation.is_animated());
+    let mut model = model;
+    model
+        .edit(|builder| builder.import_values(&slot_values))
+        .unwrap();
     animation.prune_static_bindings(&AnimationTargets::new(&model));
     assert!(!animation.is_animated());
-    assert_eq!(animation.weight.unwrap().default, 0.375);
+    assert_eq!(model.values()[animation.weight.unwrap()], 0.375);
     let fresnel = animation.hd.unwrap().fresnel.unwrap();
-    assert_eq!(fresnel.color.default, [0.2; 3]);
-    assert_eq!(fresnel.opacity.default, 0.375);
+    assert_eq!(model.values()[fresnel.color], [0.2; 3]);
+    assert_eq!(model.values()[fresnel.opacity], 0.375);
 }
 
 fn scalar_material() -> (ModelBuilder<'static>, MaterialId) {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::<Universal>::builder("scalar material tracks");
     let material = builder.reserve_material();
     let surface = m2::Material {
-        color: Animated::constant([1.; 3]),
-        opacity: Animated {
-            default: 1.,
-            binding: Some(material.opacity().into()),
-        },
-        ..Default::default()
+        color: slot_values.add([1.; 3]),
+        opacity: slot_values.add(1.),
+        ..SlotConstruct::construct(&mut slot_values)
     };
     builder
         .set_material(
@@ -206,11 +207,13 @@ fn scalar_material() -> (ModelBuilder<'static>, MaterialId) {
             },
         )
         .unwrap();
+    builder.import_values(&slot_values).unwrap();
     (builder, material)
 }
 
 #[test]
 fn constant_scalar_tracks_matching_default_do_not_require_private_materials() {
+    let slot_values = SlotValues::default();
     for linear in [false, true] {
         let (mut builder, material) = scalar_material();
         let times = [
@@ -224,29 +227,35 @@ fn constant_scalar_tracks_matching_default_do_not_require_private_materials() {
         };
         builder
             .add_timeline_channel(Channel::Scalar(Track {
-                target: material.opacity(),
+                target: opacity(&builder, material),
                 clock: Clock::Timeline,
                 curve,
             }))
             .unwrap();
-        let model = builder.finish().unwrap();
+        let model = {
+            builder.import_values(&slot_values).unwrap();
+            builder.finish()
+        }
+        .unwrap();
         let pass = compile_material_with_images(&model, material, Arc::default())
             .unwrap()
             .remove(0);
         assert!(!pass.animation.is_animated());
-        assert!(pass.animation.opacity.as_ref().unwrap().binding.is_none());
+        assert!(pass.animation.opacity.is_some());
         assert_eq!(pass.material.base_color.alpha(), 1.);
     }
 }
 
 #[test]
 fn conflicting_clip_constants_and_controller_overrides_keep_materials_live() {
+    let slot_values = SlotValues::default();
     for controller_override in [false, true] {
         let (mut builder, material) = scalar_material();
         let time = ModelTime::seconds(0.).unwrap();
+        let target = opacity(&builder, material);
         let track = |value, clock| {
             Channel::Scalar(Track {
-                target: material.opacity(),
+                target,
                 clock,
                 curve: Curve::step(vec![time], vec![value]).unwrap(),
             })
@@ -266,17 +275,22 @@ fn conflicting_clip_constants_and_controller_overrides_keep_materials_live() {
                 .unwrap();
             builder.add_channel(other, track(0.5, Clock::Clip)).unwrap();
         }
-        let model = builder.finish().unwrap();
+        let model = {
+            builder.import_values(&slot_values).unwrap();
+            builder.finish()
+        }
+        .unwrap();
         let pass = compile_material_with_images(&model, material, Arc::default())
             .unwrap()
             .remove(0);
         assert!(pass.animation.is_animated());
-        assert!(pass.animation.opacity.unwrap().binding.is_some());
+        assert!(pass.animation.opacity.is_some());
     }
 }
 
 #[test]
 fn constant_track_different_from_fallback_cannot_be_folded() {
+    let mut slot_values = SlotValues::default();
     let (mut builder, material) = scalar_material();
     let clip = builder
         .add_clip(
@@ -287,13 +301,17 @@ fn constant_track_different_from_fallback_cannot_be_folded() {
         .add_channel(
             clip,
             Channel::Scalar(Track {
-                target: material.opacity(),
+                target: opacity(&builder, material),
                 clock: Clock::Clip,
                 curve: Curve::step(vec![ModelTime::default()], vec![0.5]).unwrap(),
             }),
         )
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let pass = compile_material_with_images(&model, material, Arc::default())
         .unwrap()
         .remove(0);
@@ -305,7 +323,7 @@ fn constant_track_different_from_fallback_cannot_be_folded() {
     let sample = model
         .animation_sample(AnimationSample {
             clip: Some(clip),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     pass.animation.apply(&sample, &mut unselected);
@@ -314,6 +332,7 @@ fn constant_track_different_from_fallback_cannot_be_folded() {
 
 #[test]
 fn equal_spline_endpoints_do_not_prove_constant_scalar_output() {
+    let slot_values = SlotValues::default();
     let (mut builder, material) = scalar_material();
     let times = [
         ModelTime::seconds(0.).unwrap(),
@@ -321,37 +340,41 @@ fn equal_spline_endpoints_do_not_prove_constant_scalar_output() {
     ];
     builder
         .add_timeline_channel(Channel::Scalar(Track {
-            target: material.opacity(),
+            target: opacity(&builder, material),
             clock: Clock::Timeline,
             curve: Curve::hermite(times, [1., 1.], [0., -2.], [2., 0.]).unwrap(),
         }))
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let pass = compile_material_with_images(&model, material, Arc::default())
         .unwrap()
         .remove(0);
     assert!(pass.animation.is_animated());
-    assert!(pass.animation.opacity.unwrap().binding.is_some());
+    assert!(pass.animation.opacity.is_some());
 }
 
 #[test]
 fn folding_constant_weights_preserves_changing_uv_channels() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::<Universal>::builder("weight and UV");
-    let node = builder.add_node(Node::named("UV source")).unwrap();
+    let node = builder.add_named_node("UV source").unwrap();
     let material = builder.reserve_material();
     let mut unit: m2::TextureUnit = m2::TextureUnit {
-        contribution: Animated {
-            default: 1.,
-            binding: Some(material.opacity().into()),
-        },
-        ..Default::default()
+        contribution: slot_values.add(1.),
+        ..SlotConstruct::construct(&mut slot_values)
     };
-    unit.coordinates.transform.translation.binding = Some(node.translation());
+    unit.coordinates.transform.translation =
+        builder.model().node(node).unwrap().transform.translation;
+    let weight = unit.contribution;
     let surface = m2::Material {
-        color: Animated::constant([1.; 3]),
-        opacity: Animated::constant(1.),
+        color: slot_values.add([1.; 3]),
+        opacity: slot_values.add(1.),
         textures: vec![unit],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     builder
         .set_material(
@@ -364,14 +387,14 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
         .unwrap();
     builder
         .add_timeline_channel(Channel::Scalar(Track {
-            target: material.opacity(),
+            target: weight,
             clock: Clock::Timeline,
             curve: Curve::step(vec![ModelTime::default()], vec![1.]).unwrap(),
         }))
         .unwrap();
     builder
         .add_timeline_channel(Channel::Vector3(Track {
-            target: node.translation(),
+            target: builder.model().node(node).unwrap().transform.translation,
             clock: Clock::Timeline,
             curve: Curve::linear(
                 [
@@ -383,27 +406,32 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
             .unwrap(),
         }))
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let pass = compile_material_with_images(&model, material, Arc::default())
         .unwrap()
         .remove(0);
-    assert!(pass.animation.weight.as_ref().unwrap().binding.is_none());
-    assert!(pass
-        .animation
-        .transform
-        .as_ref()
-        .unwrap()
-        .translation
-        .binding
-        .is_some());
+    assert!(pass.animation.weight.is_some());
     assert!(pass.animation.is_animated());
     let mut value = pass.material;
     let sample = model
         .animation_sample(AnimationSample {
             timeline_time: ModelTime::seconds(0.5).unwrap(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     pass.animation.apply(&sample, &mut value);
     assert!((value.uv_transform.translation.y - 0.5).abs() < 1e-6);
+}
+
+fn opacity(builder: &ModelBuilder<'static>, id: MaterialId) -> Animated<f32> {
+    let wc3::model::MaterialStep::M2(step) =
+        &builder.model().material(id).unwrap().surface.steps[0]
+    else {
+        panic!("M2")
+    };
+    step.declaration().opacity
 }

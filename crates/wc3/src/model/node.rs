@@ -1,6 +1,6 @@
 //! Hierarchy and authored transform behavior.
 use crate::model::profiles::{Profile, Universal};
-use crate::model::{Error, NodeId, Quaternion};
+use crate::model::{Animated, Construct, Error, NodeId, Quaternion, ValueSample, Values};
 use std::borrow::Cow;
 /// Transform inheritance along a parent relationship.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,6 +83,62 @@ impl Transform {
         }
     }
 }
+/// Slot-backed authored transform. Pivot placement is static.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AnimatedTransform {
+    /// Local translation slot.
+    pub translation: Animated<[f32; 3]>,
+    /// Local rotation slot.
+    pub rotation: Animated<Quaternion>,
+    /// Local scale slot.
+    pub scale: Animated<[f32; 3]>,
+    /// Pivot relative to the parent frame.
+    pub pivot: [f32; 3],
+}
+impl AnimatedTransform {
+    /// Allocates the components of an authored transform.
+    pub fn new(value: Transform, values: &mut Values) -> Self {
+        Self {
+            translation: values.add(value.translation),
+            rotation: values.add(value.rotation),
+            scale: values.add(value.scale),
+            pivot: value.pivot,
+        }
+    }
+    pub(crate) fn validate(&self, values: &Values) -> Result<(), Error> {
+        let transform = Transform {
+            translation: *values
+                .get(self.translation)
+                .ok_or_else(|| Error::new("transform.translation", "slot is absent"))?,
+            rotation: *values
+                .get(self.rotation)
+                .ok_or_else(|| Error::new("transform.rotation", "slot is absent"))?,
+            scale: *values
+                .get(self.scale)
+                .ok_or_else(|| Error::new("transform.scale", "slot is absent"))?,
+            pivot: self.pivot,
+        };
+        transform.validate()
+    }
+    /// Resolves authored constants.
+    pub fn defaults(&self, values: &Values) -> Transform {
+        Transform {
+            translation: *values.get(self.translation).expect("validated slot"),
+            rotation: *values.get(self.rotation).expect("validated slot"),
+            scale: *values.get(self.scale).expect("validated slot"),
+            pivot: self.pivot,
+        }
+    }
+    /// Resolves evaluated components.
+    pub fn sample(&self, sample: &impl ValueSample) -> Transform {
+        Transform {
+            translation: sample.animated(&self.translation),
+            rotation: sample.animated(&self.rotation),
+            scale: sample.animated(&self.scale),
+            pivot: self.pivot,
+        }
+    }
+}
 /// A node definition. Insertion checks its relationship to the graph.
 #[derive(Clone, Debug)]
 pub struct Node<'a, P: Profile = Universal> {
@@ -93,27 +149,27 @@ pub struct Node<'a, P: Profile = Universal> {
     /// Optional parent.
     pub parent: Option<NodeId>,
     /// Authored transform.
-    pub transform: Transform,
+    pub transform: AnimatedTransform,
     /// Parent transform inheritance.
     pub inheritance: Inheritance,
     /// Camera-facing behavior.
     pub billboard: Billboard,
     /// Whether this node is initially visible.
-    pub visible: bool,
+    pub visible: Animated<bool>,
     /// Whether its origin follows the driving camera.
     pub camera_anchored: bool,
 }
 impl<'a, P: Profile> Node<'a, P> {
     /// Creates a visible root node with an identity transform.
-    pub fn named(name: impl Into<Cow<'a, str>>) -> Self {
+    pub fn named(name: impl Into<Cow<'a, str>>, values: &mut Values) -> Self {
         Self {
             name: name.into(),
             controls: Default::default(),
             parent: None,
-            transform: Transform::default(),
+            transform: AnimatedTransform::new(Transform::default(), values),
             inheritance: Inheritance::default(),
             billboard: Billboard::None,
-            visible: true,
+            visible: values.add(true),
             camera_anchored: false,
         }
     }
@@ -128,9 +184,22 @@ impl<'a, P: Profile> Node<'a, P> {
         self
     }
     /// Applies a checked authored transform.
-    pub fn with_transform(mut self, transform: Transform) -> Result<Self, Error> {
+    pub fn with_transform(
+        mut self,
+        transform: Transform,
+        values: &mut Values,
+    ) -> Result<Self, Error> {
         transform.validate()?;
-        self.transform = transform;
+        values.set(self.transform.translation, transform.translation)?;
+        values.set(self.transform.rotation, transform.rotation)?;
+        values.set(self.transform.scale, transform.scale)?;
+        self.transform.pivot = transform.pivot;
         Ok(self)
+    }
+}
+
+impl Construct for AnimatedTransform {
+    fn construct(values: &mut Values) -> Self {
+        Self::new(Transform::default(), values)
     }
 }

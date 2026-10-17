@@ -4,7 +4,7 @@ use std::hint::black_box;
 use wc3::model::profiles::Universal;
 use wc3::model::{
     AnimationProgram, AnimationSample, BillboardConvention, Channel, Clock, Curve, EvaluatedPose,
-    GeometryData, Mesh, Model, ModelPose, Node, PoseBehavior, PoseInputs, Quaternion, Time, Track,
+    GeometryData, Mesh, Model, ModelPose, PoseBehavior, PoseInputs, Quaternion, Time, Track,
     Transform,
 };
 
@@ -14,16 +14,17 @@ fn poses(c: &mut Criterion) {
         let mut builder = Model::<Universal>::builder("pose benchmark");
         let mut parent = None;
         for index in 0..count {
-            let mut node = Node::named(format!("node {index}"));
+            let mut node = builder.new_node(format!("node {index}"));
             node.parent = parent;
-            node.transform = Transform {
-                translation: [0.1, 0.2, 0.3],
-                ..Default::default()
-            };
+            builder
+                .values_mut()
+                .set(node.transform.translation, [0.1, 0.2, 0.3])
+                .unwrap();
+            let rotation = node.transform.rotation;
             let id = builder.add_node(node).unwrap();
             builder
                 .add_timeline_channel(Channel::Rotation(Track {
-                    target: id.rotation(),
+                    target: rotation,
                     clock: Clock::Timeline,
                     curve: Curve::linear(
                         [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],

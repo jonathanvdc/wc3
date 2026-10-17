@@ -2,8 +2,9 @@
 use crate::model::animation::programmed::{AnimationControl, Property};
 use crate::model::values::programmed::{BatchFlags, RegionFlags};
 use crate::model::values::programmed::{BoneFlags, ModelFlags};
+use crate::model::{Animatable, Construct};
 use crate::model::{
-    FeatureId, FeatureKind, Link, NodeId, Property as Destination, Quaternion, SkinId,
+    Animated as Destination, FeatureId, FeatureKind, Link, NodeId, Quaternion, SkinId,
     ValidateLinks,
 };
 /// Game-wide model behavior settings.
@@ -16,7 +17,7 @@ pub struct ModelMetadata {
 }
 /// Reset and animation behavior for a value whose initial state belongs to its owner.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct PropertyControl<T> {
+pub struct PropertyControl<T: Animatable> {
     /// Value used when resetting the source animation property.
     pub reset: T,
     /// Authored interpolation, source identity, and sampling controls.
@@ -25,7 +26,7 @@ pub struct PropertyControl<T> {
     pub binding: Option<Destination<T>>,
 }
 /// Source game controls attached directly to an actual skeleton node.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct BoneControls {
     /// Authored bone identifier; older unsigned control words fit in the same domain.
     pub source_id: i64,

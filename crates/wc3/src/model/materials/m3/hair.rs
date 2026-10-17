@@ -1,8 +1,9 @@
 //! Anisotropic M3 hair surface parameters.
 use super::{Property, TextureLayer};
 use crate::model::materials::contributions::SurfaceContribution;
+use crate::model::Construct;
 /// Two-lobe anisotropic hair shading with independently animated colors.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct HairMaterialStep {
     /// Map shifting the anisotropic specular response.
     pub layer_spec_shift: Option<TextureLayer>,

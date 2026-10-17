@@ -1,8 +1,10 @@
 use super::*;
 use wc3::model::{Clip, Controller, ModelBuilder, Time};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 #[test]
 fn controller_activation_and_reordering_do_not_replay_existing_programmes() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("controller transition");
     let a = builder.add_controller(Controller::default()).unwrap();
     let b = builder.add_controller(Controller::default()).unwrap();
@@ -14,7 +16,7 @@ fn controller_activation_and_reordering_do_not_replay_existing_programmes() {
             definition(Clock::Timeline, 0.9),
             controller,
         ],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     }
     .indexed();
     let mut state = EventState::default();
@@ -32,7 +34,7 @@ fn controller_activation_and_reordering_do_not_replay_existing_programmes() {
         &events,
         AnimationSample {
             controllers: &controllers,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
         clocks(1.),
         EventTraversal::default(),
@@ -52,7 +54,7 @@ fn controller_activation_and_reordering_do_not_replay_existing_programmes() {
         &events,
         AnimationSample {
             controllers: &reversed,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
         clocks(1.2),
         EventTraversal::default(),
@@ -81,6 +83,7 @@ fn definition(clock: Clock, time: f64) -> EventDefinition {
 
 #[test]
 fn many_looping_definitions_generate_only_seeds_plus_global_dispatch_budget() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("many event streams");
     let clock = builder
         .add_clock(wc3::model::SharedClock::Repeating {
@@ -94,7 +97,7 @@ fn many_looping_definitions_generate_only_seeds_plus_global_dispatch_budget() {
             .map(|_| definition(Clock::Shared(clock), 0.))
             .collect(),
         clocks: HashMap::from([(clock, 1.)]),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     }
     .indexed();
     let mut state = EventState::default();
@@ -125,8 +128,11 @@ fn many_looping_definitions_generate_only_seeds_plus_global_dispatch_budget() {
 
 #[test]
 fn compilation_resolves_event_node_index_once() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("event anchor");
-    let node = builder.add_node(wc3::model::Node::named("anchor")).unwrap();
+    let node = builder
+        .add_node(wc3::model::Node::named("anchor", &mut slot_values))
+        .unwrap();
     builder
         .add_timeline_event(Event {
             feature: None,
@@ -134,10 +140,14 @@ fn compilation_resolves_event_node_index_once() {
             time: Time::seconds(0.5).unwrap(),
             name: "key".into(),
             node: Some(node),
-            payload: Default::default(),
+            payload: SlotConstruct::construct(&mut slot_values),
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let events = RuntimeEvents::compile(&model);
     assert_eq!(events.definitions[0].node, Some(node));
     assert_eq!(events.definitions[0].node_index, Some(0));
@@ -161,13 +171,14 @@ fn collect(state: &mut EventState, events: &RuntimeEvents, time: f64, budget: us
 }
 #[test]
 fn forward_intervals_keep_duplicate_keys_and_seek_skips_destination() {
+    let mut slot_values = SlotValues::default();
     let events = RuntimeEvents {
         definitions: vec![
             definition(Clock::Timeline, 0.),
             definition(Clock::Timeline, 0.5),
             definition(Clock::Timeline, 0.5),
         ],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     }
     .indexed();
     let mut state = EventState::default();
@@ -199,12 +210,13 @@ fn forward_intervals_keep_duplicate_keys_and_seek_skips_destination() {
 }
 #[test]
 fn paused_start_keys_wait_and_reverse_traversal_does_not_dispatch() {
+    let mut slot_values = SlotValues::default();
     let events = RuntimeEvents {
         definitions: vec![
             definition(Clock::Timeline, 0.),
             definition(Clock::Timeline, 0.5),
         ],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     }
     .indexed();
     let mut state = EventState::default();
@@ -228,6 +240,7 @@ fn paused_start_keys_wait_and_reverse_traversal_does_not_dispatch() {
 }
 #[test]
 fn inclusive_loop_end_and_next_start_are_distinct_and_large_jumps_are_bounded() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("event clock");
     let id = builder
         .add_clock(wc3::model::SharedClock::Repeating {
@@ -240,7 +253,7 @@ fn inclusive_loop_end_and_next_start_are_distinct_and_large_jumps_are_bounded() 
             definition(Clock::Shared(id), 1.),
         ],
         clocks: HashMap::from([(id, 1.)]),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     }
     .indexed();
     let mut state = EventState::default();
@@ -261,6 +274,7 @@ fn inclusive_loop_end_and_next_start_are_distinct_and_large_jumps_are_bounded() 
 }
 #[test]
 fn timeline_keys_follow_selected_clip_interval_and_alias_identity() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("event clip");
     let id = builder
         .add_clip(Clip::named("clip").with_duration(Time::seconds(1.).unwrap()))
@@ -277,12 +291,12 @@ fn timeline_keys_follow_selected_clip_interval_and_alias_identity() {
                 origin: Some(10.),
             },
         )]),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     }
     .indexed();
     let selection = AnimationSample {
         clip: Some(id),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let mut state = EventState::default();
     state.collect(
@@ -307,13 +321,14 @@ fn timeline_keys_follow_selected_clip_interval_and_alias_identity() {
 
 #[test]
 fn seek_origin_preserves_forward_keys_crossed_before_first_dispatch() {
+    let mut slot_values = SlotValues::default();
     let events = RuntimeEvents {
         definitions: vec![
             definition(Clock::Timeline, 0.5),
             definition(Clock::Timeline, 0.55),
             definition(Clock::Timeline, 0.6),
         ],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     }
     .indexed();
     let mut state = EventState::default();
@@ -340,6 +355,7 @@ fn seek_origin_preserves_forward_keys_crossed_before_first_dispatch() {
 
 #[test]
 fn inactive_programs_and_unchanged_or_paused_updates_do_not_scan_event_definitions() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("indexed event cost");
     let mut events = RuntimeEvents::default();
     events.definitions.push(definition(Clock::Timeline, 0.25));
@@ -364,7 +380,7 @@ fn inactive_programs_and_unchanged_or_paused_updates_do_not_scan_event_definitio
     let events = events.indexed();
     let selection = AnimationSample {
         clip: selected,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let mut state = EventState::default();
     state.collect(
@@ -402,6 +418,7 @@ fn inactive_programs_and_unchanged_or_paused_updates_do_not_scan_event_definitio
 
 #[test]
 fn interval_clip_index_limits_global_timeline_scans_to_its_authored_window() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("bounded timeline index");
     let id = builder.add_clip(Clip::named("interval")).unwrap();
     let events = RuntimeEvents {
@@ -416,12 +433,12 @@ fn interval_clip_index_limits_global_timeline_scans_to_its_authored_window() {
                 origin: Some(5000.),
             },
         )]),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     }
     .indexed();
     let selection = AnimationSample {
         clip: Some(id),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let mut state = EventState::default();
     state.collect(
@@ -439,12 +456,13 @@ fn interval_clip_index_limits_global_timeline_scans_to_its_authored_window() {
 
 #[test]
 fn frozen_shared_clock_does_not_traverse_event_windows() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("frozen clock events");
     let clock = builder.add_clock(wc3::model::SharedClock::Frozen).unwrap();
     let events = RuntimeEvents {
         definitions: vec![definition(Clock::Shared(clock), 0.)],
         clocks: [(clock, 0.)].into(),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     }
     .indexed();
     let mut state = EventState::default();

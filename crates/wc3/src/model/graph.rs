@@ -2,6 +2,7 @@
 use crate::model::ids::Scope;
 use crate::model::profiles::{Profile, Universal};
 use crate::model::DrawId;
+use crate::model::{Animatable, Animated, ValueSlot, Values};
 use crate::model::{
     AppearanceSchema as _, AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, ClockId,
     Controller, ControllerId, Error, Event, EventId, FeatureId, InstanceId, LengthUnit, Look,
@@ -41,6 +42,7 @@ impl SharedClock {
 /// An encoding-independent model. All public access is immutable; edits are checked before publication.
 #[derive(Clone, Debug)]
 pub struct Model<'a, P: Profile = Universal> {
+    values: Values,
     dependencies: Dependencies<'a, P>,
     scope: Scope,
     id: ModelId,
@@ -50,9 +52,9 @@ pub struct Model<'a, P: Profile = Universal> {
     bounds: Option<Bounds>,
     metadata: P::ModelMetadata<'a>,
     systems: Table<SystemObject, P::System<'a>>,
-    timeline_channels: Vec<Channel<'a, P>>,
+    timeline_channels: Vec<Channel<'a>>,
     timeline_events: Vec<Event<'a>>,
-    shared_channels: Vec<Channel<'a, P>>,
+    shared_channels: Vec<Channel<'a>>,
     shared_events: Vec<Event<'a>>,
     features: Table<FeatureObject, AttachedFeature<'a, P>>,
     appearance: P::Appearance<'a>,
@@ -66,6 +68,34 @@ pub struct Model<'a, P: Profile = Universal> {
     controllers: Table<ControllerObject, Controller<'a, P>>,
 }
 impl<'a, P: Profile> Model<'a, P> {
+    /// Authored constants for every typed animation slot.
+    pub fn values(&self) -> &Values {
+        &self.values
+    }
+    /// Whether any authored program writes this slot.
+    pub fn is_animated<T: Animatable>(&self, slot: Animated<T>) -> bool {
+        self.channels()
+            .any(|channel| channel.target() == slot.slot())
+            || match slot.slot() {
+                ValueSlot::Scalar(id) => self
+                    .values
+                    .boolean_source(id)
+                    .is_some_and(|source| self.is_animated(source)),
+                _ => false,
+            }
+    }
+    /// Channels in every authored program, independent of playback selection.
+    pub fn channels(&self) -> impl Iterator<Item = &Channel<'a>> {
+        self.timeline_channels
+            .iter()
+            .chain(&self.shared_channels)
+            .chain(self.clips.values().flat_map(|clip| &clip.channels))
+            .chain(
+                self.controllers
+                    .values()
+                    .flat_map(|controller| &controller.channels),
+            )
+    }
     /// External dependency declarations owned by this model.
     pub fn dependencies(&self) -> &Dependencies<'a, P> {
         &self.dependencies
@@ -93,7 +123,7 @@ impl<'a, P: Profile> Model<'a, P> {
     ) -> Option<&P::BoneOverrideResource<'a>> {
         self.dependencies.bone_overrides.get(id)
     }
-    /// Complete sampled image values used by material, effect, and animation inputs.
+    /// Complete sampled image values in material/effect inputs, allocated slots, and curves.
     /// Repeated values are returned once; no shared editable texture objects are created.
     pub fn sampled_images(&self) -> Vec<Texture> {
         let mut images = Vec::new();
@@ -132,6 +162,7 @@ impl<'a, P: Profile> Model<'a, P> {
         for system in self.systems.values() {
             system.visit_links(&mut visit);
         }
+        self.values.visit_values(&mut visit);
         for channel in self.timeline_channels.iter().chain(&self.shared_channels) {
             channel.visit_links(&mut visit);
         }
@@ -194,7 +225,7 @@ impl<'a, P: Profile> Model<'a, P> {
             .find_map(|controller| controller.events.get(&id))
     }
     /// Channels authored on the absolute model timeline, independent of playback intervals.
-    pub fn timeline_channels(&self) -> &[Channel<'a, P>] {
+    pub fn timeline_channels(&self) -> &[Channel<'a>] {
         &self.timeline_channels
     }
     /// Event occurrences authored on the absolute model timeline.
@@ -202,7 +233,7 @@ impl<'a, P: Profile> Model<'a, P> {
         &self.timeline_events
     }
     /// Channels governed by shared clocks rather than an individual playback clip.
-    pub fn shared_channels(&self) -> &[Channel<'a, P>] {
+    pub fn shared_channels(&self) -> &[Channel<'a>] {
         &self.shared_channels
     }
     /// Event occurrences governed by shared clocks.

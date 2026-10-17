@@ -747,7 +747,10 @@ fn look_at_typed_target_rejects_non_bones_and_ambiguous_native_export_names() {
     };
     asset
         .edit(|builder| {
-            builder.add_node(builder.model().node(bone).unwrap().clone())?;
+            {
+                let definition = builder.model().node(bone).unwrap().clone();
+                builder.add_node(definition)
+            }?;
             Ok(())
         })
         .unwrap();

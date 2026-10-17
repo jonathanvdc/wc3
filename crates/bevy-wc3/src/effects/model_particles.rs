@@ -91,7 +91,7 @@ impl ModelParticleChild {
 
 fn scalar(value: &ParticleScalar) -> Option<Animated<f32>> {
     match value {
-        ParticleScalar::Animated(value) => Some(value.clone()),
+        ParticleScalar::Animated(value) => Some(*value),
         _ => None,
     }
 }
@@ -197,7 +197,7 @@ impl RuntimeModelParticles {
                 speed,
                 gravity: definition.motion.gravity.clone(),
                 lifetime,
-                latitude: details.latitude.clone(),
+                latitude: details.latitude,
             });
         }
         result
@@ -512,6 +512,8 @@ pub(crate) fn synchronize_model_particles(
 
 #[cfg(test)]
 mod tests {
+    use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+
     use super::*;
     fn child(app: &mut App, root: Entity, owner: Entity) -> Entity {
         app.world_mut()
@@ -535,6 +537,7 @@ mod tests {
     }
     #[test]
     fn delayed_children_follow_particle_age_and_frozen_world_trajectory() {
+        let mut slot_values = SlotValues::default();
         let mut app = App::new();
         app.add_systems(Update, synchronize_model_particles);
         let root = app
@@ -542,7 +545,7 @@ mod tests {
             .spawn((
                 Playback {
                     shared_time: 3.,
-                    ..Default::default()
+                    ..SlotConstruct::construct(&mut slot_values)
                 },
                 Transform::from_xyz(100., 200., 300.),
             ))
@@ -576,13 +579,14 @@ mod tests {
     }
     #[test]
     fn detached_children_are_cleaned_up_with_the_renderer_owner() {
+        let mut slot_values = SlotValues::default();
         let mut app = App::new();
         app.add_systems(Update, synchronize_model_particles);
         let root = app
             .world_mut()
             .spawn(Playback {
                 shared_time: 2.,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             })
             .id();
         let owner = app.world_mut().spawn_empty().id();
@@ -598,7 +602,7 @@ mod tests {
             compile_model, ModelInstanceError, ModelMaterial, ModelRig, ModelSource,
         };
         use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-        let model = Model::empty("particle cycle").unwrap();
+        let model = Model::<wc3::model::profiles::Universal>::empty("particle cycle").unwrap();
         let mut app = App::new();
         app.init_resource::<Assets<ModelAsset>>()
             .init_resource::<Assets<Mesh>>()

@@ -5,9 +5,9 @@ use wc3::model::formats::mdlx::{
     materials::{Layer as NativeLayer, Material as NativeMaterial, Texture as NativeTexture},
 };
 use wc3::model::io;
-use wc3::model::profiles::mdlx::properties::Layer;
 use wc3::model::profiles::Universal;
-use wc3::model::{AddressMode, Animated};
+use wc3::model::AddressMode;
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 fn source() -> mdlx::Document<'static, mdlx::V800> {
     let mut source = mdlx::Document::new();
@@ -36,6 +36,7 @@ fn source() -> mdlx::Document<'static, mdlx::V800> {
 
 #[test]
 fn shared_native_inputs_import_as_independent_values_and_export_as_interned_tables() {
+    let mut slot_values = SlotValues::default();
     let source = source();
     let mut model = io::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
@@ -43,29 +44,15 @@ fn shared_native_inputs_import_as_independent_values_and_export_as_interned_tabl
     let (id, material) = model.materials().iter().next().unwrap();
     let first = &material.surface.layers[0].binding;
     let second = &material.surface.layers[1].binding;
-    assert_eq!(first.image.default, second.image.default);
+    assert_eq!(model.values()[first.image], model.values()[second.image]);
+    assert_ne!(first.image, second.image);
     assert_eq!(model.dependencies().images().len(), 1);
-    assert_eq!(
-        first
-            .coordinates
-            .transform
-            .translation
-            .binding
-            .as_ref()
-            .unwrap(),
-        &Layer(0).translation().bind(id).widen::<Universal>()
+    assert_ne!(
+        first.coordinates.transform.translation,
+        second.coordinates.transform.translation
     );
-    assert_eq!(
-        second
-            .coordinates
-            .transform
-            .translation
-            .binding
-            .as_ref()
-            .unwrap(),
-        &Layer(1).translation().bind(id).widen::<Universal>()
-    );
-
+    assert!(model.is_animated(first.coordinates.transform.translation));
+    assert!(model.is_animated(second.coordinates.transform.translation));
     let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -82,25 +69,24 @@ fn shared_native_inputs_import_as_independent_values_and_export_as_interned_tabl
     );
 
     let mut surface = material.surface.clone();
-    surface.layers[0]
-        .binding
-        .image
-        .default
-        .as_mut()
-        .unwrap()
-        .sampler
-        .u = AddressMode::Repeat;
-    surface.layers[0].binding.coordinates.transform.scale = Animated::constant([2., 1., 1.]);
+    let image_slot = surface.layers[0].binding.image;
+    let mut image = model.values()[image_slot].unwrap();
+    image.sampler.u = AddressMode::Repeat;
+    surface.layers[0].binding.coordinates.transform.scale = slot_values.add([2., 1., 1.]);
     model
-        .edit(|draft| draft.set_material_surface(id, surface))
+        .edit(|draft| {
+            draft.import_values(&slot_values)?;
+            draft.values_mut().set(image_slot, Some(image))?;
+            draft.set_material_surface(id, surface)
+        })
         .unwrap();
     let layers = &model.material(id).unwrap().surface.layers;
     assert_eq!(
-        layers[1].binding.image.default.unwrap().sampler.u,
+        model.values()[layers[1].binding.image].unwrap().sampler.u,
         AddressMode::Clamp
     );
     assert_eq!(
-        layers[1].binding.coordinates.transform.scale.default,
+        model.values()[layers[1].binding.coordinates.transform.scale],
         [1.; 3]
     );
     let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
@@ -182,6 +168,7 @@ fn duplicate_native_texture_records_share_the_resource_and_are_deduplicated_on_e
 
 #[test]
 fn sampling_a_material_freezes_its_owned_coordinate_animation() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::mdlx::LayeredSurface;
     use wc3::model::{AnimationSample, Time};
     let source = source();
@@ -192,22 +179,16 @@ fn sampling_a_material_freezes_its_owned_coordinate_animation() {
     let sample = model
         .animation_sample(AnimationSample {
             timeline_time: Time::seconds(0.).unwrap(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     let material = model.materials().iter().next().unwrap().1;
-    let frozen = LayeredSurface::try_from(material.surface.sampled(&sample)).unwrap();
+    let frozen_values = sample.evaluate();
+    let frozen = LayeredSurface::try_from(material.surface.clone()).unwrap();
     for layer in frozen.layers {
         assert_eq!(
-            layer.binding.coordinates.transform.translation.default,
+            frozen_values[layer.binding.coordinates.transform.translation],
             [0.25, 0., 0.]
         );
-        assert!(layer
-            .binding
-            .coordinates
-            .transform
-            .translation
-            .binding
-            .is_none());
     }
 }

@@ -5,10 +5,10 @@ use crate::model::formats::mdlx::{
     animation::{TangentKeyframe, Track as NativeTrack, TrackValue, ValueKeyframe},
     Animatable,
 };
-use crate::model::profiles::{Mdlx, Universal};
+use crate::model::profiles::Mdlx;
+use crate::model::Animatable as SlotAnimatable;
 use crate::model::{
-    Animated, BindingValue, ClipId, Clock, ClockId, CurveDomain, Interpolation, Model,
-    PropertyTarget,
+    Animated, ClipId, Clock, ClockId, CurveDomain, Interpolation, Model, ValueSlot,
 };
 use std::collections::{BTreeMap, HashSet};
 
@@ -18,9 +18,24 @@ pub(super) struct Encoder<'a, 'b, 'c> {
     pub starts: BTreeMap<ClipId, f64>,
     pub globals: BTreeMap<ClockId, u32>,
     pub context: &'c mut Context,
-    pub used: HashSet<(PropertyTarget, &'static str)>,
+    pub used: HashSet<(ValueSlot, &'static str)>,
 }
 impl Encoder<'_, '_, '_> {
+    pub fn constant<U: SlotAnimatable>(&self, slot: Animated<U>) -> U {
+        *self.model.values().get(slot).expect("validated slot")
+    }
+    pub fn optional<T: TrackValue + PartialEq, U: Value>(
+        &mut self,
+        slot: Animated<U>,
+        map: impl Fn(U) -> Result<T, Error> + Clone,
+        identity: T,
+        path: &str,
+    ) -> Result<Option<NativeTrack<'static, T>>, Error> {
+        let value = map(self.constant(slot))?;
+        Ok(self
+            .track(&slot, map, path)?
+            .or_else(|| (value != identity).then(|| NativeTrack::constant(value))))
+    }
     pub fn audit(&mut self) -> Result<(), Error> {
         let model = self.model;
         for channel in model
@@ -39,7 +54,7 @@ impl Encoder<'_, '_, '_> {
             if !self
                 .used
                 .iter()
-                .any(|(target, _)| target == channel.target())
+                .any(|(target, _)| *target == channel.target())
             {
                 self.context.unsupported(
                     "animation.target",
@@ -62,38 +77,28 @@ impl Encoder<'_, '_, '_> {
         T: TrackValue,
         U: Value,
     {
-        let value = map(source.default)?;
-        let Some(property) = &source.binding else {
-            return Ok(Animatable::Static(value));
-        };
+        let value = map(*self.model.values().get(*source).expect("validated slot"))?;
+        let property = source;
         Ok(match self.track(property, map, path)? {
             Some(track) => Animatable::Both { value, track },
             None => Animatable::Static(value),
         })
     }
-    pub fn track<T, B>(
+    pub fn track<T, U>(
         &mut self,
-        binding: &B,
-        map: impl Fn(B::Value) -> Result<T, Error> + Clone,
+        binding: &Animated<U>,
+        map: impl Fn(U) -> Result<T, Error> + Clone,
         path: &str,
     ) -> Result<Option<NativeTrack<'static, T>>, Error>
     where
         T: TrackValue,
-        B: BindingValue<Profile = Universal>,
-        B::Value: Value,
+        U: Value,
     {
-        let Some(property) = binding.property() else {
-            self.context.unsupported(
-                path,
-                "Warcraft III scalar tracks cannot directly encode a converted boolean binding",
-            )?;
-            return Ok(None);
-        };
-        self.target(property.target(), map, path)
+        self.target(&binding.slot(), map, path)
     }
     pub fn target<T, U>(
         &mut self,
-        property: &PropertyTarget,
+        property: &ValueSlot,
         map: impl Fn(U) -> Result<T, Error> + Clone,
         path: &str,
     ) -> Result<Option<NativeTrack<'static, T>>, Error>
@@ -106,7 +111,7 @@ impl Encoder<'_, '_, '_> {
     }
     pub fn target_maps<T, U>(
         &mut self,
-        property: &PropertyTarget,
+        property: &ValueSlot,
         map: impl Fn(U) -> Result<T, Error> + Clone,
         tangent_map: impl Fn(U, Interpolation) -> Result<T, Error> + Clone,
         path: &str,
@@ -115,7 +120,7 @@ impl Encoder<'_, '_, '_> {
         T: TrackValue,
         U: Value,
     {
-        self.used.insert((property.clone(), U::kind()));
+        self.used.insert((*property, U::kind()));
         let mut keys = BTreeMap::<i32, Vec<NativeKey<T>>>::new();
         let mut behavior = None;
         let channels = self
@@ -146,7 +151,7 @@ impl Encoder<'_, '_, '_> {
             let Some(track) = U::track(channel) else {
                 continue;
             };
-            if track.target.target() != property {
+            if track.target.slot() != *property {
                 continue;
             }
             let mode = track.curve.interpolation();

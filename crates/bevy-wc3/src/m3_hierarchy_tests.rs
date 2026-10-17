@@ -9,9 +9,11 @@ use wc3::model::profiles::m3::BoneControls;
 use wc3::model::profiles::{Universal, M3};
 use wc3::model::Quaternion;
 use wc3::model::{Channel, Clock, Curve, M3Geometry, Time as ModelTime, Track};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 #[test]
 fn native_zero_flag_hierarchy_preserves_skinned_rest_and_animated_parent_placement() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::<M3>::builder("parent-local skin");
     let parent_matrix = Mat4::from_scale_rotation_translation(
         Vec3::new(2., 3., 4.),
@@ -25,27 +27,33 @@ fn native_zero_flag_hierarchy_preserves_skinned_rest_and_animated_parent_placeme
     );
     let parent = builder
         .add_node(
-            Node::named("parent")
-                .with_controls(BoneControls::default())
-                .with_transform(ModelTransform {
-                    translation: [3., 4., 5.],
-                    rotation: Quaternion(Quat::from_rotation_z(FRAC_PI_2).to_array()),
-                    scale: [2., 3., 4.],
-                    ..Default::default()
-                })
+            Node::named("parent", &mut slot_values)
+                .with_controls(BoneControls::construct(&mut slot_values))
+                .with_transform(
+                    ModelTransform {
+                        translation: [3., 4., 5.],
+                        rotation: Quaternion(Quat::from_rotation_z(FRAC_PI_2).to_array()),
+                        scale: [2., 3., 4.],
+                        ..SlotConstruct::construct(&mut slot_values)
+                    },
+                    &mut slot_values,
+                )
                 .unwrap(),
         )
         .unwrap();
     let child = builder
         .add_node(
-            Node::named("child")
-                .with_controls(BoneControls::default())
+            Node::named("child", &mut slot_values)
+                .with_controls(BoneControls::construct(&mut slot_values))
                 .with_parent(parent)
-                .with_transform(ModelTransform {
-                    translation: [1., 2., 3.],
-                    scale: [0.5, 1., 2.],
-                    ..Default::default()
-                })
+                .with_transform(
+                    ModelTransform {
+                        translation: [1., 2., 3.],
+                        scale: [0.5, 1., 2.],
+                        ..SlotConstruct::construct(&mut slot_values)
+                    },
+                    &mut slot_values,
+                )
                 .unwrap(),
         )
         .unwrap();
@@ -93,20 +101,24 @@ fn native_zero_flag_hierarchy_preserves_skinned_rest_and_animated_parent_placeme
     let material = builder
         .add_material(SemanticMaterial {
             name: "plain".into(),
-            surface: MaterialStep::Standard(Box::default()),
+            surface: MaterialStep::Standard(Box::new(SlotConstruct::construct(&mut slot_values))),
         })
         .unwrap();
-    let frame = builder.add_node(Node::named("")).unwrap();
+    let frame = builder.add_named_node("").unwrap();
     let mut instance = MeshInstance::new(frame, mesh);
     instance.skin = Some(skin);
     instance.draws.push(Draw::new(subset, None));
     builder
         .add_instance_with_materials(instance, vec![material])
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let options = ExportOptions {
         approximation: ApproximationPolicy::Allow { tolerance: 0.004 },
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let encoded = io::m3::plan::<m3::StarCraft2>(&model, &options)
         .unwrap()
@@ -129,7 +141,7 @@ fn native_zero_flag_hierarchy_preserves_skinned_rest_and_animated_parent_placeme
     source
         .edit(|builder| {
             builder.add_timeline_channel(Channel::Vector3(Track {
-                target: parent.translation(),
+                target: builder.model().node(parent).unwrap().transform.translation,
                 clock: Clock::Timeline,
                 curve: Curve::linear(
                     [ModelTime::seconds(0.)?, ModelTime::seconds(1.)?],
@@ -145,7 +157,7 @@ fn native_zero_flag_hierarchy_preserves_skinned_rest_and_animated_parent_placeme
     for (time, displacement) in [(0., 0.), (0.5, 1.), (1., 2.)] {
         let playback = Playback {
             timeline_time: time,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         };
         let pose = PoseBaker::default()
             .bake(
@@ -155,7 +167,7 @@ fn native_zero_flag_hierarchy_preserves_skinned_rest_and_animated_parent_placeme
                 PoseOptions {
                     playback: Some(&playback),
                     space: BakeSpace::Authored,
-                    ..Default::default()
+                    ..SlotConstruct::construct(&mut slot_values)
                 },
             )
             .unwrap();

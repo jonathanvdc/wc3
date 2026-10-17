@@ -1,5 +1,5 @@
 use super::*;
-use wc3::model::{AnimationProgram, AnimationSample, Model};
+use wc3::model::Values as SlotValues;
 #[test]
 fn collapsed_age_stages_preserve_explicit_endpoints() {
     for middle in [0., 1.] {
@@ -17,14 +17,11 @@ fn collapsed_age_stages_preserve_explicit_endpoints() {
 
 #[test]
 fn birth_freezes_motion_and_style_in_the_selected_space() {
-    let model = Model::empty("programmed sprite controls").unwrap();
-    let animation = AnimationProgram::compile(&model);
-    let sample = animation.sample(AnimationSample::default()).unwrap();
-    let sample = sample.at_times(Default::default(), Default::default(), Default::default());
-    let mut programme = ProgrammedSprite::fixture();
+    let mut slot_values = SlotValues::default();
+    let mut programme = ProgrammedSprite::fixture(&mut slot_values);
     let node = Mat4::from_translation(Vec3::new(3., 4., 5.));
     let birth = programme
-        .birth(&sample, node, Mat4::IDENTITY, [0.5; 12])
+        .birth(&slot_values, node, Mat4::IDENTITY, [0.5; 12])
         .unwrap();
     assert_eq!(birth.origin, Vec3::new(3., 4., 5.));
     assert_eq!(birth.velocity, Vec3::Z * 2.);
@@ -34,7 +31,7 @@ fn birth_freezes_motion_and_style_in_the_selected_space() {
     programme.random_lifetime = true;
     programme.random_speed = true;
     let birth = programme
-        .birth(&sample, node, Mat4::IDENTITY, [0.5; 12])
+        .birth(&slot_values, node, Mat4::IDENTITY, [0.5; 12])
         .unwrap();
     assert_eq!(birth.origin, Vec3::ZERO);
     assert_eq!(birth.lifetime, 3.);
@@ -114,49 +111,49 @@ fn squirt_occurrence_budget_is_shared_across_keys_and_ignores_zero_counts() {
 
 #[test]
 fn cylindrical_shapes_sample_area_and_authored_z_height() {
-    let model = Model::empty("cylindrical controls").unwrap();
-    let animation = AnimationProgram::compile(&model);
-    let sample = animation.sample(AnimationSample::default()).unwrap();
-    let sample = sample.at_times(Default::default(), Default::default(), Default::default());
-    let mut programme = ProgrammedSprite::fixture();
+    let mut slot_values = SlotValues::default();
+    let mut programme = ProgrammedSprite::fixture(&mut slot_values);
     programme.model_space = true;
-    programme.radius.default = 4.;
-    programme.dimensions.default = [100., 100., 6.];
+    slot_values.set(programme.radius, 4.).unwrap();
+    slot_values
+        .set(programme.dimensions, [100., 100., 6.])
+        .unwrap();
     let mut random = [0.5; 12];
     random[2] = 0.;
     random[3] = 0.25;
     random[4] = 1.;
     programme.shape = EmitterShape::Cylinder;
     let cylinder = programme
-        .birth(&sample, Mat4::IDENTITY, Mat4::IDENTITY, random)
+        .birth(&slot_values, Mat4::IDENTITY, Mat4::IDENTITY, random)
         .unwrap();
     assert_eq!(cylinder.origin, Vec3::new(2., 0., 3.));
     programme.shape = EmitterShape::Disc;
     let disc = programme
-        .birth(&sample, Mat4::IDENTITY, Mat4::IDENTITY, random)
+        .birth(&slot_values, Mat4::IDENTITY, Mat4::IDENTITY, random)
         .unwrap();
     assert_eq!(disc.origin, Vec3::new(2., 0., 0.));
     // Half the radial probability covers half the cross-sectional area.
     random[3] = 0.5;
     let disc = programme
-        .birth(&sample, Mat4::IDENTITY, Mat4::IDENTITY, random)
+        .birth(&slot_values, Mat4::IDENTITY, Mat4::IDENTITY, random)
         .unwrap();
     assert!((disc.origin.length_squared() - 8.).abs() < 1e-5);
 }
 
 #[test]
 fn native_gravity_is_transformed_by_model_basis_without_emitter_rotation() {
-    let model = Model::empty("gravity controls").unwrap();
-    let animation = AnimationProgram::compile(&model);
-    let sample = animation.sample(AnimationSample::default()).unwrap();
-    let sample = sample.at_times(Default::default(), Default::default(), Default::default());
-    let mut programme = ProgrammedSprite::fixture();
+    let mut slot_values = SlotValues::default();
+    let mut programme = ProgrammedSprite::fixture(&mut slot_values);
     programme.gravity = 4.;
     let basis = Mat4::from_rotation_x(std::f32::consts::FRAC_PI_2);
     let node = Mat4::from_rotation_y(std::f32::consts::FRAC_PI_2);
-    let birth = programme.birth(&sample, node, basis, [0.5; 12]).unwrap();
+    let birth = programme
+        .birth(&slot_values, node, basis, [0.5; 12])
+        .unwrap();
     assert!((birth.acceleration - Vec3::Y * 4.).length() < 1e-5);
     programme.model_space = true;
-    let birth = programme.birth(&sample, node, basis, [0.5; 12]).unwrap();
+    let birth = programme
+        .birth(&slot_values, node, basis, [0.5; 12])
+        .unwrap();
     assert_eq!(birth.acceleration, Vec3::NEG_Z * 4.);
 }

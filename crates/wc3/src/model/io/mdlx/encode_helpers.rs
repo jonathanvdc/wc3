@@ -13,13 +13,7 @@ pub(super) fn visibility(
     encoder: &mut Encoder<'_, '_, '_>,
     path: &str,
 ) -> Result<Option<Track<'static, f32>>, Error> {
-    let track = source
-        .binding
-        .as_ref()
-        .map(|property| encoder.track(property, Ok, path))
-        .transpose()?
-        .flatten();
-    Ok(track.or_else(|| (source.default != 1.).then(|| Track::constant(source.default))))
+    encoder.optional(*source, Ok, 1., path)
 }
 pub(super) fn events(
     source: &profile::Events<'_>,
@@ -186,43 +180,19 @@ pub(super) fn texture_transform<'a>(
     source: &TextureTransform,
     encoder: &mut Encoder<'_, '_, '_>,
 ) -> Result<native::TextureAnimation<'a>, Error> {
-    let mut transform = native::TextureAnimation {
-        translation: source
-            .translation
-            .binding
-            .as_ref()
-            .map(|property| encoder.track(property, Ok, "texture_transform.translation"))
-            .transpose()?
-            .flatten(),
-        rotation: source
-            .rotation
-            .binding
-            .as_ref()
-            .map(|property| {
-                encoder.track(
-                    property,
-                    |value: Quaternion| Ok(value.components()),
-                    "texture_transform.rotation",
-                )
-            })
-            .transpose()?
-            .flatten(),
-        scaling: source
-            .scale
-            .binding
-            .as_ref()
-            .map(|property| encoder.track(property, Ok, "texture_transform.scale"))
-            .transpose()?
-            .flatten(),
-    };
-    if transform.translation.is_none() && source.translation.default != [0.; 3] {
-        transform.translation = Some(Track::constant(source.translation.default));
-    }
-    if transform.rotation.is_none() && source.rotation.default != Quaternion::default() {
-        transform.rotation = Some(Track::constant(source.rotation.default.components()));
-    }
-    if transform.scaling.is_none() && source.scale.default != [1.; 3] {
-        transform.scaling = Some(Track::constant(source.scale.default));
-    }
-    Ok(transform)
+    Ok(native::TextureAnimation {
+        translation: encoder.optional(
+            source.translation,
+            Ok,
+            [0.; 3],
+            "texture_transform.translation",
+        )?,
+        rotation: encoder.optional(
+            source.rotation,
+            |value: Quaternion| Ok(value.components()),
+            Quaternion::default().components(),
+            "texture_transform.rotation",
+        )?,
+        scaling: encoder.optional(source.scale, Ok, [1.; 3], "texture_transform.scale")?,
+    })
 }

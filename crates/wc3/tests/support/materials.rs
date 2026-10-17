@@ -5,7 +5,7 @@ pub mod m2 {
     use wc3::model::materials::state::PassState;
     use wc3::model::values::model::{BatchFlags, BlendMode};
     use wc3::model::{Animated, Error, MaterialSurface};
-    #[derive(Clone, Debug, Default)]
+    #[derive(Clone, Debug, wc3::model::Construct)]
     pub struct MaterialFixture<'a> {
         /// Shader family identifier interpreted by the game shader implementation.
         pub shader: u16,

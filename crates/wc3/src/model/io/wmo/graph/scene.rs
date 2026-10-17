@@ -7,8 +7,8 @@ use crate::model::profiles::wmo as profile;
 use crate::model::profiles::Wmo;
 use crate::model::WorldImageResource;
 use crate::model::WorldPlacementAppearance;
-use crate::model::{Animated, FeatureId, ModelBuilder, Node, Quaternion};
 use crate::model::{ColorSpace, ImageResource, Sampler, Texture};
+use crate::model::{FeatureId, ModelBuilder, Quaternion};
 use std::borrow::Cow;
 
 pub(super) struct Identities {
@@ -34,13 +34,17 @@ pub(super) fn read<'a, 'data: 'a>(
         .into_iter()
         .enumerate()
     {
-        let mut node = Node::named(format!("Light {ordinal}"));
-        node.transform.translation = row.position;
-        node.transform.rotation = Quaternion(row.rotation);
+        let node = builder.new_node(format!("Light {ordinal}"));
+        builder
+            .values_mut()
+            .set(node.transform.translation, row.position)?;
+        builder
+            .values_mut()
+            .set(node.transform.rotation, Quaternion(row.rotation))?;
         let id = builder.add_node(node)?;
-        let feature_id = builder.add_feature(
-            id,
-            profile::Node::Light(Box::new(profile::Light {
+        let feature_id = {
+            let node = id;
+            let payload = profile::Node::Light(Box::new(profile::Light {
                 kind: match row.kind {
                     LightKind::Omni => profile::LightKind::Point,
                     LightKind::Spot => profile::LightKind::Spot,
@@ -48,14 +52,17 @@ pub(super) fn read<'a, 'data: 'a>(
                     LightKind::Ambient => profile::LightKind::Ambient,
                     LightKind::Unknown(value) => profile::LightKind::Unknown(i32::from(value)),
                 },
-                color: Animated::constant(rgba(row.color).map(|value| f32::from(value) / 255.)),
-                intensity: Animated::constant(row.intensity),
+                color: builder.add_value(rgba(row.color).map(|value| f32::from(value) / 255.)),
+                intensity: builder.add_value(row.intensity),
                 use_attenuation: row.use_attenuation != 0,
                 attenuation: [row.attenuation_start, row.attenuation_end],
                 controls: u32::from_le_bytes([row.padding[0], row.padding[1], 0, 0]).into(),
-                ..Default::default()
-            })),
-        )?;
+                cone: [0.; 2],
+                modern: None,
+                directional_terms: None,
+            }));
+            builder.add_feature(node, payload)
+        }?;
         ids.lights.push(feature_id);
     }
     for chunk in source.common_chunks() {
@@ -63,8 +70,10 @@ pub(super) fn read<'a, 'data: 'a>(
             for row in rows.iter() {
                 let row =
                     row.map_err(|error| Error::new("world.modern_light", error.to_string()))?;
-                let mut node = Node::named(format!("Modern light {}", row.light_index));
-                node.transform.translation = row.position;
+                let node = builder.new_node(format!("Modern light {}", row.light_index));
+                builder
+                    .values_mut()
+                    .set(node.transform.translation, row.position)?;
                 let id = builder.add_node(node)?;
                 let cookie = if row.cookie_file_id == 0 {
                     None
@@ -81,18 +90,17 @@ pub(super) fn read<'a, 'data: 'a>(
                 let mut flags = row.flags;
                 flags.set_blend_colors(false);
                 flags.set_cast_shadows(false);
-                let feature_id = builder.add_feature(
-                    id,
-                    profile::Node::Light(Box::new(profile::Light {
+                let feature_id = {
+                    let node = id;
+                    let payload = profile::Node::Light(Box::new(profile::Light {
                         kind: match row.kind {
                             NewLightKind::Point => profile::LightKind::Point,
                             NewLightKind::Spot => profile::LightKind::Spot,
                             NewLightKind::Unknown(value) => profile::LightKind::Unknown(value),
                         },
-                        color: Animated::constant(
-                            rgba(row.inner_color).map(|value| f32::from(value) / 255.),
-                        ),
-                        intensity: Animated::constant(row.intensity),
+                        color: builder
+                            .add_value(rgba(row.inner_color).map(|value| f32::from(value) / 255.)),
+                        intensity: builder.add_value(row.intensity),
                         use_attenuation: true,
                         attenuation: [row.attenuation_start, row.attenuation_end],
                         cone: [row.inner_angle, row.outer_angle],
@@ -139,8 +147,9 @@ pub(super) fn read<'a, 'data: 'a>(
                             trailing_controls: row.unused,
                         }),
                         directional_terms: None,
-                    })),
-                )?;
+                    }));
+                    builder.add_feature(node, payload)
+                }?;
                 ids.new_lights.push(feature_id);
             }
         }
@@ -208,10 +217,16 @@ pub(super) fn read<'a, 'data: 'a>(
                         .map_err(|error| Error::new("world.doodad", error.to_string()))?;
                     ImageResource::Path(Cow::Borrowed(bytes))
                 };
-                let mut node = Node::named(format!("Doodad {ordinal}"));
-                node.transform.translation = row.position;
-                node.transform.rotation = Quaternion(row.rotation);
-                node.transform.scale = [row.scale; 3];
+                let node = builder.new_node(format!("Doodad {ordinal}"));
+                builder
+                    .values_mut()
+                    .set(node.transform.translation, row.position)?;
+                builder
+                    .values_mut()
+                    .set(node.transform.rotation, Quaternion(row.rotation))?;
+                builder
+                    .values_mut()
+                    .set(node.transform.scale, [row.scale; 3])?;
                 let id = builder.add_node(node)?;
                 let flags = row.name_and_flags.flags();
                 let light = if flags.has_light_reference() {

@@ -1,7 +1,6 @@
 //! Native Warcraft III export planning over independent logical models.
 use super::encode_animation::{unsigned_frame, Encoder};
 use crate::model::conversion::{Context, Error, ExportOptions, Plan};
-use crate::model::formats::mdlx::animation::Track;
 use crate::model::formats::mdlx::mdx::FixedText;
 use crate::model::formats::mdlx::scene::{Node as NativeNode, NodeFlags};
 use crate::model::formats::mdlx::{
@@ -197,28 +196,25 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
                 }
             }
         }
-        if !source.visible {
+        if !encoder.constant(source.visible) {
             encoder.context.unsupported(
                 "node.visible",
                 "generic Warcraft III hierarchy nodes have no static hidden flag",
             )?;
         }
-        node.translation = encoder.track(&id.translation(), Ok, "node.translation")?;
-        node.rotation = encoder.track(
-            &id.rotation(),
+        node.translation = encoder.optional(
+            source.transform.translation,
+            Ok,
+            [0.; 3],
+            "node.translation",
+        )?;
+        node.rotation = encoder.optional(
+            source.transform.rotation,
             |value: Quaternion| Ok(value.components()),
+            Quaternion::default().components(),
             "node.rotation",
         )?;
-        node.scaling = encoder.track(&id.scale(), Ok, "node.scale")?;
-        if node.translation.is_none() && source.transform.translation != [0.; 3] {
-            node.translation = Some(Track::constant(source.transform.translation));
-        }
-        if node.rotation.is_none() && source.transform.rotation != Quaternion::default() {
-            node.rotation = Some(Track::constant(source.transform.rotation.components()));
-        }
-        if node.scaling.is_none() && source.transform.scale != [1.; 3] {
-            node.scaling = Some(Track::constant(source.transform.scale));
-        }
+        node.scaling = encoder.optional(source.transform.scale, Ok, [1.; 3], "node.scale")?;
         pivots.push(source.transform.pivot);
         nodes.insert(id, node);
     }

@@ -243,6 +243,7 @@ pub(super) fn write(
 
 #[cfg(test)]
 mod tests {
+
     use super::{vector, Context};
     use crate::model::conversion::ExportOptions;
     use crate::model::formats::diablo::d3::records::FatVertex;

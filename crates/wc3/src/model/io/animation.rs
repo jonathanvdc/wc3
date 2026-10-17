@@ -1,6 +1,6 @@
 //! Curve restrictions shared by native clocks with bounded unsigned timestamps.
 use super::Error;
-use crate::model::profiles::Profile;
+use crate::model::Animatable;
 use crate::model::{Curve, CurveValue, Interpolation, Quaternion, Time, Track};
 
 #[derive(Clone)]
@@ -18,7 +18,7 @@ struct RawTrack {
 }
 
 /// Floating-point channel components supported by exact curve restriction.
-pub trait FloatValue: CurveValue {
+pub trait FloatValue: CurveValue + Animatable {
     /// Whether component interpolation must honor quaternion rotation semantics.
     const IS_ROTATION: bool = false;
     /// Reads the scalar components in their authored order.
@@ -39,7 +39,10 @@ impl FloatValue for f32 {
         }
     }
 }
-impl<const N: usize> FloatValue for [f32; N] {
+impl<const N: usize> FloatValue for [f32; N]
+where
+    [f32; N]: Animatable,
+{
     /// Reads the scalar components in their authored order.
     fn components(&self) -> Vec<f32> {
         self.to_vec()
@@ -63,11 +66,11 @@ impl FloatValue for Quaternion {
     }
 }
 /// Restricts a typed floating-point track without resampling its spline segments.
-pub fn crop<'a, T: FloatValue + 'a, P: Profile>(
-    track: &Track<'a, T, P>,
+pub fn crop<'a, T: FloatValue + 'a>(
+    track: &Track<'a, T>,
     start: Time,
     end: Time,
-) -> Result<Track<'a, T, P>, Error> {
+) -> Result<Track<'a, T>, Error> {
     if track.curve.uses_spherical_controls() {
         let times = track.curve.times();
         if start > end {
@@ -110,7 +113,7 @@ pub fn crop<'a, T: FloatValue + 'a, P: Profile>(
         )?
         .with_spherical_controls(true)?;
         return Ok(Track {
-            target: track.target.clone(),
+            target: track.target,
             curve,
             clock: track.clock,
         });
@@ -178,7 +181,7 @@ pub fn crop<'a, T: FloatValue + 'a, P: Profile>(
         Curve::from_samples(times, values, restricted.interpolation)?
     };
     Ok(Track {
-        target: track.target.clone(),
+        target: track.target,
         curve,
         clock: track.clock,
     })

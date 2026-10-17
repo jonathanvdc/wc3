@@ -1,5 +1,6 @@
 //! Exact checked projections of complete owner payloads.
 use super::Profile;
+use crate::model::Values;
 use crate::model::{Error, PropertyPayload};
 mod m2;
 mod m3;
@@ -51,7 +52,8 @@ pub trait Narrows<Source: Profile>: Profile {
     /// Projects a surface without changing its meaning.
     fn surface<'a>(value: Source::Surface<'a>) -> Result<Self::Surface<'a>, Error>;
     /// Projects an attached feature without changing its meaning.
-    fn feature<'a>(value: Source::Feature<'a>) -> Result<Self::Feature<'a>, Error>;
+    fn feature<'a>(value: Source::Feature<'a>, values: &Values)
+        -> Result<Self::Feature<'a>, Error>;
     /// Projects node controls without changing meaning.
     fn node<'a>(value: Source::Node<'a>) -> Result<Self::Node<'a>, Error>;
     /// Projects mesh controls without changing meaning.
@@ -109,7 +111,7 @@ impl<P: Profile> Narrows<P> for P {
     fn surface<'a>(value: P::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
         Ok(value)
     }
-    fn feature<'a>(value: P::Feature<'a>) -> Result<Self::Feature<'a>, Error> {
+    fn feature<'a>(value: P::Feature<'a>, _values: &Values) -> Result<Self::Feature<'a>, Error> {
         Ok(value)
     }
     fn node<'a>(value: P::Node<'a>) -> Result<Self::Node<'a>, Error> {

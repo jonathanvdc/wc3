@@ -11,7 +11,7 @@ use crate::model::io::wmo::graph::draw::{
 use crate::model::io::{materialize, owned};
 use crate::model::profiles::wmo::{Group as LogicalGroup, Lighting, WorldSystem};
 use crate::model::profiles::Wmo;
-use crate::model::{MaterialId, Mesh, MeshInstance, ModelBuilder, Node, WmoGeometry};
+use crate::model::{MaterialId, Mesh, MeshInstance, ModelBuilder, WmoGeometry};
 use zerovec::ZeroVec;
 pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
     source: &'a Group<'_, D>,
@@ -183,7 +183,7 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
     mesh.name = super::relationships::name(root, source.header().name_offset)?;
     mesh.bounds = bounds([header.bounds_minimum, header.bounds_maximum]);
     let mesh_id = builder.add_mesh(mesh)?;
-    let node = builder.add_node(Node::named(format!("Group {} LOD {}", key.index, key.lod)))?;
+    let node = builder.add_named_node(format!("Group {} LOD {}", key.index, key.lod))?;
     let mut draws = Vec::new();
     let mut ordinal = 0usize;
     for chunk in source.chunks() {

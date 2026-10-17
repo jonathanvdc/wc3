@@ -51,14 +51,12 @@ fn additive_camera_keys_remain_exact_and_borrowed() {
         panic!("camera feature missing")
     };
     assert_eq!(camera.target, [30_000_000., 40., 50.]);
-    let property = camera.eye_offset.binding.as_ref().unwrap();
+    let property = camera.eye_offset;
     let curve = graph
         .timeline_channels()
         .iter()
         .find_map(|channel| match channel {
-            Channel::Vector3(track) if track.target.target() == property.target() => {
-                Some(&track.curve)
-            }
+            Channel::Vector3(track) if track.target == property => Some(&track.curve),
             _ => None,
         })
         .unwrap();
@@ -322,15 +320,9 @@ fn shared_uv_transform_links_are_scoped_and_rebuild_animation() {
     source.set_texture_animations([transform]);
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
-    let (id, material) = graph.materials().iter().next().unwrap();
+    let (_id, material) = graph.materials().iter().next().unwrap();
     let transform = &material.surface.layers[0].binding.coordinates.transform;
-    assert_eq!(
-        transform.translation.binding.as_ref().unwrap(),
-        &wc3::model::profiles::mdlx::properties::Layer(0)
-            .translation()
-            .bind(id)
-            .widen::<wc3::model::profiles::Universal>()
-    );
+    assert!(graph.is_animated(transform.translation));
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -550,12 +542,17 @@ fn skinned_geometry_placement_edits_cannot_silently_disappear() {
         .value;
     let anchor = asset.instances().iter().next().unwrap().1.node;
     let result = asset.edit(|builder| {
-        let mut node = builder.model().node(anchor).unwrap().clone();
-        node.transform.translation = [1., 0., 0.];
+        let node = builder.model().node(anchor).unwrap().clone();
+        builder
+            .values_mut()
+            .set(node.transform.translation, [1., 0., 0.])?;
         builder.set_node(anchor, node)
     });
     assert!(result.is_err());
-    assert_eq!(asset.node(anchor).unwrap().transform.translation, [0.; 3]);
+    assert_eq!(
+        asset.values()[asset.node(anchor).unwrap().transform.translation],
+        [0.; 3]
+    );
 }
 
 #[test]

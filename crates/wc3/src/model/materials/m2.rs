@@ -4,11 +4,12 @@ use super::state::{DepthState, Lighting, Operation, Rasterization};
 use crate::model::profiles::m2::properties::{Target, TextureUnitField};
 use crate::model::values::model::{MaterialFlags, TextureSource};
 use crate::model::{Animated, Error, Link, PropertyIdentityKey, PropertyPayload, ValidateLinks};
+use crate::model::{Construct, Values};
 use std::fmt::Debug;
 
 pub use crate::model::TextureTransform;
 /// Input-local legacy texture-frame playback.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct FrameSampling {
     /// Animated legacy texture frame selection.
     pub frame: Animated<u16>,
@@ -161,3 +162,14 @@ impl ValidateLinks for TextureSource {
 
 mod steps;
 pub use steps::*;
+
+impl Construct for TextureUnit {
+    fn construct(values: &mut Values) -> Self {
+        Self {
+            image: Default::default(),
+            coordinates: Construct::construct(values),
+            sampling: Construct::construct(values),
+            contribution: values.add(1.),
+        }
+    }
+}

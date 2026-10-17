@@ -3,7 +3,7 @@ use crate::animation_targets::AnimationTargets;
 use bevy::math::{Affine2, Mat2, Mat3, UVec4, Vec2, Vec4};
 use bevy::render::render_resource::ShaderType;
 use wc3::model::materials::m3::{Property, TextureLayer};
-use wc3::model::{ChannelValue, SampledAnimation};
+use wc3::model::{ChannelValue, SampledAnimation, ValueSample};
 
 pub(super) const ROLE_COUNT: usize = 15;
 #[derive(Clone, Copy, Debug, PartialEq, ShaderType)]
@@ -57,20 +57,13 @@ pub(crate) struct M3Animation {
     pub layers: [Option<TextureLayer>; ROLE_COUNT],
     pub weights: Vec<Property<f32>>,
 }
-fn value<T: ChannelValue>(property: &Property<T>, sample: Option<&SampledAnimation<'_, '_>>) -> T {
-    sample
-        .and_then(|sample| {
-            property
-                .binding
-                .as_ref()
-                .and_then(|binding| sample.property(binding))
-        })
-        .unwrap_or(property.initial)
+fn value<T: ChannelValue>(property: &Property<T>, sample: &impl ValueSample) -> T {
+    sample.animated(&property.value)
 }
 pub(super) fn layer_uniform(
     layer: &TextureLayer,
     route: u32,
-    sample: Option<&SampledAnimation<'_, '_>>,
+    sample: &impl ValueSample,
 ) -> LayerUniform {
     let binding = &layer.binding;
     let transform = &binding.coordinates.transform;
@@ -106,39 +99,25 @@ pub(super) fn animated_layer(
 ) -> Option<TextureLayer> {
     let c = &layer.binding.contribution;
     let t = &layer.binding.coordinates.transform;
-    let animated = targets.contains(&c.color.binding)
-        || targets.scalar_changes(c.map_alpha.initial, &c.map_alpha.binding)
-        || targets.scalar_changes(c.rgb_multiply.initial, &c.rgb_multiply.binding)
-        || targets.scalar_changes(c.rgb_add.initial, &c.rgb_add.binding)
-        || targets.contains(&t.uv_offset.binding)
-        || targets.contains(&t.uv_angle.binding)
-        || targets.contains(&t.uv_tiling.binding);
-    if !animated {
-        return None;
-    }
-    let mut layer = layer.clone();
-    let c = &mut layer.binding.contribution;
-    targets.retain(&mut c.color.binding);
-    targets.retain_scalar_binding(c.map_alpha.initial, &mut c.map_alpha.binding);
-    targets.retain_scalar_binding(c.rgb_multiply.initial, &mut c.rgb_multiply.binding);
-    targets.retain_scalar_binding(c.rgb_add.initial, &mut c.rgb_add.binding);
-    let t = &mut layer.binding.coordinates.transform;
-    targets.retain(&mut t.uv_offset.binding);
-    targets.retain(&mut t.uv_angle.binding);
-    targets.retain(&mut t.uv_tiling.binding);
-    Some(layer)
+    let animated = targets.contains(&c.color.value)
+        || targets.scalar(&c.map_alpha.value)
+        || targets.scalar(&c.rgb_multiply.value)
+        || targets.scalar(&c.rgb_add.value)
+        || targets.contains(&t.uv_offset.value)
+        || targets.contains(&t.uv_angle.value)
+        || targets.contains(&t.uv_tiling.value);
+    animated.then(|| layer.clone())
 }
 
 impl M3Animation {
     pub(crate) fn is_animated(&self) -> bool {
-        self.layers.iter().any(Option::is_some)
-            || self.weights.iter().any(|weight| weight.binding.is_some())
+        self.layers.iter().any(Option::is_some) || !self.weights.is_empty()
     }
     pub(crate) fn apply(&self, sample: &SampledAnimation<'_, '_>, target: &mut M3Uniform) -> bool {
         let mut changed = false;
         for (slot, layer) in self.layers.iter().enumerate() {
             if let Some(layer) = layer {
-                let mut next = layer_uniform(layer, target.layers[slot].route.x, Some(sample));
+                let mut next = layer_uniform(layer, target.layers[slot].route.x, sample);
                 // Image resolution and role availability are compile-time choices.
                 next.flags.x = target.layers[slot].flags.x;
                 next.flags.y = target.layers[slot].flags.y;
@@ -150,7 +129,7 @@ impl M3Animation {
             }
         }
         for (index, weight) in self.weights.iter().take(8).enumerate() {
-            let next = value(weight, Some(sample));
+            let next = value(weight, sample);
             if target.normal_weights[index / 4][index % 4] != next {
                 target.normal_weights[index / 4][index % 4] = next;
                 changed = true;

@@ -10,7 +10,7 @@ pub(super) fn map_volumematerial<'a, E: Envelope>(
     Ok(surface::VolumeMaterialStep {
         blend_mode: surface::values::BlendMode::from_raw((r.blend_mode).raw()),
         falloff_type: surface::values::VolumeFalloff::from_raw((r.falloff_type).raw()),
-        density: anim(r.density),
+        density: anim(r.density, reader.builder.values_mut()),
         color_map: get_layer(source, reader, r.color_map)?,
         noise_map1: get_layer(source, reader, r.noise_map1)?,
         noise_map2: get_layer(source, reader, r.noise_map2)?,

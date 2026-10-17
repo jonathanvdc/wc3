@@ -866,12 +866,15 @@ fn skeleton_attachments_keep_parent_bones_and_use_the_afsa_activation_stream() {
     let imported = io::m2::import(&bundle, &semantic::conversion::ImportOptions::default())
         .unwrap()
         .value;
-    let (feature_id, feature) = imported.features().iter().find(|(_,feature)| matches!(&feature.payload,semantic::profiles::m2::ActorKind::Attachment(value) if value.identity == 6)).unwrap();
+    let (_feature_id, feature) = imported.features().iter().find(|(_,feature)| matches!(&feature.payload,semantic::profiles::m2::ActorKind::Attachment(value) if value.identity == 6)).unwrap();
     let node = imported.node(feature.node).unwrap();
-    assert_eq!(node.transform.translation, [1., 2., 3.]);
+    assert_eq!(imported.values()[node.transform.translation], [1., 2., 3.]);
     assert_eq!(node.parent, Some(imported.nodes().iter().next().unwrap().0));
     let clip = imported.clips().iter().next().unwrap().0;
-    let property = semantic::profiles::m2::properties::attachment::ENABLED.bind(feature_id);
+    let semantic::profiles::m2::ActorKind::Attachment(attachment) = &feature.payload else {
+        panic!()
+    };
+    let property = attachment.visibility;
     let program = semantic::AnimationProgram::compile(&imported);
     for (seconds, expected) in [(0.25, true), (0.75, false)] {
         let sample = program
@@ -881,6 +884,6 @@ fn skeleton_attachments_keep_parent_bones_and_use_the_afsa_activation_stream() {
                 ..Default::default()
             })
             .unwrap();
-        assert_eq!(sample.property(&property), Some(expected));
+        assert_eq!(sample.override_value(&property), Some(expected));
     }
 }

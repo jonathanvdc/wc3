@@ -1,4 +1,5 @@
 use wc3::model::common::IntoZeroVec;
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 #[path = "mdlx/graph.rs"]
 mod graph;
 use std::borrow::Cow;
@@ -7,7 +8,7 @@ use wc3::model::{
     formats::mdlx::{self, mdl::Read as _, mdx::Write as _},
     io,
     profiles::{mdlx as profile, Mdlx, Universal},
-    Animated, Channel, Clock, Model,
+    Channel, Clock, Model,
 };
 fn source() -> mdlx::Document<'static, mdlx::V800> {
     mdlx::Document::decode_mdl(include_str!("../../fixtures/mdl/quad_model.mdl")).unwrap()
@@ -146,11 +147,14 @@ fn complete_native_surface_is_an_editable_logical_payload() {
     let mut imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     let (id, material) = graph.materials().iter().next().unwrap();
-    let mut material = material.surface.clone();
-    material.layers[0].opacity.default = 0.25;
+    let material = material.surface.clone();
+    let opacity = material.layers[0].opacity;
     imported
         .value
-        .edit(|builder| builder.set_material_surface(id, material))
+        .edit(|builder| {
+            builder.values_mut().set(opacity, 0.25)?;
+            builder.set_material_surface(id, material)
+        })
         .unwrap();
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
@@ -164,6 +168,7 @@ fn complete_native_surface_is_an_editable_logical_payload() {
 }
 #[test]
 fn complete_native_emitter_is_an_editable_logical_feature() {
+    let mut slot_values = SlotValues::default();
     let mut source = source();
     let mut emitter =
         mdlx::emitters::ParticleEmitter2::new(mdlx::scene::Node::new("Emitter", 1).unwrap());
@@ -181,10 +186,13 @@ fn complete_native_emitter_is_an_editable_logical_feature() {
     let profile::Node::AtlasParticles(emitter) = &mut feature else {
         unreachable!()
     };
-    emitter.emission.rate = Animated::constant(17.);
+    emitter.emission.rate = slot_values.add(17.);
     imported
         .value
-        .edit(|builder| builder.set_feature(id, feature))
+        .edit(|builder| {
+            builder.import_values(&slot_values)?;
+            builder.set_feature(id, feature)
+        })
         .unwrap();
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
@@ -203,6 +211,7 @@ fn complete_native_emitter_is_an_editable_logical_feature() {
 }
 #[test]
 fn unknown_blocks_are_rejected_or_dropped_before_authoring_edits() {
+    let mut slot_values = SlotValues::default();
     let mut source = source();
     source.chunks.push(mdlx::chunks::ModelChunk::Unknown(
         mdlx::chunks::UnknownChunk::new(mdlx::chunks::RawChunk::new(
@@ -216,7 +225,7 @@ fn unknown_blocks_are_rejected_or_dropped_before_authoring_edits() {
         &source,
         &ImportOptions {
             unknown: UnknownPolicy::Drop,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
     )
     .unwrap();

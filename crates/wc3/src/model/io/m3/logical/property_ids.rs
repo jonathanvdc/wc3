@@ -10,17 +10,15 @@ trait Collect {
 impl<T: Value + Clone> Collect for surface::Property<T> {
     fn collect(&self, bindings: &mut Bindings) {
         bindings.entries.entry(self.control.source_id).or_default();
-        if let Some(target) = &self.binding {
-            bindings.register(self.control.source_id, target.clone());
-            bindings.register_mode(target, self.control.interpolation);
-        }
+        bindings.register(self.control.source_id, self.value);
+        bindings.register_mode(&self.value, self.control.interpolation);
     }
 }
 impl<T: Value + Clone> Collect for surface::PropertyControl<T> {
     fn collect(&self, bindings: &mut Bindings) {
         bindings.entries.entry(self.control.source_id).or_default();
         if let Some(target) = &self.binding {
-            bindings.register(self.control.source_id, target.clone());
+            bindings.register(self.control.source_id, *target);
             bindings.register_mode(target, self.control.interpolation);
         }
     }
@@ -522,17 +520,15 @@ impl Collect for surface::Feature<'_> {
             Self::Event(_) => {}
             Self::Extent(value) => {
                 bindings.entries.entry(value.control.source_id).or_default();
-                bindings.register(value.control.source_id, value.minimum.clone());
-                bindings.register(value.control.source_id, value.maximum.clone());
-                bindings.register(value.control.source_id, value.radius.clone());
+                bindings.register(value.control.source_id, value.minimum);
+                bindings.register(value.control.source_id, value.maximum);
+                bindings.register(value.control.source_id, value.radius);
                 for target in [
-                    value.minimum.target(),
-                    value.maximum.target(),
-                    value.radius.target(),
+                    value.minimum.slot(),
+                    value.maximum.slot(),
+                    value.radius.slot(),
                 ] {
-                    bindings
-                        .modes
-                        .insert(target.clone(), value.control.interpolation);
+                    bindings.modes.insert(target, value.control.interpolation);
                 }
             }
 

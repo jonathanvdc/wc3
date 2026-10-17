@@ -1,10 +1,59 @@
 //! Structural and relationship checks before publishing a graph.
 use crate::model::profiles::{FeaturePayload, Profile};
+use crate::model::ValueSlot;
 use crate::model::{
     AppearanceSchema, BindingSchema as _, Clock, Error, GeometrySchema, Link, Model,
     PropertyIdentity, PropertyTarget, SharedClock, SystemPayload, ValidateLinks, VertexInfluences,
 };
 use std::collections::{BTreeSet, HashMap, HashSet};
+impl<P: Profile> Model<'_, P> {
+    /// Checks that native programs only write slots represented by their consuming definitions.
+    pub(crate) fn validate_animation_consumers(&self) -> Result<(), Error> {
+        let mut slots = HashSet::new();
+        let mut visit = |link| {
+            if let Link::Value(slot) = link {
+                slots.insert(slot);
+            }
+        };
+        for node in self.nodes.values() {
+            node.transform.translation.visit_links(&mut visit);
+            node.transform.rotation.visit_links(&mut visit);
+            node.transform.scale.visit_links(&mut visit);
+            node.visible.visit_links(&mut visit);
+            node.controls.visit_links(&mut visit);
+        }
+        for material in self.materials.values() {
+            material.surface.visit_links(&mut visit);
+        }
+        for feature in self.features.values() {
+            feature.payload.visit_links(&mut visit);
+        }
+        for system in self.systems.values() {
+            system.visit_links(&mut visit);
+        }
+        for mesh in self.meshes.values() {
+            mesh.controls.visit_links(&mut visit);
+            mesh.geometry.visit_links(&mut visit);
+        }
+        for slot in slots.clone() {
+            if let ValueSlot::Scalar(id) = slot {
+                if let Some(source) = self.values.boolean_source(id) {
+                    slots.insert(source.slot());
+                }
+            }
+        }
+        if self
+            .channels()
+            .any(|channel| !slots.contains(&channel.target()))
+        {
+            return Err(Error::new(
+                "animation.target",
+                "native output has no consuming field for an animated slot",
+            ));
+        }
+        Ok(())
+    }
+}
 impl<P: Profile> Model<'_, P> {
     /// Checks values, graph relationships, metadata, and owned resources.
     pub fn validate(&self) -> Result<(), Error> {
@@ -14,7 +63,7 @@ impl<P: Profile> Model<'_, P> {
             bounds.validate()?;
         }
         for (id, node) in self.nodes.iter() {
-            node.transform.validate()?;
+            node.transform.validate(&self.values)?;
             let mut ancestors = BTreeSet::new();
             ancestors.insert(id);
             let mut parent = node.parent;
@@ -65,6 +114,7 @@ impl<P: Profile> Model<'_, P> {
         let mut conflicting_types = false;
         let mut visit = |link| {
             missing |= match link {
+                Link::Value(slot) => !self.values.contains(slot),
                 Link::ImageResource(id) => !self.dependencies.images.contains_key(id),
                 Link::ModelResource(id) => !self.dependencies.models.contains_key(id),
                 Link::EffectResource(id) => !self.dependencies.effects.contains_key(id),
@@ -124,6 +174,7 @@ impl<P: Profile> Model<'_, P> {
                 Link::System(id) => !self.systems.contains_key(id),
             };
         };
+        self.values.visit_values(&mut visit);
         for value in self.dependencies.images.values() {
             value.visit_links(&mut visit);
         }
@@ -141,6 +192,10 @@ impl<P: Profile> Model<'_, P> {
         }
         for node in self.nodes.values() {
             node.parent.visit_links(&mut visit);
+            node.transform.translation.visit_links(&mut visit);
+            node.transform.rotation.visit_links(&mut visit);
+            node.transform.scale.visit_links(&mut visit);
+            node.visible.visit_links(&mut visit);
             node.controls.visit_links(&mut visit);
         }
         for clip in self.clips.values() {

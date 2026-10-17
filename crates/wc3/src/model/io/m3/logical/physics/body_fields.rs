@@ -5,6 +5,7 @@ use super::super::{
 };
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{records, Container, Envelope, Ref};
+use crate::model::Values;
 use crate::model::{
     profiles::m3::{values, Body, BodyParameters, DynamicState},
     NodeId,
@@ -45,6 +46,7 @@ pub(super) fn read<'view, E: Envelope>(
     reference: Ref<records::targets::RigidBody>,
     nodes: &[NodeId],
     context: &mut Context,
+    values: &mut Values,
 ) -> Result<Vec<Input<'view>>, Error> {
     if reference.is_empty() {
         return Ok(Vec::new());
@@ -92,7 +94,7 @@ pub(super) fn read<'view, E: Envelope>(
                 let dynamic =
                     Slot::<records::AnimationValue<u32>>::slot(r.dynamic_state).map(|state| {
                         DynamicState {
-                            state: anim(state),
+                            state: anim(state, values),
                             blend_out: Slot::<f32>::slot(r.dynamic_blend_out).unwrap_or_default(),
                         }
                     });

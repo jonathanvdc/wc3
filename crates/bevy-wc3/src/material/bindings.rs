@@ -153,6 +153,7 @@ impl AsBindGroup for ModelMaterialExtension {
 }
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use bevy::prelude::Assets;
     #[test]

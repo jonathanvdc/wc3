@@ -7,6 +7,7 @@ use crate::model::resources::{M2ImageResource, PathResource};
 use crate::model::Link;
 use crate::model::M2ResourceLocator;
 use crate::model::PropertyIdentityKey;
+use crate::model::Values;
 use crate::model::{
     Basis, Bounds, ClipControls, DrawControls, DrawLooks, Error, FeatureKind, IdentityBinding,
     LengthUnit, M2Geometry, MaterialSurface, MeshControls, Model, ModelMetadata, NodeControls,
@@ -44,6 +45,7 @@ impl Profile for M2 {
         super::texture::resources(model)
     }
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
+        model.validate_animation_consumers()?;
         if model.bounds().is_none() {
             return Err(Error::new(
                 "model.bounds",
@@ -161,8 +163,8 @@ impl Extends<M2> for Universal {
     fn surface<'a>(value: <M2 as Profile>::Surface<'a>) -> Self::Surface<'a> {
         MaterialSurface::from(value)
     }
-    fn feature<'a>(value: <M2 as Profile>::Feature<'a>) -> Self::Feature<'a> {
-        value.into()
+    fn feature<'a>(value: <M2 as Profile>::Feature<'a>, values: &mut Values) -> Self::Feature<'a> {
+        crate::model::features::FromFeature::from_feature(value, values)
     }
     fn node<'a>(value: <M2 as Profile>::Node<'a>) -> Self::Node<'a> {
         value.map(NodeControls::M2)
@@ -228,20 +230,22 @@ impl<'a> FeatureVocabulary<'a> for M2 {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
-    use crate::model::{Controller, Node, Skin};
+    use crate::model::{Controller, Skin};
     use m2::{BoneControls, ModelMetadata};
 
     #[test]
     fn native_joint_palettes_require_declared_bone_nodes() {
         let mut invalid = Model::<M2>::builder("palette");
-        let helper = invalid.add_node(Node::named("helper")).unwrap();
+        let helper = invalid.add_named_node("helper").unwrap();
         invalid.add_skin(Skin::identity(vec![helper])).unwrap();
         assert!(invalid.finish().is_err());
         let mut valid = Model::<M2>::builder("palette");
-        let bone = valid
-            .add_node(Node::named("bone").with_controls(BoneControls::default()))
-            .unwrap();
+        let definition = valid
+            .new_node("bone")
+            .with_controls(BoneControls::default());
+        let bone = valid.add_node(definition).unwrap();
         valid.add_skin(Skin::identity(vec![bone])).unwrap();
         valid.finish().unwrap();
     }
@@ -249,7 +253,7 @@ mod tests {
     #[test]
     fn key_bone_categories_and_layers_are_checked_at_publication() {
         let mut invalid = Model::<M2>::builder("key bone");
-        let helper = invalid.add_node(Node::named("helper")).unwrap();
+        let helper = invalid.add_named_node("helper").unwrap();
         invalid.set_metadata(ModelMetadata {
             key_bone_lookup: vec![Some(helper)],
             ..ModelMetadata::default()

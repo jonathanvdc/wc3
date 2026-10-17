@@ -46,17 +46,20 @@ pub(super) fn read<'a, E: Envelope>(
                     source_id: r.bounds.animation_id,
                     reserved: r.bounds.reserved,
                 };
+                let initial = bounds(r.bounds.initial_value);
+                let minimum = builder.add_value(initial.minimum);
+                let maximum = builder.add_value(initial.maximum);
+                let radius = builder.add_value(initial.sphere_radius);
                 builder.set_feature(
                     feature,
                     surface::Feature::Extent(
                         (surface::ExtentBinding {
                             detail_level: Some(detail_level),
-                            initial: bounds(r.bounds.initial_value),
                             reset: bounds(r.bounds.null_value),
                             control,
-                            minimum: surface::properties::EXTENT_MINIMUM.bind(feature).widen(),
-                            maximum: surface::properties::EXTENT_MAXIMUM.bind(feature).widen(),
-                            radius: surface::properties::EXTENT_RADIUS.bind(feature).widen(),
+                            minimum,
+                            maximum,
+                            radius,
                         })
                         .into(),
                     ),

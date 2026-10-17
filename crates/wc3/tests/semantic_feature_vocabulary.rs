@@ -1,8 +1,9 @@
 use wc3::model::profiles::mdlx;
 use wc3::model::profiles::{Mdlx, Profile, Unavailable};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 use wc3::model::{
-    Animated, FeatureKind, FeatureSet, FeatureView, FeatureVocabulary, LightEmission, LightView,
-    Link, Model, Node, PropertyIdentityKey,
+    FeatureKind, FeatureSet, FeatureView, FeatureVocabulary, LightEmission, LightView, Link, Model,
+    PropertyIdentityKey,
 };
 use wc3::model::{FeatureSchema as _, ValidateLinks as _};
 #[derive(Clone, Debug)]
@@ -131,45 +132,64 @@ impl Profile for LightsOnly {
 }
 #[test]
 fn custom_profile_selects_shared_light_composition_and_inspection() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::<LightsOnly>::builder("lights only");
-    let node = builder.add_node(Node::named("light")).unwrap();
+    let node = builder.add_named_node("light").unwrap();
     let id = builder
         .add_feature(
             node,
             FeatureSet::Light(mdlx::Light {
                 diffuse: LightEmission {
-                    intensity: Animated::constant(3.5),
-                    ..Default::default()
+                    intensity: slot_values.add(3.5),
+                    ..SlotConstruct::construct(&mut slot_values)
                 },
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             }),
         )
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let FeatureView::Light(light) = model.feature(id).unwrap().payload.feature() else {
         panic!()
     };
     assert_eq!(
-        light.ambient_diffuse().unwrap().diffuse.intensity.default,
+        model.values()[light.ambient_diffuse().unwrap().diffuse.intensity],
         3.5
     );
 }
 #[test]
-fn custom_vocabulary_policy_rejects_unsupported_animated_destination() {
+fn custom_vocabulary_uses_profile_independent_slots() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::<LightsOnly>::builder("static lights only");
-    let node = builder.add_node(Node::named("light")).unwrap();
+    let node = builder.add_named_node("light").unwrap();
     let id = builder.reserve_feature(node);
+    let intensity = slot_values.add(1f32);
     builder
         .set_feature(
             id,
             FeatureSet::Light(mdlx::Light {
                 diffuse: LightEmission {
-                    intensity: Animated::new(1., mdlx::properties::light::INTENSITY.bind(id)),
-                    ..Default::default()
+                    intensity,
+                    ..SlotConstruct::construct(&mut slot_values)
                 },
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             }),
         )
         .unwrap();
-    assert!(builder.finish().is_err());
+    builder.import_values(&slot_values).unwrap();
+    builder
+        .add_timeline_channel(wc3::model::Channel::Scalar(wc3::model::Track {
+            target: intensity,
+            clock: wc3::model::Clock::Timeline,
+            curve: wc3::model::Curve::step([wc3::model::Time::default()], [2.]).unwrap(),
+        }))
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let sample = model
+        .animation_sample(wc3::model::AnimationSample::default())
+        .unwrap();
+    assert_eq!(sample.animated(&intensity), 2.);
 }

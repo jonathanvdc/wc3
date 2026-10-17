@@ -3,14 +3,14 @@ use super::bindings::Bindings;
 use super::materials::{anim, read_error, string};
 use crate::model::conversion::Error;
 use crate::model::io::materialize;
+use crate::model::AnimatedTransform;
+use crate::model::{Animatable, Animated};
 use zerovec::ZeroVec;
 
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::m3::logical::GraphBuilder;
 use crate::model::ExplicitBinding;
-use crate::model::{
-    profiles::m3 as surface, Billboard, Node, NodeId, Property, Quaternion, Skin, Transform,
-};
+use crate::model::{profiles::m3 as surface, Billboard, NodeId, Quaternion, Skin, Transform};
 use native::Envelope;
 use std::array::from_fn;
 
@@ -18,7 +18,10 @@ pub(super) struct Skeleton<'a> {
     pub nodes: Vec<NodeId>,
     pub inverse_bind: ZeroVec<'a, [[f32; 4]; 4]>,
 }
-fn control<T>(value: surface::Property<T>, binding: Property<T>) -> surface::PropertyControl<T> {
+fn control<T: Animatable>(
+    value: surface::Property<T>,
+    binding: Animated<T>,
+) -> surface::PropertyControl<T> {
     surface::PropertyControl {
         reset: value.reset,
         control: value.control,
@@ -45,7 +48,7 @@ pub(super) fn read<'a, E: Envelope>(
             {
                 let bone = bone.map_err(read_error)?;
                 let id = nodes[index];
-                let mut node = Node::named(string(document, bone.name)?);
+                let mut node = builder.new_node(string(document, bone.name)?);
                 node.parent = if bone.parent_index == u16::MAX {
                     None
                 } else {
@@ -53,12 +56,15 @@ pub(super) fn read<'a, E: Envelope>(
                         Error::new("m3.bone.parent", "parent lies outside the skeleton")
                     })?)
                 };
-                node.transform = Transform {
-                    translation: bone.position.initial_value,
-                    rotation: Quaternion(bone.rotation.initial_value),
-                    scale: bone.scale.initial_value,
-                    ..Transform::default()
-                };
+                node.transform = AnimatedTransform::new(
+                    Transform {
+                        translation: bone.position.initial_value,
+                        rotation: Quaternion(bone.rotation.initial_value),
+                        scale: bone.scale.initial_value,
+                        ..Transform::default()
+                    },
+                    builder.values_mut(),
+                );
                 // Native zero-bit bones use ordinary parent-local TRS composition.
                 // The legacy low-bit names do not establish selective inheritance.
                 node.billboard = if bone.flags.billboard1() {
@@ -66,53 +72,50 @@ pub(super) fn read<'a, E: Envelope>(
                 } else {
                     Billboard::None
                 };
-                let rotation = anim(bone.rotation);
-                let mut batching = anim(bone.batching);
-                batching.binding = Some(surface::properties::BATCHING.bind(id).widen().into());
+                let rotation = anim(bone.rotation, builder.values_mut());
+                let batching = anim(bone.batching, builder.values_mut());
+
                 let payload = surface::BoneControls {
                     source_id: i64::from(bone.id),
                     extra_flags: surface::values::BoneFlags(bone.flags.bits() & !0x10),
                     reserved: bone.padding,
-                    position: control(anim(bone.position), id.translation()),
+                    position: control(
+                        anim(bone.position, builder.values_mut()),
+                        node.transform.translation,
+                    ),
                     rotation: control(
                         surface::Property {
-                            initial: Quaternion(rotation.initial),
+                            value: builder.add_value(Quaternion(
+                                *builder.model().values().get(rotation.value).unwrap(),
+                            )),
                             reset: Quaternion(rotation.reset),
                             control: rotation.control,
-                            binding: None,
                         },
-                        id.rotation(),
+                        node.transform.rotation,
                     ),
-                    scale: control(anim(bone.scale), id.scale()),
+                    scale: control(anim(bone.scale, builder.values_mut()), node.transform.scale),
                     batching,
                 };
                 bindings.register_mode(
-                    &id.translation(),
+                    &node.transform.translation,
                     surface::values::Interpolation::from_raw(bone.position.interpolation.raw()),
                 );
                 bindings.register_mode(
-                    &id.rotation(),
+                    &node.transform.rotation,
                     surface::values::Interpolation::from_raw(bone.rotation.interpolation.raw()),
                 );
                 bindings.register_mode(
-                    &id.scale(),
+                    &node.transform.scale,
                     surface::values::Interpolation::from_raw(bone.scale.interpolation.raw()),
                 );
                 bindings.register_mode(
-                    payload.batching.binding.as_ref().expect("batching binding"),
+                    &payload.batching.value,
                     surface::values::Interpolation::from_raw(bone.batching.interpolation.raw()),
                 );
-                bindings.register(bone.position.animation_id, id.translation());
-                bindings.register(bone.rotation.animation_id, id.rotation());
-                bindings.register(bone.scale.animation_id, id.scale());
-                bindings.register(
-                    bone.batching.animation_id,
-                    payload
-                        .batching
-                        .binding
-                        .clone()
-                        .expect("registered batching destination"),
-                );
+                bindings.register(bone.position.animation_id, node.transform.translation);
+                bindings.register(bone.rotation.animation_id, node.transform.rotation);
+                bindings.register(bone.scale.animation_id, node.transform.scale);
+                bindings.register(bone.batching.animation_id, payload.batching.value);
                 node.controls = payload.into();
                 builder.set_node(id, node)?;
             }

@@ -3,6 +3,7 @@ use super::super::animation::AnimationIds;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::m3::logical::Graph;
+use crate::model::Animatable;
 use crate::model::PathResource;
 use crate::model::{profiles::m3 as surface, ImageResourceId, MaterialId};
 use native::{Envelope, Ref};
@@ -64,15 +65,14 @@ fn append<E: Envelope, T: native::Record + native::Write<E> + native::RecordLayo
         .map_err(|e| Error::new("m3.write", e.to_string()))?;
     Ok(Ref::from_section(count, id.index()))
 }
-fn native_anim<T: Clone>(r: &surface::Property<T>, ids: &AnimationIds) -> nr::AnimationValue<T> {
+fn native_anim<T: Animatable + Clone>(
+    r: &surface::Property<T>,
+    ids: &AnimationIds,
+) -> nr::AnimationValue<T> {
     let mut interpolation = r.control.interpolation;
     let mut flags = r.control.flags.bits();
     let mut id = r.control.source_id;
-    if let Some(mapped) = r
-        .binding
-        .as_ref()
-        .and_then(|binding| ids.get(binding.target()))
-    {
+    if let Some(mapped) = ids.get(&r.value.slot()) {
         id = mapped.id;
         interpolation = mapped.interpolation;
         if mapped.keyed {
@@ -83,8 +83,8 @@ fn native_anim<T: Clone>(r: &surface::Property<T>, ids: &AnimationIds) -> nr::An
         interpolation: nr::Interpolation::from_raw(interpolation.raw()),
         flags: nr::AnimationFlags(flags),
         animation_id: id,
-        initial_value: r.initial.clone(),
-        null_value: r.reset.clone(),
+        initial_value: *ids.values.get(r.value).expect("validated slot"),
+        null_value: r.reset,
         reserved: r.control.reserved,
     }
 }
@@ -92,7 +92,14 @@ fn native_color<E: Envelope>(
     r: &surface::Property<[f32; 4]>,
     writer: &mut Writer<'_, '_, '_, '_, E>,
 ) -> Result<nr::AnimationValue<[u8; 4]>, Error> {
-    let initial = quantize_color(r.initial, writer.context)?;
+    let initial = quantize_color(
+        *writer
+            .animation_ids
+            .values
+            .get(r.value)
+            .expect("validated slot"),
+        writer.context,
+    )?;
     let reset = quantize_color(r.reset, writer.context)?;
     let value = native_anim(r, writer.animation_ids);
     Ok(nr::AnimationValue {

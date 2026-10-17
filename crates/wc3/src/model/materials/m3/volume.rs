@@ -3,9 +3,10 @@ use super::{Property, TextureLayer};
 use crate::model::values::programmed::{
     BlendMode, VolumeCameraMode, VolumeFalloff, VolumeFlags, VolumeNoiseFlags,
 };
+use crate::model::Construct;
 
 /// Editable M3 VolumeMaterialStep values.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct VolumeMaterialStep {
     /// Selects the behavior used for alpha blend mode.
     pub blend_mode: BlendMode,
@@ -26,7 +27,7 @@ pub struct VolumeMaterialStep {
 }
 
 /// Editable M3 VolumeNoiseMaterialStep values.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct VolumeNoiseMaterialStep {
     /// Selects the behavior used for density falloff type.
     pub falloff_type: VolumeFalloff,

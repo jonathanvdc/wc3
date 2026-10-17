@@ -1,7 +1,8 @@
 use wc3::model::common::{IntoZeroVec, ZeroVec};
 use wc3::model::profiles::diablo::d3::{self, Geometry, NodeRole, VertexExtras, VertexStreams, D3};
 use wc3::model::profiles::Universal;
-use wc3::model::{Mesh, Model, Node, SnoNamespace, SnoResource};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Mesh, Model, SnoNamespace, SnoResource};
 
 fn triangle<'a>(positions: &'a [[f32; 3]]) -> Geometry<'a> {
     Geometry::new(
@@ -29,6 +30,7 @@ fn triangle<'a>(positions: &'a [[f32; 3]]) -> Geometry<'a> {
 
 #[test]
 fn widening_and_narrowing_preserve_geometry_identity_and_borrowed_arrays() {
+    let mut slot_values = SlotValues::default();
     let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
     let mut builder = Model::<D3>::builder("triangle");
     let material = builder
@@ -45,11 +47,15 @@ fn widening_and_narrowing_preserve_geometry_identity_and_borrowed_arrays() {
         .add_mesh(
             Mesh::new(triangle(&positions)).with_controls(d3::MeshControls {
                 material_slot: Some(slot),
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             }),
         )
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let wider = model.widen::<Universal>();
     assert_eq!(wider.mesh(id).unwrap().positions().to_vec(), positions);
     let restored = wider.try_narrow::<D3>().unwrap();
@@ -81,6 +87,7 @@ fn independent_binormals_and_auxiliary_colors_are_validated() {
 
 #[test]
 fn source_namespaces_do_not_alias_and_profiles_require_their_game() {
+    let slot_values = SlotValues::default();
     let d3 = SnoResource::Sno {
         namespace: SnoNamespace::Diablo3,
         group: 44,
@@ -94,21 +101,34 @@ fn source_namespaces_do_not_alias_and_profiles_require_their_game() {
     assert_ne!(d3, d4);
     let mut builder = Model::<D3>::builder("wrong game");
     let _resource = builder.add_image_resource(d4);
-    assert!(builder.finish().is_err());
+    assert!({
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .is_err());
 }
 
 #[test]
 fn nonuniform_bone_transforms_fail_checked_publication() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::<D3>::builder("bone");
-    let mut node = Node::named("bone");
-    node.controls = NodeRole::Bone(Box::default());
-    node.transform.scale = [1., 2., 1.];
+    let mut node = builder.new_node("bone");
+    node.controls = NodeRole::Bone(Box::new(SlotConstruct::construct(&mut slot_values)));
+    builder
+        .values_mut()
+        .set(node.transform.scale, [1., 2., 1.])
+        .unwrap();
     builder.add_node(node).unwrap();
-    assert!(builder.finish().is_err());
+    assert!({
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .is_err());
 }
 
 #[test]
 fn d4_resource_publication_requires_the_correct_game_namespace() {
+    let slot_values = SlotValues::default();
     use wc3::model::profiles::D4;
     for (namespace, valid) in [
         (SnoNamespace::Diablo4, true),
@@ -120,12 +140,20 @@ fn d4_resource_publication_requires_the_correct_game_namespace() {
             group: 44,
             id: 12,
         });
-        assert_eq!(builder.finish().is_ok(), valid);
+        assert_eq!(
+            {
+                builder.import_values(&slot_values).unwrap();
+                builder.finish()
+            }
+            .is_ok(),
+            valid
+        );
     }
 }
 
 #[test]
 fn d4_chunks_and_look_hashes_have_model_scoped_ownership() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::profiles::diablo::d4::{self, Chunk, D4};
     use wc3::model::GeometryData;
     let mut foreign = d4::ModelMetadata::default();
@@ -138,10 +166,14 @@ fn d4_chunks_and_look_hashes_have_model_scoped_ownership() {
     builder
         .add_mesh(Mesh::new(geometry).with_controls(d4::MeshControls {
             chunk: Some(foreign_id),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         }))
         .unwrap();
-    assert!(builder.finish().is_err());
+    assert!({
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .is_err());
 
     let mut a = d4::Appearance::default();
     let slot_a = a.add_slot(d4::Slot::new(1, 0, 0));

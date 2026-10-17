@@ -1,8 +1,8 @@
 //! Typed curves and property destinations, independent of file clocks and channel numbers.
-use std::any::TypeId;
+
 /// Resettable values with authored sampling controls.
 pub mod programmed;
-use crate::model::profiles::{Extends, Narrows, Profile, Universal};
+use crate::model::profiles::{Profile, Universal};
 use crate::model::{ClipId, ClockId, Error, EventId, FeatureId, NodeId, Quaternion, Texture};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -51,41 +51,9 @@ pub enum Interpolation {
 }
 pub mod properties;
 pub use properties::*;
-mod bindings;
-pub use bindings::*;
+mod slots;
+pub use slots::*;
 
-/// Rest value and optional binding to a typed animated property.
-#[derive(Clone, Debug)]
-pub struct Animated<T: AnimatedValue, P: Profile = Universal> {
-    /// Value when no animation overrides this property.
-    pub default: T,
-    /// Optional typed read binding.
-    pub binding: Option<Binding<T, P>>,
-}
-impl<T: AnimatedValue, P: Profile> Animated<T, P> {
-    /// An unanimated value.
-    pub fn constant(default: T) -> Self {
-        Self {
-            default,
-            binding: None,
-        }
-    }
-    /// Binds a rest value to its animation destination.
-    pub fn new<Q: Profile>(default: T, property: Property<T, Q>) -> Self
-    where
-        P: Extends<Q>,
-    {
-        Self {
-            default,
-            binding: Some(property.widen::<P>().into()),
-        }
-    }
-}
-impl<T: AnimatedValue + Default, P: Profile> Default for Animated<T, P> {
-    fn default() -> Self {
-        Self::constant(T::default())
-    }
-}
 /// Clock used to evaluate a track.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Clock {
@@ -105,7 +73,7 @@ pub struct Controller<'a, P: Profile = Universal> {
     /// Controller display name.
     pub name: Cow<'a, str>,
     /// Curves owned by this programme, rather than duplicated by playback clips.
-    pub channels: Vec<Channel<'a, P>>,
+    pub channels: Vec<Channel<'a>>,
     /// Event occurrences owned by this programme.
     pub events: BTreeMap<EventId, Event<'a>>,
     /// Evaluation priority.
@@ -127,58 +95,53 @@ impl<P: Profile> Default for Controller<'_, P> {
 }
 /// One typed animation channel.
 #[derive(Clone, Debug)]
-pub struct Track<'a, T: CurveValue, P: Profile = Universal> {
+pub struct Track<'a, T: CurveValue + Animatable> {
     /// Typed animated destination.
-    pub target: Property<T, P>,
+    pub target: Animated<T>,
     /// Checked key data.
     pub curve: Curve<'a, T>,
     /// Evaluation clock.
     pub clock: Clock,
 }
-/// Heterogeneous typed channels in one profile's playback programme.
+/// Heterogeneous channels targeting typed value slots.
 ///
-/// Profile property vocabularies cannot be mixed implicitly:
+/// A channel cannot write a slot of another value type:
 /// ```compile_fail
-/// use wc3::model::{Channel, Clock, Curve, FeatureId, Time, Track};
-/// use wc3::model::profiles::{M2, mdlx::properties::light};
-/// fn invalid(feature: FeatureId) {
-///     let _: Channel<'static, M2> = Channel::Scalar(Track {
-///         target: light::INTENSITY.bind(feature),
-///         curve: Curve::step([Time::default()], [1f32]).unwrap(),
-///         clock: Clock::Timeline,
-///     });
+/// use wc3::model::{Animated, Clock, Curve, Track};
+/// fn invalid(target: Animated<bool>, curve: Curve<'static, f32>) -> Track<'static, f32> {
+///     Track { target, curve, clock: Clock::Clip }
 /// }
 /// ```
 #[derive(Clone, Debug)]
-pub enum Channel<'a, P: Profile = Universal> {
+pub enum Channel<'a> {
     /// Four unsigned integer components.
-    Unsigned4(Track<'a, [u32; 4], P>),
+    Unsigned4(Track<'a, [u32; 4]>),
     /// Four byte components.
-    Bytes4(Track<'a, [u8; 4], P>),
+    Bytes4(Track<'a, [u8; 4]>),
     /// Quaternion rotation, including angular interpolation for linear curves.
-    Rotation(Track<'a, Quaternion, P>),
+    Rotation(Track<'a, Quaternion>),
     /// Float scalar.
-    Scalar(Track<'a, f32, P>),
+    Scalar(Track<'a, f32>),
     /// Two float components.
-    Vector2(Track<'a, [f32; 2], P>),
+    Vector2(Track<'a, [f32; 2]>),
     /// Three float components.
-    Vector3(Track<'a, [f32; 3], P>),
+    Vector3(Track<'a, [f32; 3]>),
     /// Four float components.
-    Vector4(Track<'a, [f32; 4], P>),
+    Vector4(Track<'a, [f32; 4]>),
     /// Unsigned scalar.
-    Unsigned(Track<'a, u32, P>),
+    Unsigned(Track<'a, u32>),
     /// Signed scalar.
-    Signed(Track<'a, i32, P>),
+    Signed(Track<'a, i32>),
     /// Unsigned short.
-    Unsigned16(Track<'a, u16, P>),
+    Unsigned16(Track<'a, u16>),
     /// Byte scalar.
-    Byte(Track<'a, u8, P>),
+    Byte(Track<'a, u8>),
     /// Boolean.
-    Boolean(Track<'a, bool, P>),
+    Boolean(Track<'a, bool>),
     /// Texture resource.
-    Texture(Track<'a, Texture, P>),
+    Texture(Track<'a, Texture>),
     /// Optional texture selection.
-    OptionalTexture(Track<'a, Option<Texture>, P>),
+    OptionalTexture(Track<'a, Option<Texture>>),
 }
 /// A named playback interval with typed channels and event occurrences.
 #[derive(Clone, Debug)]
@@ -189,7 +152,7 @@ pub struct Clip<'a, P: Profile = Universal> {
     pub(crate) name: Cow<'a, str>,
     pub(crate) duration: Time,
     pub(crate) looping: bool,
-    pub(crate) channels: Vec<Channel<'a, P>>,
+    pub(crate) channels: Vec<Channel<'a>>,
     pub(crate) events: Vec<Event<'a>>,
 }
 impl<'a, P: Profile> Clip<'a, P> {
@@ -242,7 +205,7 @@ impl<'a, P: Profile> Clip<'a, P> {
         self.looping
     }
     /// Typed channel definitions.
-    pub fn channels(&self) -> &[Channel<'a, P>] {
+    pub fn channels(&self) -> &[Channel<'a>] {
         &self.channels
     }
     /// Event occurrences.
@@ -267,7 +230,7 @@ pub struct Event<'a> {
     pub payload: ZeroVec<'a, u8>,
 }
 
-impl<P: Profile> Channel<'_, P> {
+impl Channel<'_> {
     /// Clock on which this channel is evaluated.
     pub fn clock(&self) -> Clock {
         match self {
@@ -288,112 +251,23 @@ impl<P: Profile> Channel<'_, P> {
         }
     }
     /// Logical destination of this typed channel.
-    pub fn target(&self) -> &PropertyTarget<P> {
+    pub fn target(&self) -> ValueSlot {
         match self {
-            Self::Unsigned4(track) => track.target.target(),
-            Self::Bytes4(track) => track.target.target(),
-            Self::Rotation(track) => track.target.target(),
-            Self::Scalar(track) => track.target.target(),
-            Self::Vector2(track) => track.target.target(),
-            Self::Vector3(track) => track.target.target(),
-            Self::Vector4(track) => track.target.target(),
-            Self::Unsigned(track) => track.target.target(),
-            Self::Signed(track) => track.target.target(),
-            Self::Unsigned16(track) => track.target.target(),
-            Self::Byte(track) => track.target.target(),
-            Self::Boolean(track) => track.target.target(),
-            Self::Texture(track) => track.target.target(),
-            Self::OptionalTexture(track) => track.target.target(),
+            Self::Unsigned4(track) => track.target.slot(),
+            Self::Bytes4(track) => track.target.slot(),
+            Self::Rotation(track) => track.target.slot(),
+            Self::Scalar(track) => track.target.slot(),
+            Self::Vector2(track) => track.target.slot(),
+            Self::Vector3(track) => track.target.slot(),
+            Self::Vector4(track) => track.target.slot(),
+            Self::Unsigned(track) => track.target.slot(),
+            Self::Signed(track) => track.target.slot(),
+            Self::Unsigned16(track) => track.target.slot(),
+            Self::Byte(track) => track.target.slot(),
+            Self::Boolean(track) => track.target.slot(),
+            Self::Texture(track) => track.target.slot(),
+            Self::OptionalTexture(track) => track.target.slot(),
         }
-    }
-}
-
-impl<'a, T: CurveValue, P: Profile> Track<'a, T, P> {
-    fn map_profile<Q: Profile>(
-        self,
-        map: impl Fn(P::Property) -> Result<Q::Property, Error>,
-    ) -> Result<Track<'a, T, Q>, Error> {
-        Ok(Track {
-            target: Property::new(self.target.target().clone().map_profile(map)?),
-            curve: self.curve,
-            clock: self.clock,
-        })
-    }
-}
-impl<'a, P: Profile> Channel<'a, P> {
-    pub(crate) fn map_profile<Q: Profile>(
-        self,
-        map: impl Fn(P::Property) -> Result<Q::Property, Error> + Copy,
-    ) -> Result<Channel<'a, Q>, Error> {
-        Ok(match self {
-            Self::Unsigned4(track) => Channel::Unsigned4(track.map_profile(map)?),
-            Self::Bytes4(track) => Channel::Bytes4(track.map_profile(map)?),
-            Self::Rotation(track) => Channel::Rotation(track.map_profile(map)?),
-            Self::Scalar(track) => {
-                let track = track.map_profile(map)?;
-                if track.target.target().value_type() == Some(TypeId::of::<bool>()) {
-                    if track.curve.interpolation() != Interpolation::Step
-                        || track
-                            .curve
-                            .values()
-                            .iter()
-                            .any(|value| value != 0. && value != 1.)
-                    {
-                        return Err(Error::new(
-                            "socket.visibility",
-                            "boolean socket visibility requires binary step keys",
-                        ));
-                    }
-                    Channel::Boolean(Track {
-                        target: Property::new(track.target.target().clone()),
-                        curve: Curve::step(
-                            track.curve.times().clone(),
-                            track
-                                .curve
-                                .values()
-                                .iter()
-                                .map(|value| value == 1.)
-                                .collect::<Vec<_>>(),
-                        )?,
-                        clock: track.clock,
-                    })
-                } else {
-                    Channel::Scalar(track)
-                }
-            }
-            Self::Vector2(track) => Channel::Vector2(track.map_profile(map)?),
-            Self::Vector3(track) => Channel::Vector3(track.map_profile(map)?),
-            Self::Vector4(track) => Channel::Vector4(track.map_profile(map)?),
-            Self::Unsigned(track) => Channel::Unsigned(track.map_profile(map)?),
-            Self::Signed(track) => Channel::Signed(track.map_profile(map)?),
-            Self::Unsigned16(track) => Channel::Unsigned16(track.map_profile(map)?),
-            Self::Byte(track) => Channel::Byte(track.map_profile(map)?),
-            Self::Boolean(track) => Channel::Boolean(track.map_profile(map)?),
-            Self::Texture(track) => Channel::Texture(track.map_profile(map)?),
-            Self::OptionalTexture(track) => Channel::OptionalTexture(track.map_profile(map)?),
-        })
-    }
-    /// Embeds a typed programme in a containing vocabulary while sharing its curve arrays.
-    pub fn widen<Q: Extends<P>>(self) -> Channel<'a, Q> {
-        self.map_profile(|key| Ok(Q::property(key)))
-            .expect("infallible property embedding")
-    }
-    /// Projects a typed programme exactly, converting binary scalar step keys when required.
-    pub fn try_narrow<Q: Narrows<P>>(self) -> Result<Channel<'a, Q>, Error> {
-        self.map_profile(Q::property)
-    }
-}
-
-impl<T: AnimatedValue + PartialEq, P: Profile, Q: Profile> PartialEq<Animated<T, Q>>
-    for Animated<T, P>
-{
-    fn eq(&self, other: &Animated<T, Q>) -> bool {
-        self.default == other.default
-            && match (&self.binding, &other.binding) {
-                (None, None) => true,
-                (Some(a), Some(b)) => a.equivalent::<Q>(b),
-                _ => false,
-            }
     }
 }
 

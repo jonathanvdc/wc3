@@ -1,11 +1,11 @@
 use wc3::model::common::ZeroVec;
 use wc3::model::profiles::mdlx::properties::{light, Layer, LightField, Target as MdlxTarget};
-use wc3::model::profiles::{Mdlx, Profile, Universal};
+use wc3::model::profiles::{Mdlx, Universal};
 use wc3::model::{
-    AnimatedValue, BezierKeyframe, ContinuousDomain, Curve, CurveValue, HermiteKeyframe,
-    Interpolation, Material, Model, Node, OwnerId, Property, PropertyTarget, Quaternion,
-    TcbKeyframe, TcbParameters, Time, ValueKeyframe,
+    BezierKeyframe, ContinuousDomain, Curve, CurveValue, HermiteKeyframe, Interpolation, Material,
+    Model, OwnerId, PropertyTarget, Quaternion, TcbKeyframe, TcbParameters, Time, ValueKeyframe,
 };
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 use zerovec::ule::AsULE;
 
 fn time(seconds: f64) -> Time {
@@ -104,6 +104,7 @@ fn bezier_controls_and_tcb_parameters_keep_their_authored_domains() {
 
 #[test]
 fn constructors_check_order_cardinality_and_finite_controls() {
+    let mut slot_values = SlotValues::default();
     assert!(Curve::linear([time(1.), time(0.)], [0f32, 1.]).is_err());
     assert!(Curve::step([time(0.)], Vec::<bool>::new()).is_err());
     assert!(Curve::hermite([time(0.)], [1f32], Vec::<f32>::new(), [0.]).is_err());
@@ -113,7 +114,7 @@ fn constructors_check_order_cardinality_and_finite_controls() {
         [1f32],
         [TcbParameters {
             tension: f32::NAN,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         }]
     )
     .is_err());
@@ -146,8 +147,9 @@ fn spherical_keyframes_and_discrete_keys_select_their_shapes() {
 
 #[test]
 fn descriptors_preserve_structural_fields_and_typed_owner_identities() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::<Universal>::builder("properties");
-    let node = builder.add_node(Node::named("light")).unwrap();
+    let node = builder.add_named_node("light").unwrap();
     let feature = builder.reserve_feature(node);
     let intensity = light::INTENSITY.bind(feature);
     assert_eq!(
@@ -160,7 +162,7 @@ fn descriptors_preserve_structural_fields_and_typed_owner_identities() {
     let material = builder
         .add_material(Material {
             name: "".into(),
-            surface: Default::default(),
+            surface: SlotConstruct::construct(&mut slot_values),
         })
         .unwrap();
     let texture = Layer(2).texture_slot(3).bind(material);
@@ -183,9 +185,6 @@ impl AsULE for Probability {
     fn from_unaligned(value: Self::ULE) -> Self {
         Self(f32::from_unaligned(value))
     }
-}
-impl AnimatedValue for Probability {
-    type Binding<P: Profile> = Property<Self, P>;
 }
 impl CurveValue for Probability {
     type Domain = ContinuousDomain;

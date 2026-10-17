@@ -48,7 +48,9 @@ fn alpha_model<'a>(
     for (_, feature) in model.features() {
         if let crate::model::profiles::wmo::Node::Light(light) = &feature.payload {
             let node = model.node(feature.node).expect("validated light anchor");
-            if node.transform.rotation != Quaternion::default() || light.modern.is_some() {
+            if node.transform.defaults(model.values()).rotation != Quaternion::default()
+                || light.modern.is_some()
+            {
                 context.unsupported(
                     "world.light",
                     "historical monolithic light has no orientation or later light extension",

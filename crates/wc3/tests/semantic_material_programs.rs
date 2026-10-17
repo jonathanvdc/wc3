@@ -1,3 +1,4 @@
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 #[path = "support/materials.rs"]
 mod native_fixtures;
 use native_fixtures::m2::Material as M2Material;
@@ -10,6 +11,7 @@ use wc3::model::PropertyPayload;
 
 #[test]
 fn layered_projection_repeats_native_declarations_on_each_step() {
+    let mut slot_values = SlotValues::default();
     let original = LayeredSurface {
         priority_plane: -17,
         shader: "Shader_HD_DefaultUnit".into(),
@@ -18,8 +20,11 @@ fn layered_projection_repeats_native_declarations_on_each_step() {
         sort_near_z: true,
         sort_far_z: true,
         full_resolution: true,
-        layers: vec![Layer::default(), Layer::default()],
-        ..Default::default()
+        layers: vec![
+            Layer::construct(&mut slot_values),
+            Layer::construct(&mut slot_values),
+        ],
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let broad = MaterialSurface::try_from(original.clone()).unwrap();
     for step in &broad.steps {
@@ -42,7 +47,7 @@ fn layered_projection_repeats_native_declarations_on_each_step() {
     assert!(LayeredSurface::try_from(changed).is_err());
     assert!(MaterialSurface::try_from(LayeredSurface {
         priority_plane: 1,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     })
     .is_err());
     assert!(MaterialSurface::try_from(LayeredSurface::default())
@@ -53,10 +58,11 @@ fn layered_projection_repeats_native_declarations_on_each_step() {
 
 #[test]
 fn single_step_projection_preserves_shader_identity_and_native_state() {
+    let mut slot_values = SlotValues::default();
     let shader = M2Material {
         shader: 0xf123,
         label: "authored programme".into(),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let restored = M2Material::try_from(MaterialSurface::from(shader)).unwrap();
     assert_eq!(restored.shader, 0xf123);
@@ -66,7 +72,7 @@ fn single_step_projection_preserves_shader_identity_and_native_state() {
         shader: Some(0xffff1234),
         uv_scroll: [[0.2, -0.4], [0.5, 0.8]],
         legacy_controls: Some(0xfedcba98),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     world.state.rasterization.controls.exterior_lit = true;
     assert_eq!(
@@ -77,11 +83,12 @@ fn single_step_projection_preserves_shader_identity_and_native_state() {
 
 #[test]
 fn mixed_steps_are_valid_but_native_projection_cannot_drop_them() {
+    let mut slot_values = SlotValues::default();
     let program = MaterialSurface {
         steps: vec![
-            MaterialStep::Mdlx(Box::default()),
-            MaterialStep::M2(Box::default()),
-            MaterialStep::Wmo(Box::default()),
+            MaterialStep::Mdlx(Box::new(SlotConstruct::construct(&mut slot_values))),
+            MaterialStep::M2(Box::new(SlotConstruct::construct(&mut slot_values))),
+            MaterialStep::Wmo(Box::new(SlotConstruct::construct(&mut slot_values))),
         ],
     };
     program.validate().unwrap();
@@ -93,11 +100,12 @@ fn mixed_steps_are_valid_but_native_projection_cannot_drop_them() {
 
 #[test]
 fn native_single_step_projection_rejects_empty_and_repeated_steps() {
+    let mut slot_values = SlotValues::default();
     for steps in [
         vec![],
         vec![
-            MaterialStep::Wmo(Box::default()),
-            MaterialStep::Wmo(Box::default()),
+            MaterialStep::Wmo(Box::new(SlotConstruct::construct(&mut slot_values))),
+            MaterialStep::Wmo(Box::new(SlotConstruct::construct(&mut slot_values))),
         ],
     ] {
         let broad = MaterialSurface { steps };
@@ -108,11 +116,12 @@ fn native_single_step_projection_rejects_empty_and_repeated_steps() {
 
 #[test]
 fn property_selection_uses_program_ordinals_for_mdlx_and_m2() {
+    let mut slot_values = SlotValues::default();
     let mut program = MaterialSurface {
         steps: vec![
-            MaterialStep::Wmo(Box::default()),
-            MaterialStep::Mdlx(Box::default()),
-            MaterialStep::M2(Box::default()),
+            MaterialStep::Wmo(Box::new(SlotConstruct::construct(&mut slot_values))),
+            MaterialStep::Mdlx(Box::new(SlotConstruct::construct(&mut slot_values))),
+            MaterialStep::M2(Box::new(SlotConstruct::construct(&mut slot_values))),
         ],
     };
     let opacity = |index| {
@@ -130,7 +139,11 @@ fn property_selection_uses_program_ordinals_for_mdlx_and_m2() {
         .identity()
         .to_owned();
     assert!(program.supports_property(&model_opacity));
-    program.steps.push(MaterialStep::M2(Box::default()));
+    program
+        .steps
+        .push(MaterialStep::M2(Box::new(SlotConstruct::construct(
+            &mut slot_values,
+        ))));
     assert!(program.supports_property(&model_opacity));
 }
 
@@ -143,20 +156,13 @@ fn an_empty_program_does_not_require_a_default_step_type() {
 
 #[test]
 fn a_mixed_program_samples_each_shader_without_changing_step_order() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::profiles::Universal;
-    use wc3::model::{
-        Animated, AnimationSample, Channel, Clock, Curve, Material, Model, Time, Track,
-    };
+    use wc3::model::{AnimationSample, Channel, Clock, Curve, Material, Model, Time, Track};
     let mut draft = Model::<Universal>::builder("mixed step animation");
     let id = draft.reserve_material();
-    let layered = mdlx::properties::Layer(0)
-        .opacity()
-        .bind(id)
-        .widen::<Universal>();
-    let shader = m2::properties::MaterialStep(1)
-        .opacity()
-        .bind(id)
-        .widen::<Universal>();
+    let layered = slot_values.add(1f32);
+    let shader = slot_values.add(1f32);
     draft
         .set_material(
             id,
@@ -166,19 +172,19 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
                     steps: vec![
                         MaterialStep::Mdlx(Box::new(
                             Layer {
-                                opacity: Animated::new(1., layered.clone()),
-                                ..Default::default()
+                                opacity: layered,
+                                ..SlotConstruct::construct(&mut slot_values)
                             }
                             .into(),
                         )),
                         MaterialStep::M2(Box::new(
                             M2Material {
-                                opacity: Animated::new(1., shader.clone()),
-                                ..Default::default()
+                                opacity: shader,
+                                ..SlotConstruct::construct(&mut slot_values)
                             }
                             .into(),
                         )),
-                        MaterialStep::Wmo(Box::default()),
+                        MaterialStep::Wmo(Box::new(SlotConstruct::construct(&mut slot_values))),
                     ],
                 },
             },
@@ -197,66 +203,85 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
             }))
             .unwrap();
     }
-    let mut model = draft.finish().unwrap();
+    let mut model = {
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .unwrap();
     let sample = model
         .animation_sample(AnimationSample {
             timeline_time: Time::seconds(0.5).unwrap(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     let source = &model.material(id).unwrap().surface;
-    let frozen = source.sampled(&sample);
+    let frozen_values = sample.evaluate();
+    let frozen = source.clone();
     let MaterialStep::Mdlx(first) = &frozen.steps[0] else {
         panic!("layered")
     };
     let MaterialStep::M2(second) = &frozen.steps[1] else {
         panic!("model shader")
     };
-    assert_eq!(first.to_layer().opacity.default, 0.5);
-    assert_eq!(second.declaration().opacity.default, 0.75);
-    assert!(first.to_layer().opacity.binding.is_none());
-    assert!(second.declaration().opacity.binding.is_none());
+    assert_eq!(frozen_values[first.to_layer().opacity], 0.5);
+    assert_eq!(frozen_values[second.declaration().opacity], 0.75);
+    assert_eq!(first.to_layer().opacity, layered);
+    assert_eq!(second.declaration().opacity, shader);
     assert!(matches!(frozen.steps[2], MaterialStep::Wmo(_)));
     // Appending a step preserves the existing indexed animation targets.
     assert!(model
         .edit(|draft| {
-            let mut material = draft.model().material(id).unwrap().clone();
-            let program = &mut material.surface;
-            program.steps.push(MaterialStep::M2(Box::default()));
-            draft.set_material(id, material)
+            let edit_result = {
+                let mut material = draft.model().material(id).unwrap().clone();
+                let program = &mut material.surface;
+                program
+                    .steps
+                    .push(MaterialStep::M2(Box::new(SlotConstruct::construct(
+                        &mut slot_values,
+                    ))));
+                draft.set_material(id, material)
+            };
+            draft.import_values(&slot_values)?;
+            edit_result
         })
         .is_ok());
 }
 
 #[test]
 fn every_m3_shader_has_a_typed_step_and_exact_native_projection() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::m3::MaterialStep as M3MaterialStep;
     let native = [
-        M3MaterialStep::Standard(Box::default()),
-        M3MaterialStep::Displacement(Box::default()),
-        M3MaterialStep::Composite(Box::default()),
-        M3MaterialStep::Terrain(Box::default()),
-        M3MaterialStep::Volume(Box::default()),
-        M3MaterialStep::VolumeNoise(Box::default()),
-        M3MaterialStep::Hair(Box::default()),
-        M3MaterialStep::Creep(Box::default()),
-        M3MaterialStep::SplatTerrainBake(Box::default()),
-        M3MaterialStep::Reflection(Box::default()),
-        M3MaterialStep::LensFlare(Box::default()),
-        M3MaterialStep::DataDriven(Box::default()),
+        M3MaterialStep::Standard(Box::new(SlotConstruct::construct(&mut slot_values))),
+        M3MaterialStep::Displacement(Box::new(SlotConstruct::construct(&mut slot_values))),
+        M3MaterialStep::Composite(Box::new(SlotConstruct::construct(&mut slot_values))),
+        M3MaterialStep::Terrain(Box::new(SlotConstruct::construct(&mut slot_values))),
+        M3MaterialStep::Volume(Box::new(SlotConstruct::construct(&mut slot_values))),
+        M3MaterialStep::VolumeNoise(Box::new(SlotConstruct::construct(&mut slot_values))),
+        M3MaterialStep::Hair(Box::new(SlotConstruct::construct(&mut slot_values))),
+        M3MaterialStep::Creep(Box::new(SlotConstruct::construct(&mut slot_values))),
+        M3MaterialStep::SplatTerrainBake(Box::new(SlotConstruct::construct(&mut slot_values))),
+        M3MaterialStep::Reflection(Box::new(SlotConstruct::construct(&mut slot_values))),
+        M3MaterialStep::LensFlare(Box::new(SlotConstruct::construct(&mut slot_values))),
+        M3MaterialStep::DataDriven(Box::new(SlotConstruct::construct(&mut slot_values))),
     ];
     for original in native {
         let program = MaterialSurface::from(original.clone());
         assert_eq!(program.steps.len(), 1);
         assert_eq!(M3MaterialStep::try_from(program.clone()).unwrap(), original);
         let mut extended = program;
-        extended.steps.push(MaterialStep::Wmo(Box::default()));
+        extended
+            .steps
+            .push(MaterialStep::Wmo(Box::new(SlotConstruct::construct(
+                &mut slot_values,
+            ))));
         assert!(M3MaterialStep::try_from(extended).is_err());
     }
 }
 
 #[test]
 fn diablo3_keeps_shader_inputs_and_phases() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::diablo3::{MaterialStep as Material, RenderState};
     use wc3::model::materials::parameters::{OpaqueWord, ParameterEntry, ShaderTag};
     let mut original = Material::default();
@@ -266,21 +291,21 @@ fn diablo3_keeps_shader_inputs_and_phases() {
         ParameterEntry {
             key: ShaderTag(7),
             value: OpaqueWord(0xffffffff),
-            controls: Default::default(),
+            controls: SlotConstruct::construct(&mut slot_values),
         },
         ParameterEntry {
             key: ShaderTag(7),
             value: OpaqueWord(0x7fc00000),
-            controls: Default::default(),
+            controls: SlotConstruct::construct(&mut slot_values),
         },
     ];
     original.opaque_passes = vec![RenderState {
         effect_file: "opaque".into(),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     }];
     original.translucent_passes = vec![RenderState {
         effect_file: "translucent".into(),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     }];
     let program = MaterialSurface::from(original.clone());
     let MaterialStep::Diablo3(shader) = &program.steps[0] else {
@@ -294,19 +319,24 @@ fn diablo3_keeps_shader_inputs_and_phases() {
     assert_eq!(restored.uber.colors.diffuse, original.uber.colors.diffuse);
     assert_eq!(restored.shader_params, original.shader_params);
     let mut extended = program;
-    extended.steps.push(MaterialStep::Wmo(Box::default()));
+    extended
+        .steps
+        .push(MaterialStep::Wmo(Box::new(SlotConstruct::construct(
+            &mut slot_values,
+        ))));
     assert!(Material::try_from(extended).is_err());
 }
 
 #[test]
 fn unresolved_and_resolved_diablo4_programmes_project_exactly() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::profiles::diablo::d4::{Material, MaterialStep as D4MaterialStep};
     for steps in [
         vec![],
         vec![D4MaterialStep {
             shader_map: 197,
             value_set_override: -7,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         }],
     ] {
         let native = Material { steps };
@@ -318,37 +348,51 @@ fn unresolved_and_resolved_diablo4_programmes_project_exactly() {
             assert_eq!(shader.value_set_override, -7);
         }
         let mut extended = program;
-        extended.steps.push(MaterialStep::Wmo(Box::default()));
+        extended
+            .steps
+            .push(MaterialStep::Wmo(Box::new(SlotConstruct::construct(
+                &mut slot_values,
+            ))));
         assert!(Material::try_from(extended).is_err());
     }
 }
 
 #[test]
 fn unindexed_programmed_animation_fields_require_one_matching_step() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::profiles::m3::properties::{Field, FieldPath, Target};
     let key = Target::Field(FieldPath::root(Field::Material).child(Field::ParallaxHeight))
         .identity()
         .to_owned();
     let mut program = MaterialSurface {
         steps: vec![
-            MaterialStep::M3(m3::MaterialStep::Standard(Box::default())),
-            MaterialStep::M3(m3::MaterialStep::Composite(Box::default())),
-            MaterialStep::Wmo(Box::default()),
+            MaterialStep::M3(m3::MaterialStep::Standard(Box::new(
+                SlotConstruct::construct(&mut slot_values),
+            ))),
+            MaterialStep::M3(m3::MaterialStep::Composite(Box::new(
+                SlotConstruct::construct(&mut slot_values),
+            ))),
+            MaterialStep::Wmo(Box::new(SlotConstruct::construct(&mut slot_values))),
         ],
     };
     assert!(program.supports_property(&key));
     program
         .steps
-        .push(MaterialStep::M3(m3::MaterialStep::Volume(Box::default())));
+        .push(MaterialStep::M3(m3::MaterialStep::Volume(Box::new(
+            SlotConstruct::construct(&mut slot_values),
+        ))));
     assert!(program.supports_property(&key));
     program
         .steps
-        .push(MaterialStep::M3(m3::MaterialStep::Standard(Box::default())));
+        .push(MaterialStep::M3(m3::MaterialStep::Standard(Box::new(
+            SlotConstruct::construct(&mut slot_values),
+        ))));
     assert!(!program.supports_property(&key));
 }
 
 #[test]
 fn programmed_selectors_check_optional_inputs_leaves_and_collection_bounds() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::m3::{Property, StandardMaterialStep, TextureLayer};
     use wc3::model::profiles::m3::properties::{Field, FieldPath, Target};
     let root = FieldPath::root(Field::Material);
@@ -356,11 +400,11 @@ fn programmed_selectors_check_optional_inputs_leaves_and_collection_bounds() {
     let color = Target::Field(diffuse.child(Field::Color))
         .identity()
         .to_owned();
-    let mut shader = StandardMaterialStep::default();
+    let mut shader = StandardMaterialStep::construct(&mut slot_values);
     let step = MaterialStep::M3(m3::MaterialStep::Standard(Box::new(shader.clone())));
     assert!(!step.supports_property(&color, 0));
-    shader.diffuse = Some(TextureLayer::default());
-    shader.normals.weights = vec![Property::default(); 2];
+    shader.diffuse = Some(TextureLayer::construct(&mut slot_values));
+    shader.normals.weights = vec![Property::construct(&mut slot_values); 2];
     let step = MaterialStep::M3(m3::MaterialStep::Standard(Box::new(shader)));
     assert!(step.supports_property(&color, 0));
     assert!(!step.supports_property(&Target::Field(diffuse).identity().to_owned(), 0));
@@ -370,12 +414,15 @@ fn programmed_selectors_check_optional_inputs_leaves_and_collection_bounds() {
             .to_owned();
         assert_eq!(step.supports_property(&key, 0), index < 2);
     }
-    let composite = MaterialStep::M3(m3::MaterialStep::Composite(Box::default()));
+    let composite = MaterialStep::M3(m3::MaterialStep::Composite(Box::new(
+        SlotConstruct::construct(&mut slot_values),
+    )));
     assert!(!composite.supports_property(&color, 0));
 }
 
 #[test]
 fn wc3_shader_steps_interpret_selector_precedence_and_preserve_native_inputs() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::bindings::TextureBinding;
     use wc3::model::materials::mdlx::{MaterialStep as Wc3MaterialStep, TextureSlot};
     for (name, selector, expected) in [
@@ -392,9 +439,9 @@ fn wc3_shader_steps_interpret_selector_precedence_and_preserve_native_inputs() {
             shader: name.into(),
             layers: vec![Layer {
                 shader: selector,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             }],
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         };
         let surface = MaterialSurface::try_from(original.clone()).unwrap();
         let MaterialStep::Mdlx(step) = &surface.steps[0] else {
@@ -426,12 +473,12 @@ fn wc3_shader_steps_interpret_selector_precedence_and_preserve_native_inputs() {
                 textures: [2, 2, 97]
                     .map(|slot| TextureSlot {
                         slot,
-                        binding: TextureBinding::default(),
+                        binding: TextureBinding::construct(&mut slot_values),
                     })
                     .into(),
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             }],
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         };
         let surface = MaterialSurface::try_from(original.clone()).unwrap();
         let MaterialStep::Mdlx(step) = &surface.steps[0] else {
@@ -457,11 +504,13 @@ fn wc3_shader_steps_interpret_selector_precedence_and_preserve_native_inputs() {
 
 #[test]
 fn wc3_shader_variants_derive_native_selection_and_expose_shader_specific_properties() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::mdlx::{
         MaterialStep as Wc3MaterialStep, ReforgedDefaultMaterialStep,
     };
     use wc3::model::profiles::mdlx::properties::{LayerField, Target};
-    let mut step = Wc3MaterialStep::ReforgedDefault(ReforgedDefaultMaterialStep::default());
+    let mut step =
+        Wc3MaterialStep::ReforgedDefault(ReforgedDefaultMaterialStep::construct(&mut slot_values));
     assert_eq!(step.to_layer().shader, Some(1));
     let fresnel = Target::Layer {
         index: 0,
@@ -473,7 +522,7 @@ fn wc3_shader_variants_derive_native_selection_and_expose_shader_specific_proper
     let Wc3MaterialStep::ReforgedDefault(hd) = &mut step else {
         unreachable!()
     };
-    hd.fresnel = Some(Default::default());
+    hd.fresnel = Some(SlotConstruct::construct(&mut slot_values));
     assert!(step.supports_property(&fresnel, 0));
     let mut surface = MaterialSurface::default();
     surface.steps.push(MaterialStep::Mdlx(Box::new(step)));
@@ -481,23 +530,22 @@ fn wc3_shader_variants_derive_native_selection_and_expose_shader_specific_proper
     let native = LayeredSurface::try_from(surface).unwrap();
     assert!(native.shader.is_empty());
     assert_eq!(native.layers[0].shader, Some(1));
-    assert!(!Wc3MaterialStep::default().supports_property(&fresnel, 0));
+    assert!(!Wc3MaterialStep::construct(&mut slot_values).supports_property(&fresnel, 0));
 }
 
 #[test]
 fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassification() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::mdlx::{Fresnel, MaterialStep as Wc3MaterialStep};
     use wc3::model::profiles::Universal;
-    use wc3::model::{
-        Animated, AnimationSample, Channel, Clock, Curve, Material, Model, Time, Track,
-    };
+    use wc3::model::{AnimationSample, Channel, Clock, Curve, Material, Model, Time, Track};
     for selector in [1, 99] {
         let mut draft = Model::<Universal>::builder("shader inputs");
         let id = draft.reserve_material();
-        let target = mdlx::properties::Layer(0);
-        let opacity = target.opacity().bind(id).widen::<Universal>();
-        let gain = target.emissive_gain().bind(id).widen::<Universal>();
-        let fresnel = target.fresnel_opacity().bind(id).widen::<Universal>();
+        let _target = mdlx::properties::Layer(0);
+        let opacity = slot_values.add(1f32);
+        let gain = slot_values.add(1f32);
+        let fresnel = slot_values.add(1f32);
         draft
             .set_material(
                 id,
@@ -506,15 +554,15 @@ fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassificati
                     surface: MaterialSurface::try_from(LayeredSurface {
                         layers: vec![Layer {
                             shader: Some(selector),
-                            opacity: Animated::new(1., opacity.clone()),
-                            emissive_gain: Some(Animated::new(1., gain.clone())),
+                            opacity,
+                            emissive_gain: Some(gain),
                             fresnel: Some(Fresnel {
-                                opacity: Animated::new(1., fresnel.clone()),
-                                ..Default::default()
+                                opacity: fresnel,
+                                ..SlotConstruct::construct(&mut slot_values)
                             }),
-                            ..Default::default()
+                            ..SlotConstruct::construct(&mut slot_values)
                         }],
-                        ..Default::default()
+                        ..SlotConstruct::construct(&mut slot_values)
                     })
                     .unwrap(),
                 },
@@ -533,14 +581,19 @@ fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassificati
                 }))
                 .unwrap();
         }
-        let model = draft.finish().unwrap();
+        let model = {
+            draft.import_values(&slot_values).unwrap();
+            draft.finish()
+        }
+        .unwrap();
         let sample = model
             .animation_sample(AnimationSample {
                 timeline_time: Time::seconds(0.5).unwrap(),
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             })
             .unwrap();
-        let surface = model.material(id).unwrap().surface.sampled(&sample);
+        let frozen_values = sample.evaluate();
+        let surface = model.material(id).unwrap().surface.clone();
         let MaterialStep::Mdlx(step) = &surface.steps[0] else {
             unreachable!()
         };
@@ -553,29 +606,30 @@ fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassificati
             selector == 99
         );
         let layer = step.to_layer();
-        assert_eq!(layer.opacity.default, 0.5);
-        assert!(layer.opacity.binding.is_none());
+        assert_eq!(frozen_values[layer.opacity], 0.5);
+        assert_eq!(layer.opacity, opacity);
         let gain = layer.emissive_gain.unwrap();
-        assert_eq!(gain.default, 0.5);
-        assert!(gain.binding.is_none());
+        assert_eq!(frozen_values[gain], 0.5);
+        assert!(frozen_values.get(gain).is_some());
         let fresnel = layer.fresnel.unwrap().opacity;
-        assert_eq!(fresnel.default, 0.5);
-        assert!(fresnel.binding.is_none());
+        assert_eq!(frozen_values[fresnel], 0.5);
+        assert!(frozen_values.get(fresnel).is_some());
     }
 }
 
 #[test]
 fn wc3_known_steps_normalize_shader_spellings_and_mix_with_unresolved_steps() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::mdlx::MaterialStep as Wc3MaterialStep;
     let original = LayeredSurface {
         shader: "Shader_HD_DefaultUnit".into(),
         layers: [2, 1, 99]
             .map(|shader| Layer {
                 shader: Some(shader),
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             })
             .into(),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let surface = MaterialSurface::try_from(original.clone()).unwrap();
     let canonical = LayeredSurface::try_from(surface.clone()).unwrap();

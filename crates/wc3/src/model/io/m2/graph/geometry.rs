@@ -132,7 +132,7 @@ where
                 center: section.center_position,
                 sorting: section.sort_center.logical(),
             }))?;
-            let node = builder.add_node(Node::named(format!("mesh-{index}-{section_index}")))?;
+            let node = builder.add_named_node(format!("mesh-{index}-{section_index}"))?;
             let mut draws = Vec::new();
             let mut draw_materials = Vec::new();
             let mut batches: Vec<_> = profile
@@ -159,7 +159,7 @@ where
                     surface: profile::Material::default(),
                 })?;
                 let mut steps = Vec::new();
-                for (step_index, batch) in batches.into_iter().enumerate() {
+                for batch in batches.into_iter() {
                     let native_material = core
                         .materials
                         .get(batch.material_index as usize)
@@ -168,8 +168,8 @@ where
                         batch_flags: profile::values::BatchFlags::from_bits_retain(
                             batch.flags.bits(),
                         ),
-                        color: Animated::constant([1.; 3]),
-                        opacity: Animated::constant(1.),
+                        color: builder.add_value([1.; 3]),
+                        opacity: builder.add_value(1.),
                         state: PassState {
                             blend: profile::values::BlendMode::from_raw(
                                 native_material.blending_mode.raw(),
@@ -181,7 +181,7 @@ where
                             ),
                             ordering: batch.priority_plane,
                         },
-                        ..Default::default()
+                        ..builder.construct()
                     };
                     let mut textures_for_step = Vec::new();
                     let routes = coordinates::routes(batch.shader_id, batch.texture_count as usize);
@@ -216,11 +216,11 @@ where
                                     },
                                     |routes| routes[slot].source,
                                 ),
-                                transform: profile::TextureTransform::default(),
+                                transform: builder.construct(),
                             },
-                            contribution: Animated::constant(1.),
+                            contribution: builder.add_value(1.),
                             sampling: FrameSampling {
-                                frame: Animated::constant(0),
+                                frame: builder.add_value(0),
                             },
                         });
                     }
@@ -232,15 +232,8 @@ where
                     );
                     if batch.color_index >= 0 {
                         if let Some(color) = core.colors.get(batch.color_index as usize) {
-                            let rgb = profile::properties::MaterialStep(step_index)
-                                .color()
-                                .bind(material);
-                            let alpha = profile::properties::MaterialStep(step_index)
-                                .opacity()
-                                .bind(material);
-                            surface.declaration_mut().color.binding = Some(rgb.clone().widen());
-                            surface.declaration_mut().opacity.binding =
-                                Some(alpha.clone().widen().into());
+                            let rgb = surface.declaration().color;
+                            let alpha = surface.declaration().opacity;
                             for (seq, clip) in animation::sequences(clips) {
                                 let (start, _) = tables
                                     .sequences
@@ -252,7 +245,7 @@ where
                                     animation::insert(
                                         builder,
                                         clip,
-                                        Channel::Vector3(bind(c, g, rgb.clone(), clocks)?),
+                                        Channel::Vector3(bind(c, g, rgb, clocks)?),
                                     )?
                                 }
                                 if let Some((c, g)) =
@@ -263,7 +256,7 @@ where
                                     animation::insert(
                                         builder,
                                         clip,
-                                        Channel::Scalar(bind(c, g, alpha.clone(), clocks)?),
+                                        Channel::Scalar(bind(c, g, alpha, clocks)?),
                                     )?
                                 }
                             }
@@ -275,11 +268,7 @@ where
                             .get(batch.texture_weight_combo_index as usize + slot)
                             .and_then(|i| core.texture_weights.get(i as usize))
                         {
-                            let prop = profile::properties::TextureUnit(slot)
-                                .at_step(step_index)
-                                .weight()
-                                .bind(material);
-                            unit.contribution.binding = Some(prop.clone().widen().into());
+                            let prop = unit.contribution;
                             for (seq, clip) in animation::sequences(clips) {
                                 let (start, _) = tables
                                     .sequences
@@ -293,7 +282,7 @@ where
                                     animation::insert(
                                         builder,
                                         clip,
-                                        Channel::Scalar(bind(c, g, prop.clone(), clocks)?),
+                                        Channel::Scalar(bind(c, g, prop, clocks)?),
                                     )?
                                 }
                             }
@@ -316,31 +305,17 @@ where
                             .get(batch.texture_transform_combo_index as usize + transform_slot)
                             .and_then(|i| core.texture_transforms.get(i as usize))
                         {
-                            let tr = profile::properties::TextureUnit(slot)
-                                .at_step(step_index)
-                                .translation()
-                                .bind(material);
-                            let ro = profile::properties::TextureUnit(slot)
-                                .at_step(step_index)
-                                .rotation()
-                                .bind(material);
-                            let sc = profile::properties::TextureUnit(slot)
-                                .at_step(step_index)
-                                .scale()
-                                .bind(material);
-                            unit.coordinates.transform.translation.binding =
-                                Some(tr.clone().widen());
-                            unit.coordinates.transform.rotation.binding = Some(ro.clone().widen());
-                            unit.coordinates.transform.scale.binding = Some(sc.clone().widen());
+                            let tr = unit.coordinates.transform.translation;
+                            let ro = unit.coordinates.transform.rotation;
+                            let sc = unit.coordinates.transform.scale;
                             for (seq, clip) in animation::sequences(clips) {
                                 let (start, _) = tables
                                     .sequences
                                     .get(seq)
                                     .map_or((0, 0), |s| s.timing.window());
-                                for (prop, track) in [
-                                    (tr.clone(), &transform.translation),
-                                    (sc.clone(), &transform.scaling),
-                                ] {
+                                for (prop, track) in
+                                    [(tr, &transform.translation), (sc, &transform.scaling)]
+                                {
                                     if let Some((c, g)) =
                                         curve(source, track, &source.key, seq, start, |v| v)?
                                     {
@@ -362,7 +337,7 @@ where
                                     animation::insert(
                                         builder,
                                         clip,
-                                        Channel::Rotation(bind(c, g, ro.clone(), clocks)?),
+                                        Channel::Rotation(bind(c, g, ro, clocks)?),
                                     )?
                                 }
                             }
@@ -437,9 +412,10 @@ where
         let placement = model
             .node(instance.node)
             .ok_or_else(|| Error::new("m2.mesh", "missing placement"))?;
-        if placement.transform.translation != [0.; 3]
-            || placement.transform.rotation != semantic::Quaternion::default()
-            || placement.transform.scale != [1.; 3]
+        if placement.transform.defaults(model.values()).translation != [0.; 3]
+            || placement.transform.defaults(model.values()).rotation
+                != semantic::Quaternion::default()
+            || placement.transform.defaults(model.values()).scale != [1.; 3]
         {
             context.unsupported(
                 "m2.mesh.placement",

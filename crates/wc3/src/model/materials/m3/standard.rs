@@ -8,10 +8,11 @@ use crate::model::values::programmed::{
     AdditionalMaterialFlags, BlendMode, LayerBlendOp, MaterialClass, MaterialFlags, RttChannels,
     SpecularMode,
 };
+use crate::model::Construct;
 use crate::model::{Link, ValidateLinks};
 
 /// Editable M3 StandardMaterialStep values.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct StandardMaterialStep {
     /// Draw composition, rasterization controls, and authored priority.
     pub state: PassState<BlendMode, StandardRasterization, i32>,

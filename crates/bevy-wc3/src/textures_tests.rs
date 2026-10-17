@@ -3,10 +3,12 @@ use crate::material::compile_material_with_images;
 use crate::material::native_fixtures::wmo;
 use bevy::prelude::{Assets, Image};
 use wc3::model::materials::bindings::TextureBinding;
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 use wc3::model::{Material, MaterialSurface, ModelBuilder};
 
 #[test]
 fn m3_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("M3 layer samplers");
     let mut source = Texture::new(builder.add_image_resource(wc3::model::ImageResource::Path(
         "shared.dds".as_bytes().into(),
@@ -18,16 +20,20 @@ fn m3_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion() {
     let texture = source;
     let mut materials = Vec::new();
     for (wrap_u, wrap_v) in [(false, false), (true, false), (false, true), (true, true)] {
-        let mut layer = m3::TextureLayer::default();
+        let mut layer = m3::TextureLayer::construct(&mut slot_values);
         layer.binding.image = Some(texture.resource);
-        layer.binding.coordinates.transform.uv_tiling.initial = [1.; 2];
+        slot_values
+            .set(layer.binding.coordinates.transform.uv_tiling.value, [1.; 2])
+            .unwrap();
         layer.binding.coordinates.transform.uv_source_related = u32::MAX;
-        layer.binding.contribution.map_alpha.initial = 1.;
+        slot_values
+            .set(layer.binding.contribution.map_alpha.value, 1.)
+            .unwrap();
         layer.binding.sampling.flags.set_uv_wrap_x(wrap_u);
         layer.binding.sampling.flags.set_uv_wrap_y(wrap_v);
         let mut surface = m3::StandardMaterialStep {
             diffuse: Some(layer.clone()),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         };
         surface.normals.base = Some(layer.clone());
         surface.ambient_occlusion_layer = Some(layer);
@@ -52,7 +58,11 @@ fn m3_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion() {
             },
         ));
     }
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let mut assets = Assets::<Image>::default();
     let resolved = Arc::new(TextureImages::resolve(&model, |_| {
         Some(assets.add(Image::default()))
@@ -102,6 +112,7 @@ fn m3_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion() {
 
 #[test]
 fn world_surface_clamps_resolve_independent_variants_without_mutating_texture() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("world samplers");
     let mut texture = Texture::new(builder.add_image_resource(wc3::model::ImageResource::Path(
         "shared.png".as_bytes().into(),
@@ -112,7 +123,7 @@ fn world_surface_clamps_resolve_independent_variants_without_mutating_texture() 
     for clamp_u in [false, true, true] {
         let mut surface = wmo::Material {
             shader: Some(0),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         };
         surface.textures.push(TextureBinding {
             image: Some({
@@ -122,7 +133,7 @@ fn world_surface_clamps_resolve_independent_variants_without_mutating_texture() 
                 }
                 image
             }),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         });
         materials.push(
             builder
@@ -133,7 +144,11 @@ fn world_surface_clamps_resolve_independent_variants_without_mutating_texture() 
                 .unwrap(),
         );
     }
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let requests = texture_requests(&model);
     assert_eq!(
         requests
@@ -171,13 +186,14 @@ fn world_surface_clamps_resolve_independent_variants_without_mutating_texture() 
 
 #[test]
 fn native_world_clamp_authority_imports_without_texture_sampler_mutation() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::formats::wmo::{
         codec::Array, records::Material as NativeMaterial, root::RootChunk, Bundle, Classic, Root,
     };
     use wc3::model::{conversion::ImportOptions, io};
     let mut material = NativeMaterial::<Classic> {
         texture0: 42,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     material.flags.set_clamp_s(true);
     let mut root = Root::<Classic>::new();
@@ -211,15 +227,18 @@ fn native_world_clamp_authority_imports_without_texture_sampler_mutation() {
 
 #[test]
 fn image_requests_retain_native_input_metadata_for_replacement_selection() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::mdlx::{Layer, LayeredSurface};
-    use wc3::model::{Animated, TextureControls};
+    use wc3::model::TextureControls;
     let mut builder = ModelBuilder::new("shared decoded image");
     let first = builder.add_file_texture("shared.png").unwrap();
     let mut second = first;
-    second.controls = Some(TextureControls::Mdlx(Default::default()));
+    second.controls = Some(TextureControls::Mdlx(SlotConstruct::construct(
+        &mut slot_values,
+    )));
     let layers = [first, second].map(|image| {
-        let mut layer = Layer::default();
-        layer.binding.image = Animated::constant(Some(image));
+        let mut layer = Layer::construct(&mut slot_values);
+        layer.binding.image = slot_values.add(Some(image));
         layer
     });
     builder
@@ -227,12 +246,16 @@ fn image_requests_retain_native_input_metadata_for_replacement_selection() {
             name: "surface".into(),
             surface: MaterialSurface::try_from(LayeredSurface {
                 layers: layers.into(),
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             })
             .unwrap(),
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let requests = texture_requests(&model);
     assert_eq!(
         requests

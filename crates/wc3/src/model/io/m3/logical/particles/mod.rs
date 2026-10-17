@@ -63,6 +63,7 @@ pub(super) fn import<'view, E: Envelope>(
                 let row = row.map_err(read_error)?;
                 let copy_indices = row.copy_indices;
                 let mut reader = Reader {
+                    builder: &mut *builder,
                     source,
                     owner: particles[index],
                     particles: &particles,
@@ -74,7 +75,7 @@ pub(super) fn import<'view, E: Envelope>(
                     context,
                 };
                 let payload = read::decode(row, &mut reader)?;
-                builder.set_feature(particles[index], surface::Feature::Particle((payload).into()))?;
+                reader.builder.set_feature(particles[index], surface::Feature::Particle((payload).into()))?;
                 for entry in source
                     .resolve::<nr::U32>(copy_indices.cast())
                     .map_err(read_error)?
@@ -99,7 +100,7 @@ pub(super) fn import<'view, E: Envelope>(
                         .ok_or_else(|| {
                             Error::new("m3.particle.copy.node", "copy anchor exceeds skeleton")
                         })?;
-                    let owner = builder.reserve_feature(node);
+                    let owner = reader.builder.reserve_feature(node);
                     reader.owner = owner;
                     let payload = surface::ParticleCopy {
                         source: particles[index],
@@ -110,7 +111,7 @@ copy.emission_rate),
                             .property(&FieldPath::root(Field::ParticleCopy).child(Field::SquirtAmount),
 copy.squirt_amount),
                     };
-                    builder.set_feature(owner, surface::Feature::ParticleCopy((payload).into()))?;
+                    reader.builder.set_feature(owner, surface::Feature::ParticleCopy((payload).into()))?;
                 }
             }
             for (index, used) in used.iter().enumerate() {

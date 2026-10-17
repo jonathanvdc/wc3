@@ -32,7 +32,13 @@ pub(super) fn read<'view, E: Envelope + Send + Sync>(
         r.physics_constraints
     ));
     let joints = joints::read(source.container(), joint_ref, nodes)?;
-    let inputs = body_fields::read(source.container(), body_ref, nodes, context)?;
+    let inputs = body_fields::read(
+        source.container(),
+        body_ref,
+        nodes,
+        context,
+        builder.values_mut(),
+    )?;
     let constraints = constraints::read(
         source.container(),
         constraint_ref,
@@ -44,7 +50,8 @@ pub(super) fn read<'view, E: Envelope + Send + Sync>(
     if inputs.is_empty() && joints.is_empty() && constraints.is_empty() {
         return Ok(());
     }
-    let id = builder.add_system(System::Physics(PhysicsSystem::default()))?;
+    let definition = builder.construct();
+    let id = builder.add_system(System::Physics(definition))?;
     let mut bodies = Vec::with_capacity(inputs.len());
     for mut input in inputs {
         input.body.shapes = shapes::read(source.container(), input.shapes, builder, context)?;

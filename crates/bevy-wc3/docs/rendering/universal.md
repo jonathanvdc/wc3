@@ -56,7 +56,9 @@ Application transforms remain outside that conversion. The driving camera for
 billboards and camera anchoring is explicitly selected on `Playback`.
 
 Playback uses seconds. `wc3` evaluates typed curves, while `AnimationProgram`
-indexes compiled channels by property destination. Clip aliases resolve their
+indexes compiled channels by typed slot identity. Authored constants live in the
+model’s value table; node, material, and effect fields retain references to those
+slots. Each playback instance samples against its own clocks and selected programmes. Clip aliases resolve their
 programmes without losing the selected clip's loop or clamp policy. Independent
 repeating shared clocks wrap by their authored periods; frozen shared clocks
 retain time zero without event traversal. Warcraft III and M3 clip metadata

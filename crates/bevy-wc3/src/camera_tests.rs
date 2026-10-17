@@ -2,17 +2,19 @@ use super::*;
 use crate::{compile_model, spawn_model};
 use bevy::ecs::world::CommandQueue;
 use wc3::model::{
-    AimedCamera, Animated, Camera as ModelCamera, CameraConvention, Channel, Clock, Curve, Model,
-    Node, NodeFeature, Time as ModelTime, Track,
+    AimedCamera, Camera as ModelCamera, CameraConvention, Channel, Clock, Curve, Model,
+    NodeFeature, Time as ModelTime, Track,
 };
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 #[test]
 fn binding_samples_current_animation_and_root_without_pose_or_global_update_lag() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::builder("bound camera");
-    let node = builder.add_node(Node::named("camera")).unwrap();
+    let node = builder.add_named_node("camera").unwrap();
     builder
         .add_timeline_channel(Channel::Vector3(Track {
-            target: node.translation(),
+            target: builder.model().node(node).unwrap().transform.translation,
             clock: Clock::Timeline,
             curve: Curve::linear(
                 [
@@ -28,17 +30,23 @@ fn binding_samples_current_animation_and_root_without_pose_or_global_update_lag(
         .add_feature(
             node,
             NodeFeature::Camera(ModelCamera::Aimed(Box::new(AimedCamera {
-                eye_offset: Animated::constant([0.; 3]),
+                eye_offset: slot_values.add([0.; 3]),
                 target: [0., 10., 0.],
-                target_offset: Animated::constant([0.; 3]),
-                field_of_view: Animated::constant(1.),
+                target_offset: slot_values.add([0.; 3]),
+                field_of_view: slot_values.add(1.),
                 clipping: [0.1, 100.],
-                roll: Animated::constant(0.),
-                convention: CameraConvention::Vertical(Box::default()),
+                roll: slot_values.add(0.),
+                convention: CameraConvention::Vertical(Box::new(SlotConstruct::construct(
+                    &mut slot_values,
+                ))),
             }))),
         )
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let compiled = compile_model(&model, |_| None).unwrap();
     let mut meshes = Assets::default();
     let mut binds = Assets::default();

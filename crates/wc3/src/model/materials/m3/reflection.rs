@@ -2,9 +2,10 @@
 use super::{Property, TextureLayer};
 use crate::model::materials::contributions::SurfaceContribution;
 use crate::model::values::programmed::ReflectionFlags;
+use crate::model::Construct;
 
 /// Editable M3 ReflectionMaterialStep values.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ReflectionMaterialStep {
     /// The purpose of this field has not been established.
     pub unknown: u32,

@@ -5,7 +5,7 @@ use super::storage::Storage;
 use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::profiles::mdlx as profile;
-use crate::model::{LightEmission, Node, NodeId, PhotographicControls, VisibleLight};
+use crate::model::{LightEmission, NodeId, PhotographicControls, VisibleLight};
 use std::collections::BTreeMap;
 
 pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
@@ -111,8 +111,11 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         }
     }
     for source in source.cameras() {
-        let mut node = Node::named(S::text(source.name.text()));
-        node.transform.translation = source.position;
+        let node = decoder.builder.new_node(S::text(source.name.text()));
+        decoder
+            .builder
+            .values_mut()
+            .set(node.transform.translation, source.position)?;
         let id = decoder.builder.add_node(node)?;
         let feature = decoder.builder.reserve_feature(id);
         let owner = feature;

@@ -1,6 +1,7 @@
 //! Exact projections of M2 owner payloads.
 use super::{incompatible, Narrows};
 use crate::model::profiles::{NoControls, Profile, Universal, M2};
+use crate::model::Values;
 use crate::model::{
     ClipControls, DrawControls, Error, MeshControls, ModelMetadata, NodeControls, System,
     UniversalAppearance, UniversalBinding,
@@ -68,8 +69,12 @@ impl Narrows<Universal> for M2 {
     fn surface<'a>(value: <Universal as Profile>::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
         value.try_into()
     }
-    fn feature<'a>(value: <Universal as Profile>::Feature<'a>) -> Result<Self::Feature<'a>, Error> {
-        value.try_into().map_err(|_| incompatible("feature"))
+    fn feature<'a>(
+        value: <Universal as Profile>::Feature<'a>,
+        values: &Values,
+    ) -> Result<Self::Feature<'a>, Error> {
+        crate::model::features::TryFromFeature::try_from_feature(value, values)
+            .map_err(|_| incompatible("feature"))
     }
     fn node<'a>(value: <Universal as Profile>::Node<'a>) -> Result<Self::Node<'a>, Error> {
         match value {

@@ -3,11 +3,17 @@ use crate::compile_model;
 use crate::compiled::RuntimeNode;
 use std::f32::consts::FRAC_PI_2;
 use wc3::model::{AnimationSample, Channel, Clock, Curve, Model, Node, Quaternion, Time, Track};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 fn runtime_node() -> RuntimeNode {
+    let slot_values = SlotValues::default();
     let mut builder = Model::builder("pose reference");
-    builder.add_node(Node::named("node")).unwrap();
-    let model = builder.finish().unwrap();
+    builder.add_named_node("node").unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let compiled = compile_model(&model, |_| None).unwrap();
     let mut node = compiled.nodes[0].clone();
     node.billboard_convention = BillboardConvention::Warcraft3;
@@ -101,6 +107,7 @@ fn native_nested_camera_anchors_apply_camera_translation_once() {
 
 #[test]
 fn native_noninheritance_preserves_expected_pose_with_collapsed_parent_axes() {
+    let mut slot_values = SlotValues::default();
     for (scale_index, scale) in [[-2., 3., -4.], [0., 2., -1.]].into_iter().enumerate() {
         let mut node = runtime_node();
         let parent_pose = ModelTransform {
@@ -118,7 +125,7 @@ fn native_noninheritance_preserves_expected_pose_with_collapsed_parent_axes() {
                 translation: [0.5, 0.2, -0.3],
                 rotation: Quaternion(Quat::from_rotation_y(0.2).to_array()),
                 pivot: [2., -1., 4.],
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             };
             let actual = evaluate_pose(&node, authored, parent, None);
             let matrix = Mat4::from_cols_array(&INHERITANCE[scale_index * 7 + mask - 1]);
@@ -133,23 +140,27 @@ fn native_noninheritance_preserves_expected_pose_with_collapsed_parent_axes() {
 
 #[test]
 fn birth_pose_follows_parent_rotation_between_frame_endpoints() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::builder("rotating parent");
-    let parent = builder.add_node(Node::named("parent")).unwrap();
+    let parent = builder.add_named_node("parent").unwrap();
     let child = builder
         .add_node(
-            Node::named("emitter")
+            Node::named("emitter", &mut slot_values)
                 .with_parent(parent)
-                .with_transform(ModelTransform {
-                    translation: [1., 0., 0.],
-                    ..Default::default()
-                })
+                .with_transform(
+                    ModelTransform {
+                        translation: [1., 0., 0.],
+                        ..SlotConstruct::construct(&mut slot_values)
+                    },
+                    &mut slot_values,
+                )
                 .unwrap(),
         )
         .unwrap();
     let time = |value| Time::seconds(value).unwrap();
     builder
         .add_timeline_channel(Channel::Rotation(Track {
-            target: parent.rotation::<Universal>(),
+            target: builder.model().node(parent).unwrap().transform.rotation,
             clock: Clock::Timeline,
             curve: Curve::linear(
                 [time(0.), time(1.)],
@@ -161,7 +172,11 @@ fn birth_pose_follows_parent_rotation_between_frame_endpoints() {
             .unwrap(),
         }))
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let compiled = compile_model(&model, |_| None).unwrap();
     let sample = compiled
         .animation
@@ -194,17 +209,18 @@ fn birth_pose_follows_parent_rotation_between_frame_endpoints() {
 
 #[test]
 fn camera_selection_preserves_generic_nonbillboard_affine_shear() {
+    let mut slot_values = SlotValues::default();
     let mut node = runtime_node();
     node.billboard_convention = BillboardConvention::Generic;
     node.inheritance.translation = false;
     let parent = EvaluatedPose {
         matrix: Mat4::from_scale(Vec3::new(2., 1., 3.)),
         scale: Vec3::new(2., 1., 3.),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let pose = ModelTransform {
         rotation: Quaternion(Quat::from_rotation_z(0.7).to_array()),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let without = evaluate_pose(&node, pose, parent, None);
     let with = evaluate_pose(&node, pose, parent, Some(Affine3A::from_rotation_y(0.4)));
@@ -213,18 +229,26 @@ fn camera_selection_preserves_generic_nonbillboard_affine_shear() {
 
 #[test]
 fn feature_origins_use_node_pivots_without_moving_geometry_coordinates() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::builder("pivot-local feature origin");
     builder
         .add_node(
-            Node::named("feature anchor")
-                .with_transform(ModelTransform {
-                    pivot: [0., 0., 2.],
-                    ..Default::default()
-                })
+            Node::named("feature anchor", &mut slot_values)
+                .with_transform(
+                    ModelTransform {
+                        pivot: [0., 0., 2.],
+                        ..SlotConstruct::construct(&mut slot_values)
+                    },
+                    &mut slot_values,
+                )
                 .unwrap(),
         )
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let compiled = compile_model(&model, |_| None).unwrap();
     let sample = compiled
         .animation
@@ -253,14 +277,20 @@ fn feature_origins_use_node_pivots_without_moving_geometry_coordinates() {
 
 #[test]
 fn m2_billboard_convention_is_selected_from_bone_controls() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::controls::model::BoneControls;
     use wc3::model::NodeControls;
     let mut builder = Model::builder("M2 bone convention");
-    let mut node = Node::named("native billboard")
-        .with_controls(Some(NodeControls::M2(BoneControls::default())));
+    let mut node = Node::named("native billboard", &mut slot_values).with_controls(Some(
+        NodeControls::M2(BoneControls::construct(&mut slot_values)),
+    ));
     node.billboard = Billboard::Spherical;
     builder.add_node(node).unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let compiled = compile_model(&model, |_| None).unwrap();
     assert_eq!(
         compiled.nodes[0].billboard_convention,
@@ -270,13 +300,14 @@ fn m2_billboard_convention_is_selected_from_bone_controls() {
 
 #[test]
 fn m2_spherical_billboards_face_yz_geometry_toward_rotated_cameras() {
+    let mut slot_values = SlotValues::default();
     let mut node = runtime_node();
     node.billboard_convention = BillboardConvention::M2;
     node.billboard = Billboard::Spherical;
     let pivot = Vec3::new(2., -1., 3.);
     let pose = ModelTransform {
         pivot: pivot.to_array(),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     for camera_rotation in [
         Quat::IDENTITY,
@@ -299,6 +330,7 @@ fn m2_spherical_billboards_face_yz_geometry_toward_rotated_cameras() {
 
 #[test]
 fn m2_spherical_billboards_preserve_authored_rotation_pivot_and_basis_lengths() {
+    let mut slot_values = SlotValues::default();
     let mut node = runtime_node();
     node.billboard_convention = BillboardConvention::M2;
     node.billboard = Billboard::Spherical;
@@ -321,7 +353,7 @@ fn m2_spherical_billboards_preserve_authored_rotation_pivot_and_basis_lengths() 
             ),
             rotation,
             scale: parent_scale,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         };
         let before = evaluate_pose(&node, pose, parent, None);
         let actual = evaluate_pose(&node, pose, parent, Some(camera));
@@ -362,25 +394,29 @@ fn m2_spherical_billboards_preserve_authored_rotation_pivot_and_basis_lengths() 
 
 #[test]
 fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::NodeChannels;
     use wc3::model::{Clip, Controller, SharedClock};
     let mut builder = Model::builder("node channel inventory");
-    let parent = builder.add_node(Node::named("animated parent")).unwrap();
+    let parent = builder.add_named_node("animated parent").unwrap();
     let child = builder
         .add_node(
-            Node::named("static child")
+            Node::named("static child", &mut slot_values)
                 .with_parent(parent)
-                .with_transform(ModelTransform {
-                    translation: [0., 1., 0.],
-                    ..Default::default()
-                })
+                .with_transform(
+                    ModelTransform {
+                        translation: [0., 1., 0.],
+                        ..SlotConstruct::construct(&mut slot_values)
+                    },
+                    &mut slot_values,
+                )
                 .unwrap(),
         )
         .unwrap();
     let times = [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()];
     builder
         .add_timeline_channel(Channel::Vector3(Track {
-            target: parent.translation(),
+            target: builder.model().node(parent).unwrap().transform.translation,
             clock: Clock::Timeline,
             curve: Curve::linear(times, [[0.; 3], [2., 0., 0.]]).unwrap(),
         }))
@@ -392,7 +428,7 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
         .unwrap();
     builder
         .add_shared_channel(Channel::Rotation(Track {
-            target: parent.rotation(),
+            target: builder.model().node(parent).unwrap().transform.rotation,
             clock: Clock::Shared(shared),
             curve: Curve::linear(
                 times,
@@ -414,7 +450,7 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
         .add_channel(
             clip,
             Channel::Vector3(Track {
-                target: parent.scale(),
+                target: builder.model().node(parent).unwrap().transform.scale,
                 clock: Clock::Clip,
                 curve: Curve::linear(times, [[1.; 3], [3.; 3]]).unwrap(),
             }),
@@ -425,13 +461,17 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
         .add_controller_channel(
             controller,
             Channel::Boolean(Track {
-                target: parent.visibility(),
+                target: builder.model().node(parent).unwrap().visible,
                 clock: Clock::Timeline,
                 curve: Curve::step(times, [true, false]).unwrap(),
             }),
         )
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let compiled = compile_model(&model, |_| None).unwrap();
     let parent_index = compiled
         .nodes
@@ -466,7 +506,7 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
             clip_time: time,
             timeline_time: time,
             shared_time: time,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     let retimed = sample.at_times(time, time, time);

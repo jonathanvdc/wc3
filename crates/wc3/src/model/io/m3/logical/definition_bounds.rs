@@ -35,7 +35,7 @@ pub(super) fn write(
                 "detail-group bounds exceed 16-bit indexing capacity",
             )
         })?;
-        let mapped = ids.get(bounds.minimum.target());
+        let mapped = ids.get(&bounds.minimum.slot());
         division.bounds.push(records::MeshSection::<records::V1> {
             node_index: *bones.get(&feature.node).ok_or_else(|| {
                 Error::new(
@@ -58,7 +58,11 @@ pub(super) fn write(
                         },
                 ),
                 animation_id: mapped.map_or(bounds.control.source_id, |mapped| mapped.id),
-                initial_value: extent(bounds.initial),
+                initial_value: extent(Bounds {
+                    minimum: graph.values()[bounds.minimum],
+                    maximum: graph.values()[bounds.maximum],
+                    sphere_radius: graph.values()[bounds.radius],
+                }),
                 null_value: extent(bounds.reset),
                 reserved: bounds.control.reserved,
             },

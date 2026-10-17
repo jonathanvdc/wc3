@@ -525,6 +525,7 @@ fn interpolated(a: Mat4, b: Mat4, t: f32) -> Mat4 {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     fn state() -> State {
         State {

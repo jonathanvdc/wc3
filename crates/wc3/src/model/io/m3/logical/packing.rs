@@ -155,6 +155,7 @@ pub(super) fn unorm(
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use crate::model::conversion::{ApproximationPolicy, ExportOptions};
 

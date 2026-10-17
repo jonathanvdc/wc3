@@ -3,6 +3,7 @@ use super::bindings::TextureBinding;
 use super::parameters::{OrderedParameters, ParameterEntry, ShaderValue};
 use super::program::MaterialProgram;
 use crate::model::profiles::SurfacePayload;
+use crate::model::Construct;
 use crate::model::{Error, ImageResourceId, Link, PropertyIdentityKey, ValidateLinks};
 
 /// A texture input retains negative source selections independently of image handles.
@@ -95,7 +96,7 @@ pub struct MaterialValues {
     pub vectors: OrderedParameters<ShaderValue, [f32; 4], ParameterControls>,
 }
 /// Diablo IV shader declaration, independent of native material and appearance layouts.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Construct)]
 pub struct MaterialStep {
     /// Independently authored material-resource declarations, when imported from a material document.
     pub asset: Option<MaterialAssetControls>,

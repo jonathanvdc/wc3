@@ -213,7 +213,7 @@ pub(in crate::model::io::m3::logical) fn read<'view, E: Envelope + Send + Sync>(
                     .collect::<Result<Vec<_>, Error>>()?;
                 let active = Slot::<records::AnimationValue<u32>>::slot(r.active)
                     .or_else(|| Slot::<records::AnimationValue<u32>>::slot(r.legacy_active))
-                    .map(anim);
+                    .map(|value| anim(value, builder.values_mut()));
                 proxy_refs.push(
                     Slot::<Ref<records::targets::ClothProxy>>::slot(r.proxies).unwrap_or_default(),
                 );
@@ -268,7 +268,8 @@ pub(in crate::model::io::m3::logical) fn read<'view, E: Envelope + Send + Sync>(
     for (index, reference) in proxy_refs.into_iter().enumerate() {
         cloths[index].proxies = proxies(document, reference, regions, &cages)?;
     }
-    let id = builder.add_system(System::Cloth(ClothSystem::default()))?;
+    let definition = builder.construct();
+    let id = builder.add_system(System::Cloth(definition))?;
     let mut system = System::Cloth(ClothSystem { cloths });
     bindings::system(&mut system, OwnerId::System(id), registry);
     builder.set_system(id, system)?;

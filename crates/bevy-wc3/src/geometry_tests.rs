@@ -4,6 +4,7 @@ use wc3::model::profiles::Universal;
 use wc3::model::{
     Attribute, ConnectivitySets, GeometryData, Mesh as ModelMesh, ModelBuilder, PrimitiveSelection,
 };
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 fn positions(mesh: &Mesh) -> &[[f32; 3]] {
     let Some(VertexAttributeValues::Float32x3(values)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)
@@ -149,6 +150,7 @@ fn strip_index_window_preserves_original_attribute_rows() {
 
 #[test]
 fn empty_uv_zero_slot_in_a_valid_model_uses_default_coordinates() {
+    let mut slot_values = SlotValues::default();
     let mut source = mesh(
         &[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
         Topology::Triangles([[0, 1, 2]].into_iter().collect()),
@@ -159,13 +161,17 @@ fn empty_uv_zero_slot_in_a_valid_model_uses_default_coordinates() {
         .insert(Attribute {
             semantic: AttributeSemantic::TexCoord(0),
             domain: AttributeDomain::Vertex,
-            values: AttributeValues::Vector2(Default::default()),
+            values: AttributeValues::Vector2(SlotConstruct::construct(&mut slot_values)),
         })
         .unwrap();
     let subset = source.add_primary_subset(0, 1);
     let mut builder = ModelBuilder::<Universal>::new("empty UV0");
     let id = builder.add_mesh(source).unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let source = model.mesh(id).unwrap();
     let parts = compile_geometry(source, source.subset(subset).unwrap(), 0).unwrap();
     assert_eq!(
@@ -441,10 +447,10 @@ fn fourth_uv_preserves_corner_rows_without_allocating_unused_streams() {
 
 #[test]
 fn compact_skin_remaps_both_streams_and_ignores_vertices_outside_part() {
-    use wc3::model::{GeometryInfluences, Influence, Model, Node, ValueGroups};
+    use wc3::model::{GeometryInfluences, Influence, Model, ValueGroups};
     let mut builder = Model::<Universal>::builder("joint identities");
     let joints: Vec<_> = (0..16)
-        .map(|i| builder.add_node(Node::named(format!("joint {i}"))).unwrap())
+        .map(|i| builder.add_named_node(format!("joint {i}")).unwrap())
         .collect();
     let mut geometry = GeometryData::triangles([[0.; 3]; 3], [[0, 1, 2]]).unwrap();
     let selected = [14, 2, 10, 4, 12, 6, 8, 0];

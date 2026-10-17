@@ -17,9 +17,8 @@ use wc3::model::values::programmed::{
     EmitterShape, ParticleInstance, Smoothing, Variation, VelocityKind,
 };
 use wc3::model::{
-    Animated, AnimatedValue, ClipId, Clock, ParticleAppearance, ParticleDefinition,
-    ParticleDetails, ParticleGravity, ParticleScalar, ParticleTrigger, ProgrammedAge,
-    RetimedAnimation, VariationControl,
+    Animatable, Animated, ClipId, Clock, ParticleAppearance, ParticleDefinition, ParticleDetails,
+    ParticleGravity, ParticleScalar, ParticleTrigger, ProgrammedAge, ValueSample, VariationControl,
 };
 
 #[derive(Clone)]
@@ -84,53 +83,50 @@ pub(super) struct SpriteStyle {
     pub rotation: f32,
     pub cell: u32,
 }
-pub(super) fn animated<T: AnimatedValue>(property: &Property<T>) -> Animated<T> {
-    Animated {
-        default: property.initial.clone(),
-        binding: property.binding.clone().map(Into::into),
-    }
+pub(super) fn animated<T: Animatable>(property: &Property<T>) -> Animated<T> {
+    property.value
 }
 fn scalar(value: &ParticleScalar) -> Animated<f32> {
     match value {
-        ParticleScalar::Animated(value) => value.clone(),
+        ParticleScalar::Animated(value) => *value,
         ParticleScalar::Programmed(property) => animated(property),
     }
 }
 impl ProgrammedSprite {
     #[cfg(test)]
-    pub(super) fn fixture() -> Self {
+    pub(super) fn fixture(slot_values: &mut wc3::model::Values) -> Self {
         Self {
-            rate: Animated::constant(10.),
-            squirt: Animated::constant(0),
-            lifetime: Animated::constant(2.),
-            lifetime_other: Animated::constant(4.),
+            rate: slot_values.add(10.),
+            squirt: slot_values.add(0),
+            lifetime: slot_values.add(2.),
+            lifetime_other: slot_values.add(4.),
             random_lifetime: false,
-            speed: Animated::constant(2.),
-            speed_other: Animated::constant(6.),
+            speed: slot_values.add(2.),
+            speed_other: slot_values.add(6.),
             random_speed: false,
             shape: EmitterShape::Point,
-            dimensions: Animated::constant([2.; 3]),
-            radius: Animated::constant(1.),
+            dimensions: slot_values.add([2.; 3]),
+            radius: slot_values.add(1.),
             velocity: VelocityKind::ZAxis,
-            angle_x: Animated::constant(0.),
-            angle_y: Animated::constant(0.),
-            spread_x: Animated::constant(0.),
-            spread_y: Animated::constant(0.),
+            angle_x: slot_values.add(0.),
+            angle_y: slot_values.add(0.),
+            spread_x: slot_values.add(0.),
+            spread_y: slot_values.add(0.),
             gravity: -4.,
             model_space: false,
             max_particles: 20,
             lit: false,
-            sizes: Animated::constant([1., 2., 0.]),
-            rotations: Animated::constant([0., 1., 2.]),
+            sizes: slot_values.add([1., 2., 0.]),
+            rotations: slot_values.add([0., 1., 2.]),
             colors: [
-                Animated::constant([1., 0., 0., 1.]),
-                Animated::constant([0., 1., 0., 1.]),
-                Animated::constant([0., 0., 1., 0.]),
+                slot_values.add([1., 0., 0., 1.]),
+                slot_values.add([0., 1., 0., 1.]),
+                slot_values.add([0., 0., 1., 0.]),
             ],
             middle: [0.5; 4],
-            size_other: Animated::constant([1.; 3]),
-            rotation_other: Animated::constant([0.; 3]),
-            color_other: from_fn(|_| Animated::constant([1.; 4])),
+            size_other: slot_values.add([1.; 3]),
+            rotation_other: slot_values.add([0.; 3]),
+            color_other: from_fn(|_| slot_values.add([1.; 4])),
             random_size: false,
             random_rotation: false,
             random_color: false,
@@ -141,7 +137,10 @@ impl ProgrammedSprite {
             cell_middle: 0.5,
         }
     }
-    pub fn compile(definition: &ParticleDefinition<'_>) -> Result<(Self, Vec<String>), String> {
+    pub fn compile(
+        definition: &ParticleDefinition<'_>,
+        model: &wc3::model::Model<'_>,
+    ) -> Result<(Self, Vec<String>), String> {
         let ParticleDetails::Programmed(details) = &definition.details else {
             return Err("Expected programmed sprite controls".into());
         };
@@ -224,7 +223,8 @@ impl ProgrammedSprite {
         {
             diagnostics.push("Programmed kill radius, inherited velocity, parent/local time and prewarming controls are not implemented".into());
         }
-        if nondefault_scalar(&details.particle_velocity) || nondefault_scalar(&details.phase_shift)
+        if nondefault_scalar(&details.particle_velocity, model)
+            || nondefault_scalar(&details.phase_shift, model)
         {
             diagnostics.push(
                 "Programmed particle_velocity and phase_shift controls are not implemented".into(),
@@ -244,7 +244,7 @@ impl ProgrammedSprite {
         diagnostics.push("Programmed effect variation functions are not implemented; keyed squirt counts use bounded authored clock crossings independently of continuous emission".into());
         let squirt = match &definition.emission.trigger {
             ParticleTrigger::Programmed(value) => animated(value),
-            _ => Animated::constant(0),
+            _ => return Err("programmed particle requires a squirt-count slot".into()),
         };
         Ok((
             Self {
@@ -314,7 +314,7 @@ impl ProgrammedSprite {
     }
     pub fn birth(
         &self,
-        sample: &RetimedAnimation<'_, '_, '_>,
+        sample: &impl ValueSample,
         node: Mat4,
         basis: Mat4,
         random: [f32; 12],
@@ -414,11 +414,7 @@ impl ProgrammedSprite {
             appearance: self.appearance(sample, [random[8], random[9], random[10], random[11]]),
         })
     }
-    pub fn appearance(
-        &self,
-        sample: &RetimedAnimation<'_, '_, '_>,
-        random: [f32; 4],
-    ) -> ProgrammedAppearance {
+    pub fn appearance(&self, sample: &impl ValueSample, random: [f32; 4]) -> ProgrammedAppearance {
         let mut size = sample.animated(&self.sizes);
         if self.random_size {
             let other = sample.animated(&self.size_other);
@@ -457,13 +453,16 @@ impl ProgrammedSprite {
         }
     }
 }
-pub(super) fn nondefault_scalar(value: &Property<f32>) -> bool {
-    value.initial != 0. || value.binding.is_some()
+pub(super) fn nondefault_scalar(value: &Property<f32>, model: &wc3::model::Model<'_>) -> bool {
+    model.values()[value.value] != 0. || model.is_animated(value.value)
 }
-pub(super) fn nondefault_variation(value: &VariationControl) -> bool {
+pub(super) fn nondefault_variation(
+    value: &VariationControl,
+    model: &wc3::model::Model<'_>,
+) -> bool {
     value.kind != Variation::None
-        || nondefault_scalar(&value.amplitude)
-        || nondefault_scalar(&value.frequency)
+        || nondefault_scalar(&value.amplitude, model)
+        || nondefault_scalar(&value.frequency, model)
 }
 /// Bounded occurrence scratch; counts are independent of continuous emission.
 #[derive(Default)]
@@ -481,10 +480,7 @@ impl SquirtSchedule {
         include_origin: bool,
     ) {
         self.occurrences.clear();
-        let track = amount
-            .binding
-            .as_ref()
-            .and_then(|target| frame.sample.track(target));
+        let track = frame.sample.track(amount);
         let clock = track
             .as_ref()
             .map_or(Clock::Clip, |track| track.track.clock);
@@ -553,8 +549,8 @@ impl SquirtSchedule {
         } else {
             // An inactive bound programme must not fall back to an authored
             // default burst; defaults apply only to genuinely unbound values.
-            if amount.binding.is_none() {
-                add(origin, amount.default);
+            if track.is_none() {
+                add(origin, frame.sample.animated(amount));
             }
         }
         self.occurrences.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -640,24 +636,12 @@ impl ProgrammedAppearance {
     }
     pub fn from_age(
         age: &ProgrammedAge,
-        sample: &RetimedAnimation<'_, '_, '_>,
+        sample: &impl ValueSample,
         size_smoothing: Smoothing,
         color_smoothing: Smoothing,
     ) -> Self {
-        let value3 = |property: &Property<[f32; 3]>| {
-            property
-                .binding
-                .as_ref()
-                .and_then(|binding| sample.property(binding))
-                .unwrap_or(property.initial)
-        };
-        let value4 = |property: &Property<[f32; 4]>| {
-            property
-                .binding
-                .as_ref()
-                .and_then(|binding| sample.property(binding))
-                .unwrap_or(property.initial)
-        };
+        let value3 = |property: &Property<[f32; 3]>| sample.animated(&property.value);
+        let value4 = |property: &Property<[f32; 4]>| sample.animated(&property.value);
         Self {
             size: value3(&age.size_animation),
             rotation: value3(&age.rotation_animation),
@@ -738,9 +722,10 @@ pub(super) fn no_shadow_material() -> ModelMaterial {
     use std::sync::Arc;
     use wc3::model::materials::{m3, MaterialSurface};
     use wc3::model::profiles::Universal;
-    use wc3::model::{Material, Model};
+    use wc3::model::{Construct, Material, Model};
     let mut builder = Model::<Universal>::builder("effect shadow flags");
-    let mut standard = m3::StandardMaterialStep::default();
+    let slot_values = builder.values_mut();
+    let mut standard = m3::StandardMaterialStep::construct(slot_values);
     standard.state.rasterization.flags.set_no_shadows_cast(true);
     standard
         .state

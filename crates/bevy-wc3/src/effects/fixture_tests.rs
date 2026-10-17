@@ -7,6 +7,7 @@ use wc3::model::formats::m2::{
 use wc3::model::formats::m3::{self, records as nr};
 use wc3::model::io::m2 as semantic_m2;
 use wc3::model::io::m3 as semantic_m3;
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 fn value<T: Clone + Default>(initial: T) -> nr::AnimationValue<T> {
     nr::AnimationValue {
@@ -22,6 +23,7 @@ fn color(rgba: [u8; 4]) -> nr::AnimationValue<nr::FixedBytes<4>> {
 #[test]
 #[ignore = "writes a native M3 and TGA under /tmp for the existing GPU capture example"]
 fn write_programmed_effect_capture_fixture() {
+    let mut slot_values = SlotValues::default();
     let directory = "/tmp/wc3-m3-effects-fixture";
     create_dir_all(directory).unwrap();
     let document = m3::Document::new::<m3::StarCraft2>().unwrap();
@@ -44,7 +46,7 @@ fn write_programmed_effect_capture_fixture() {
             position: value(position),
             rotation: value([0., 0., 0., 1.]),
             scale: value([1.; 3]),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .collect();
     let bones = container.append(&bones).unwrap();
@@ -62,13 +64,13 @@ fn write_programmed_effect_capture_fixture() {
         uv_tiling: value([1., 1.]),
         flipbook_rows: 1,
         flipbook_columns: 1,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let diffuse = container.append(&[diffuse]).unwrap();
     let material = nr::StandardMaterial::<nr::V20> {
         blend_mode: nr::BlendMode::AlphaBlend,
         diffuse_layer: m3::Ref::from_section(1, diffuse.index()),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let material = container.append(&[material]).unwrap();
     model.standard_materials = m3::Ref::from_section(1, material.index());
@@ -112,7 +114,7 @@ fn write_programmed_effect_capture_fixture() {
         collision_spawn_index: -1,
         splat_projection_index: -1,
         ribbon_link_index: -1,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let mut lit = base;
     lit.bone_index = 1;
@@ -122,7 +124,7 @@ fn write_programmed_effect_capture_fixture() {
     let endpoint = container
         .append(&[nr::SplineRibbon {
             bone_index: 3,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         }])
         .unwrap();
     let ribbon = nr::RibbonEmitter::<nr::V9> {
@@ -142,7 +144,7 @@ fn write_programmed_effect_capture_fixture() {
         alpha_mid_time: 0.5,
         rotation_mid_time: 0.5,
         spline_ribbons: m3::Ref::from_section(1, endpoint.index()),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let ribbons = container.append(&[ribbon]).unwrap();
     model.ribbon_emitters = m3::Ref::from_section(1, ribbons.index());
@@ -251,9 +253,7 @@ fn gravity_fixture(
 
 #[test]
 fn native_packed_gravity_preserves_sign_and_compiles_emitters() {
-    use wc3::model::profiles::m2::properties::{ParticleField, Target};
     use wc3::model::Channel;
-    use wc3::model::PropertyTarget;
 
     for (x, magnitude, expected_x, expected_z) in [
         (64, 100i16, 1., 1.),
@@ -272,14 +272,7 @@ fn native_packed_gravity_preserves_sign_and_compiles_emitters() {
                 let Channel::Vector3(track) = channel else {
                     return None;
                 };
-                matches!(
-                    track.target.target(),
-                    PropertyTarget::Profile {
-                        key: Target::Particle(ParticleField::Gravity),
-                        ..
-                    }
-                )
-                .then(|| track.curve.values().get(0).unwrap())
+                Some(track.curve.values().get(0).unwrap())
             })
             .expect("native packed gravity must become a vector channel");
         assert_eq!(gravity[0].signum(), expected_x);

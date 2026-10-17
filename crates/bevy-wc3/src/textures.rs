@@ -196,10 +196,10 @@ pub fn texture_requests<'view, 'data>(
                             2 => TextureRole::Data,
                             _ => TextureRole::Color,
                         };
-                        if let Some(image) = binding.default {
+                        if let Some(image) = model.values()[*binding] {
                             add(address(slot), image, role, None);
                         }
-                        if binding.binding.is_some() {
+                        if model.is_animated(*binding) {
                             for image in model.sampled_images() {
                                 add(address(slot), image, role, None);
                             }

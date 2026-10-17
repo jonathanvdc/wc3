@@ -133,6 +133,7 @@ pub mod particle {
 mod tests {
     use super::*;
     use crate::model::profiles::{m2, mdlx, Mdlx, Narrows, UniversalProperty, M2};
+    use crate::model::{Construct, Values};
 
     #[test]
     fn illumination_selectors_share_identity_and_narrow_exactly() {
@@ -165,7 +166,9 @@ mod tests {
     fn portable_lights_accept_shared_emission_but_not_ambient_channels() {
         use crate::model::profiles::FeaturePayload;
         use crate::model::{Light, NodeFeature};
-        let feature = NodeFeature::Light(Light::Portable(Box::default()));
+        let mut values = Values::default();
+        let feature =
+            NodeFeature::Light(Light::Portable(Box::new(Construct::construct(&mut values))));
         for property in [
             FeatureProperty::LightDiffuseColor,
             FeatureProperty::LightDiffuseIntensity,

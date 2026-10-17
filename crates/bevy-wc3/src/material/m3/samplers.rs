@@ -35,6 +35,7 @@ impl SamplerPool {
 mod tests {
     use super::*;
     use wc3::model::AddressMode;
+
     #[test]
     fn all_native_wrap_pairs_fit_and_roles_share_matching_samplers() {
         let mut pool = SamplerPool::default();

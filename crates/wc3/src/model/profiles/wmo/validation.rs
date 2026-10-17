@@ -132,9 +132,9 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
         if node.parent.is_some()
             || node.inheritance != Inheritance::default()
             || node.billboard != Billboard::None
-            || !node.visible
+            || value.values().get(node.visible) != Some(&true)
             || node.camera_anchored
-            || node.transform.pivot != [0.; 3]
+            || node.transform.defaults(value.values()).pivot != [0.; 3]
         {
             return Err(Error::new(
                 "world.nodes",
@@ -174,6 +174,7 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
             .node(instance.node)
             .expect("validated placement")
             .transform
+            .defaults(value.values())
             != Transform::default()
         {
             return Err(Error::new(
@@ -186,14 +187,15 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
         let node = value.node(feature.node).expect("validated feature anchor");
         match &feature.payload {
             super::Node::Light(light) => {
-                if light.color.binding.is_some() || light.intensity.binding.is_some() {
+                if value.is_animated(light.color) || value.is_animated(light.intensity) {
                     return Err(Error::new(
                         "world.light.curves",
                         "static world lights use constant properties or authored flicker programs",
                     ));
                 }
-                if node.transform.scale != [1.; 3]
-                    || (light.modern.is_some() && node.transform.rotation != Default::default())
+                if node.transform.defaults(value.values()).scale != [1.; 3]
+                    || (light.modern.is_some()
+                        && node.transform.defaults(value.values()).rotation != Default::default())
                 {
                     return Err(Error::new(
                         "world.light.transform",
@@ -202,8 +204,10 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
                 }
             }
             super::Node::Attachment(_) => {
-                if node.transform.scale[0] != node.transform.scale[1]
-                    || node.transform.scale[1] != node.transform.scale[2]
+                if node.transform.defaults(value.values()).scale[0]
+                    != node.transform.defaults(value.values()).scale[1]
+                    || node.transform.defaults(value.values()).scale[1]
+                        != node.transform.defaults(value.values()).scale[2]
                 {
                     return Err(Error::new(
                         "world.doodad.scale",
@@ -212,7 +216,8 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
                 }
             }
             super::Node::PointLight(_) | super::Node::LightProgram(_) => {
-                if node.transform.rotation != Default::default() || node.transform.scale != [1.; 3]
+                if node.transform.defaults(value.values()).rotation != Default::default()
+                    || node.transform.defaults(value.values()).scale != [1.; 3]
                 {
                     return Err(Error::new(
                         "world.region.light.transform",

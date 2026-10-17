@@ -1,13 +1,14 @@
 use wc3::model::io::geometry;
 use wc3::model::profiles::{Mdlx, Universal};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 use wc3::model::{
     Draw, DrawId, InstanceId, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshInstance,
-    Model, ModelBuilder, Node,
+    Model, ModelBuilder,
 };
 
 fn fixture() -> (Model<'static>, InstanceId, [DrawId; 2], [MaterialId; 2]) {
     let mut builder = ModelBuilder::new("complete looks");
-    let node = builder.add_node(Node::named("placement")).unwrap();
+    let node = builder.add_named_node("placement").unwrap();
     let mut mesh = Mesh::triangles(
         vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
         vec![[0, 1, 2]],
@@ -94,6 +95,7 @@ fn incomplete_alternative_is_rejected_without_default_fallback() {
 
 #[test]
 fn duplicate_and_foreign_draw_assignments_are_rejected() {
+    let mut slot_values = SlotValues::default();
     let (mut model, instance, draws, materials) = fixture();
     let look_id = model.default_look().unwrap();
     let original = model.look(look_id).unwrap().clone();
@@ -105,7 +107,7 @@ fn duplicate_and_foreign_draw_assignments_are_rejected() {
     let mut foreign = original;
     foreign.bindings[0].draw = Draw::<Mdlx>::new(
         model.instance(instance).unwrap().draws[0].subset,
-        Default::default(),
+        SlotConstruct::construct(&mut slot_values),
     )
     .id();
     assert!(model
@@ -178,6 +180,7 @@ fn draws_cannot_publish_without_a_complete_appearance() {
 
 #[test]
 fn sole_look_is_automatically_default_and_survives_profile_changes() {
+    let slot_values = SlotValues::default();
     let mut builder = Model::<Mdlx>::builder("single");
     let selected = builder.model().default_look().unwrap();
     assert_eq!(builder.model().looks().len(), 1);
@@ -195,12 +198,14 @@ fn sole_look_is_automatically_default_and_survives_profile_changes() {
         .unwrap();
     assert_eq!(builder.model().default_look(), Some(selected));
     assert!(builder.set_default_look(None).is_err());
-    let model = builder
-        .finish()
-        .unwrap()
-        .widen::<Universal>()
-        .try_narrow::<Mdlx>()
-        .unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap()
+    .widen::<Universal>()
+    .try_narrow::<Mdlx>()
+    .unwrap();
     assert_eq!(model.default_look(), Some(selected));
     assert_eq!(model.look(selected).unwrap().name, "sole");
 }
@@ -236,8 +241,9 @@ fn new_bindings_need_new_draw_identities_even_when_the_subset_is_shared() {
 
 #[test]
 fn mismatched_material_count_leaves_the_builder_unchanged() {
+    let slot_values = SlotValues::default();
     let mut draft = ModelBuilder::new("mismatched materials");
-    let node = draft.add_node(Node::named("placement")).unwrap();
+    let node = draft.add_named_node("placement").unwrap();
     let mesh = draft
         .add_mesh(Mesh::triangles(vec![[0.; 3]; 3], vec![[0, 1, 2]]))
         .unwrap();
@@ -249,15 +255,20 @@ fn mismatched_material_count_leaves_the_builder_unchanged() {
         .is_err());
     assert_eq!(draft.model().instances().len(), 0);
     assert_eq!(draft.model().looks().len(), 0);
-    draft.finish().unwrap();
+    {
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .unwrap();
 }
 
 #[test]
 fn draw_and_look_identities_survive_widening_and_exact_narrowing() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::profiles::mdlx::Material as MdlxMaterial;
     use wc3::model::MdlxGeometry;
     let mut draft = Model::<Mdlx>::builder("typed draw");
-    let node = draft.add_node(Node::named("placement")).unwrap();
+    let node = draft.add_named_node("placement").unwrap();
     let mut mesh = Mesh::new(MdlxGeometry::triangles(vec![[0.; 3]; 3], vec![[0, 1, 2]]).unwrap());
     let subset = mesh.add_primary_subset(0, 1);
     let mesh = draft.add_mesh(mesh).unwrap();
@@ -268,13 +279,17 @@ fn draw_and_look_identities_survive_widening_and_exact_narrowing() {
         })
         .unwrap();
     let mut instance = MeshInstance::new(node, mesh);
-    let draw = Draw::new(subset, Default::default());
+    let draw = Draw::new(subset, SlotConstruct::construct(&mut slot_values));
     let draw_id = draw.id();
     instance.draws.push(draw);
     let instance = draft
         .add_instance_with_materials(instance, vec![material])
         .unwrap();
-    let model = draft.finish().unwrap();
+    let model = {
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .unwrap();
     let look = model.default_look();
     let broad = model.widen::<Universal>();
     assert_eq!(

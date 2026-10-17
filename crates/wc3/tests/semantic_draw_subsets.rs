@@ -3,8 +3,9 @@ use wc3::model::conversion::{Context, ExportOptions};
 use wc3::model::io::geometry;
 use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw, DrawSubset, Material,
-    Mesh, MeshInstance, ModelBuilder, Node, PrimitiveRange, PrimitiveSelection, Topology,
+    Mesh, MeshInstance, ModelBuilder, PrimitiveRange, PrimitiveSelection, Topology,
 };
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 fn mesh() -> Mesh<'static> {
     Mesh::triangles(
@@ -15,18 +16,19 @@ fn mesh() -> Mesh<'static> {
 
 #[test]
 fn instances_share_mesh_owned_selections_with_independent_materials() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("shared subsets");
-    let node = builder.add_node(Node::named("placement")).unwrap();
+    let node = builder.add_named_node("placement").unwrap();
     let first = builder
         .add_material(Material {
             name: "".into(),
-            surface: Default::default(),
+            surface: SlotConstruct::construct(&mut slot_values),
         })
         .unwrap();
     let second = builder
         .add_material(Material {
             name: "".into(),
-            surface: Default::default(),
+            surface: SlotConstruct::construct(&mut slot_values),
         })
         .unwrap();
     let mut source = mesh();
@@ -39,7 +41,11 @@ fn instances_share_mesh_owned_selections_with_independent_materials() {
             .add_instance_with_materials(instance, vec![material])
             .unwrap();
     }
-    let mut model = builder.finish().unwrap();
+    let mut model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     model
         .edit(|draft| {
             let mesh_id = mesh;
@@ -71,12 +77,13 @@ fn instances_share_mesh_owned_selections_with_independent_materials() {
 
 #[test]
 fn strip_selections_use_their_own_faces_and_explicit_index_counting() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("strip subset");
-    let node = builder.add_node(Node::named("placement")).unwrap();
+    let node = builder.add_named_node("placement").unwrap();
     let material = builder
         .add_material(Material {
             name: "".into(),
-            surface: Default::default(),
+            surface: SlotConstruct::construct(&mut slot_values),
         })
         .unwrap();
     let mut source = mesh();
@@ -101,7 +108,11 @@ fn strip_selections_use_their_own_faces_and_explicit_index_counting() {
     let instance = builder
         .add_instance_with_materials(instance, vec![material])
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let projected = geometry::project(
         &model,
         instance,
@@ -126,15 +137,16 @@ fn strip_selections_use_their_own_faces_and_explicit_index_counting() {
 
 #[test]
 fn foreign_subset_and_connectivity_identities_are_rejected() {
+    let mut slot_values = SlotValues::default();
     let mut owner = mesh();
     let subset = owner.add_primary_subset(0, 1);
     let foreign_connectivity = owner.subsets.primary();
     let mut builder = ModelBuilder::new("foreign subset");
-    let node = builder.add_node(Node::named("placement")).unwrap();
+    let node = builder.add_named_node("placement").unwrap();
     let material = builder
         .add_material(Material {
             name: "".into(),
-            surface: Default::default(),
+            surface: SlotConstruct::construct(&mut slot_values),
         })
         .unwrap();
     let other = builder.add_mesh(mesh()).unwrap();
@@ -143,7 +155,11 @@ fn foreign_subset_and_connectivity_identities_are_rejected() {
     builder
         .add_instance_with_materials(instance, vec![material])
         .unwrap();
-    assert!(builder.finish().is_err());
+    assert!({
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .is_err());
     let mut builder = ModelBuilder::new("foreign connectivity");
     let mut other = mesh();
     other.add_subset(DrawSubset::new(PrimitiveSelection {
@@ -151,11 +167,16 @@ fn foreign_subset_and_connectivity_identities_are_rejected() {
         range: PrimitiveRange::Primitives { first: 0, count: 1 },
     }));
     builder.add_mesh(other).unwrap();
-    assert!(builder.finish().is_err());
+    assert!({
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .is_err());
 }
 
 #[test]
 fn range_domains_and_connectivity_attribute_cardinality_are_checked() {
+    let slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("wrong range");
     let mut source = mesh();
     source.add_subset(DrawSubset::new(PrimitiveSelection {
@@ -163,7 +184,11 @@ fn range_domains_and_connectivity_attribute_cardinality_are_checked() {
         range: PrimitiveRange::StripIndices { first: 0, count: 3 },
     }));
     builder.add_mesh(source).unwrap();
-    assert!(builder.finish().is_err());
+    assert!({
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .is_err());
     let mut builder = ModelBuilder::new("wrong face count");
     let mut source = mesh();
     let connectivity = source.subsets.primary();
@@ -176,11 +201,16 @@ fn range_domains_and_connectivity_attribute_cardinality_are_checked() {
         })
         .unwrap();
     builder.add_mesh(source).unwrap();
-    assert!(builder.finish().is_err());
+    assert!({
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .is_err());
 }
 
 #[test]
 fn constrained_profiles_reject_unsupported_subset_bindings() {
+    let slot_values = SlotValues::default();
     use wc3::model::profiles::Mdlx;
     use wc3::model::{MdlxGeometry, Model};
     let geometry = MdlxGeometry::triangles(vec![[0.; 3]; 3], vec![[0, 1, 2]]).unwrap();
@@ -191,5 +221,13 @@ fn constrained_profiles_reject_unsupported_subset_bindings() {
     mesh.subsets.set(subset, definition).unwrap();
     let mut builder = Model::<Mdlx>::builder("");
     builder.add_mesh(mesh).unwrap();
-    assert_eq!(builder.finish().unwrap_err().path(), "mesh.subsets");
+    assert_eq!(
+        {
+            builder.import_values(&slot_values).unwrap();
+            builder.finish()
+        }
+        .unwrap_err()
+        .path(),
+        "mesh.subsets"
+    );
 }

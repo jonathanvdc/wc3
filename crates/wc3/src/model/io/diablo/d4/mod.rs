@@ -16,7 +16,7 @@ use crate::model::profiles::diablo::d4::{
     NameInfo, NodeRole, Slot, D4,
 };
 use crate::model::{
-    Bounds, ExplicitBinding, Material, Mesh, MeshInstance, Model, Node, Quaternion, Skin, Transform,
+    Bounds, ExplicitBinding, Material, Mesh, MeshInstance, Model, Quaternion, Skin, Transform,
 };
 use std::{array::from_fn, borrow::Cow, collections::BTreeMap};
 
@@ -62,7 +62,10 @@ pub fn import_with_layouts<'a>(
             })
         })
         .collect();
-    let frame = builder.add_node(Node::named("").with_controls(NodeRole::ModelSpace))?;
+    let frame = {
+        let definition = builder.new_node("").with_controls(NodeRole::ModelSpace);
+        builder.add_node(definition)
+    }?;
     for chunk in &root.structure.chunks {
         if !chunk.lod_distance_per_sub_object.is_empty() {
             context.unsupported(
@@ -94,9 +97,10 @@ pub fn import_with_layouts<'a>(
             inverse_bind_pose: transform(&bone.transform_inv),
             inverse_skinning_pose: transform(&bone.transform_skinning_inv),
         };
-        let mut node = Node::named("")
+        let mut node = builder
+            .new_node("")
             .with_controls(NodeRole::Bone(Box::new(control)))
-            .with_transform(transform(&bone.transform_parent_rel))?;
+            .with_transform(transform(&bone.transform_parent_rel), builder.values_mut())?;
         node.parent = if bone.parent_index == u16::MAX {
             None
         } else {
@@ -110,17 +114,21 @@ pub fn import_with_layouts<'a>(
     }
     if let Some(skeleton) = skeleton {
         for hardpoint in &skeleton.hardpoints {
-            let mut node = Node::named("")
+            let mut node = builder
+                .new_node("")
                 .with_controls(NodeRole::Hardpoint {
                     hash: hardpoint.info.hash,
                     hash_flags: hardpoint.info.hash_flag,
                     ignore_parent_orientation: hardpoint.ignore_parent_orientation,
                 })
-                .with_transform(Transform {
-                    translation: hardpoint.transform.wp,
-                    rotation: quaternion(&hardpoint.transform.q),
-                    ..Default::default()
-                })?;
+                .with_transform(
+                    Transform {
+                        translation: hardpoint.transform.wp,
+                        rotation: quaternion(&hardpoint.transform.q),
+                        ..Default::default()
+                    },
+                    builder.values_mut(),
+                )?;
             if hardpoint.bone_index < -1 {
                 return Err(error(
                     "hardpoint parent uses an unsupported negative sentinel",

@@ -1,6 +1,7 @@
 //! Transactional graph construction and editing.
 use crate::model::ids::Scope;
 use crate::model::profiles::{Profile, Universal};
+use crate::model::{Animatable, Animated, Construct, Values};
 use crate::model::{
     AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, Clock, ClockId, Controller,
     ControllerId, DrawAppearanceSchema, DrawSubsetId, Error, Event, EventId, FeatureId, InstanceId,
@@ -186,6 +187,31 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     ) -> Option<P::BoneOverrideResource<'a>> {
         self.model.dependencies.bone_overrides.remove(&id)
     }
+    /// Creates a root node and allocates its transform and visibility slots.
+    pub fn new_node(&mut self, name: impl Into<Cow<'a, str>>) -> Node<'a, P> {
+        Node::named(name, &mut self.model.values)
+    }
+    /// Adds a root node with identity transform and visible authored state.
+    pub fn add_named_node(&mut self, name: impl Into<Cow<'a, str>>) -> Result<NodeId, Error> {
+        let node = self.new_node(name);
+        self.add_node(node)
+    }
+    /// Allocates an independently animatable value in this model.
+    pub fn add_value<T: Animatable>(&mut self, value: T) -> Animated<T> {
+        self.model.values.add(value)
+    }
+    /// Constructs a definition and allocates its animation slots.
+    pub fn construct<T: Construct>(&mut self) -> T {
+        T::construct(&mut self.model.values)
+    }
+    /// Adopts separately constructed values while preserving their scoped identities.
+    pub fn import_values(&mut self, values: &Values) -> Result<(), Error> {
+        self.model.values.extend(values)
+    }
+    /// Mutable authored constants while constructing or editing a model.
+    pub fn values_mut(&mut self) -> &mut Values {
+        &mut self.model.values
+    }
     /// Identity reserved for this model before publication.
     pub fn id(&self) -> ModelId {
         self.model.id()
@@ -197,6 +223,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         let id = scope.allocate();
         Self {
             model: Model {
+                values: Values::scoped(scope.clone()),
                 dependencies: Dependencies::default(),
                 scope,
                 id,
@@ -261,7 +288,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     pub fn add_controller_channel(
         &mut self,
         id: ControllerId,
-        channel: Channel<'a, P>,
+        channel: Channel<'a>,
     ) -> Result<(), Error> {
         self.model
             .controllers
@@ -367,7 +394,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         self.model.bounds = bounds;
     }
     /// Adds a channel authored on the absolute model timeline.
-    pub fn add_timeline_channel(&mut self, channel: Channel<'a, P>) -> Result<(), Error> {
+    pub fn add_timeline_channel(&mut self, channel: Channel<'a>) -> Result<(), Error> {
         if channel.clock() != Clock::Timeline {
             return Err(Error::new(
                 "timeline_channels.clock",
@@ -381,7 +408,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     pub fn set_timeline_channel(
         &mut self,
         index: usize,
-        channel: Channel<'a, P>,
+        channel: Channel<'a>,
     ) -> Result<(), Error> {
         if channel.clock() != Clock::Timeline {
             return Err(Error::new(
@@ -425,7 +452,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         Ok(())
     }
     /// Adds a channel that must use a shared repeating clock.
-    pub fn add_shared_channel(&mut self, channel: Channel<'a, P>) -> Result<(), Error> {
+    pub fn add_shared_channel(&mut self, channel: Channel<'a>) -> Result<(), Error> {
         if !matches!(channel.clock(), Clock::Shared(_)) {
             return Err(Error::new(
                 "shared_channels.clock",
@@ -436,11 +463,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         Ok(())
     }
     /// Replaces an existing shared-clock channel without appending a duplicate program.
-    pub fn set_shared_channel(
-        &mut self,
-        index: usize,
-        channel: Channel<'a, P>,
-    ) -> Result<(), Error> {
+    pub fn set_shared_channel(&mut self, index: usize, channel: Channel<'a>) -> Result<(), Error> {
         if !matches!(channel.clock(), Clock::Shared(_)) {
             return Err(Error::new(
                 "shared_channels.clock",
@@ -705,7 +728,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         Ok(self.model.clocks.add(&self.model.scope, value))
     }
     /// Appends a typed channel to an existing playback clip.
-    pub fn add_channel(&mut self, id: ClipId, channel: Channel<'a, P>) -> Result<(), Error> {
+    pub fn add_channel(&mut self, id: ClipId, channel: Channel<'a>) -> Result<(), Error> {
         self.model
             .clips
             .get_mut(&id)

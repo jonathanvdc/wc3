@@ -168,6 +168,7 @@ impl EffectClock {
 mod discontinuity_tests {
     use super::*;
     use crate::events::EventClocks;
+
     #[test]
     fn explicit_forward_seek_skips_time_but_subsequent_forward_motion_advances() {
         let mut clock = EffectClock::default();

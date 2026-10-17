@@ -122,7 +122,7 @@ pub(super) fn plan(
             },
             transform: native_transform(control.bind_pose)?,
             transform_inv: native_transform(control.inverse_bind_pose)?,
-            transform_parent_rel: native_transform(node.transform)?,
+            transform_parent_rel: native_transform(node.transform.defaults(asset.values()))?,
             transform_skinning_inv: native_transform(control.inverse_skinning_pose)?,
             ..Default::default()
         });
@@ -135,10 +135,12 @@ pub(super) fn plan(
             ignore_parent_orientation,
         } = &node.controls
         {
-            if node.transform.scale != [1.; 3] || node.transform.pivot != [0.; 3] {
+            if node.transform.defaults(asset.values()).scale != [1.; 3]
+                || node.transform.defaults(asset.values()).pivot != [0.; 3]
+            {
                 return Err(error("hardpoints require rigid transforms"));
             }
-            let trs = native_transform(node.transform)?;
+            let trs = native_transform(node.transform.defaults(asset.values()))?;
             skeleton.hardpoints.push(native::Hardpoint {
                 info: native::HardpointInfo {
                     hash: *hash,

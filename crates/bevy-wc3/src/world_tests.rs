@@ -3,6 +3,7 @@ use super::*;
 use bevy::mesh::VertexAttributeValues;
 use wc3::model::profiles::Universal;
 use wc3::model::{controls::world::WorldSystem, ModelBuilder};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 fn system_id() -> SystemId {
     ModelBuilder::<Universal>::new("world identities")
@@ -12,6 +13,7 @@ fn system_id() -> SystemId {
 
 #[test]
 fn liquid_grid_uses_absolute_heights_and_omits_hidden_tiles() {
+    let mut slot_values = SlotValues::default();
     let mut liquid = Liquid {
         position: [10., 20., 99.],
         dimensions: [2, 2],
@@ -25,7 +27,7 @@ fn liquid_grid_uses_absolute_heights_and_omits_hidden_tiles() {
             .into_iter()
             .collect(),
         tiles: [0].into_iter().collect(),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let mesh = liquid_mesh(&liquid, [2., 3.]).unwrap().unwrap();
     let Some(VertexAttributeValues::Float32x3(positions)) =
@@ -49,15 +51,17 @@ fn liquid_grid_uses_absolute_heights_and_omits_hidden_tiles() {
 
 #[test]
 fn malformed_liquid_grid_returns_an_error() {
+    let mut slot_values = SlotValues::default();
     let liquid = Liquid {
         dimensions: [2, 2],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     assert!(liquid_mesh(&liquid, [1.; 2]).is_err());
 }
 
 #[test]
 fn explicit_portal_reachability_is_conservative_and_keeps_other_systems() {
+    let mut slot_values = SlotValues::default();
     let system = system_id();
     let other = system_id();
     let a = GroupId { system, index: 0 };
@@ -65,11 +69,11 @@ fn explicit_portal_reachability_is_conservative_and_keeps_other_systems() {
     let isolated = GroupId { system, index: 2 };
     let runtime = WorldRuntime {
         neighbors: HashMap::from([(a, vec![b]), (b, vec![a]), (isolated, vec![])]),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let selected = runtime.visibility(&WorldSelection {
         portals: WorldPortalPolicy::ReachableFrom(a),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     });
     assert!(selected.group_visible(a));
     assert!(selected.group_visible(b));
@@ -82,20 +86,21 @@ fn explicit_portal_reachability_is_conservative_and_keeps_other_systems() {
     assert!(all.group_visible(isolated));
     let unknown = runtime.visibility(&WorldSelection {
         portals: WorldPortalPolicy::ReachableFrom(GroupId { system, index: 99 }),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     });
     assert!(unknown.group_visible(isolated));
 }
 
 #[test]
 fn explicit_doodad_selection_keeps_common_set() {
+    let mut slot_values = SlotValues::default();
     let system = system_id();
     let common = DoodadSetId { system, index: 0 };
     let chosen = DoodadSetId { system, index: 2 };
     let runtime = WorldRuntime::default();
     let selected = runtime.visibility(&WorldSelection {
         doodad_sets: Some(HashSet::from([chosen])),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     });
     assert!(selected.set_visible(common));
     assert!(selected.set_visible(chosen));
@@ -115,14 +120,15 @@ fn spherical_volume_fades_without_mutating_scene_lighting() {
 
 #[test]
 fn compiled_world_spawns_liquid_hooks_and_selection_gates() {
+    let mut slot_values = SlotValues::default();
     use super::super::{compile_model, spawn_model, ModelMaterial, PoseBaker, PoseOptions};
     use bevy::ecs::world::CommandQueue;
     use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
     use wc3::model::controls::world::{Group, RegionControls};
-    use wc3::model::{GeometryData, Mesh as ModelMesh, MeshInstance, Node};
+    use wc3::model::{GeometryData, Mesh as ModelMesh, MeshInstance};
 
     let mut builder = ModelBuilder::<Universal>::new("liquid region");
-    let node = builder.add_node(Node::named("region")).unwrap();
+    let node = builder.add_named_node("region").unwrap();
     let geometry =
         GeometryData::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]).unwrap();
     let mesh = builder.add_mesh(ModelMesh::new(geometry)).unwrap();
@@ -142,21 +148,25 @@ fn compiled_world_spawns_liquid_hooks_and_selection_gates() {
                 .collect(),
             tiles: [0].into_iter().collect(),
             liquid_type: 42,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         }],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     })));
     let instance = builder.add_instance(placement).unwrap();
     let system = builder
         .add_system(System::Wmo(WorldSystem {
             groups: vec![Group {
                 instances: vec![instance],
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             }],
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         }))
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let compiled = compile_model(&model, |_| None).unwrap();
     assert_eq!(compiled.world.groups.len(), 1);
     assert_eq!(compiled.liquids.len(), 1);
@@ -174,7 +184,7 @@ fn compiled_world_spawns_liquid_hooks_and_selection_gates() {
                 &binds,
                 PoseOptions {
                     lod,
-                    ..Default::default()
+                    ..SlotConstruct::construct(&mut slot_values)
                 },
             )
             .unwrap();
@@ -254,6 +264,7 @@ fn compiled_world_spawns_liquid_hooks_and_selection_gates() {
 
 #[test]
 fn default_placement_selection_includes_common_without_combining_variants() {
+    let mut slot_values = SlotValues::default();
     let system = system_id();
     let runtime = WorldRuntime::default();
     let common = DoodadSetId { system, index: 0 };
@@ -263,7 +274,7 @@ fn default_placement_selection_includes_common_without_combining_variants() {
     assert!(!selected.set_visible(alternative));
     let all = runtime.visibility(&WorldSelection {
         doodad_sets: None,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     });
     assert!(all.set_visible(alternative));
 }

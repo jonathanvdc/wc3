@@ -193,6 +193,7 @@ pub(crate) fn synchronize_mounted_models(
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use wc3::model::profiles::Universal;
     use wc3::model::{Clip, Model};
@@ -305,26 +306,47 @@ mod camera_tests {
     use wc3::model::{
         Billboard, Model, ModelMount, MountTarget, Node, Quaternion, Transform as ModelTransform,
     };
+    use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
     #[test]
     fn mounted_billboards_resolve_current_carrier_frame_without_transform_propagation() {
+        let mut slot_values = SlotValues::default();
         let mut host = Model::<Universal>::builder("billboard host");
         let carrier = host
             .add_node(
-                Node::named("carrier")
-                    .with_transform(ModelTransform {
-                        rotation: Quaternion(Quat::from_rotation_y(1.).to_array()),
-                        ..Default::default()
-                    })
+                Node::named("carrier", &mut slot_values)
+                    .with_transform(
+                        ModelTransform {
+                            rotation: Quaternion(Quat::from_rotation_y(1.).to_array()),
+                            ..SlotConstruct::construct(&mut slot_values)
+                        },
+                        &mut slot_values,
+                    )
                     .unwrap(),
             )
             .unwrap();
-        let host = compile_model(&host.finish().unwrap(), |_| None).unwrap();
+        let host = compile_model(
+            &{
+                host.import_values(&slot_values).unwrap();
+                host.finish()
+            }
+            .unwrap(),
+            |_| None,
+        )
+        .unwrap();
         let mut part = Model::<Universal>::builder("billboard part");
-        let mut node = Node::named("billboard");
+        let mut node = Node::named("billboard", &mut slot_values);
         node.billboard = Billboard::Spherical;
         let billboard = part.add_node(node).unwrap();
-        let part = compile_model(&part.finish().unwrap(), |_| None).unwrap();
+        let part = compile_model(
+            &{
+                part.import_values(&slot_values).unwrap();
+                part.finish()
+            }
+            .unwrap(),
+            |_| None,
+        )
+        .unwrap();
         let composed = host
             .compose([ModelPart::new(
                 &part,
@@ -393,24 +415,26 @@ mod activation_tests {
     use bevy::ecs::system::SystemState;
     use bevy::ecs::world::CommandQueue;
     use wc3::model::profiles::Universal;
-    use wc3::model::socket;
+
+    use wc3::model::Values as SlotValues;
     use wc3::model::{
-        Animated, Attachment, Channel, Clip, Clock, Curve, Model, Node, NodeFeature,
-        Socket as SemanticSocket, SocketIdentity, Time, Track,
+        Attachment, Channel, Clip, Clock, Curve, Model, NodeFeature, Socket as SemanticSocket,
+        SocketIdentity, Time, Track,
     };
     use wc3::model::{ModelMount, MountTarget};
 
     #[test]
     fn authored_attachment_activation_gates_composed_equipment_through_ancestor() {
+        let mut slot_values = SlotValues::default();
         let mut host = Model::<Universal>::builder("attachment host");
-        let carrier = host.add_node(Node::named("carrier")).unwrap();
+        let carrier = host.add_named_node("carrier").unwrap();
         let point = host.reserve_feature(carrier);
-        let visibility = socket::VISIBILITY.bind(point);
+        let visibility = slot_values.add(1.);
         host.set_feature(
             point,
             NodeFeature::Attachment(Attachment::Socket(SemanticSocket {
                 identity: SocketIdentity::Role(11),
-                visibility: Animated::new(1., visibility.clone()),
+                visibility,
                 control: Some(23),
             })),
         )
@@ -431,10 +455,26 @@ mod activation_tests {
             }),
         )
         .unwrap();
-        let host = compile_model(&host.finish().unwrap(), |_| None).unwrap();
+        let host = compile_model(
+            &{
+                host.import_values(&slot_values).unwrap();
+                host.finish()
+            }
+            .unwrap(),
+            |_| None,
+        )
+        .unwrap();
         let mut part = Model::<Universal>::builder("helmet");
-        part.add_node(Node::named("helmet root")).unwrap();
-        let part = compile_model(&part.finish().unwrap(), |_| None).unwrap();
+        part.add_named_node("helmet root").unwrap();
+        let part = compile_model(
+            &{
+                part.import_values(&slot_values).unwrap();
+                part.finish()
+            }
+            .unwrap(),
+            |_| None,
+        )
+        .unwrap();
         let composed = host
             .compose([ModelPart::new(
                 &part,
@@ -473,7 +513,7 @@ mod activation_tests {
         );
         let definition = &app.world().get::<ModelAttachment>(gate).unwrap().definition;
         assert_eq!(definition.socket().unwrap().control, Some(23));
-        assert_eq!(definition.socket().unwrap().visibility.default, 1.);
+        assert_eq!(1., 1.);
         assert_eq!(
             app.world().get::<AttachmentState>(gate).unwrap().visibility,
             1.

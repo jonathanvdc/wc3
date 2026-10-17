@@ -34,6 +34,7 @@ impl ChildCoordinates {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     fn close(actual: Mat4, expected: Mat4) {
         for (actual, expected) in actual
             .to_cols_array()

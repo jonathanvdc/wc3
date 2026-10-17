@@ -1,4 +1,5 @@
 //! Independently selected image, coordinates, sampling, and shader contribution.
+use crate::model::{Animatable, Animated, Construct, Values};
 use crate::model::{Link, Texture, ValidateLinks};
 
 /// One image input, independently composed from its coordinate and shader behavior.
@@ -54,5 +55,26 @@ impl<S: ValidateLinks> ValidateLinks for ImageSelection<S> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.source.visit_links(visitor);
         self.texture.visit_links(visitor);
+    }
+}
+
+impl<T: Animatable + Default, C: Construct, S: Construct, V: Construct> Construct
+    for TextureBinding<Animated<T>, C, S, V>
+{
+    fn construct(values: &mut Values) -> Self {
+        Self {
+            image: values.add(T::default()),
+            coordinates: C::construct(values),
+            sampling: S::construct(values),
+            contribution: V::construct(values),
+        }
+    }
+}
+impl<S: Default> Construct for Coordinates<S, crate::model::TextureTransform> {
+    fn construct(values: &mut Values) -> Self {
+        Self {
+            source: S::default(),
+            transform: crate::model::TextureTransform::construct(values),
+        }
     }
 }

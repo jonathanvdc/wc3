@@ -6,6 +6,7 @@ use wc3::model::materials::{m3, MaterialSurface};
 use wc3::model::profiles::Unavailable;
 use wc3::model::profiles::Universal;
 use wc3::model::{AnimationSample, ColorSpace, Material, ModelBuilder, Texture};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 #[test]
 fn default_extension_preserves_base_blend_and_depth_while_authored_pass_overrides() {
@@ -34,12 +35,13 @@ fn default_extension_preserves_base_blend_and_depth_while_authored_pass_override
 
 #[test]
 fn basic_world_shaders_keep_black_baked_light_separate_from_surface_albedo() {
+    let mut slot_values = SlotValues::default();
     let model = ModelBuilder::new("world surface").finish().unwrap();
     for shader in [0, 4, 16] {
         let surface = wmo_shader::Material {
             shader: Some(shader),
             diffuse: [0; 4],
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         };
         let pass = compile_wmo(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
         assert_eq!(pass.material.base_color, Color::WHITE);
@@ -56,7 +58,7 @@ fn basic_world_shaders_keep_black_baked_light_separate_from_surface_albedo() {
     }
     let unsupported = wmo_shader::Material {
         shader: Some(8),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let pass = compile_wmo(
         &model,
@@ -72,6 +74,7 @@ fn basic_world_shaders_keep_black_baked_light_separate_from_surface_albedo() {
 
 #[test]
 fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("DefaultUnit");
     let ids = from_fn::<_, 6, _>(|slot| {
         builder
@@ -89,39 +92,43 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
     });
     let mut layer = mdlx::Layer {
         shader: Some(1),
-        opacity: Animated::constant(0.8),
-        ..Default::default()
+        opacity: slot_values.add(0.8),
+        ..SlotConstruct::construct(&mut slot_values)
     };
     layer.state.blend = BlendOperations::AlphaKey(());
-    layer.binding.image = Animated::constant(Some(ids[0]));
+    layer.binding.image = slot_values.add(Some(ids[0]));
     layer.textures = ids
         .iter()
         .enumerate()
         .map(|(slot, id)| mdlx::TextureSlot {
             slot: slot as u32,
             binding: wc3::model::materials::bindings::TextureBinding {
-                image: Animated::constant(Some(*id)),
-                ..Default::default()
+                image: slot_values.add(Some(*id)),
+                ..SlotConstruct::construct(&mut slot_values)
             },
         })
         .collect();
-    layer.emissive_gain = Some(Animated::constant(2.));
+    layer.emissive_gain = Some(slot_values.add(2.));
     layer.fresnel = Some(mdlx::Fresnel {
-        color: Animated::constant([0.2, 0.4, 0.8]),
-        opacity: Animated::constant(0.5),
-        team_color: Animated::constant(0.3),
+        color: slot_values.add([0.2, 0.4, 0.8]),
+        opacity: slot_values.add(0.5),
+        team_color: slot_values.add(0.3),
     });
     let id = builder
         .add_material(Material {
             name: "HD".into(),
             surface: MaterialSurface::try_from(mdlx::LayeredSurface {
                 layers: vec![layer],
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             })
             .unwrap(),
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let mut images = Assets::<Image>::default();
     let resolved = Arc::new(TextureImages::resolve(&model, |_| {
         Some(images.add(Image::default()))
@@ -170,7 +177,14 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
         .animation
         .apply_to_assets(&sample, &handle, &mut materials));
     let mut changed = pass.animation.clone();
-    changed.hd.as_mut().unwrap().gain = Some(Animated::constant(3.));
+    changed.hd.as_mut().unwrap().gain = Some(slot_values.add(3.));
+    let mut changed_model = model.clone();
+    changed_model
+        .edit(|builder| builder.import_values(&slot_values))
+        .unwrap();
+    let sample = changed_model
+        .animation_sample(AnimationSample::default())
+        .unwrap();
     assert!(changed.apply_to_assets(&sample, &handle, &mut materials));
     assert!(!changed.apply_to_assets(&sample, &handle, &mut materials));
     assert_eq!(materials.get(&handle).unwrap().base.emissive.red, 3.);
@@ -178,17 +192,18 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
 
 #[test]
 fn unknown_layer_shader_does_not_infer_hd_data_roles() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("unknown shader");
     let texture = builder.add_file_texture("unknown.png").unwrap();
     let mut layer = mdlx::Layer {
         shader: Some(55),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     layer.textures.push(mdlx::TextureSlot {
         slot: 1,
         binding: wc3::model::materials::bindings::TextureBinding {
-            image: Animated::constant(Some(texture)),
-            ..Default::default()
+            image: slot_values.add(Some(texture)),
+            ..SlotConstruct::construct(&mut slot_values)
         },
     });
     let id = builder
@@ -197,12 +212,16 @@ fn unknown_layer_shader_does_not_infer_hd_data_roles() {
             surface: MaterialSurface::try_from(mdlx::LayeredSurface {
                 shader: "Shader_HD_DefaultUnit".into(),
                 layers: vec![layer],
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             })
             .unwrap(),
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let requests = super::super::textures::texture_requests(&model);
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].role, TextureRole::Color);
@@ -228,6 +247,7 @@ fn layered_uv_rotation_and_scale_use_center_pivot() {
 
 #[test]
 fn same_resource_texture_variants_keep_independent_image_handles() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::<Universal>::new("texture variants");
     let srgb = builder.add_file_texture("shared.png").unwrap();
     let mut linear = Texture::new(builder.add_image_resource(wc3::model::ImageResource::Path(
@@ -237,8 +257,8 @@ fn same_resource_texture_variants_keep_independent_image_handles() {
 
     let layers = [srgb, linear]
         .map(|texture| {
-            let mut layer = mdlx::Layer::default();
-            layer.binding.image = Animated::constant(Some(texture));
+            let mut layer = mdlx::Layer::construct(&mut slot_values);
+            layer.binding.image = slot_values.add(Some(texture));
             layer
         })
         .to_vec();
@@ -247,12 +267,16 @@ fn same_resource_texture_variants_keep_independent_image_handles() {
             name: "variants".into(),
             surface: MaterialSurface::try_from(mdlx::LayeredSurface {
                 layers,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             })
             .unwrap(),
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let mut assets = Assets::<Image>::default();
     let first = assets.add(Image::default());
     let second = assets.add(Image::default());
@@ -267,13 +291,14 @@ fn same_resource_texture_variants_keep_independent_image_handles() {
 
 #[test]
 fn m3_normal_and_diffuse_uses_of_one_image_select_distinct_interpretations() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::<Universal>::new("normal interpretation");
     let id = builder.add_file_texture("shared.png").unwrap();
-    let mut layer = m3::TextureLayer::default();
+    let mut layer = m3::TextureLayer::construct(&mut slot_values);
     layer.binding.image = Some(id.resource);
     let mut standard = m3::StandardMaterialStep {
         diffuse: Some(layer.clone()),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     standard.normals.base = Some(layer);
     let material = builder
@@ -282,7 +307,11 @@ fn m3_normal_and_diffuse_uses_of_one_image_select_distinct_interpretations() {
             surface: MaterialSurface::from(m3::MaterialStep::Standard(Box::new(standard))),
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let mut assets = Assets::<Image>::default();
     let color = assets.add(Image::default());
     let normal = assets.add(Image::default());
@@ -316,12 +345,13 @@ fn particle_blend_separates_unweighted_and_opacity_weighted_addition() {
 
 #[test]
 fn legacy_selectors_keep_texture_alpha_roles_independent() {
+    let mut slot_values = SlotValues::default();
     use crate::material::native_fixtures::m2 as m2_materials;
-    let combiner = |shader, count| {
+    let mut combiner = |shader, count| {
         let step = m2_materials::Material {
             shader,
-            textures: vec![Default::default(); count],
-            ..Default::default()
+            textures: vec![SlotConstruct::construct(&mut slot_values); count],
+            ..SlotConstruct::construct(&mut slot_values)
         }
         .into();
         super::m2::program(&step).map(|program| program.mode)
@@ -336,17 +366,21 @@ fn legacy_selectors_keep_texture_alpha_roles_independent() {
 
 #[test]
 fn sampling_static_bindings_does_not_request_repeated_asset_writes() {
-    let model = ModelBuilder::<Universal>::new("material sampling")
-        .finish()
-        .unwrap();
-    let sampled = model.animation_sample(AnimationSample::default()).unwrap();
+    let mut slot_values = SlotValues::default();
     let mut material = StandardMaterial::default();
     let animation = SurfaceAnimation {
-        color: Some(Animated::constant([0.25, 0.5, 0.75])),
-        opacity: Some(Animated::constant(0.6)),
-        weight: Some(Animated::constant(0.5)),
-        ..Default::default()
+        color: Some(slot_values.add([0.25, 0.5, 0.75])),
+        opacity: Some(slot_values.add(0.6)),
+        weight: Some(slot_values.add(0.5)),
+        ..SlotConstruct::construct(&mut slot_values)
     };
+    let model = {
+        let mut builder = ModelBuilder::<Universal>::new("material sampling");
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
+    let sampled = model.animation_sample(AnimationSample::default()).unwrap();
     assert!(animation.apply(&sampled, &mut material));
     assert!(!animation.apply(&sampled, &mut material));
     assert_eq!(
@@ -437,11 +471,14 @@ fn live_guild_palette_updates_uniforms_without_changing_pipeline_identity() {
 
 #[test]
 fn nested_composites_expand_ordered_passes_and_multiply_opacity_once() {
+    let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::<Universal>::new("nested composite");
     let leaf = builder
         .add_material(Material {
             name: "leaf".into(),
-            surface: MaterialSurface::from(m3::MaterialStep::Standard(Box::default())),
+            surface: MaterialSurface::from(m3::MaterialStep::Standard(Box::new(
+                SlotConstruct::construct(&mut slot_values),
+            ))),
         })
         .unwrap();
     let inner = builder
@@ -453,8 +490,8 @@ fn nested_composites_expand_ordered_passes_and_multiply_opacity_once() {
                     sections: vec![m3::CompositeSection {
                         material: leaf,
                         map_multiplier: m3::Property {
-                            initial: 0.5,
-                            ..Default::default()
+                            value: slot_values.add(0.5),
+                            ..SlotConstruct::construct(&mut slot_values)
                         },
                     }],
                 },
@@ -471,15 +508,15 @@ fn nested_composites_expand_ordered_passes_and_multiply_opacity_once() {
                         m3::CompositeSection {
                             material: inner,
                             map_multiplier: m3::Property {
-                                initial: 0.25,
-                                ..Default::default()
+                                value: slot_values.add(0.25),
+                                ..SlotConstruct::construct(&mut slot_values)
                             },
                         },
                         m3::CompositeSection {
                             material: leaf,
                             map_multiplier: m3::Property {
-                                initial: 1.,
-                                ..Default::default()
+                                value: slot_values.add(1.),
+                                ..SlotConstruct::construct(&mut slot_values)
                             },
                         },
                     ],
@@ -487,7 +524,11 @@ fn nested_composites_expand_ordered_passes_and_multiply_opacity_once() {
             ))),
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let passes =
         compile_material_with_images(&model, outer, Arc::new(TextureImages::default())).unwrap();
     assert_eq!(passes.len(), 2);
@@ -529,11 +570,12 @@ fn m3_shader_family_is_static_and_uniform_edits_reuse_its_pipeline() {
 
 #[test]
 fn mixed_m3_external_and_composite_steps_keep_their_order_and_weights() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::{diablo3, diablo4};
     use wc3::model::MaterialStep;
 
     let mut builder = ModelBuilder::new("mixed shader execution");
-    let mut external = diablo3::MaterialStep::default();
+    let mut external = diablo3::MaterialStep::construct(&mut slot_values);
     external.uber.colors.diffuse = [0.2, 0.4, 0.6, 0.8];
     let child = builder
         .add_material(Material {
@@ -546,29 +588,37 @@ fn mixed_m3_external_and_composite_steps_keep_their_order_and_weights() {
             name: "mixed stack".into(),
             surface: MaterialSurface {
                 steps: vec![
-                    MaterialStep::M3(m3::MaterialStep::Standard(Box::default())),
+                    MaterialStep::M3(m3::MaterialStep::Standard(Box::new(
+                        SlotConstruct::construct(&mut slot_values),
+                    ))),
                     MaterialStep::M3(m3::MaterialStep::Composite(Box::new(
                         m3::CompositeMaterialStep {
                             priority: 13,
                             sections: vec![m3::CompositeSection {
                                 material: child,
                                 map_multiplier: m3::Property {
-                                    initial: 0.5,
-                                    ..Default::default()
+                                    value: slot_values.add(0.5),
+                                    ..SlotConstruct::construct(&mut slot_values)
                                 },
                             }],
                         },
                     ))),
                     MaterialStep::Diablo4(Box::new(diablo4::MaterialStep {
                         shader_map: 42,
-                        ..Default::default()
+                        ..SlotConstruct::construct(&mut slot_values)
                     })),
-                    MaterialStep::M3(m3::MaterialStep::Volume(Box::default())),
+                    MaterialStep::M3(m3::MaterialStep::Volume(Box::new(
+                        SlotConstruct::construct(&mut slot_values),
+                    ))),
                 ],
             },
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let passes =
         compile_material_with_images(&model, id, Arc::new(TextureImages::default())).unwrap();
     assert_eq!(passes.len(), 4);
@@ -585,6 +635,7 @@ fn mixed_m3_external_and_composite_steps_keep_their_order_and_weights() {
 
 #[test]
 fn layered_passes_compile_independent_culling_priority_and_sorting() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::mdlx::{
         ClassicMaterialStep, MaterialDeclaration, MaterialStep as MdlxMaterialStep,
     };
@@ -600,24 +651,30 @@ fn layered_passes_compile_independent_culling_priority_and_sorting() {
                             priority_plane: -3,
                             two_sided: true,
                             sort_far_z: true,
-                            ..Default::default()
+                            ..SlotConstruct::construct(&mut slot_values)
                         },
-                        ..Default::default()
+                        ..SlotConstruct::construct(&mut slot_values)
                     }))),
-                    MaterialStep::M3(m3::MaterialStep::Standard(Box::default())),
+                    MaterialStep::M3(m3::MaterialStep::Standard(Box::new(
+                        SlotConstruct::construct(&mut slot_values),
+                    ))),
                     MaterialStep::Mdlx(Box::new(MdlxMaterialStep::Classic(ClassicMaterialStep {
                         declaration: MaterialDeclaration {
                             priority_plane: 9,
                             sort_near_z: true,
-                            ..Default::default()
+                            ..SlotConstruct::construct(&mut slot_values)
                         },
-                        ..Default::default()
+                        ..SlotConstruct::construct(&mut slot_values)
                     }))),
                 ],
             },
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let passes =
         compile_material_with_images(&model, id, Arc::new(TextureImages::default())).unwrap();
     assert_eq!(passes.len(), 3);
@@ -631,25 +688,30 @@ fn layered_passes_compile_independent_culling_priority_and_sorting() {
 
 #[test]
 fn unresolved_diablo_placeholder_uses_appearance_variant_ownership() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::appearance::{diablo4, UniversalAppearance};
     let mut builder = ModelBuilder::new("unresolved Diablo selection");
     let linked = builder
         .add_material(Material {
             name: "external".into(),
-            surface: Default::default(),
+            surface: SlotConstruct::construct(&mut slot_values),
         })
         .unwrap();
     let empty = builder
         .add_material(Material {
             name: "empty".into(),
-            surface: Default::default(),
+            surface: SlotConstruct::construct(&mut slot_values),
         })
         .unwrap();
     let mut appearance = diablo4::Appearance::default();
     let slot = appearance.add_slot(diablo4::Slot::default());
     appearance.add_variant(slot, linked).unwrap();
     builder.set_appearance(UniversalAppearance::D4(appearance));
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let images = Arc::new(TextureImages::default());
     let passes = compile_material_with_images(&model, linked, images.clone()).unwrap();
     assert_eq!(passes.len(), 1);
@@ -664,21 +726,22 @@ fn unresolved_diablo_placeholder_uses_appearance_variant_ownership() {
 
 #[test]
 fn m2_material_program_compiles_steps_in_order_with_independent_controls() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::m2::{DiffuseMaterialStep, MaterialStep as M2Step};
     use wc3::model::profiles::m2::Material as M2Material;
     use wc3::model::MaterialProgram;
 
     let mut builder = ModelBuilder::new("M2 layered material");
-    let mut first = DiffuseMaterialStep::default();
-    first.declaration.color = Animated::constant([1., 0., 0.]);
-    first.declaration.opacity = Animated::constant(0.25);
+    let mut first = DiffuseMaterialStep::construct(&mut slot_values);
+    first.declaration.color = slot_values.add([1., 0., 0.]);
+    first.declaration.opacity = slot_values.add(0.25);
     first.declaration.state.ordering = 3;
-    first.diffuse.contribution = Animated::constant(1.);
-    let mut second = DiffuseMaterialStep::default();
-    second.declaration.color = Animated::constant([0., 1., 0.]);
-    second.declaration.opacity = Animated::constant(0.75);
+    first.diffuse.contribution = slot_values.add(1.);
+    let mut second = DiffuseMaterialStep::construct(&mut slot_values);
+    second.declaration.color = slot_values.add([0., 1., 0.]);
+    second.declaration.opacity = slot_values.add(0.75);
     second.declaration.state.ordering = -2;
-    second.diffuse.contribution = Animated::constant(1.);
+    second.diffuse.contribution = slot_values.add(1.);
     let program: M2Material<'_> = MaterialProgram {
         steps: vec![M2Step::Diffuse(first), M2Step::Diffuse(second)],
     };
@@ -688,7 +751,11 @@ fn m2_material_program_compiles_steps_in_order_with_independent_controls() {
             surface: program.into(),
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let passes =
         compile_material_with_images(&model, id, Arc::new(TextureImages::default())).unwrap();
     assert_eq!(passes.len(), 2);

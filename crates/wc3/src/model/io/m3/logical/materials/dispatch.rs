@@ -257,13 +257,12 @@ pub(in crate::model::io::m3::logical) fn read<'a, E: Envelope>(
                 format!("materials[{index}]"),
                 format!("unknown source material family {code}"),
             )?;
+            let placeholder: surface::StandardMaterialStep = reader.builder.construct();
             reader.builder.set_material(
                 materials[index],
                 sem::Material {
                     name: Cow::Borrowed(""),
-                    surface: surface::MaterialStep::Standard(
-                        (surface::StandardMaterialStep::default()).into(),
-                    ),
+                    surface: surface::MaterialStep::Standard((placeholder).into()),
                 },
             )?;
             continue;

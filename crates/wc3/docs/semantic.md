@@ -151,7 +151,7 @@ use wc3::model::{Model, Node};
 use wc3::model::profiles::{Mdlx, Universal};
 
 let mut draft = Model::<Mdlx>::builder("Example");
-let root = draft.add_node(Node::named("Root"))?;
+let root = draft.add_named_node("Root")?;
 let model = draft.finish()?;
 let broader: Model<'_, Universal> = model.widen();
 assert_eq!(broader.node(root).unwrap().name, "Root");
@@ -282,16 +282,9 @@ semantics agree. Unresolved selectors and incompatible resource layouts retain
 their raw selection and complete binding order on `UnresolvedMaterialStep`.
 Legacy M2 surplus inputs and unused WMO slots remain explicit unused bindings,
 preserving graph references without turning them into active shader inputs.
-M2 input ordinals remain stable through `inputs()` and `inputs_mut()`, so
-existing texture-weight and transform animation targets keep their meaning.
-
-MDLX and M2 animation selectors address the ordinal in `steps`. Reordering steps
-therefore requires updating selectors that address their fields. M2's `Material`
-is a `MaterialProgram<MaterialStep>`; `properties::MaterialStep(index)` selects
-that step's color, opacity, or texture-input properties. The `COLOR`, `OPACITY`,
-and `TextureUnit(index)` convenience selectors address the first step. M3
-selectors have no step ordinal: a selector must identify exactly one operation in
-the program, and publication rejects ambiguous targets.
+Animation follows the input-owned slot references through input and material-step
+reordering. Profile property descriptors describe the native schema; native export
+resolves each consuming field to its current native position.
 
 M2 import sorts each skin section’s batches by native `material_layer`, retaining
 source order for ties. Consecutive batches with the same auxiliary section word
@@ -316,7 +309,7 @@ absent-image codes. `Coordinates<Source, Transform>` separates mesh UV or genera
 coordinate selection from its input-owned transform. Animated TRS values,
 Diablo matrices and parametric animation, and M3 UV programs retain distinct
 types because their behavior differs. Native transform conventions and units
-are preserved. MDLX transform properties address the owning material layer,
+are preserved. MDLX transform slots belong to each material input,
 so editing one imported use does not affect another use of the same native record.
 
 Native import expands texture and transform table references into complete
@@ -324,8 +317,9 @@ input values while sharing image declarations. Animated MDLX image choices carry
 the selected image's sampler and native options with each key. Export rebuilds
 native indirection tables and interns equal records; native table identity and
 unused records are not semantic authoring objects. `Model::sampled_images()`
-collects the distinct inline sampled-image values currently used by materials,
-effects, and animation channels rather than exposing a stored texture table.
+collects distinct sampled-image values from materials, effects, allocated value
+slots, and animation channels. This does not introduce shared editable texture
+objects.
 
 Sampling belongs to the input that uses it. M3 bindings retain sampling programs for flipbook, video, and noise,
 together with independent channel-selection contributions. Simpler bindings
@@ -339,17 +333,19 @@ binding vocabulary:
 
 ```rust
 use wc3::model::materials::m2::{MaterialStep, ModulateMaterialStep, TextureUnit};
-use wc3::model::Animated;
+use wc3::model::{Construct, Values};
 
-let mut modulation = TextureUnit::default();
+let mut values = Values::default();
+let mut modulation = TextureUnit::construct(&mut values);
 modulation.coordinates.source = 1;
-modulation.contribution = Animated::constant(0.75);
+values.set(modulation.contribution, 0.75)?;
 let step = MaterialStep::Modulate(ModulateMaterialStep {
     modulation,
-    ..Default::default()
+    ..ModulateMaterialStep::construct(&mut values)
 });
 let MaterialStep::Modulate(value) = step else { unreachable!() };
-assert_eq!(value.modulation.contribution.default, 0.75);
+assert_eq!(values[value.modulation.contribution], 0.75);
+# Ok::<(), wc3::model::Error>(())
 ```
 
 A binding supplies a shader input; a step describes an authored operation.
@@ -412,7 +408,7 @@ Unresolved controls remain authored values.
 roll, and field of view. `CameraConvention` distinguishes vertical projection
 with visibility and photographic controls from diagonal projection with an
 application camera role. Widening a static vertical field of view represents it
-as a constant animated value; adding a binding prevents exact MDLX narrowing.
+as a slot containing a constant; animating that slot prevents exact MDLX export.
 Optical camera programs retain their initial/reset values and animation-reference
 metadata rather than collapsing them into a simpler rest value.
 
@@ -420,12 +416,11 @@ Attachments compose identity, visibility, and placement independently.
 `Socket` exposes a named identity, an application role, or an MDLX point
 index; those namespaces remain distinct even when their numeric values coincide.
 Its `visibility: Animated<f32>` describes mounted content visibility; constant
-`1.0` represents an uncontrolled socket. Native M2 boolean bindings are read as
-scalar zero or one through `ScalarBinding::FromBoolean`, preserving the source
-identity, shared channels, and clocks. The socket also retains unresolved authored
-controls. Exact M2 narrowing requires binary defaults and either an original
-boolean source or binary step curves on the shared `socket::VISIBILITY` property;
-fractional values and fades are rejected. Native formats without a visibility
+`1.0` represents an uncontrolled socket. Native M2 boolean visibility is read as
+scalar zero or one through `Values::scalar_from_boolean`, preserving the source
+slot, shared channels, and clocks. The socket also retains unresolved authored
+controls. Exact M2 narrowing requires the original explicit boolean source;
+fractional visibility cannot be represented. Native formats without a visibility
 control require constant-one visibility. Exact export checks identity namespace,
 visibility representability, and control presence
 against the destination vocabulary. `ChildModel` combines a resource with an
@@ -472,7 +467,7 @@ Universal generation rate uses `f64`, which exactly retains either native `u32` 
 values. Checked export requires an integral in-range rate for MDLX or an exactly
 representable `f32` rate for M2. Atlas dimensions similarly use a shared unsigned
 width, while animated atlas selectors retain their `u16` or `u32` value domain
-and structural property identity. Gravity and emission angle retain separate
+and typed slot identity. Gravity and emission angle retain separate
 meanings; layered materials and ordered texture/surface bindings remain explicit
 rendering programs.
 
@@ -500,14 +495,16 @@ native payload:
 
 ```rust
 use wc3::model::profiles::mdlx;
-use wc3::model::{Animated, ParticleDefinition, ParticleScalar};
+use wc3::model::{Construct, FromFeature, TryFromFeature, Values, ParticleDefinition, ParticleScalar};
 
-let mut emitter = ParticleDefinition::from(mdlx::Particle2::default());
-emitter.emission.rate = ParticleScalar::Animated(Animated::constant(24.));
-emitter.motion.speed = ParticleScalar::Animated(Animated::constant(8.));
-let exported = mdlx::Particle2::try_from(emitter).unwrap();
-assert_eq!(exported.emission.rate.default, 24.);
-assert_eq!(exported.motion.speed.default, 8.);
+let mut values = Values::default();
+let native = mdlx::Particle2::construct(&mut values);
+let mut emitter = ParticleDefinition::from_feature(native, &mut values);
+emitter.emission.rate = ParticleScalar::Animated(values.add(24.));
+emitter.motion.speed = ParticleScalar::Animated(values.add(8.));
+let exported = mdlx::Particle2::try_from_feature(emitter, &values).unwrap();
+assert_eq!(values[exported.emission.rate], 24.);
+assert_eq!(values[exported.motion.speed], 8.);
 ```
 
 Widening moves each feature into its behavior representation. Exact narrowing
@@ -709,73 +706,59 @@ cannot represent rather than substituting another rotation path.
 
 ## Typed animation curves
 
-A `Track<T, P>` connects a `Property<T, P>` to a checked `Curve<T>` and an explicit
-clock. The value type determines which curve values are permitted, while the
-profile determines the structural property vocabulary. `Profile::Property` selects
-an enum implementing `PropertyPayload`. `PropertyTarget<P>` describes common
-transform and sampling destinations directly, or carries an owner ID and one of
-that profile's selectors. Neither display labels nor formatted paths participate
-in equality, hashing, validation, or native routing.
+An `Animated<T>` is a typed identity into the model's `Values` table. Every
+potentially animated field owns such a reference, including node translation,
+rotation, scale, and visibility. The table stores authored constants. Copying a
+reference shares both its constant and its animation; allocating a fresh slot
+creates an independent value. Animation never needs to traverse an owner object
+to find a field.
 
-Common destinations come from typed ID methods such as
-`NodeId::translation::<Mdlx>()` and `MaterialId::texture::<Mdlx>(slot)`; the profile
-can also be inferred from the surrounding channel. Profile descriptors fix an
-owner identity type, value type, and property enum. For example,
-`profiles::mdlx::properties::light::INTENSITY.bind(feature)` returns a
-`Property<f32, Mdlx>` selecting the explicit light-intensity variant, while
-`profiles::mdlx::properties::Layer(index).texture_slot(slot)` selects a material
-layer and sampling slot through integer fields. M2 and M3 publish their selectors
-under their own `properties` modules. M3's nested fields use `FieldPath` with enum
-field segments and collection ordinals. Shared feature destinations live under `feature_properties::light` and
-`feature_properties::camera`. Diffuse and ambient illumination, attenuation, and
-camera roll share structural identity where their value and spatial semantics
-agree. Native selectors resolve those same identities for exact export. Universal also
-admits `camera::VERTICAL_FIELD_OF_VIEW` for vertical aimed cameras; MDLX narrowing
-rejects this binding because its field of view is static. `feature_properties::trail`
-provides shared tint, opacity, and cross-section extent destinations, while
-`feature_properties::particle` exposes continuous rate, lifetime, and initial
-speed where those quantities have established shared units. Keyed burst counts
-remain distinct from continuous emission rates. Fields
-whose meanings differ retain distinct selectors, including camera projection
-and boolean enablement versus fractional visibility.
-Publication checks owner identities, selector families, existing layer and slot
-ordinals, and declared value domains.
+`Track<T>` connects a slot to a checked `Curve<T>` and an explicit clock. Channels
+are independent of model profiles. A native exporter finds the fields consuming
+each slot and writes the corresponding native tracks, duplicating a curve when
+several fields share its slot. Exact projection rejects animation that the target
+format cannot attach to a supported field. Profile property descriptors describe
+native schemas; they no longer identify runtime animation destinations.
 
-`Animated<T, P>` keeps a rest value and an optional typed read binding separate
-from playback programs. `AnimatedValue` selects the binding representation for
-its value domain through `Binding<T, P>`. Most domains read a `Property<T, P>`
-directly. Scalars use `ScalarBinding`, whose `Property` variant reads a scalar
-source and whose `FromBoolean` variant reads a boolean source as zero or one.
-The source keeps its identity and clocks; the conversion happens when sampling
-the binding. Tracks still target direct `Property<T, P>` addresses, so a converted
-read cannot become a channel destination.
+Allocate constants with `Values::add` or `ModelBuilder::add_value`. Construct
+slot-bearing payloads with `Construct::construct(&mut values)` or
+`builder.construct()`, which recursively allocates their defaults. `builder.new_node`
+and `add_named_node` allocate the node's transform and visibility slots. Changing a
+table entry preserves its identity. Model publication validates slot references,
+value domains, and resource dependencies. `import_values` preserves identities
+when combining independently constructed payloads; conflicting constants are an
+error. Widening and narrowing retain existing slot identities and may allocate
+additional constants required by the destination payload.
 
-Built-in owner payloads retain bindings in the universal structural vocabulary
-so their complete payloads can move unchanged into containing profiles.
-`Animated::new` embeds a supplied direct property when the `Extends` relationship
-permits it. Direct assignment to a payload's `binding` field can use
-`Some(property.widen::<Universal>().into())`. Custom payloads may instead use
-`Animated<T, ApplicationProfile>` to constrain their own bindings directly.
-Program channels always carry their model's profile.
+```rust
+use wc3::model::{Channel, Clock, Curve, Model, Time, Track};
+let mut builder = Model::builder("Moving node");
+let node = builder.new_node("Root");
+let translation = node.transform.translation;
+builder.add_node(node)?;
+builder.add_timeline_channel(Channel::Vector3(Track {
+    target: translation,
+    clock: Clock::Timeline,
+    curve: Curve::linear(
+        [Time::seconds(0.)?, Time::seconds(1.)?],
+        [[0., 0., 0.], [1., 0., 0.]],
+    )?,
+}))?;
+let model = builder.finish()?;
+assert_eq!(model.values()[translation], [0., 0., 0.]);
+# Ok::<(), wc3::model::Error>(())
+```
 
-Widening maps program selectors into the containing enum while moving the existing
-curve arrays. Containing property enums preserve canonical structural identity,
-so the channels still address their owner fields. Exact narrowing projects accepted
-selectors into the destination enum and rejects foreign vocabularies. Relationship
-traversal uses transient, profile-independent structural identities to compare
-bindings from different containing vocabularies; active targets retain their actual
-enums. Model-level owners carry a scoped `ModelId`, just as feature and material
-owners carry their own scoped IDs.
+The sealed `Animatable` trait selects a subtable for each supported type. The
+trait, slots, and storage are profile-independent. Applications can define their
+own payloads using these supported slot types. Standalone curves can use custom
+value types, but those types cannot add subtables to `Values`.
 
-Applications define their own property enum through `Profile::Property` and
-implement `PropertyPayload` for it. The default identity is the enum value itself;
-containing enums delegate identity to the selected child vocabulary. A custom
-`PropertyDescriptor` specifies its `Profile`, `Owner`, and `Value` types and
-returns an enum selector from `key`. `Property::profile` binds that selector to an
-owner. Feature and surface payloads can implement `supports_property` to check
-which selectors and indexed elements they actually expose. This extends the
-structural schema without registering property names or manufacturing numeric
-surrogate keys.
+Boolean-to-scalar reads are explicit: `Values::scalar_from_boolean` allocates a
+scalar slot linked to a boolean source, sampled as zero or one. Both identities
+remain available, so native conversions can recover the original boolean field.
+A direct scalar channel on that output takes precedence over its converted read.
+This relation belongs to the value table rather than a field-specific binding.
 
 Choose interpolation through `Curve::step`, `linear`, `hermite`, `bezier`, `tcb`,
 `slerp`, or `nlerp`. The constructor's trait bounds express the permitted value
@@ -789,13 +772,10 @@ seconds and can precede playback. Coincident keys retain their input order: the
 first key defines the incoming limit, while the last defines the boundary value
 and outgoing segment.
 
-Custom value types implement `AnimatedValue` to select their read binding
-(usually `Property<Self, P>`), `AsULE` for encoded storage, and `CurveValue` for
-curve behavior, selecting `DiscreteDomain`,
-`NumericDomain`, `ContinuousDomain`, or `RotationDomain` through its associated
-`Domain` type. That choice derives the constructor capability traits and supplies
-the native decoder's checks. Applications do not implement those capability
-traits separately or repeat their runtime flags.
+Custom standalone curve types implement `AsULE` for encoded storage and
+`CurveValue` for curve behavior, selecting `DiscreteDomain`, `NumericDomain`,
+`ContinuousDomain`, or `RotationDomain` through its associated `Domain` type.
+That choice derives constructor capabilities and supplies native decoder checks.
 
 Each curve stores exactly the controls required by its interpolation. Hermite
 curves expose `hermite_derivatives`, Bezier curves expose `bezier_controls`, and

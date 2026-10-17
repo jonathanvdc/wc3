@@ -6,7 +6,8 @@ use wc3::model::materials::m2::{
 };
 use wc3::model::materials::mdlx::{LayeredSurface, SurfaceLayer};
 use wc3::model::profiles::{m2, mdlx, SurfacePayload};
-use wc3::model::{Animated, Error, Link, PropertyPayload, TextureTransform, ValidateLinks};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Error, Link, PropertyPayload, TextureTransform, ValidateLinks};
 
 #[derive(Clone, Debug, Default)]
 struct CheckedPass {
@@ -46,11 +47,12 @@ fn surfaces_admit_independently_defined_pass_and_input_vocabularies() {
 
 #[test]
 fn built_in_profiles_select_the_shared_owning_types() {
+    let mut slot_values = SlotValues::default();
     let layered = LayeredSurface::default();
     let _: mdlx::Material<'_> = layered;
-    let shader = M2MaterialStep::default();
+    let shader = M2MaterialStep::construct(&mut slot_values);
     let _: m2::Material<'_> = shader.into();
-    let transform = TextureTransform::default();
+    let transform = TextureTransform::construct(&mut slot_values);
     let _: m2::TextureTransform = transform;
 }
 
@@ -79,19 +81,20 @@ fn controller_program_traverses_its_selected_block_vocabulary() {
 
 #[test]
 fn selected_coordinate_form_controls_which_destinations_exist() {
+    let mut slot_values = SlotValues::default();
     use m2::properties::{Target, TextureUnitField};
     let input = TextureUnit {
         image: ImageSelection {
-            source: Default::default(),
+            source: SlotConstruct::construct(&mut slot_values),
             texture: None,
         },
         coordinates: Coordinates {
             source: 0,
             transform: (),
         },
-        contribution: Animated::constant(1.),
+        contribution: slot_values.add(1.),
         sampling: FrameSampling {
-            frame: Animated::constant(0),
+            frame: slot_values.add(0),
         },
     };
     let weight = Target::TextureUnit {
@@ -114,7 +117,7 @@ fn selected_coordinate_form_controls_which_destinations_exist() {
     let animated_input = TextureUnit {
         coordinates: Coordinates {
             source: input.coordinates.source,
-            transform: TextureTransform::default(),
+            transform: TextureTransform::construct(&mut slot_values),
         },
         image: input.image,
         contribution: input.contribution,
@@ -154,20 +157,21 @@ fn texture_bindings_traverse_every_selected_component() {
 
 #[test]
 fn m3_input_validation_reaches_nested_components_at_publication() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::m3::{
         MaterialStep as M3MaterialStep, SamplingProgram, StandardMaterialStep, TextureLayer,
     };
     use wc3::model::profiles::M3;
     use wc3::model::{Material, Model};
 
-    let mut layer = TextureLayer::default();
+    let mut layer = TextureLayer::construct(&mut slot_values);
     layer.binding.sampling = SamplingProgram {
         noise_amplitude: f32::NAN,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let standard = StandardMaterialStep {
         diffuse: Some(layer),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let mut builder = Model::<M3>::builder("invalid input");
     builder
@@ -176,7 +180,11 @@ fn m3_input_validation_reaches_nested_components_at_publication() {
             surface: M3MaterialStep::Standard(Box::new(standard)),
         })
         .unwrap();
-    assert!(builder.finish().is_err());
+    assert!({
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .is_err());
 }
 
 #[test]
@@ -224,8 +232,10 @@ fn image_source_vocabularies_can_supply_graph_relationships() {
 
 #[test]
 fn guild_palette_defaults_are_neutral_and_nonfinite_settings_are_rejected() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::materials::m2::GuildPalette;
-    let mut shader = M2MaterialStep::Guild(Box::new(GuildMaterialStep::default()));
+    let mut shader =
+        M2MaterialStep::Guild(Box::new(GuildMaterialStep::construct(&mut slot_values)));
     assert_eq!(
         shader.guild_palette().unwrap(),
         GuildPalette {

@@ -28,7 +28,7 @@ pub(in super::super) fn interpolation_code(value: sm::Interpolation) -> NativeIn
 
 pub(in super::super) fn import_track<'data, D: Dialect, T: Value>(
     source: &Bundle<'data, D>,
-    track: &Track<'data, T, D::Layout>,
+    track: &Track<'data, T>,
     owner: &native::FileKey,
     sequence: usize,
     start: u32,
@@ -45,7 +45,7 @@ where
 
 pub(in super::super) fn import_track_try<'data, D: Dialect, T: Value>(
     source: &Bundle<'data, D>,
-    track: &Track<'data, T, D::Layout>,
+    track: &Track<'data, T>,
     owner: &native::FileKey,
     sequence: usize,
     start: u32,
@@ -145,7 +145,7 @@ pub(in super::super) fn export_track<V: ModelLayout, T: Value>(
     globals: &mut Vec<u32>,
     context: &mut Context,
     convert: impl Fn(&[f32], &mut Context, &str) -> Result<T, Error>,
-) -> Result<Track<'static, T, V>, Error>
+) -> Result<Track<'static, T>, Error>
 where
     [T; 3]: Value,
     V::Timeline<'static>: TimelineFactory,
@@ -253,7 +253,7 @@ where
     })
 }
 
-pub(in super::super) fn initial<T: Value, V: ModelLayout>(track: &Track<'_, T, V>) -> Option<T>
+pub(in super::super) fn initial<T: Value, V: ModelLayout>(track: &Track<'_, T>) -> Option<T>
 where
     [T; 3]: Value,
 {
@@ -264,7 +264,7 @@ where
 }
 
 pub(in super::super) fn ensure_constant<V: ModelLayout, T: Value>(
-    track: &mut Track<'static, T, V>,
+    track: &mut Track<'static, T>,
     value: T,
     globals: &mut Vec<u32>,
 ) where

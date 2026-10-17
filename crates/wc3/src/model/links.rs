@@ -1,4 +1,5 @@
 //! Logical relationship traversal for checked graph construction.
+use crate::model::{Animatable, ValueSlot};
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
 };
@@ -12,6 +13,8 @@ use std::borrow::Cow;
 /// A relationship to another object in the semantic graph.
 #[derive(Clone, Debug)]
 pub enum Link {
+    /// Typed animation value slot.
+    Value(ValueSlot),
     /// External image dependency.
     ImageResource(ImageResourceId),
     /// External model dependency.
@@ -155,7 +158,7 @@ impl ValidateLinks for ClockId {
 }
 
 use crate::model::profiles::Profile;
-use crate::model::{Animated, Property, PropertyIdentity, PropertyPayload, PropertyTarget};
+use crate::model::{Property, PropertyIdentity, PropertyPayload, PropertyTarget};
 impl<T: 'static, P: Profile> ValidateLinks for Property<T, P> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         v(Link::Property {
@@ -188,38 +191,20 @@ impl<T: 'static, P: Profile> ValidateLinks for Property<T, P> {
         }
     }
 }
-impl<T: CurveValue + 'static, P: Profile> ValidateLinks for Animated<T, P> {
-    fn visit_links(&self, v: &mut dyn FnMut(Link)) {
-        if !self.default.is_valid() {
-            v(Link::InvalidValue);
-        }
-        self.default.visit_value_links(v);
-        self.binding.visit_links(v);
-    }
-}
 use crate::model::{Channel, Clock, Track};
-impl<T: CurveValue + 'static, P: Profile> ValidateLinks for Track<'_, T, P> {
+impl<T: CurveValue + Animatable + 'static> ValidateLinks for Track<'_, T> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         for value in self.curve.values().iter() {
             value.visit_value_links(v);
         }
         self.curve.visit_control_links(v);
-        self.target.visit_links(&mut |link| match link {
-            Link::Property {
-                target, value_type, ..
-            } => v(Link::Property {
-                target,
-                value_type,
-                definition: false,
-            }),
-            other => v(other),
-        });
+        self.target.visit_links(v);
         if let Clock::Shared(id) = self.clock {
             id.visit_links(v);
         }
     }
 }
-impl<P: Profile> ValidateLinks for Channel<'_, P> {
+impl ValidateLinks for Channel<'_> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         match self {
             Self::Unsigned4(t) => t.visit_links(v),

@@ -60,11 +60,13 @@ pub(super) fn revision<E: Envelope, T: native::Target>(
         .map(|section| section.revision())
         .ok_or_else(|| native::ReadError::invalid(0, "missing material section"))
 }
-pub(super) fn anim<T>(r: nr::AnimationValue<T>) -> surface::Property<T> {
+pub(super) fn anim<T: sem::Animatable>(
+    r: nr::AnimationValue<T>,
+    values: &mut sem::Values,
+) -> surface::Property<T> {
     surface::Property {
-        initial: r.initial_value,
+        value: values.add(r.initial_value),
         reset: r.null_value,
-        binding: None,
         control: surface::AnimationControl {
             interpolation: surface::values::Interpolation::from_raw(r.interpolation.raw()),
             flags: surface::values::AnimationFlags(r.flags.bits()),
@@ -73,7 +75,10 @@ pub(super) fn anim<T>(r: nr::AnimationValue<T>) -> surface::Property<T> {
         },
     }
 }
-pub(super) fn color(r: nr::AnimationValue<[u8; 4]>) -> surface::Property<[f32; 4]> {
+pub(super) fn color(
+    r: nr::AnimationValue<[u8; 4]>,
+    values: &mut sem::Values,
+) -> surface::Property<[f32; 4]> {
     let rgba = |value: [u8; 4]| {
         [value[2], value[1], value[0], value[3]].map(|lane| f32::from(lane) / 255.)
     };
@@ -85,17 +90,23 @@ pub(super) fn color(r: nr::AnimationValue<[u8; 4]>) -> surface::Property<[f32; 4
         animation_id: r.animation_id,
         reserved: r.reserved,
     };
-    anim(value)
+    anim(value, values)
 }
-pub(super) fn fixed_color(r: nr::AnimationValue<nr::FixedBytes<4>>) -> surface::Property<[f32; 4]> {
-    color(nr::AnimationValue {
-        initial_value: r.initial_value.0,
-        null_value: r.null_value.0,
-        interpolation: r.interpolation,
-        flags: r.flags,
-        animation_id: r.animation_id,
-        reserved: r.reserved,
-    })
+pub(super) fn fixed_color(
+    r: nr::AnimationValue<nr::FixedBytes<4>>,
+    values: &mut sem::Values,
+) -> surface::Property<[f32; 4]> {
+    color(
+        nr::AnimationValue {
+            initial_value: r.initial_value.0,
+            null_value: r.null_value.0,
+            interpolation: r.interpolation,
+            flags: r.flags,
+            animation_id: r.animation_id,
+            reserved: r.reserved,
+        },
+        values,
+    )
 }
 fn identity<T>(value: T) -> T {
     value

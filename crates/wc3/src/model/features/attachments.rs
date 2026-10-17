@@ -1,12 +1,13 @@
 //! Sockets and authored child models, composed independently.
+use crate::model::features::{FromFeature, TryFromFeature};
 use crate::model::ModelResourceId;
-use std::any::TypeId;
+use crate::model::{Animatable, Construct, Values};
 use std::borrow::Cow;
 
-use crate::model::profiles::{m2, m3, wmo, Universal};
+use crate::model::profiles::{m2, m3, wmo};
 use crate::model::{
-    scene, Animated, FeatureId, FeatureKind, Link, ModelMount, MountTarget, NodeId, Property,
-    SampledAnimation, ScalarBinding, ValidateLinks,
+    scene, Animated, FeatureId, FeatureKind, Link, ModelMount, MountTarget, NodeId,
+    SampledAnimation, ValidateLinks,
 };
 
 /// Sockets and authored child model references.
@@ -60,7 +61,7 @@ impl<'a> Attachment<'a> {
     }
 
     /// Sample mounted content visibility; children without a socket are fully visible.
-    pub fn visibility(&self, sample: &SampledAnimation<'_, '_, Universal>) -> f32 {
+    pub fn visibility(&self, sample: &SampledAnimation<'_, '_>) -> f32 {
         self.socket()
             .map_or(1., |point| sample.animated(&point.visibility).clamp(0., 1.))
     }
@@ -154,47 +155,30 @@ pub enum PlacementAppearance {
     },
 }
 
-impl<'a> From<m2::Attachment> for Socket<'a> {
-    fn from(value: m2::Attachment) -> Self {
+impl<'a> FromFeature<m2::Attachment> for Socket<'a> {
+    fn from_feature(value: m2::Attachment, values: &mut Values) -> Self {
         Self {
             identity: SocketIdentity::Role(value.identity),
-            visibility: Animated {
-                default: if value.visibility.default { 1. } else { 0. },
-                binding: value.visibility.binding.map(ScalarBinding::FromBoolean),
-            },
+            visibility: values
+                .scalar_from_boolean(value.visibility)
+                .expect("validated source slot"),
             control: None,
         }
     }
 }
-impl<'a> TryFrom<Socket<'a>> for m2::Attachment {
+impl<'a> TryFromFeature<Socket<'a>> for m2::Attachment {
     type Error = Box<Socket<'a>>;
-    fn try_from(value: Socket<'a>) -> Result<Self, Self::Error> {
+    fn try_from_feature(value: Socket<'a>, values: &Values) -> Result<Self, Self::Error> {
         if let Socket {
             identity: SocketIdentity::Role(role),
             visibility,
             control: None,
         } = &value
         {
-            if visibility.default == 0. || visibility.default == 1. {
-                let binding = match &visibility.binding {
-                    Some(ScalarBinding::FromBoolean(property)) => Some(property.clone()),
-                    Some(ScalarBinding::Property(property)) => {
-                        let Ok(target) = property.target().clone().try_narrow::<m2::M2>() else {
-                            return Err(Box::new(value));
-                        };
-                        if target.value_type() != Some(TypeId::of::<bool>()) {
-                            return Err(Box::new(value));
-                        }
-                        Some(Property::new(target.widen()))
-                    }
-                    None => None,
-                };
+            if let Some(source) = values.boolean_source(*visibility) {
                 return Ok(Self {
                     identity: *role,
-                    visibility: Animated {
-                        default: visibility.default == 1.,
-                        binding,
-                    },
+                    visibility: source,
                     control: (),
                 });
             }
@@ -202,24 +186,24 @@ impl<'a> TryFrom<Socket<'a>> for m2::Attachment {
         Err(Box::new(value))
     }
 }
-impl<'a> From<m3::Attachment<'a>> for Socket<'a> {
-    fn from(value: m3::Attachment<'a>) -> Self {
+impl<'a> FromFeature<m3::Attachment<'a>> for Socket<'a> {
+    fn from_feature(value: m3::Attachment<'a>, values: &mut Values) -> Self {
         Self {
             identity: SocketIdentity::Named(value.identity),
-            visibility: Animated::constant(1.),
+            visibility: values.add(1.),
             control: Some(value.control),
         }
     }
 }
-impl<'a> TryFrom<Socket<'a>> for m3::Attachment<'a> {
+impl<'a> TryFromFeature<Socket<'a>> for m3::Attachment<'a> {
     type Error = Box<Socket<'a>>;
-    fn try_from(value: Socket<'a>) -> Result<Self, Self::Error> {
+    fn try_from_feature(value: Socket<'a>, values: &Values) -> Result<Self, Self::Error> {
         match value {
             Socket {
                 identity: SocketIdentity::Named(name),
                 visibility,
                 control: Some(control),
-            } if visibility.default == 1. && visibility.binding.is_none() => Ok(Self {
+            } if values.get(visibility) == Some(&1.) => Ok(Self {
                 identity: name,
                 visibility: (),
                 control,
@@ -373,6 +357,18 @@ impl ValidateLinks for Attachment<'_> {
         match self {
             Self::Socket(value) => value.visit_links(visitor),
             Self::Child(value) => value.visit_links(visitor),
+        }
+    }
+}
+
+impl<I: Default, T: Animatable + Default, C: Default> Construct
+    for SocketDefinition<I, Animated<T>, C>
+{
+    fn construct(values: &mut Values) -> Self {
+        Self {
+            identity: I::default(),
+            visibility: values.add(T::default()),
+            control: C::default(),
         }
     }
 }

@@ -4,6 +4,7 @@ use super::super::GraphBuilder;
 use super::{events, extents, keys, raw_keys};
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
+use crate::model::ValueSlot;
 use crate::model::{
     profiles::m3 as surface, Bounds, Clip, ClipId, Controller, Interpolation, NodeId, Time,
 };
@@ -37,19 +38,19 @@ fn revision<E: Envelope, T: native::Target>(
         .map(|section| section.revision())
         .ok_or_else(|| Error::new("m3.animation.reference", "missing section"))
 }
-fn target_property(target: &Target) -> &crate::model::PropertyTarget {
+fn target_property(target: &Target) -> ValueSlot {
     match target {
-        Target::Scalar(p) => p.target(),
-        Target::Vector2(p) => p.target(),
-        Target::Vector3(p) => p.target(),
-        Target::Vector4(p) => p.target(),
-        Target::Unsigned(p) => p.target(),
-        Target::Unsigned16(p) => p.target(),
-        Target::Rotation(p) => p.target(),
-        Target::Signed(p) => p.target(),
-        Target::Byte(p) => p.target(),
-        Target::Bytes4(p) => p.target(),
-        Target::Unsigned4(p) => p.target(),
+        Target::Scalar(p) => p.slot(),
+        Target::Vector2(p) => p.slot(),
+        Target::Vector3(p) => p.slot(),
+        Target::Vector4(p) => p.slot(),
+        Target::Unsigned(p) => p.slot(),
+        Target::Unsigned16(p) => p.slot(),
+        Target::Rotation(p) => p.slot(),
+        Target::Signed(p) => p.slot(),
+        Target::Byte(p) => p.slot(),
+        Target::Bytes4(p) => p.slot(),
+        Target::Unsigned4(p) => p.slot(),
     }
 }
 
@@ -217,17 +218,14 @@ pub(in crate::model::io::m3::logical) fn read<'a, E: Envelope + Send + Sync>(
                 controller,
                 selector,
                 identity,
-                destinations
-                    .iter()
-                    .map(|target| target_property(target).clone())
-                    .collect(),
+                destinations.iter().map(target_property).collect(),
                 Vec::new(),
                 Vec::new(),
             )?);
             for destination in destinations {
                 let mode = match bindings
                     .modes
-                    .get(target_property(destination))
+                    .get(&target_property(destination))
                     .copied()
                     .unwrap_or_default()
                 {

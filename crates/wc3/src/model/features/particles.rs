@@ -10,6 +10,7 @@ use crate::model::values::model::{
     ParticleBlend, ParticleFlags as AgeDrivenFlags, ParticleGenerator, ParticleHeadTail,
 };
 use crate::model::values::programmed::*;
+use crate::model::Construct;
 use crate::model::ImageResourceId;
 use crate::model::ModelResourceId;
 use crate::model::{
@@ -25,7 +26,7 @@ pub enum ParticleScalar {
     Programmed(Property<f32>),
 }
 /// Common emission controls.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ParticleEmission<
     R = ParticleScalar,
     T = ParticleTrigger,
@@ -62,7 +63,7 @@ pub enum ParticleActivation {
     Programmed,
 }
 /// Common initial velocity and acceleration controls.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ParticleMotion<S = ParticleScalar, V = ParticleScalar, G = ParticleGravity> {
     /// Initial velocity magnitude in model units per second.
     pub speed: S,
@@ -98,7 +99,7 @@ pub enum ParticleGravity {
     },
 }
 /// Lifetime in seconds with an independently authored random contribution.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ParticleLifetime<D = ParticleScalar, V = ParticleScalar> {
     /// Particle lifetime in seconds.
     pub duration: D,
@@ -106,7 +107,7 @@ pub struct ParticleLifetime<D = ParticleScalar, V = ParticleScalar> {
     pub variation: V,
 }
 /// Complete composed particle definition.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ParticleComposition<E, M, L, A, D> {
     /// Model-clock emission timing and activation.
     pub emission: E,
@@ -161,7 +162,7 @@ impl ValidateLinks for ParticleResource {
     }
 }
 /// Simulation-specific controls composed with common emission, motion and lifetime.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ModelParticle {
     /// Model or image resource instantiated per particle.
     pub resource: ParticleResource,
@@ -176,7 +177,7 @@ pub struct ModelParticle {
 }
 
 /// Simulation-specific controls composed with common emission, motion and lifetime.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct AtlasParticle {
     /// Model-space rather than world-space simulation.
     pub model_space: bool,
@@ -432,7 +433,7 @@ pub struct AtlasParticleRendering {
     pub unfogged: bool,
 }
 /// Shape controls shared independently of emitter timing.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct AtlasParticleShape {
     /// Emission-cone latitude in degrees.
     pub latitude: Animated<f32>,

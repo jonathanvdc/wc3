@@ -142,14 +142,14 @@ impl RuntimeProgrammedRibbons {
                 &definition.alpha,
             ]
             .into_iter()
-            .any(nondefault_variation)
+            .any(|value| nondefault_variation(value, model))
             {
                 diagnose(
                     "M3 endpoint ribbon yaw/pitch/speed/size/alpha variation controls are not implemented",
                 );
             }
-            if nondefault_scalar(&definition.overlay)
-                || nondefault_scalar(&definition.particle_velocity)
+            if nondefault_scalar(&definition.overlay, model)
+                || nondefault_scalar(&definition.particle_velocity, model)
             {
                 diagnose(
                     "M3 endpoint ribbon overlay and particle_velocity controls are not implemented",
@@ -504,6 +504,8 @@ fn draw_mesh(
 }
 #[cfg(test)]
 mod tests {
+    use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+
     use super::*;
     #[test]
     fn endpoint_paths_follow_arc_length_and_explicit_length_cap() {
@@ -519,17 +521,18 @@ mod tests {
     }
     #[test]
     fn endpoint_material_passes_share_one_mesh_and_keep_distinct_materials() {
+        let mut slot_values = SlotValues::default();
         use bevy::ecs::world::CommandQueue;
         use wc3::model::profiles::Universal;
-        use wc3::model::{Animated, Attachment, Node, Socket, SocketIdentity};
+        use wc3::model::{Attachment, Socket, SocketIdentity};
         let mut builder = Model::<Universal>::builder("ribbon passes");
-        let node = builder.add_node(Node::named("anchor")).unwrap();
+        let node = builder.add_named_node("anchor").unwrap();
         let feature = builder
             .add_feature(
                 node,
                 NodeFeature::Attachment(Attachment::Socket(Socket {
                     identity: SocketIdentity::Role(11),
-                    visibility: Animated::constant(1.),
+                    visibility: slot_values.add(1.),
                     control: None,
                 })),
             )
@@ -549,17 +552,17 @@ mod tests {
                     color_mid_hold_time: 0.,
                     alpha_mid_hold_time: 0.,
                     rotation_mid_hold_time: 0.,
-                    size_animation: Default::default(),
-                    rotation_animation: Default::default(),
-                    color_start: Default::default(),
-                    color_mid: Default::default(),
-                    color_end: Default::default(),
+                    size_animation: SlotConstruct::construct(&mut slot_values),
+                    rotation_animation: SlotConstruct::construct(&mut slot_values),
+                    color_start: SlotConstruct::construct(&mut slot_values),
+                    color_mid: SlotConstruct::construct(&mut slot_values),
+                    color_end: SlotConstruct::construct(&mut slot_values),
                 },
                 smoothing: [Smoothing::Linear; 2],
                 kind: RibbonKind::Billboard,
                 segments: 1,
-                max_length: Animated::constant(10.),
-                active: Animated::constant(1),
+                max_length: slot_values.add(10.),
+                active: slot_values.add(1),
                 passes: [Color::WHITE, Color::BLACK]
                     .map(|color| {
                         let mut material = if color == Color::BLACK {

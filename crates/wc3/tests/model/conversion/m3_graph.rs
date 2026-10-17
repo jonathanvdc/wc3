@@ -6,6 +6,7 @@ use wc3::model::{
     profiles::m3 as surface,
     profiles::M3,
 };
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 fn source() -> m3::Bundle<'static> {
     let model = m3::Document::new::<m3::StarCraft2>().unwrap();
@@ -38,8 +39,12 @@ fn source() -> m3::Bundle<'static> {
 }
 #[test]
 fn imported_typed_graph_edits_rebuild_native_bone_fields() {
+    let mut slot_values = SlotValues::default();
     let source = source();
-    let mut imported: Model<'_, M3> = io::m3::import(&source, &Default::default()).unwrap().value;
+    let mut imported: Model<'_, M3> =
+        io::m3::import(&source, &SlotConstruct::construct(&mut slot_values))
+            .unwrap()
+            .value;
     let (id, node) = imported
         .nodes()
         .iter()
@@ -47,17 +52,24 @@ fn imported_typed_graph_edits_rebuild_native_bone_fields() {
         .unwrap();
     assert!(matches!(node.name, std::borrow::Cow::Borrowed(_)));
     let mut node = node.clone();
-    node.transform.translation = [3., 4., 5.];
+    let translation = node.transform.translation;
     let surface::NodeRole::Bone(controls) = &mut node.controls else {
         panic!("expected actual bone")
     };
-    controls.batching.initial = 0x8000_0001;
-    imported.edit(|draft| draft.set_node(id, node)).unwrap();
-    let output = io::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
+    let batching = controls.batching.value;
+    imported
+        .edit(|draft| {
+            draft.values_mut().set(translation, [3., 4., 5.])?;
+            draft.values_mut().set(batching, 0x8000_0001)?;
+            draft.set_node(id, node)
+        })
+        .unwrap();
+    let output =
+        io::m3::plan::<m3::StarCraft2>(&imported, &SlotConstruct::construct(&mut slot_values))
+            .unwrap()
+            .execute()
+            .unwrap()
+            .value;
     let root = output.model.root_record().unwrap();
     let bones = output
         .model
@@ -68,29 +80,34 @@ fn imported_typed_graph_edits_rebuild_native_bone_fields() {
     assert_eq!(bone.position.initial_value, [3., 4., 5.]);
     assert_eq!(bone.batching.initial_value, 0x8000_0001);
     assert_eq!(bone.id, 17);
-    let reread = io::m3::import(&output, &Default::default()).unwrap();
+    let reread = io::m3::import(&output, &SlotConstruct::construct(&mut slot_values)).unwrap();
     let (_, node) = reread
         .value
         .nodes()
         .iter()
         .find(|(_, node)| node.name == "b")
         .unwrap();
-    assert_eq!(node.transform.translation, [3., 4., 5.]);
+    assert_eq!(
+        reread.value.values()[node.transform.translation],
+        [3., 4., 5.]
+    );
 }
 #[test]
 fn complete_camera_optics_rebuild_without_editable_document_backing() {
+    let mut slot_values = SlotValues::default();
     let source = source();
-    let mut imported = io::m3::import(&source, &Default::default()).unwrap().value;
+    let mut imported = io::m3::import(&source, &SlotConstruct::construct(&mut slot_values))
+        .unwrap()
+        .value;
     let (id, _) = imported
         .nodes()
         .iter()
         .find(|(_, node)| node.name == "b")
         .unwrap();
-    let constant = |value| surface::Property {
-        initial: value,
+    let mut constant = |value| surface::Property {
+        value: slot_values.add(value),
         reset: value,
         control: surface::AnimationControl::default(),
-        binding: None,
     };
     let camera = surface::Camera {
         name: "Main camera".into(),
@@ -104,13 +121,17 @@ fn complete_camera_optics_rebuild_without_editable_document_backing() {
         dof_amount: constant(0.),
     };
     imported
-        .edit(|draft| draft.add_feature(id, surface::Feature::Camera((camera).into())))
+        .edit(|draft| {
+            draft.import_values(&slot_values)?;
+            draft.add_feature(id, surface::Feature::Camera((camera).into()))
+        })
         .unwrap();
-    let output = io::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
+    let output =
+        io::m3::plan::<m3::StarCraft2>(&imported, &SlotConstruct::construct(&mut slot_values))
+            .unwrap()
+            .execute()
+            .unwrap()
+            .value;
     let root = output.model.root_record().unwrap();
     let reference = m3::visit_m3_root!(root, |r| r.cameras);
     let camera = output
@@ -128,6 +149,7 @@ fn complete_camera_optics_rebuild_without_editable_document_backing() {
 
 #[test]
 fn inherited_emitters_rebuild_from_independent_graph_definitions() {
+    let mut slot_values = SlotValues::default();
     let source = source();
     let id = source.model.root_id();
     let mut root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
@@ -152,12 +174,12 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
             emission_rate: nr::AnimationValue {
                 initial_value: 12.,
                 null_value: 2.,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
             squirt_amount: nr::AnimationValue {
                 initial_value: 3,
                 null_value: 1,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
             bone_index: 0,
         }])
@@ -173,13 +195,15 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
             flipbook_column_fraction: f32::INFINITY,
             flipbook_row_fraction: f32::INFINITY,
             copy_indices: m3::Ref::from_section(1, indices.index()),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         }])
         .unwrap();
     root.particle_emitters = m3::Ref::from_section(1, particle.index());
     document.replace(id, &[root]).unwrap();
     let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
-    let mut imported = io::m3::import(&source, &Default::default()).unwrap().value;
+    let mut imported = io::m3::import(&source, &SlotConstruct::construct(&mut slot_values))
+        .unwrap()
+        .value;
     let (copy_id, feature) = imported
         .features()
         .iter()
@@ -189,17 +213,21 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
     let surface::Feature::ParticleCopy(copy) = &mut payload else {
         unreachable!()
     };
-    copy.emission_rate.initial = 25.;
+    let rate_slot = copy.emission_rate.value;
     let owner = feature.node;
     imported
-        .edit(|draft| draft.set_feature(copy_id, payload))
+        .edit(|draft| {
+            draft.values_mut().set(rate_slot, 25.)?;
+            draft.set_feature(copy_id, payload)
+        })
         .unwrap();
     assert_eq!(imported.feature(copy_id).unwrap().node, owner);
-    let output = io::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
+    let output =
+        io::m3::plan::<m3::StarCraft2>(&imported, &SlotConstruct::construct(&mut slot_values))
+            .unwrap()
+            .execute()
+            .unwrap()
+            .value;
     let root = output.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let particle = output
         .model
@@ -221,7 +249,7 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
     assert_eq!(copy.emission_rate.initial_value, 25.);
     assert_eq!(copy.emission_rate.null_value, 2.);
     assert_eq!(copy.squirt_amount.initial_value, 3);
-    let reread = io::m3::import(&output, &Default::default()).unwrap();
+    let reread = io::m3::import(&output, &SlotConstruct::construct(&mut slot_values)).unwrap();
     assert_eq!(
         reread
             .value
@@ -244,6 +272,7 @@ fn inherited_emitters_rebuild_from_independent_graph_definitions() {
 
 #[test]
 fn every_particle_record_revision_maps_through_logical_fields() {
+    let mut slot_values = SlotValues::default();
     macro_rules! roundtrip {
         ($version:ty $(,$field:ident=$value:expr)*) => {{
             let source=source();
@@ -256,14 +285,14 @@ fn every_particle_record_revision_maps_through_logical_fields() {
             root.material_maps=m3::Ref::from_section(1,maps.index());
             let ribbon=document.append(&[nr::RibbonEmitter::<nr::V9>::default()]).unwrap();
             root.ribbon_emitters=m3::Ref::from_section(1,ribbon.index());
-            let emitter=nr::ParticleEmitter::<$version>{$($field:$value,)*trail_link_index:-1,collision_spawn_index:-1,splat_projection_index:-1,..Default::default()};
+            let emitter=nr::ParticleEmitter::<$version>{$($field:$value,)*trail_link_index:-1,collision_spawn_index:-1,splat_projection_index:-1,..SlotConstruct::construct(&mut slot_values)};
             let particles=document.append(&[emitter]).unwrap();
             root.particle_emitters=m3::Ref::from_section(1,particles.index());
             document.replace(id,&[root]).unwrap();
             let source=m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
-            let imported=io::m3::import(&source,&Default::default()).unwrap().value;
-            let output=io::m3::plan::<m3::StarCraft2>(&imported,&Default::default()).unwrap().execute().unwrap().value;
-            let reread=io::m3::import(&output,&Default::default()).unwrap();
+            let imported=io::m3::import(&source,&SlotConstruct::construct(&mut slot_values)).unwrap().value;
+            let output=io::m3::plan::<m3::StarCraft2>(&imported,&SlotConstruct::construct(&mut slot_values)).unwrap().execute().unwrap().value;
+            let reread=io::m3::import(&output,&SlotConstruct::construct(&mut slot_values)).unwrap();
             assert_eq!(reread.value.features().iter().filter(|(_,feature)|matches!(feature.payload,surface::Feature::Particle(_))).count(),1);
         }};
     }
@@ -286,6 +315,7 @@ fn every_particle_record_revision_maps_through_logical_fields() {
 
 #[test]
 fn static_collision_streams_are_materialized_and_independently_editable() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::profiles::Universal;
     use wc3::model::{
         AttributeDomain, AttributeSemantic, GeometryKind, GeometrySchema, M3CollisionGeometry,
@@ -330,7 +360,7 @@ fn static_collision_streams_are_materialized_and_independently_editable() {
     };
     document.replace(id, &[root]).unwrap();
     let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
-    let mut widened = io::m3::import(&source, &Default::default())
+    let mut widened = io::m3::import(&source, &SlotConstruct::construct(&mut slot_values))
         .unwrap()
         .value
         .widen::<Universal>();
@@ -379,11 +409,12 @@ fn static_collision_streams_are_materialized_and_independently_editable() {
         .unwrap(),
     );
     imported.edit(|draft| draft.set_mesh(id, edited)).unwrap();
-    let output = io::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
+    let output =
+        io::m3::plan::<m3::StarCraft2>(&imported, &SlotConstruct::construct(&mut slot_values))
+            .unwrap()
+            .execute()
+            .unwrap()
+            .value;
     let root = output.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     assert_eq!(
         output
@@ -402,6 +433,7 @@ fn static_collision_streams_are_materialized_and_independently_editable() {
 
 #[test]
 fn joint_relationships_rebuild_from_edited_logical_controls() {
+    let mut slot_values = SlotValues::default();
     let mut source = source();
     let root_id = source.model.root_id();
     let mut root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
@@ -413,14 +445,16 @@ fn joint_relationships_rebuild_from_edited_logical_controls() {
         enable_friction: 0x4000_0001,
         friction: 0.125,
         collision_control: -17,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let mut document = source.model.into_container();
     let joints = document.append(&[joint]).unwrap();
     root.physics_joints = m3::Ref::from_section(1, joints.index());
     document.replace(root_id, &[root]).unwrap();
     source.model = m3::Document::from_container(document).unwrap();
-    let mut asset = io::m3::import(&source, &Default::default()).unwrap().value;
+    let mut asset = io::m3::import(&source, &SlotConstruct::construct(&mut slot_values))
+        .unwrap()
+        .value;
     let (id, system) = asset
         .systems()
         .iter()
@@ -434,11 +468,12 @@ fn joint_relationships_rebuild_from_edited_logical_controls() {
     asset
         .edit(|builder| builder.set_system(id, system))
         .unwrap();
-    let output = io::m3::plan::<m3::StarCraft2>(&asset, &Default::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
+    let output =
+        io::m3::plan::<m3::StarCraft2>(&asset, &SlotConstruct::construct(&mut slot_values))
+            .unwrap()
+            .execute()
+            .unwrap()
+            .value;
     let root = output.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let joints = output
         .model
@@ -454,6 +489,7 @@ fn joint_relationships_rebuild_from_edited_logical_controls() {
 
 #[test]
 fn body_mass_and_dynamic_defaults_are_logical_authoring_values() {
+    let mut slot_values = SlotValues::default();
     let mut source = source();
     let root_id = source.model.root_id();
     let mut root = source.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
@@ -465,16 +501,18 @@ fn body_mass_and_dynamic_defaults_are_logical_authoring_values() {
             animation_id: 0x1234_5678,
             initial_value: u32::MAX,
             null_value: 16_777_217,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let mut document = source.model.into_container();
     let bodies = document.append(&[body]).unwrap();
     root.rigid_bodies = m3::Ref::from_section(1, bodies.index());
     document.replace(root_id, &[root]).unwrap();
     source.model = m3::Document::from_container(document).unwrap();
-    let mut asset = io::m3::import(&source, &Default::default()).unwrap().value;
+    let mut asset = io::m3::import(&source, &SlotConstruct::construct(&mut slot_values))
+        .unwrap()
+        .value;
     let (id, system) = asset
         .systems()
         .iter()
@@ -490,11 +528,12 @@ fn body_mass_and_dynamic_defaults_are_logical_authoring_values() {
     asset
         .edit(|builder| builder.set_system(id, system))
         .unwrap();
-    let output = io::m3::plan::<m3::StarCraft2>(&asset, &Default::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
+    let output =
+        io::m3::plan::<m3::StarCraft2>(&asset, &SlotConstruct::construct(&mut slot_values))
+            .unwrap()
+            .execute()
+            .unwrap()
+            .value;
     let root = output.model.root::<nr::ModelRecord<nr::V29>>().unwrap();
     let bodies = output
         .model
@@ -511,6 +550,7 @@ fn body_mass_and_dynamic_defaults_are_logical_authoring_values() {
 
 #[test]
 fn ordinary_parent_local_bones_preserve_bind_matrices_and_unresolved_flag_bits() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::Inheritance;
 
     let source = source();
@@ -561,7 +601,9 @@ fn ordinary_parent_local_bones_preserve_bind_matrices_and_unresolved_flag_bits()
     root.initial_reference = m3::Ref::from_section(2, inverse.index());
     document.replace(id, &[root]).unwrap();
     let source = m3::Bundle::from_model(m3::Document::from_container(document).unwrap());
-    let imported = io::m3::import(&source, &Default::default()).unwrap().value;
+    let imported = io::m3::import(&source, &SlotConstruct::construct(&mut slot_values))
+        .unwrap()
+        .value;
     let nodes: Vec<_> = imported
         .nodes()
         .iter()
@@ -570,19 +612,29 @@ fn ordinary_parent_local_bones_preserve_bind_matrices_and_unresolved_flag_bits()
     assert_eq!(nodes[0].1.inheritance, Inheritance::default());
     assert_eq!(nodes[1].1.inheritance, Inheritance::default());
     assert_eq!(nodes[1].1.parent, Some(nodes[0].0));
-    assert_eq!(nodes[0].1.transform.translation, [3., 4., 5.]);
-    assert_eq!(nodes[0].1.transform.rotation.0, [0., 0., half, half]);
-    assert_eq!(nodes[0].1.transform.scale, [2., 3., 4.]);
-    assert_eq!(nodes[1].1.transform.translation, [1., 2., 3.]);
-    assert_eq!(nodes[1].1.transform.scale, [0.5, 1., 2.]);
+    assert_eq!(
+        imported.values()[nodes[0].1.transform.translation],
+        [3., 4., 5.]
+    );
+    assert_eq!(
+        imported.values()[nodes[0].1.transform.rotation].0,
+        [0., 0., half, half]
+    );
+    assert_eq!(imported.values()[nodes[0].1.transform.scale], [2., 3., 4.]);
+    assert_eq!(
+        imported.values()[nodes[1].1.transform.translation],
+        [1., 2., 3.]
+    );
+    assert_eq!(imported.values()[nodes[1].1.transform.scale], [0.5, 1., 2.]);
     let (_, skin) = imported.skins().iter().next().unwrap();
     assert_eq!(skin.inverse_bind().get(0), Some(binds[0]));
     assert_eq!(skin.inverse_bind().get(1), Some(binds[1]));
-    let output = io::m3::plan::<m3::StarCraft2>(&imported, &Default::default())
-        .unwrap()
-        .execute()
-        .unwrap()
-        .value;
+    let output =
+        io::m3::plan::<m3::StarCraft2>(&imported, &SlotConstruct::construct(&mut slot_values))
+            .unwrap()
+            .execute()
+            .unwrap()
+            .value;
     let bones = output
         .model
         .container()
@@ -594,12 +646,17 @@ fn ordinary_parent_local_bones_preserve_bind_matrices_and_unresolved_flag_bits()
 
 #[test]
 fn selective_semantic_inheritance_requires_explicit_m3_export_loss() {
+    let mut slot_values = SlotValues::default();
     let source = source();
-    let mut imported = io::m3::import(&source, &Default::default()).unwrap().value;
+    let mut imported = io::m3::import(&source, &SlotConstruct::construct(&mut slot_values))
+        .unwrap()
+        .value;
     let (id, node) = imported.nodes().iter().next().unwrap();
     let mut node = node.clone();
     node.inheritance.scale = false;
     imported.edit(|draft| draft.set_node(id, node)).unwrap();
-    let error = io::m3::plan::<m3::StarCraft2>(&imported, &Default::default()).unwrap_err();
+    let error =
+        io::m3::plan::<m3::StarCraft2>(&imported, &SlotConstruct::construct(&mut slot_values))
+            .unwrap_err();
     assert_eq!(error.path, "m3.node.inheritance");
 }

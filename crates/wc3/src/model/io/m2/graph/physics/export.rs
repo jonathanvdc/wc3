@@ -45,9 +45,9 @@ fn export_one<D: ExportDialect>(
         let node = model
             .node(body.node)
             .ok_or_else(|| Error::new("physics.body.node", "placement is absent"))?;
-        if node.transform.rotation != semantic::Quaternion::IDENTITY
-            || node.transform.scale != [1.; 3]
-            || node.transform.pivot != [0.; 3]
+        if node.transform.defaults(model.values()).rotation != semantic::Quaternion::IDENTITY
+            || node.transform.defaults(model.values()).scale != [1.; 3]
+            || node.transform.defaults(model.values()).pivot != [0.; 3]
         {
             return Err(Error::new(
                 "physics.body.transform",
@@ -83,7 +83,7 @@ fn export_one<D: ExportDialect>(
             body_type: PhysicsBodyKind::from_raw(body.kind.raw()),
             bone_index: u16::try_from(bone)
                 .map_err(|_| Error::new("physics.body.bone", "bone index exceeds native range"))?,
-            position: node.transform.translation,
+            position: node.transform.defaults(model.values()).translation,
             shape_index: i32::try_from(first).map_err(|_| {
                 Error::new("physics.body.shapes", "shape start exceeds native range")
             })?,

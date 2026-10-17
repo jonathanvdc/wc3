@@ -18,7 +18,7 @@ where
     Ok(surface::DisplacementMaterialStep {
         displacement: SurfaceContribution {
             input: normal_map,
-            parameters: anim(r.strength),
+            parameters: anim(r.strength, reader.builder.values_mut()),
         },
         unknown: r.unknown,
         strength_map,

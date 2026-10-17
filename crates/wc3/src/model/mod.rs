@@ -16,19 +16,18 @@
 //! profile's surface and feature vocabulary. Built-in profiles describe game
 //! semantics; native codec dialects separately select file layouts and revisions.
 //!
-//! [`Track`](crate::model::Track) binds a value-typed and profile-typed
-//! [`Property`](crate::model::Property) to a checked [`Curve`](crate::model::Curve)
-//! and explicit [`Clock`](crate::model::Clock). Each profile selects its structural
-//! property enum through `Profile::Property`; owner IDs, field variants, and collection
-//! ordinals form the destination rather than display names. Widening and narrowing map
-//! these enums along with programme channels while preserving identity and shared curves.
+//! [`Animated`] is a typed slot identity into the model's [`Values`] table.
+//! The sealed [`Animatable`] trait selects storage for each supported value type.
+//! Nodes, materials, and effects retain slot references; constants and evaluated
+//! instance values live in separate tables with the same identities.
+//! [`Track`] connects a slot to a checked [`Curve`] and explicit [`Clock`].
+//! Slots and channels are profile-independent, and native exporters resolve
+//! consuming fields when translating them into native tracks.
 //! Curve constructors select interpolation together with its required key shape:
 //! [`HermiteKeyframe`](crate::model::HermiteKeyframe) carries derivatives,
 //! [`BezierKeyframe`](crate::model::BezierKeyframe) carries control points, and
 //! [`TcbKeyframe`](crate::model::TcbKeyframe) carries authored spline parameters.
 //! Capability traits prevent spherical scalar curves and interpolated discrete resource choices.
-//! Custom profiles implement [`PropertyPayload`](crate::model::PropertyPayload)
-//! and [`PropertyDescriptor`](crate::model::PropertyDescriptor) for their own destinations.
 //!
 //! Fixed-width arrays use [`ZeroVec`](crate::model::ZeroVec), borrowing compatible packed storage.
 //! Native slices and differing layouts are encoded into owned arrays once. Variable-length
@@ -56,9 +55,9 @@ mod rotation;
 pub use rotation::*;
 pub mod animation;
 pub use animation::{
-    curves::*, properties::*, Animated, AnimatedValue, AnimationProgram, AnimationSample, Binding,
-    BindingValue, Channel, ChannelValue, Clip, Clock, Controller, Event, Interpolation,
-    PropertySample, RetimedAnimation, SampledAnimation, SampledTrack, ScalarBinding, Time, Track,
+    curves::*, properties::*, Animatable, Animated, AnimationProgram, AnimationSample, Channel,
+    ChannelValue, Clip, Clock, Construct, Controller, Event, Interpolation, RetimedAnimation,
+    SampledAnimation, SampledTrack, Time, Track, ValueObject, ValueSample, ValueSlot, Values,
 };
 mod playback_controls;
 pub use playback_controls::*;

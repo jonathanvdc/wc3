@@ -2,7 +2,7 @@
 use super::*;
 use crate::model::io::m2::graph::texture_index;
 use crate::model::io::{materialize, owned};
-use crate::model::{self as semantic, profiles::m2 as profile, Animated, Curve, Time};
+use crate::model::{self as semantic, profiles::m2 as profile, Curve, Time};
 use crate::model::{
     AgeDrivenParticle, AgeDrivenParticleRendering, AgeDrivenParticleShape, ParticleEmission,
     ParticleLifetime, ParticleMotion,
@@ -272,13 +272,11 @@ where
             shape: AgeDrivenParticleShape {
                 generator: profile::values::ParticleGenerator::from_raw(kind.raw()),
                 legacy_shape: legacy[0],
-                vertical_range: Animated::constant(initial(&value.vertical_range).unwrap_or(0.)),
-                horizontal_range: Animated::constant(
-                    initial(&value.horizontal_range).unwrap_or(0.),
-                ),
-                area_width: Animated::constant(initial(&value.emission_area_width).unwrap_or(0.)),
-                area_length: Animated::constant(initial(&value.emission_area_length).unwrap_or(0.)),
-                z_source: Animated::constant(initial(&value.z_source).unwrap_or(0.)),
+                vertical_range: builder.add_value(initial(&value.vertical_range).unwrap_or(0.)),
+                horizontal_range: builder.add_value(initial(&value.horizontal_range).unwrap_or(0.)),
+                area_width: builder.add_value(initial(&value.emission_area_width).unwrap_or(0.)),
+                area_length: builder.add_value(initial(&value.emission_area_length).unwrap_or(0.)),
+                z_source: builder.add_value(initial(&value.z_source).unwrap_or(0.)),
                 spline: materialize(value.spline_points.len(), move |i| spline.get(i).unwrap()),
             },
             twinkle_speed: value.twinkle_speed,
@@ -297,21 +295,21 @@ where
             ],
         },
         motion: ParticleMotion {
-            speed: Animated::constant(initial(&value.emission_speed).unwrap_or(0.)),
-            variation: Animated::constant(initial(&value.speed_variation).unwrap_or(0.)),
-            gravity: Animated::constant(gravity_vector(
+            speed: builder.add_value(initial(&value.emission_speed).unwrap_or(0.)),
+            variation: builder.add_value(initial(&value.speed_variation).unwrap_or(0.)),
+            gravity: builder.add_value(gravity_vector(
                 initial(&value.gravity).unwrap_or(0),
                 value.flags.packed_gravity(),
             )?),
         },
         lifetime: ParticleLifetime {
-            duration: Animated::constant(initial(&value.lifespan).unwrap_or(0.)),
+            duration: builder.add_value(initial(&value.lifespan).unwrap_or(0.)),
             variation: value.lifespan_variation.get(),
         },
         emission: ParticleEmission {
-            rate: Animated::constant(initial(&value.emission_rate).unwrap_or(0.)),
+            rate: builder.add_value(initial(&value.emission_rate).unwrap_or(0.)),
             variation: value.emission_rate_variation.get(),
-            activation: Animated::constant(initial(&value.enabled).unwrap_or(1) != 0),
+            activation: builder.add_value(initial(&value.enabled).unwrap_or(1) != 0),
             trigger: (),
         },
         appearance: value.lifetime.logical()?,

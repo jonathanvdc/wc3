@@ -1,38 +1,40 @@
-use wc3::model::feature_properties::{particle, trail};
 use wc3::model::profiles::{mdlx, Mdlx, Universal};
+use wc3::model::FromFeature as SlotFromFeature;
 use wc3::model::TrailAppearance;
-use wc3::model::{Animated, Channel, Clock, Curve, Model, Node, Time, Track};
+use wc3::model::{Channel, Clock, Curve, Model, Time, Track};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 use wc3::model::{ParticleEmission, ParticleLifetime, ParticleMotion};
 
 #[test]
 fn atlas_speed_keeps_one_shared_identity_through_native_publication() {
+    let mut slot_values = SlotValues::default();
     let mut draft = Model::<Mdlx>::builder("atlas animation");
-    let node = draft.add_node(Node::named("emitter")).unwrap();
+    let node = draft.add_named_node("emitter").unwrap();
     let id = draft.reserve_feature(node);
-    let native = mdlx::properties::particle2::SPEED.bind(id);
+    let native = slot_values.add(2f32);
     draft
         .set_feature(
             id,
             mdlx::Node::AtlasParticles(mdlx::Particle2 {
                 motion: ParticleMotion {
-                    speed: Animated::new(2., native.clone()),
-                    ..Default::default()
+                    speed: native,
+                    ..SlotConstruct::construct(&mut slot_values)
                 },
                 emission: ParticleEmission {
                     variation: (),
-                    ..Default::default()
+                    ..SlotConstruct::construct(&mut slot_values)
                 },
                 lifetime: ParticleLifetime {
                     variation: (),
-                    ..Default::default()
+                    ..SlotConstruct::construct(&mut slot_values)
                 },
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             }),
         )
         .unwrap();
     draft
         .add_timeline_channel(Channel::Scalar(Track {
-            target: native.clone(),
+            target: native,
             curve: Curve::linear(
                 [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
                 [2f32, 4.],
@@ -41,38 +43,48 @@ fn atlas_speed_keeps_one_shared_identity_through_native_publication() {
             clock: Clock::Timeline,
         }))
         .unwrap();
-    let model = draft.finish().unwrap().widen::<Universal>();
-    assert_eq!(native.widen::<Universal>(), particle::SPEED.bind(id));
+    let model = {
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .unwrap()
+    .widen::<Universal>();
+    assert_eq!(model.timeline_channels()[0].target(), native.slot());
     let restored = model.try_narrow::<Mdlx>().unwrap();
     assert_eq!(restored.timeline_channels().len(), 1);
-    assert_eq!(
-        restored.timeline_channels()[0].target(),
-        particle::SPEED.bind(id).target()
-    );
+    assert_eq!(restored.timeline_channels()[0].target(), native.slot());
 }
 
 #[test]
 fn common_trail_fields_bind_the_owned_component_and_export_exactly() {
+    let mut slot_values = SlotValues::default();
     let mut draft = Model::<Mdlx>::builder("trail animation");
-    let node = draft.add_node(Node::named("trail")).unwrap();
+    let node = draft.add_named_node("trail").unwrap();
     let id = draft.reserve_feature(node);
+    let opacity = slot_values.add(1f32);
+    let _rate = slot_values.add(12f32);
     draft
         .set_feature(
             id,
             mdlx::Node::Ribbon(mdlx::Ribbon {
                 appearance: TrailAppearance {
-                    opacity: Animated::new(1., mdlx::properties::ribbon::OPACITY.bind(id)),
-                    ..Default::default()
+                    opacity,
+                    ..SlotConstruct::construct(&mut slot_values)
                 },
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             }),
         )
         .unwrap();
-    let mut model = draft.finish().unwrap().widen::<Universal>();
+    let mut model = {
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .unwrap()
+    .widen::<Universal>();
     model
         .edit(|draft| {
             draft.add_timeline_channel(Channel::Scalar(Track {
-                target: trail::OPACITY.bind(id),
+                target: opacity,
                 curve: Curve::linear(
                     [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
                     [1f32, 0.],
@@ -88,49 +100,60 @@ fn common_trail_fields_bind_the_owned_component_and_export_exactly() {
 
 #[test]
 fn a_shared_continuous_rate_narrows_on_non_burst_atlas_emitters() {
+    let mut slot_values = SlotValues::default();
     let mut draft = Model::<Mdlx>::builder("continuous atlas");
-    let node = draft.add_node(Node::named("emitter")).unwrap();
+    let node = draft.add_named_node("emitter").unwrap();
     let id = draft.reserve_feature(node);
+    let _opacity = slot_values.add(1f32);
+    let rate = slot_values.add(12f32);
     draft
         .set_feature(
             id,
             mdlx::Node::AtlasParticles(mdlx::Particle2 {
                 emission: ParticleEmission {
-                    rate: Animated::new(12., particle::CONTINUOUS_RATE.bind(id)),
+                    rate,
                     variation: (),
-                    ..Default::default()
+                    ..SlotConstruct::construct(&mut slot_values)
                 },
                 lifetime: ParticleLifetime {
                     variation: (),
-                    ..Default::default()
+                    ..SlotConstruct::construct(&mut slot_values)
                 },
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             }),
         )
         .unwrap();
     draft
         .add_timeline_channel(Channel::Scalar(Track {
-            target: particle::CONTINUOUS_RATE
-                .bind(id)
-                .try_narrow::<Mdlx>()
-                .unwrap(),
+            target: rate,
             curve: Curve::linear([Time::seconds(0.).unwrap()], [12f32]).unwrap(),
             clock: Clock::Timeline,
         }))
         .unwrap();
-    let model = draft.finish().unwrap().widen::<Universal>();
+    let model = {
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .unwrap()
+    .widen::<Universal>();
     assert!(model.try_narrow::<Mdlx>().is_ok());
 }
 
 #[test]
 fn changing_gravity_representation_removes_the_old_scalar_destination() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::profiles::FeaturePayload;
     use wc3::model::{NodeFeature, ParticleDefinition, ParticleGravity, PropertyPayload};
-    let mut definition = ParticleDefinition::from(mdlx::Particle2::default());
+    let mut definition = ParticleDefinition::from_feature(
+        mdlx::Particle2::construct(&mut slot_values),
+        &mut slot_values,
+    );
     let key = mdlx::properties::Target::Particle2(mdlx::properties::Particle2Field::Gravity)
         .identity()
         .to_owned();
-    assert!(NodeFeature::from(definition.clone()).supports_property(&key));
-    definition.motion.gravity = ParticleGravity::Vector(Animated::constant([0., 0., -9.8]));
-    assert!(!NodeFeature::from(definition).supports_property(&key));
+    assert!(
+        NodeFeature::from_feature(definition.clone(), &mut slot_values).supports_property(&key)
+    );
+    definition.motion.gravity = ParticleGravity::Vector(slot_values.add([0., 0., -9.8]));
+    assert!(!NodeFeature::from_feature(definition, &mut slot_values).supports_property(&key));
 }

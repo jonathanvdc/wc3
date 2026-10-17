@@ -1,5 +1,6 @@
 //! Logical M3 flare values.
 use super::{Property, TextureLayer};
+use crate::model::Construct;
 use std::borrow::Cow;
 
 /// Editable M3 SubFlare values.
@@ -26,7 +27,7 @@ pub struct SubFlare {
 }
 
 /// Editable M3 LensFlareMaterialStep values.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct LensFlareMaterialStep<'a> {
     /// Sets flare texture atlas.
     pub flare_map: Option<TextureLayer>,

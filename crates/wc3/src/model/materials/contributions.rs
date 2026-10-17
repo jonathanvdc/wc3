@@ -1,4 +1,5 @@
 //! Surface inputs composed with the parameters that govern their contribution.
+use crate::model::{Animatable, Construct, Values};
 use crate::model::{Link, ValidateLinks};
 
 /// An input together with its authored response parameters.
@@ -89,5 +90,16 @@ impl<Input: ValidateLinks> ValidateLinks for SpecularInputs<Input> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.color.visit_links(visitor);
         self.gloss.visit_links(visitor);
+    }
+}
+
+impl<I: Construct, T: Animatable + Default> Construct
+    for SurfaceContribution<I, crate::model::animation::programmed::Property<T>>
+{
+    fn construct(values: &mut Values) -> Self {
+        Self {
+            input: I::construct(values),
+            parameters: Construct::construct(values),
+        }
     }
 }

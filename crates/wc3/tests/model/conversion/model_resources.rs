@@ -1,17 +1,16 @@
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::profiles::Universal;
-use wc3::model::{
-    Animated, ImageResource, Material, MaterialSurface, Model, ModelBuilder, Texture,
-};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{ImageResource, Material, MaterialSurface, Model, ModelBuilder, Texture};
 
-fn textured_material(texture: Texture) -> Material<'static> {
-    let mut layer = Layer::default();
-    layer.binding.image = Animated::constant(Some(texture));
+fn textured_material(texture: Texture, slot_values: &mut SlotValues) -> Material<'static> {
+    let mut layer = Layer::construct(slot_values);
+    layer.binding.image = slot_values.add(Some(texture));
     Material {
         name: "surface".into(),
         surface: MaterialSurface::try_from(LayeredSurface {
             layers: vec![layer],
-            ..Default::default()
+            ..SlotConstruct::construct(slot_values)
         })
         .unwrap(),
     }
@@ -19,10 +18,17 @@ fn textured_material(texture: Texture) -> Material<'static> {
 
 #[test]
 fn model_resource_edits_are_transactional_and_clones_are_independent() {
+    let mut slot_values = SlotValues::default();
     let mut draft = ModelBuilder::new("first");
     let texture = draft.add_file_texture("original.blp").unwrap();
-    draft.add_material(textured_material(texture)).unwrap();
-    let mut model = draft.finish().unwrap();
+    draft
+        .add_material(textured_material(texture, &mut slot_values))
+        .unwrap();
+    let mut model = {
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .unwrap();
     let original = model.clone();
     model
         .edit(|draft| {
@@ -55,20 +61,34 @@ fn model_resource_edits_are_transactional_and_clones_are_independent() {
 
 #[test]
 fn unanimated_texture_references_are_checked_at_publication() {
+    let mut slot_values = SlotValues::default();
     let mut foreign = Model::<Universal>::builder("textures");
     let texture = foreign.add_file_texture("foreign.blp").unwrap();
     let mut draft = ModelBuilder::new("invalid");
-    draft.add_material(textured_material(texture)).unwrap();
-    assert!(draft.finish().is_err());
+    draft
+        .add_material(textured_material(texture, &mut slot_values))
+        .unwrap();
+    assert!({
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .is_err());
 }
 
 #[test]
 fn draft_model_exposes_its_owned_resources_before_publication() {
+    let mut slot_values = SlotValues::default();
     let mut draft = ModelBuilder::new("draft resources");
     let texture = draft.add_file_texture("model.blp").unwrap();
     assert!(draft.model().image_resource(texture.resource).is_some());
-    draft.add_material(textured_material(texture)).unwrap();
-    let model = draft.finish().unwrap();
+    draft
+        .add_material(textured_material(texture, &mut slot_values))
+        .unwrap();
+    let model = {
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .unwrap();
     assert!(model.image_resource(texture.resource).is_some());
     model.validate().unwrap();
 }
@@ -94,23 +114,32 @@ fn native_profiles_publish_declared_bounds_and_reject_clearing_them() {
 
 #[test]
 fn metadata_edits_validate_and_preserve_the_published_model_on_failure() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::profiles::{mdlx::ModelMetadata, Mdlx};
     use wc3::model::Model;
     let mut draft = Model::<Mdlx>::builder("metadata");
     draft.set_metadata(ModelMetadata {
         blend_time: 0.25,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     });
-    let mut model = draft.finish().unwrap();
+    let mut model = {
+        draft.import_values(&slot_values).unwrap();
+        draft.finish()
+    }
+    .unwrap();
     let identity = model.id();
     assert_eq!(model.metadata().blend_time, 0.25);
     assert!(model
         .edit(|draft| {
-            draft.set_metadata(ModelMetadata {
-                blend_time: f64::NAN,
-                ..Default::default()
-            });
-            Ok(())
+            let edit_result = {
+                draft.set_metadata(ModelMetadata {
+                    blend_time: f64::NAN,
+                    ..SlotConstruct::construct(&mut slot_values)
+                });
+                Ok(())
+            };
+            draft.import_values(&slot_values)?;
+            edit_result
         })
         .is_err());
     assert_eq!(model.metadata().blend_time, 0.25);

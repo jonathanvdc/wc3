@@ -1,6 +1,7 @@
 //! Exact projections of Wmo owner payloads.
 use super::{incompatible, Narrows};
 use crate::model::profiles::{NoControls, Profile, Universal, Wmo};
+use crate::model::Values;
 use crate::model::{
     DrawControls, Error, InstanceControls, ModelMetadata, System, UniversalAppearance,
 };
@@ -66,7 +67,10 @@ impl Narrows<Universal> for Wmo {
     fn surface<'a>(value: <Universal as Profile>::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
         value.try_into()
     }
-    fn feature<'a>(value: <Universal as Profile>::Feature<'a>) -> Result<Self::Feature<'a>, Error> {
+    fn feature<'a>(
+        value: <Universal as Profile>::Feature<'a>,
+        _values: &Values,
+    ) -> Result<Self::Feature<'a>, Error> {
         value.try_into().map_err(|_| incompatible("feature"))
     }
     fn node<'a>(value: <Universal as Profile>::Node<'a>) -> Result<Self::Node<'a>, Error> {

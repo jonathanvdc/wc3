@@ -6,12 +6,13 @@ use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
-use wc3::model::{
-    Animated, Billboard, Draw, ExplicitBinding, GeometryData, GeometryInfluences, IdentityBinding,
-    Influence, Material as SemanticMaterial, MaterialSurface, Mesh as ModelMesh, MeshInstance,
-    Node, Skin, UniversalBinding, ZeroVec,
-};
 use wc3::model::{Axis as ModelAxis, Handedness, LengthUnit, Model};
+use wc3::model::{
+    Billboard, Draw, ExplicitBinding, GeometryData, GeometryInfluences, IdentityBinding, Influence,
+    Material as SemanticMaterial, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node, Skin,
+    UniversalBinding, ZeroVec,
+};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 use wc3::model::{NodeId, Transform as ModelTransform};
 
 fn fixture(binding: UniversalBinding<'static>) -> (Model<'static>, NodeId) {
@@ -24,24 +25,31 @@ fn fixture_geometry<'a>(
     mut geometry: GeometryData<'a>,
     binding: UniversalBinding<'a>,
 ) -> (Model<'a>, NodeId) {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::builder("explicit skin fixture");
     let joint = builder
         .add_node(
-            Node::named("joint")
-                .with_transform(ModelTransform {
-                    translation: [3., 0., 0.],
-                    ..Default::default()
-                })
+            Node::named("joint", &mut slot_values)
+                .with_transform(
+                    ModelTransform {
+                        translation: [3., 0., 0.],
+                        ..SlotConstruct::construct(&mut slot_values)
+                    },
+                    &mut slot_values,
+                )
                 .unwrap(),
         )
         .unwrap();
     let mount = builder
         .add_node(
-            Node::named("mesh placement")
-                .with_transform(ModelTransform {
-                    translation: [7., 2., 0.],
-                    ..Default::default()
-                })
+            Node::named("mesh placement", &mut slot_values)
+                .with_transform(
+                    ModelTransform {
+                        translation: [7., 2., 0.],
+                        ..SlotConstruct::construct(&mut slot_values)
+                    },
+                    &mut slot_values,
+                )
                 .unwrap(),
         )
         .unwrap();
@@ -76,21 +84,31 @@ fn fixture_geometry<'a>(
             name: "plain".into(),
             surface: MaterialSurface::try_from(LayeredSurface {
                 layers: vec![Layer {
-                    opacity: Animated::constant(1.),
-                    ..Default::default()
+                    opacity: slot_values.add(1.),
+                    ..SlotConstruct::construct(&mut slot_values)
                 }],
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             })
             .unwrap(),
         })
         .unwrap();
     let mut instance = MeshInstance::new(mount, mesh);
     instance.skin = Some(skin);
-    instance.draws.push(Draw::new(subset, Default::default()));
+    instance.draws.push(Draw::new(
+        subset,
+        SlotConstruct::construct(&mut slot_values),
+    ));
     builder
         .add_instance_with_materials(instance, vec![material])
         .unwrap();
-    (builder.finish().unwrap(), joint)
+    (
+        {
+            builder.import_values(&slot_values).unwrap();
+            builder.finish()
+        }
+        .unwrap(),
+        joint,
+    )
 }
 #[test]
 fn explicit_and_identity_bindings_preserve_authored_matrices() {
@@ -188,6 +206,7 @@ fn assert_matrix_close(actual: Mat4, expected: Mat4) {
 }
 #[test]
 fn rendered_hierarchy_preserves_shear_and_declared_coordinate_units() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::{Basis, Quaternion};
     let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
     let mount = source.instances().iter().next().unwrap().1.node;
@@ -195,30 +214,40 @@ fn rendered_hierarchy_preserves_shear_and_declared_coordinate_units() {
     let child_rotation = Quat::from_rotation_z(0.7);
     source
         .edit(|builder| {
-            builder.set_basis(Basis::new(
-                ModelAxis::PositiveZ,
-                ModelAxis::PositiveY,
-                Handedness::Right,
-            )?);
-            builder.set_units(LengthUnit::MetersPerUnit(0.25));
-            let parent = builder.add_node(Node::named("nonuniform parent").with_transform(
-                ModelTransform {
-                    translation: [1., 2., 3.],
-                    rotation: Quaternion(parent_rotation.to_array()),
-                    scale: [2., 1., 0.5],
-                    ..Default::default()
-                },
-            )?)?;
-            builder.set_node(
-                mount,
-                Node::named("rotated child")
-                    .with_parent(parent)
-                    .with_transform(ModelTransform {
-                        translation: [4., 0., 0.],
-                        rotation: Quaternion(child_rotation.to_array()),
-                        ..Default::default()
-                    })?,
-            )
+            let edit_result = (|| {
+                builder.set_basis(Basis::new(
+                    ModelAxis::PositiveZ,
+                    ModelAxis::PositiveY,
+                    Handedness::Right,
+                )?);
+                builder.set_units(LengthUnit::MetersPerUnit(0.25));
+                let parent = builder.add_node(
+                    Node::named("nonuniform parent", &mut slot_values).with_transform(
+                        ModelTransform {
+                            translation: [1., 2., 3.],
+                            rotation: Quaternion(parent_rotation.to_array()),
+                            scale: [2., 1., 0.5],
+                            ..SlotConstruct::construct(&mut slot_values)
+                        },
+                        &mut slot_values,
+                    )?,
+                )?;
+                builder.set_node(
+                    mount,
+                    Node::named("rotated child", &mut slot_values)
+                        .with_parent(parent)
+                        .with_transform(
+                            ModelTransform {
+                                translation: [4., 0., 0.],
+                                rotation: Quaternion(child_rotation.to_array()),
+                                ..SlotConstruct::construct(&mut slot_values)
+                            },
+                            &mut slot_values,
+                        )?,
+                )
+            })();
+            builder.import_values(&slot_values)?;
+            edit_result
         })
         .unwrap();
     let compiled = compile_model(&source, |_| None).unwrap();
@@ -294,6 +323,7 @@ fn rendered_hierarchy_preserves_shear_and_declared_coordinate_units() {
 }
 #[test]
 fn asset_population_retains_existing_root_controls_and_source_identity() {
+    let mut slot_values = SlotValues::default();
     use super::instances::{spawn_loaded_models, PreparedModelCache};
     let (source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
     let compiled = compile_model(&source, |_| None).unwrap();
@@ -326,7 +356,7 @@ fn asset_population_retains_existing_root_controls_and_source_identity() {
                 speed: 0.37,
                 paused: true,
                 lod: 7,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
         ))
         .id();
@@ -349,6 +379,7 @@ fn asset_population_retains_existing_root_controls_and_source_identity() {
 
 #[test]
 fn replacing_asset_population_removes_only_the_owned_old_hierarchy() {
+    let mut slot_values = SlotValues::default();
     use super::instances::{spawn_loaded_models, PreparedModelCache};
     let (source, joint) = fixture(UniversalBinding::Identity(IdentityBinding));
     let compiled = compile_model(&source, |_| None).unwrap();
@@ -377,7 +408,7 @@ fn replacing_asset_population_removes_only_the_owned_old_hierarchy() {
         });
     let override_pose = ModelTransform {
         translation: [9., 8., 7.],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let root = app
         .world_mut()
@@ -386,7 +417,7 @@ fn replacing_asset_population_removes_only_the_owned_old_hierarchy() {
             Playback {
                 clip_time: 0.42,
                 paused: true,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
             PoseOverrides(HashMap::from([(joint, override_pose)])),
         ))
@@ -505,32 +536,37 @@ fn constant_materials_share_assets_between_instances() {
 }
 #[test]
 fn animated_materials_are_isolated_between_playback_clocks() {
-    use wc3::model::profiles::mdlx::properties::Layer as LayerProperty;
+    let mut slot_values = SlotValues::default();
+
     use wc3::model::{Channel, Clock, Curve, Time as ModelTime, Track};
     let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
     let material = source.materials().iter().next().unwrap().0;
-    let property = LayerProperty(0).opacity().bind(material);
+    let property = slot_values.add(1.);
     source
         .edit(|builder| {
-            builder.set_material_surface(
-                material,
-                MaterialSurface::try_from(LayeredSurface {
-                    layers: vec![Layer {
-                        opacity: Animated::new(1., property.clone()),
-                        ..Default::default()
-                    }],
-                    ..Default::default()
-                })
-                .unwrap(),
-            )?;
-            builder.add_timeline_channel(Channel::Scalar(Track {
-                target: property.widen(),
-                curve: Curve::linear(
-                    [ModelTime::seconds(0.)?, ModelTime::seconds(1.)?],
-                    [1.0f32, 0.],
-                )?,
-                clock: Clock::Timeline,
-            }))
+            let edit_result = (|| {
+                builder.set_material_surface(
+                    material,
+                    MaterialSurface::try_from(LayeredSurface {
+                        layers: vec![Layer {
+                            opacity: property,
+                            ..SlotConstruct::construct(&mut slot_values)
+                        }],
+                        ..SlotConstruct::construct(&mut slot_values)
+                    })
+                    .unwrap(),
+                )?;
+                builder.add_timeline_channel(Channel::Scalar(Track {
+                    target: property,
+                    curve: Curve::linear(
+                        [ModelTime::seconds(0.)?, ModelTime::seconds(1.)?],
+                        [1.0f32, 0.],
+                    )?,
+                    clock: Clock::Timeline,
+                }))
+            })();
+            builder.import_values(&slot_values)?;
+            edit_result
         })
         .unwrap();
     let (mut app, first, second, node) = spawn_pair(&source);
@@ -761,6 +797,7 @@ fn driving_camera_and_root_local_changes_update_billboards_before_propagation() 
 
 #[test]
 fn m3_authored_controller_selection_drives_live_and_baked_pose_with_explicit_empty_override() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::controls::playback::{
         ControllerSelection as SemanticControllerSelection, SequenceControls,
     };
@@ -770,30 +807,34 @@ fn m3_authored_controller_selection_drives_live_and_baked_pose_with_explicit_emp
     let (mut source, joint) = fixture(UniversalBinding::Identity(IdentityBinding));
     let clip = source
         .edit(|builder| {
-            let controller = builder.add_controller(Controller::default())?;
-            builder.add_controller_channel(
-                controller,
-                Channel::Vector3(Track {
-                    target: joint.translation(),
-                    curve: Curve::linear(
-                        [ModelTime::seconds(1.)?, ModelTime::seconds(2.)?],
-                        [[4., 0., 0.], [6., 0., 0.]],
-                    )?,
-                    clock: Clock::Timeline,
-                }),
-            )?;
-            let mut clip =
-                Clip::named("M3 selected programme").with_duration(ModelTime::seconds(1.)?);
-            clip.controls = Some(ClipControls::M3(SequenceControls {
-                timeline_origin: ModelTime::seconds(1.)?,
-                blend_duration: ModelTime::seconds(0.3)?,
-                selection: Some(SemanticControllerSelection {
-                    name: "authored STG".into(),
-                    controllers: vec![controller],
-                }),
-                ..Default::default()
-            }));
-            builder.add_clip(clip)
+            let edit_result = (|| {
+                let controller = builder.add_controller(Controller::default())?;
+                builder.add_controller_channel(
+                    controller,
+                    Channel::Vector3(Track {
+                        target: builder.model().node(joint).unwrap().transform.translation,
+                        curve: Curve::linear(
+                            [ModelTime::seconds(1.)?, ModelTime::seconds(2.)?],
+                            [[4., 0., 0.], [6., 0., 0.]],
+                        )?,
+                        clock: Clock::Timeline,
+                    }),
+                )?;
+                let mut clip =
+                    Clip::named("M3 selected programme").with_duration(ModelTime::seconds(1.)?);
+                clip.controls = Some(ClipControls::M3(SequenceControls {
+                    timeline_origin: ModelTime::seconds(1.)?,
+                    blend_duration: ModelTime::seconds(0.3)?,
+                    selection: Some(SemanticControllerSelection {
+                        name: "authored STG".into(),
+                        controllers: vec![controller],
+                    }),
+                    ..SlotConstruct::construct(&mut slot_values)
+                }));
+                builder.add_clip(clip)
+            })();
+            builder.import_values(&slot_values)?;
+            edit_result
         })
         .unwrap();
     let compiled = compile_model(&source, |_| None).unwrap();
@@ -811,7 +852,7 @@ fn m3_authored_controller_selection_drives_live_and_baked_pose_with_explicit_emp
             PoseOptions {
                 playback: Some(&playback),
                 space: BakeSpace::Authored,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
         )
         .unwrap();
@@ -858,7 +899,7 @@ fn m3_authored_controller_selection_drives_live_and_baked_pose_with_explicit_emp
             PoseOptions {
                 playback: Some(&playback),
                 space: BakeSpace::Authored,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
         )
         .unwrap();
@@ -874,17 +915,22 @@ fn m3_authored_controller_selection_drives_live_and_baked_pose_with_explicit_emp
 
 #[test]
 fn m2_nonzero_transition_pairs_require_explicit_application_duration() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::controls::model::SequenceControls;
     use wc3::model::{Clip, ClipControls};
     let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
     source
         .edit(|builder| {
-            let mut clip = Clip::named("M2 authored transition");
-            clip.controls = Some(ClipControls::M2(SequenceControls {
-                blend_time: [150, 300],
-                ..Default::default()
-            }));
-            builder.add_clip(clip)
+            let edit_result = {
+                let mut clip = Clip::named("M2 authored transition");
+                clip.controls = Some(ClipControls::M2(SequenceControls {
+                    blend_time: [150, 300],
+                    ..SlotConstruct::construct(&mut slot_values)
+                }));
+                builder.add_clip(clip)
+            };
+            builder.import_values(&slot_values)?;
+            edit_result
         })
         .unwrap();
     let compiled = compile_model(&source, |_| None).unwrap();
@@ -896,13 +942,14 @@ fn m2_nonzero_transition_pairs_require_explicit_application_duration() {
 
 #[test]
 fn programmed_shadow_cast_and_receive_flags_are_independent() {
+    let mut slot_values = SlotValues::default();
     use bevy::light::{NotShadowCaster, NotShadowReceiver};
     use wc3::model::materials::m3;
     for cast in [false, true] {
         for receive in [false, true] {
             let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
             let id = source.materials().iter().next().unwrap().0;
-            let mut standard = m3::StandardMaterialStep::default();
+            let mut standard = m3::StandardMaterialStep::construct(&mut slot_values);
             standard
                 .state
                 .rasterization
@@ -915,6 +962,7 @@ fn programmed_shadow_cast_and_receive_flags_are_independent() {
                 .set_no_shadows_receive(!receive);
             source
                 .edit(|builder| {
+                    builder.import_values(&slot_values)?;
                     builder.set_material_surface(
                         id,
                         MaterialSurface::from(m3::MaterialStep::Standard(Box::new(standard))),

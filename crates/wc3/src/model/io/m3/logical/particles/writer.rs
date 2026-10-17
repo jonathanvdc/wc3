@@ -5,6 +5,7 @@ use super::super::{
 };
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
+use crate::model::Animatable;
 use crate::model::{profiles::m3 as surface, FeatureId, MaterialId, MeshId};
 use native::{Envelope, Ref};
 use std::collections::BTreeMap;
@@ -19,15 +20,14 @@ pub(in crate::model::io::m3::logical) struct Writer<'out, 'draft, E: Envelope> {
     pub projectors: &'draft BTreeMap<FeatureId, u32>,
 }
 impl<E: Envelope> Writer<'_, '_, E> {
-    pub fn property_is_set<T: Default + PartialEq>(&self, value: &surface::Property<T>) -> bool {
-        value.initial != T::default()
+    pub fn property_is_set<T: Animatable + Default + PartialEq>(
+        &self,
+        value: &surface::Property<T>,
+    ) -> bool {
+        self.ids.values.get(value.value) != Some(&T::default())
             || value.reset != T::default()
             || value.control != surface::AnimationControl::default()
-            || value
-                .binding
-                .as_ref()
-                .and_then(|binding| self.ids.get(binding.target()))
-                .is_some_and(|id| id.keyed)
+            || self.ids.get(&value.value.slot()).is_some_and(|id| id.keyed)
     }
     pub fn material(&self, id: Option<MaterialId>) -> Result<u32, Error> {
         id.and_then(|id| self.materials.get(&id).copied())

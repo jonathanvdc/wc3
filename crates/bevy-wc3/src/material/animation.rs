@@ -6,34 +6,27 @@ use crate::animation_targets::AnimationTargets;
 use bevy::math::Affine2;
 use bevy::prelude::*;
 use std::array::from_fn;
-use wc3::model::{Animated, AnimatedValue, SampledAnimation};
+use wc3::model::{Animatable, Animated, SampledAnimation, ValueSample};
 use wc3::model::{SurfaceColor, TextureTransform};
 
 impl HdAnimation {
-    fn is_animated(&self) -> bool {
+    fn is_animated(&self, targets: &AnimationTargets) -> bool {
         self.slots
             .iter()
             .flatten()
-            .any(|value| value.binding.is_some())
-            || self
-                .gain
-                .as_ref()
-                .is_some_and(|value| value.binding.is_some())
-            || self.fresnel.as_ref().is_some_and(|value| {
-                value.color.binding.is_some()
-                    || value.opacity.binding.is_some()
-                    || value.team_color.binding.is_some()
+            .any(|slot| targets.contains(slot))
+            || self.gain.as_ref().is_some_and(|slot| targets.scalar(slot))
+            || self.fresnel.as_ref().is_some_and(|f| {
+                targets.contains(&f.color)
+                    || targets.scalar(&f.opacity)
+                    || targets.scalar(&f.team_color)
             })
     }
 
-    pub(super) fn apply(
-        &self,
-        sample: Option<&SampledAnimation<'_, '_>>,
-        material: &mut ModelMaterial,
-    ) -> bool {
+    pub(super) fn apply(&self, sample: &impl ValueSample, material: &mut ModelMaterial) -> bool {
         let handles: [Option<&Handle<Image>>; 6] = from_fn(|slot| {
             let binding = self.slots[slot].as_ref()?;
-            let id = sample.map_or(binding.default, |sample| sample.animated(binding))?;
+            let id = sample.animated(binding)?;
             let role = match slot {
                 1 => TextureRole::Normal,
                 2 => TextureRole::Data,
@@ -52,9 +45,9 @@ impl HdAnimation {
         );
         changed |= replace_handle(&mut material.base.emissive_texture, handles[3]);
         let gain = if handles[3].is_some() {
-            self.gain.as_ref().map_or(1., |value| {
-                sample.map_or(value.default, |sample| sample.animated(value))
-            })
+            self.gain
+                .as_ref()
+                .map_or(1., |value| sample.animated(value))
         } else {
             0.
         };
@@ -77,13 +70,9 @@ impl HdAnimation {
         );
         let (color, opacity, team) = self.fresnel.as_ref().map_or(([1.; 3], 0., 0.), |value| {
             (
-                sample.map_or(value.color.default, |sample| sample.animated(&value.color)),
-                sample.map_or(value.opacity.default, |sample| {
-                    sample.animated(&value.opacity)
-                }),
-                sample.map_or(value.team_color.default, |sample| {
-                    sample.animated(&value.team_color)
-                }),
+                sample.animated(&value.color),
+                sample.animated(&value.opacity),
+                sample.animated(&value.team_color),
             )
         });
         changed |= replace(
@@ -125,56 +114,41 @@ pub(crate) fn mesh_alpha_mode(authored: AlphaMode, opacity: f32) -> AlphaMode {
 }
 
 impl SurfaceAnimation {
-    /// A semantic binding may exist without any channel in the model. Such a
-    /// binding evaluates to its own default and needs no instance-owned asset.
+    /// Records whether the retained slots require instance-owned material updates.
     pub(super) fn prune_static_bindings(&mut self, targets: &AnimationTargets) {
-        fn retain<T: AnimatedValue>(value: &mut Option<Animated<T>>, targets: &AnimationTargets) {
-            if let Some(value) = value {
-                targets.retain(&mut value.binding);
-            }
+        fn contains<T: Animatable>(slot: &Option<Animated<T>>, targets: &AnimationTargets) -> bool {
+            slot.as_ref().is_some_and(|slot| targets.contains(slot))
         }
-        retain(&mut self.color, targets);
-        retain(&mut self.rgba, targets);
-        for value in [&mut self.opacity, &mut self.weight, &mut self.emissive_gain]
+        fn scalar(slot: &Option<Animated<f32>>, targets: &AnimationTargets) -> bool {
+            slot.as_ref().is_some_and(|slot| targets.scalar(slot))
+        }
+        self.animated = contains(&self.color, targets)
+            || contains(&self.rgba, targets)
+            || contains(&self.texture, targets)
+            || contains(&self.emission, targets)
+            || scalar(&self.opacity, targets)
+            || scalar(&self.weight, targets)
+            || scalar(&self.emissive_gain, targets)
+            || self.pass_weights.iter().any(|slot| targets.scalar(slot))
+            || self
+                .input_weights
+                .iter()
+                .flatten()
+                .any(|slot| targets.scalar(slot))
+            || [
+                &self.transform,
+                &self.secondary_transform,
+                &self.third_transform,
+                &self.fourth_transform,
+            ]
             .into_iter()
             .flatten()
-        {
-            targets.retain_scalar(value);
-        }
-        retain(&mut self.texture, targets);
-        retain(&mut self.emission, targets);
-        for value in &mut self.pass_weights {
-            targets.retain_scalar(value);
-        }
-        for value in self.input_weights.iter_mut().flatten() {
-            targets.retain_scalar(value);
-        }
-        for transform in [
-            &mut self.transform,
-            &mut self.secondary_transform,
-            &mut self.third_transform,
-            &mut self.fourth_transform,
-        ]
-        .into_iter()
-        .flatten()
-        {
-            targets.retain(&mut transform.translation.binding);
-            targets.retain(&mut transform.rotation.binding);
-            targets.retain(&mut transform.scale.binding);
-        }
-        if let Some(hd) = &mut self.hd {
-            for slot in &mut hd.slots {
-                retain(slot, targets);
-            }
-            if let Some(gain) = &mut hd.gain {
-                targets.retain_scalar(gain);
-            }
-            if let Some(fresnel) = &mut hd.fresnel {
-                targets.retain(&mut fresnel.color.binding);
-                targets.retain_scalar(&mut fresnel.opacity);
-                targets.retain_scalar(&mut fresnel.team_color);
-            }
-        }
+            .any(|t| {
+                targets.contains(&t.translation)
+                    || targets.contains(&t.rotation)
+                    || targets.contains(&t.scale)
+            })
+            || self.hd.as_ref().is_some_and(|hd| hd.is_animated(targets));
     }
 
     /// Procedural material motion needs clock updates even without any channels.
@@ -196,67 +170,13 @@ impl SurfaceAnimation {
     }
 
     pub(crate) fn is_animated(&self) -> bool {
-        self.pass_weights
-            .iter()
-            .any(|value| value.binding.is_some())
+        self.animated
+            || self.uses_shared_time()
+            || self.mesh.as_ref().is_some_and(MeshAnimation::is_animated)
             || self
                 .m3
                 .as_ref()
                 .is_some_and(|animation| animation.is_animated())
-            || self
-                .input_weights
-                .iter()
-                .flatten()
-                .any(|v| v.binding.is_some())
-            || [&self.third_transform, &self.fourth_transform]
-                .into_iter()
-                .flatten()
-                .any(|t| {
-                    t.translation.binding.is_some()
-                        || t.rotation.binding.is_some()
-                        || t.scale.binding.is_some()
-                })
-            || self.uses_shared_time()
-            || self.hd.as_ref().is_some_and(HdAnimation::is_animated)
-            || self.mesh.as_ref().is_some_and(MeshAnimation::is_animated)
-            || self
-                .rgba
-                .as_ref()
-                .is_some_and(|value| value.binding.is_some())
-            || self
-                .emission
-                .as_ref()
-                .is_some_and(|value| value.binding.is_some())
-            || self
-                .color
-                .as_ref()
-                .is_some_and(|value| value.binding.is_some())
-            || self
-                .opacity
-                .as_ref()
-                .is_some_and(|value| value.binding.is_some())
-            || self
-                .weight
-                .as_ref()
-                .is_some_and(|value| value.binding.is_some())
-            || self
-                .texture
-                .as_ref()
-                .is_some_and(|value| value.binding.is_some())
-            || self
-                .emissive_gain
-                .as_ref()
-                .is_some_and(|value| value.binding.is_some())
-            || self.transform.as_ref().is_some_and(|value| {
-                value.translation.binding.is_some()
-                    || value.rotation.binding.is_some()
-                    || value.scale.binding.is_some()
-            })
-            || self.secondary_transform.as_ref().is_some_and(|value| {
-                value.translation.binding.is_some()
-                    || value.rotation.binding.is_some()
-                    || value.scale.binding.is_some()
-            })
     }
     pub(crate) fn apply_to_assets(
         &self,
@@ -325,7 +245,7 @@ impl SurfaceAnimation {
             changed |= m3.apply(sample, &mut material.extension.m3);
         }
         if let Some(hd) = &self.hd {
-            changed |= hd.apply(Some(sample), material);
+            changed |= hd.apply(sample, material);
         }
         changed
     }

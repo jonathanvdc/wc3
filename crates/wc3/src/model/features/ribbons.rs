@@ -1,9 +1,10 @@
 //! Composed ribbon emission, geometry, appearance, and rendering programs.
 use crate::model::profiles::{m2, m3, mdlx};
 use crate::model::{Animated, Axis, MaterialId, Texture};
+use crate::model::{Construct, Values};
 
 /// A persistent trail assembled from successive cross sections.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct TrailComposition<R, S, A, B, C> {
     /// Authored generation rate and its semantic unit.
     pub emission_rate: R,
@@ -31,17 +32,17 @@ pub struct TrailGeometry {
     /// Extent below the center line.
     pub height_below: Animated<f32>,
 }
-impl Default for TrailGeometry {
-    fn default() -> Self {
+impl Construct for TrailGeometry {
+    fn construct(values: &mut Values) -> Self {
         Self {
             axis: Axis::PositiveY,
-            height_above: Default::default(),
-            height_below: Default::default(),
+            height_above: values.add(0.),
+            height_below: values.add(0.),
         }
     }
 }
 /// Animated trail appearance and atlas layout.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct TrailAppearance<S = TrailAtlasSlot, A = u32> {
     /// RGB tint.
     pub color: Animated<[f32; 3]>,
@@ -95,7 +96,7 @@ pub struct SurfaceTrailRendering {
     pub materials: Vec<MaterialId>,
 }
 /// Gravitational acceleration and fractional visibility.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct GravityTrailControls {
     /// Gravity acceleration.
     pub gravity: f32,

@@ -303,6 +303,7 @@ pub(crate) fn update_lod(
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn sparse_levels_quality_caps_and_hysteresis() {
         let levels = [0, 2, 5];

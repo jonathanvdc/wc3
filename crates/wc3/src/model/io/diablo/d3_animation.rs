@@ -7,7 +7,7 @@ use crate::model::profiles::diablo::d3::ClipControls;
 use crate::model::profiles::diablo::d3::{NodeRole, D3};
 use crate::model::Model;
 use crate::model::Quaternion;
-use crate::model::{Channel, Clip, Clock, Curve, Interpolation, PropertyTarget, Time, Track};
+use crate::model::{Channel, Clip, Clock, Curve, Interpolation, Time, Track};
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
 pub(super) fn read<'a>(
@@ -135,7 +135,7 @@ pub(super) fn read<'a>(
                     });
                     let values = materialize(keys.len(), move |k| keys.get(k).unwrap().position);
                     channels.push(Channel::Vector3(Track {
-                        target: node.translation(),
+                        target: model.node(node).unwrap().transform.translation,
                         curve: Curve::linear(times, values)?,
                         clock: Clock::Clip,
                     }));
@@ -149,7 +149,7 @@ pub(super) fn read<'a>(
                         Quaternion(keys.get(k).unwrap().rotation.components())
                     });
                     channels.push(Channel::Rotation(Track {
-                        target: node.rotation(),
+                        target: model.node(node).unwrap().transform.rotation,
                         curve: Curve::nlerp(times, values)?,
                         clock: Clock::Clip,
                     }));
@@ -161,7 +161,7 @@ pub(super) fn read<'a>(
                     });
                     let values = materialize(keys.len(), move |k| [keys.get(k).unwrap().scale; 3]);
                     channels.push(Channel::Vector3(Track {
-                        target: node.scale(),
+                        target: model.node(node).unwrap().transform.scale,
                         curve: Curve::linear(times, values)?,
                         clock: Clock::Clip,
                     }));
@@ -328,122 +328,134 @@ pub(super) fn write(
                     "native permutation channels require clip-local clocks",
                 ));
             }
-            let (node, kind) = match channel.target() {
-                PropertyTarget::Translation(id) => (*id, 0),
-                PropertyTarget::Rotation(id) => (*id, 1),
-                PropertyTarget::Scale(id) => (*id, 2),
-                _ => {
-                    context.unsupported(
-                        "d3.animation.target",
-                        "native bone curves support translation, rotation and uniform scale",
-                    )?;
-                    continue;
-                }
-            };
-            let index = c
-                .bone_order
+            let destinations: Vec<_> = model
+                .nodes()
                 .iter()
-                .position(|id| *id == node)
-                .ok_or_else(|| {
-                    Error::new(
-                        "d3.animation.palette",
-                        "channel target is absent from authored animation palette",
-                    )
-                })?;
-            if seen.contains(&(index, kind)) {
-                return Err(Error::new(
-                    "d3.animation.channel",
-                    "duplicate channel targets cannot share one native curve",
-                ));
-            }
-            seen.push((index, kind));
-            match (kind, channel) {
-                (0, Channel::Vector3(track)) => {
-                    if track.curve.interpolation() != Interpolation::Linear {
-                        return Err(Error::new(
-                            "d3.animation.interpolation",
-                            "translation requires linear interpolation",
-                        ));
+                .filter_map(|(id, node)| {
+                    if channel.target() == node.transform.translation.slot() {
+                        Some((id, 0))
+                    } else if channel.target() == node.transform.rotation.slot() {
+                        Some((id, 1))
+                    } else if channel.target() == node.transform.scale.slot() {
+                        Some((id, 2))
+                    } else {
+                        None
                     }
-                    let keys = track
-                        .curve
-                        .times()
-                        .iter()
-                        .zip(track.curve.values().iter())
-                        .map(|(time, position)| {
-                            Ok(native::TranslationKey {
-                                frame: frame(time, c.frames_per_second, context)?,
-                                position,
-                            })
-                        })
-                        .collect::<Result<Vec<_>, Error>>()?;
-                    p.translation_curves[index] = native::TranslationCurve {
-                        key_count: i32_count(keys.len())?,
-                        keys: ZeroVec::alloc_from_slice(&keys),
-                        ..Default::default()
-                    };
-                }
-                (1, Channel::Rotation(track)) => {
-                    if track.curve.interpolation() != Interpolation::Nlerp {
-                        return Err(Error::new(
-                            "d3.animation.interpolation",
-                            "rotation requires normalized-linear quaternion interpolation",
-                        ));
-                    }
-                    let keys = track
-                        .curve
-                        .times()
-                        .iter()
-                        .zip(track.curve.values().iter())
-                        .map(|(time, value)| {
-                            Ok(native::RotationKey {
-                                frame: frame(time, c.frames_per_second, context)?,
-                                rotation: rotation(value, context)?,
-                            })
-                        })
-                        .collect::<Result<Vec<_>, Error>>()?;
-                    p.rotation_curves[index] = native::RotationCurve {
-                        key_count: i32_count(keys.len())?,
-                        keys: ZeroVec::alloc_from_slice(&keys),
-                        ..Default::default()
-                    };
-                }
-                (2, Channel::Vector3(track)) => {
-                    if track.curve.interpolation() != Interpolation::Linear {
-                        return Err(Error::new(
-                            "d3.animation.interpolation",
-                            "scale requires linear interpolation",
-                        ));
-                    }
-                    let keys = track
-                        .curve
-                        .times()
-                        .iter()
-                        .zip(track.curve.values().iter())
-                        .map(|(time, value)| {
-                            if value[0] != value[1] || value[0] != value[2] {
-                                return Err(Error::new(
-                                    "d3.animation.scale",
-                                    "native scale curves require uniform scale",
-                                ));
-                            }
-                            Ok(native::ScaleKey {
-                                frame: frame(time, c.frames_per_second, context)?,
-                                scale: value[0],
-                            })
-                        })
-                        .collect::<Result<Vec<_>, Error>>()?;
-                    p.scale_curves[index] = native::ScaleCurve {
-                        key_count: i32_count(keys.len())?,
-                        keys: ZeroVec::alloc_from_slice(&keys),
-                        ..Default::default()
-                    };
-                }
-                _ => {
+                })
+                .collect();
+            if destinations.is_empty() {
+                context.unsupported(
+                    "d3.animation.target",
+                    "native bone curves support translation, rotation and uniform scale",
+                )?;
+                continue;
+            };
+            for (node, kind) in destinations {
+                let index = c
+                    .bone_order
+                    .iter()
+                    .position(|id| *id == node)
+                    .ok_or_else(|| {
+                        Error::new(
+                            "d3.animation.palette",
+                            "channel target is absent from authored animation palette",
+                        )
+                    })?;
+                if seen.contains(&(index, kind)) {
                     return Err(Error::new(
                         "d3.animation.channel",
-                        "channel value type does not match its target",
-                    ))
+                        "duplicate channel targets cannot share one native curve",
+                    ));
+                }
+                seen.push((index, kind));
+                match (kind, channel) {
+                    (0, Channel::Vector3(track)) => {
+                        if track.curve.interpolation() != Interpolation::Linear {
+                            return Err(Error::new(
+                                "d3.animation.interpolation",
+                                "translation requires linear interpolation",
+                            ));
+                        }
+                        let keys = track
+                            .curve
+                            .times()
+                            .iter()
+                            .zip(track.curve.values().iter())
+                            .map(|(time, position)| {
+                                Ok(native::TranslationKey {
+                                    frame: frame(time, c.frames_per_second, context)?,
+                                    position,
+                                })
+                            })
+                            .collect::<Result<Vec<_>, Error>>()?;
+                        p.translation_curves[index] = native::TranslationCurve {
+                            key_count: i32_count(keys.len())?,
+                            keys: ZeroVec::alloc_from_slice(&keys),
+                            ..Default::default()
+                        };
+                    }
+                    (1, Channel::Rotation(track)) => {
+                        if track.curve.interpolation() != Interpolation::Nlerp {
+                            return Err(Error::new(
+                                "d3.animation.interpolation",
+                                "rotation requires normalized-linear quaternion interpolation",
+                            ));
+                        }
+                        let keys = track
+                            .curve
+                            .times()
+                            .iter()
+                            .zip(track.curve.values().iter())
+                            .map(|(time, value)| {
+                                Ok(native::RotationKey {
+                                    frame: frame(time, c.frames_per_second, context)?,
+                                    rotation: rotation(value, context)?,
+                                })
+                            })
+                            .collect::<Result<Vec<_>, Error>>()?;
+                        p.rotation_curves[index] = native::RotationCurve {
+                            key_count: i32_count(keys.len())?,
+                            keys: ZeroVec::alloc_from_slice(&keys),
+                            ..Default::default()
+                        };
+                    }
+                    (2, Channel::Vector3(track)) => {
+                        if track.curve.interpolation() != Interpolation::Linear {
+                            return Err(Error::new(
+                                "d3.animation.interpolation",
+                                "scale requires linear interpolation",
+                            ));
+                        }
+                        let keys = track
+                            .curve
+                            .times()
+                            .iter()
+                            .zip(track.curve.values().iter())
+                            .map(|(time, value)| {
+                                if value[0] != value[1] || value[0] != value[2] {
+                                    return Err(Error::new(
+                                        "d3.animation.scale",
+                                        "native scale curves require uniform scale",
+                                    ));
+                                }
+                                Ok(native::ScaleKey {
+                                    frame: frame(time, c.frames_per_second, context)?,
+                                    scale: value[0],
+                                })
+                            })
+                            .collect::<Result<Vec<_>, Error>>()?;
+                        p.scale_curves[index] = native::ScaleCurve {
+                            key_count: i32_count(keys.len())?,
+                            keys: ZeroVec::alloc_from_slice(&keys),
+                            ..Default::default()
+                        };
+                    }
+                    _ => {
+                        return Err(Error::new(
+                            "d3.animation.channel",
+                            "channel value type does not match its target",
+                        ))
+                    }
                 }
             }
         }

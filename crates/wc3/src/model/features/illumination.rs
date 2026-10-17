@@ -1,5 +1,6 @@
 //! Shared illumination components with explicit activation semantics.
 use crate::model::profiles::{m2, m3, mdlx, wmo};
+use crate::model::Construct;
 use crate::model::{scene, Animated, Link, ValidateLinks};
 use m2::values::LightKind as ActorLightKind;
 /// Complete illumination models.
@@ -37,7 +38,7 @@ pub enum UnknownIlluminationKind {
     M2(u16),
 }
 /// Independently animated RGB emission and multiplier.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct LightEmission {
     /// RGB emission color.
     pub color: Animated<[f32; 3]>,
@@ -45,7 +46,7 @@ pub struct LightEmission {
     pub intensity: Animated<f32>,
 }
 /// Shared ambient/diffuse light fields.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct AmbientDiffuseLight<K = IlluminationKind, A = LightActivation> {
     /// Spatial emission interpretation.
     pub kind: K,
@@ -67,7 +68,7 @@ pub enum LightActivation {
     Enabled(Animated<bool>),
 }
 /// Fractional light visibility and optional shadow/falloff controls.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq)]
 pub struct VisibleLight {
     /// Visibility multiplier.
     pub visibility: Animated<f32>,

@@ -18,6 +18,7 @@ use wc3::model::{
     },
     profiles::m2 as mp,
 };
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
 fn native_triangle() -> m2::Bundle<'static, m2::Flat<m2::V256>> {
     let mut model = m2::Document::<m2::Flat<m2::V256>>::new();
@@ -160,6 +161,7 @@ fn particle_texture_programs_follow_the_material_prefix_and_round_trip() {
 
 #[test]
 fn particle_texture_program_counts_and_unmapped_material_controls_are_explicit() {
+    let mut slot_values = SlotValues::default();
     let mut duplicated = particle_program_bundle(&[[0, 0], [7, 9], [0, 0]]);
     duplicated
         .model
@@ -182,7 +184,7 @@ fn particle_texture_program_counts_and_unmapped_material_controls_are_explicit()
         &source,
         &ImportOptions {
             loss_policy: LossPolicy::Drop,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
     )
     .unwrap();
@@ -244,6 +246,7 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
 }
 #[test]
 fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
+    let mut slot_values = SlotValues::default();
     let mut source = native_triangle();
     let core = source.model.core_mut();
     core.sequences.push(m2::records::Sequence {
@@ -254,7 +257,7 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
         id: 4,
         flags: SequenceFlags::from_bits_retain(0x20),
         variation_next: -1,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     });
     core.bones[0].translation = Track {
         base: TrackBase {
@@ -343,15 +346,18 @@ fn semantic_geometry_edits_rebuild_native_values() {
 }
 #[test]
 fn quantization_requires_an_explicit_tolerance() {
+    let mut slot_values = SlotValues::default();
     let mut builder = sm::Model::<sm::profiles::M2>::builder("quantized");
-    let node = builder
-        .add_node(sm::Node::named("bone").with_controls(mp::BoneControls {
+    let node = {
+        let definition = builder.new_node("bone").with_controls(mp::BoneControls {
             key_bone: -1,
             flags: mp::values::BoneBehaviorFlags::default(),
             submesh: 0,
             name_crc: 0,
-        }))
-        .unwrap();
+        });
+        builder.add_node(definition)
+    }
+    .unwrap();
     let clip = builder
         .add_clip(sm::Clip::named("clip").with_duration(sm::Time::seconds(1.).unwrap()))
         .unwrap();
@@ -364,19 +370,23 @@ fn quantization_requires_an_explicit_tolerance() {
         .add_channel(
             clip,
             sm::Channel::Vector3(sm::Track {
-                target: node.translation(),
+                target: builder.model().node(node).unwrap().transform.translation,
                 curve,
                 clock: sm::Clock::Clip,
             }),
         )
         .unwrap();
-    let asset = builder.finish().unwrap();
+    let asset = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     assert!(io::m2::plan::<m2::Flat<m2::V264>>(&asset, &ExportOptions::default()).is_err());
     let plan = io::m2::plan::<m2::Flat<m2::V264>>(
         &asset,
         &ExportOptions {
             approximation: ApproximationPolicy::Allow { tolerance: 0.0005 },
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
     )
     .unwrap();
@@ -384,13 +394,14 @@ fn quantization_requires_an_explicit_tolerance() {
 }
 #[test]
 fn unresolved_companions_are_errors() {
+    let mut slot_values = SlotValues::default();
     let mut model = m2::Document::<m2::Flat<m2::V264>>::new();
     model.core_mut().skins = 1;
     assert!(io::m2::import(
         &m2::Bundle::from_model(model),
         &ImportOptions {
             loss_policy: LossPolicy::Drop,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         }
     )
     .is_err());
@@ -429,6 +440,7 @@ where
 }
 #[test]
 fn lights_particles_ribbons_and_collision_use_logical_fields() {
+    let mut slot_values = SlotValues::default();
     let mut source = native_triangle();
     let core = source.model.core_mut();
     core.global_sequences = ZeroVec::alloc_from_slice(&[1000]);
@@ -439,7 +451,7 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
         diffuse_color: constant([0.1, 0.2, 0.3]),
         diffuse_intensity: constant(2.),
         visibility: constant(1),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     });
     let mut particle = m2::records::ParticleEmitter::<m2::V256>::new(ModelFlags::default());
     particle.id = 7;
@@ -463,7 +475,7 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
         alpha: constant(32767),
         texture_rows: 1,
         texture_columns: 1,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     });
     core.collision_vertices =
         ZeroVec::alloc_from_slice(&[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]);
@@ -565,6 +577,7 @@ fn native_material_edits_affect_rebuilt_output() {
 }
 #[test]
 fn unknown_extensions_require_explicit_drop_policy() {
+    let mut slot_values = SlotValues::default();
     let mut model = native_triangle().model.into_chunked();
     model
         .insert_extension(
@@ -581,7 +594,7 @@ fn unknown_extensions_require_explicit_drop_policy() {
         &source,
         &ImportOptions {
             unknown: UnknownPolicy::Drop,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
     )
     .unwrap();
@@ -610,6 +623,7 @@ fn compressed_rotations_decode_to_unit_components() {
 
 #[test]
 fn native_physics_shapes_and_body_offsets_are_editable() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::formats::m2::companions::{
         PhysicsBody4, PhysicsBox, PhysicsChunk, PhysicsFile, PhysicsFrame, PhysicsShape,
         PhysicsShape2,
@@ -637,9 +651,9 @@ fn native_physics_shapes_and_body_offsets_are_editable() {
                     restitution: 0.5,
                     density: 2.,
                     game_flags: PhysicsGameFlags::from_bits_retain(7),
-                    ..Default::default()
+                    ..SlotConstruct::construct(&mut slot_values)
                 },
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             }]),
             PhysicsChunk::Bodies4(vec![PhysicsBody4 {
                 body_type: PhysicsBodyKind::Kinematic,
@@ -650,7 +664,7 @@ fn native_physics_shapes_and_body_offsets_are_editable() {
                 gravity_scale: 0.5,
                 inertia_scale: 1.5,
                 follow_factor: 0.75,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             }]),
         ],
         padding: Cow::Owned(Vec::new()),
@@ -792,6 +806,7 @@ fn sparse_bone_overrides_use_editable_pose_matrices() {
 
 #[test]
 fn packed_particle_gravity_is_a_direction_and_rejects_malformed_words() {
+    let mut slot_values = SlotValues::default();
     let mut source = native_triangle();
     source.model.core_mut().global_sequences = ZeroVec::alloc_from_slice(&[1000]);
     let word = u32::from_le_bytes([32, 0, 100, 0]);
@@ -804,14 +819,29 @@ fn packed_particle_gravity_is_a_direction_and_rejects_malformed_words() {
         .unwrap()
         .value;
     let semantic = &asset;
-    let sm::Channel::Vector3(track)=semantic.shared_channels().iter().find(|c|matches!(c,sm::Channel::Vector3(t)if matches!(t.target.target(),sm::PropertyTarget::Profile{key:mp::properties::Target::Particle(mp::properties::ParticleField::Gravity),..}))).unwrap() else{panic!("gravity channel lost")};
+    let gravity_slot = semantic
+        .features()
+        .iter()
+        .find_map(|(_, feature)| match &feature.payload {
+            mp::ActorKind::Particle(particle) => Some(particle.motion.gravity),
+            _ => None,
+        })
+        .unwrap();
+    let sm::Channel::Vector3(track) = semantic
+        .shared_channels()
+        .iter()
+        .find(|channel| channel.target() == gravity_slot.slot())
+        .unwrap()
+    else {
+        panic!("gravity channel lost")
+    };
     let gravity = track.curve.values().get(0).unwrap();
     assert!(gravity[0] > 1.);
     assert_eq!(gravity[1], 0.);
     assert!(gravity[2] > 4.);
     let options = ExportOptions {
         approximation: ApproximationPolicy::Allow { tolerance: 0.00001 },
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &options)
         .unwrap()
@@ -839,9 +869,11 @@ fn static_node_transforms_become_constant_native_curves() {
         .find(|(_, node)| node.controls.is_some())
         .unwrap()
         .0;
-    let mut node = asset.node(id).unwrap().clone();
-    node.transform.translation = [2., 3., 4.];
-    asset.edit(|draft| draft.set_node(id, node)).unwrap();
+    let node = asset.node(id).unwrap().clone();
+    let translation = node.transform.translation;
+    asset
+        .edit(|draft| draft.values_mut().set(translation, [2., 3., 4.]))
+        .unwrap();
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -863,12 +895,13 @@ fn static_node_transforms_become_constant_native_curves() {
 
 #[test]
 fn local_effect_transforms_drive_the_effects_emitted_bone() {
+    let mut slot_values = SlotValues::default();
     let mut source = native_triangle();
     source.model.core_mut().lights.push(m2::records::Light {
         kind: LightKind::Point,
         bone_id: 0,
         position: [1., 2., 3.],
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     });
     let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
@@ -890,7 +923,7 @@ fn local_effect_transforms_drive_the_effects_emitted_bone() {
                 (vec![[5., 0., 0.]]).into_zero_vec(),
             )?;
             draft.add_shared_channel(sm::Channel::Vector3(sm::Track {
-                target: node.translation(),
+                target: draft.model().node(node).unwrap().transform.translation,
                 curve,
                 clock: sm::Clock::Shared(clock),
             }))
@@ -967,6 +1000,7 @@ fn legacy_particle_shape_and_head_tail_controls_survive_conversion() {
 
 #[test]
 fn texture_options_keep_unknown_bits_and_reject_unencoded_interpretations() {
+    let mut slot_values = SlotValues::default();
     let mut source = native_triangle();
     source.model.core_mut().textures[0].flags = TextureFlags::from_bits_retain(0x8000_0001);
     let mut asset = io::m2::import(&source, &ImportOptions::default())
@@ -990,28 +1024,32 @@ fn texture_options_keep_unknown_bits_and_reject_unencoded_interpretations() {
     for invalid_color in [false, true] {
         assert!(asset
             .edit(|draft| {
-                let mut value = original.clone();
-                let input = value.steps[0].inputs()[0].clone();
-                let mut changed = input;
-                if invalid_color {
-                    changed.image.texture.as_mut().unwrap().color_space = sm::ColorSpace::Srgb;
-                } else {
-                    changed.image.texture.as_mut().unwrap().sampler.u = sm::AddressMode::Mirror;
-                }
-                let mut inputs = value.steps[0]
-                    .inputs()
-                    .into_iter()
-                    .cloned()
-                    .collect::<Vec<_>>();
-                inputs[0] = changed;
-                let declaration = value.steps[0].declaration().clone();
-                value.steps[0] = mp::MaterialStep::from_native(
-                    value.steps[0].native_shader(),
-                    declaration,
-                    inputs,
-                    Default::default(),
-                );
-                draft.set_material_surface(material, value)
+                let edit_result = {
+                    let mut value = original.clone();
+                    let input = value.steps[0].inputs()[0].clone();
+                    let mut changed = input;
+                    if invalid_color {
+                        changed.image.texture.as_mut().unwrap().color_space = sm::ColorSpace::Srgb;
+                    } else {
+                        changed.image.texture.as_mut().unwrap().sampler.u = sm::AddressMode::Mirror;
+                    }
+                    let mut inputs = value.steps[0]
+                        .inputs()
+                        .into_iter()
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    inputs[0] = changed;
+                    let declaration = value.steps[0].declaration().clone();
+                    value.steps[0] = mp::MaterialStep::from_native(
+                        value.steps[0].native_shader(),
+                        declaration,
+                        inputs,
+                        SlotConstruct::construct(&mut slot_values),
+                    );
+                    draft.set_material_surface(material, value)
+                };
+                draft.import_values(&slot_values)?;
+                edit_result
             })
             .is_err());
     }
@@ -1047,6 +1085,7 @@ fn replacement_texture_retains_its_separately_declared_filename() {
 
 #[test]
 fn native_alias_keeps_light_programme_on_its_referenced_clip() {
+    let mut slot_values = SlotValues::default();
     let mut source = native_triangle();
     let core = source.model.core_mut();
     core.sequences = vec![
@@ -1058,7 +1097,7 @@ fn native_alias_keeps_light_programme_on_its_referenced_clip() {
             },
             flags: SequenceFlags::from_bits_retain(0x20),
             variation_next: -1,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
         m2::records::Sequence {
             id: 5,
@@ -1069,7 +1108,7 @@ fn native_alias_keeps_light_programme_on_its_referenced_clip() {
             flags: SequenceFlags::from_bits_retain(0x40),
             alias_next: 0,
             variation_next: -1,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
     ];
     core.lights.push(m2::records::Light {
@@ -1086,7 +1125,7 @@ fn native_alias_keeps_light_programme_on_its_referenced_clip() {
             },
             values: LegacyValues::Values(ZeroVec::alloc_from_slice(&[2., 6.])),
         },
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     });
     let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
     let model = &imported.value;
@@ -1100,17 +1139,18 @@ fn native_alias_keeps_light_programme_on_its_referenced_clip() {
         .sample(sm::AnimationSample {
             clip: Some(clips[1].0),
             clip_time: sm::Time::seconds(0.5).unwrap(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     let sm::Channel::Scalar(track) = &clips[0].1.channels()[0] else {
         panic!("light intensity must remain a typed scalar channel")
     };
-    assert_eq!(sample.property(&track.target), Some(4.));
+    assert_eq!(sample.override_value(&track.target), Some(4.));
 }
 
 #[test]
 fn zero_duration_global_tracks_are_typed_frozen_clocks_and_roundtrip_without_retiming() {
+    let mut slot_values = SlotValues::default();
     let mut invalid = sm::ModelBuilder::new("zero repeating period");
     invalid
         .add_clock(sm::SharedClock::Repeating {
@@ -1143,15 +1183,15 @@ fn zero_duration_global_tracks_are_typed_frozen_clocks_and_roundtrip_without_ret
         let sample = program
             .sample(sm::AnimationSample {
                 shared_time: sm::Time::seconds(seconds).unwrap(),
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             })
             .unwrap();
         assert_eq!(
-            sample.property(&node.translation::<sm::profiles::M2>()),
+            sample.override_value(&imported.node(node).unwrap().transform.translation),
             Some([2., 3., 4.])
         );
         assert_eq!(
-            sample.property(&node.scale::<sm::profiles::M2>()),
+            sample.override_value(&imported.node(node).unwrap().transform.scale),
             Some([1., 2., 3.])
         );
     }
@@ -1224,18 +1264,18 @@ fn native_shader_routes_share_repeated_coordinate_animation() {
         surface.steps[0].inputs()[0].coordinates.transform,
         surface.steps[0].inputs()[2].coordinates.transform
     );
-    assert!(surface.steps[0].inputs()[0]
-        .coordinates
-        .transform
-        .translation
-        .binding
-        .is_some());
-    assert!(surface.steps[0].inputs()[1]
-        .coordinates
-        .transform
-        .translation
-        .binding
-        .is_none());
+    assert!(imported.is_animated(
+        surface.steps[0].inputs()[0]
+            .coordinates
+            .transform
+            .translation
+    ));
+    assert!(!imported.is_animated(
+        surface.steps[0].inputs()[1]
+            .coordinates
+            .transform
+            .translation
+    ));
     let native = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -1249,12 +1289,12 @@ fn native_shader_routes_share_repeated_coordinate_animation() {
         surface.steps[0].inputs()[0].coordinates.transform,
         surface.steps[0].inputs()[2].coordinates.transform
     );
-    assert!(surface.steps[0].inputs()[0]
-        .coordinates
-        .transform
-        .translation
-        .binding
-        .is_some());
+    assert!(reread.is_animated(
+        surface.steps[0].inputs()[0]
+            .coordinates
+            .transform
+            .translation
+    ));
 }
 
 #[test]
@@ -1309,6 +1349,7 @@ fn native_three_route_programme_uses_third_transform_for_uv1() {
 
 #[test]
 fn native_export_rejects_independent_transforms_on_repeated_shader_routes() {
+    let mut slot_values = SlotValues::default();
     let source = material_routes(0x8003, 3);
     let mut imported = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
@@ -1318,9 +1359,12 @@ fn native_export_rejects_independent_transforms_on_repeated_shader_routes() {
     surface.steps[0].inputs_mut()[2]
         .coordinates
         .transform
-        .translation = sm::Animated::constant([99., 0., 0.]);
+        .translation = slot_values.add([99., 0., 0.]);
     imported
-        .edit(|draft| draft.set_material_surface(id, surface))
+        .edit(|draft| {
+            draft.import_values(&slot_values)?;
+            draft.set_material_surface(id, surface)
+        })
         .unwrap();
     assert!(io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).is_err());
 }
@@ -1342,6 +1386,7 @@ fn native_export_rejects_coordinate_sources_incompatible_with_shader_routes() {
 
 #[test]
 fn application_guild_palettes_survive_profile_changes_but_require_export_loss_policy() {
+    let mut slot_values = SlotValues::default();
     let source = material_routes(0x801a, 3);
     let mut imported = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
@@ -1375,7 +1420,7 @@ fn application_guild_palettes_survive_profile_changes_but_require_export_loss_po
         &imported,
         &ExportOptions {
             loss_policy: LossPolicy::Drop,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
     )
     .unwrap();
@@ -1455,12 +1500,8 @@ fn batch_layers_become_ordered_steps_with_independent_animation() {
     );
     let (id, material) = imported.materials().iter().next().unwrap();
     assert_eq!(material.surface.steps.len(), 3);
-    for (index, step) in material.surface.steps.iter().enumerate().take(2) {
-        let target = step.declaration().color.binding.as_ref().unwrap();
-        assert_eq!(
-            *target,
-            mp::properties::MaterialStep(index).color().bind(id)
-        );
+    for (_index, step) in material.surface.steps.iter().enumerate().take(2) {
+        assert!(imported.is_animated(step.declaration().color));
     }
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
@@ -1554,6 +1595,7 @@ fn auxiliary_section_words_are_draw_local_and_survive_profile_changes() {
 
 #[test]
 fn ribbon_export_flattens_material_programs_into_ordered_native_materials() {
+    let mut slot_values = SlotValues::default();
     let mut source = native_triangle();
     source
         .model
@@ -1567,7 +1609,7 @@ fn ribbon_export_flattens_material_programs_into_ordered_native_materials() {
             texture_columns: 1,
             texture_indices: ZeroVec::alloc_from_slice(&[0]),
             material_indices: ZeroVec::alloc_from_slice(&[0]),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         });
     let mut imported = io::m2::import(&source, &ImportOptions::default())
         .unwrap()

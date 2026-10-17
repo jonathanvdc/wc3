@@ -46,7 +46,7 @@ prepared traversal, local transitions, physics, or occurrence-time sampling.
 `Transform::blend` interpolates local poses before hierarchy composition.
 `cargo bench -p wc3 --bench evaluation` measures reusable pose evaluation and
 draw projection without initializing a renderer.
-`PropertySample` accepts both ordinary and retimed animation samples, so effect
+`ValueSample` accepts both ordinary and retimed animation samples, so effect
 and event times do not require selecting animation programmes again.
 
 ## Projecting and deforming geometry
@@ -93,26 +93,26 @@ numerical scale of one meter per unit for conversion.
 
 ## Sampling surfaces and processing the result
 
-Surface evaluation does not require texture pixels. `LayeredSurface::sampled`
-freezes Warcraft III pass values, texture selections, opacity, emissive gain, and
-Fresnel controls, including each input's inline coordinate transform, while
-retaining native render state. `materials::m2::MaterialStep::sampled`
-freezes model-shader color, opacity, input weights, frames, and inline transforms.
-These operations preserve shader identity and draw state without approximating
-their meaning with PBR.
-`MaterialSurface::sampled` applies these operations across a universal material program,
-retaining its order and each step's rendering settings. WMO, M3, and external shader steps are cloned unchanged; their shader programmes are not
-executed or flattened by this helper. Other native surface families remain available through their semantic definitions
-and typed property sampling; these helpers do not interpret arbitrary shader
-programmes or simulate procedural texture playback.
+Surface evaluation does not require texture pixels. Each potentially animated
+field references a typed slot in the model's authored `Values` table. Read a field
+through `sample.animated(&field)` for lazy evaluation, or materialize a complete
+snapshot with `sample.evaluate()`. The resulting `Values` has the same identities
+as the authored table, so the same node, material, and effect definitions can be
+used with independently sampled instances.
+
+`sample.evaluate_into(&mut values)` replaces the output contents and resets all entries
+from the authored constants before sampling. A value without an active writer
+therefore returns to its authored value. This evaluates slot values while
+preserving native shader descriptions and render state; it does not execute
+shader programmes or procedural textures. `Values` itself implements
+`ValueSample`, allowing an evaluated snapshot to supply pose and material reads.
 
 `MeshAppearance::compile` prepares geometry-owned tint and opacity controls. Rebuild
 this preparation after changing geometry-animation definitions or channel targets.
 Its sampled RGBA multiplier combines with surface color; `SurfaceColor` provides
 the shared color/opacity/weight composition used by Bevy materials. Sampled image
 values retain their shared image dependency handles, color interpretation, and
-samplers after evaluation. `TextureTransform::sampled` freezes all components;
-`affine` applies the established layered-center or model-shader-origin UV convention.
+samplers after evaluation. `TextureTransform::affine` reads its slots from a sample and applies the established layered-center or model-shader-origin UV convention.
 
 For a standing building, select a clip, evaluate its pose, choose the desired LOD,
 project and deform its visible draws, and encode the sampled materials and geometry.

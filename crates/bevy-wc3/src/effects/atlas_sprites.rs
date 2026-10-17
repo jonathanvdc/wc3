@@ -20,7 +20,7 @@ use wc3::model::scene::keyframed::Frames;
 use wc3::model::{
     Animated, ClipId, Clock, FeatureId, Model, NodeFeature, NodeId, ParticleActivation,
     ParticleAppearance, ParticleDetails, ParticleEmitter, ParticleGravity, ParticleScalar,
-    ParticleTrigger, SampledTrack, ScalarBinding, Time as ModelTime, ZeroVec,
+    ParticleTrigger, SampledTrack, Time as ModelTime, ZeroVec,
 };
 
 enum BurstTrack<'sample, 'data> {
@@ -62,6 +62,7 @@ struct AtlasEmitter {
     node: NodeId,
     anchor: usize,
     rate: Animated<f32>,
+    animated_rate: bool,
     speed: Animated<f32>,
     variation: Animated<f32>,
     gravity: Animated<f32>,
@@ -116,7 +117,7 @@ pub(crate) struct AtlasParticleInstances {
 }
 fn scalar(value: &ParticleScalar) -> Option<Animated<f32>> {
     if let ParticleScalar::Animated(value) = value {
-        Some(value.clone())
+        Some(*value)
     } else {
         None
     }
@@ -236,13 +237,14 @@ impl RuntimeAtlasParticles {
                 node: value.node,
                 anchor: nodes[&value.node],
                 rate,
+                animated_rate: model.is_animated(rate),
                 speed,
                 variation,
-                gravity: gravity.clone(),
+                gravity: *gravity,
                 lifetime,
-                width: details.shape.width.clone(),
-                length: details.shape.length.clone(),
-                latitude: details.shape.latitude.clone(),
+                width: details.shape.width,
+                length: details.shape.length,
+                latitude: details.shape.latitude,
                 activation: definition.emission.activation.clone(),
                 burst: matches!(definition.emission.trigger, ParticleTrigger::KeyedBurst),
                 line: details.shape.line_emitter,
@@ -597,18 +599,11 @@ impl RuntimeAtlasParticles {
     ) {
         // Effective track selection and clock bounds are shared with ordinary
         // property sampling, so inactive programmes cannot produce bursts.
-        let track = emitter
-            .rate
-            .binding
-            .as_ref()
-            .and_then(|binding| match binding {
-                ScalarBinding::Property(property) => {
-                    frame.sample.track(property).map(BurstTrack::Scalar)
-                }
-                ScalarBinding::FromBoolean(property) => {
-                    frame.sample.track(property).map(BurstTrack::Boolean)
-                }
-            });
+        let track = if let Some(source) = frame.sample.values().boolean_source(emitter.rate) {
+            frame.sample.track(&source).map(BurstTrack::Boolean)
+        } else {
+            frame.sample.track(&emitter.rate).map(BurstTrack::Scalar)
+        };
         let clock = track.as_ref().map_or(Clock::Clip, |value| value.clock().0);
         let period = track
             .as_ref()
@@ -701,8 +696,8 @@ impl RuntimeAtlasParticles {
                 }
                 add(key.as_seconds(), track.value(index));
             }
-        } else if emitter.rate.binding.is_none() {
-            add(origin, emitter.rate.default);
+        } else if !emitter.animated_rate {
+            add(origin, frame.sample.animated(&emitter.rate));
         }
         occurrences.sort_by(|a, b| a.0.total_cmp(&b.0));
         for &(occurrence, count) in
@@ -765,13 +760,14 @@ pub(super) fn retimed_selection(
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use bevy::ecs::world::CommandQueue;
     use wc3::model::conversion::ImportOptions;
     use wc3::model::formats::mdlx::mdl::Read as _;
     use wc3::model::formats::mdlx::{DynamicDocument, NoExtensions};
     use wc3::model::io::mdlx as semantic_mdlx;
-    use wc3::model::profiles::mdlx::properties::particle2;
+
     use wc3::model::{AnimationProgram, AnimationSample, Channel, Curve, SharedClock, Track};
     fn time(value: f64) -> ModelTime {
         ModelTime::seconds(value).unwrap()
@@ -798,21 +794,21 @@ mod tests {
             .find(|(_, value)| matches!(value.payload, NodeFeature::Particle(_)))
             .map(|(id, value)| (id, value.payload.clone()))
             .unwrap();
-        let property = particle2::EMISSION_RATE.bind(feature);
+        let mut slot_values = model.values().clone();
+        let property = slot_values.add(0.);
         let NodeFeature::Particle(ParticleEmitter::Simulated(definition)) = &mut payload else {
             unreachable!()
         };
         definition.emission.trigger = ParticleTrigger::KeyedBurst;
-        definition.emission.rate = ParticleScalar::Animated(Animated::new(0., property.clone()));
-        let boolean_source = model.nodes().iter().next().unwrap().0.visibility();
+        definition.emission.rate = ParticleScalar::Animated(property);
+        let boolean_source = model.nodes().iter().next().unwrap().1.visible;
         if boolean {
-            definition.emission.rate = ParticleScalar::Animated(Animated {
-                default: 0.,
-                binding: Some(ScalarBinding::FromBoolean(boolean_source.clone())),
-            });
+            definition.emission.rate =
+                ParticleScalar::Animated(slot_values.scalar_from_boolean(boolean_source).unwrap());
         }
         model
             .edit(|builder| {
+                builder.import_values(&slot_values)?;
                 builder.set_feature(feature, payload)?;
                 let clock = builder.add_clock(SharedClock::Repeating { period: time(1.) })?;
                 if boolean {
@@ -826,7 +822,7 @@ mod tests {
                     }));
                 }
                 builder.add_shared_channel(Channel::Scalar(Track {
-                    target: property.widen(),
+                    target: property,
                     curve: Curve::step(
                         keys.iter().map(|(t, _)| time(*t)).collect::<Vec<_>>(),
                         keys.iter().map(|(_, v)| *v).collect::<Vec<_>>(),
@@ -844,7 +840,13 @@ mod tests {
         let mut runtime = RuntimeAtlasParticles::compile(&model, &nodes, &TextureImages::default());
         runtime.emitters.retain(|value| value.feature == feature);
         runtime.emitters[0].frames = Frames::Head;
-        runtime.emitters[0].lifetime = Animated::constant(10000.);
+        let lifetime = runtime.emitters[0].lifetime;
+        model
+            .edit(|builder| {
+                builder.values_mut().set(lifetime, 10000.)?;
+                Ok(())
+            })
+            .unwrap();
         let mut world = World::new();
         let mut meshes = Assets::default();
         let mut queue = CommandQueue::default();
@@ -910,9 +912,14 @@ mod tests {
     }
     #[test]
     fn missing_bound_burst_track_does_not_emit_default() {
-        let (mut runtime, _, mut state) = fixture(vec![(0., 2.)]);
-        runtime.emitters[0].rate.default = 5.;
-        let model = Model::builder("no selected source").finish().unwrap();
+        let (runtime, prior, mut state) = fixture(vec![(0., 2.)]);
+        let mut builder = Model::<wc3::model::profiles::Universal>::builder("no selected source");
+        builder.import_values(prior.values()).unwrap();
+        builder
+            .values_mut()
+            .set(runtime.emitters[0].rate, 5.)
+            .unwrap();
+        let model = builder.finish().unwrap();
         let program = AnimationProgram::compile(&model);
         advance(&runtime, &program, &mut state, 0.25, 0.25, true);
         assert_eq!(state.live.len(), 0);

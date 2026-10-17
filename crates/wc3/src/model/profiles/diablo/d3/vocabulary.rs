@@ -7,6 +7,7 @@ use crate::model::profiles::{
     Extends, Narrows, NoControls, Profile, SurfacePayload, Unavailable, Universal,
 };
 use crate::model::resources::SnoResource;
+use crate::model::Values;
 use crate::model::{
     Basis, Billboard, Bounds, Error, ExplicitBinding, Inheritance, LengthUnit, Model, NodeControls,
     SnoNamespace, Transform, UniversalAppearance, UniversalBinding,
@@ -44,6 +45,7 @@ impl Profile for D3 {
         Some(Bounds::default())
     }
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
+        model.validate_animation_consumers()?;
         if model.bounds().is_none()
             || model.basis() != Basis::default()
             || model.units() != LengthUnit::Unspecified
@@ -65,10 +67,10 @@ impl Profile for D3 {
             }
         }
         for (_, node) in model.nodes() {
-            uniform_transform(&node.transform)?;
+            uniform_transform(&node.transform.defaults(model.values()))?;
             if node.billboard != Billboard::None
                 || node.inheritance != Inheritance::default()
-                || !node.visible
+                || model.values().get(node.visible) != Some(&true)
                 || node.camera_anchored
             {
                 return Err(Error::new("d3.node", "generic visibility, billboard, and inheritance overrides have no native Diablo III mapping"));
@@ -76,7 +78,7 @@ impl Profile for D3 {
             match &node.controls {
                 NodeRole::ModelSpace
                     if node.parent.is_some()
-                        || node.transform != Transform::default()
+                        || node.transform.defaults(model.values()) != Transform::default()
                         || !node.name.is_empty() =>
                 {
                     return Err(Error::new(
@@ -230,7 +232,7 @@ impl Extends<D3> for Universal {
     fn surface<'a>(value: <D3 as Profile>::Surface<'a>) -> Self::Surface<'a> {
         value.into()
     }
-    fn feature<'a>(value: <D3 as Profile>::Feature<'a>) -> Self::Feature<'a> {
+    fn feature<'a>(value: <D3 as Profile>::Feature<'a>, _values: &mut Values) -> Self::Feature<'a> {
         match value {}
     }
     fn node<'a>(value: <D3 as Profile>::Node<'a>) -> Self::Node<'a> {
@@ -333,7 +335,10 @@ impl Narrows<Universal> for D3 {
     fn surface<'a>(value: <Universal as Profile>::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
         value.try_into()
     }
-    fn feature<'a>(value: <Universal as Profile>::Feature<'a>) -> Result<Self::Feature<'a>, Error> {
+    fn feature<'a>(
+        value: <Universal as Profile>::Feature<'a>,
+        _values: &Values,
+    ) -> Result<Self::Feature<'a>, Error> {
         let _ = value;
         Err(Error::new(
             "d3.narrow.feature",

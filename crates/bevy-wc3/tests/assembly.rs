@@ -6,10 +6,10 @@ use bevy_wc3::assembly::{
 };
 use bevy_wc3::{BakeSpace, ModelError, PartBinding, PoseBaker, PoseOptions};
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 use wc3::model::{
-    Animated, Draw, GeometryData, ImageResource, Material, MaterialSurface, Mesh as ModelMesh,
-    MeshInstance, Model, ModelMount, MountTarget, Node, NodeId, ResourceLocator, Texture,
-    Transform as ModelTransform,
+    Draw, GeometryData, ImageResource, Material, MaterialSurface, Mesh as ModelMesh, MeshInstance,
+    Model, ModelMount, MountTarget, NodeId, ResourceLocator, Texture, Transform as ModelTransform,
 };
 
 fn resource(name: &'static str) -> ResourceLocator<'static> {
@@ -19,8 +19,9 @@ fn resource(name: &'static str) -> ResourceLocator<'static> {
     }
 }
 fn model(textured: bool) -> (Model<'static>, NodeId, Option<Texture>) {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::builder("application-authored machine");
-    let node = builder.add_node(Node::named("mounting frame")).unwrap();
+    let node = builder.add_named_node("mounting frame").unwrap();
     let texture = textured.then(|| builder.add_file_texture("original.png").unwrap());
     let mut geometry =
         GeometryData::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]).unwrap();
@@ -29,16 +30,16 @@ fn model(textured: bool) -> (Model<'static>, NodeId, Option<Texture>) {
     let subset = mesh.add_primary_subset(0, 1);
     let mesh = builder.add_mesh(mesh).unwrap();
     let mut layer = Layer {
-        opacity: Animated::constant(1.),
-        ..Default::default()
+        opacity: slot_values.add(1.),
+        ..SlotConstruct::construct(&mut slot_values)
     };
-    layer.binding.image = Animated::constant(texture);
+    layer.binding.image = slot_values.add(texture);
     let material = builder
         .add_material(Material {
             name: "paint".into(),
             surface: MaterialSurface::try_from(LayeredSurface {
                 layers: vec![layer],
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             })
             .unwrap(),
         })
@@ -48,7 +49,15 @@ fn model(textured: bool) -> (Model<'static>, NodeId, Option<Texture>) {
     builder
         .add_instance_with_materials(instance, vec![material])
         .unwrap();
-    (builder.finish().unwrap(), node, texture)
+    (
+        {
+            builder.import_values(&slot_values).unwrap();
+            builder.finish()
+        }
+        .unwrap(),
+        node,
+        texture,
+    )
 }
 
 // These choices belong to the application; the renderer imposes no inventory,
@@ -118,6 +127,7 @@ impl Resolver<Configuration> for Workshop {
 
 #[test]
 fn application_defined_machine_configuration_compiles_without_native_character_metadata() {
+    let mut slot_values = SlotValues::default();
     let (chassis, mounting_frame, _) = model(false);
     let (module, _, paint) = model(true);
     assert!(chassis
@@ -170,7 +180,7 @@ fn application_defined_machine_configuration_compiles_without_native_character_m
             &binds,
             PoseOptions {
                 space: BakeSpace::Authored,
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
         )
         .unwrap();

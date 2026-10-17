@@ -1,16 +1,18 @@
 use super::*;
 use std::f64::consts::FRAC_PI_2;
 use wc3::model::systems::model_physics::Spring;
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 use wc3::model::{ModelMount, MountTarget};
 use wc3::model::{Node, Quaternion};
 
 fn fixture(dynamic: usize) -> (PhysicsDefinition, Vec<Mat4>) {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::<Universal>::builder("secondary motion");
     let mut bodies = Vec::new();
     let mut authored = Vec::new();
     for index in 0..dynamic {
         let id = builder
-            .add_node(Node::named(format!("body-{index}")))
+            .add_node(Node::named(format!("body-{index}"), &mut slot_values))
             .unwrap();
         bodies.push(BodyDefinition {
             info: PhysicsBodyInfo {
@@ -48,7 +50,7 @@ fn fixture(dynamic: usize) -> (PhysicsDefinition, Vec<Mat4>) {
     (
         PhysicsDefinition {
             bodies,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
         authored,
     )
@@ -171,13 +173,14 @@ fn distance_joint_preserves_anchor_separation_and_override_authority() {
 
 #[test]
 fn collisions_require_explicit_pair_and_respect_kinematic_body() {
+    let mut slot_values = SlotValues::default();
     let (mut definition, mut authored) = fixture(2);
     definition.bodies[0].inverse_mass = 0.;
     definition.bodies[0].info.body.kind = PhysicsBodyKind::Kinematic;
     authored[1] = Mat4::from_translation(Vec3::X * 0.25);
     let settings = PhysicsSimulation {
         gravity: Vec3::ZERO,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let mut state = PhysicsState::default();
     state.step(&definition, &settings, 0., &authored, &HashMap::new());
@@ -208,20 +211,24 @@ fn paused_preserves_state_and_invalid_settings_do_not_emit_nonfinite_poses() {
 
 #[test]
 fn runtime_simulates_rest_rig_and_restores_authored_pose_when_disabled() {
+    let mut slot_values = SlotValues::default();
     use crate::runtime::animate_instances;
     use crate::{compile_model, spawn_model, ModelMaterial, ModelRig, Playback, PoseOverrides};
     use bevy::ecs::world::CommandQueue;
     use wc3::model::systems::model_physics::{Body, Physics};
     let mut builder = Model::<Universal>::builder("armor secondary motion");
-    let bone = builder.add_node(Node::named("armor-bone")).unwrap();
+    let bone = builder.add_named_node("armor-bone").unwrap();
     let placement = builder
         .add_node(
-            Node::named("physics-body")
+            Node::named("physics-body", &mut slot_values)
                 .with_parent(bone)
-                .with_transform(ModelTransform {
-                    translation: [0., 0., 1.],
-                    ..Default::default()
-                })
+                .with_transform(
+                    ModelTransform {
+                        translation: [0., 0., 1.],
+                        ..SlotConstruct::construct(&mut slot_values)
+                    },
+                    &mut slot_values,
+                )
                 .unwrap(),
         )
         .unwrap();
@@ -245,11 +252,15 @@ fn runtime_simulates_rest_rig_and_restores_authored_pose_when_disabled() {
             joints: Vec::new(),
             collision_pairs: Vec::new(),
             wind_coefficients: None,
-            follow_allow_list: Default::default(),
+            follow_allow_list: SlotConstruct::construct(&mut slot_values),
             vegetation: Vec::new(),
         })))
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let compiled = compile_model(&model, |_| None).unwrap();
     let mut meshes = Assets::default();
     let mut binds = Assets::default();
@@ -291,7 +302,7 @@ fn runtime_simulates_rest_rig_and_restores_authored_pose_when_disabled() {
             bone,
             ModelTransform {
                 translation: [0., 0., 3.],
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
         );
     app.world_mut()
@@ -320,6 +331,7 @@ fn runtime_simulates_rest_rig_and_restores_authored_pose_when_disabled() {
 
 #[test]
 fn composition_remaps_parent_bodies_and_constraints_to_shared_host_body() {
+    let mut slot_values = SlotValues::default();
     let (mut host, _) = fixture(1);
     let (mut part, _) = fixture(2);
     let host_id = host.bodies[0].info.body.node;
@@ -357,11 +369,13 @@ fn composition_remaps_parent_bodies_and_constraints_to_shared_host_body() {
             id,
             name: "composed".into(),
             parent: None,
+            transform: wc3::model::AnimatedTransform::construct(&mut slot_values),
+            visibility: slot_values.add(true),
             rest: ModelTransform::default(),
-            channels: Default::default(),
-            inheritance: Default::default(),
-            billboard: Default::default(),
-            billboard_convention: Default::default(),
+            channels: SlotConstruct::construct(&mut slot_values),
+            inheritance: SlotConstruct::construct(&mut slot_values),
+            billboard: SlotConstruct::construct(&mut slot_values),
+            billboard_convention: SlotConstruct::construct(&mut slot_values),
             visible: true,
             camera_anchored: false,
         })
@@ -377,23 +391,26 @@ fn composition_remaps_parent_bodies_and_constraints_to_shared_host_body() {
 
 #[test]
 fn composition_body_offset_includes_rest_correction_anchors() {
+    let mut slot_values = SlotValues::default();
     let (mut part, _) = fixture(1);
     let mut builder = Model::<Universal>::builder("corrected host frames");
-    let host = builder.add_node(Node::named("host")).unwrap();
-    let anchor = builder.add_node(Node::named("rest correction")).unwrap();
-    let placement = builder.add_node(Node::named("placement")).unwrap();
-    let make = |id, parent, x| RuntimeNode {
+    let host = builder.add_named_node("host").unwrap();
+    let anchor = builder.add_named_node("rest correction").unwrap();
+    let placement = builder.add_named_node("placement").unwrap();
+    let mut make = |id, parent, x| RuntimeNode {
+        transform: wc3::model::AnimatedTransform::construct(&mut slot_values),
+        visibility: slot_values.add(true),
         id,
         name: "corrected".into(),
-        channels: Default::default(),
+        channels: SlotConstruct::construct(&mut slot_values),
         parent,
         rest: ModelTransform {
             translation: [x, 0., 0.],
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         },
-        inheritance: Default::default(),
-        billboard: Default::default(),
-        billboard_convention: Default::default(),
+        inheritance: SlotConstruct::construct(&mut slot_values),
+        billboard: SlotConstruct::construct(&mut slot_values),
+        billboard_convention: SlotConstruct::construct(&mut slot_values),
         visible: true,
         camera_anchored: false,
     };
@@ -511,6 +528,7 @@ fn explicit_contact_supports_dynamic_body_under_gravity_without_energy_growth() 
 
 #[test]
 fn mounted_physics_inherits_forces_through_current_frame_carrier_rotation() {
+    let mut slot_values = SlotValues::default();
     use crate::runtime::{animate_instances, synchronize_mounted_models};
     use crate::{
         compile_model, spawn_model, ModelMaterial, ModelPart, ModelRig, PartBinding, Playback,
@@ -519,12 +537,20 @@ fn mounted_physics_inherits_forces_through_current_frame_carrier_rotation() {
     use bevy::ecs::world::CommandQueue;
     use wc3::model::systems::model_physics::Physics;
     let mut host = Model::<Universal>::builder("physics host");
-    let carrier = host.add_node(Node::named("carrier")).unwrap();
-    let host = compile_model(&host.finish().unwrap(), |_| None).unwrap();
+    let carrier = host.add_named_node("carrier").unwrap();
+    let host = compile_model(
+        &{
+            host.import_values(&slot_values).unwrap();
+            host.finish()
+        }
+        .unwrap(),
+        |_| None,
+    )
+    .unwrap();
     let mut part = Model::<Universal>::builder("physics part");
-    let bone = part.add_node(Node::named("bone")).unwrap();
+    let bone = part.add_named_node("bone").unwrap();
     let placement = part
-        .add_node(Node::named("body").with_parent(bone))
+        .add_node(Node::named("body", &mut slot_values).with_parent(bone))
         .unwrap();
     part.add_system(System::M2(ModelSystem::Physics(Physics {
         kind: PhysicsKind::WornItem,
@@ -545,11 +571,19 @@ fn mounted_physics_inherits_forces_through_current_frame_carrier_rotation() {
         joints: Vec::new(),
         collision_pairs: Vec::new(),
         wind_coefficients: None,
-        follow_allow_list: Default::default(),
+        follow_allow_list: SlotConstruct::construct(&mut slot_values),
         vegetation: Vec::new(),
     })))
     .unwrap();
-    let part = compile_model(&part.finish().unwrap(), |_| None).unwrap();
+    let part = compile_model(
+        &{
+            part.import_values(&slot_values).unwrap();
+            part.finish()
+        }
+        .unwrap(),
+        |_| None,
+    )
+    .unwrap();
     let composed = host
         .compose([ModelPart::new(
             &part,
@@ -594,7 +628,7 @@ fn mounted_physics_inherits_forces_through_current_frame_carrier_rotation() {
             carrier,
             ModelTransform {
                 rotation: Quaternion(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2).to_array()),
-                ..Default::default()
+                ..SlotConstruct::construct(&mut slot_values)
             },
         );
     app.world_mut()
@@ -619,12 +653,13 @@ fn mounted_physics_inherits_forces_through_current_frame_carrier_rotation() {
 
 #[test]
 fn world_frame_preserves_motion_while_model_frame_carries_bodies() {
+    let mut slot_values = SlotValues::default();
     let (definition, authored) = fixture(1);
     for frame_mode in [PhysicsFrame::World, PhysicsFrame::Model] {
         let settings = PhysicsSimulation {
             gravity: Vec3::ZERO,
             frame: frame_mode,
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         };
         let mut state = PhysicsState::default();
         for frame in 0..=2 {
@@ -657,12 +692,13 @@ fn world_frame_preserves_motion_while_model_frame_carries_bodies() {
 
 #[test]
 fn inertial_rotation_and_converted_forces_preserve_world_direction() {
+    let mut slot_values = SlotValues::default();
     let (definition, mut authored) = fixture(1);
     authored[0] = Mat4::from_translation(Vec3::X * 2.);
     let mut settings = PhysicsSimulation {
         gravity: Vec3::NEG_Z * 9.81,
         acceleration: Vec3::Y,
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let mut state = PhysicsState::default();
     state.rebase(&definition, &settings, 0., Some(Affine3A::IDENTITY));
@@ -696,6 +732,7 @@ fn changing_sheared_frame_resets_inertial_state_to_animation() {
 
 #[test]
 fn ragdoll_and_private_world_equipment_preserve_domain_and_simulate_authored_chain() {
+    let mut slot_values = SlotValues::default();
     use crate::compile_model;
     use crate::pose::{evaluate_pose, EvaluatedPose};
     use wc3::model::systems::model_physics::{CollisionMask, Motor, Physics};
@@ -705,10 +742,12 @@ fn ragdoll_and_private_world_equipment_preserve_domain_and_simulate_authored_cha
         let mut bodies = Vec::new();
         for index in 0..8 {
             let bone = builder
-                .add_node(Node::named(format!("belt-bone-{index}")))
+                .add_node(Node::named(format!("belt-bone-{index}"), &mut slot_values))
                 .unwrap();
             let node = builder
-                .add_node(Node::named(format!("belt-body-{index}")).with_parent(bone))
+                .add_node(
+                    Node::named(format!("belt-body-{index}"), &mut slot_values).with_parent(bone),
+                )
                 .unwrap();
             bodies.push(Body {
                 node,
@@ -776,11 +815,15 @@ fn ragdoll_and_private_world_equipment_preserve_domain_and_simulate_authored_cha
                 joints,
                 collision_pairs: Vec::new(),
                 wind_coefficients: None,
-                follow_allow_list: Default::default(),
+                follow_allow_list: SlotConstruct::construct(&mut slot_values),
                 vegetation: Vec::new(),
             })))
             .unwrap();
-        let source = builder.finish().unwrap();
+        let source = {
+            builder.import_values(&slot_values).unwrap();
+            builder.finish()
+        }
+        .unwrap();
         let compiled = compile_model(&source, |_| None).unwrap();
         assert_eq!(compiled.physics.bodies().count(), 8);
         assert_eq!(compiled.physics.joints().count(), 7);

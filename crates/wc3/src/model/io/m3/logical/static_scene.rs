@@ -114,9 +114,9 @@ pub(super) fn read<'a, E: Envelope>(
         let owner = builder.reserve_feature(node(u32::from(r.bone_index), &skeleton.nodes)?);
         let mut payload = surface::ShadowBox {
             reserved: r.padding,
-            length: anim(r.length),
-            width: anim(r.width),
-            height: anim(r.height),
+            length: anim(r.length, builder.values_mut()),
+            width: anim(r.width, builder.values_mut()),
+            height: anim(r.height, builder.values_mut()),
         };
         bindings::field(
             &mut payload.length,
@@ -145,7 +145,9 @@ pub(super) fn read<'a, E: Envelope>(
     {
         let r = row.map_err(read_error)?;
         let owner = builder.reserve_feature(node(r.node_index, &skeleton.nodes)?);
-        let mut payload = surface::ViewVolume { size: anim(r.size) };
+        let mut payload = surface::ViewVolume {
+            size: anim(r.size, builder.values_mut()),
+        };
         bindings::field(
             &mut payload.size,
             OwnerId::Feature(owner),

@@ -23,16 +23,16 @@ where
     Ok(surface::ReflectionMaterialStep {
         displacement: SurfaceContribution {
             input: displacement_map,
-            parameters: anim(r.displacement_strength),
+            parameters: anim(r.displacement_strength, reader.builder.values_mut()),
         },
         reflection: SurfaceContribution {
             input: reflection_map,
-            parameters: anim(r.reflection_strength),
+            parameters: anim(r.reflection_strength, reader.builder.values_mut()),
         },
         unknown: r.unknown,
-        reflection_offset: anim(r.reflection_offset.value()),
-        blur_angle: anim(r.blur_angle.value()),
-        blur_distance_max: anim(r.blur_distance_max.value()),
+        reflection_offset: anim(r.reflection_offset.value(), reader.builder.values_mut()),
+        blur_angle: anim(r.blur_angle.value(), reader.builder.values_mut()),
+        blur_distance_max: anim(r.blur_distance_max.value(), reader.builder.values_mut()),
         blur_map,
         flags: surface::values::ReflectionFlags((r.flags).bits()),
         unknown2: r.unknown2.value(),

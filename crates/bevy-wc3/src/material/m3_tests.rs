@@ -6,19 +6,28 @@ use super::*;
 use std::sync::Arc;
 use wc3::model::materials::m3;
 use wc3::model::{AnimationSample, Material, MaterialStep, MaterialSurface};
+use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
 
-fn constant(color: [f32; 4]) -> m3::TextureLayer {
-    let mut layer = m3::TextureLayer::default();
+fn constant(slot_values: &mut SlotValues, color: [f32; 4]) -> m3::TextureLayer {
+    let mut layer = m3::TextureLayer::construct(slot_values);
     layer.binding.sampling.flags.set_color(true);
-    layer.binding.contribution.color.initial = color;
+    slot_values
+        .set(layer.binding.contribution.color.value, color)
+        .unwrap();
     layer.binding.contribution.color_type = ColorChannel::Rgba;
-    layer.binding.contribution.map_alpha.initial = 1.;
-    layer.binding.coordinates.transform.uv_tiling.initial = [1.; 2];
+    slot_values
+        .set(layer.binding.contribution.map_alpha.value, 1.)
+        .unwrap();
+    slot_values
+        .set(layer.binding.coordinates.transform.uv_tiling.value, [1.; 2])
+        .unwrap();
     layer.binding.coordinates.transform.uv_source_related = u32::MAX;
     layer
 }
-fn compile(surface: m3::StandardMaterialStep) -> SurfacePass {
-    let model = Model::builder("standard controls").finish().unwrap();
+fn compile(surface: m3::StandardMaterialStep, slot_values: &SlotValues) -> SurfacePass {
+    let mut builder = Model::builder("standard controls");
+    builder.import_values(slot_values).unwrap();
+    let model = builder.finish().unwrap();
     compile_m3(
         &model,
         &m3::MaterialStep::Standard(Box::new(surface)),
@@ -28,14 +37,17 @@ fn compile(surface: m3::StandardMaterialStep) -> SurfacePass {
 }
 #[test]
 fn constant_layers_keep_role_controls_without_requesting_unused_uv_streams() {
-    let mut surface = m3::StandardMaterialStep::default();
-    let mut diffuse = constant([0.2, 0.4, 0.8, 0.5]);
+    let mut slot_values = SlotValues::default();
+    let mut surface = m3::StandardMaterialStep::construct(&mut slot_values);
+    let mut diffuse = constant(&mut slot_values, [0.2, 0.4, 0.8, 0.5]);
     diffuse.binding.coordinates.source = UvMappingMode::TriPlanarWorld;
-    diffuse.binding.contribution.map_alpha.initial = 0.25;
+    slot_values
+        .set(diffuse.binding.contribution.map_alpha.value, 0.25)
+        .unwrap();
     surface.diffuse = Some(diffuse);
-    surface.opacity.primary = Some(constant([0.3; 4]));
-    surface.opacity.secondary = Some(constant([0.5; 4]));
-    let pass = compile(surface);
+    surface.opacity.primary = Some(constant(&mut slot_values, [0.3; 4]));
+    surface.opacity.secondary = Some(constant(&mut slot_values, [0.5; 4]));
+    let pass = compile(surface, &slot_values);
     assert_eq!(pass.material.base_color, Color::WHITE);
     assert_eq!(pass.state.m3.layers[0].color, Vec4::new(0.2, 0.4, 0.8, 0.5));
     assert_eq!(pass.state.m3.layers[0].controls.z, 0.25);
@@ -46,15 +58,33 @@ fn constant_layers_keep_role_controls_without_requesting_unused_uv_streams() {
 }
 #[test]
 fn uv_transform_uses_authored_radians_center_and_pretiling_offset() {
-    let mut layer = constant([1.; 4]);
-    layer.binding.coordinates.transform.uv_offset.initial = [0.25, -0.5];
-    layer.binding.coordinates.transform.uv_angle.initial = [0., 0., std::f32::consts::FRAC_PI_2];
-    layer.binding.coordinates.transform.uv_tiling.initial = [2., 3.];
-    let uniform = layer_uniform(&layer, 0, None);
+    let mut slot_values = SlotValues::default();
+    let layer = constant(&mut slot_values, [1.; 4]);
+    slot_values
+        .set(
+            layer.binding.coordinates.transform.uv_offset.value,
+            [0.25, -0.5],
+        )
+        .unwrap();
+    slot_values
+        .set(
+            layer.binding.coordinates.transform.uv_angle.value,
+            [0., 0., std::f32::consts::FRAC_PI_2],
+        )
+        .unwrap();
+    slot_values
+        .set(
+            layer.binding.coordinates.transform.uv_tiling.value,
+            [2., 3.],
+        )
+        .unwrap();
+    let uniform = layer_uniform(&layer, 0, &slot_values);
     let mapped = (uniform.uv * Vec3::new(0.75, 0., 1.)).truncate();
     assert!((mapped - Vec2::splat(0.5)).length() < 1e-6);
-    layer.binding.coordinates.transform.uv_tiling.initial = [0.; 2];
-    let collapsed = layer_uniform(&layer, 0, None);
+    slot_values
+        .set(layer.binding.coordinates.transform.uv_tiling.value, [0.; 2])
+        .unwrap();
+    let collapsed = layer_uniform(&layer, 0, &slot_values);
     assert_eq!(
         (collapsed.uv * Vec3::new(0., 1., 1.)).truncate(),
         Vec2::splat(0.5)
@@ -62,15 +92,16 @@ fn uv_transform_uses_authored_radians_center_and_pretiling_offset() {
 }
 #[test]
 fn every_regular_role_has_a_fixed_physical_image_binding() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::builder("standard roles");
     let texture = builder.add_file_texture("roles.dds").unwrap();
-    let mut layer = constant([1.; 4]);
+    let mut layer = constant(&mut slot_values, [1.; 4]);
     layer.binding.sampling.flags.set_color(false);
     layer.binding.image = Some(texture.resource);
     let mut surface = m3::StandardMaterialStep {
         diffuse: Some(layer.clone()),
         decal_layer: Some(layer.clone()),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     surface.specular.input.color = Some(layer.clone());
     surface.specular.input.gloss = Some(layer.clone());
@@ -93,9 +124,17 @@ fn every_regular_role_has_a_fixed_physical_image_binding() {
             surface: MaterialSurface::from(surface.clone()),
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let handle = Handle::<Image>::default();
     let images = TextureImages::resolve(&model, |_| Some(handle.clone()));
+    let mut model = model.clone();
+    model
+        .edit(|builder| builder.import_values(&slot_values))
+        .unwrap();
     let pass = compile_m3(&model, &surface, &images).unwrap();
     assert!(pass.state.m3.layers.iter().all(|layer| layer.flags.x == 1));
     assert_eq!(pass.material.base_color_texture, Some(handle.clone()));
@@ -111,15 +150,16 @@ fn every_regular_role_has_a_fixed_physical_image_binding() {
 }
 #[test]
 fn uv3_only_requests_its_raw_stream_and_pipeline_layout() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::builder("fourth UV");
     let texture = builder.add_file_texture("uv.dds").unwrap();
-    let mut layer = constant([1.; 4]);
+    let mut layer = constant(&mut slot_values, [1.; 4]);
     layer.binding.image = Some(texture.resource);
     layer.binding.sampling.flags.set_color(false);
     layer.binding.coordinates.source = UvMappingMode::ExplicitUV3;
     let surface = m3::StandardMaterialStep {
         diffuse: Some(layer),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let surface = m3::MaterialStep::Standard(Box::new(surface));
     builder
@@ -128,8 +168,16 @@ fn uv3_only_requests_its_raw_stream_and_pipeline_layout() {
             surface: MaterialSurface::from(surface.clone()),
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let images = TextureImages::resolve(&model, |_| Some(Handle::default()));
+    let mut model = model.clone();
+    model
+        .edit(|builder| builder.import_values(&slot_values))
+        .unwrap();
     let pass = compile_m3(&model, &surface, &images).unwrap();
     assert_eq!(pass.fourth_coordinate, Some(3));
     assert_eq!(pass.secondary_coordinate, None);
@@ -139,12 +187,17 @@ fn uv3_only_requests_its_raw_stream_and_pipeline_layout() {
 
 #[test]
 fn unchanged_sampling_keeps_uniforms_and_team_settings_stable() {
-    let model = Model::builder("static animation").finish().unwrap();
-    let surface = m3::StandardMaterialStep {
-        diffuse: Some(constant([0.2, 0.4, 0.8, 1.])),
-        ..Default::default()
+    let mut slot_values = SlotValues::default();
+    let model = {
+        let mut draft = Model::<wc3::model::profiles::Universal>::builder("static animation");
+        draft.import_values(&slot_values).unwrap();
+        draft.finish().unwrap()
     };
-    let pass = compile(surface);
+    let surface = m3::StandardMaterialStep {
+        diffuse: Some(constant(&mut slot_values, [0.2, 0.4, 0.8, 1.])),
+        ..SlotConstruct::construct(&mut slot_values)
+    };
+    let pass = compile(surface, &slot_values);
     let mut material = ModelMaterial {
         base: pass.material,
         extension: pass.state,
@@ -155,7 +208,7 @@ fn unchanged_sampling_keeps_uniforms_and_team_settings_stable() {
     assert!(!pass.animation.apply_to_material(&sample, &mut material));
     let colors = TeamColors {
         diffuse: Vec3::new(0.2, 0.4, 0.8),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     assert!(material.extension.set_team_colors(colors).unwrap());
     assert_eq!(material.extension.team_colors(), Some(colors));
@@ -174,16 +227,25 @@ fn unchanged_sampling_keeps_uniforms_and_team_settings_stable() {
 }
 #[test]
 fn unresolved_coordinate_generators_skip_only_the_affected_role() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::builder("unsupported sampled coordinates");
     let texture = builder.add_file_texture("unsupported.dds").unwrap();
-    let model = builder.finish().unwrap();
-    let mut surface = m3::StandardMaterialStep::default();
-    let mut layer = constant([1.; 4]);
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
+    let mut surface = m3::StandardMaterialStep::construct(&mut slot_values);
+    let mut layer = constant(&mut slot_values, [1.; 4]);
     layer.binding.sampling.flags.set_color(false);
     layer.binding.image = Some(texture.resource);
     layer.binding.coordinates.source = UvMappingMode::TriPlanarWorld;
     surface.diffuse = Some(layer);
-    surface.opacity.primary = Some(constant([0.5; 4]));
+    surface.opacity.primary = Some(constant(&mut slot_values, [0.5; 4]));
+    let mut model = model.clone();
+    model
+        .edit(|builder| builder.import_values(&slot_values))
+        .unwrap();
     let pass = compile_m3(
         &model,
         &m3::MaterialStep::Standard(Box::new(surface)),
@@ -200,20 +262,25 @@ fn unresolved_coordinate_generators_skip_only_the_affected_role() {
 
 #[test]
 fn alpha_test_uses_native_byte_threshold_without_losing_custom_clip_on_blend() {
-    let mut surface = m3::StandardMaterialStep::default();
+    let mut slot_values = SlotValues::default();
+    let mut surface = m3::StandardMaterialStep::construct(&mut slot_values);
     surface.state.rasterization.alpha_test_threshold = 128;
-    let pass = compile(surface.clone());
+    let pass = compile(surface.clone(), &slot_values);
     assert_eq!(pass.state.combiner.clip.x, 128. / 255.);
     assert!(matches!(pass.material.alpha_mode, AlphaMode::Mask(_)));
     surface.state.blend = BlendOperations::Alpha;
-    let transparent = compile(surface);
+    let transparent = compile(surface, &slot_values);
     assert_eq!(transparent.state.combiner.clip.x, 128. / 255.);
     assert_eq!(transparent.material.alpha_mode, AlphaMode::Blend);
 }
 
 #[test]
 fn effect_context_enables_external_color_without_changing_authored_mesh_state() {
-    let pass = compile(m3::StandardMaterialStep::default());
+    let mut slot_values = SlotValues::default();
+    let pass = compile(
+        m3::StandardMaterialStep::construct(&mut slot_values),
+        &slot_values,
+    );
     assert_eq!(pass.state.m3.settings.y, 0);
     assert_eq!(pass.state.m3.settings.z, 0);
     let mut effect = pass.state.clone();
@@ -229,20 +296,29 @@ fn effect_context_enables_external_color_without_changing_authored_mesh_state() 
 
 #[test]
 fn unresolved_images_use_white_diffuse_and_neutral_optional_roles() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::builder("unresolved roles");
     let texture = builder.add_file_texture("missing.dds").unwrap();
-    let model = builder.finish().unwrap();
-    let mut layer = constant([1.; 4]);
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
+    let mut layer = constant(&mut slot_values, [1.; 4]);
     layer.binding.sampling.flags.set_color(false);
     layer.binding.image = Some(texture.resource);
     layer.binding.coordinates.source = UvMappingMode::ExplicitUV3;
     let mut surface = m3::StandardMaterialStep {
         diffuse: Some(layer.clone()),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     surface.normals.base = Some(layer.clone());
     surface.opacity.primary = Some(layer.clone());
     surface.ambient_occlusion_layer = Some(layer.clone());
+    let mut model = model.clone();
+    model
+        .edit(|builder| builder.import_values(&slot_values))
+        .unwrap();
     let pass = compile_m3(
         &model,
         &m3::MaterialStep::Standard(Box::new(surface)),
@@ -274,6 +350,7 @@ fn unresolved_images_use_white_diffuse_and_neutral_optional_roles() {
 
 #[test]
 fn independent_image_roles_share_each_effective_native_wrap_sampler() {
+    let mut slot_values = SlotValues::default();
     let mut builder = Model::builder("pooled standard sampling");
     let texture = builder.add_file_texture("wrap.dds").unwrap();
     let mut layers = Vec::new();
@@ -284,7 +361,7 @@ fn independent_image_roles_share_each_effective_native_wrap_sampler() {
         (true, true),
         (false, false),
     ] {
-        let mut layer = constant([1.; 4]);
+        let mut layer = constant(&mut slot_values, [1.; 4]);
         layer.binding.image = Some(texture.resource);
         layer.binding.sampling.flags.set_color(false);
         layer.binding.sampling.flags.set_uv_wrap_x(u);
@@ -294,7 +371,7 @@ fn independent_image_roles_share_each_effective_native_wrap_sampler() {
     let mut surface = m3::StandardMaterialStep {
         diffuse: Some(layers[0].clone()),
         decal_layer: Some(layers[1].clone()),
-        ..Default::default()
+        ..SlotConstruct::construct(&mut slot_values)
     };
     surface.opacity.primary = Some(layers[2].clone());
     surface.opacity.secondary = Some(layers[3].clone());
@@ -306,8 +383,16 @@ fn independent_image_roles_share_each_effective_native_wrap_sampler() {
             surface: MaterialSurface::from(surface.clone()),
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let images = TextureImages::resolve(&model, |_| Some(Handle::default()));
+    let mut model = model.clone();
+    model
+        .edit(|builder| builder.import_values(&slot_values))
+        .unwrap();
     let pass = compile_m3(&model, &surface, &images).unwrap();
     assert_eq!(
         [0, 1, 6, 7, 8].map(|slot| pass.state.m3.layers[slot].route.y),
@@ -319,13 +404,14 @@ fn independent_image_roles_share_each_effective_native_wrap_sampler() {
 
 #[test]
 fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::{Channel, Clock, Curve, Time as ModelTime, Track};
     let mut builder = Model::builder("animated material roles");
     let material = builder.reserve_material();
-    let property = material.opacity();
-    let mut opacity = constant([1.; 4]);
-    opacity.binding.contribution.map_alpha.binding = Some(property.clone());
-    let mut surface = m3::StandardMaterialStep::default();
+    let property = slot_values.add(1.);
+    let mut opacity = constant(&mut slot_values, [1.; 4]);
+    opacity.binding.contribution.map_alpha.value = property;
+    let mut surface = m3::StandardMaterialStep::construct(&mut slot_values);
     surface.opacity.primary = Some(opacity);
     builder
         .set_material(
@@ -350,7 +436,11 @@ fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
             .unwrap(),
         }))
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let pass = compile_material_with_images(&model, material, Arc::new(TextureImages::default()))
         .unwrap()
         .remove(0);
@@ -363,7 +453,7 @@ fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
     let sample = model
         .animation_sample(AnimationSample {
             timeline_time: ModelTime::seconds(0.5).unwrap(),
-            ..Default::default()
+            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     assert!(pass.animation.apply_to_material(&sample, &mut material));
@@ -374,14 +464,15 @@ fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
 
 #[test]
 fn native_bound_constants_keep_opaque_composite_base_and_no_animation_sidecar() {
+    let mut slot_values = SlotValues::default();
     use wc3::model::conversion::{ExportOptions, ImportOptions};
     use wc3::model::formats::m3::StarCraft2;
     use wc3::model::profiles::{Universal, M3};
     use wc3::model::{io, profiles::m3 as native};
     let mut builder = Model::<M3>::builder("constant composite bindings");
     let standard = native::StandardMaterialStep {
-        diffuse: Some(constant([1.; 4])),
-        ..Default::default()
+        diffuse: Some(constant(&mut slot_values, [1.; 4])),
+        ..SlotConstruct::construct(&mut slot_values)
     };
     let leaf = builder
         .add_material(Material {
@@ -398,16 +489,20 @@ fn native_bound_constants_keep_opaque_composite_base_and_no_animation_sidecar() 
                     .map(|weight| native::CompositeSection {
                         material: leaf,
                         map_multiplier: native::Property {
-                            initial: weight,
+                            value: slot_values.add(weight),
                             reset: weight,
-                            ..Default::default()
+                            ..SlotConstruct::construct(&mut slot_values)
                         },
                     })
                     .into(),
             })),
         })
         .unwrap();
-    let model = builder.finish().unwrap();
+    let model = {
+        builder.import_values(&slot_values).unwrap();
+        builder.finish()
+    }
+    .unwrap();
     let native = io::m3::plan::<StarCraft2>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -430,7 +525,7 @@ fn native_bound_constants_keep_opaque_composite_base_and_no_animation_sidecar() 
     assert!(surface
         .sections
         .iter()
-        .all(|section| section.map_multiplier.binding.is_some()));
+        .all(|section| model.values().contains(section.map_multiplier.value.slot())));
     let passes =
         compile_material_with_images(&model, composite, Arc::new(TextureImages::default()))
             .unwrap();

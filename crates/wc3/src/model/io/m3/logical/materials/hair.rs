@@ -22,14 +22,14 @@ pub(super) fn get_hair<'a, E: Envelope>(
     Ok(surface::HairMaterialStep {
         diffuse: SurfaceContribution {
             input: layer_base,
-            parameters: color(value.color_diffuse),
+            parameters: color(value.color_diffuse, reader.builder.values_mut()),
         },
         layer_spec_shift,
         layer_spec_noise,
         layer_ambient_occlusion,
         shift_primary: value.shift_primary,
         shift_secondary: value.shift_secondary,
-        color_specular: color(value.color_spec),
+        color_specular: color(value.color_spec, reader.builder.values_mut()),
         specular_exponent_primary: value.spec_exponent0,
         specular_exponent_secondary: value.spec_exponent1,
     })

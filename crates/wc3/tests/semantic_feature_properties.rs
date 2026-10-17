@@ -1,76 +1,69 @@
-use wc3::model::feature_properties::camera;
-use wc3::model::profiles::{m2, mdlx, Extends, Mdlx, Narrows, Universal, UniversalProperty, M2};
+use wc3::model::profiles::{m2, mdlx, Mdlx, Universal, M2};
 use wc3::model::{
-    Camera, Channel, Clock, Curve, FeatureProperty, Model, Node, NodeFeature, Time, Track,
+    AnimationSample, Camera, Channel, Clip, Clock, Construct, Curve, FromFeature, Model,
+    NodeFeature, Time, Track, Values,
 };
 
 #[test]
-fn vertical_field_of_view_publishes_in_universal_and_cannot_narrow_to_static_mdlx() {
-    let mut draft = Model::<Universal>::builder("vertical camera");
-    let node = draft.add_node(Node::named("camera")).unwrap();
-    let id = draft.reserve_feature(node);
-    let mut feature =
-        <Universal as Extends<Mdlx>>::feature(mdlx::Node::Camera(mdlx::Camera::default()));
+fn vertical_fov_animation_cannot_narrow_to_a_static_native_field() {
+    let mut values = Values::default();
+    let camera: mdlx::Camera = Construct::construct(&mut values);
+    let mut feature = NodeFeature::from_feature(mdlx::Node::Camera(camera), &mut values);
     let NodeFeature::Camera(Camera::Aimed(camera)) = &mut feature else {
-        panic!("expected aimed camera")
+        panic!()
     };
-    camera.field_of_view.binding = Some(camera::VERTICAL_FIELD_OF_VIEW.bind(id).into());
-    draft.set_feature(id, feature).unwrap();
+    let fov = camera.field_of_view;
+    let mut draft = Model::<Universal>::builder("vertical camera");
+    draft.import_values(&values).unwrap();
+    let node = draft.add_named_node("camera").unwrap();
+    draft.add_feature(node, feature).unwrap();
     draft
         .add_timeline_channel(Channel::Scalar(Track {
-            target: camera::VERTICAL_FIELD_OF_VIEW.bind(id),
-            curve: Curve::linear(
-                [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
-                vec![0.5f32, 1.],
-            )
-            .unwrap(),
+            target: fov,
+            curve: Curve::linear([Time::default(), Time::seconds(1.).unwrap()], [0.5f32, 1.])
+                .unwrap(),
             clock: Clock::Timeline,
         }))
         .unwrap();
-    let model = draft.finish().unwrap();
-    assert!(model.try_narrow::<Mdlx>().is_err());
-    assert!(
-        <M2 as Narrows<Universal>>::property(UniversalProperty::Feature(
-            FeatureProperty::CameraVerticalFieldOfView
-        ))
-        .is_err()
-    );
-    assert!(
-        <Mdlx as Narrows<Universal>>::property(UniversalProperty::Feature(
-            FeatureProperty::CameraVerticalFieldOfView
-        ))
-        .is_err()
-    );
+    assert!(draft.finish().unwrap().try_narrow::<Mdlx>().is_err());
 }
 
 #[test]
-fn diagonal_cameras_reject_vertical_field_of_view_channels() {
-    let mut draft = Model::<Universal>::builder("diagonal camera");
-    let node = draft.add_node(Node::named("camera")).unwrap();
-    let id = draft
-        .add_feature(
-            node,
-            NodeFeature::from(m2::ActorKind::Camera(m2::Camera {
-                convention: m2::values::CameraKind::Unknown(0),
-                field_of_view: Default::default(),
-                clipping: [0.1, 100.],
-                target: [0.; 3],
-                eye_offset: Default::default(),
-                target_offset: Default::default(),
-                roll: Default::default(),
-            })),
-        )
+fn a_fov_slot_keeps_its_diagonal_camera_convention() {
+    let mut draft = Model::<M2>::builder("diagonal camera");
+    let mut camera: m2::Camera = draft.construct();
+    camera.convention = m2::values::CameraKind::Unknown(0);
+    camera.clipping = [0.1, 100.];
+    let fov = camera.field_of_view;
+    let node = draft.add_named_node("camera").unwrap();
+    let feature = draft
+        .add_feature(node, m2::ActorKind::Camera(camera))
+        .unwrap();
+    let clip = draft
+        .add_clip(Clip::named("lens").with_duration(Time::seconds(1.).unwrap()))
         .unwrap();
     draft
-        .add_timeline_channel(Channel::Scalar(Track {
-            target: camera::VERTICAL_FIELD_OF_VIEW.bind(id),
-            curve: Curve::linear(
-                [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
-                vec![0.5f32, 1.],
-            )
-            .unwrap(),
-            clock: Clock::Timeline,
-        }))
+        .add_channel(
+            clip,
+            Channel::Scalar(Track {
+                target: fov,
+                curve: Curve::step([Time::default()], [0.75f32]).unwrap(),
+                clock: Clock::Clip,
+            }),
+        )
         .unwrap();
-    assert!(draft.finish().is_err());
+    let universal = draft.finish().unwrap().widen::<Universal>();
+    let NodeFeature::Camera(Camera::Aimed(camera)) = &universal.feature(feature).unwrap().payload
+    else {
+        panic!()
+    };
+    assert_eq!(camera.field_of_view, fov);
+    let sample = universal
+        .animation_sample(AnimationSample {
+            clip: Some(clip),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(sample.animated(&fov), 0.75);
+    assert!(universal.try_narrow::<M2>().is_ok());
 }
