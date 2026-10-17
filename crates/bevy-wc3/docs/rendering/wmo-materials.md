@@ -8,6 +8,19 @@ an interpreter. Loading a WMO successfully does not establish full game fidelity
 
 ## Texture programmes
 
+The compiler consumes `wmo::MaterialStep` variants with named texture inputs.
+`ReflectionEmissionMaterialStep` owns diffuse and reflection bindings, while
+`LayeredDiffuseModulationMaterialStep` owns two diffuse bindings and a modulation
+binding. Variants determine the equation, sampled input count, and coordinate
+routes; known steps carry no native shader selector. Unused authored slots remain
+separate bindings so native projection and graph traversal retain their resources.
+Native and Universal WMO profiles use these same definitions.
+
+Specialized or incompletely understood contracts remain `UnresolvedMaterialStep`
+definitions. Terrain and LOD paths retain their identity even when their current
+rendering approximation uses only the primary diffuse image. The shared GPU
+transport does not determine the semantic shader vocabulary.
+
 The regular surface interpreter supports selectors 0, 3, 4, 5, 6, 9, 11, 12,
 13, 15, 17, 18, 19 and 20. Texture slots follow their programme's authored UV
 routes. Selectors 3 and 5 generate view-space reflection coordinates; selectors

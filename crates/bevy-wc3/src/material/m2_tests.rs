@@ -1,11 +1,12 @@
 use super::*;
+use crate::material::native_fixtures::m2;
 use naga::front::wgsl::parse_str;
 use naga::valid::{Capabilities, ValidationFlags, Validator};
 use wc3::model::values::model::BatchFlags;
 use wc3::model::Animated;
 
-fn surface(shader: u16, coordinates: &[i16]) -> m2::MaterialStep<'static> {
-    m2::MaterialStep {
+fn surface(shader: u16, coordinates: &[i16]) -> m2::Material<'static> {
+    m2::Material {
         shader,
         color: Animated::constant([0.25, 0.5, 0.75]),
         opacity: Animated::constant(0.8),
@@ -22,9 +23,9 @@ fn surface(shader: u16, coordinates: &[i16]) -> m2::MaterialStep<'static> {
     }
 }
 
-fn compile(surface: &m2::MaterialStep<'_>) -> SurfacePass {
+fn compile(surface: &m2::Material<'_>) -> SurfacePass {
     let model = Model::builder("shader controls").finish().unwrap();
-    compile_m2(&model, surface, &TextureImages::default()).unwrap()
+    compile_m2(&model, &surface.clone().into(), &TextureImages::default()).unwrap()
 }
 
 #[test]
@@ -241,4 +242,15 @@ fn unknown_legacy_selector_controls_do_not_silently_use_a_known_equation() {
             .any(|message| message.contains("approximated")));
     }
     assert!(program(0x4011, 2).is_some());
+}
+
+fn program(shader: u16, count: usize) -> Option<ShaderProgram> {
+    super::program(
+        &m2::Material {
+            shader,
+            textures: vec![Default::default(); count],
+            ..Default::default()
+        }
+        .into(),
+    )
 }

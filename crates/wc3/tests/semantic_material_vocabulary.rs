@@ -1,7 +1,9 @@
 use wc3::model::controls::playback::ControllerProgram;
 use wc3::model::materials::bindings::{Coordinates, ImageSelection};
 use wc3::model::materials::m2::FrameSampling;
-use wc3::model::materials::m2::{MaterialStep as M2MaterialStep, ShaderInput, TextureUnit};
+use wc3::model::materials::m2::{
+    GuildMaterialStep, MaterialStep as M2MaterialStep, ShaderInput, TextureUnit,
+};
 use wc3::model::materials::mdlx::{LayeredSurface, SurfaceLayer};
 use wc3::model::profiles::{m2, mdlx, SurfacePayload};
 use wc3::model::{Animated, Error, Link, PropertyPayload, TextureTransform, ValidateLinks};
@@ -36,11 +38,10 @@ fn surfaces_admit_independently_defined_pass_and_input_vocabularies() {
     layered.layers[0].depth = 0.5;
     layered.validate().unwrap();
 
-    let mut shader = M2MaterialStep::<CheckedPass>::default();
-    shader.textures.push(CheckedPass { depth: f32::NAN });
-    assert!(shader.validate().is_err());
-    shader.textures[0].depth = 1.;
-    shader.validate().unwrap();
+    let mut input = CheckedPass { depth: f32::NAN };
+    assert!(ShaderInput::validate(&input).is_err());
+    input.depth = 1.;
+    ShaderInput::validate(&input).unwrap();
 }
 
 #[test]
@@ -48,7 +49,7 @@ fn built_in_profiles_select_the_shared_owning_types() {
     let layered = LayeredSurface::default();
     let _: mdlx::Material<'_> = layered;
     let shader = M2MaterialStep::default();
-    let _: m2::Material<'_> = shader;
+    let _: m2::Material<'_> = shader.into();
     let transform = TextureTransform::default();
     let _: m2::TextureTransform = transform;
 }
@@ -94,12 +95,14 @@ fn selected_coordinate_form_controls_which_destinations_exist() {
         },
     };
     let weight = Target::TextureUnit {
+        step: 0,
         index: 0,
         field: TextureUnitField::Weight,
     }
     .identity()
     .to_owned();
     let translation = Target::TextureUnit {
+        step: 0,
         index: 0,
         field: TextureUnitField::Translation,
     }
@@ -222,17 +225,21 @@ fn image_source_vocabularies_can_supply_graph_relationships() {
 #[test]
 fn guild_palette_defaults_are_neutral_and_nonfinite_settings_are_rejected() {
     use wc3::model::materials::m2::GuildPalette;
-    let mut shader = M2MaterialStep::<CheckedPass>::default();
+    let mut shader = M2MaterialStep::Guild(Box::new(GuildMaterialStep::default()));
     assert_eq!(
-        shader.guild_palette,
+        shader.guild_palette().unwrap(),
         GuildPalette {
             background: [1.; 3],
             emblem: [1.; 3],
             border: [1.; 3],
         }
     );
-    shader.guild_palette.emblem[1] = f32::NAN;
+    if let M2MaterialStep::Guild(v) = &mut shader {
+        v.palette.emblem[1] = f32::NAN;
+    }
     assert!(shader.validate().is_err());
-    shader.guild_palette.emblem[1] = 0.5;
+    if let M2MaterialStep::Guild(v) = &mut shader {
+        v.palette.emblem[1] = 0.5;
+    }
     shader.validate().unwrap();
 }

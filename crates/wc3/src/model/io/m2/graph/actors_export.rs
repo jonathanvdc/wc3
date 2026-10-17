@@ -172,19 +172,22 @@ where
                     let material = model
                         .material(*id)
                         .ok_or_else(|| Error::new("m2.ribbon.material", "missing surface"))?;
-                    let surface = &material.surface;
-                    material_indices.push(
-                        u16::try_from(core.materials.len())
-                            .map_err(|_| Error::new("m2.ribbon.material", "too many materials"))?,
-                    );
-                    let mut materials: Vec<_> = core.materials.iter().collect();
-                    materials.push(native::records::Material {
-                        flags: MaterialFlags::from_bits_retain(
-                            material_flags(&surface.state.rasterization).bits(),
-                        ),
-                        blending_mode: BlendMode::from_raw(surface.state.blend.raw()),
-                    });
-                    core.materials = ZeroVec::alloc_from_slice(&materials)
+                    for step in &material.surface.steps {
+                        let surface = step.declaration();
+                        material_indices.push(
+                            u16::try_from(core.materials.len()).map_err(|_| {
+                                Error::new("m2.ribbon.material", "too many materials")
+                            })?,
+                        );
+                        let mut materials: Vec<_> = core.materials.iter().collect();
+                        materials.push(native::records::Material {
+                            flags: MaterialFlags::from_bits_retain(
+                                material_flags(&surface.state.rasterization).bits(),
+                            ),
+                            blending_mode: BlendMode::from_raw(surface.state.blend.raw()),
+                        });
+                        core.materials = ZeroVec::alloc_from_slice(&materials)
+                    }
                 }
                 core.ribbons.push(native::records::RibbonEmitter {
                     id: value.controls.id,

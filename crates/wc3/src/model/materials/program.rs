@@ -4,13 +4,14 @@ use super::m3::properties::MaterialProperties;
 use super::mdlx::{LayeredSurface, MaterialDeclaration, MaterialStep as MdlxMaterialStep};
 use super::wmo::MaterialStep as WmoMaterialStep;
 use super::{diablo3, diablo4, m3};
+use crate::model::profiles::m2::properties::Target as M2Target;
 use crate::model::profiles::m3::properties::Target as M3Target;
 use crate::model::profiles::m3::properties::{Field, FieldSegment};
 use crate::model::profiles::SurfacePayload;
 use crate::model::{Error, Link, PropertyIdentityKey, ValidateLinks};
 
 /// An authored sequence of material operations, interpreted into rendering passes.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MaterialProgram<S> {
     /// Material operations in authored order.
     pub steps: Vec<S>,
@@ -63,7 +64,7 @@ impl MaterialStep<'_> {
     pub fn supports_property(&self, key: &PropertyIdentityKey, ordinal: usize) -> bool {
         match self {
             Self::Mdlx(v) => v.supports_property(key, ordinal),
-            Self::M2(v) => v.supports_property(key),
+            Self::M2(v) => m2_step_index(key) == Some(ordinal) && v.supports_property(key),
             Self::M3(v) => m3_path(key).is_some_and(|path| v.supports_path(path)),
             Self::Wmo(_) | Self::Diablo3(_) | Self::Diablo4(_) => false,
         }
@@ -82,7 +83,7 @@ impl MaterialStep<'_> {
 }
 impl SurfacePayload for MaterialSurface<'_> {
     fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        // Unindexed selectors must identify one step. MDLX selectors carry an ordinal.
+        // MDLX and M2 selectors carry a step ordinal; other selectors must identify one step.
         self.steps
             .iter()
             .enumerate()
@@ -335,5 +336,50 @@ impl TryFrom<MaterialSurface<'_>> for MaterialProgram<diablo4::MaterialStep> {
             })
             .collect::<Result<_, _>>()?;
         Ok(Self { steps })
+    }
+}
+
+fn m2_step_index(key: &PropertyIdentityKey) -> Option<usize> {
+    key.downcast_ref::<M2Target>()?.material_step()
+}
+impl SurfacePayload for MaterialProgram<M2MaterialStep<'_>> {
+    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
+        m2_step_index(key)
+            .and_then(|i| self.steps.get(i))
+            .is_some_and(|s| s.supports_property(key))
+    }
+    fn validate(&self) -> Result<(), Error> {
+        self.steps.iter().try_for_each(M2MaterialStep::validate)
+    }
+}
+impl<'a> From<MaterialProgram<M2MaterialStep<'a>>> for MaterialSurface<'a> {
+    fn from(value: MaterialProgram<M2MaterialStep<'a>>) -> Self {
+        Self {
+            steps: value
+                .steps
+                .into_iter()
+                .map(|s| MaterialStep::M2(Box::new(s)))
+                .collect(),
+        }
+    }
+}
+impl<'a> TryFrom<MaterialSurface<'a>> for MaterialProgram<M2MaterialStep<'a>> {
+    type Error = Error;
+    fn try_from(value: MaterialSurface<'a>) -> Result<Self, Error> {
+        Ok(Self {
+            steps: value
+                .steps
+                .into_iter()
+                .map(|s| match s {
+                    MaterialStep::M2(v) => Ok(*v),
+                    _ => Err(incompatible("surface contains a non-M2 material step")),
+                })
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+impl<S> From<S> for MaterialProgram<S> {
+    fn from(step: S) -> Self {
+        Self { steps: vec![step] }
     }
 }

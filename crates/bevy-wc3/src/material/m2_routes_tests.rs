@@ -1,5 +1,6 @@
 use super::super::ModelMaterialKey;
 use super::*;
+use crate::material::native_fixtures::m2;
 use wc3::model::Animated;
 
 #[test]
@@ -10,7 +11,7 @@ fn third_input_reuses_raw_streams_with_its_own_transform() {
         ([0, 1, 2], 3, Some(2)),
         ([0, 1, -1], 1, Some(0)),
     ] {
-        let mut shader: m2::MaterialStep<'static> = m2::MaterialStep {
+        let mut shader: m2::Material<'static> = m2::Material {
             shader: 0x8012,
             textures: sources
                 .into_iter()
@@ -24,7 +25,7 @@ fn third_input_reuses_raw_streams_with_its_own_transform() {
         };
         shader.textures[2].coordinates.transform.translation = Animated::constant([0.25, 0.5, 0.]);
         let model = Model::builder("coordinate routes").finish().unwrap();
-        let pass = compile_m2(&model, &shader, &TextureImages::default()).unwrap();
+        let pass = compile_m2(&model, &shader.clone().into(), &TextureImages::default()).unwrap();
         assert!(pass.diagnostics.is_empty());
         assert_eq!(pass.state.combiner.coordinates.w, route);
         assert_eq!(pass.third_coordinate, stream);
@@ -49,7 +50,7 @@ fn masked_crossfade_reuses_streams_and_keeps_mask_transform() {
         ([0, 1, 2, 2], 3, Some(2)),
         ([0, 1, 2, 0], 0, Some(2)),
     ] {
-        let mut shader: m2::MaterialStep<'static> = m2::MaterialStep {
+        let mut shader: m2::Material<'static> = m2::Material {
             shader: 0x8016,
             textures: sources
                 .into_iter()
@@ -64,7 +65,7 @@ fn masked_crossfade_reuses_streams_and_keeps_mask_transform() {
         shader.textures[3].coordinates.transform.translation = Animated::constant([0.25, 0.5, 0.]);
         shader.textures[3].contribution = Animated::constant(0.4);
         let model = Model::builder("masked crossfade routes").finish().unwrap();
-        let pass = compile_m2(&model, &shader, &TextureImages::default()).unwrap();
+        let pass = compile_m2(&model, &shader.clone().into(), &TextureImages::default()).unwrap();
         assert!(pass.diagnostics.is_empty());
         assert_eq!(pass.state.combiner.mode.x, 23);
         assert_eq!(pass.state.combiner.additional_coordinates.x, expected_route);
@@ -86,7 +87,7 @@ fn masked_crossfade_rejects_missing_surplus_and_unrepresentable_inputs() {
         vec![0, 1, 2, 3],
         vec![0, 0, 0, -1],
     ] {
-        let shader = m2::MaterialStep {
+        let shader = m2::Material {
             shader: 0x8016,
             textures: sources
                 .into_iter()
@@ -98,7 +99,7 @@ fn masked_crossfade_rejects_missing_surplus_and_unrepresentable_inputs() {
                 .collect(),
             ..Default::default()
         };
-        let pass = compile_m2(&model, &shader, &TextureImages::default()).unwrap();
+        let pass = compile_m2(&model, &shader.clone().into(), &TextureImages::default()).unwrap();
         assert_eq!(pass.state.combiner.mode.x, 0);
         assert_eq!(pass.diagnostics.len(), 1);
     }
@@ -113,7 +114,7 @@ fn shared_primary_and_secondary_coordinates_avoid_duplicate_vertex_streams() {
         (0x8000, vec![0, 0], Some(0)),
         (0x800f, vec![0, 1], Some(1)),
     ] {
-        let surface: m2::MaterialStep<'static> = m2::MaterialStep {
+        let surface: m2::Material<'static> = m2::Material {
             shader,
             textures: sources
                 .into_iter()
@@ -125,7 +126,7 @@ fn shared_primary_and_secondary_coordinates_avoid_duplicate_vertex_streams() {
                 .collect(),
             ..Default::default()
         };
-        let pass = compile_m2(&model, &surface, &TextureImages::default()).unwrap();
+        let pass = compile_m2(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
         assert_eq!(pass.secondary_coordinate, secondary);
     }
 }

@@ -4,8 +4,6 @@ pub mod properties;
 mod texture;
 pub use crate::model::controls::texture::{SupplementalTextureFlags, TextureControls};
 pub use crate::model::materials::m2::*;
-/// World of Warcraft selects independently animated model-shader inputs.
-pub type Material<'a> = MaterialStep<'a, TextureUnit<TextureTransform>>;
 mod actors;
 pub use actors::*;
 mod particles;
@@ -27,3 +25,8 @@ pub use crate::model::geometry::weighted_model::*;
 pub use crate::model::resources::M2ImageResource as ImageResource;
 /// External companion addresses admitted by this profile.
 pub use crate::model::resources::M2ResourceLocator as ResourceLocator;
+
+use crate::model::MaterialProgram;
+
+/// Ordered shader-specific material steps selected by this profile.
+pub type Material<'a> = MaterialProgram<MaterialStep<'a>>;

@@ -1,7 +1,5 @@
 //! Built-in WMO authoring vocabulary and its lossless embeddings.
-use crate::model::profiles::{
-    wmo, Extends, NoControls, Profile, SurfacePayload, Unavailable, Universal,
-};
+use crate::model::profiles::{wmo, Extends, NoControls, Profile, Unavailable, Universal};
 use crate::model::resources::{WorldImageResource, WorldModelResource};
 use crate::model::Model;
 use crate::model::{
@@ -27,7 +25,7 @@ impl Profile for Wmo {
     type Draw = Option<wmo::DrawControls>;
     type ModelMetadata<'a> = wmo::ModelMetadata;
     type System<'a> = wmo::WorldSystem<'a>;
-    type Surface<'a> = wmo::MaterialStep<'a>;
+    type Surface<'a> = wmo::Material<'a>;
     type Feature<'a> = wmo::Node<'a>;
     type Node<'a> = NoControls;
     type Texture<'a> = NoControls;
@@ -40,15 +38,6 @@ impl Profile for Wmo {
     }
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
         super::validation::model(model)
-    }
-}
-impl SurfacePayload for wmo::MaterialStep<'_> {
-    fn supports_property(&self, _key: &PropertyIdentityKey) -> bool {
-        false
-    }
-
-    fn validate(&self) -> Result<(), Error> {
-        Ok(())
     }
 }
 impl wmo::Node<'_> {

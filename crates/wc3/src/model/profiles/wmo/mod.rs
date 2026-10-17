@@ -18,3 +18,6 @@ pub use crate::model::geometry::world::*;
 
 /// Image dependency declarations admitted by this profile.
 pub use crate::model::resources::WorldImageResource as ImageResource;
+
+/// Complete shader-specific material definition selected by this profile.
+pub type Material<'a> = MaterialStep<'a>;

@@ -98,7 +98,8 @@ freezes Warcraft III pass values, texture selections, opacity, emissive gain, an
 Fresnel controls while retaining native render state and shared texture-transform
 references. Sample those referenced transforms separately. `materials::m2::MaterialStep::sampled`
 freezes model-shader color, opacity, input weights, frames, and inline transforms.
-Both preserve shader selectors instead of approximating their meaning with PBR.
+These operations preserve shader identity and draw state without approximating
+their meaning with PBR.
 `MaterialSurface::sampled` applies these operations across a universal material program,
 retaining its order and each step's rendering settings. WMO, M3, and external shader steps are cloned unchanged; their shader programmes are not
 executed or flattened by this helper. Other native surface families remain available through their semantic definitions

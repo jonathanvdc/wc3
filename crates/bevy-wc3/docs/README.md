@@ -41,13 +41,13 @@ then choose a topic:
   selection, quality controls, and camera policy.
 - [Geoset animation](rendering/geoset-animation.md): color, opacity,
   material sharing, isolation, and sampling.
-- [M2 materials](rendering/m2-materials.md): native texture combiners, generated
+- [M2 materials](rendering/m2-materials.md): ordered shader steps, texture combiners, generated
   coordinates, weighted crossfades, edge opacity and PBR integration limits.
 - [M2 programme inventory](rendering/m2-programmes.md): complete known shader-table
   coverage, texture and palette requirements, and bounded unresolved families.
 - [Reforged materials](rendering/reforged-materials.md): WC3 shader-specific steps, texture roles,
   surface animation, UV sets, and Bevy shading integration.
-- [WMO materials](rendering/wmo-materials.md): layered texture programmes, native
+- [WMO materials](rendering/wmo-materials.md): typed shader steps, layered texture programmes, native
   vertex-light preparation, regional ambient contributions and scene limits.
 - [M3 materials](rendering/m3-materials.md): the complete family/role inventory,
   animated Standard layers, composite passes and PBR fidelity limits.

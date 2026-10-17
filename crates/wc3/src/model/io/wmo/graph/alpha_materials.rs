@@ -19,8 +19,8 @@ pub(super) fn write<'a>(
         .flat_map(|(_, material)| {
             material
                 .surface
-                .textures
-                .iter()
+                .inputs()
+                .into_iter()
                 .filter_map(|binding| binding.image)
         })
         .collect::<BTreeSet<_>>();
@@ -61,9 +61,11 @@ pub(super) fn write<'a>(
     let mut records = Vec::new();
     let mut mapping = BTreeMap::new();
     for (id, material) in model.materials() {
-        let surface = &material.surface;
-        if surface.shader.is_some()
-            || surface.textures.len() > 2
+        let step = &material.surface;
+        let surface = step.declaration();
+        let inputs = step.inputs();
+        if step.native_shader().is_some()
+            || inputs.len() > 2
             || surface.shader_overrides.is_some()
             || surface.legacy_color.is_some()
             || surface.legacy_controls.is_some()
@@ -79,8 +81,7 @@ pub(super) fn write<'a>(
             )?;
         }
         let texture = |slot: usize| {
-            surface
-                .textures
+            inputs
                 .get(slot)
                 .and_then(|binding| binding.image)
                 .map_or(0, |id| textures[&id])

@@ -255,12 +255,39 @@ may be unrepresentable. Checked projections reject unsupported steps or extra
 operations rather than dropping them. A native M3 surface requires one matching
 shader or composite step; Diablo IV accepts zero or one resolved shader step.
 
-MDLX animation selectors address the ordinal in `steps`. Reordering steps
-therefore requires updating selectors that address their fields. M2 and M3
+M2 and WMO use shader-specific `MaterialStep` enums in both their native profiles
+and Universal. There is no general material input struct between those profiles.
+The M2 native profile stores an ordered program of those steps; WMO retains one
+step per native material. M2 steps distinguish modulation, additive equations, weighted interpolation,
+masked crossfades, facing opacity, and guild composition. WMO steps distinguish
+diffuse, reflection, layered, emission, and modulation equations. Each payload
+names its active texture roles; a `MaskedDualCrossfadeMaterialStep`, for example,
+owns `base`, `first`, `second`, and `alpha_mask` inputs. Guild palettes belong to
+the guild payloads. Shared draw declarations remain on each step.
+
+Known steps derive their native selectors from the equation and coordinate
+choices. Native encoding aliases normalize to the same definition where their
+semantics agree. Unresolved selectors and incompatible resource layouts retain
+their raw selection and complete binding order on `UnresolvedMaterialStep`.
+Legacy M2 surplus inputs and unused WMO slots remain explicit unused bindings,
+preserving graph references without turning them into active shader inputs.
+M2 input ordinals remain stable through `inputs()` and `inputs_mut()`, so
+existing texture-weight and transform animation targets keep their meaning.
+
+MDLX and M2 animation selectors address the ordinal in `steps`. Reordering steps
+therefore requires updating selectors that address their fields. M2's `Material`
+is a `MaterialProgram<MaterialStep>`; `properties::MaterialStep(index)` selects
+that step's color, opacity, or texture-input properties. The `COLOR`, `OPACITY`,
+and `TextureUnit(index)` convenience selectors address the first step. M3
 selectors have no step ordinal: a selector must identify exactly one operation in
-the program. Adding a second step accepting that selector makes it ambiguous,
-and publication rejects channels or bindings targeting it. Existing typed input
-selectors and animation identities otherwise remain unchanged.
+the program, and publication rejects ambiguous targets.
+
+M2 import sorts each skin section’s batches by native `material_layer`, retaining
+source order for ties. Consecutive batches with the same auxiliary section word
+become one draw with an ordered material program. Export derives dense layer
+numbers from draw and step order within each section. The auxiliary section word belongs to
+M2-specific draw controls and is not a geometry reference. Material steps retain
+shader inputs and composition state without pointing back to their geometry.
 
 The word layer describes different operations in these dialects. A Warcraft III
 draw layer becomes an MDLX step. An M3 texture layer supplies sampling,
@@ -286,21 +313,22 @@ slots even when their image bindings are absent. Diablo matrix rows and unresolv
 animation controls retain their authored order. These distinctions do not require
 optional fields on every texture binding.
 
-The following M2 step selects inputs without an inline coordinate transform.
-Its inputs still use the same owning binding structure as other selections:
+The following M2 step names its modulation input while reusing the shared texture
+binding vocabulary:
 
 ```rust
-use wc3::model::materials::m2::{MaterialStep as M2MaterialStep, TextureUnit};
+use wc3::model::materials::m2::{MaterialStep, ModulateMaterialStep, TextureUnit};
 use wc3::model::Animated;
 
-let mut input = TextureUnit::<()>::default();
-input.coordinates.source = 1;
-input.contribution = Animated::constant(0.75);
-let surface = M2MaterialStep {
-    textures: vec![input],
+let mut modulation = TextureUnit::default();
+modulation.coordinates.source = 1;
+modulation.contribution = Animated::constant(0.75);
+let step = MaterialStep::Modulate(ModulateMaterialStep {
+    modulation,
     ..Default::default()
-};
-assert_eq!(surface.textures[0].contribution.default, 0.75);
+});
+let MaterialStep::Modulate(value) = step else { unreachable!() };
+assert_eq!(value.modulation.contribution.default, 0.75);
 ```
 
 A binding supplies a shader input; a step describes an authored operation.

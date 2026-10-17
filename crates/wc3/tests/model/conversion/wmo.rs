@@ -403,7 +403,10 @@ fn unknown_native_blends_keep_their_family_namespace_during_edits() {
             .next()
             .map(|(id, value)| (id, value.clone()))
             .unwrap();
-        assert_eq!(material.surface.state.blend, Blend::Unknown(code));
+        assert_eq!(
+            material.surface.declaration().state.blend,
+            Blend::Unknown(code)
+        );
         material.name = "Renamed".into();
         asset
             .edit(|builder| builder.set_material(id, material))

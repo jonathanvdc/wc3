@@ -1,5 +1,6 @@
 use super::*;
 use crate::material::compile_material_with_images;
+use crate::material::native_fixtures::wmo;
 use bevy::prelude::{Assets, Image};
 use wc3::model::materials::bindings::TextureBinding;
 use wc3::model::{Material, MaterialSurface, ModelBuilder};
@@ -106,7 +107,7 @@ fn world_surface_clamps_resolve_independent_variants_without_mutating_texture() 
     let texture = builder.add_texture(texture).unwrap();
     let mut materials = Vec::new();
     for clamp_u in [false, true, true] {
-        let mut surface = wmo::MaterialStep {
+        let mut surface = wmo::Material {
             shader: Some(0),
             ..Default::default()
         };

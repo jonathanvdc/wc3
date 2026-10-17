@@ -12,7 +12,7 @@ pub(super) fn export<V: ModelLayout>(
     starts: &[u32],
     globals: &mut Vec<u32>,
     context: &mut Context,
-) -> Result<BTreeMap<semantic::MaterialId, Controls>, Error>
+) -> Result<BTreeMap<(semantic::MaterialId, usize), Controls>, Error>
 where
     V::Timeline<'static>: TimelineFactory,
     V::TrackValues<'static, [f32; 3]>: ValuesFactory<[f32; 3]>,
@@ -21,81 +21,81 @@ where
 {
     let mut controls = BTreeMap::new();
     for (id, material) in model.materials() {
-        let surface = surface(material, context)?;
-        if surface.guild_palette != profile::GuildPalette::default() {
-            context.unsupported(
-                "m2.material.guild_palette",
-                "application guild colours have no native M2 encoding",
-            )?;
-        }
-        let color = i16::try_from(core.colors.len())
-            .map_err(|_| Error::new("m2.material.color", "too many color controls"))?;
-        core.colors.push(native::records::ColorAnimation {
-            color: animated(model, &surface.color, starts, globals, context, |v, _| {
-                Ok(v)
-            })?,
-            alpha: animated(
-                model,
-                &surface.opacity,
-                starts,
-                globals,
-                context,
-                fixed_alpha,
-            )?,
-        });
-        let mut units = Vec::new();
-        for unit in &surface.textures {
-            let weight = u16::try_from(core.texture_weights.len())
-                .map_err(|_| Error::new("m2.material.weight", "too many weight controls"))?;
-            core.texture_weights.push(native::records::TextureWeight {
-                weight: animated(
+        for (step_index, surface) in material.surface.steps.iter().enumerate() {
+            let declaration = surface.declaration();
+            if surface.guild_palette().unwrap_or_default() != profile::GuildPalette::default() {
+                context.unsupported(
+                    "m2.material.guild_palette",
+                    "application guild colours have no native M2 encoding",
+                )?;
+            }
+            let color = i16::try_from(core.colors.len())
+                .map_err(|_| Error::new("m2.material.color", "too many color controls"))?;
+            core.colors.push(native::records::ColorAnimation {
+                color: animated(
                     model,
-                    &unit.contribution,
+                    &declaration.color,
+                    starts,
+                    globals,
+                    context,
+                    |v, _| Ok(v),
+                )?,
+                alpha: animated(
+                    model,
+                    &declaration.opacity,
                     starts,
                     globals,
                     context,
                     fixed_alpha,
                 )?,
             });
-            let transform = u16::try_from(core.texture_transforms.len())
-                .map_err(|_| Error::new("m2.material.transform", "too many transforms"))?;
-            core.texture_transforms
-                .push(native::records::TextureTransform {
-                    translation: animated(
+            let mut units = Vec::new();
+            for unit in surface.inputs() {
+                let weight = u16::try_from(core.texture_weights.len())
+                    .map_err(|_| Error::new("m2.material.weight", "too many weight controls"))?;
+                core.texture_weights.push(native::records::TextureWeight {
+                    weight: animated(
                         model,
-                        &unit.coordinates.transform.translation,
+                        &unit.contribution,
                         starts,
                         globals,
                         context,
-                        |v, _| Ok(v),
-                    )?,
-                    rotation: animated(
-                        model,
-                        &unit.coordinates.transform.rotation,
-                        starts,
-                        globals,
-                        context,
-                        |v, _| Ok(v.components()),
-                    )?,
-                    scaling: animated(
-                        model,
-                        &unit.coordinates.transform.scale,
-                        starts,
-                        globals,
-                        context,
-                        |v, _| Ok(v),
+                        fixed_alpha,
                     )?,
                 });
-            units.push((weight, transform))
+                let transform = u16::try_from(core.texture_transforms.len())
+                    .map_err(|_| Error::new("m2.material.transform", "too many transforms"))?;
+                core.texture_transforms
+                    .push(native::records::TextureTransform {
+                        translation: animated(
+                            model,
+                            &unit.coordinates.transform.translation,
+                            starts,
+                            globals,
+                            context,
+                            |v, _| Ok(v),
+                        )?,
+                        rotation: animated(
+                            model,
+                            &unit.coordinates.transform.rotation,
+                            starts,
+                            globals,
+                            context,
+                            |v, _| Ok(v.components()),
+                        )?,
+                        scaling: animated(
+                            model,
+                            &unit.coordinates.transform.scale,
+                            starts,
+                            globals,
+                            context,
+                            |v, _| Ok(v),
+                        )?,
+                    });
+                units.push((weight, transform))
+            }
+            controls.insert((id, step_index), Controls { color, units });
         }
-        controls.insert(id, Controls { color, units });
     }
     Ok(controls)
-}
-
-pub(super) fn surface<'a>(
-    material: &semantic::Material<'a, M2Vocabulary>,
-    _context: &mut Context,
-) -> Result<profile::Material<'a>, Error> {
-    Ok(material.surface.clone())
 }

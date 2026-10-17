@@ -1,15 +1,14 @@
 //! World of Warcraft shader inputs and draw-state semantics.
 use super::bindings::{Coordinates, ImageSelection, TextureBinding};
-use super::state::{DepthState, Lighting, Operation, PassState, Rasterization};
+use super::state::{DepthState, Lighting, Operation, Rasterization};
 use crate::model::profiles::m2::properties::{Target, TextureUnitField};
-use crate::model::profiles::SurfacePayload;
-use crate::model::values::model::{BatchFlags, BlendMode, MaterialFlags, TextureSource};
+use crate::model::values::model::{MaterialFlags, TextureSource};
 use crate::model::{Animated, Error, Link, PropertyIdentityKey, PropertyPayload, ValidateLinks};
-use std::{borrow::Cow, fmt::Debug};
+use std::fmt::Debug;
 
 pub use crate::model::TextureTransform;
 /// Input-local legacy texture-frame playback.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct FrameSampling {
     /// Animated legacy texture frame selection.
     pub frame: Animated<u16>,
@@ -58,40 +57,6 @@ impl Default for GuildPalette {
         }
     }
 }
-/// An M2 shader step. Table addresses are replaced with graph bindings.
-#[derive(Clone, Debug)]
-pub struct MaterialStep<'a, I = TextureUnit> {
-    /// Shader family identifier interpreted by the game shader implementation.
-    pub shader: u16,
-    /// Native batch auxiliary geoset word, distinct from the skin section identity.
-    /// Character section selection uses `MeshInstance::selection_group`.
-    pub geoset: u16,
-    /// Layer order of this pass within its geometry section.
-    pub layer: u16,
-    /// Established draw behavior and retained extension bits.
-    pub batch_flags: BatchFlags,
-    /// Color composition, rasterization, and authored pass ordering.
-    pub state: PassState<BlendMode, ModelRasterization, i8>,
-    /// Animated surface color multiplier.
-    pub color: Animated<[f32; 3]>,
-    /// Animated surface opacity multiplier.
-    pub opacity: Animated<f32>,
-    /// External colours used by legacy guild shader programmes.
-    pub guild_palette: GuildPalette,
-    /// Ordered shader texture inputs.
-    pub textures: Vec<I>,
-    /// Optional user-authored shader label.
-    pub label: Cow<'a, str>,
-}
-impl<I: ValidateLinks> ValidateLinks for MaterialStep<'_, I> {
-    fn visit_links(&self, v: &mut dyn FnMut(Link)) {
-        self.state.visit_links(v);
-        self.color.visit_links(v);
-        self.opacity.visit_links(v);
-        self.textures.visit_links(v)
-    }
-}
-
 /// A complete independently animated shader-input vocabulary.
 pub trait ShaderInput: Clone + Debug + Send + Sync + ValidateLinks {
     /// Whether this input exposes a structural destination at its ordinal.
@@ -131,7 +96,7 @@ impl ShaderCoordinates for () {
 impl<T: ShaderCoordinates> ShaderInput for TextureUnit<T> {
     fn supports_property(&self, key: &PropertyIdentityKey, ordinal: usize) -> bool {
         match Target::from_identity(key) {
-            Some(Target::TextureUnit { index, field }) if index == ordinal => match field {
+            Some(Target::TextureUnit { index, field, .. }) if index == ordinal => match field {
                 TextureUnitField::Weight => true,
                 TextureUnitField::Translation => self
                     .coordinates
@@ -150,45 +115,6 @@ impl<T: ShaderCoordinates> ShaderInput for TextureUnit<T> {
         }
     }
 }
-impl<I: ShaderInput> SurfacePayload for MaterialStep<'_, I> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        matches!(
-            Target::from_identity(key),
-            Some(Target::Color | Target::Opacity)
-        ) || self
-            .textures
-            .iter()
-            .enumerate()
-            .any(|(ordinal, input)| input.supports_property(key, ordinal))
-    }
-    fn validate(&self) -> Result<(), Error> {
-        if !self.guild_palette.is_finite() {
-            return Err(Error::new(
-                "m2.material.guild_palette",
-                "guild colours must be finite",
-            ));
-        }
-        self.textures.iter().try_for_each(ShaderInput::validate)
-    }
-}
-
-impl<I> Default for MaterialStep<'_, I> {
-    fn default() -> Self {
-        Self {
-            shader: 0,
-            geoset: 0,
-            layer: 0,
-            batch_flags: BatchFlags::default(),
-            state: PassState::default(),
-            color: Animated::default(),
-            opacity: Animated::default(),
-            guild_palette: GuildPalette::default(),
-            textures: Vec::new(),
-            label: Cow::Borrowed(""),
-        }
-    }
-}
-
 /// Model shaders select common depth, face, and lighting operations with retained extension flags.
 pub type ModelRasterization =
     Rasterization<DepthState<Operation, Operation>, bool, Lighting, MaterialFlags>;
@@ -232,3 +158,6 @@ impl ValidateLinks for MaterialFlags {
 impl ValidateLinks for TextureSource {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
+
+mod steps;
+pub use steps::*;

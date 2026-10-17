@@ -1,5 +1,6 @@
 use super::super::ModelMaterial;
 use super::*;
+use crate::material::native_fixtures::wmo as wmo_shader;
 use wc3::model::{AnimationSample, ModelBuilder, Time};
 
 #[test]
@@ -23,12 +24,12 @@ fn world_compiler_retains_independent_scroll_velocities() {
     let model = ModelBuilder::<Universal>::new("world scrolling")
         .finish()
         .unwrap();
-    let surface = wmo_shader::MaterialStep {
+    let surface = wmo_shader::Material {
         shader: Some(6),
         uv_scroll: [[0.25, -0.5], [-0.75, 1.0]],
         ..default()
     };
-    let pass = compile_wmo(&model, &surface, &TextureImages::default()).unwrap();
+    let pass = compile_wmo(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
     assert_eq!(pass.animation.uv_scroll, surface.uv_scroll);
     assert!(pass.animation.is_animated());
     assert!(!pass
@@ -42,12 +43,12 @@ fn procedural_scroll_uses_shared_clock_without_a_clip_and_avoids_unchanged_write
     let model = ModelBuilder::<Universal>::new("clockless world")
         .finish()
         .unwrap();
-    let surface = wmo_shader::MaterialStep {
+    let surface = wmo_shader::Material {
         shader: Some(6),
         uv_scroll: [[0.25, -0.5], [0.5, 0.0]],
         ..default()
     };
-    let pass = compile_wmo(&model, &surface, &TextureImages::default()).unwrap();
+    let pass = compile_wmo(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
     let mut material = ModelMaterial {
         base: pass.material,
         extension: pass.state,
@@ -99,11 +100,11 @@ fn world_programmes_select_native_routes_without_sampling_unimplemented_families
         (12, 3, Some(0), Some(1), 1),
         (17, 3, Some(0), Some(1), 1),
     ] {
-        let surface = wmo_shader::MaterialStep {
+        let surface = wmo_shader::Material {
             shader: Some(shader),
             ..default()
         };
-        let pass = compile_wmo(&model, &surface, &TextureImages::default()).unwrap();
+        let pass = compile_wmo(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
         assert_eq!(
             pass.state.world.composition.x,
             if count > 1 { shader + 1 } else { 0 }
@@ -141,11 +142,11 @@ fn world_programmes_select_native_routes_without_sampling_unimplemented_families
         Some(23),
         Some(999),
     ] {
-        let surface = wmo_shader::MaterialStep {
+        let surface = wmo_shader::Material {
             shader,
             ..default()
         };
-        let pass = compile_wmo(&model, &surface, &TextureImages::default()).unwrap();
+        let pass = compile_wmo(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
         assert_eq!(pass.state.world.composition.x, 0);
         assert!(pass
             .diagnostics
@@ -159,12 +160,12 @@ fn reflection_programmes_scroll_the_uv_layer_without_scrolling_generated_coordin
     let model = ModelBuilder::<Universal>::new("world reflected scrolling")
         .finish()
         .unwrap();
-    let surface = wmo_shader::MaterialStep {
+    let surface = wmo_shader::Material {
         shader: Some(12),
         uv_scroll: [[0.25, -0.5], [0.5, -0.25]],
         ..default()
     };
-    let pass = compile_wmo(&model, &surface, &TextureImages::default()).unwrap();
+    let pass = compile_wmo(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
     assert_eq!(pass.animation.uv_scroll[1], [0.; 2]);
     assert_eq!(pass.animation.third_uv_scroll, [0.5, -0.25]);
     let mut material = ModelMaterial {
@@ -221,11 +222,11 @@ fn world_illumination_is_draw_local_and_nonworld_materials_keep_their_identity()
     let model = ModelBuilder::<Universal>::new("world ambient")
         .finish()
         .unwrap();
-    let surface = wmo_shader::MaterialStep {
+    let surface = wmo_shader::Material {
         shader: Some(0),
         ..default()
     };
-    let mut pass = compile_wmo(&model, &surface, &TextureImages::default()).unwrap();
+    let mut pass = compile_wmo(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
     for lighting in 0..=2 {
         let key = pass.state.set_world_illumination(ambient, lighting);
         assert_eq!(
@@ -262,12 +263,12 @@ fn world_extended_blends_preserve_native_rgb_and_alpha_factors() {
             BlendFactor::OneMinusSrcAlpha,
         ),
     ] {
-        let mut surface = wmo_shader::MaterialStep {
+        let mut surface = wmo_shader::Material {
             shader: Some(0),
             ..default()
         };
         surface.state.blend = BlendOperations::Extension(operation);
-        let pass = compile_wmo(&model, &surface, &TextureImages::default()).unwrap();
+        let pass = compile_wmo(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
         assert_eq!(pass.material.alpha_mode, AlphaMode::Blend);
         assert!(pass.diagnostics.is_empty());
         let key = ModelMaterialKey::from(&pass.state);

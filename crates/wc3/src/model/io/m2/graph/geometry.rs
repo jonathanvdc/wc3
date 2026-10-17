@@ -135,217 +135,262 @@ where
             let node = builder.add_node(Node::named(format!("mesh-{index}-{section_index}")))?;
             let mut draws = Vec::new();
             let mut draw_materials = Vec::new();
-            for batch in profile
+            let mut batches: Vec<_> = profile
                 .batches
                 .iter()
-                .filter(|b| b.skin_section_index as usize == section_index)
-            {
-                let native_material = core
-                    .materials
-                    .get(batch.material_index as usize)
-                    .ok_or_else(|| Error::new("m2.material", "missing render state"))?;
-                let mut surface = profile::Material {
-                    shader: batch.shader_id,
-                    geoset: batch.geoset_index,
-                    layer: batch.material_layer,
-                    batch_flags: profile::values::BatchFlags::from_bits_retain(batch.flags.bits()),
-                    color: Animated::constant([1.; 3]),
-                    opacity: Animated::constant(1.),
-                    state: PassState {
-                        blend: profile::values::BlendMode::from_raw(
-                            native_material.blending_mode.raw(),
-                        ),
-                        rasterization: rasterization(
-                            profile::values::MaterialFlags::from_bits_retain(
-                                native_material.flags.bits(),
-                            ),
-                        ),
-                        ordering: batch.priority_plane,
-                    },
-                    ..Default::default()
-                };
-                let routes = coordinates::routes(batch.shader_id, batch.texture_count as usize);
-                for slot in 0..batch.texture_count as usize {
-                    let texture = core
-                        .texture_combos
-                        .get(batch.texture_combo_index as usize + slot)
-                        .ok_or_else(|| {
-                            Error::new("m2.material.texture", "missing texture combination")
-                        })? as usize;
-                    let record = core
-                        .textures
-                        .get(texture)
-                        .ok_or_else(|| Error::new("m2.material.texture", "missing texture"))?;
-                    surface.textures.push(profile::TextureUnit {
-                        image: ImageSelection {
-                            source: profile::values::TextureSource::from_raw(record.kind.raw()),
-                            texture: Some(*textures.get(texture).ok_or_else(|| {
-                                Error::new("m2.material.texture", "missing logical texture")
-                            })?),
-                        },
-                        coordinates: Coordinates {
-                            source: routes.map_or_else(
-                                || {
-                                    core.texture_transform_bone_map
-                                        .get(batch.texture_coordinate_combo_index as usize + slot)
-                                        .unwrap_or(0) as i16
-                                },
-                                |routes| routes[slot].source,
-                            ),
-                            transform: profile::TextureTransform::default(),
-                        },
-                        contribution: Animated::constant(1.),
-                        sampling: FrameSampling {
-                            frame: Animated::constant(0),
-                        },
-                    });
+                .filter(|batch| batch.skin_section_index as usize == section_index)
+                .collect();
+            batches.sort_by_key(|batch| batch.material_layer);
+            let mut groups: Vec<(u16, Vec<_>)> = Vec::new();
+            for batch in batches {
+                if let Some((_, steps)) = groups
+                    .last_mut()
+                    .filter(|(word, _)| *word == batch.geoset_index)
+                {
+                    steps.push(batch);
+                } else {
+                    groups.push((batch.geoset_index, vec![batch]));
                 }
+            }
+            let subset = builder.add_primary_subset(mesh, 0, faces as u32)?;
+            for (auxiliary_section, batches) in groups {
                 let material = builder.add_material(semantic::Material {
                     name: Cow::Borrowed(""),
-                    surface: surface.clone(),
+                    surface: profile::Material::default(),
                 })?;
-                if batch.color_index >= 0 {
-                    if let Some(color) = core.colors.get(batch.color_index as usize) {
-                        let rgb = profile::properties::COLOR.bind(material);
-                        let alpha = profile::properties::OPACITY.bind(material);
-                        surface.color.binding = Some(rgb.clone().widen());
-                        surface.opacity.binding = Some(alpha.clone().widen().into());
-                        for (seq, clip) in animation::sequences(clips) {
-                            let (start, _) = tables
-                                .sequences
-                                .get(seq)
-                                .map_or((0, 0), |s| s.timing.window());
-                            if let Some((c, g)) =
-                                curve(source, &color.color, &source.key, seq, start, |v| v)?
-                            {
-                                animation::insert(
-                                    builder,
-                                    clip,
-                                    Channel::Vector3(bind(c, g, rgb.clone(), clocks)?),
-                                )?
-                            }
-                            if let Some((c, g)) =
-                                curve(source, &color.alpha, &source.key, seq, start, |v| {
-                                    f32::from(v) / 32767.
-                                })?
-                            {
-                                animation::insert(
-                                    builder,
-                                    clip,
-                                    Channel::Scalar(bind(c, g, alpha.clone(), clocks)?),
-                                )?
-                            }
-                        }
-                    }
-                }
-                for (slot, unit) in surface.textures.iter_mut().enumerate() {
-                    if let Some(weight) = core
-                        .texture_weight_combos
-                        .get(batch.texture_weight_combo_index as usize + slot)
-                        .and_then(|i| core.texture_weights.get(i as usize))
-                    {
-                        let prop = profile::properties::TextureUnit(slot)
-                            .weight()
-                            .bind(material);
-                        unit.contribution.binding = Some(prop.clone().widen().into());
-                        for (seq, clip) in animation::sequences(clips) {
-                            let (start, _) = tables
-                                .sequences
-                                .get(seq)
-                                .map_or((0, 0), |s| s.timing.window());
-                            if let Some((c, g)) =
-                                curve(source, &weight.weight, &source.key, seq, start, |v| {
-                                    f32::from(v) / 32767.
-                                })?
-                            {
-                                animation::insert(
-                                    builder,
-                                    clip,
-                                    Channel::Scalar(bind(c, g, prop.clone(), clocks)?),
-                                )?
-                            }
-                        }
-                    }
-                    let transform_slot = if let Some(routes) = routes {
-                        let route = routes[slot];
-                        if route.transform.is_none()
-                            || routes[..slot]
-                                .iter()
-                                .any(|previous| previous.transform == route.transform)
-                        {
-                            continue;
-                        }
-                        route.transform.unwrap()
-                    } else {
-                        slot
+                let mut steps = Vec::new();
+                for (step_index, batch) in batches.into_iter().enumerate() {
+                    let native_material = core
+                        .materials
+                        .get(batch.material_index as usize)
+                        .ok_or_else(|| Error::new("m2.material", "missing render state"))?;
+                    let declaration = profile::MaterialDeclaration {
+                        batch_flags: profile::values::BatchFlags::from_bits_retain(
+                            batch.flags.bits(),
+                        ),
+                        color: Animated::constant([1.; 3]),
+                        opacity: Animated::constant(1.),
+                        state: PassState {
+                            blend: profile::values::BlendMode::from_raw(
+                                native_material.blending_mode.raw(),
+                            ),
+                            rasterization: rasterization(
+                                profile::values::MaterialFlags::from_bits_retain(
+                                    native_material.flags.bits(),
+                                ),
+                            ),
+                            ordering: batch.priority_plane,
+                        },
+                        ..Default::default()
                     };
-                    if let Some(transform) = core
-                        .texture_transform_combos
-                        .get(batch.texture_transform_combo_index as usize + transform_slot)
-                        .and_then(|i| core.texture_transforms.get(i as usize))
-                    {
-                        let tr = profile::properties::TextureUnit(slot)
-                            .translation()
-                            .bind(material);
-                        let ro = profile::properties::TextureUnit(slot)
-                            .rotation()
-                            .bind(material);
-                        let sc = profile::properties::TextureUnit(slot)
-                            .scale()
-                            .bind(material);
-                        unit.coordinates.transform.translation.binding = Some(tr.clone().widen());
-                        unit.coordinates.transform.rotation.binding = Some(ro.clone().widen());
-                        unit.coordinates.transform.scale.binding = Some(sc.clone().widen());
-                        for (seq, clip) in animation::sequences(clips) {
-                            let (start, _) = tables
-                                .sequences
-                                .get(seq)
-                                .map_or((0, 0), |s| s.timing.window());
-                            for (prop, track) in [
-                                (tr.clone(), &transform.translation),
-                                (sc.clone(), &transform.scaling),
-                            ] {
+                    let mut textures_for_step = Vec::new();
+                    let routes = coordinates::routes(batch.shader_id, batch.texture_count as usize);
+                    for slot in 0..batch.texture_count as usize {
+                        let texture = core
+                            .texture_combos
+                            .get(batch.texture_combo_index as usize + slot)
+                            .ok_or_else(|| {
+                                Error::new("m2.material.texture", "missing texture combination")
+                            })? as usize;
+                        let record = core
+                            .textures
+                            .get(texture)
+                            .ok_or_else(|| Error::new("m2.material.texture", "missing texture"))?;
+                        textures_for_step.push(profile::TextureUnit {
+                            image: ImageSelection {
+                                source: profile::values::TextureSource::from_raw(record.kind.raw()),
+                                texture: Some(*textures.get(texture).ok_or_else(|| {
+                                    Error::new("m2.material.texture", "missing logical texture")
+                                })?),
+                            },
+                            coordinates: Coordinates {
+                                source: routes.map_or_else(
+                                    || {
+                                        core.texture_transform_bone_map
+                                            .get(
+                                                batch.texture_coordinate_combo_index as usize
+                                                    + slot,
+                                            )
+                                            .unwrap_or(0)
+                                            as i16
+                                    },
+                                    |routes| routes[slot].source,
+                                ),
+                                transform: profile::TextureTransform::default(),
+                            },
+                            contribution: Animated::constant(1.),
+                            sampling: FrameSampling {
+                                frame: Animated::constant(0),
+                            },
+                        });
+                    }
+                    let mut surface = profile::MaterialStep::from_native(
+                        batch.shader_id,
+                        declaration,
+                        textures_for_step,
+                        Default::default(),
+                    );
+                    if batch.color_index >= 0 {
+                        if let Some(color) = core.colors.get(batch.color_index as usize) {
+                            let rgb = profile::properties::MaterialStep(step_index)
+                                .color()
+                                .bind(material);
+                            let alpha = profile::properties::MaterialStep(step_index)
+                                .opacity()
+                                .bind(material);
+                            surface.declaration_mut().color.binding = Some(rgb.clone().widen());
+                            surface.declaration_mut().opacity.binding =
+                                Some(alpha.clone().widen().into());
+                            for (seq, clip) in animation::sequences(clips) {
+                                let (start, _) = tables
+                                    .sequences
+                                    .get(seq)
+                                    .map_or((0, 0), |s| s.timing.window());
                                 if let Some((c, g)) =
-                                    curve(source, track, &source.key, seq, start, |v| v)?
+                                    curve(source, &color.color, &source.key, seq, start, |v| v)?
                                 {
                                     animation::insert(
                                         builder,
                                         clip,
-                                        Channel::Vector3(bind(c, g, prop, clocks)?),
+                                        Channel::Vector3(bind(c, g, rgb.clone(), clocks)?),
+                                    )?
+                                }
+                                if let Some((c, g)) =
+                                    curve(source, &color.alpha, &source.key, seq, start, |v| {
+                                        f32::from(v) / 32767.
+                                    })?
+                                {
+                                    animation::insert(
+                                        builder,
+                                        clip,
+                                        Channel::Scalar(bind(c, g, alpha.clone(), clocks)?),
                                     )?
                                 }
                             }
-                            if let Some((c, g)) =
-                                curve(source, &transform.rotation, &source.key, seq, start, |v| {
-                                    semantic::Quaternion(v)
-                                })?
+                        }
+                    }
+                    for (slot, unit) in surface.inputs_mut().into_iter().enumerate() {
+                        if let Some(weight) = core
+                            .texture_weight_combos
+                            .get(batch.texture_weight_combo_index as usize + slot)
+                            .and_then(|i| core.texture_weights.get(i as usize))
+                        {
+                            let prop = profile::properties::TextureUnit(slot)
+                                .at_step(step_index)
+                                .weight()
+                                .bind(material);
+                            unit.contribution.binding = Some(prop.clone().widen().into());
+                            for (seq, clip) in animation::sequences(clips) {
+                                let (start, _) = tables
+                                    .sequences
+                                    .get(seq)
+                                    .map_or((0, 0), |s| s.timing.window());
+                                if let Some((c, g)) =
+                                    curve(source, &weight.weight, &source.key, seq, start, |v| {
+                                        f32::from(v) / 32767.
+                                    })?
+                                {
+                                    animation::insert(
+                                        builder,
+                                        clip,
+                                        Channel::Scalar(bind(c, g, prop.clone(), clocks)?),
+                                    )?
+                                }
+                            }
+                        }
+                        let transform_slot = if let Some(routes) = routes {
+                            let route = routes[slot];
+                            if route.transform.is_none()
+                                || routes[..slot]
+                                    .iter()
+                                    .any(|previous| previous.transform == route.transform)
                             {
-                                animation::insert(
-                                    builder,
-                                    clip,
-                                    Channel::Rotation(bind(c, g, ro.clone(), clocks)?),
-                                )?
+                                continue;
+                            }
+                            route.transform.unwrap()
+                        } else {
+                            slot
+                        };
+                        if let Some(transform) = core
+                            .texture_transform_combos
+                            .get(batch.texture_transform_combo_index as usize + transform_slot)
+                            .and_then(|i| core.texture_transforms.get(i as usize))
+                        {
+                            let tr = profile::properties::TextureUnit(slot)
+                                .at_step(step_index)
+                                .translation()
+                                .bind(material);
+                            let ro = profile::properties::TextureUnit(slot)
+                                .at_step(step_index)
+                                .rotation()
+                                .bind(material);
+                            let sc = profile::properties::TextureUnit(slot)
+                                .at_step(step_index)
+                                .scale()
+                                .bind(material);
+                            unit.coordinates.transform.translation.binding =
+                                Some(tr.clone().widen());
+                            unit.coordinates.transform.rotation.binding = Some(ro.clone().widen());
+                            unit.coordinates.transform.scale.binding = Some(sc.clone().widen());
+                            for (seq, clip) in animation::sequences(clips) {
+                                let (start, _) = tables
+                                    .sequences
+                                    .get(seq)
+                                    .map_or((0, 0), |s| s.timing.window());
+                                for (prop, track) in [
+                                    (tr.clone(), &transform.translation),
+                                    (sc.clone(), &transform.scaling),
+                                ] {
+                                    if let Some((c, g)) =
+                                        curve(source, track, &source.key, seq, start, |v| v)?
+                                    {
+                                        animation::insert(
+                                            builder,
+                                            clip,
+                                            Channel::Vector3(bind(c, g, prop, clocks)?),
+                                        )?
+                                    }
+                                }
+                                if let Some((c, g)) = curve(
+                                    source,
+                                    &transform.rotation,
+                                    &source.key,
+                                    seq,
+                                    start,
+                                    semantic::Quaternion,
+                                )? {
+                                    animation::insert(
+                                        builder,
+                                        clip,
+                                        Channel::Rotation(bind(c, g, ro.clone(), clocks)?),
+                                    )?
+                                }
                             }
                         }
                     }
-                }
-                if let Some(routes) = routes {
-                    for slot in 0..routes.len() {
-                        if let Some(owner) = routes[..slot]
-                            .iter()
-                            .position(|route| route.transform == routes[slot].transform)
-                            .filter(|_| routes[slot].transform.is_some())
-                        {
-                            surface.textures[slot].coordinates.transform =
-                                surface.textures[owner].coordinates.transform.clone();
+                    if let Some(routes) = routes {
+                        for slot in 0..routes.len() {
+                            if let Some(owner) = routes[..slot]
+                                .iter()
+                                .position(|route| route.transform == routes[slot].transform)
+                                .filter(|_| routes[slot].transform.is_some())
+                            {
+                                let transform =
+                                    surface.inputs()[owner].coordinates.transform.clone();
+                                surface.inputs_mut()[slot].coordinates.transform = transform;
+                            }
                         }
                     }
+                    steps.push(surface);
                 }
-                builder.set_material_surface(material, surface)?;
+                builder.set_material_surface(material, profile::Material { steps })?;
                 draw_materials.push(material);
                 draws.push(Draw::new(
-                    builder.add_primary_subset(mesh, 0, faces as u32)?,
-                    Default::default(),
+                    subset,
+                    Some(profile::DrawControls {
+                        auxiliary_section,
+                        shadow: None,
+                    }),
                 ));
             }
             builder.add_instance_with_materials(
@@ -368,7 +413,7 @@ pub(super) fn export<D: Dialect>(
     model: &Graph<'_>,
     nodes: &[semantic::NodeId],
     textures: &[semantic::TextureId],
-    controls: &BTreeMap<semantic::MaterialId, super::materials::Controls>,
+    controls: &BTreeMap<(semantic::MaterialId, usize), super::materials::Controls>,
     look: Option<semantic::LookId>,
     bundle: &mut Bundle<'static, D>,
     context: &mut Context,
@@ -578,6 +623,7 @@ where
                 .unwrap_or(0),
             sort_center: SectionSorting::make(geoset.and_then(|g| g.sorting), context)?,
         });
+        let mut section_layer = 0usize;
         for draw in &instance.draws {
             let draw = mesh.resolve_draw(draw)?;
             let material_id = model.material_for_draw(instance_id, draw.id, look)?;
@@ -590,83 +636,90 @@ where
             let material = model
                 .material(material_id)
                 .ok_or_else(|| Error::new("m2.material", "missing surface"))?;
-            let surface = super::materials::surface(material, context)?;
-            let routes = coordinates::routes(surface.shader, surface.textures.len());
-            if let Some(routes) = routes {
-                for (slot, route) in routes.iter().enumerate() {
-                    if surface.textures[slot].coordinates.source != route.source {
-                        context.unsupported(
-                            "m2.material.coordinates",
-                            "shader coordinate route differs from the native programme",
-                        )?;
-                    }
-                    let conflicting_owner = routes[..slot]
-                        .iter()
-                        .position(|previous| previous.transform == route.transform)
-                        .filter(|owner| {
-                            route.transform.is_some()
-                                && surface.textures[slot].coordinates.transform
-                                    != surface.textures[*owner].coordinates.transform
-                        });
-                    if conflicting_owner.is_some() {
-                        context.unsupported("m2.material.transform", "native shader repeats one transform; independent input transforms require changing the shader")?;
+            for (step_index, surface) in material.surface.steps.iter().enumerate() {
+                let declaration = surface.declaration();
+                let inputs = surface.inputs();
+                let shader = surface.native_shader();
+                let routes = coordinates::routes(shader, inputs.len());
+                if let Some(routes) = routes {
+                    for (slot, route) in routes.iter().enumerate() {
+                        if inputs[slot].coordinates.source != route.source {
+                            context.unsupported(
+                                "m2.material.coordinates",
+                                "shader coordinate route differs from the native programme",
+                            )?;
+                        }
+                        let conflicting_owner = routes[..slot]
+                            .iter()
+                            .position(|previous| previous.transform == route.transform)
+                            .filter(|owner| {
+                                route.transform.is_some()
+                                    && inputs[slot].coordinates.transform
+                                        != inputs[*owner].coordinates.transform
+                            });
+                        if conflicting_owner.is_some() {
+                            context.unsupported("m2.material.transform", "native shader repeats one transform; independent input transforms require changing the shader")?;
+                        }
                     }
                 }
-            }
-            let material_index = materials.len();
-            materials.push(native::records::Material {
-                flags: MaterialFlags::from_bits_retain(
-                    material_flags(&surface.state.rasterization).bits(),
-                ),
-                blending_mode: BlendMode::from_raw(surface.state.blend.raw()),
-            });
-            let combo = texture_combos.len();
-            for (slot, unit) in surface.textures.iter().enumerate() {
-                let id = unit.image.texture.ok_or_else(|| {
-                    Error::new("m2.material.texture", "shader unit has no texture resource")
-                })?;
-                texture_combos.push(
-                    u16::try_from(
-                        textures
-                            .iter()
-                            .position(|v| *v == id)
-                            .ok_or_else(|| Error::new("m2.material.texture", "missing resource"))?,
-                    )
-                    .map_err(|_| Error::new("m2.material.texture", "index exceeds u16"))?,
-                );
-                uv_sets.push(unit.coordinates.source as u16);
-                let indices = controls
-                    .get(&material_id)
-                    .and_then(|c| c.units.get(slot))
-                    .copied()
-                    .unwrap_or((u16::MAX, u16::MAX));
-                weights.push(indices.0);
-                let transform = routes.map_or(indices.1, |routes| {
-                    routes
-                        .iter()
-                        .position(|route| route.transform == Some(slot))
-                        .and_then(|owner| {
-                            controls.get(&material_id).and_then(|c| c.units.get(owner))
-                        })
-                        .map_or(u16::MAX, |indices| indices.1)
+                let material_index = materials.len();
+                materials.push(native::records::Material {
+                    flags: MaterialFlags::from_bits_retain(
+                        material_flags(&declaration.state.rasterization).bits(),
+                    ),
+                    blending_mode: BlendMode::from_raw(declaration.state.blend.raw()),
                 });
-                transforms.push(transform)
+                let combo = texture_combos.len();
+                for (slot, unit) in inputs.iter().enumerate() {
+                    let id = unit.image.texture.ok_or_else(|| {
+                        Error::new("m2.material.texture", "shader unit has no texture resource")
+                    })?;
+                    texture_combos.push(
+                        u16::try_from(textures.iter().position(|v| *v == id).ok_or_else(|| {
+                            Error::new("m2.material.texture", "missing resource")
+                        })?)
+                        .map_err(|_| Error::new("m2.material.texture", "index exceeds u16"))?,
+                    );
+                    uv_sets.push(unit.coordinates.source as u16);
+                    let indices = controls
+                        .get(&(material_id, step_index))
+                        .and_then(|c| c.units.get(slot))
+                        .copied()
+                        .unwrap_or((u16::MAX, u16::MAX));
+                    weights.push(indices.0);
+                    let transform = routes.map_or(indices.1, |routes| {
+                        routes
+                            .iter()
+                            .position(|route| route.transform == Some(slot))
+                            .and_then(|owner| {
+                                controls
+                                    .get(&(material_id, step_index))
+                                    .and_then(|c| c.units.get(owner))
+                            })
+                            .map_or(u16::MAX, |indices| indices.1)
+                    });
+                    transforms.push(transform)
+                }
+                profile.batches.push(native::records::Batch {
+                    flags: BatchFlags::from_bits_retain(declaration.batch_flags.bits()),
+                    priority_plane: declaration.state.ordering,
+                    shader_id: shader,
+                    skin_section_index: section_index as u16,
+                    color_index: controls
+                        .get(&(material_id, step_index))
+                        .map_or(-1, |c| c.color),
+                    material_index: material_index as u16,
+                    material_layer: u16::try_from(section_layer)
+                        .map_err(|_| Error::new("m2.material.steps", "too many material steps"))?,
+                    geoset_index: draw.controls.as_ref().map_or(0, |v| v.auxiliary_section),
+                    texture_count: inputs.len() as u16,
+                    texture_combo_index: combo as u16,
+                    texture_coordinate_combo_index: combo as u16,
+                    texture_weight_combo_index: combo as u16,
+                    texture_transform_combo_index: combo as u16,
+                });
+                section_layer += 1;
             }
-            profile.batches.push(native::records::Batch {
-                flags: BatchFlags::from_bits_retain(surface.batch_flags.bits()),
-                priority_plane: surface.state.ordering,
-                shader_id: surface.shader,
-                skin_section_index: section_index as u16,
-                color_index: controls.get(&material_id).map_or(-1, |c| c.color),
-                material_index: material_index as u16,
-                material_layer: surface.layer,
-                geoset_index: surface.geoset,
-                texture_count: surface.textures.len() as u16,
-                texture_combo_index: combo as u16,
-                texture_coordinate_combo_index: combo as u16,
-                texture_weight_combo_index: combo as u16,
-                texture_transform_combo_index: combo as u16,
-            });
         }
     }
     let core = bundle.model.core_mut();

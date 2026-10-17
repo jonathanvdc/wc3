@@ -98,59 +98,63 @@ pub(super) fn read<'a, 'data: 'a>(
         unclassified.set_clamp_t(false);
         let tail = row.tail.texture_slots();
         let extended = matches!(row.shader, 22..=24);
-        let surface = profile::MaterialStep {
-            shader: Some(row.shader),
-            textures: bindings,
-            self_illumination: color(row.sidn_color),
-            runtime_self_illumination: color(row.frame_sidn_color),
-            diffuse: color(row.diffuse_color),
-            ground_type: row.ground_type,
-            uv_scroll: scroll
-                .get(index)
-                .map_or([[0.; 2]; 2], |value| [value.speed0, value.speed1]),
-            shader_overrides: extensions.get(index).map(|value| profile::ShaderOverrides {
-                color: color(value.color),
-                texture_override: u64::from(value.override_key[0])
-                    | (u64::from(value.override_key[1]) << 32),
-                control: value.unknown,
-            }),
-            legacy_color: (!extended).then(|| color(tail[0].to_le_bytes())),
-            legacy_controls: (!extended).then_some(tail[1]),
-            legacy_runtime: (!extended)
-                .then_some(tail[2..].try_into().expect("four tail controls")),
-            state: PassState {
-                blend: match row.blend_mode {
-                    BlendMode::Opaque => profile::Blend::Opaque,
-                    BlendMode::AlphaKey => profile::Blend::AlphaKey(()),
-                    BlendMode::Alpha => profile::Blend::Alpha,
-                    BlendMode::Add => profile::Blend::Additive,
-                    BlendMode::Modulate => profile::Blend::Modulate,
-                    BlendMode::Modulate2x => profile::Blend::Modulate2x,
-                    BlendMode::ModulateAdd => profile::Blend::Extension(WorldBlend::ModulateAdd),
-                    BlendMode::InverseSourceAlphaAdd => {
-                        profile::Blend::Extension(WorldBlend::InverseSourceAlphaAdd)
-                    }
-                    BlendMode::Unknown(value) => profile::Blend::Unknown(value),
-                },
-                rasterization: profile::MaterialRasterization {
-                    depth: (),
-                    faces: flags.two_sided(),
-                    lighting: Lighting {
-                        unlit: flags.unlit(),
-                        unfogged: flags.unfogged(),
+        let surface = profile::MaterialStep::from_native(
+            Some(row.shader),
+            profile::MaterialDeclaration {
+                self_illumination: color(row.sidn_color),
+                runtime_self_illumination: color(row.frame_sidn_color),
+                diffuse: color(row.diffuse_color),
+                ground_type: row.ground_type,
+                uv_scroll: scroll
+                    .get(index)
+                    .map_or([[0.; 2]; 2], |value| [value.speed0, value.speed1]),
+                shader_overrides: extensions.get(index).map(|value| profile::ShaderOverrides {
+                    color: color(value.color),
+                    texture_override: u64::from(value.override_key[0])
+                        | (u64::from(value.override_key[1]) << 32),
+                    control: value.unknown,
+                }),
+                legacy_color: (!extended).then(|| color(tail[0].to_le_bytes())),
+                legacy_controls: (!extended).then_some(tail[1]),
+                legacy_runtime: (!extended)
+                    .then_some(tail[2..].try_into().expect("four tail controls")),
+                state: PassState {
+                    blend: match row.blend_mode {
+                        BlendMode::Opaque => profile::Blend::Opaque,
+                        BlendMode::AlphaKey => profile::Blend::AlphaKey(()),
+                        BlendMode::Alpha => profile::Blend::Alpha,
+                        BlendMode::Add => profile::Blend::Additive,
+                        BlendMode::Modulate => profile::Blend::Modulate,
+                        BlendMode::Modulate2x => profile::Blend::Modulate2x,
+                        BlendMode::ModulateAdd => {
+                            profile::Blend::Extension(WorldBlend::ModulateAdd)
+                        }
+                        BlendMode::InverseSourceAlphaAdd => {
+                            profile::Blend::Extension(WorldBlend::InverseSourceAlphaAdd)
+                        }
+                        BlendMode::Unknown(value) => profile::Blend::Unknown(value),
                     },
-                    controls: RasterizationOptions {
-                        exterior_lit: flags.exterior_lit(),
-                        clamp_u: flags.clamp_s(),
-                        clamp_v: flags.clamp_t(),
-                        self_illuminated: false,
-                        unclassified: unclassified.bits().into(),
+                    rasterization: profile::MaterialRasterization {
+                        depth: (),
+                        faces: flags.two_sided(),
+                        lighting: Lighting {
+                            unlit: flags.unlit(),
+                            unfogged: flags.unfogged(),
+                        },
+                        controls: RasterizationOptions {
+                            exterior_lit: flags.exterior_lit(),
+                            clamp_u: flags.clamp_s(),
+                            clamp_v: flags.clamp_t(),
+                            self_illuminated: false,
+                            unclassified: unclassified.bits().into(),
+                        },
                     },
+                    ordering: (),
                 },
-                ordering: (),
+                ..Default::default()
             },
-            ..Default::default()
-        };
+            bindings,
+        );
         output.push(builder.add_material(Material {
             name: Cow::Owned(format!("Material {index}")),
             surface,
@@ -174,8 +178,8 @@ pub(super) fn write<'a, D: Dialect>(
         .flat_map(|(_, material)| {
             material
                 .surface
-                .textures
-                .iter()
+                .inputs()
+                .into_iter()
                 .filter_map(|binding| binding.image)
         })
         .collect::<std::collections::BTreeSet<_>>();
@@ -232,9 +236,10 @@ pub(super) fn write<'a, D: Dialect>(
     let mut scrolls = Vec::new();
     let mut extensions = Vec::new();
     for (id, material) in model.materials() {
-        let source = &material.surface;
+        let step = &material.surface;
+        let source = step.declaration();
         let mut row = native::records::Material::<D> {
-            shader: if let Some(shader) = source.shader {
+            shader: if let Some(shader) = step.native_shader() {
                 shader
             } else {
                 context.unsupported(
@@ -257,7 +262,7 @@ pub(super) fn write<'a, D: Dialect>(
         row.frame_sidn_color = color(source.runtime_self_illumination);
         row.diffuse_color = color(source.diffuse);
         row.ground_type = source.ground_type;
-        for (slot, texture) in source.textures.iter().enumerate() {
+        for (slot, texture) in step.inputs().into_iter().enumerate() {
             row.set_texture(slot, texture.image.map_or(0, |id| selectors[&id]))
                 .map_err(|error| Error::new("world.material.texture", error.to_string()))?;
         }
@@ -331,7 +336,7 @@ pub(super) fn write<'a, D: Dialect>(
     if model
         .materials()
         .iter()
-        .any(|(_, material)| material.surface.shader_overrides.is_some())
+        .any(|(_, material)| material.surface.declaration().shader_overrides.is_some())
     {
         append(
             root,
@@ -410,34 +415,36 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
                 unclassified.set_exterior_lit(false);
                 unclassified.set_clamp_s(false);
                 unclassified.set_clamp_t(false);
-                let surface = profile::MaterialStep {
-                    shader: None,
-                    textures: bindings,
-                    self_illumination: color(row.sidn_color),
-                    runtime_self_illumination: color(row.frame_sidn_color),
-                    diffuse: color(row.diffuse_color),
-                    ground_type: row.ground_type,
-                    state: PassState {
-                        blend: blend(row.blend_mode),
-                        rasterization: profile::MaterialRasterization {
-                            depth: (),
-                            faces: flags.two_sided(),
-                            lighting: Lighting {
-                                unlit: flags.unlit(),
-                                unfogged: flags.unfogged(),
+                let surface = profile::MaterialStep::from_native(
+                    None,
+                    profile::MaterialDeclaration {
+                        self_illumination: color(row.sidn_color),
+                        runtime_self_illumination: color(row.frame_sidn_color),
+                        diffuse: color(row.diffuse_color),
+                        ground_type: row.ground_type,
+                        state: PassState {
+                            blend: blend(row.blend_mode),
+                            rasterization: profile::MaterialRasterization {
+                                depth: (),
+                                faces: flags.two_sided(),
+                                lighting: Lighting {
+                                    unlit: flags.unlit(),
+                                    unfogged: flags.unfogged(),
+                                },
+                                controls: RasterizationOptions {
+                                    exterior_lit: flags.exterior_lit(),
+                                    clamp_u: flags.clamp_s(),
+                                    clamp_v: flags.clamp_t(),
+                                    unclassified: unclassified.bits().into(),
+                                    ..Default::default()
+                                },
                             },
-                            controls: RasterizationOptions {
-                                exterior_lit: flags.exterior_lit(),
-                                clamp_u: flags.clamp_s(),
-                                clamp_v: flags.clamp_t(),
-                                unclassified: unclassified.bits().into(),
-                                ..Default::default()
-                            },
+                            ordering: (),
                         },
-                        ordering: (),
+                        ..Default::default()
                     },
-                    ..Default::default()
-                };
+                    bindings,
+                );
                 result.push(builder.add_material(Material {
                     name: Cow::Owned(format!("Material {}", result.len())),
                     surface,

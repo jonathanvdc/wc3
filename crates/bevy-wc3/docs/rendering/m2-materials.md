@@ -7,7 +7,23 @@ remain visible alongside Bevy lighting without replacing its PBR pipeline. This
 preserves the authored texture equations but approximates the game's lighting
 response, especially effects described by native shaders as specular.
 
-## Shader selectors and coordinates
+Native batches on each skin section are sorted by layer, retaining source order
+for ties. Consecutive batches with the same auxiliary section word import as one
+draw whose material steps follow that order. Each step
+keeps independent color, opacity, and texture animation. The compiler emits passes
+in step order; Bevy render phases may still reorder those passes, so this does
+not guarantee the game's complete framebuffer ordering. Native priority planes
+remain separate per-step composition state.
+
+## Shader definitions and coordinates
+
+The compiler consumes the shader-specific `m2::MaterialStep` enum. Modulation and
+addition carry typed alpha choices; crossfades own named base, weighted, and mask
+inputs; guild steps own their palettes. Native selectors are interpreted by the
+model adapter and derived again on export. The renderer matches these definitions
+to its shared GPU composition transport without decoding native selector bits.
+Unknown selectors and incompatible input layouts remain unresolved definitions
+with their complete authored inputs.
 
 Modern low-bit selectors support one input and the common two-input multiplication,
 addition and alpha combinations. The environment bits and explicit coordinate

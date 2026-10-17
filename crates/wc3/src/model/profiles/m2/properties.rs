@@ -23,10 +23,11 @@ pub mod camera {
     pub const FIELD_OF_VIEW: PropertyKey<FeatureId, f32, M2> =
         PropertyKey::new(Target::Camera(CameraField::FieldOfView));
 }
-/// Animated material color.
-pub const COLOR: PropertyKey<MaterialId, [f32; 3], M2> = PropertyKey::new(Target::Color);
-/// Animated material opacity.
-pub const OPACITY: PropertyKey<MaterialId, f32, M2> = PropertyKey::new(Target::Opacity);
+/// Animated color of the first material step.
+pub const COLOR: PropertyKey<MaterialId, [f32; 3], M2> =
+    PropertyKey::new(Target::Color { step: 0 });
+/// Animated opacity of the first material step.
+pub const OPACITY: PropertyKey<MaterialId, f32, M2> = PropertyKey::new(Target::Opacity { step: 0 });
 
 /// Animated attachment properties on an attached feature.
 pub mod attachment {
@@ -131,31 +132,86 @@ pub mod particle {
 #[derive(Clone, Copy, Debug)]
 pub struct TextureUnit(pub usize);
 impl TextureUnit {
+    /// Selects an input on a particular material step.
+    pub fn at_step(self, step: usize) -> MaterialTextureUnit {
+        MaterialTextureUnit {
+            step,
+            index: self.0,
+        }
+    }
+    /// Animated input weight on the first material step.
+    pub fn weight(self) -> PropertyKey<MaterialId, f32, M2> {
+        self.at_step(0).weight()
+    }
+    /// Animated coordinate translation on the first material step.
+    pub fn translation(self) -> PropertyKey<MaterialId, [f32; 3], M2> {
+        self.at_step(0).translation()
+    }
+    /// Animated coordinate rotation on the first material step.
+    pub fn rotation(self) -> PropertyKey<MaterialId, Quaternion, M2> {
+        self.at_step(0).rotation()
+    }
+    /// Animated coordinate scale on the first material step.
+    pub fn scale(self) -> PropertyKey<MaterialId, [f32; 3], M2> {
+        self.at_step(0).scale()
+    }
+}
+/// Animated properties of one material step.
+#[derive(Clone, Copy, Debug)]
+pub struct MaterialStep(pub usize);
+impl MaterialStep {
+    /// Animated color multiplier.
+    pub fn color(self) -> PropertyKey<MaterialId, [f32; 3], M2> {
+        PropertyKey::new(Target::Color { step: self.0 })
+    }
+    /// Animated opacity multiplier.
+    pub fn opacity(self) -> PropertyKey<MaterialId, f32, M2> {
+        PropertyKey::new(Target::Opacity { step: self.0 })
+    }
+    /// Animated input properties.
+    pub fn texture_unit(self, index: usize) -> MaterialTextureUnit {
+        MaterialTextureUnit {
+            step: self.0,
+            index,
+        }
+    }
+}
+/// An input selected within a material step.
+#[derive(Clone, Copy, Debug)]
+pub struct MaterialTextureUnit {
+    step: usize,
+    index: usize,
+}
+impl MaterialTextureUnit {
     /// Animated sampling weight.
     pub fn weight(self) -> PropertyKey<MaterialId, f32, M2> {
         PropertyKey::new(Target::TextureUnit {
-            index: self.0,
+            step: self.step,
+            index: self.index,
             field: TextureUnitField::Weight,
         })
     }
     /// Animated coordinate translation.
     pub fn translation(self) -> PropertyKey<MaterialId, [f32; 3], M2> {
         PropertyKey::new(Target::TextureUnit {
-            index: self.0,
+            step: self.step,
+            index: self.index,
             field: TextureUnitField::Translation,
         })
     }
     /// Animated coordinate rotation.
     pub fn rotation(self) -> PropertyKey<MaterialId, Quaternion, M2> {
         PropertyKey::new(Target::TextureUnit {
-            index: self.0,
+            step: self.step,
+            index: self.index,
             field: TextureUnitField::Rotation,
         })
     }
     /// Animated coordinate scale.
     pub fn scale(self) -> PropertyKey<MaterialId, [f32; 3], M2> {
         PropertyKey::new(Target::TextureUnit {
-            index: self.0,
+            step: self.step,
+            index: self.index,
             field: TextureUnitField::Scale,
         })
     }
@@ -175,11 +231,19 @@ pub enum Target {
     /// Particle properties.
     Particle(ParticleField),
     /// Animated color.
-    Color,
+    Color {
+        /// Material step ordinal.
+        step: usize,
+    },
     /// Animated opacity.
-    Opacity,
+    Opacity {
+        /// Material step ordinal.
+        step: usize,
+    },
     /// Indexed textureunit property.
     TextureUnit {
+        /// Material step ordinal.
+        step: usize,
         /// Owner-local element ordinal.
         index: usize,
         /// Field of the selected element.
@@ -372,8 +436,8 @@ impl PropertyPayload for Target {
             Target::Particle(ParticleField::ZSource) => TypeId::of::<f32>(),
             Target::Particle(ParticleField::Enabled) => TypeId::of::<bool>(),
             Target::Particle(ParticleField::Gravity) => TypeId::of::<[f32; 3]>(),
-            Target::Color => TypeId::of::<[f32; 3]>(),
-            Target::Opacity => TypeId::of::<f32>(),
+            Target::Color { .. } => TypeId::of::<[f32; 3]>(),
+            Target::Opacity { .. } => TypeId::of::<f32>(),
             Target::TextureUnit {
                 field: TextureUnitField::Weight,
                 ..
@@ -425,8 +489,8 @@ impl PropertyPayload for Target {
             Target::Particle(ParticleField::ZSource) => matches!(owner, OwnerId::Feature(_)),
             Target::Particle(ParticleField::Enabled) => matches!(owner, OwnerId::Feature(_)),
             Target::Particle(ParticleField::Gravity) => matches!(owner, OwnerId::Feature(_)),
-            Target::Color => matches!(owner, OwnerId::Material(_)),
-            Target::Opacity => matches!(owner, OwnerId::Material(_)),
+            Target::Color { .. } => matches!(owner, OwnerId::Material(_)),
+            Target::Opacity { .. } => matches!(owner, OwnerId::Material(_)),
             Target::TextureUnit {
                 field: TextureUnitField::Weight,
                 ..
@@ -491,6 +555,18 @@ impl Target {
                 value.supports_age_driven_property(field)
             }
             _ => false,
+        }
+    }
+}
+
+impl Target {
+    /// Material step selected by this destination, if it is a material property.
+    pub fn material_step(&self) -> Option<usize> {
+        match self {
+            Self::Color { step } | Self::Opacity { step } | Self::TextureUnit { step, .. } => {
+                Some(*step)
+            }
+            _ => None,
         }
     }
 }

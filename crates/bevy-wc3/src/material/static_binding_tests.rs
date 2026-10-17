@@ -1,7 +1,9 @@
 //! Runtime binding pruning preserves constants and every programme owner.
 use super::*;
 use crate::animation_targets::AnimationTargets;
-use wc3::model::profiles::{m2, mdlx, Universal};
+use crate::material::native_fixtures::m2;
+use wc3::model::profiles::m2::properties;
+use wc3::model::profiles::{mdlx, Universal};
 use wc3::model::{
     AnimationSample, Channel, Clip, Clock, Controller, Curve, Material, MaterialId,
     MaterialSurface, Model, ModelBuilder, Node, NodeId, SharedClock, Time as ModelTime, Track,
@@ -11,18 +13,18 @@ use wc3::model::{
 fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
     let mut builder = Model::<Universal>::builder("bound constant M2 material");
     let material = builder.reserve_material();
-    let mut surface = m2::MaterialStep {
+    let mut surface = m2::Material {
         color: Animated {
             default: [0.2, 0.4, 0.6],
-            binding: Some(m2::properties::COLOR.bind(material).widen()),
+            binding: Some(properties::COLOR.bind(material).widen()),
         },
         opacity: Animated {
             default: 0.75,
-            binding: Some(m2::properties::OPACITY.bind(material).widen().into()),
+            binding: Some(properties::OPACITY.bind(material).widen().into()),
         },
         ..Default::default()
     };
-    let unit = m2::properties::TextureUnit(0);
+    let unit = properties::TextureUnit(0);
     let mut texture: m2::TextureUnit = m2::TextureUnit {
         contribution: Animated {
             default: 0.8,
@@ -187,7 +189,7 @@ fn pruning_visits_every_uv_transform_weight_and_hd_control() {
 fn scalar_material() -> (ModelBuilder<'static>, MaterialId) {
     let mut builder = Model::<Universal>::builder("scalar material tracks");
     let material = builder.reserve_material();
-    let surface = m2::MaterialStep {
+    let surface = m2::Material {
         color: Animated::constant([1.; 3]),
         opacity: Animated {
             default: 1.,
@@ -345,7 +347,7 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
         ..Default::default()
     };
     unit.coordinates.transform.translation.binding = Some(node.translation());
-    let surface = m2::MaterialStep {
+    let surface = m2::Material {
         color: Animated::constant([1.; 3]),
         opacity: Animated::constant(1.),
         textures: vec![unit],

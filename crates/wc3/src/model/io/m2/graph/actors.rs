@@ -207,19 +207,31 @@ where
                 .materials
                 .get(index as usize)
                 .ok_or_else(|| Error::new("m2.ribbon.material", "missing material"))?;
-            materials.push(builder.add_material(semantic::Material {
-                name: Cow::Borrowed(""),
-                surface: profile::Material {
-                    state: PassState {
-                        blend: profile::values::BlendMode::from_raw(native.blending_mode.raw()),
-                        rasterization: rasterization(
-                            profile::values::MaterialFlags::from_bits_retain(native.flags.bits()),
-                        ),
-                        ordering: 0,
-                    },
-                    ..Default::default()
-                },
-            })?)
+            materials.push(
+                builder.add_material(semantic::Material {
+                    name: Cow::Borrowed(""),
+                    surface: profile::MaterialStep::from_native(
+                        0,
+                        profile::MaterialDeclaration {
+                            state: PassState {
+                                blend: profile::values::BlendMode::from_raw(
+                                    native.blending_mode.raw(),
+                                ),
+                                rasterization: rasterization(
+                                    profile::values::MaterialFlags::from_bits_retain(
+                                        native.flags.bits(),
+                                    ),
+                                ),
+                                ordering: 0,
+                            },
+                            ..Default::default()
+                        },
+                        Vec::new(),
+                        Default::default(),
+                    )
+                    .into(),
+                })?,
+            )
         }
         let tail = D::Layout::ribbon_tail(&value.modern);
         let feature = builder.reserve_feature(node);

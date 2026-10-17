@@ -1,10 +1,10 @@
 use super::*;
 use crate::assembly::{Atlas, PixelRect, RgbaImage, TextureLayer, TextureReplacement};
+use crate::material::native_fixtures::m2::{Material as M2Material, TextureUnit};
 use crate::wow::ModelPart as EquipmentPart;
 use std::collections::HashMap;
 use wc3::model::controls::model::BoneControls;
 use wc3::model::materials::bindings::ImageSelection;
-use wc3::model::materials::m2::{MaterialStep as M2MaterialStep, TextureUnit};
 use wc3::model::materials::program::MaterialStep;
 use wc3::model::{
     Animated, Draw, GeometryData, GeometryInfluences, IdentityBinding, Influence, Material,
@@ -56,8 +56,7 @@ fn model(name: &str, geosets: &[u16]) -> (Model<'static>, NodeId) {
         let material = builder
             .add_material(Material {
                 name: "M2".into(),
-                surface: MaterialSurface::from(M2MaterialStep {
-                    geoset: 17,
+                surface: MaterialSurface::from(M2Material {
                     textures: vec![TextureUnit {
                         image: ImageSelection {
                             texture: Some(texture),
@@ -226,7 +225,7 @@ fn hidden_hair_texture_is_optional_but_selected_missing_texture_is_an_error() {
         for (id, mut material) in hidden_materials {
             for pass in &mut material.surface.steps {
                 if let MaterialStep::M2(surface) = pass {
-                    surface.textures[0].image.texture = Some(texture);
+                    surface.inputs_mut()[0].image.texture = Some(texture);
                 }
             }
             draft.set_material(id, material)?;

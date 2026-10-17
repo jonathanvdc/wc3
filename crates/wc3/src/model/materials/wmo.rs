@@ -1,11 +1,9 @@
 //! World-model surfaces and texture bindings independent of WMO chunk layout.
-use super::bindings::TextureBinding;
-use super::state::{Lighting, PassState, Rasterization};
+use super::state::{Lighting, Rasterization};
 use crate::model::materials::state::BlendOperations;
 use crate::model::profiles::Unavailable;
 use crate::model::values::world::MaterialFlags;
-use crate::model::{Link, TextureId, ValidateLinks};
-use std::borrow::Cow;
+use crate::model::{Link, ValidateLinks};
 
 /// World-model blend operations, including operations absent from other formats.
 pub type Blend = BlendOperations<WorldBlend, (), Unavailable, u32>;
@@ -35,37 +33,6 @@ pub struct ShaderOverrides {
     /// Unresolved shader control value.
     pub control: u32,
 }
-/// A WMO shader step and all its texture inputs.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct MaterialStep<'a> {
-    /// Optional authoring name.
-    pub name: Cow<'a, str>,
-    /// External client shader-table selector, absent for fixed-function surfaces.
-    pub shader: Option<u32>,
-    /// Color composition and shared rasterization controls.
-    pub state: PassState<Blend, MaterialRasterization>,
-    /// Texture bindings in shader-slot order.
-    pub textures: Vec<TextureBinding<Option<TextureId>>>,
-    /// Self-illumination color in RGBA order.
-    pub self_illumination: [u8; 4],
-    /// Serialized runtime self-illumination color in RGBA order.
-    pub runtime_self_illumination: [u8; 4],
-    /// Diffuse color, also used for interior liquid shading.
-    pub diffuse: [u8; 4],
-    /// External terrain-type identifier.
-    pub ground_type: u32,
-    /// UV scroll velocity for the first two texture slots.
-    pub uv_scroll: [[f32; 2]; 2],
-    /// Optional extended shader overrides.
-    pub shader_overrides: Option<ShaderOverrides>,
-    /// Historical additional material color in RGBA order.
-    pub legacy_color: Option<[u8; 4]>,
-    /// Historical additional material controls with unresolved meanings.
-    pub legacy_controls: Option<u32>,
-    /// Historical runtime control values with unresolved meanings.
-    pub legacy_runtime: Option<[u32; 4]>,
-}
-
 impl ValidateLinks for RasterizationOptions {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
@@ -81,3 +48,6 @@ pub enum WorldBlend {
 impl ValidateLinks for WorldBlend {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
+
+mod steps;
+pub use steps::*;

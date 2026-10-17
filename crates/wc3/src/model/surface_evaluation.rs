@@ -266,16 +266,15 @@ impl TextureUnit {
     }
 }
 impl M2MaterialStep<'_> {
-    /// Freezes model shader color, opacity and inputs without interpreting its shader programme.
+    /// Freezes each shader's animated fields without changing its interpretation.
     pub fn sampled(&self, sample: &impl PropertySample) -> Self {
         let mut value = self.clone();
-        value.color = self.color.sampled(sample);
-        value.opacity = self.opacity.sampled(sample);
-        value.textures = self
-            .textures
-            .iter()
-            .map(|input| input.sampled(sample))
-            .collect();
+        let declaration = value.declaration_mut();
+        declaration.color = declaration.color.sampled(sample);
+        declaration.opacity = declaration.opacity.sampled(sample);
+        for input in value.inputs_mut() {
+            *input = input.sampled(sample);
+        }
         value
     }
 }

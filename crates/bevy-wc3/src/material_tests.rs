@@ -36,12 +36,12 @@ fn default_extension_preserves_base_blend_and_depth_while_authored_pass_override
 fn basic_world_shaders_keep_black_baked_light_separate_from_surface_albedo() {
     let model = ModelBuilder::new("world surface").finish().unwrap();
     for shader in [0, 4, 16] {
-        let surface = wmo_shader::MaterialStep {
+        let surface = wmo_shader::Material {
             shader: Some(shader),
             diffuse: [0; 4],
             ..Default::default()
         };
-        let pass = compile_wmo(&model, &surface, &TextureImages::default()).unwrap();
+        let pass = compile_wmo(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
         assert_eq!(pass.material.base_color, Color::WHITE);
         assert!(!pass.material.unlit);
         assert_eq!(
@@ -54,11 +54,16 @@ fn basic_world_shaders_keep_black_baked_light_separate_from_surface_albedo() {
             .iter()
             .any(|value| value.contains("needs its authored texture/specular combiner")));
     }
-    let unsupported = wmo_shader::MaterialStep {
+    let unsupported = wmo_shader::Material {
         shader: Some(8),
         ..Default::default()
     };
-    let pass = compile_wmo(&model, &unsupported, &TextureImages::default()).unwrap();
+    let pass = compile_wmo(
+        &model,
+        &unsupported.clone().into(),
+        &TextureImages::default(),
+    )
+    .unwrap();
     assert!(pass
         .diagnostics
         .iter()
@@ -305,13 +310,22 @@ fn particle_blend_separates_unweighted_and_opacity_weighted_addition() {
 
 #[test]
 fn legacy_selectors_keep_texture_alpha_roles_independent() {
-    assert_eq!(legacy_combiner(0, 1), Some(UVec4::new(1, 0, 0, 0)));
-    assert_eq!(legacy_combiner(0x10, 1), Some(UVec4::new(1, 1, 0, 0)));
-    assert_eq!(legacy_combiner(4, 2), Some(UVec4::new(1, 0, 1, 1)));
-    assert_eq!(legacy_combiner(0x16, 2), Some(UVec4::new(1, 1, 0, 1)));
-    assert!(legacy_combiner(0x8000, 2).is_none());
-    assert!(legacy_combiner(3, 2).is_none());
-    assert!(legacy_combiner(0x80, 1).is_none());
+    use crate::material::native_fixtures::m2 as m2_materials;
+    let combiner = |shader, count| {
+        let step = m2_materials::Material {
+            shader,
+            textures: vec![Default::default(); count],
+            ..Default::default()
+        }
+        .into();
+        super::m2::program(&step).map(|program| program.mode)
+    };
+    assert_eq!(combiner(0, 1), Some(UVec4::new(1, 0, 0, 0)));
+    assert_eq!(combiner(0x10, 1), Some(UVec4::new(1, 1, 0, 0)));
+    assert_eq!(combiner(4, 2), Some(UVec4::new(1, 0, 1, 1)));
+    assert_eq!(combiner(0x16, 2), Some(UVec4::new(1, 1, 0, 1)));
+    assert_eq!(combiner(3, 2), Some(UVec4::new(16, 0, 0, 0)));
+    assert!(combiner(0xffff, 2).is_none());
 }
 
 #[test]
@@ -640,4 +654,46 @@ fn unresolved_diablo_placeholder_uses_appearance_variant_ownership() {
     assert!(compile_material_with_images(&model, empty, images)
         .unwrap()
         .is_empty());
+}
+
+#[test]
+fn m2_material_program_compiles_steps_in_order_with_independent_controls() {
+    use wc3::model::materials::m2::{DiffuseMaterialStep, MaterialStep as M2Step};
+    use wc3::model::profiles::m2::Material as M2Material;
+    use wc3::model::MaterialProgram;
+
+    let mut builder = ModelBuilder::new("M2 layered material");
+    let mut first = DiffuseMaterialStep::default();
+    first.declaration.color = Animated::constant([1., 0., 0.]);
+    first.declaration.opacity = Animated::constant(0.25);
+    first.declaration.state.ordering = 3;
+    first.diffuse.contribution = Animated::constant(1.);
+    let mut second = DiffuseMaterialStep::default();
+    second.declaration.color = Animated::constant([0., 1., 0.]);
+    second.declaration.opacity = Animated::constant(0.75);
+    second.declaration.state.ordering = -2;
+    second.diffuse.contribution = Animated::constant(1.);
+    let program: M2Material<'_> = MaterialProgram {
+        steps: vec![M2Step::Diffuse(first), M2Step::Diffuse(second)],
+    };
+    let id = builder
+        .add_material(Material {
+            name: "two steps".into(),
+            surface: program.into(),
+        })
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let passes =
+        compile_material_with_images(&model, id, Arc::new(TextureImages::default())).unwrap();
+    assert_eq!(passes.len(), 2);
+    assert_eq!(
+        passes[0].material.base_color.to_linear().to_f32_array(),
+        [1., 0., 0., 0.25]
+    );
+    assert_eq!(
+        passes[1].material.base_color.to_linear().to_f32_array(),
+        [0., 1., 0., 0.75]
+    );
+    assert_eq!(passes[0].material.depth_bias, 3.);
+    assert_eq!(passes[1].material.depth_bias, -2.);
 }

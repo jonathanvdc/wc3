@@ -125,3 +125,18 @@ impl Default for BoneControls {
         }
     }
 }
+
+/// M2 draw-local native metadata and optional shadow behavior.
+#[derive(Clone, Debug, Default)]
+pub struct DrawControls {
+    /// Auxiliary native section/flags word, whose interpretation varies by client version.
+    /// This is not a semantic geometry reference.
+    pub auxiliary_section: u16,
+    /// Optional dedicated shadow-pass behavior.
+    pub shadow: Option<ShadowControls>,
+}
+impl ValidateLinks for DrawControls {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.shadow.visit_links(visitor);
+    }
+}

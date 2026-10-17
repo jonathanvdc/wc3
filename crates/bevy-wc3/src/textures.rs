@@ -138,7 +138,7 @@ pub fn texture_requests<'view, 'data>(
                     }
                 }
                 MaterialStep::Wmo(surface) => {
-                    for slot in &surface.textures {
+                    for slot in surface.inputs() {
                         if let Some((id, texture)) = slot
                             .image
                             .and_then(|id| model.texture(id).map(|texture| (id, texture)))
@@ -363,7 +363,7 @@ impl TextureImages {
 
 /// WMO addressing is surface authority; texture definitions remain unchanged.
 pub(crate) fn world_sampler(surface: &wmo::MaterialStep<'_>, mut sampler: Sampler) -> Sampler {
-    let controls = surface.state.rasterization.controls;
+    let controls = surface.declaration().state.rasterization.controls;
     if controls.clamp_u {
         sampler.u = AddressMode::Clamp;
     }

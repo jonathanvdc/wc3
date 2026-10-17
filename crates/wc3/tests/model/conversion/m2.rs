@@ -554,7 +554,10 @@ fn native_material_edits_affect_rebuilt_output() {
         .value;
     let (id, material) = asset.materials().iter().next().unwrap();
     let mut surface = material.surface.clone();
-    surface.shader = 42;
+    let mp::MaterialStep::Diffuse(shader) = &mut surface.steps[0] else {
+        panic!("expected diffuse")
+    };
+    shader.use_texture_alpha = true;
     asset
         .edit(|draft| draft.set_material_surface(id, surface))
         .unwrap();
@@ -563,7 +566,7 @@ fn native_material_edits_affect_rebuilt_output() {
         .execute()
         .unwrap()
         .value;
-    assert_eq!(output.model.core().skins[0].batches[0].shader_id, 42);
+    assert_eq!(output.model.core().skins[0].batches[0].shader_id, 0x10);
 }
 #[test]
 fn unknown_extensions_require_explicit_drop_policy() {
@@ -922,7 +925,7 @@ fn unknown_native_blend_does_not_collide_with_common_transparency() {
         .unwrap()
         .value;
     let surface = &asset.materials().iter().next().unwrap().1.surface;
-    assert!(surface.state.blend == mp::values::BlendMode::Unknown(8));
+    assert!(surface.steps[0].declaration().state.blend == mp::values::BlendMode::Unknown(8));
     let id = asset.nodes().iter().next().unwrap().0;
     let mut node = asset.node(id).unwrap().clone();
     node.name = Cow::Borrowed("edited");
@@ -1197,24 +1200,24 @@ fn native_shader_routes_share_repeated_coordinate_animation() {
         .value;
     let surface = &imported.materials().iter().next().unwrap().1.surface;
     assert_eq!(
-        surface
-            .textures
+        surface.steps[0]
+            .inputs()
             .iter()
             .map(|unit| unit.coordinates.source)
             .collect::<Vec<_>>(),
         [0, -1, 0]
     );
     assert_eq!(
-        surface.textures[0].coordinates.transform,
-        surface.textures[2].coordinates.transform
+        surface.steps[0].inputs()[0].coordinates.transform,
+        surface.steps[0].inputs()[2].coordinates.transform
     );
-    assert!(surface.textures[0]
+    assert!(surface.steps[0].inputs()[0]
         .coordinates
         .transform
         .translation
         .binding
         .is_some());
-    assert!(surface.textures[1]
+    assert!(surface.steps[0].inputs()[1]
         .coordinates
         .transform
         .translation
@@ -1230,10 +1233,10 @@ fn native_shader_routes_share_repeated_coordinate_animation() {
         .value;
     let surface = &reread.materials().iter().next().unwrap().1.surface;
     assert_eq!(
-        surface.textures[0].coordinates.transform,
-        surface.textures[2].coordinates.transform
+        surface.steps[0].inputs()[0].coordinates.transform,
+        surface.steps[0].inputs()[2].coordinates.transform
     );
-    assert!(surface.textures[0]
+    assert!(surface.steps[0].inputs()[0]
         .coordinates
         .transform
         .translation
@@ -1248,8 +1251,8 @@ fn native_environment_then_t1_exports_the_active_transform_in_slot_zero() {
         .unwrap()
         .value;
     let surface = &imported.materials().iter().next().unwrap().1.surface;
-    assert_eq!(surface.textures[0].coordinates.source, -1);
-    assert_eq!(surface.textures[1].coordinates.source, 0);
+    assert_eq!(surface.steps[0].inputs()[0].coordinates.source, -1);
+    assert_eq!(surface.steps[0].inputs()[1].coordinates.source, 0);
     let native = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -1271,8 +1274,8 @@ fn native_three_route_programme_uses_third_transform_for_uv1() {
         .value;
     let surface = &imported.materials().iter().next().unwrap().1.surface;
     assert_eq!(
-        surface
-            .textures
+        surface.steps[0]
+            .inputs()
             .iter()
             .map(|unit| unit.coordinates.source)
             .collect::<Vec<_>>(),
@@ -1299,7 +1302,10 @@ fn native_export_rejects_independent_transforms_on_repeated_shader_routes() {
         .value;
     let (id, material) = imported.materials().iter().next().unwrap();
     let mut surface = material.surface.clone();
-    surface.textures[2].coordinates.transform.translation = sm::Animated::constant([99., 0., 0.]);
+    surface.steps[0].inputs_mut()[2]
+        .coordinates
+        .transform
+        .translation = sm::Animated::constant([99., 0., 0.]);
     imported
         .edit(|draft| draft.set_material_surface(id, surface))
         .unwrap();
@@ -1314,7 +1320,7 @@ fn native_export_rejects_coordinate_sources_incompatible_with_shader_routes() {
         .value;
     let (id, material) = imported.materials().iter().next().unwrap();
     let mut surface = material.surface.clone();
-    surface.textures[2].coordinates.source = 0;
+    surface.steps[0].inputs_mut()[2].coordinates.source = 0;
     imported
         .edit(|draft| draft.set_material_surface(id, surface))
         .unwrap();
@@ -1329,22 +1335,23 @@ fn application_guild_palettes_survive_profile_changes_but_require_export_loss_po
         .value;
     let (id, material) = imported.materials().iter().next().unwrap();
     let mut surface = material.surface.clone();
-    assert_eq!(surface.guild_palette, mp::GuildPalette::default());
-    surface.guild_palette.background = [0.25, 0.5, 0.75];
+    assert_eq!(
+        surface.steps[0].guild_palette().unwrap(),
+        mp::GuildPalette::default()
+    );
+    let mp::MaterialStep::Guild(guild) = &mut surface.steps[0] else {
+        panic!("expected guild")
+    };
+    guild.palette.background = [0.25, 0.5, 0.75];
     imported
         .edit(|draft| draft.set_material_surface(id, surface))
         .unwrap();
     let broad = imported.clone().widen::<sm::profiles::Universal>();
     let narrowed = broad.try_narrow::<sm::profiles::M2>().unwrap();
     assert_eq!(
-        narrowed
-            .materials()
-            .iter()
-            .next()
+        narrowed.materials().iter().next().unwrap().1.surface.steps[0]
+            .guild_palette()
             .unwrap()
-            .1
-            .surface
-            .guild_palette
             .background,
         [0.25, 0.5, 0.75]
     );
@@ -1375,7 +1382,219 @@ fn application_guild_palettes_survive_profile_changes_but_require_export_loss_po
             .unwrap()
             .1
             .surface
-            .guild_palette,
+            .steps[0]
+            .guild_palette()
+            .unwrap(),
         mp::GuildPalette::default()
+    );
+}
+
+#[test]
+fn batch_layers_become_ordered_steps_with_independent_animation() {
+    let mut source = native_triangle();
+    let core = source.model.core_mut();
+    core.global_sequences = ZeroVec::alloc_from_slice(&[1000]);
+    core.colors = vec![
+        m2::records::ColorAnimation {
+            color: constant([1., 0., 0.]),
+            alpha: constant(8192),
+        },
+        m2::records::ColorAnimation {
+            color: constant([0., 1., 0.]),
+            alpha: constant(24576),
+        },
+    ];
+    core.texture_weights = vec![
+        m2::records::TextureWeight {
+            weight: constant(4096),
+        },
+        m2::records::TextureWeight {
+            weight: constant(16384),
+        },
+    ];
+    core.texture_weight_combos = ZeroVec::alloc_from_slice(&[0, 1]);
+    let mut first = core.skins[0].batches[0];
+    first.shader_id = 0;
+    first.material_layer = 9;
+    first.geoset_index = 37;
+    first.color_index = 0;
+    let mut second = first;
+    second.material_layer = 2;
+    second.shader_id = 0x10;
+    second.color_index = 1;
+    second.texture_weight_combo_index = 1;
+    let mut third = first;
+    third.color_index = -1;
+    core.skins[0].batches = vec![first, second, third];
+    let imported = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let instance = imported.instances().iter().next().unwrap().1;
+    assert_eq!(instance.draws.len(), 1);
+    assert_eq!(instance.selection_group, 17);
+    assert_eq!(
+        instance.draws[0]
+            .controls
+            .as_ref()
+            .unwrap()
+            .auxiliary_section,
+        37
+    );
+    let (id, material) = imported.materials().iter().next().unwrap();
+    assert_eq!(material.surface.steps.len(), 3);
+    for (index, step) in material.surface.steps.iter().enumerate().take(2) {
+        let target = step.declaration().color.binding.as_ref().unwrap();
+        assert_eq!(
+            *target,
+            mp::properties::MaterialStep(index).color().bind(id)
+        );
+    }
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let core = output.model.core();
+    let batches = &core.skins[0].batches;
+    assert_eq!(
+        batches.iter().map(|b| b.material_layer).collect::<Vec<_>>(),
+        [0, 1, 2]
+    );
+    assert!(batches.iter().all(|b| b.geoset_index == 37));
+    for (batch, expected) in batches.iter().zip([16384, 4096]) {
+        let weight = core
+            .texture_weight_combos
+            .get(batch.texture_weight_combo_index as usize)
+            .unwrap();
+        let LegacyValues::Values(values) = &core.texture_weights[weight as usize].weight.values
+        else {
+            panic!("weight values")
+        };
+        assert_eq!(values.get(0), Some(expected));
+    }
+    assert_eq!(
+        batches.iter().map(|b| b.shader_id).collect::<Vec<_>>(),
+        [0x10, 0, 0]
+    );
+    for (batch, expected) in batches.iter().zip([[0., 1., 0.], [1., 0., 0.]]) {
+        let LegacyValues::Values(values) = &core.colors[batch.color_index as usize].color.values
+        else {
+            panic!("color values")
+        };
+        assert_eq!(values.get(0), Some(expected));
+    }
+    // Reordering semantic steps is the only operation needed to change native layer order.
+    let mut edited = imported.clone();
+    let mut program = material.surface.clone();
+    program.steps.swap(0, 1);
+    edited
+        .edit(|draft| draft.set_material_surface(id, program))
+        .unwrap();
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&edited, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert_eq!(
+        output.model.core().skins[0]
+            .batches
+            .iter()
+            .map(|b| b.shader_id)
+            .collect::<Vec<_>>(),
+        [0, 0x10, 0]
+    );
+}
+
+#[test]
+fn auxiliary_section_words_are_draw_local_and_survive_profile_changes() {
+    let mut source = native_triangle();
+    let mut first = source.model.core().skins[0].batches[0];
+    first.geoset_index = 41;
+    let mut second = first;
+    second.geoset_index = 7;
+    second.material_layer = 1;
+    let mut third = first;
+    third.material_layer = 2;
+    source.model.core_mut().skins[0].batches = vec![first, second, third];
+    let imported = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let broad = imported.widen::<sm::profiles::Universal>();
+    let imported = broad.try_narrow::<sm::profiles::M2>().unwrap();
+    let instance = imported.instances().iter().next().unwrap().1;
+    assert_eq!(instance.draws.len(), 3);
+    assert_eq!(instance.draws[0].subset, instance.draws[1].subset);
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert_eq!(
+        output.model.core().skins[0]
+            .batches
+            .iter()
+            .map(|b| b.geoset_index)
+            .collect::<Vec<_>>(),
+        [41, 7, 41]
+    );
+}
+
+#[test]
+fn ribbon_export_flattens_material_programs_into_ordered_native_materials() {
+    let mut source = native_triangle();
+    source
+        .model
+        .core_mut()
+        .ribbons
+        .push(m2::records::RibbonEmitter {
+            bone_id: 0,
+            edges_per_second: 1.,
+            edge_lifetime: 1.,
+            texture_rows: 1,
+            texture_columns: 1,
+            texture_indices: ZeroVec::alloc_from_slice(&[0]),
+            material_indices: ZeroVec::alloc_from_slice(&[0]),
+            ..Default::default()
+        });
+    let mut imported = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let ribbon = imported
+        .features()
+        .iter()
+        .find_map(|(_, feature)| match &feature.payload {
+            mp::ActorKind::Ribbon(ribbon) => Some(ribbon),
+            _ => None,
+        })
+        .unwrap();
+    let material_id = ribbon.rendering.materials[0];
+    let mut surface = imported.material(material_id).unwrap().surface.clone();
+    let mut second = surface.steps[0].clone();
+    second.declaration_mut().state.blend = sm::values::model::BlendMode::Additive;
+    surface.steps.push(second);
+    imported
+        .edit(|draft| draft.set_material_surface(material_id, surface))
+        .unwrap();
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let core = output.model.core();
+    let materials = &core.ribbons[0].material_indices;
+    assert_eq!(materials.len(), 2);
+    assert_eq!(
+        core.materials
+            .get(materials.get(0).unwrap() as usize)
+            .unwrap()
+            .blending_mode,
+        BlendMode::Alpha
+    );
+    assert_eq!(
+        core.materials
+            .get(materials.get(1).unwrap() as usize)
+            .unwrap()
+            .blending_mode,
+        BlendMode::from_raw(3)
     );
 }

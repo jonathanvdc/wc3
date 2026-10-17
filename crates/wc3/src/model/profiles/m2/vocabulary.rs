@@ -30,7 +30,7 @@ impl Profile for M2 {
     type Appearance<'a> = DrawLooks<'a>;
     type Binding<'a> = IdentityBinding;
     type Geometry<'a> = M2Geometry<'a>;
-    type Draw = Option<m2::ShadowControls>;
+    type Draw = Option<m2::DrawControls>;
     type ModelMetadata<'a> = m2::ModelMetadata;
     type System<'a> = m2::System<'a>;
     type Surface<'a> = m2::Material<'a>;

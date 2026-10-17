@@ -75,8 +75,9 @@ masking uses the existing independent UV transport; simple materials do not gain
 another vertex stream or sample unused images.
 
 Guild programmes additionally require background, emblem and border colour
-multipliers. `model_shader::GuildPalette` supplies these explicitly on the semantic
-shader pass, with neutral white defaults. These settings belong to the application;
+multipliers. `materials::m2::GuildPalette` supplies these through the `palette`
+field of `GuildMaterialStep`, `GuildEmblemMaterialStep`, and
+`OpaqueGuildMaterialStep`, with neutral white defaults. These settings belong to the application;
 the native material record does not encode them. A live Bevy material exposes
 `ModelMaterialExtension::guild_palette` and `set_guild_palette`, allowing colour
 changes without rebuilding the model or changing the shader pipeline. Bevy material

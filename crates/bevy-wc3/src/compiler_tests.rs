@@ -99,10 +99,10 @@ fn generic_empty_draw_instances_remain_without_render_passes() {
 
 #[test]
 fn world_draw_materials_separate_lighting_classes_and_preserve_source_colors() {
+    use crate::material::native_fixtures::wmo::Material as WmoMaterial;
     use bevy::mesh::VertexAttributeValues;
     use wc3::model::controls::world::ModelMetadata as WorldMetadata;
     use wc3::model::controls::{world::RegionControls, world_draw, DrawControls, InstanceControls};
-    use wc3::model::materials::wmo::MaterialStep as WmoMaterialStep;
     use wc3::model::scene::world::WorldOptions;
     use wc3::model::{Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw};
 
@@ -130,7 +130,7 @@ fn world_draw_materials_separate_lighting_classes_and_preserve_source_colors() {
     let material = builder
         .add_material(SemanticMaterial {
             name: "stone".into(),
-            surface: MaterialSurface::from(WmoMaterialStep {
+            surface: MaterialSurface::from(WmoMaterial {
                 shader: Some(0),
                 uv_scroll: [[0.25, 0.], [0.; 2]],
                 ..Default::default()
@@ -343,9 +343,9 @@ fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
 
 #[test]
 fn a_pass_stack_keeps_world_lighting_local_to_each_pass() {
+    use crate::material::native_fixtures::wmo::Material as WmoMaterial;
     use wc3::model::controls::{world_draw, DrawControls};
     use wc3::model::materials::program::{MaterialStep, MaterialSurface};
-    use wc3::model::materials::wmo::MaterialStep as WmoMaterialStep;
     use wc3::model::Draw;
 
     let mut builder = ModelBuilder::new("world pass lighting");
@@ -353,7 +353,7 @@ fn a_pass_stack_keeps_world_lighting_local_to_each_pass() {
     let mut mesh = ModelMesh::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]);
     let subset = mesh.add_primary_subset(0, 1);
     let mesh = builder.add_mesh(mesh).unwrap();
-    let interior = WmoMaterialStep {
+    let interior = WmoMaterial {
         shader: Some(0),
         ..Default::default()
     };
@@ -364,8 +364,8 @@ fn a_pass_stack_keeps_world_lighting_local_to_each_pass() {
             name: "two lighting programmes".into(),
             surface: MaterialSurface {
                 steps: vec![
-                    MaterialStep::Wmo(Box::new(interior)),
-                    MaterialStep::Wmo(Box::new(exterior)),
+                    MaterialStep::Wmo(Box::new(interior.into())),
+                    MaterialStep::Wmo(Box::new(exterior.into())),
                     MaterialStep::Mdlx(Box::default()),
                 ],
             },

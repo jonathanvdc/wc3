@@ -33,13 +33,11 @@ use compile::rasterization;
 #[cfg(test)]
 use compile::{blend, depth};
 #[cfg(test)]
-use m2::legacy_combiner;
+use native_fixtures::wmo as wmo_shader;
 pub(crate) use ribbon_material::effect_state;
 use std::array::from_fn;
 use std::collections::HashMap;
 use std::sync::Arc;
-#[cfg(test)]
-use wc3::model::materials::wmo as wmo_shader;
 use wc3::model::materials::{m2::GuildPalette, mdlx, state::Lighting};
 use wc3::model::values::model::ParticleBlend;
 use wc3::model::{Animated, TextureId, TextureTransform};
@@ -570,3 +568,6 @@ mod tests;
 #[cfg(test)]
 #[path = "material/static_binding_tests.rs"]
 mod static_binding_tests;
+
+#[cfg(test)]
+pub(crate) mod native_fixtures;

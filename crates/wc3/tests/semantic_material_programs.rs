@@ -1,8 +1,10 @@
-use wc3::model::materials::m2::MaterialStep as M2MaterialStep;
+#[path = "support/materials.rs"]
+mod native_fixtures;
+use native_fixtures::m2::Material as M2Material;
+use native_fixtures::wmo;
 use wc3::model::materials::m3;
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::materials::program::{MaterialProgram, MaterialStep, MaterialSurface};
-use wc3::model::materials::wmo;
 use wc3::model::profiles::{m2, mdlx, SurfacePayload};
 use wc3::model::PropertyPayload;
 
@@ -51,20 +53,16 @@ fn layered_projection_repeats_native_declarations_on_each_step() {
 
 #[test]
 fn single_step_projection_preserves_shader_identity_and_native_state() {
-    let shader = M2MaterialStep {
+    let shader = M2Material {
         shader: 0xf123,
-        geoset: 19,
-        layer: 7,
         label: "authored programme".into(),
         ..Default::default()
     };
-    let restored = M2MaterialStep::try_from(MaterialSurface::from(shader)).unwrap();
+    let restored = M2Material::try_from(MaterialSurface::from(shader)).unwrap();
     assert_eq!(restored.shader, 0xf123);
-    assert_eq!(restored.geoset, 19);
-    assert_eq!(restored.layer, 7);
     assert_eq!(restored.label, "authored programme");
 
-    let mut world = wmo::MaterialStep {
+    let mut world = wmo::Material {
         shader: Some(0xffff1234),
         uv_scroll: [[0.2, -0.4], [0.5, 0.8]],
         legacy_controls: Some(0xfedcba98),
@@ -72,7 +70,7 @@ fn single_step_projection_preserves_shader_identity_and_native_state() {
     };
     world.state.rasterization.controls.exterior_lit = true;
     assert_eq!(
-        wmo::MaterialStep::try_from(MaterialSurface::from(world.clone())).unwrap(),
+        wmo::Material::try_from(MaterialSurface::from(world.clone())).unwrap(),
         world
     );
 }
@@ -89,8 +87,8 @@ fn mixed_steps_are_valid_but_native_projection_cannot_drop_them() {
     program.validate().unwrap();
     let broad = program;
     assert!(LayeredSurface::try_from(broad.clone()).is_err());
-    assert!(M2MaterialStep::try_from(broad.clone()).is_err());
-    assert!(wmo::MaterialStep::try_from(broad).is_err());
+    assert!(M2Material::try_from(broad.clone()).is_err());
+    assert!(wmo::Material::try_from(broad).is_err());
 }
 
 #[test]
@@ -103,13 +101,13 @@ fn native_single_step_projection_rejects_empty_and_repeated_steps() {
         ],
     ] {
         let broad = MaterialSurface { steps };
-        assert!(wmo::MaterialStep::try_from(broad.clone()).is_err());
-        assert!(M2MaterialStep::try_from(broad).is_err());
+        assert!(wmo::Material::try_from(broad.clone()).is_err());
+        assert!(M2Material::try_from(broad).is_err());
     }
 }
 
 #[test]
-fn property_selection_uses_program_ordinals_and_rejects_ambiguous_model_destinations() {
+fn property_selection_uses_program_ordinals_for_mdlx_and_m2() {
     let mut program = MaterialSurface {
         steps: vec![
             MaterialStep::Wmo(Box::default()),
@@ -128,10 +126,12 @@ fn property_selection_uses_program_ordinals_and_rejects_ambiguous_model_destinat
     assert!(!program.supports_property(&opacity(0)));
     assert!(program.supports_property(&opacity(1)));
     assert!(!program.supports_property(&opacity(2)));
-    let model_opacity = m2::properties::Target::Opacity.identity().to_owned();
+    let model_opacity = m2::properties::Target::Opacity { step: 2 }
+        .identity()
+        .to_owned();
     assert!(program.supports_property(&model_opacity));
     program.steps.push(MaterialStep::M2(Box::default()));
-    assert!(!program.supports_property(&model_opacity));
+    assert!(program.supports_property(&model_opacity));
 }
 
 #[test]
@@ -153,7 +153,10 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
         .opacity()
         .bind(id)
         .widen::<Universal>();
-    let shader = m2::properties::OPACITY.bind(id).widen::<Universal>();
+    let shader = m2::properties::MaterialStep(1)
+        .opacity()
+        .bind(id)
+        .widen::<Universal>();
     draft
         .set_material(
             id,
@@ -168,10 +171,13 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
                             }
                             .into(),
                         )),
-                        MaterialStep::M2(Box::new(M2MaterialStep {
-                            opacity: Animated::new(1., shader.clone()),
-                            ..Default::default()
-                        })),
+                        MaterialStep::M2(Box::new(
+                            M2Material {
+                                opacity: Animated::new(1., shader.clone()),
+                                ..Default::default()
+                            }
+                            .into(),
+                        )),
                         MaterialStep::Wmo(Box::default()),
                     ],
                 },
@@ -207,11 +213,11 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
         panic!("model shader")
     };
     assert_eq!(first.to_layer().opacity.default, 0.5);
-    assert_eq!(second.opacity.default, 0.75);
+    assert_eq!(second.declaration().opacity.default, 0.75);
     assert!(first.to_layer().opacity.binding.is_none());
-    assert!(second.opacity.binding.is_none());
+    assert!(second.declaration().opacity.binding.is_none());
     assert!(matches!(frozen.steps[2], MaterialStep::Wmo(_)));
-    // Existing model-shader channels cannot become ambiguous through an edit.
+    // Appending a step preserves the existing indexed animation targets.
     assert!(model
         .edit(|draft| {
             let mut material = draft.model().material(id).unwrap().clone();
@@ -219,7 +225,7 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
             program.steps.push(MaterialStep::M2(Box::default()));
             draft.set_material(id, material)
         })
-        .is_err());
+        .is_ok());
 }
 
 #[test]
