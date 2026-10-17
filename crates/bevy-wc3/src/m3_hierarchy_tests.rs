@@ -4,7 +4,7 @@ use wc3::model::common::IntoZeroVec as _;
 use wc3::model::conversion::{ApproximationPolicy, ExportOptions, ImportOptions};
 use wc3::model::formats::m3::{self, Bundle, Document, Md34};
 use wc3::model::io;
-use wc3::model::materials::programmed;
+use wc3::model::materials::m3::MaterialStep;
 use wc3::model::profiles::m3::BoneControls;
 use wc3::model::profiles::{Universal, M3};
 use wc3::model::Quaternion;
@@ -93,7 +93,7 @@ fn native_zero_flag_hierarchy_preserves_skinned_rest_and_animated_parent_placeme
     let material = builder
         .add_material(SemanticMaterial {
             name: "plain".into(),
-            surface: programmed::Material::Standard(Box::default()),
+            surface: MaterialStep::Standard(Box::default()),
         })
         .unwrap();
     let frame = builder.add_node(Node::named("")).unwrap();

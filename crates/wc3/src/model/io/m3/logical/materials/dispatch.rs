@@ -73,14 +73,14 @@ fn body<'a, E: Envelope>(
     source: &'a native::Document<'_, E>,
     reader: &mut Reader<'a, '_>,
     map: nr::MaterialMap,
-) -> Result<surface::Material<'a>, Error> {
+) -> Result<surface::MaterialStep<'a>, Error> {
     let root = source.root_record().map_err(read_error)?;
     let document = source.container();
     match map.material_type {
         nr::MaterialKind::Standard => {
             let reference: native::Ref<nr::targets::StandardMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.standard_materials));
-            Ok(surface::Material::Standard(
+            Ok(surface::MaterialStep::Standard(
                 (super::standard::get_standard(
                     document,
                     reader,
@@ -93,7 +93,7 @@ fn body<'a, E: Envelope>(
         nr::MaterialKind::Displacement => {
             let reference: native::Ref<nr::targets::DisplacementMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.displacement_materials));
-            Ok(surface::Material::Displacement(
+            Ok(surface::MaterialStep::Displacement(
                 (super::displacementmaterial::get_displacementmaterial(
                     document,
                     reader,
@@ -106,7 +106,7 @@ fn body<'a, E: Envelope>(
         nr::MaterialKind::Composite => {
             let reference: native::Ref<nr::targets::CompositeMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.composite_materials));
-            Ok(surface::Material::Composite(
+            Ok(surface::MaterialStep::Composite(
                 (super::compositematerial::get_compositematerial(
                     document,
                     reader,
@@ -119,7 +119,7 @@ fn body<'a, E: Envelope>(
         nr::MaterialKind::Terrain => {
             let reference: native::Ref<nr::targets::TerrainMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.terrain_materials));
-            Ok(surface::Material::Terrain(
+            Ok(surface::MaterialStep::Terrain(
                 (super::terrainmaterial::get_terrainmaterial(
                     document,
                     reader,
@@ -132,7 +132,7 @@ fn body<'a, E: Envelope>(
         nr::MaterialKind::Volume => {
             let reference: native::Ref<nr::targets::VolumeMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.volume_materials));
-            Ok(surface::Material::Volume(
+            Ok(surface::MaterialStep::Volume(
                 (super::volumematerial::get_volumematerial(
                     document,
                     reader,
@@ -145,7 +145,7 @@ fn body<'a, E: Envelope>(
         nr::MaterialKind::VolumeNoise => {
             let reference: native::Ref<nr::targets::VolumeNoiseMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.volume_noise_materials));
-            Ok(surface::Material::VolumeNoise(
+            Ok(surface::MaterialStep::VolumeNoise(
                 (super::volumenoisematerial::get_volumenoisematerial(
                     document,
                     reader,
@@ -158,7 +158,7 @@ fn body<'a, E: Envelope>(
         nr::MaterialKind::Creep => {
             let reference: native::Ref<nr::targets::CreepMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.creep_materials));
-            Ok(surface::Material::Creep(
+            Ok(surface::MaterialStep::Creep(
                 (super::creepmaterial::get_creepmaterial(
                     document,
                     reader,
@@ -171,7 +171,7 @@ fn body<'a, E: Envelope>(
         nr::MaterialKind::Hair => {
             let reference: native::Ref<nr::targets::HairMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.hair_materials));
-            Ok(surface::Material::Hair(
+            Ok(surface::MaterialStep::Hair(
                 (super::hair::get_hair(document, reader, reference, map.material_index as usize)?)
                     .into(),
             ))
@@ -179,7 +179,7 @@ fn body<'a, E: Envelope>(
         nr::MaterialKind::SplatTerrainBake => {
             let reference: native::Ref<nr::targets::STBMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.stb_materials));
-            Ok(surface::Material::SplatTerrainBake(
+            Ok(surface::MaterialStep::SplatTerrainBake(
                 (super::stbmaterial::get_stbmaterial(
                     document,
                     reader,
@@ -192,7 +192,7 @@ fn body<'a, E: Envelope>(
         nr::MaterialKind::Reflection => {
             let reference: native::Ref<nr::targets::ReflectionMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.reflection_materials));
-            Ok(surface::Material::Reflection(
+            Ok(surface::MaterialStep::Reflection(
                 (super::reflectionmaterial::get_reflectionmaterial(
                     document,
                     reader,
@@ -205,7 +205,7 @@ fn body<'a, E: Envelope>(
         nr::MaterialKind::LensFlare => {
             let reference: native::Ref<nr::targets::LensFlare> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.lens_flare_materials));
-            Ok(surface::Material::LensFlare(
+            Ok(surface::MaterialStep::LensFlare(
                 (super::flare::get_lensflare(
                     document,
                     reader,
@@ -218,7 +218,7 @@ fn body<'a, E: Envelope>(
         nr::MaterialKind::DataDriven => {
             let reference: native::Ref<nr::targets::DataDrivenMaterial> =
                 native::visit_m3_root!(root, |r| Slot::value(&r.data_driven_materials));
-            Ok(surface::Material::DataDriven(
+            Ok(surface::MaterialStep::DataDriven(
                 (super::data_driven::get_datadriven(
                     document,
                     reader,
@@ -261,7 +261,9 @@ pub(in crate::model::io::m3::logical) fn read<'a, E: Envelope>(
                 materials[index],
                 sem::Material {
                     name: Cow::Borrowed(""),
-                    surface: surface::Material::Standard((surface::Standard::default()).into()),
+                    surface: surface::MaterialStep::Standard(
+                        (surface::StandardMaterialStep::default()).into(),
+                    ),
                 },
             )?;
             continue;

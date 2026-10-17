@@ -3,9 +3,9 @@
 pub mod properties;
 mod texture;
 pub use crate::model::controls::texture::{SupplementalTextureFlags, TextureControls};
-pub use crate::model::materials::model_shader::*;
+pub use crate::model::materials::m2::*;
 /// World of Warcraft selects independently animated model-shader inputs.
-pub type Material<'a> = ShaderPass<'a, TextureUnit<TextureTransform>>;
+pub type Material<'a> = MaterialStep<'a, TextureUnit<TextureTransform>>;
 mod actors;
 pub use actors::*;
 mod particles;

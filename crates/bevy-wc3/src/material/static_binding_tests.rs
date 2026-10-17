@@ -1,7 +1,6 @@
 //! Runtime binding pruning preserves constants and every programme owner.
 use super::*;
 use crate::animation_targets::AnimationTargets;
-use wc3::model::materials::model_shader;
 use wc3::model::profiles::{m2, mdlx, Universal};
 use wc3::model::{
     AnimationSample, Channel, Clip, Clock, Controller, Curve, Material, MaterialId,
@@ -12,7 +11,7 @@ use wc3::model::{
 fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
     let mut builder = Model::<Universal>::builder("bound constant M2 material");
     let material = builder.reserve_material();
-    let mut surface = model_shader::ShaderPass {
+    let mut surface = m2::MaterialStep {
         color: Animated {
             default: [0.2, 0.4, 0.6],
             binding: Some(m2::properties::COLOR.bind(material).widen()),
@@ -24,7 +23,7 @@ fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
         ..Default::default()
     };
     let unit = m2::properties::TextureUnit(0);
-    let mut texture: model_shader::TextureUnit = model_shader::TextureUnit {
+    let mut texture: m2::TextureUnit = m2::TextureUnit {
         contribution: Animated {
             default: 0.8,
             binding: Some(unit.weight().bind(material).widen().into()),
@@ -41,7 +40,7 @@ fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
             material,
             Material {
                 name: "bound".into(),
-                surface: MaterialSurface::ModelShader(Box::new(surface)),
+                surface: MaterialSurface::from(surface),
             },
         )
         .unwrap();
@@ -133,7 +132,7 @@ fn pruning_visits_every_uv_transform_weight_and_hd_control() {
             material,
             Material {
                 name: "owner".into(),
-                surface: MaterialSurface::Layered(Box::default()),
+                surface: Default::default(),
             },
         )
         .unwrap();
@@ -164,7 +163,7 @@ fn pruning_visits_every_uv_transform_weight_and_hd_control() {
         hd: Some(HdAnimation {
             slots: std::array::from_fn(|_| Some(texture.clone())),
             gain: Some(scalar()),
-            fresnel: Some(layered::Fresnel {
+            fresnel: Some(mdlx::Fresnel {
                 color: Animated {
                     default: [0.2; 3],
                     binding: Some(node.translation()),
@@ -188,7 +187,7 @@ fn pruning_visits_every_uv_transform_weight_and_hd_control() {
 fn scalar_material() -> (ModelBuilder<'static>, MaterialId) {
     let mut builder = Model::<Universal>::builder("scalar material tracks");
     let material = builder.reserve_material();
-    let surface = model_shader::ShaderPass {
+    let surface = m2::MaterialStep {
         color: Animated::constant([1.; 3]),
         opacity: Animated {
             default: 1.,
@@ -201,7 +200,7 @@ fn scalar_material() -> (ModelBuilder<'static>, MaterialId) {
             material,
             Material {
                 name: "scalar".into(),
-                surface: MaterialSurface::ModelShader(Box::new(surface)),
+                surface: MaterialSurface::from(surface),
             },
         )
         .unwrap();
@@ -338,7 +337,7 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
     let mut builder = Model::<Universal>::builder("weight and UV");
     let node = builder.add_node(Node::named("UV source")).unwrap();
     let material = builder.reserve_material();
-    let mut unit: model_shader::TextureUnit = model_shader::TextureUnit {
+    let mut unit: m2::TextureUnit = m2::TextureUnit {
         contribution: Animated {
             default: 1.,
             binding: Some(material.opacity().into()),
@@ -346,7 +345,7 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
         ..Default::default()
     };
     unit.coordinates.transform.translation.binding = Some(node.translation());
-    let surface = model_shader::ShaderPass {
+    let surface = m2::MaterialStep {
         color: Animated::constant([1.; 3]),
         opacity: Animated::constant(1.),
         textures: vec![unit],
@@ -357,7 +356,7 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
             material,
             Material {
                 name: "UV".into(),
-                surface: MaterialSurface::ModelShader(Box::new(surface)),
+                surface: MaterialSurface::from(surface),
             },
         )
         .unwrap();

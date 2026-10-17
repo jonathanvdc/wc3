@@ -5,14 +5,14 @@ use super::{Blend, SurfacePass};
 use crate::ModelError;
 use bevy::math::Affine2;
 use bevy::prelude::*;
-use wc3::model::materials::world as world_surface;
-use wc3::model::materials::{state::BlendOperations, world::WorldBlend};
+use wc3::model::materials::wmo as wmo_shader;
+use wc3::model::materials::{state::BlendOperations, wmo::WorldBlend};
 use wc3::model::profiles::Universal;
 use wc3::model::Model;
 
-pub(super) fn compile_world(
+pub(super) fn compile_wmo(
     model: &Model<'_, Universal>,
-    surface: &world_surface::Material<'_>,
+    surface: &wmo_shader::MaterialStep<'_>,
     images: &TextureImages,
 ) -> Result<SurfacePass, ModelError> {
     let mut pass = SurfacePass::default();
@@ -27,6 +27,7 @@ pub(super) fn compile_world(
         _ => blend(&surface.state.blend, &mut pass),
     }
     let raster = &surface.state.rasterization;
+    pass.exterior_lit = raster.controls.exterior_lit;
     rasterization(&mut pass, raster.faces, raster.lighting);
     pass.state.world.flags = UVec4::new(1, (surface.shader == Some(4)) as u32, 0, 0);
     pass.material.base_color_texture =
@@ -92,7 +93,7 @@ fn programme(shader: Option<u32>) -> Option<(u32, u32, Option<u32>, Option<u32>)
 
 fn world_image(
     model: &Model<'_, Universal>,
-    surface: &world_surface::Material<'_>,
+    surface: &wmo_shader::MaterialStep<'_>,
     slot: usize,
     images: &TextureImages,
     diagnostics: &mut Vec<String>,
@@ -122,9 +123,9 @@ pub(super) fn scrolling_transform(base: Affine2, velocity: [f32; 2], seconds: f3
 }
 
 #[cfg(test)]
-#[path = "world_tests.rs"]
+#[path = "wmo_tests.rs"]
 mod tests;
 
 #[cfg(test)]
-#[path = "world_capture_tests.rs"]
+#[path = "wmo_capture_tests.rs"]
 mod world_capture_tests;

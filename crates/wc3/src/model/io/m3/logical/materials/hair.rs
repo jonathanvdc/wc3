@@ -7,7 +7,7 @@ pub(super) fn get_hair<'a, E: Envelope>(
     reader: &mut Reader<'a, '_>,
     reference: native::Ref<nr::targets::HairMaterial>,
     index: usize,
-) -> Result<surface::Hair, Error> {
+) -> Result<surface::HairMaterialStep, Error> {
     let value = source
         .resolve::<nr::HairMaterial>(reference.cast())
         .map_err(read_error)?
@@ -19,7 +19,7 @@ pub(super) fn get_hair<'a, E: Envelope>(
     let layer_spec_shift = get_layer(source, reader, value.layer_spec_shift)?;
     let layer_spec_noise = get_layer(source, reader, value.layer_spec_noise)?;
     let layer_ambient_occlusion = get_layer(source, reader, value.layer_a_o)?;
-    Ok(surface::Hair {
+    Ok(surface::HairMaterialStep {
         diffuse: SurfaceContribution {
             input: layer_base,
             parameters: color(value.color_diffuse),

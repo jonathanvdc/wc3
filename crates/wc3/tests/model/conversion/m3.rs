@@ -48,7 +48,9 @@ pub(super) fn asset() -> Model<'static, M3> {
     let material = builder
         .add_material(sem::Material {
             name: Cow::Borrowed("Solid"),
-            surface: surface::Material::Standard((surface::Standard::default()).into()),
+            surface: surface::MaterialStep::Standard(
+                (surface::StandardMaterialStep::default()).into(),
+            ),
         })
         .unwrap();
     let identity = [
@@ -172,7 +174,7 @@ fn standard_controls_remain_active_after_geometry_edit() {
     let mut asset = asset();
     let (id, material) = asset.materials().iter().next().unwrap();
     let mut material = material.clone();
-    let surface::Material::Standard(standard) = &mut material.surface else {
+    let surface::MaterialStep::Standard(standard) = &mut material.surface else {
         unreachable!()
     };
     standard.layer_blend = surface::values::LayerBlendOp::Lerp;
@@ -208,7 +210,7 @@ fn standard_controls_remain_active_after_geometry_edit() {
 #[test]
 fn dormant_standard_and_hair_surfaces_are_authored_materials() {
     let mut asset = asset();
-    let hair = surface::Hair {
+    let hair = surface::HairMaterialStep {
         shift_primary: 0.25,
         ..Default::default()
     };
@@ -216,7 +218,7 @@ fn dormant_standard_and_hair_surfaces_are_authored_materials() {
         .edit(|builder| {
             builder.add_material(sem::Material {
                 name: Cow::Borrowed("Dormant hair"),
-                surface: surface::Material::Hair((hair).into()),
+                surface: surface::MaterialStep::Hair((hair).into()),
             })
         })
         .unwrap();
@@ -230,7 +232,7 @@ fn dormant_standard_and_hair_surfaces_are_authored_materials() {
         .value
         .materials()
         .iter()
-        .any(|(_, material)| matches!(material.surface, surface::Material::Hair(_))));
+        .any(|(_, material)| matches!(material.surface, surface::MaterialStep::Hair(_))));
 }
 
 #[path = "m3_geometry_controls.rs"]
@@ -347,7 +349,7 @@ fn contribution_groups_round_trip_sparse_slots_and_arbitrary_normal_weights() {
     let mut asset = asset();
     let (id, material) = asset.materials().iter().next().unwrap();
     let mut material = material.clone();
-    let surface::Material::Standard(standard) = &mut material.surface else {
+    let surface::MaterialStep::Standard(standard) = &mut material.surface else {
         unreachable!()
     };
     standard.specular.parameters.exponent = 23.;
@@ -384,7 +386,7 @@ fn contribution_groups_round_trip_sparse_slots_and_arbitrary_normal_weights() {
         .iter()
         .find(|(_, material)| material.name == "Solid")
         .unwrap();
-    let surface::Material::Standard(standard) = &material.surface else {
+    let surface::MaterialStep::Standard(standard) = &material.surface else {
         unreachable!()
     };
     assert_eq!(standard.specular.parameters.exponent, 23.);

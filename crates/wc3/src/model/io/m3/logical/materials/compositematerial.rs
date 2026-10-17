@@ -8,12 +8,12 @@ pub(super) fn map_compositematerial<'a, E: Envelope, D: nr::CompositeMaterialDia
     r: nr::CompositeMaterial<D>,
     source: &'a native::Container<'_, E>,
     reader: &mut Reader<'a, '_>,
-) -> Result<surface::Composite, Error>
+) -> Result<surface::CompositeMaterialStep, Error>
 where
     D::Name: Slot<native::Ref<nr::targets::Character>>,
 {
     reader.name = Some(string(source, r.name.value())?);
-    Ok(surface::Composite {
+    Ok(surface::CompositeMaterialStep {
         priority: r.priority,
         sections: identity(
             source
@@ -37,7 +37,7 @@ pub(super) fn get_compositematerial<'a, E: Envelope>(
     reader: &mut Reader<'a, '_>,
     reference: native::Ref<nr::targets::CompositeMaterial>,
     index: usize,
-) -> Result<surface::Composite, Error> {
+) -> Result<surface::CompositeMaterialStep, Error> {
     macro_rules! read {
         ($t:ty) => {{
             let r = source

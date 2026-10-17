@@ -160,7 +160,7 @@ impl Extends<M2> for Universal {
         System::M2(value)
     }
     fn surface<'a>(value: <M2 as Profile>::Surface<'a>) -> Self::Surface<'a> {
-        MaterialSurface::ModelShader(Box::new(value))
+        MaterialSurface::from(value)
     }
     fn feature<'a>(value: <M2 as Profile>::Feature<'a>) -> Self::Feature<'a> {
         value.into()

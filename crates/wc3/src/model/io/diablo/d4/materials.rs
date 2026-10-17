@@ -4,8 +4,8 @@ use crate::model::formats::diablo::d4::records as native;
 use crate::model::materials::diablo4::{TextureContribution, TexturePlayback};
 use crate::model::materials::parameters::ShaderValue;
 use crate::model::profiles::diablo::d4::{
-    AppearanceMaterialControls, GraphAbsence, Material, MaterialValues, ParameterControls,
-    ScalarValue, Shader, TextureInput, TextureSelection, VectorValue, D4,
+    GraphAbsence, Material, MaterialStep, MaterialValues, ParameterControls, ScalarValue,
+    Selection, TextureInput, TextureSelection, VectorValue, D4,
 };
 use crate::model::profiles::NoControls;
 use crate::model::SnoResource;
@@ -15,35 +15,33 @@ use zerovec::ZeroVec;
 pub(super) fn read_appearance(
     value: &native::SubObjectAppearance<'_>,
     context: &mut Context,
-) -> Result<Material, Error> {
+) -> Result<Selection, Error> {
     if !value.anim_cloth_overrides.is_empty() {
         context.unsupported(
             "d4.material.animation_cloth_overrides",
             "animation-dependent cloth selections have no established logical mapping",
         )?;
     }
-    Ok(Material {
-        appearance: AppearanceMaterialControls {
-            flags: value.flags,
-            base_material: value.material,
-            override_material: value.override_material,
-            cloth: value.cloth,
-            high_quality_cloth_override: value.high_quality_cloth_override,
-            mounted_cloth_overrides: value.mounted_cloth_overrides,
-            effect_group: value.effect_group,
-            variant_materials: value.variant_materials.iter().collect(),
-        },
-        shader: None,
+    Ok(Selection {
+        flags: value.flags,
+        base_material: value.material,
+        override_material: value.override_material,
+        cloth: value.cloth,
+        high_quality_cloth_override: value.high_quality_cloth_override,
+        mounted_cloth_overrides: value.mounted_cloth_overrides,
+        effect_group: value.effect_group,
+        variant_materials: value.variant_materials.iter().collect(),
     })
 }
 pub(super) fn write_appearance(
     value: &Material,
+    selection: &Selection,
     context: &mut Context,
 ) -> Result<native::SubObjectAppearance<'static>, Error> {
-    if value.shader.is_some() {
+    if !value.steps.is_empty() {
         context.unsupported("d4.material.shader", "appearance output contains external shader references; resolved shader edits require separate material-document output")?;
     }
-    let value = &value.appearance;
+    let value = selection;
     Ok(native::SubObjectAppearance {
         flags: value.flags,
         material: value.base_material,
@@ -62,7 +60,7 @@ pub(super) fn read_shader(
     value: &native::UberMaterial<'_>,
     model: &mut ModelBuilder<'_, D4>,
     context: &mut Context,
-) -> Result<Shader, Error> {
+) -> Result<MaterialStep, Error> {
     let textures = value
         .mat_tex_list
         .iter()
@@ -174,7 +172,7 @@ pub(super) fn read_shader(
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;
-    Ok(Shader {
+    Ok(MaterialStep {
         asset: None,
         shader_map: value.shader_map,
         value_set_override: value.material_value_set_override,
@@ -186,7 +184,7 @@ pub(super) fn read_shader(
     })
 }
 pub(super) fn write_shader(
-    value: &Shader,
+    value: &MaterialStep,
     model: &Model<'_, D4>,
     _context: &mut Context,
 ) -> Result<native::UberMaterial<'static>, Error> {

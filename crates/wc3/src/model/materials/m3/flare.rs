@@ -25,9 +25,9 @@ pub struct SubFlare {
     pub offset: [f32; 2],
 }
 
-/// Editable M3 LensFlare values.
+/// Editable M3 LensFlareMaterialStep values.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct LensFlare<'a> {
+pub struct LensFlareMaterialStep<'a> {
     /// Sets flare texture atlas.
     pub flare_map: Option<TextureLayer>,
     /// Supplies the mask delimiting the creep effect.

@@ -1,7 +1,7 @@
 #import "embedded://bevy_wc3/shaders/model_io.wgsl"::{VertexOutput,to_bevy,from_bevy}
 #import "embedded://bevy_wc3/shaders/particle_composition.wgsl"::{particle,compose_particle}
-#ifdef PROGRAMMED_MATERIAL
-#import "embedded://bevy_wc3/shaders/programmed.wgsl"::{programmed,apply_programmed,programmed_after_lighting}
+#ifdef M3_MATERIAL
+#import "embedded://bevy_wc3/shaders/m3.wgsl"::{m3,apply_m3,m3_after_lighting}
 #import bevy_pbr::pbr_fragment::pbr_input_from_vertex_output
 #endif
 // Adapted from Bevy v0.19.1 pbr.wgsl (MIT OR Apache-2.0).
@@ -87,14 +87,14 @@ fn fragment(
 #endif
 
     // generate a PbrInput struct from the StandardMaterial bindings
-#ifdef PROGRAMMED_MATERIAL
+#ifdef M3_MATERIAL
     let flags=pbr_bindings::material.flags;
     var pbr_input=pbr_input_from_vertex_output(to_bevy(in),is_front,(flags&pbr_types::STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT)!=0u);
     pbr_input.material.flags=flags;
     pbr_input.material.alpha_cutoff=pbr_bindings::material.alpha_cutoff;
     pbr_input.material.deferred_lighting_pass_id=pbr_bindings::material.deferred_lighting_pass_id;
-    let programmed_result=apply_programmed(in,is_front,pbr_input);
-    pbr_input=programmed_result.input;
+    let m3_result=apply_m3(in,is_front,pbr_input);
+    pbr_input=m3_result.input;
 #else
     var pbr_input=pbr_input_from_standard_material(to_bevy(in),is_front);
 #endif
@@ -229,8 +229,8 @@ fn fragment(
 
     // apply in-shader post processing (fog, alpha-premultiply, and also tonemapping, debanding if the camera is non-hdr)
     // note this does not include fullscreen postprocessing effects like bloom.
-#ifdef PROGRAMMED_MATERIAL
-    out.color=programmed_after_lighting(out.color,programmed_result.emission_a,programmed_result.emission_b);
+#ifdef M3_MATERIAL
+    out.color=m3_after_lighting(out.color,m3_result.emission_a,m3_result.emission_b);
 #endif
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
 #endif

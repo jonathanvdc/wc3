@@ -1,4 +1,5 @@
 //! Named material slots and actual variants own Diablo III appearance assignments.
+use crate::model::materials::diablo3::{AssetRef, Group};
 use crate::model::{
     AppearanceSchema, Error, Id, Link, Look as DrawLook, LookId, MaterialId, MaterialSlotId, Scope,
     ValidateLinks,
@@ -14,13 +15,52 @@ pub enum AlternativeObject {}
 /// Stable appearance-scoped named look identity.
 pub type AlternativeId = Id<AlternativeObject>;
 
+/// External resources and qualifiers selected by one appearance variant.
+#[derive(Clone, Debug)]
+pub struct Selection {
+    /// Independently authored subobject appearance qualifier.
+    pub appearance_control: i32,
+    /// External material resource selection.
+    pub base_material: AssetRef,
+    /// External cloth resource selection.
+    pub cloth: AssetRef,
+}
+impl Default for Selection {
+    fn default() -> Self {
+        Self {
+            appearance_control: 0,
+            base_material: AssetRef {
+                id: 0,
+                group: Group::Material,
+            },
+            cloth: AssetRef {
+                id: 0,
+                group: Group::Cloth,
+            },
+        }
+    }
+}
+impl ValidateLinks for Selection {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.base_material.visit_links(visitor);
+        self.cloth.visit_links(visitor);
+    }
+}
+/// One actual appearance variant and its independent external selections.
+#[derive(Clone, Debug)]
+pub struct Variant {
+    /// Shader material executed by this variant.
+    pub material: MaterialId,
+    /// External resources and qualifiers belonging to this variant.
+    pub selection: Selection,
+}
 /// Named native material slot with independently authored variants.
 #[derive(Clone, Debug, Default)]
 pub struct Slot<'a> {
     /// Authored material-slot name, independent of material display labels.
     pub name: Cow<'a, str>,
     scope: Scope,
-    variants: Vec<(VariantId, MaterialId)>,
+    variants: Vec<(VariantId, Variant)>,
 }
 impl<'a> Slot<'a> {
     /// Creates an empty named material slot.
@@ -32,7 +72,9 @@ impl<'a> Slot<'a> {
     }
     /// Iterates actual variants in authored order, including variants unused by any look.
     pub fn variants(&self) -> impl ExactSizeIterator<Item = (VariantId, MaterialId)> + '_ {
-        self.variants.iter().copied()
+        self.variants
+            .iter()
+            .map(|(id, variant)| (*id, variant.material))
     }
     /// Replaces an actual variant assignment while preserving its scoped identity.
     pub fn set_variant(&mut self, id: VariantId, material: MaterialId) -> Result<(), Error> {
@@ -43,7 +85,7 @@ impl<'a> Slot<'a> {
             .ok_or_else(|| {
                 Error::new("d3.appearance.variant", "variant belongs to another slot")
             })?;
-        value.1 = material;
+        value.1.material = material;
         Ok(())
     }
     /// Removes a variant; checked publication rejects looks that still select it.
@@ -51,14 +93,28 @@ impl<'a> Slot<'a> {
         self.variants
             .iter()
             .position(|(key, _)| *key == id)
-            .map(|index| self.variants.remove(index).1)
+            .map(|index| self.variants.remove(index).1.material)
     }
     /// Resolves a variant only when this actual slot owns its identity.
     pub fn variant(&self, id: VariantId) -> Option<MaterialId> {
         self.variants
             .iter()
             .find(|(key, _)| *key == id)
-            .map(|(_, value)| *value)
+            .map(|(_, value)| value.material)
+    }
+    /// Reads the complete variant owned by this slot.
+    pub fn variant_definition(&self, id: VariantId) -> Option<&Variant> {
+        self.variants
+            .iter()
+            .find(|(key, _)| *key == id)
+            .map(|(_, value)| value)
+    }
+    /// Edits shader assignment and external selections without changing identity.
+    pub fn variant_definition_mut(&mut self, id: VariantId) -> Option<&mut Variant> {
+        self.variants
+            .iter_mut()
+            .find(|(key, _)| *key == id)
+            .map(|(_, value)| value)
     }
 }
 /// Named look assigning actual variants to actual material slots.
@@ -94,6 +150,15 @@ impl<'a> Appearance<'a> {
         slot: MaterialSlotId,
         material: MaterialId,
     ) -> Result<VariantId, Error> {
+        self.add_variant_with_selection(slot, material, Selection::default())
+    }
+    /// Adds an actual variant with independently authored external selections.
+    pub fn add_variant_with_selection(
+        &mut self,
+        slot: MaterialSlotId,
+        material: MaterialId,
+        selection: Selection,
+    ) -> Result<VariantId, Error> {
         let slot = self
             .slots
             .iter_mut()
@@ -103,7 +168,13 @@ impl<'a> Appearance<'a> {
                 Error::new("d3.appearance.slot", "slot belongs to another appearance")
             })?;
         let id = slot.scope.allocate();
-        slot.variants.push((id, material));
+        slot.variants.push((
+            id,
+            Variant {
+                material,
+                selection,
+            },
+        ));
         Ok(id)
     }
     /// Adds a named look after checking every selected slot and variant.
@@ -216,8 +287,9 @@ impl<'a> Appearance<'a> {
 impl ValidateLinks for Appearance<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         for (_, slot) in &self.slots {
-            for (_, material) in slot.variants() {
-                material.visit_links(visitor);
+            for (_, variant) in &slot.variants {
+                variant.material.visit_links(visitor);
+                variant.selection.visit_links(visitor);
             }
         }
     }

@@ -2,8 +2,8 @@
 use super::{incompatible, Narrows};
 use crate::model::profiles::{NoControls, Profile, Universal, M3};
 use crate::model::{
-    ClipControls, DrawControls, Error, InstanceControls, MaterialSurface, MeshControls,
-    ModelMetadata, NodeControls, System, UniversalAppearance, UniversalBinding,
+    ClipControls, DrawControls, Error, InstanceControls, MeshControls, ModelMetadata, NodeControls,
+    System, UniversalAppearance, UniversalBinding,
 };
 impl Narrows<Universal> for M3 {
     fn image_resource<'a>(
@@ -66,10 +66,7 @@ impl Narrows<Universal> for M3 {
         }
     }
     fn surface<'a>(value: <Universal as Profile>::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
-        match value {
-            MaterialSurface::Programmed(value) => Ok(*value),
-            _ => Err(incompatible("surface")),
-        }
+        value.try_into()
     }
     fn feature<'a>(value: <Universal as Profile>::Feature<'a>) -> Result<Self::Feature<'a>, Error> {
         value.try_into().map_err(|_| incompatible("feature"))

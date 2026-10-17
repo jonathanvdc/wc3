@@ -3,14 +3,16 @@
 pub mod diablo3;
 /// Diablo IV external shader parameter vocabulary.
 pub mod diablo4;
-/// Ordered animated material passes.
-pub mod layered;
-/// Model shader passes and texture inputs.
-pub mod model_shader;
-/// Programmed surface families and animated shader properties.
-pub mod programmed;
-/// Static-world surface shaders.
-pub mod world;
+/// Model shader steps and texture inputs.
+pub mod m2;
+/// M3 shader and composition steps with animated inputs.
+pub mod m3;
+/// Ordered animated material steps.
+pub mod mdlx;
+/// Material programs and the universal shader-dialect step vocabulary.
+pub mod program;
+/// World of Warcraft world shader steps.
+pub mod wmo;
 
 /// Texture identity, coordinate, sampling, and contribution compositions.
 pub mod bindings;
@@ -22,7 +24,7 @@ pub mod parameters;
 pub mod state;
 
 use crate::model::profiles::{Profile, SurfacePayload, Universal};
-use crate::model::{Error, ImageResourceId, Link, PropertyIdentityKey, ValidateLinks};
+use crate::model::{Error, ImageResourceId, Link, ValidateLinks};
 use std::borrow::Cow;
 
 /// Texture color interpretation.
@@ -92,34 +94,7 @@ impl ValidateLinks for Sampler {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
 
-/// A profile-selected set of complete surface families.
-///
-/// Each parameter is a semantic surface vocabulary. An unavailable family can
-/// use `Unavailable`; one-family profiles can select their surface directly.
-#[derive(Clone, Debug)]
-pub enum SurfaceSet<D3, D4, Layered, ModelShader, Programmed, World> {
-    /// Shader resources and render passes with Diablo III semantics.
-    D3(Box<D3>),
-    /// External material selections and shader parameters.
-    D4(Box<D4>),
-    /// Ordered animated layered shader passes.
-    Layered(Box<Layered>),
-    /// Model shader pass with independently animated inputs.
-    ModelShader(Box<ModelShader>),
-    /// Programmed surface family.
-    Programmed(Box<Programmed>),
-    /// Static-world surface shader.
-    World(Box<World>),
-}
-/// The broad built-in selection of complete semantic surface families.
-pub type MaterialSurface<'a> = SurfaceSet<
-    diablo3::Material<'a>,
-    diablo4::Material,
-    layered::LayeredSurface<'a>,
-    model_shader::ShaderPass<'a>,
-    programmed::Material<'a>,
-    world::Material<'a>,
->;
+pub use program::MaterialSurface;
 /// A named, complete logical surface description.
 #[derive(Clone, Debug)]
 pub struct Material<'a, P: Profile = Universal> {
@@ -139,59 +114,5 @@ impl<'a, P: Profile> Material<'a, P> {
 impl<P: Profile> Material<'_, P> {
     pub(crate) fn validate(&self) -> Result<(), Error> {
         self.surface.validate()
-    }
-}
-
-impl<
-        D3: ValidateLinks,
-        D4: ValidateLinks,
-        Layered: ValidateLinks,
-        ModelShader: ValidateLinks,
-        Programmed: ValidateLinks,
-        World: ValidateLinks,
-    > ValidateLinks for SurfaceSet<D3, D4, Layered, ModelShader, Programmed, World>
-{
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        match self {
-            Self::D4(value) => value.visit_links(visitor),
-            Self::D3(value) => value.visit_links(visitor),
-            Self::Layered(value) => value.visit_links(visitor),
-            Self::ModelShader(value) => value.visit_links(visitor),
-            Self::Programmed(value) => value.visit_links(visitor),
-            Self::World(value) => value.visit_links(visitor),
-        }
-    }
-}
-impl<
-        D3: SurfacePayload,
-        D4: SurfacePayload,
-        Layered: SurfacePayload,
-        ModelShader: SurfacePayload,
-        Programmed: SurfacePayload,
-        World: SurfacePayload,
-    > SurfacePayload for SurfaceSet<D3, D4, Layered, ModelShader, Programmed, World>
-{
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        match self {
-            Self::Layered(v) => v.supports_property(key),
-            Self::ModelShader(v) => v.supports_property(key),
-            Self::Programmed(v) => v.supports_property(key),
-
-            Self::D3(v) => v.supports_property(key),
-            Self::D4(v) => v.supports_property(key),
-            Self::World(v) => v.supports_property(key),
-        }
-    }
-
-    fn validate(&self) -> Result<(), Error> {
-        match self {
-            Self::D4(value) => value.validate(),
-            Self::D3(value) => value.validate(),
-
-            Self::Layered(value) => value.validate(),
-            Self::ModelShader(value) => value.validate(),
-            Self::Programmed(value) => value.validate(),
-            Self::World(value) => value.validate(),
-        }
     }
 }

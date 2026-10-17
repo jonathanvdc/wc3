@@ -42,8 +42,7 @@ pub fn import_material<'a>(
     model.add_material(Material {
         name: "".into(),
         surface: Surface {
-            shader: Some(shader),
-            ..Default::default()
+            steps: vec![shader],
         },
     })?;
     Ok(Conversion {
@@ -63,7 +62,7 @@ pub fn plan_material(
         .material(material)
         .ok_or_else(|| Error::new("d4.material", "material belongs to another model"))?
         .surface;
-    let shader = surface.shader.as_ref().ok_or_else(|| {
+    let shader = surface.steps.first().ok_or_else(|| {
         Error::new(
             "d4.material.shader",
             "standalone material output requires a supplied shader definition",

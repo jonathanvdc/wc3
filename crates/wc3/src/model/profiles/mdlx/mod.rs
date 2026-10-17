@@ -6,7 +6,7 @@ mod links;
 mod scene;
 mod validation;
 pub use crate::model::controls::layered::*;
-pub use crate::model::materials::layered::*;
+pub use crate::model::materials::mdlx::*;
 /// Warcraft III selects animated layered shader passes.
 pub type Material<'a> = LayeredSurface<'a, Layer>;
 pub use scene::*;

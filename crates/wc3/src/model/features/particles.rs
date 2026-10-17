@@ -2,7 +2,7 @@
 use super::effect_components::*;
 use super::programmed_effects::{ExternalModel, VariationControl};
 use crate::model::animation::programmed::Property;
-use crate::model::materials::layered::Blend;
+use crate::model::materials::mdlx::Blend;
 use crate::model::profiles::{m2, m3, mdlx};
 use crate::model::scene::keyframed::Frames;
 use crate::model::values::layered::{Particle2Flags, ParticleFlags as ModelParticleFlags};

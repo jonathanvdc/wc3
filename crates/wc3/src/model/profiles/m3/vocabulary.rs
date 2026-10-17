@@ -1,5 +1,7 @@
 //! Built-in M3 authoring vocabulary and its lossless embeddings.
 use super::properties::Target as PropertySelector;
+use super::properties::{Field, FieldSegment};
+use crate::model::materials::m3::properties::MaterialProperties;
 use crate::model::profiles::m3;
 use crate::model::profiles::Unavailable;
 use crate::model::profiles::UniversalProperty;
@@ -8,9 +10,9 @@ use crate::model::resources::PathResource;
 use crate::model::{
     Basis, Billboard, Channel, ClipControls, Clock, ColorSpace, DrawControls, Error,
     ExplicitBinding, FeatureKind, GeometrySchema as _, Inheritance, InstanceControls,
-    Interpolation, LengthUnit, Link, M3Geometry, MaterialSurface, MeshControls, Model,
-    ModelMetadata, NodeControls, PropertyTarget, Sampler, SingleLook, SkinId, System, Topology,
-    Transform, UniversalAppearance, UniversalBinding, ValidateLinks, VertexInfluences,
+    Interpolation, LengthUnit, Link, M3Geometry, MeshControls, Model, ModelMetadata, NodeControls,
+    PropertyTarget, Sampler, SingleLook, SkinId, System, Topology, Transform, UniversalAppearance,
+    UniversalBinding, ValidateLinks, VertexInfluences,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 use crate::model::{PropertyIdentityKey, PropertyPayload};
@@ -36,7 +38,7 @@ impl Profile for M3 {
     type Draw = Option<profiles::m3::BatchControls>;
     type ModelMetadata<'a> = profiles::m3::ModelMetadata;
     type System<'a> = profiles::m3::System<'a>;
-    type Surface<'a> = profiles::m3::Material<'a>;
+    type Surface<'a> = profiles::m3::MaterialStep<'a>;
     type Feature<'a> = profiles::m3::Feature<'a>;
     type Node<'a> = profiles::m3::NodeRole;
     type Texture<'a> = NoControls;
@@ -531,13 +533,28 @@ impl Profile for M3 {
         Ok(())
     }
 }
-impl SurfacePayload for profiles::m3::Material<'_> {
+impl SurfacePayload for profiles::m3::MaterialStep<'_> {
     fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        super::properties::Target::from_identity(key).is_some_and(|key| key.supports_material())
+        PropertySelector::from_identity(key).is_some_and(|key| match key {
+            PropertySelector::Field(path) => match path.segments().split_first() {
+                Some((FieldSegment::Field(Field::Material), rest)) => self.supports_path(rest),
+                _ => false,
+            },
+            _ => false,
+        })
     }
 
     fn validate(&self) -> Result<(), Error> {
-        Ok(())
+        let mut invalid = false;
+        self.visit_links(&mut |link| invalid |= matches!(link, Link::InvalidValue));
+        if invalid {
+            Err(Error::new(
+                "m3.material",
+                "invalid M3 shader input or rendering state",
+            ))
+        } else {
+            Ok(())
+        }
     }
 }
 impl profiles::m3::Feature<'_> {
@@ -600,7 +617,7 @@ impl Extends<M3> for Universal {
         System::M3(value)
     }
     fn surface<'a>(value: <M3 as Profile>::Surface<'a>) -> Self::Surface<'a> {
-        MaterialSurface::Programmed(Box::new(value))
+        value.into()
     }
     fn feature<'a>(value: <M3 as Profile>::Feature<'a>) -> Self::Feature<'a> {
         value.into()

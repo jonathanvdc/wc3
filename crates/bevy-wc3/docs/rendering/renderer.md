@@ -36,7 +36,8 @@ guide](../usage.md#bake-a-static-pose).
 
 ## Materials and textures
 
-`ModelMaterial` extends Bevy `StandardMaterial` with authored blend/depth states
+Authored material programs contain dialect-specific steps, which the compiler
+interprets into rendering passes. `ModelMaterial` extends Bevy `StandardMaterial` with authored blend/depth states
 and supported native combiners. Classic layered surfaces, [M2 texture combinations](m2-materials.md),
 [WMO surfaces](wmo-materials.md), [M3 common layers](m3-materials.md), and known Diablo roles map into that pipeline.
 Unsupported combinations remain diagnostic fallbacks. Unlit and unfogged controls use

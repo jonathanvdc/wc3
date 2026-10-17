@@ -4,9 +4,9 @@ use crate::model::values::programmed::{
     BlendMode, VolumeCameraMode, VolumeFalloff, VolumeFlags, VolumeNoiseFlags,
 };
 
-/// Editable M3 Volume values.
+/// Editable M3 VolumeMaterialStep values.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Volume {
+pub struct VolumeMaterialStep {
     /// Selects the behavior used for alpha blend mode.
     pub blend_mode: BlendMode,
     /// Selects the behavior used for density falloff type.
@@ -25,9 +25,9 @@ pub struct Volume {
     pub flags: VolumeFlags,
 }
 
-/// Editable M3 VolumeNoise values.
+/// Editable M3 VolumeNoiseMaterialStep values.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct VolumeNoise {
+pub struct VolumeNoiseMaterialStep {
     /// Selects the behavior used for density falloff type.
     pub falloff_type: VolumeFalloff,
     /// Selects the transparency behavior for a camera inside or outside the volume.

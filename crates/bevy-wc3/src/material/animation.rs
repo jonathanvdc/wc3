@@ -1,6 +1,6 @@
 //! Owned surface binding evaluation and authored UV transforms.
 use super::super::{mesh_animation::MeshAnimation, textures::TextureRole};
-use super::world::scrolling_transform;
+use super::wmo::scrolling_transform;
 use super::{HdAnimation, ModelMaterial, SurfaceAnimation};
 use crate::animation_targets::AnimationTargets;
 use bevy::math::Affine2;
@@ -200,7 +200,7 @@ impl SurfaceAnimation {
             .iter()
             .any(|value| value.binding.is_some())
             || self
-                .programmed
+                .m3
                 .as_ref()
                 .is_some_and(|animation| animation.is_animated())
             || self
@@ -321,8 +321,8 @@ impl SurfaceAnimation {
                 );
             }
         }
-        if let Some(programmed) = &self.programmed {
-            changed |= programmed.apply(sample, &mut material.extension.programmed);
+        if let Some(m3) = &self.m3 {
+            changed |= m3.apply(sample, &mut material.extension.m3);
         }
         if let Some(hd) = &self.hd {
             changed |= hd.apply(Some(sample), material);

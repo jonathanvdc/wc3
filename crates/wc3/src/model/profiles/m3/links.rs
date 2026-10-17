@@ -2,12 +2,14 @@
 use super::{
     AnimationControl, AttachmentVolume, AuxiliaryGeometry, BillboardBehavior, Body, BodyParameters,
     BoneControls, Camera, CameraBokeh, CameraClipping, CameraFalloff, Cloth, ClothCollider,
-    ClothProxy, Composite, CompositeSection, Creep, DataDriven, DataProperties, Displacement,
-    DynamicState, ExternalModel, Feature, Force, Hair, HitTestShape, IkCcd, IkJoint, IkTwoJoint,
-    Joint, LensFlare, Light, Material, ModelMetadata, NodeRole, OneBoneSolver, Parameters,
-    Projector, Property, PropertyControl, Reflection, ShadowBox, Shape, ShapeGeometry,
-    SplatTerrainBake, SplinePoint, Standard, SubFlare, Terrain, TextureLayer, TurretBehavior,
-    VariationControl, ViewVolume, Volume, VolumeNoise, Warp,
+    ClothProxy, CompositeMaterialStep, CompositeSection, CreepMaterialStep, DataDrivenMaterialStep,
+    DataDrivenParameters, DataProperties, DisplacementMaterialStep, DynamicState, ExternalModel,
+    Feature, Force, HairMaterialStep, HitTestShape, IkCcd, IkJoint, IkTwoJoint, Joint,
+    LensFlareMaterialStep, Light, MaterialStep, ModelMetadata, NodeRole, OneBoneSolver, Projector,
+    Property, PropertyControl, ReflectionMaterialStep, ShadowBox, Shape, ShapeGeometry,
+    SplatTerrainBakeMaterialStep, SplinePoint, StandardMaterialStep, SubFlare, TerrainMaterialStep,
+    TextureLayer, TurretBehavior, VariationControl, ViewVolume, VolumeMaterialStep,
+    VolumeNoiseMaterialStep, Warp,
 };
 use crate::model::{CurveValue, FeatureKind, GeometryKind, Link, Quaternion, ValidateLinks};
 
@@ -652,7 +654,7 @@ impl<'a> ValidateLinks for Cloth<'a> {
         }
     }
 }
-impl ValidateLinks for Reflection {
+impl ValidateLinks for ReflectionMaterialStep {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.reflection.parameters.visit_links(visitor);
         self.displacement.parameters.visit_links(visitor);
@@ -670,7 +672,7 @@ impl ValidateLinks for Reflection {
         }
     }
 }
-impl ValidateLinks for Standard {
+impl ValidateLinks for StandardMaterialStep {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.state.visit_links(visitor);
         self.diffuse.visit_links(visitor);
@@ -696,7 +698,7 @@ impl ValidateLinks for Standard {
 impl ValidateLinks for AnimationControl {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
-impl<'a> ValidateLinks for DataDriven<'a> {
+impl<'a> ValidateLinks for DataDrivenMaterialStep<'a> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         for id in self.textures.iter() {
             visitor(Link::Texture(*id));
@@ -744,7 +746,7 @@ impl ValidateLinks for SubFlare {
         }
     }
 }
-impl<'a> ValidateLinks for LensFlare<'a> {
+impl<'a> ValidateLinks for LensFlareMaterialStep<'a> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if let Some(child) = &self.flare_map {
             child.visit_links(visitor);
@@ -764,7 +766,7 @@ impl<'a> ValidateLinks for LensFlare<'a> {
         self.size.visit_links(visitor);
     }
 }
-impl ValidateLinks for Displacement {
+impl ValidateLinks for DisplacementMaterialStep {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.displacement.parameters.visit_links(visitor);
         if let Some(child) = &self.displacement.input {
@@ -775,21 +777,21 @@ impl ValidateLinks for Displacement {
         }
     }
 }
-impl ValidateLinks for Terrain {
+impl ValidateLinks for TerrainMaterialStep {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if let Some(child) = &self.terrain_map {
             child.visit_links(visitor);
         }
     }
 }
-impl ValidateLinks for Creep {
+impl ValidateLinks for CreepMaterialStep {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if let Some(child) = &self.mask_map {
             child.visit_links(visitor);
         }
     }
 }
-impl ValidateLinks for SplatTerrainBake {
+impl ValidateLinks for SplatTerrainBakeMaterialStep {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if let Some(child) = &self.diffuse_map {
             child.visit_links(visitor);
@@ -802,7 +804,7 @@ impl ValidateLinks for SplatTerrainBake {
         }
     }
 }
-impl ValidateLinks for Hair {
+impl ValidateLinks for HairMaterialStep {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if let Some(child) = &self.diffuse.input {
             child.visit_links(visitor);
@@ -838,7 +840,7 @@ impl ValidateLinks for CompositeSection {
         self.map_multiplier.visit_links(visitor);
     }
 }
-impl ValidateLinks for Composite {
+impl ValidateLinks for CompositeMaterialStep {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         for child in self.sections.iter() {
             child.visit_links(visitor);
@@ -868,7 +870,7 @@ impl ValidateLinks for TextureLayer {
         }
     }
 }
-impl ValidateLinks for Volume {
+impl ValidateLinks for VolumeMaterialStep {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.density.visit_links(visitor);
         if let Some(child) = &self.color_map {
@@ -882,7 +884,7 @@ impl ValidateLinks for Volume {
         }
     }
 }
-impl ValidateLinks for VolumeNoise {
+impl ValidateLinks for VolumeNoiseMaterialStep {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.density.visit_links(visitor);
         self.near_plane.visit_links(visitor);
@@ -930,7 +932,7 @@ fn reset_valid<T: CurveValue + 'static>(value: &T, flags: u16) -> bool {
     any.downcast_ref::<Quaternion>()
         .is_some_and(|q| q.components().iter().all(|v| v.is_finite() && *v == 0.))
 }
-impl ValidateLinks for Material<'_> {
+impl ValidateLinks for MaterialStep<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
             Self::Standard(value) => value.visit_links(visitor),
@@ -983,7 +985,7 @@ impl Feature<'_> {
         }
     }
 }
-impl ValidateLinks for Parameters<'_> {
+impl ValidateLinks for DataDrivenParameters<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if let Self::Named(value) = self {
             value.visit_links(visitor)

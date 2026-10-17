@@ -96,10 +96,12 @@ numerical scale of one meter per unit for conversion.
 Surface evaluation does not require texture pixels. `LayeredSurface::sampled`
 freezes Warcraft III pass values, texture selections, opacity, emissive gain, and
 Fresnel controls while retaining native render state and shared texture-transform
-references. Sample those referenced transforms separately. `ShaderPass::sampled`
+references. Sample those referenced transforms separately. `materials::m2::MaterialStep::sampled`
 freezes model-shader color, opacity, input weights, frames, and inline transforms.
 Both preserve shader selectors instead of approximating their meaning with PBR.
-Other native surface families remain available through their semantic definitions
+`MaterialSurface::sampled` applies these operations across a universal material program,
+retaining its order and each step's rendering settings. WMO, M3, and external shader steps are cloned unchanged; their shader programmes are not
+executed or flattened by this helper. Other native surface families remain available through their semantic definitions
 and typed property sampling; these helpers do not interpret arbitrary shader
 programmes or simulate procedural texture playback.
 

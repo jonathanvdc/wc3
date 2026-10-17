@@ -2,17 +2,17 @@
 mod animation;
 mod bindings;
 mod compile;
-mod model;
+mod m2;
 mod particle;
 pub(crate) use particle::{particle_material_layers, ParticleComposition};
-mod programmed;
-use programmed::layers::{ProgrammedAnimation, ProgrammedUniform};
-pub use programmed::TeamColors;
+mod m3;
+use m3::layers::{M3Animation, M3Uniform};
+pub use m3::TeamColors;
 #[path = "ribbon_material.rs"]
 mod ribbon_material;
-mod world;
+mod wmo;
 #[cfg(test)]
-use self::world::compile_world;
+use self::wmo::compile_wmo;
 use crate::ModelError;
 use animation::layered_uv;
 pub(super) use animation::mesh_alpha_mode;
@@ -33,14 +33,14 @@ use compile::rasterization;
 #[cfg(test)]
 use compile::{blend, depth};
 #[cfg(test)]
-use model::legacy_combiner;
+use m2::legacy_combiner;
 pub(crate) use ribbon_material::effect_state;
 use std::array::from_fn;
 use std::collections::HashMap;
 use std::sync::Arc;
 #[cfg(test)]
-use wc3::model::materials::world as world_surface;
-use wc3::model::materials::{layered, model_shader::GuildPalette, state::Lighting};
+use wc3::model::materials::wmo as wmo_shader;
+use wc3::model::materials::{m2::GuildPalette, mdlx, state::Lighting};
 use wc3::model::values::model::ParticleBlend;
 use wc3::model::{Animated, TextureId, TextureTransform};
 
@@ -58,6 +58,9 @@ pub(crate) struct SurfacePass {
     pub secondary_coordinate: Option<u32>,
     pub third_coordinate: Option<u32>,
     pub fourth_coordinate: Option<u32>,
+    pub exterior_lit: bool,
+    pub sort_far: bool,
+    pub sort_near: bool,
 }
 
 /// A semantic material retaining Bevy PBR shading and authored draw state.
@@ -90,8 +93,8 @@ pub struct ModelMaterialExtension {
     fourth: Option<Handle<Image>>,
     world: WorldUniform,
     particle: ParticleUniform,
-    programmed: ProgrammedUniform,
-    programmed_samplers: [Option<Handle<Image>>; 6],
+    m3: M3Uniform,
+    m3_samplers: [Option<Handle<Image>>; 6],
     normal_secondary: Option<Handle<Image>>,
     normal_secondary_mask: Option<Handle<Image>>,
     light_map: Option<Handle<Image>>,
@@ -106,19 +109,19 @@ pub struct ModelMaterialExtension {
 
 impl ModelMaterialExtension {
     pub(crate) fn enable_effect_color(&mut self) {
-        if self.programmed.settings.x != 0 {
-            self.programmed.settings.y = 1;
-            self.programmed.settings.z = 1;
+        if self.m3.settings.x != 0 {
+            self.m3.settings.y = 1;
+            self.m3.settings.z = 1;
         }
     }
 
     /// Application colours used by an M3 standard material's team operations.
     pub fn team_colors(&self) -> Option<TeamColors> {
-        (self.programmed.settings.x != 0).then(|| TeamColors {
-            diffuse: self.programmed.diffuse_team.truncate(),
-            emissive: self.programmed.emissive_team.truncate(),
-            diffuse_exponent: self.programmed.diffuse_team.w,
-            emissive_exponent: self.programmed.emissive_team.w,
+        (self.m3.settings.x != 0).then(|| TeamColors {
+            diffuse: self.m3.diffuse_team.truncate(),
+            emissive: self.m3.emissive_team.truncate(),
+            diffuse_exponent: self.m3.diffuse_team.w,
+            emissive_exponent: self.m3.emissive_team.w,
         })
     }
 
@@ -138,14 +141,14 @@ impl ModelMaterialExtension {
                 "team colours must be finite and both mask exponents nonnegative",
             ));
         }
-        if self.programmed.settings.x == 0 {
+        if self.m3.settings.x == 0 {
             return Ok(false);
         }
         if self.team_colors() == Some(colors) {
             return Ok(false);
         }
-        self.programmed.diffuse_team = colors.diffuse.extend(colors.diffuse_exponent);
-        self.programmed.emissive_team = colors.emissive.extend(colors.emissive_exponent);
+        self.m3.diffuse_team = colors.diffuse.extend(colors.diffuse_exponent);
+        self.m3.emissive_team = colors.emissive.extend(colors.emissive_exponent);
         Ok(true)
     }
 
@@ -336,8 +339,8 @@ impl Default for ModelMaterialExtension {
             environment: None,
             world: WorldUniform::default(),
             particle: ParticleUniform::default(),
-            programmed: ProgrammedUniform::default(),
-            programmed_samplers: from_fn(|_| None),
+            m3: M3Uniform::default(),
+            m3_samplers: from_fn(|_| None),
             normal_secondary: None,
             normal_secondary_mask: None,
             light_map: None,
@@ -363,13 +366,13 @@ pub struct ModelMaterialKey {
     fourth_uv: bool,
     world_layer_alpha: bool,
     edge_fade: bool,
-    programmed: bool,
+    m3: bool,
 }
 
 impl From<&ModelMaterialExtension> for ModelMaterialKey {
     fn from(state: &ModelMaterialExtension) -> Self {
         Self {
-            programmed: state.programmed.settings.x != 0,
+            m3: state.m3.settings.x != 0,
             fourth_uv: state.fourth_uv,
             world_layer_alpha: matches!(
                 state.world.composition.x,
@@ -381,7 +384,7 @@ impl From<&ModelMaterialExtension> for ModelMaterialKey {
                     || state.combiner.additional_coordinates.x == 3
                     || state.world.composition.y > 2
                     || state
-                        .programmed
+                        .m3
                         .layers
                         .iter()
                         .any(|layer| layer.flags.y != 0 && layer.route.x == 2)),
@@ -467,9 +470,9 @@ impl MaterialExtension for ModelMaterialExtension {
             key.bind_group_data.world_layer_alpha,
             key.bind_group_data.fourth_uv,
         )?;
-        if key.bind_group_data.programmed {
+        if key.bind_group_data.m3 {
             if let Some(fragment) = &mut descriptor.fragment {
-                fragment.shader_defs.push("PROGRAMMED_MATERIAL".into());
+                fragment.shader_defs.push("M3_MATERIAL".into());
             }
         }
         if key.bind_group_data.edge_fade {
@@ -525,13 +528,13 @@ pub(crate) struct SurfaceAnimation {
     images: Arc<HashMap<TextureId, Handle<Image>>>,
     centered_transform: bool,
     hd: Option<HdAnimation>,
-    programmed: Option<ProgrammedAnimation>,
+    m3: Option<M3Animation>,
 }
 
 #[derive(Clone)]
 struct HdAnimation {
     slots: [Option<Animated<Option<TextureId>>>; 6],
-    fresnel: Option<layered::Fresnel>,
+    fresnel: Option<mdlx::Fresnel>,
     gain: Option<Animated<f32>>,
     images: Arc<TextureImages>,
 }
@@ -553,6 +556,9 @@ impl Default for SurfacePass {
             secondary_coordinate: None,
             third_coordinate: None,
             fourth_coordinate: None,
+            exterior_lit: false,
+            sort_far: false,
+            sort_near: false,
         }
     }
 }

@@ -71,6 +71,27 @@ controllers, and solvers can use this boundary without replacing the renderer.
 
 ## Surfaces and scene integration
 
+The compiler traverses `MaterialSurface::steps` in authored order. `MaterialStep`
+selects the MDLX, M2, WMO, M3, Diablo III, or Diablo IV dialect for each operation.
+The selected dialect owns its typed shader inputs and rendering settings. M3
+composite steps recursively compile referenced material programs and apply their
+weights and priority to the resulting rendering passes. Cyclic references fail
+compilation. M3 texture layers remain inputs to their owning shader step and do not
+become separate draws.
+
+MDLX shader selection, culling, priority, and sorting belong to each step.
+WMO exterior-lighting selection is evaluated per step, so two WMO steps in
+one material can retain different lighting behavior. External Diablo shader
+execution remains unresolved: D3 displays its authored diffuse and emission
+constants, and D4 produces a diagnostic placeholder. An unresolved D4 material
+selection has no semantic shader steps. The compiler recognizes its appearance
+variant ownership and emits the same diagnostic fallback. External resource
+selections belong to the appearance variant rather than the shared shader material.
+Unsupported M3 shader families retain their existing diagnostic interpretation.
+The program structure does not add shader coverage. Compiled rendering-pass records
+retain order, but Bevy render phases can reorder draws; exact authored execution
+order across steps is not guaranteed.
+
 Surfaces extend Bevy's standard material and lighting pipeline. Authored blend
 factors and independent depth-test/write controls specialize the GPU pipeline. A
 default `ModelMaterialExtension` leaves a standalone `StandardMaterial`'s blend

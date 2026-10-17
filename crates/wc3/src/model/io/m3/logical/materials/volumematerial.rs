@@ -5,9 +5,9 @@ pub(super) fn map_volumematerial<'a, E: Envelope>(
     r: nr::VolumeMaterial,
     source: &'a native::Container<'_, E>,
     reader: &mut Reader<'a, '_>,
-) -> Result<surface::Volume, Error> {
+) -> Result<surface::VolumeMaterialStep, Error> {
     reader.name = Some(string(source, r.name)?);
-    Ok(surface::Volume {
+    Ok(surface::VolumeMaterialStep {
         blend_mode: surface::values::BlendMode::from_raw((r.blend_mode).raw()),
         falloff_type: surface::values::VolumeFalloff::from_raw((r.falloff_type).raw()),
         density: anim(r.density),
@@ -24,7 +24,7 @@ pub(super) fn get_volumematerial<'a, E: Envelope>(
     reader: &mut Reader<'a, '_>,
     reference: native::Ref<nr::targets::VolumeMaterial>,
     index: usize,
-) -> Result<surface::Volume, Error> {
+) -> Result<surface::VolumeMaterialStep, Error> {
     macro_rules! read {
         ($t:ty) => {{
             let r = source

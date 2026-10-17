@@ -5,9 +5,9 @@ pub(super) fn map_volumenoisematerial<'a, E: Envelope>(
     r: nr::VolumeNoiseMaterial,
     source: &'a native::Container<'_, E>,
     reader: &mut Reader<'a, '_>,
-) -> Result<surface::VolumeNoise, Error> {
+) -> Result<surface::VolumeNoiseMaterialStep, Error> {
     reader.name = Some(string(source, r.name)?);
-    Ok(surface::VolumeNoise {
+    Ok(surface::VolumeNoiseMaterialStep {
         falloff_type: surface::values::VolumeFalloff::from_raw((r.falloff_type).raw()),
         draw_transparency: surface::values::VolumeCameraMode::from_raw((r.draw_transparency).raw()),
         density: anim(r.density),
@@ -30,7 +30,7 @@ pub(super) fn get_volumenoisematerial<'a, E: Envelope>(
     reader: &mut Reader<'a, '_>,
     reference: native::Ref<nr::targets::VolumeNoiseMaterial>,
     index: usize,
-) -> Result<surface::VolumeNoise, Error> {
+) -> Result<surface::VolumeNoiseMaterialStep, Error> {
     macro_rules! read {
         ($t:ty) => {{
             let r = source

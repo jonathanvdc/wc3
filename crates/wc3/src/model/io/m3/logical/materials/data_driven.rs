@@ -7,9 +7,9 @@ use zerovec::ZeroVec;
 fn parameters<'a, E: Envelope>(
     source: &'a native::Container<'_, E>,
     reference: native::Ref<nr::targets::Character>,
-) -> Result<surface::Parameters<'a>, Error> {
+) -> Result<surface::DataDrivenParameters<'a>, Error> {
     let Some(section) = source.referenced_section(reference).map_err(read_error)? else {
-        return Ok(surface::Parameters::Unresolved(ZeroVec::new()));
+        return Ok(surface::DataDrivenParameters::Unresolved(ZeroVec::new()));
     };
     if section.tag() != *b"CHAR" || section.revision() != 0 {
         return Err(Error::new(
@@ -26,22 +26,22 @@ fn parameters<'a, E: Envelope>(
                 "parameter span exceeds source values",
             )
         })?;
-    Ok(surface::Parameters::Unresolved(ZeroVec::new_borrowed(
-        bytes,
-    )))
+    Ok(surface::DataDrivenParameters::Unresolved(
+        ZeroVec::new_borrowed(bytes),
+    ))
 }
 pub(super) fn datadriven<'a, E: Envelope, D: nr::DataDrivenMaterialDialect>(
     source: &'a native::Container<'_, E>,
     reader: &mut Reader<'a, '_>,
     r: nr::DataDrivenMaterial<D>,
-) -> Result<surface::DataDriven<'a>, Error>
+) -> Result<surface::DataDrivenMaterialStep<'a>, Error>
 where
     D::ExtraHashes: Slot<native::Ref<nr::targets::U32>>,
     D::EffectNameHash2: Slot<u32>,
     D::EffectNameHash3: Slot<u32>,
 {
     reader.name = Some(string(source, r.material_name)?);
-    Ok(surface::DataDriven {
+    Ok(surface::DataDrivenMaterialStep {
         fragment_hashes: identity(
             source
                 .resolve::<nr::U32>(r.fragment_hashes.cast())
@@ -105,7 +105,7 @@ pub(super) fn get_datadriven<'a, E: Envelope>(
     reader: &mut Reader<'a, '_>,
     reference: native::Ref<nr::targets::DataDrivenMaterial>,
     index: usize,
-) -> Result<surface::DataDriven<'a>, Error> {
+) -> Result<surface::DataDrivenMaterialStep<'a>, Error> {
     macro_rules! read {
         ($v:ty) => {{
             let r = source

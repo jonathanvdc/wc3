@@ -566,9 +566,6 @@ impl Target {
             _ => false,
         }
     }
-    pub(crate) fn supports_material(&self) -> bool {
-        matches!(self, Self::Field(path) if matches!(path.segments().first(), Some(FieldSegment::Field(Field::Material))))
-    }
 }
 
 impl Target {

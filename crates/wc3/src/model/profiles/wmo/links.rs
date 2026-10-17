@@ -1,7 +1,7 @@
 //! Relationship traversal for world-model authoring data.
-use super::{Material, Node, WorldSystem};
+use super::{MaterialStep, Node, WorldSystem};
 use crate::model::{FeatureKind, Link, ValidateLinks};
-impl ValidateLinks for Material<'_> {
+impl ValidateLinks for MaterialStep<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.state.visit_links(visitor);
         self.textures.visit_links(visitor);

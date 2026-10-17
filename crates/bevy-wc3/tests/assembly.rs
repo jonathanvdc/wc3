@@ -5,7 +5,7 @@ use bevy_wc3::assembly::{
     TextureLayer, TextureReplacement,
 };
 use bevy_wc3::{BakeSpace, ModelError, PartBinding, PoseBaker, PoseOptions};
-use wc3::model::materials::layered::{Layer, LayeredSurface};
+use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::{
     Animated, Draw, GeometryData, ImageResource, Material, MaterialSurface, Mesh as ModelMesh,
     MeshInstance, Model, ModelMount, MountTarget, Node, NodeId, ResourceLocator, TextureId,
@@ -36,10 +36,11 @@ fn model(textured: bool) -> (Model<'static>, NodeId, Option<TextureId>) {
     let material = builder
         .add_material(Material {
             name: "paint".into(),
-            surface: MaterialSurface::Layered(Box::new(LayeredSurface {
+            surface: MaterialSurface::try_from(LayeredSurface {
                 layers: vec![layer],
                 ..Default::default()
-            })),
+            })
+            .unwrap(),
         })
         .unwrap();
     let mut instance = MeshInstance::new(node, mesh);

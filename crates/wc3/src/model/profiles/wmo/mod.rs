@@ -8,7 +8,7 @@ pub use crate::model::controls::world_draw::*;
 mod validation;
 mod world;
 pub use crate::model::controls::world::*;
-pub use crate::model::materials::world::*;
+pub use crate::model::materials::wmo::*;
 pub use world::*;
 
 mod vocabulary;

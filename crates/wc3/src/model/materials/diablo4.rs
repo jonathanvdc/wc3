@@ -1,8 +1,9 @@
 //! Diablo IV shader inputs use checked texture identities and explicit parameter selections.
 use super::bindings::TextureBinding;
 use super::parameters::{OrderedParameters, ParameterEntry, ShaderValue};
+use super::program::MaterialProgram;
 use crate::model::profiles::SurfacePayload;
-use crate::model::{Error, Link, TextureId, ValidateLinks};
+use crate::model::{Error, Link, PropertyIdentityKey, TextureId, ValidateLinks};
 
 /// A texture input retains negative source selections independently of image handles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,7 +33,7 @@ pub struct TexturePlayback {
     /// Animation-state index, including unresolved negative sentinels.
     pub animation_state_index: i32,
 }
-/// Shader-defined texture role and independently authored control.
+/// MaterialStep-defined texture role and independently authored control.
 #[derive(Clone, Debug, Default)]
 pub struct TextureContribution {
     /// Producer-defined shader texture semantic.
@@ -95,7 +96,7 @@ pub struct MaterialValues {
 }
 /// Diablo IV shader declaration, independent of native material and appearance layouts.
 #[derive(Clone, Debug, Default)]
-pub struct Shader {
+pub struct MaterialStep {
     /// Independently authored material-resource declarations, when imported from a material document.
     pub asset: Option<MaterialAssetControls>,
     /// External shader-map SNO in the Diablo IV namespace.
@@ -113,7 +114,7 @@ pub struct Shader {
     /// Source graph declaration, preserving unresolved integer choices.
     pub has_graph: i32,
 }
-impl ValidateLinks for Shader {
+impl ValidateLinks for MaterialStep {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if self.asset.as_ref().is_some_and(|a| {
             a.unclassified_scalars
@@ -137,7 +138,7 @@ impl ValidateLinks for Shader {
         }
     }
 }
-impl SurfacePayload for Shader {
+impl SurfacePayload for MaterialStep {
     fn validate(&self) -> Result<(), Error> {
         let mut invalid = false;
         self.visit_links(&mut |link| {
@@ -153,50 +154,6 @@ impl SurfacePayload for Shader {
         } else {
             Ok(())
         }
-    }
-}
-
-/// Appearance-local references that select an external material and attached cloth/effects.
-#[derive(Clone, Debug, Default)]
-pub struct AppearanceMaterialControls {
-    /// Appearance material options.
-    pub flags: u32,
-    /// External base-material resource, including negative absent selections.
-    pub base_material: i32,
-    /// External override-material resource.
-    pub override_material: i32,
-    /// External cloth resource.
-    pub cloth: i32,
-    /// External high-quality cloth override.
-    pub high_quality_cloth_override: i32,
-    /// Mounted cloth overrides in their authored slots.
-    pub mounted_cloth_overrides: [i32; 4],
-    /// External effect-group resource.
-    pub effect_group: i32,
-    /// Ordered external variant-material resources.
-    pub variant_materials: Vec<i32>,
-}
-/// Complete Diablo IV surface with explicit external references and optional resolved shader state.
-#[derive(Clone, Debug, Default)]
-pub struct Material {
-    /// Appearance-local dependency selections.
-    pub appearance: AppearanceMaterialControls,
-    /// Resolved shader definition, when supplied by the caller.
-    pub shader: Option<Shader>,
-}
-impl ValidateLinks for Material {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        if let Some(shader) = &self.shader {
-            shader.visit_links(visitor);
-        }
-    }
-}
-impl SurfacePayload for Material {
-    fn validate(&self) -> Result<(), Error> {
-        if let Some(shader) = &self.shader {
-            shader.validate()?;
-        }
-        Ok(())
     }
 }
 
@@ -241,5 +198,20 @@ impl ValidateLinks for MaterialValues {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.scalars.visit_links(visitor);
         self.vectors.visit_links(visitor);
+    }
+}
+
+impl SurfacePayload for MaterialProgram<MaterialStep> {
+    fn supports_property(&self, _: &PropertyIdentityKey) -> bool {
+        false
+    }
+    fn validate(&self) -> Result<(), Error> {
+        if self.steps.len() > 1 {
+            return Err(Error::new(
+                "d4.material",
+                "native material resources admit at most one resolved shader",
+            ));
+        }
+        self.steps.iter().try_for_each(SurfacePayload::validate)
     }
 }

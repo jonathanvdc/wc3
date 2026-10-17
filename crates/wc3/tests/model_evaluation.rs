@@ -3,12 +3,12 @@ use glam::{Affine3A, Mat4, Quat, Vec2, Vec3};
 use std::{borrow::Cow, collections::HashMap};
 use wc3::model::conversion::ImportOptions;
 use wc3::model::io::mdlx;
+use wc3::model::materials::mdlx::LayeredSurface;
 use wc3::model::profiles::Universal;
 use wc3::model::{
     AnimationSample, Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Basis,
-    Channel, Clock, Curve, DeformableGeometry, GeometryData, LengthUnit, MaterialSurface, Mesh,
-    MeshAppearance, Model, ModelPose, Node, PoseInputs, PoseLayout, PrimitiveKind, Time, Track,
-    Transform,
+    Channel, Clock, Curve, DeformableGeometry, GeometryData, LengthUnit, Mesh, MeshAppearance,
+    Model, ModelPose, Node, PoseInputs, PoseLayout, PrimitiveKind, Time, Track, Transform,
 };
 
 fn time(seconds: f64) -> Time {
@@ -59,9 +59,7 @@ fn standing_snapshot_retains_bindings_and_supports_editable_geometry_without_ima
                 .material_for_draw(instance_id, draw.id(), None)
                 .unwrap();
             let material = model.material(material_id).unwrap();
-            let MaterialSurface::Layered(surface) = &material.surface else {
-                panic!("layered fixture")
-            };
+            let surface = LayeredSurface::try_from(material.surface.clone()).unwrap();
             let frozen = surface.sampled(&sample);
             let texture = frozen.layers[0].binding.image.default.unwrap();
             assert!(model.texture(texture).is_some());
@@ -279,11 +277,10 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
     let selection = Layer(0).texture().bind(material_id).widen();
     let texture = model.textures().iter().next().unwrap().0;
     let mut material = model.material(material_id).unwrap().clone();
-    let MaterialSurface::Layered(surface) = &mut material.surface else {
-        panic!("layered fixture")
-    };
+    let mut surface = LayeredSurface::try_from(material.surface.clone()).unwrap();
     surface.layers[0].opacity = Animated::new(1., opacity.clone());
     surface.layers[0].binding.image = Animated::new(Some(texture), selection.clone());
+    material.surface = surface.try_into().unwrap();
     model
         .edit(|draft| {
             draft.set_material(material_id, material)?;
@@ -305,10 +302,8 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
             ..Default::default()
         })
         .unwrap();
-    let MaterialSurface::Layered(surface) = &model.material(material_id).unwrap().surface else {
-        panic!("layered fixture")
-    };
-    let mut source = surface.as_ref().clone();
+    let mut source =
+        LayeredSurface::try_from(model.material(material_id).unwrap().surface.clone()).unwrap();
     source.layers[0].opacity = Animated::new(1., opacity);
     source.layers[0].binding.image = Animated::new(Some(texture), selection);
     let frozen = source.sampled(&sample);

@@ -2,7 +2,7 @@
 use super::{append, native_anim, nr, surface, Envelope, Error, Writer};
 pub(super) fn encode<E: Envelope>(
     name: &str,
-    r: &surface::Composite,
+    r: &surface::CompositeMaterialStep,
     writer: &mut Writer<'_, '_, '_, '_, E>,
 ) -> Result<nr::CompositeMaterial<nr::V2>, Error> {
     Ok(nr::CompositeMaterial {

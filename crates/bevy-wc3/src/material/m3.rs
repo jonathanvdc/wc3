@@ -5,17 +5,18 @@ mod samplers;
 use super::compile::{blend, image_role_with_sampler};
 use super::SurfacePass;
 use crate::animation_targets::AnimationTargets;
-use crate::textures::{programmed_sampler, TextureImages, TextureRole};
+use crate::textures::{m3_sampler, TextureImages, TextureRole};
 use crate::ModelError;
 use bevy::material::OpaqueRendererMethod;
 use bevy::prelude::*;
 use bevy::render::render_resource::Face;
-use layers::{layer_uniform, ProgrammedAnimation, ROLE_COUNT};
+use layers::{layer_uniform, M3Animation, ROLE_COUNT};
 use samplers::SamplerPool;
-use wc3::model::materials::programmed;
+use wc3::model::materials::m3;
 use wc3::model::materials::state::BlendOperations;
 use wc3::model::profiles::Universal;
 use wc3::model::values::programmed::{ColorChannel, LayerBlendOp, SpecularMode, UvMappingMode};
+
 use wc3::model::Model;
 
 /// Application-owned colours for M3 standard team-colour operations.
@@ -42,22 +43,22 @@ impl Default for TeamColors {
 }
 
 #[cfg(test)]
-pub(super) fn compile_programmed(
+pub(super) fn compile_m3(
     model: &Model<'_, Universal>,
-    surface: &programmed::Material<'_>,
+    surface: &m3::MaterialStep<'_>,
     images: &TextureImages,
 ) -> Result<SurfacePass, ModelError> {
-    compile_programmed_with_targets(model, surface, images, &AnimationTargets::new(model))
+    compile_m3_with_targets(model, surface, images, &AnimationTargets::new(model))
 }
 
-pub(super) fn compile_programmed_with_targets(
+pub(super) fn compile_m3_with_targets(
     model: &Model<'_, Universal>,
-    surface: &programmed::Material<'_>,
+    surface: &m3::MaterialStep<'_>,
     images: &TextureImages,
     targets: &AnimationTargets,
 ) -> Result<SurfacePass, ModelError> {
     let mut pass = SurfacePass::default();
-    let programmed::Material::Standard(surface) = surface else {
+    let m3::MaterialStep::Standard(surface) = surface else {
         pass.diagnostics.push(format!(
             "M3 {} material requires a dedicated shader interpreter",
             family_name(surface)
@@ -137,25 +138,25 @@ pub(super) fn compile_programmed_with_targets(
     pass.material.depth_bias = surface.state.ordering as f32;
     pass.state.cast_shadows = !flags.no_shadows_cast();
     pass.state.receive_shadows = !flags.no_shadows_receive();
-    pass.state.programmed.settings = UVec4::new(
+    pass.state.m3.settings = UVec4::new(
         1,
         u32::from(flags.vertex_color() || additional.vertex_color()),
         u32::from(flags.vertex_alpha() || additional.vertex_alpha()),
         surface.specular.parameters.mode.raw(),
     );
-    pass.state.programmed.blends = UVec4::new(
+    pass.state.m3.blends = UVec4::new(
         surface.layer_blend.raw(),
         surface.emissive.input.primary.parameters.raw(),
         surface.emissive.input.secondary.parameters.raw(),
         flags.bits(),
     );
-    pass.state.programmed.response = Vec4::new(
+    pass.state.m3.response = Vec4::new(
         surface.specular.parameters.exponent,
         surface.specular.parameters.hdr_multiplier,
         surface.emissive.parameters,
         if flags.bits() & 4 != 0 { 1. } else { 0. },
     );
-    let sources: [Option<&programmed::TextureLayer>; ROLE_COUNT] = [
+    let sources: [Option<&m3::TextureLayer>; ROLE_COUNT] = [
         surface.diffuse.as_ref(),
         surface.decal_layer.as_ref(),
         surface.specular.input.color.as_ref(),
@@ -172,7 +173,7 @@ pub(super) fn compile_programmed_with_targets(
         surface.light_map_layer.as_ref(),
         surface.ambient_occlusion_layer.as_ref(),
     ];
-    let mut animations = ProgrammedAnimation {
+    let mut animations = M3Animation {
         layers: from_fn(|_| None),
         weights: surface
             .normals
@@ -218,7 +219,7 @@ pub(super) fn compile_programmed_with_targets(
             pass.diagnostics.push(format!("M3 standard normal role {slot} decodes authored constant AG values; native constant-normal parity remains unverified"));
         }
         let uniform = layer_uniform(layer, route, None);
-        pass.state.programmed.layers[slot] = uniform;
+        pass.state.m3.layers[slot] = uniform;
         animations.layers[slot] = layers::animated_layer(layer, targets);
         if !layer.binding.sampling.flags.color() {
             let role = if matches!(slot, 0 | 1 | 2 | 4 | 5 | 13) {
@@ -229,9 +230,9 @@ pub(super) fn compile_programmed_with_targets(
                 TextureRole::Data
             };
             let image = layer_image(model, layer, role, images, &mut pass.diagnostics)?;
-            pass.state.programmed.layers[slot].flags.y = u32::from(image.is_some());
+            pass.state.m3.layers[slot].flags.y = u32::from(image.is_some());
             if image.is_none() && slot != 0 {
-                pass.state.programmed.layers[slot].flags.x = 0;
+                pass.state.m3.layers[slot].flags.x = 0;
                 animations.layers[slot] = None;
                 continue;
             }
@@ -242,14 +243,14 @@ pub(super) fn compile_programmed_with_targets(
                     .and_then(|id| model.texture(id))
                     .map(|texture| texture.sampler)
                     .unwrap_or_default();
-                let sampler = programmed_sampler(layer, source_sampler);
+                let sampler = m3_sampler(layer, source_sampler);
                 let Some(selector) = samplers.intern(sampler, image) else {
-                    pass.state.programmed.layers[slot].flags.x = 0;
+                    pass.state.m3.layers[slot].flags.x = 0;
                     animations.layers[slot] = None;
                     pass.diagnostics.push(format!("M3 role {slot} exceeds the shared sampler-state budget and is not evaluated"));
                     continue;
                 };
-                pass.state.programmed.layers[slot].route.y = selector;
+                pass.state.m3.layers[slot].route.y = selector;
                 match route {
                     1 => pass.secondary_coordinate = Some(1),
                     2 => pass.third_coordinate = Some(2),
@@ -281,9 +282,9 @@ pub(super) fn compile_programmed_with_targets(
             }
         }
     }
-    pass.state.programmed_samplers = samplers.images();
+    pass.state.m3_samplers = samplers.images();
     for (index, weight) in surface.normals.weights.iter().take(8).enumerate() {
-        pass.state.programmed.normal_weights[index / 4][index % 4] = weight.initial;
+        pass.state.m3.normal_weights[index / 4][index % 4] = weight.initial;
     }
     if surface.normals.weights.len() > 8 {
         pass.diagnostics.push("M3 normal blending has more than eight weights; the standard shader evaluates its first eight native mask channels".into());
@@ -303,7 +304,7 @@ pub(super) fn compile_programmed_with_targets(
     }
     let required = if flags.bits() & (1 << 27) != 0 { 8 } else { 4 };
     if flags.bits() & 4 != 0 && surface.normals.weights.len() < required {
-        pass.state.programmed.blends.w &= !4;
+        pass.state.m3.blends.w &= !4;
         pass.diagnostics.push(format!("M3 enabled normal blending needs {required} mask weights; its incomplete or version-ambiguous controls are not evaluated"));
     }
     if let (Some(first), Some(second)) = (
@@ -314,24 +315,24 @@ pub(super) fn compile_programmed_with_targets(
             pass.diagnostics.push("M3 second additional normal uses its own authored UV controls; native sharing with the first additional normal remains unverified".into());
         }
     }
-    pass.animation.programmed = animations.is_animated().then_some(animations);
+    pass.animation.m3 = animations.is_animated().then_some(animations);
     Ok(pass)
 }
 
-fn family_name(material: &programmed::Material<'_>) -> &'static str {
+fn family_name(material: &m3::MaterialStep<'_>) -> &'static str {
     match material {
-        programmed::Material::Standard(_) => "Standard",
-        programmed::Material::Displacement(_) => "Displacement",
-        programmed::Material::Composite(_) => "Composite",
-        programmed::Material::Terrain(_) => "Terrain",
-        programmed::Material::Volume(_) => "Volume",
-        programmed::Material::VolumeNoise(_) => "VolumeNoise",
-        programmed::Material::Creep(_) => "Creep",
-        programmed::Material::Hair(_) => "Hair",
-        programmed::Material::SplatTerrainBake(_) => "SplatTerrainBake",
-        programmed::Material::Reflection(_) => "Reflection",
-        programmed::Material::LensFlare(_) => "LensFlare",
-        programmed::Material::DataDriven(_) => "DataDriven",
+        m3::MaterialStep::Standard(_) => "Standard",
+        m3::MaterialStep::Displacement(_) => "Displacement",
+        m3::MaterialStep::Composite(_) => "Composite",
+        m3::MaterialStep::Terrain(_) => "Terrain",
+        m3::MaterialStep::Volume(_) => "Volume",
+        m3::MaterialStep::VolumeNoise(_) => "VolumeNoise",
+        m3::MaterialStep::Creep(_) => "Creep",
+        m3::MaterialStep::Hair(_) => "Hair",
+        m3::MaterialStep::SplatTerrainBake(_) => "SplatTerrainBake",
+        m3::MaterialStep::Reflection(_) => "Reflection",
+        m3::MaterialStep::LensFlare(_) => "LensFlare",
+        m3::MaterialStep::DataDriven(_) => "DataDriven",
     }
 }
 fn uv_route(mode: UvMappingMode) -> Option<u32> {
@@ -344,7 +345,7 @@ fn uv_route(mode: UvMappingMode) -> Option<u32> {
     }
 }
 fn diagnose_layer(
-    layer: &programmed::TextureLayer,
+    layer: &m3::TextureLayer,
     slot: usize,
     targets: &AnimationTargets,
     diagnostics: &mut Vec<String>,
@@ -371,7 +372,7 @@ fn diagnose_layer(
 }
 fn layer_image(
     model: &Model<'_, Universal>,
-    layer: &programmed::TextureLayer,
+    layer: &m3::TextureLayer,
     role: TextureRole,
     images: &TextureImages,
     diagnostics: &mut Vec<String>,
@@ -386,11 +387,11 @@ fn layer_image(
         model,
         layer.binding.image,
         role,
-        Some(programmed_sampler(layer, sampler)),
+        Some(m3_sampler(layer, sampler)),
         images,
         diagnostics,
     )
 }
 #[cfg(test)]
-#[path = "programmed_tests.rs"]
+#[path = "m3_tests.rs"]
 mod tests;

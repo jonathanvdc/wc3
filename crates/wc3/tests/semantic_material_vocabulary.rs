@@ -1,8 +1,8 @@
 use wc3::model::controls::playback::ControllerProgram;
 use wc3::model::materials::bindings::{Coordinates, ImageSelection};
-use wc3::model::materials::layered::{LayeredSurface, SurfaceLayer};
-use wc3::model::materials::model_shader::FrameSampling;
-use wc3::model::materials::model_shader::{ShaderInput, ShaderPass, TextureUnit};
+use wc3::model::materials::m2::FrameSampling;
+use wc3::model::materials::m2::{MaterialStep as M2MaterialStep, ShaderInput, TextureUnit};
+use wc3::model::materials::mdlx::{LayeredSurface, SurfaceLayer};
 use wc3::model::profiles::{m2, mdlx, SurfacePayload};
 use wc3::model::{Animated, Error, Link, PropertyPayload, TextureTransform, ValidateLinks};
 
@@ -36,7 +36,7 @@ fn surfaces_admit_independently_defined_pass_and_input_vocabularies() {
     layered.layers[0].depth = 0.5;
     layered.validate().unwrap();
 
-    let mut shader = ShaderPass::<CheckedPass>::default();
+    let mut shader = M2MaterialStep::<CheckedPass>::default();
     shader.textures.push(CheckedPass { depth: f32::NAN });
     assert!(shader.validate().is_err());
     shader.textures[0].depth = 1.;
@@ -47,7 +47,7 @@ fn surfaces_admit_independently_defined_pass_and_input_vocabularies() {
 fn built_in_profiles_select_the_shared_owning_types() {
     let layered = LayeredSurface::default();
     let _: mdlx::Material<'_> = layered;
-    let shader = ShaderPass::default();
+    let shader = M2MaterialStep::default();
     let _: m2::Material<'_> = shader;
     let transform = TextureTransform::default();
     let _: m2::TextureTransform = transform;
@@ -121,25 +121,6 @@ fn selected_coordinate_form_controls_which_destinations_exist() {
 }
 
 #[test]
-fn broad_surface_selection_preserves_property_and_validation_policies() {
-    use wc3::model::profiles::Unavailable;
-    use wc3::model::SurfaceSet;
-
-    type CustomSurfaces = SurfaceSet<
-        Unavailable,
-        Unavailable,
-        LayeredSurface<'static, CheckedPass>,
-        Unavailable,
-        Unavailable,
-        Unavailable,
-    >;
-    let mut surface = LayeredSurface::default();
-    surface.layers.push(CheckedPass { depth: f32::NAN });
-    let selected = CustomSurfaces::Layered(Box::new(surface));
-    assert!(selected.validate().is_err());
-}
-
-#[test]
 fn texture_bindings_traverse_every_selected_component() {
     use wc3::model::materials::bindings::TextureBinding;
 
@@ -169,9 +150,9 @@ fn texture_bindings_traverse_every_selected_component() {
 }
 
 #[test]
-fn programmed_input_validation_reaches_nested_components_at_publication() {
-    use wc3::model::materials::programmed::{
-        Material as ProgrammedMaterial, SamplingProgram, Standard, TextureLayer,
+fn m3_input_validation_reaches_nested_components_at_publication() {
+    use wc3::model::materials::m3::{
+        MaterialStep as M3MaterialStep, SamplingProgram, StandardMaterialStep, TextureLayer,
     };
     use wc3::model::profiles::M3;
     use wc3::model::{Material, Model};
@@ -181,7 +162,7 @@ fn programmed_input_validation_reaches_nested_components_at_publication() {
         noise_amplitude: f32::NAN,
         ..Default::default()
     };
-    let standard = Standard {
+    let standard = StandardMaterialStep {
         diffuse: Some(layer),
         ..Default::default()
     };
@@ -189,7 +170,7 @@ fn programmed_input_validation_reaches_nested_components_at_publication() {
     builder
         .add_material(Material {
             name: "surface".into(),
-            surface: ProgrammedMaterial::Standard(Box::new(standard)),
+            surface: M3MaterialStep::Standard(Box::new(standard)),
         })
         .unwrap();
     assert!(builder.finish().is_err());
@@ -197,7 +178,7 @@ fn programmed_input_validation_reaches_nested_components_at_publication() {
 
 #[test]
 fn model_rasterization_preserves_unknown_flags_and_edits_known_operations() {
-    use wc3::model::materials::model_shader::{material_flags, rasterization};
+    use wc3::model::materials::m2::{material_flags, rasterization};
     use wc3::model::materials::state::Operation;
     use wc3::model::values::model::MaterialFlags;
 
@@ -240,8 +221,8 @@ fn image_source_vocabularies_can_supply_graph_relationships() {
 
 #[test]
 fn guild_palette_defaults_are_neutral_and_nonfinite_settings_are_rejected() {
-    use wc3::model::materials::model_shader::GuildPalette;
-    let mut shader = ShaderPass::<CheckedPass>::default();
+    use wc3::model::materials::m2::GuildPalette;
+    let mut shader = M2MaterialStep::<CheckedPass>::default();
     assert_eq!(
         shader.guild_palette,
         GuildPalette {

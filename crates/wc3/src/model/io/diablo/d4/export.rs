@@ -218,6 +218,10 @@ pub(super) fn plan(
                     .material(material)
                     .ok_or_else(|| error("slot material is absent"))?
                     .surface,
+                &slot
+                    .variant_definition(variant)
+                    .expect("owned variant")
+                    .selection,
                 &mut context,
             )?);
             selected.push(variant);
@@ -229,6 +233,10 @@ pub(super) fn plan(
                         .material(material)
                         .ok_or_else(|| error("slot material is absent"))?
                         .surface,
+                    &slot
+                        .variant_definition(variant)
+                        .expect("owned variant")
+                        .selection,
                     &mut context,
                 )?);
             }

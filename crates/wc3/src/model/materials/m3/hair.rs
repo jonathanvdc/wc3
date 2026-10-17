@@ -3,7 +3,7 @@ use super::{Property, TextureLayer};
 use crate::model::materials::contributions::SurfaceContribution;
 /// Two-lobe anisotropic hair shading with independently animated colors.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Hair {
+pub struct HairMaterialStep {
     /// Map shifting the anisotropic specular response.
     pub layer_spec_shift: Option<TextureLayer>,
     /// Noise map varying the specular response.

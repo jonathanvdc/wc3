@@ -171,22 +171,19 @@ pub struct RenderState<'a> {
     /// Stores source shader-parameter entries in authored order.
     pub shader_params: OrderedParameters<ShaderTag, OpaqueWord, ParameterType>,
 }
-/// Diablo III shader declaration with external dependencies and ordered render passes.
+/// Typed external shader programme and its authored opaque/translucent phases.
+///
+/// The programme owns its shared inputs and native rasterization declarations.
+/// Its internal GPU execution requires an external shader interpreter.
 #[derive(Clone, Debug, Default)]
-pub struct Material<'a> {
-    /// Independently authored subobject appearance qualifier.
-    pub appearance_control: i32,
-    /// Shader resource, color response, and animated texture inputs.
+pub struct MaterialStep<'a> {
+    /// Shader resource, color response, and texture inputs.
     pub uber: UberMaterial,
-    /// External base-material dependency.
-    pub base_material: AssetRef,
-    /// External cloth-material dependency.
-    pub cloth: AssetRef,
-    /// Ordered shader property entries.
+    /// Ordered shader parameters, retaining duplicate selectors.
     pub shader_params: OrderedParameters<ShaderTag, OpaqueWord, ParameterType>,
-    /// Ordered opaque rasterization passes.
+    /// Ordered opaque phase declarations.
     pub opaque_passes: Vec<RenderState<'a>>,
-    /// Ordered translucent rasterization passes.
+    /// Ordered translucent phase declarations.
     pub translucent_passes: Vec<RenderState<'a>>,
 }
 impl AssetRef {
@@ -281,7 +278,7 @@ impl RenderState<'_> {
             && (self.texture_stage_count as usize <= self.texture_stages.len())
     }
 }
-impl ValidateLinks for Material<'_> {
+impl ValidateLinks for MaterialStep<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if !self.uber.is_valid()
             || self
@@ -294,7 +291,7 @@ impl ValidateLinks for Material<'_> {
         }
     }
 }
-impl Material<'_> {
+impl MaterialStep<'_> {
     /// Checks coefficients and active stage windows before graph publication.
     pub fn validate(&self) -> Result<(), Error> {
         let mut valid = true;

@@ -5,12 +5,12 @@ pub(super) fn map_creepmaterial<'a, E: Envelope, D: nr::CreepMaterialDialect>(
     r: nr::CreepMaterial<D>,
     source: &'a native::Container<'_, E>,
     reader: &mut Reader<'a, '_>,
-) -> Result<surface::Creep, Error>
+) -> Result<surface::CreepMaterialStep, Error>
 where
     D::CreepLow: Slot<u32>,
 {
     reader.name = Some(string(source, r.name)?);
-    Ok(surface::Creep {
+    Ok(surface::CreepMaterialStep {
         mask_map: get_layer(source, reader, r.mask_map)?,
         creep_low: r.creep_low.value(),
     })
@@ -21,7 +21,7 @@ pub(super) fn get_creepmaterial<'a, E: Envelope>(
     reader: &mut Reader<'a, '_>,
     reference: native::Ref<nr::targets::CreepMaterial>,
     index: usize,
-) -> Result<surface::Creep, Error> {
+) -> Result<surface::CreepMaterialStep, Error> {
     macro_rules! read {
         ($t:ty) => {{
             let r = source

@@ -27,7 +27,7 @@ The files under `rendering/` describe how the renderer evaluates model data and
 draws it through Bevy. Start with the [renderer overview](rendering/renderer.md),
 then choose a topic:
 
-- [Semantic compiler and native resources](rendering/universal.md): Universal compilation,
+- [Semantic compiler and native resources](rendering/universal.md): Universal material-program compilation,
   typed dependency tables, native resource providers, semantic animation, and family-specific interpretation limits.
 - [Model assembly](rendering/assembly.md): application-defined selections, typed
   geometry and texture choices, shared skeletons and rigid components.

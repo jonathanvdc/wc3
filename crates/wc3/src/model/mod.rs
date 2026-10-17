@@ -4,7 +4,7 @@
 //! texture definitions. It connects hierarchy nodes, shared geometry,
 //! material definitions, resource references, animation, and scene systems through scoped IDs.
 //! A [`MeshInstance`](crate::model::MeshInstance) places a mesh at a node; its [`Draw`](crate::model::Draw) values select the
-//! geometry and rendering controls for individual passes. A [`Look`](crate::model::Look) supplies a complete
+//! geometry and rendering controls for individual steps. A [`Look`](crate::model::Look) supplies a complete
 //! material assignment for those draws. Shared [`TextureTransform`](crate::model::TextureTransform) objects animate sampling
 //! coordinates independently of node placement. An [`AttachedFeature`](crate::model::AttachedFeature) gives a node an effect or behavior,
 //! while [`System`](crate::model::System) describes independently authored relationships such as physics
@@ -95,9 +95,8 @@ mod node_evaluation;
 pub use node::*;
 pub use node_evaluation::*;
 pub mod materials;
-pub use materials::{
-    AddressMode, ColorSpace, Material, MaterialSurface, Sampler, SurfaceSet, Texture,
-};
+pub use materials::program::{MaterialProgram, MaterialStep};
+pub use materials::{AddressMode, ColorSpace, Material, MaterialSurface, Sampler, Texture};
 mod links;
 pub use links::*;
 /// Compile-time selections and authoring rules for model families.

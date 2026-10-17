@@ -852,3 +852,51 @@ fn absent_auxiliary_direction_stream_exports_zero_bytes() {
         );
     }
 }
+
+#[test]
+fn appearance_variants_share_shader_material_without_sharing_selections() {
+    let mut source = source();
+    source.root.materials[0].variants[1].unknown00 = 19;
+    source.root.materials[0].variants[1].material_sno = 73;
+    source.root.materials[0].variants[1].cloth = 81;
+    let mut model = conversion::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (slot_id, slot) = model.appearance().slots().next().unwrap();
+    let variants: Vec<_> = slot.variants().collect();
+    let shared = variants[0].1;
+    model
+        .edit(|draft| {
+            let mut appearance = draft.model().appearance().clone();
+            appearance
+                .slot_mut(slot_id)
+                .unwrap()
+                .set_variant(variants[1].0, shared)?;
+            draft.set_appearance(appearance);
+            draft.remove_material(variants[1].1);
+            Ok(())
+        })
+        .unwrap();
+    let model = model.widen::<Universal>().try_narrow::<D3>().unwrap();
+    let slot = model.appearance().slot(slot_id).unwrap();
+    assert_eq!(slot.variant(variants[1].0), Some(shared));
+    assert_eq!(
+        slot.variant_definition(variants[1].0)
+            .unwrap()
+            .selection
+            .base_material
+            .id,
+        73
+    );
+    let output = conversion::plan(&model, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let variants = &output.root.materials[0].variants;
+    assert_eq!(variants[0].material, variants[1].material);
+    assert_eq!(variants[1].unknown00, 19);
+    assert_eq!(variants[1].material_sno, 73);
+    assert_eq!(variants[1].cloth, 81);
+    assert_eq!(variants[0].material_sno, 20);
+}

@@ -2,7 +2,7 @@ use super::super::DrawSource;
 use super::*;
 use wc3::model::appearance::{diablo3, diablo4, UniversalAppearance};
 use wc3::model::controls::{diablo3 as d3_controls, diablo4 as d4_controls};
-use wc3::model::materials::layered::{Layer, LayeredSurface};
+use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::{
     InstanceId, Material as SemanticMaterial, MaterialId, MaterialSurface, Mesh as ModelMesh,
     MeshInstance, ModelBuilder, Node,
@@ -12,10 +12,11 @@ fn material(builder: &mut ModelBuilder<'static>, name: &str) -> MaterialId {
     builder
         .add_material(SemanticMaterial {
             name: name.to_owned().into(),
-            surface: MaterialSurface::Layered(Box::new(LayeredSurface {
+            surface: MaterialSurface::try_from(LayeredSurface {
                 layers: vec![Layer::default()],
                 ..Default::default()
-            })),
+            })
+            .unwrap(),
         })
         .unwrap()
 }
@@ -101,7 +102,7 @@ fn world_draw_materials_separate_lighting_classes_and_preserve_source_colors() {
     use bevy::mesh::VertexAttributeValues;
     use wc3::model::controls::world::ModelMetadata as WorldMetadata;
     use wc3::model::controls::{world::RegionControls, world_draw, DrawControls, InstanceControls};
-    use wc3::model::materials::world::Material as WorldMaterial;
+    use wc3::model::materials::wmo::MaterialStep as WmoMaterialStep;
     use wc3::model::scene::world::WorldOptions;
     use wc3::model::{Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw};
 
@@ -129,11 +130,11 @@ fn world_draw_materials_separate_lighting_classes_and_preserve_source_colors() {
     let material = builder
         .add_material(SemanticMaterial {
             name: "stone".into(),
-            surface: MaterialSurface::World(Box::new(WorldMaterial {
+            surface: MaterialSurface::from(WmoMaterialStep {
                 shader: Some(0),
                 uv_scroll: [[0.25, 0.], [0.; 2]],
                 ..Default::default()
-            })),
+            }),
         })
         .unwrap();
     let mut instance = MeshInstance::new(node, mesh);
@@ -259,10 +260,11 @@ fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
         let material = builder
             .add_material(SemanticMaterial {
                 name: "two passes".into(),
-                surface: MaterialSurface::Layered(Box::new(LayeredSurface {
+                surface: MaterialSurface::try_from(LayeredSurface {
                     layers: vec![Layer::default(), Layer::default()],
                     ..Default::default()
-                })),
+                })
+                .unwrap(),
             })
             .unwrap();
         let mut instance = MeshInstance::new(joints[0], mesh);
@@ -337,4 +339,53 @@ fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
             assert_eq!(positions[0], [translation, 0., 0.]);
         }
     }
+}
+
+#[test]
+fn a_pass_stack_keeps_world_lighting_local_to_each_pass() {
+    use wc3::model::controls::{world_draw, DrawControls};
+    use wc3::model::materials::program::{MaterialStep, MaterialSurface};
+    use wc3::model::materials::wmo::MaterialStep as WmoMaterialStep;
+    use wc3::model::Draw;
+
+    let mut builder = ModelBuilder::new("world pass lighting");
+    let node = builder.add_node(Node::named("room")).unwrap();
+    let mut mesh = ModelMesh::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]);
+    let subset = mesh.add_primary_subset(0, 1);
+    let mesh = builder.add_mesh(mesh).unwrap();
+    let interior = WmoMaterialStep {
+        shader: Some(0),
+        ..Default::default()
+    };
+    let mut exterior = interior.clone();
+    exterior.state.rasterization.controls.exterior_lit = true;
+    let material = builder
+        .add_material(SemanticMaterial {
+            name: "two lighting programmes".into(),
+            surface: MaterialSurface {
+                steps: vec![
+                    MaterialStep::Wmo(Box::new(interior)),
+                    MaterialStep::Wmo(Box::new(exterior)),
+                    MaterialStep::Mdlx(Box::default()),
+                ],
+            },
+        })
+        .unwrap();
+    let mut instance = MeshInstance::new(node, mesh);
+    instance.draws.push(Draw::new(
+        subset,
+        Some(DrawControls::Wmo(world_draw::DrawControls {
+            lighting: world_draw::Lighting::Interior,
+            ..Default::default()
+        })),
+    ));
+    builder
+        .add_instance_with_materials(instance, vec![material])
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let compiled = compile_model(&model, |_| None).unwrap();
+    assert_eq!(compiled.draws.len(), 3);
+    assert_eq!(compiled.draws[0].world_state[3], 1);
+    assert_eq!(compiled.draws[1].world_state[3], 2);
+    assert_eq!(compiled.draws[2].world_state, [0; 4]);
 }

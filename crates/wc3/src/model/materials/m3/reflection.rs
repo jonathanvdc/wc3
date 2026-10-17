@@ -3,9 +3,9 @@ use super::{Property, TextureLayer};
 use crate::model::materials::contributions::SurfaceContribution;
 use crate::model::values::programmed::ReflectionFlags;
 
-/// Editable M3 Reflection values.
+/// Editable M3 ReflectionMaterialStep values.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Reflection {
+pub struct ReflectionMaterialStep {
     /// The purpose of this field has not been established.
     pub unknown: u32,
     /// Controls reflection offset through its animation value.

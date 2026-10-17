@@ -7,3 +7,6 @@ mod vocabulary;
 pub use vocabulary::D3;
 
 pub use crate::model::appearance::diablo3::*;
+
+/// The native appearance embeds one external shader programme.
+pub type Material<'a> = MaterialStep<'a>;

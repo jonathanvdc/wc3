@@ -1,6 +1,6 @@
 use super::*;
 use crate::model::controls::{diablo3 as d3_controls, diablo4 as d4_controls};
-use crate::model::{Material, MaterialSurface, Mesh, MeshInstance, ModelBuilder, Node};
+use crate::model::{Material, Mesh, MeshInstance, ModelBuilder, Node};
 
 fn fixture(
     appearance: UniversalAppearance<'static>,
@@ -23,7 +23,7 @@ fn material(builder: &mut ModelBuilder<'static>) -> MaterialId {
     builder
         .add_material(Material {
             name: "".into(),
-            surface: MaterialSurface::Layered(Box::default()),
+            surface: Default::default(),
         })
         .unwrap()
 }

@@ -1,4 +1,5 @@
 //! Native Diablo material declarations map to the Diablo semantic vocabulary.
+use crate::model::appearance::diablo3::Selection;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::diablo::d3::records as native;
 use crate::model::materials::bindings::Coordinates;
@@ -26,63 +27,67 @@ fn native_anim(v: &TexAnim) -> native::MaterialTextureAnim {
         rate1: v.rate1,
     }
 }
-pub(super) fn read(v: &native::SubObjectAppearance<'_>) -> Material<'static> {
+pub(super) fn read(v: &native::SubObjectAppearance<'_>) -> (Selection, Material<'static>) {
     let c = &v.material.colors;
-    Material {
-        appearance_control: v.unknown00,
-        uber: UberMaterial {
-            shader_map: asset(v.material.shader_map, Group::ShaderMap),
-            colors: MaterialColors {
-                diffuse: c.diffuse,
-                specular: c.specular,
-                emissive: c.emissive,
-                ambient: c.ambient,
-                shininess: c.shininess,
-                material_flags: MaterialFlags::from_bits_retain(c.material_flags),
-            },
-            textures: v
-                .material
-                .textures
-                .iter()
-                .map(|t| TextureEntry {
-                    image: asset(t.texture, Group::Textures),
-                    coordinates: Coordinates {
-                        source: UvTransformMode(t.uv_transform_mode),
-                        transform: TextureTransform {
-                            matrix: [t.uv_row0, t.uv_row1, t.uv_row2, t.uv_row3],
-                            animations: [
-                                anim(t.anim_u),
-                                anim(t.anim_v),
-                                anim(t.anim_rotate),
-                                anim(t.anim3),
-                                anim(t.anim4),
-                                anim(t.anim5),
-                            ],
-                            flags: UvFlags::from_bits_retain(t.uv_flags),
+    (
+        Selection {
+            appearance_control: v.unknown00,
+            base_material: asset(v.material_sno, Group::Material),
+            cloth: asset(v.cloth, Group::Cloth),
+        },
+        Material {
+            uber: UberMaterial {
+                shader_map: asset(v.material.shader_map, Group::ShaderMap),
+                colors: MaterialColors {
+                    diffuse: c.diffuse,
+                    specular: c.specular,
+                    emissive: c.emissive,
+                    ambient: c.ambient,
+                    shininess: c.shininess,
+                    material_flags: MaterialFlags::from_bits_retain(c.material_flags),
+                },
+                textures: v
+                    .material
+                    .textures
+                    .iter()
+                    .map(|t| TextureEntry {
+                        image: asset(t.texture, Group::Textures),
+                        coordinates: Coordinates {
+                            source: UvTransformMode(t.uv_transform_mode),
+                            transform: TextureTransform {
+                                matrix: [t.uv_row0, t.uv_row1, t.uv_row2, t.uv_row3],
+                                animations: [
+                                    anim(t.anim_u),
+                                    anim(t.anim_v),
+                                    anim(t.anim_rotate),
+                                    anim(t.anim3),
+                                    anim(t.anim4),
+                                    anim(t.anim5),
+                                ],
+                                flags: UvFlags::from_bits_retain(t.uv_flags),
+                            },
                         },
-                    },
-                    sampling: (),
-                    contribution: TextureContribution {
-                        role: TextureType(t.texture_type),
-                        unclassified_controls: [t.unknown04, t.unknown9_c],
-                    },
+                        sampling: (),
+                        contribution: TextureContribution {
+                            role: TextureType(t.texture_type),
+                            unclassified_controls: [t.unknown04, t.unknown9_c],
+                        },
+                    })
+                    .collect(),
+            },
+            shader_params: v
+                .shader_params
+                .iter()
+                .map(|t| TagValue {
+                    controls: ParameterType(t.value_type),
+                    key: ShaderTag(t.tag_id),
+                    value: OpaqueWord(t.value),
                 })
                 .collect(),
+            opaque_passes: Vec::new(),
+            translucent_passes: Vec::new(),
         },
-        base_material: asset(v.material_sno, Group::Material),
-        cloth: asset(v.cloth, Group::Cloth),
-        shader_params: v
-            .shader_params
-            .iter()
-            .map(|t| TagValue {
-                controls: ParameterType(t.value_type),
-                key: ShaderTag(t.tag_id),
-                value: OpaqueWord(t.value),
-            })
-            .collect(),
-        opaque_passes: Vec::new(),
-        translucent_passes: Vec::new(),
-    }
+    )
 }
 fn id(value: &AssetRef, expected: Group) -> Result<i32, Error> {
     if value.group != expected {
@@ -95,17 +100,18 @@ fn id(value: &AssetRef, expected: Group) -> Result<i32, Error> {
 }
 pub(super) fn write(
     v: &Material<'_>,
+    selection: &Selection,
     context: &mut Context,
 ) -> Result<native::SubObjectAppearance<'static>, Error> {
     if !v.opaque_passes.is_empty() || !v.translucent_passes.is_empty() {
         context.unsupported("d3.material.passes","appearance materials reference shader resources; embedded render passes require separate shader-document export")?;
     }
     Ok(native::SubObjectAppearance {
-        unknown00: v.appearance_control,
-        cloth: id(&v.cloth, Group::Cloth)?,
+        unknown00: selection.appearance_control,
+        cloth: id(&selection.cloth, Group::Cloth)?,
         shader_params: write_tags(&v.shader_params),
         material: write_uber(&v.uber)?,
-        material_sno: id(&v.base_material, Group::Material)?,
+        material_sno: id(&selection.base_material, Group::Material)?,
         ..Default::default()
     })
 }

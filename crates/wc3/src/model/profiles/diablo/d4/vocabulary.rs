@@ -3,9 +3,8 @@ use super::{Appearance, Geometry, Material, MeshControls, ModelMetadata, NodeRol
 use crate::model::profiles::{Extends, Narrows, NoControls, Profile, Unavailable, Universal};
 use crate::model::resources::SnoResource;
 use crate::model::{
-    Basis, Billboard, Bounds, ColorSpace, Error, ExplicitBinding, Inheritance, LengthUnit,
-    MaterialSurface, Model, NodeControls, Sampler, SnoNamespace, Transform, UniversalAppearance,
-    UniversalBinding,
+    Basis, Billboard, Bounds, ColorSpace, Error, ExplicitBinding, Inheritance, LengthUnit, Model,
+    NodeControls, Sampler, SnoNamespace, Transform, UniversalAppearance, UniversalBinding,
 };
 use crate::model::{MeshControls as AnyMeshControls, ModelMetadata as AnyModelMetadata};
 
@@ -226,7 +225,7 @@ impl Extends<D4> for Universal {
         match value {}
     }
     fn surface<'a>(value: <D4 as Profile>::Surface<'a>) -> Self::Surface<'a> {
-        MaterialSurface::D4(Box::new(value))
+        value.into()
     }
     fn feature<'a>(value: <D4 as Profile>::Feature<'a>) -> Self::Feature<'a> {
         match value {}
@@ -334,13 +333,7 @@ impl Narrows<Universal> for D4 {
         ))
     }
     fn surface<'a>(value: <Universal as Profile>::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
-        match value {
-            MaterialSurface::D4(value) => Ok(*value),
-            _ => Err(Error::new(
-                "d4.narrow.surface",
-                "payload belongs to another authoring vocabulary",
-            )),
-        }
+        value.try_into()
     }
     fn feature<'a>(value: <Universal as Profile>::Feature<'a>) -> Result<Self::Feature<'a>, Error> {
         let _ = value;

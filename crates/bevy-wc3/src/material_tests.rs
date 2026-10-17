@@ -2,7 +2,7 @@ use super::super::textures::TextureRole;
 use super::*;
 use std::array::from_fn;
 use wc3::model::materials::state::{BlendOperations, Lighting, Operation};
-use wc3::model::materials::{programmed, SurfaceSet};
+use wc3::model::materials::{m3, MaterialSurface};
 use wc3::model::profiles::Unavailable;
 use wc3::model::profiles::Universal;
 use wc3::model::{AnimationSample, ColorSpace, Material, ModelBuilder, Texture};
@@ -36,12 +36,12 @@ fn default_extension_preserves_base_blend_and_depth_while_authored_pass_override
 fn basic_world_shaders_keep_black_baked_light_separate_from_surface_albedo() {
     let model = ModelBuilder::new("world surface").finish().unwrap();
     for shader in [0, 4, 16] {
-        let surface = world_surface::Material {
+        let surface = wmo_shader::MaterialStep {
             shader: Some(shader),
             diffuse: [0; 4],
             ..Default::default()
         };
-        let pass = compile_world(&model, &surface, &TextureImages::default()).unwrap();
+        let pass = compile_wmo(&model, &surface, &TextureImages::default()).unwrap();
         assert_eq!(pass.material.base_color, Color::WHITE);
         assert!(!pass.material.unlit);
         assert_eq!(
@@ -54,11 +54,11 @@ fn basic_world_shaders_keep_black_baked_light_separate_from_surface_albedo() {
             .iter()
             .any(|value| value.contains("needs its authored texture/specular combiner")));
     }
-    let unsupported = world_surface::Material {
+    let unsupported = wmo_shader::MaterialStep {
         shader: Some(8),
         ..Default::default()
     };
-    let pass = compile_world(&model, &unsupported, &TextureImages::default()).unwrap();
+    let pass = compile_wmo(&model, &unsupported, &TextureImages::default()).unwrap();
     assert!(pass
         .diagnostics
         .iter()
@@ -82,7 +82,7 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
             )
             .unwrap()
     });
-    let mut layer = layered::Layer {
+    let mut layer = mdlx::Layer {
         shader: Some(1),
         opacity: Animated::constant(0.8),
         ..Default::default()
@@ -92,7 +92,7 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
     layer.textures = ids
         .iter()
         .enumerate()
-        .map(|(slot, id)| layered::TextureSlot {
+        .map(|(slot, id)| mdlx::TextureSlot {
             slot: slot as u32,
             binding: wc3::model::materials::bindings::TextureBinding {
                 image: Animated::constant(Some(*id)),
@@ -101,7 +101,7 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
         })
         .collect();
     layer.emissive_gain = Some(Animated::constant(2.));
-    layer.fresnel = Some(layered::Fresnel {
+    layer.fresnel = Some(mdlx::Fresnel {
         color: Animated::constant([0.2, 0.4, 0.8]),
         opacity: Animated::constant(0.5),
         team_color: Animated::constant(0.3),
@@ -109,10 +109,11 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
     let id = builder
         .add_material(Material {
             name: "HD".into(),
-            surface: SurfaceSet::Layered(Box::new(layered::LayeredSurface {
+            surface: MaterialSurface::try_from(mdlx::LayeredSurface {
                 layers: vec![layer],
                 ..Default::default()
-            })),
+            })
+            .unwrap(),
         })
         .unwrap();
     let model = builder.finish().unwrap();
@@ -168,11 +169,11 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
 fn unknown_layer_shader_does_not_infer_hd_data_roles() {
     let mut builder = ModelBuilder::new("unknown shader");
     let texture = builder.add_file_texture("unknown.png").unwrap();
-    let mut layer = layered::Layer {
+    let mut layer = mdlx::Layer {
         shader: Some(55),
         ..Default::default()
     };
-    layer.textures.push(layered::TextureSlot {
+    layer.textures.push(mdlx::TextureSlot {
         slot: 1,
         binding: wc3::model::materials::bindings::TextureBinding {
             image: Animated::constant(Some(texture)),
@@ -182,11 +183,12 @@ fn unknown_layer_shader_does_not_infer_hd_data_roles() {
     let id = builder
         .add_material(Material {
             name: "unknown".into(),
-            surface: SurfaceSet::Layered(Box::new(layered::LayeredSurface {
+            surface: MaterialSurface::try_from(mdlx::LayeredSurface {
                 shader: "Shader_HD_DefaultUnit".into(),
                 layers: vec![layer],
                 ..Default::default()
-            })),
+            })
+            .unwrap(),
         })
         .unwrap();
     let model = builder.finish().unwrap();
@@ -224,7 +226,7 @@ fn same_resource_texture_variants_keep_independent_image_handles() {
     let linear = builder.add_texture(linear).unwrap();
     let layers = [srgb, linear]
         .map(|texture| {
-            let mut layer = layered::Layer::default();
+            let mut layer = mdlx::Layer::default();
             layer.binding.image = Animated::constant(Some(texture));
             layer
         })
@@ -232,10 +234,11 @@ fn same_resource_texture_variants_keep_independent_image_handles() {
     let id = builder
         .add_material(Material {
             name: "variants".into(),
-            surface: SurfaceSet::Layered(Box::new(layered::LayeredSurface {
+            surface: MaterialSurface::try_from(mdlx::LayeredSurface {
                 layers,
                 ..Default::default()
-            })),
+            })
+            .unwrap(),
         })
         .unwrap();
     let model = builder.finish().unwrap();
@@ -255,9 +258,9 @@ fn same_resource_texture_variants_keep_independent_image_handles() {
 fn m3_normal_and_diffuse_uses_of_one_image_select_distinct_interpretations() {
     let mut builder = ModelBuilder::<Universal>::new("normal interpretation");
     let id = builder.add_file_texture("shared.png").unwrap();
-    let mut layer = programmed::TextureLayer::default();
+    let mut layer = m3::TextureLayer::default();
     layer.binding.image = Some(id);
-    let mut standard = programmed::Standard {
+    let mut standard = m3::StandardMaterialStep {
         diffuse: Some(layer.clone()),
         ..Default::default()
     };
@@ -265,9 +268,7 @@ fn m3_normal_and_diffuse_uses_of_one_image_select_distinct_interpretations() {
     let material = builder
         .add_material(Material {
             name: "standard".into(),
-            surface: SurfaceSet::Programmed(Box::new(programmed::Material::Standard(Box::new(
-                standard,
-            )))),
+            surface: MaterialSurface::from(m3::MaterialStep::Standard(Box::new(standard))),
         })
         .unwrap();
     let model = builder.finish().unwrap();
@@ -337,7 +338,7 @@ fn sampling_static_bindings_does_not_request_repeated_asset_writes() {
 #[test]
 fn cutout_preserves_depth_and_uses_the_documented_threshold() {
     let mut pass = SurfacePass::default();
-    let operation: layered::Blend = BlendOperations::AlphaKey(());
+    let operation: mdlx::Blend = BlendOperations::AlphaKey(());
     blend(&operation, &mut pass);
     depth(&mut pass, Operation::Enabled, Operation::Enabled);
     assert_eq!(pass.material.alpha_mode, AlphaMode::Mask(128.0 / 255.0));
@@ -347,7 +348,7 @@ fn cutout_preserves_depth_and_uses_the_documented_threshold() {
 #[test]
 fn blend_and_depth_policies_remain_independent() {
     let mut pass = SurfacePass::default();
-    let operation: layered::Blend = BlendOperations::Modulate2x;
+    let operation: mdlx::Blend = BlendOperations::Modulate2x;
     blend(&operation, &mut pass);
     depth(&mut pass, Operation::Disabled, Operation::Enabled);
     assert_eq!(pass.material.alpha_mode, AlphaMode::Blend);
@@ -420,52 +421,50 @@ fn nested_composites_expand_ordered_passes_and_multiply_opacity_once() {
     let leaf = builder
         .add_material(Material {
             name: "leaf".into(),
-            surface: SurfaceSet::Programmed(Box::new(programmed::Material::Standard(
-                Box::default(),
-            ))),
+            surface: MaterialSurface::from(m3::MaterialStep::Standard(Box::default())),
         })
         .unwrap();
     let inner = builder
         .add_material(Material {
             name: "inner".into(),
-            surface: SurfaceSet::Programmed(Box::new(programmed::Material::Composite(Box::new(
-                programmed::Composite {
+            surface: MaterialSurface::from(m3::MaterialStep::Composite(Box::new(
+                m3::CompositeMaterialStep {
                     priority: 3,
-                    sections: vec![programmed::CompositeSection {
+                    sections: vec![m3::CompositeSection {
                         material: leaf,
-                        map_multiplier: programmed::Property {
+                        map_multiplier: m3::Property {
                             initial: 0.5,
                             ..Default::default()
                         },
                     }],
                 },
-            )))),
+            ))),
         })
         .unwrap();
     let outer = builder
         .add_material(Material {
             name: "outer".into(),
-            surface: SurfaceSet::Programmed(Box::new(programmed::Material::Composite(Box::new(
-                programmed::Composite {
+            surface: MaterialSurface::from(m3::MaterialStep::Composite(Box::new(
+                m3::CompositeMaterialStep {
                     priority: 7,
                     sections: vec![
-                        programmed::CompositeSection {
+                        m3::CompositeSection {
                             material: inner,
-                            map_multiplier: programmed::Property {
+                            map_multiplier: m3::Property {
                                 initial: 0.25,
                                 ..Default::default()
                             },
                         },
-                        programmed::CompositeSection {
+                        m3::CompositeSection {
                             material: leaf,
-                            map_multiplier: programmed::Property {
+                            map_multiplier: m3::Property {
                                 initial: 1.,
                                 ..Default::default()
                             },
                         },
                     ],
                 },
-            )))),
+            ))),
         })
         .unwrap();
     let model = builder.finish().unwrap();
@@ -493,17 +492,144 @@ fn nested_composites_expand_ordered_passes_and_multiply_opacity_once() {
 }
 
 #[test]
-fn programmed_shader_family_is_static_and_uniform_edits_reuse_its_pipeline() {
+fn m3_shader_family_is_static_and_uniform_edits_reuse_its_pipeline() {
     let ordinary = ModelMaterialExtension::default();
     let ordinary_key = ModelMaterialKey::from(&ordinary);
-    assert!(!ordinary_key.programmed);
+    assert!(!ordinary_key.m3);
     let mut standard = ordinary;
-    standard.programmed.settings.x = 1;
+    standard.m3.settings.x = 1;
     let standard_key = ModelMaterialKey::from(&standard);
-    assert!(standard_key.programmed);
+    assert!(standard_key.m3);
     assert_ne!(ordinary_key, standard_key);
-    standard.programmed.diffuse_team = Vec4::new(0.2, 0.4, 0.8, 1.);
-    standard.programmed.layers[0].controls.z = 0.25;
+    standard.m3.diffuse_team = Vec4::new(0.2, 0.4, 0.8, 1.);
+    standard.m3.layers[0].controls.z = 0.25;
     standard.enable_effect_color();
     assert_eq!(ModelMaterialKey::from(&standard), standard_key);
+}
+
+#[test]
+fn mixed_m3_external_and_composite_steps_keep_their_order_and_weights() {
+    use wc3::model::materials::{diablo3, diablo4};
+    use wc3::model::MaterialStep;
+
+    let mut builder = ModelBuilder::new("mixed shader execution");
+    let mut external = diablo3::MaterialStep::default();
+    external.uber.colors.diffuse = [0.2, 0.4, 0.6, 0.8];
+    let child = builder
+        .add_material(Material {
+            name: "external child".into(),
+            surface: external.into(),
+        })
+        .unwrap();
+    let id = builder
+        .add_material(Material {
+            name: "mixed stack".into(),
+            surface: MaterialSurface {
+                steps: vec![
+                    MaterialStep::M3(m3::MaterialStep::Standard(Box::default())),
+                    MaterialStep::M3(m3::MaterialStep::Composite(Box::new(
+                        m3::CompositeMaterialStep {
+                            priority: 13,
+                            sections: vec![m3::CompositeSection {
+                                material: child,
+                                map_multiplier: m3::Property {
+                                    initial: 0.5,
+                                    ..Default::default()
+                                },
+                            }],
+                        },
+                    ))),
+                    MaterialStep::Diablo4(Box::new(diablo4::MaterialStep {
+                        shader_map: 42,
+                        ..Default::default()
+                    })),
+                    MaterialStep::M3(m3::MaterialStep::Volume(Box::default())),
+                ],
+            },
+        })
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let passes =
+        compile_material_with_images(&model, id, Arc::new(TextureImages::default())).unwrap();
+    assert_eq!(passes.len(), 4);
+    assert_eq!(passes[0].state.m3.settings.x, 1);
+    assert!((passes[1].material.base_color.alpha() - 0.4).abs() < 1e-6);
+    assert_eq!(passes[1].material.depth_bias, 13.);
+    assert_eq!(passes[1].animation.pass_weights.len(), 1);
+    assert!(passes[2]
+        .diagnostics
+        .iter()
+        .any(|v| v.contains("shader map 42")));
+    assert!(passes[3].diagnostics.iter().any(|v| v.contains("Volume")));
+}
+
+#[test]
+fn layered_passes_compile_independent_culling_priority_and_sorting() {
+    use wc3::model::materials::mdlx::MaterialStep as MdlxMaterialStep;
+    use wc3::model::materials::program::MaterialStep;
+    let mut builder = ModelBuilder::new("independent layered settings");
+    let id = builder
+        .add_material(Material {
+            name: "mixed".into(),
+            surface: MaterialSurface {
+                steps: vec![
+                    MaterialStep::Mdlx(Box::new(MdlxMaterialStep {
+                        priority_plane: -3,
+                        two_sided: true,
+                        sort_far_z: true,
+                        ..Default::default()
+                    })),
+                    MaterialStep::M3(m3::MaterialStep::Standard(Box::default())),
+                    MaterialStep::Mdlx(Box::new(MdlxMaterialStep {
+                        priority_plane: 9,
+                        sort_near_z: true,
+                        ..Default::default()
+                    })),
+                ],
+            },
+        })
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let passes =
+        compile_material_with_images(&model, id, Arc::new(TextureImages::default())).unwrap();
+    assert_eq!(passes.len(), 3);
+    assert_eq!(passes[0].material.depth_bias, -3.);
+    assert!(passes[0].material.cull_mode.is_none());
+    assert!(passes[0].sort_far && !passes[0].sort_near);
+    assert_eq!(passes[2].material.depth_bias, 9.);
+    assert!(passes[2].material.cull_mode.is_some());
+    assert!(passes[2].sort_near && !passes[2].sort_far);
+}
+
+#[test]
+fn unresolved_diablo_placeholder_uses_appearance_variant_ownership() {
+    use wc3::model::appearance::{diablo4, UniversalAppearance};
+    let mut builder = ModelBuilder::new("unresolved Diablo selection");
+    let linked = builder
+        .add_material(Material {
+            name: "external".into(),
+            surface: Default::default(),
+        })
+        .unwrap();
+    let empty = builder
+        .add_material(Material {
+            name: "empty".into(),
+            surface: Default::default(),
+        })
+        .unwrap();
+    let mut appearance = diablo4::Appearance::default();
+    let slot = appearance.add_slot(diablo4::Slot::default());
+    appearance.add_variant(slot, linked).unwrap();
+    builder.set_appearance(UniversalAppearance::D4(appearance));
+    let model = builder.finish().unwrap();
+    let images = Arc::new(TextureImages::default());
+    let passes = compile_material_with_images(&model, linked, images.clone()).unwrap();
+    assert_eq!(passes.len(), 1);
+    assert!(passes[0]
+        .diagnostics
+        .iter()
+        .any(|message| message.contains("external material shader is unresolved")));
+    assert!(compile_material_with_images(&model, empty, images)
+        .unwrap()
+        .is_empty());
 }

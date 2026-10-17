@@ -14,7 +14,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::{
-    ClipId, FeatureId, MaterialId, MaterialSurface, Model, NodeFeature, NodeId,
+    ClipId, FeatureId, MaterialId, Model, NodeFeature, NodeId,
     RibbonEmitter as SemanticRibbonEmitter, TrailAtlasSlot, TrailControls, TrailEmitter,
     TrailRendering,
 };
@@ -176,7 +176,6 @@ impl RuntimeRibbons {
             };
             let mut passes = Vec::new();
             for id in ids {
-                let first_pass = passes.len();
                 let Some(surfaces) = materials.get(&id) else {
                     diagnostic("Trail material does not resolve to a compiled surface");
                     continue;
@@ -195,8 +194,8 @@ impl RuntimeRibbons {
                     }
                     passes.push(Pass {
                         priority: material.base.depth_bias as i32,
-                        sort_far: false,
-                        sort_near: false,
+                        sort_far: surface.sort_far,
+                        sort_near: surface.sort_near,
                         two_sided: material.base.cull_mode.is_none(),
                         material,
                         animation: surface.animation.clone(),
@@ -204,14 +203,6 @@ impl RuntimeRibbons {
                         depth_test: state.depth_test,
                         depth_write: state.depth_write,
                     });
-                }
-                if let Some(material) = model.material(id) {
-                    if let MaterialSurface::Layered(surface) = &material.surface {
-                        for pass in &mut passes[first_pass..] {
-                            pass.sort_far = surface.sort_far_z;
-                            pass.sort_near = surface.sort_near_z;
-                        }
-                    }
                 }
             }
             if passes.is_empty() {

@@ -8,8 +8,8 @@ use crate::model::profiles::{
 };
 use crate::model::resources::SnoResource;
 use crate::model::{
-    Basis, Billboard, Bounds, Error, ExplicitBinding, Inheritance, LengthUnit, MaterialSurface,
-    Model, NodeControls, SnoNamespace, Transform, UniversalAppearance, UniversalBinding,
+    Basis, Billboard, Bounds, Error, ExplicitBinding, Inheritance, LengthUnit, Model, NodeControls,
+    SnoNamespace, Transform, UniversalAppearance, UniversalBinding,
 };
 use crate::model::{
     ClipControls as AnyClipControls, MeshControls as AnyMeshControls,
@@ -229,7 +229,7 @@ impl Extends<D3> for Universal {
         match value {}
     }
     fn surface<'a>(value: <D3 as Profile>::Surface<'a>) -> Self::Surface<'a> {
-        MaterialSurface::D3(Box::new(value))
+        value.into()
     }
     fn feature<'a>(value: <D3 as Profile>::Feature<'a>) -> Self::Feature<'a> {
         match value {}
@@ -336,13 +336,7 @@ impl Narrows<Universal> for D3 {
         ))
     }
     fn surface<'a>(value: <Universal as Profile>::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
-        match value {
-            MaterialSurface::D3(value) => Ok(*value),
-            _ => Err(Error::new(
-                "d3.narrow.surface",
-                "payload belongs to another authoring vocabulary",
-            )),
-        }
+        value.try_into()
     }
     fn feature<'a>(value: <Universal as Profile>::Feature<'a>) -> Result<Self::Feature<'a>, Error> {
         let _ = value;

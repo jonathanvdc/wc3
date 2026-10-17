@@ -2,9 +2,7 @@
 use bevy::math::Vec3;
 use std::sync::Arc;
 use wc3::model::controls::{world_draw::Lighting, DrawControls, InstanceControls};
-use wc3::model::materials::SurfaceSet;
 use wc3::model::systems::{ModelMetadata, System};
-use wc3::model::MaterialId;
 use wc3::model::{Billboard, MeshInstance, Model, PrimitiveRange, Topology, Transform};
 
 // Regional illumination is a material contribution. Bevy scene lights and ambient
@@ -13,7 +11,7 @@ pub(crate) fn illumination(
     model: &Model<'_>,
     instance: &MeshInstance<'_>,
     controls: Option<&DrawControls>,
-    material: MaterialId,
+    exterior_material: bool,
 ) -> (Vec3, u32) {
     let region = match &instance.controls {
         Some(InstanceControls::Wmo(region)) => Some(region.as_ref()),
@@ -27,9 +25,6 @@ pub(crate) fn illumination(
         .and_then(|region| region.ambient_override)
         .unwrap_or(root_ambient);
     let ambient = Vec3::new(ambient[0] as f32, ambient[1] as f32, ambient[2] as f32) / 255.;
-    let exterior_material = model.material(material).is_some_and(|material| {
-        matches!(&material.surface, SurfaceSet::World(surface) if surface.state.rasterization.controls.exterior_lit)
-    });
     if exterior_material || region.is_some_and(|region| region.options.exterior_lit) {
         return (ambient, 2);
     }

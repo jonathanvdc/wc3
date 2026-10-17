@@ -10,11 +10,11 @@ use crate::model::values::programmed::{
 };
 use crate::model::{Link, ValidateLinks};
 
-/// Editable M3 Standard values.
+/// Editable M3 StandardMaterialStep values.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Standard {
+pub struct StandardMaterialStep {
     /// Draw composition, rasterization controls, and authored priority.
-    pub state: PassState<BlendMode, PassControls, i32>,
+    pub state: PassState<BlendMode, StandardRasterization, i32>,
     /// Sets HDR environment constant.
     pub hdr_environment_constant: f32,
     /// Sets HDR environment diffuse.
@@ -79,10 +79,10 @@ impl ValidateLinks for LayerBlendOp {
 
 /// Shader-specific rasterization controls whose values remain in their authored domains.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct PassControls {
+pub struct StandardRasterization {
     /// Additional shader behavior flags.
     pub additional_flags: AdditionalMaterialFlags,
-    /// Material behavior flags, including unresolved bits.
+    /// MaterialStep behavior flags, including unresolved bits.
     pub flags: MaterialFlags,
     /// Render-to-texture channel selection.
     pub rtt_channels: RttChannels,
@@ -92,7 +92,7 @@ pub struct PassControls {
     pub alpha_test_threshold: u32,
 }
 
-impl ValidateLinks for PassControls {
+impl ValidateLinks for StandardRasterization {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.depth_blend_falloff.visit_links(visitor);
     }

@@ -16,11 +16,12 @@ use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 ///
 /// The graph cannot accept surfaces outside its vocabulary:
 /// ```compile_fail
-/// use wc3::model::{Material, MaterialSurface};
+/// use wc3::model::Material;
+/// use wc3::model::materials::m2::MaterialStep as M2MaterialStep;
 /// use wc3::model::profiles::Mdlx;
 /// let material = Material::<Mdlx> {
 ///     name: "invalid surface family".into(),
-///     surface: MaterialSurface::ModelShader(Box::default()),
+///     surface: M2MaterialStep::default().into(),
 /// };
 /// ```
 ///
@@ -123,7 +124,7 @@ impl Extends<Mdlx> for Universal {
         match value {}
     }
     fn surface<'a>(value: <Mdlx as Profile>::Surface<'a>) -> Self::Surface<'a> {
-        MaterialSurface::Layered(Box::new(value))
+        MaterialSurface::try_from(value).expect("validated MDLX surface")
     }
     fn feature<'a>(value: <Mdlx as Profile>::Feature<'a>) -> Self::Feature<'a> {
         value.into()

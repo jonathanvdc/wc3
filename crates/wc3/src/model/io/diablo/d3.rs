@@ -160,11 +160,12 @@ fn import_appearance<'a>(
         }
         let slot_id = appearance.add_slot(Slot::named(slot_name));
         for variant in &slot.variants {
+            let (selection, surface) = materials::read(variant);
             let material = builder.add_material(Material {
                 name: Cow::Borrowed(""),
-                surface: materials::read(variant),
+                surface,
             })?;
-            appearance.add_variant(slot_id, material)?;
+            appearance.add_variant_with_selection(slot_id, material, selection)?;
         }
         slot_ids.push(slot_id);
     }
@@ -425,7 +426,7 @@ pub fn import_material(
     _options: &ImportOptions,
 ) -> Result<Conversion<MaterialAsset>, Error> {
     let root = &source.root;
-    let projected = materials::read(&native::SubObjectAppearance {
+    let (_, projected) = materials::read(&native::SubObjectAppearance {
         material: root.material.as_borrowed(),
         shader_params: root.shader_params.as_borrowed(),
         ..Default::default()

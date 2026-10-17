@@ -2,8 +2,7 @@
 use super::{incompatible, Narrows};
 use crate::model::profiles::{NoControls, Profile, Universal, Wmo};
 use crate::model::{
-    DrawControls, Error, InstanceControls, MaterialSurface, ModelMetadata, System,
-    UniversalAppearance,
+    DrawControls, Error, InstanceControls, ModelMetadata, System, UniversalAppearance,
 };
 impl Narrows<Universal> for Wmo {
     fn image_resource<'a>(
@@ -65,10 +64,7 @@ impl Narrows<Universal> for Wmo {
         }
     }
     fn surface<'a>(value: <Universal as Profile>::Surface<'a>) -> Result<Self::Surface<'a>, Error> {
-        match value {
-            MaterialSurface::World(value) => Ok(*value),
-            _ => Err(incompatible("surface")),
-        }
+        value.try_into()
     }
     fn feature<'a>(value: <Universal as Profile>::Feature<'a>) -> Result<Self::Feature<'a>, Error> {
         value.try_into().map_err(|_| incompatible("feature"))

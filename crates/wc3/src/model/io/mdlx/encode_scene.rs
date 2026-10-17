@@ -2,7 +2,7 @@
 use super::encode_animation::Encoder;
 use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, Dialect};
-use crate::model::materials::layered::AlphaAdditiveEncoding;
+use crate::model::materials::mdlx::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
 use crate::model::{Axis, FeatureId, MaterialId, MeshId, Model, NodeId, TextureId};

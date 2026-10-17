@@ -1,5 +1,4 @@
 use super::*;
-use crate::model::MaterialSurface;
 #[test]
 fn shortened_splines_keep_values_between_new_boundaries() {
     for interpolation in [Interpolation::Hermite, Interpolation::Bezier] {
@@ -78,7 +77,7 @@ fn typed_restriction_retains_clock_and_target() {
     let material = builder
         .add_material(Material {
             name: "".into(),
-            surface: MaterialSurface::Layered(Box::default()),
+            surface: Default::default(),
         })
         .unwrap();
     let track = Track {

@@ -14,6 +14,37 @@ pub enum AlternativeObject {}
 /// Stable appearance-scoped hashed look identity.
 pub type AlternativeId = Id<AlternativeObject>;
 
+/// Appearance-local references that select an external material and attached cloth/effects.
+#[derive(Clone, Debug, Default)]
+pub struct Selection {
+    /// Appearance material options.
+    pub flags: u32,
+    /// External base-material resource, including negative absent selections.
+    pub base_material: i32,
+    /// External override-material resource.
+    pub override_material: i32,
+    /// External cloth resource.
+    pub cloth: i32,
+    /// External high-quality cloth override.
+    pub high_quality_cloth_override: i32,
+    /// Mounted cloth overrides in their authored slots.
+    pub mounted_cloth_overrides: [i32; 4],
+    /// External effect-group resource.
+    pub effect_group: i32,
+    /// Ordered external variant-material resources.
+    pub variant_materials: Vec<i32>,
+}
+impl ValidateLinks for Selection {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+}
+/// One actual appearance variant and its independent external selections.
+#[derive(Clone, Debug)]
+pub struct Variant {
+    /// Shader material executed by this variant.
+    pub material: MaterialId,
+    /// External resources and qualifiers belonging to this variant.
+    pub selection: Selection,
+}
 /// Named native material slot with independently authored variants.
 #[derive(Clone, Debug, Default)]
 pub struct Slot {
@@ -24,7 +55,7 @@ pub struct Slot {
     /// Authored persona selection.
     pub persona: u8,
     scope: Scope,
-    variants: Vec<(VariantId, MaterialId)>,
+    variants: Vec<(VariantId, Variant)>,
 }
 impl Slot {
     /// Creates an empty slot with authored identity and persona declarations.
@@ -38,7 +69,9 @@ impl Slot {
     }
     /// Iterates actual variants in authored order, including variants unused by any look.
     pub fn variants(&self) -> impl ExactSizeIterator<Item = (VariantId, MaterialId)> + '_ {
-        self.variants.iter().copied()
+        self.variants
+            .iter()
+            .map(|(id, variant)| (*id, variant.material))
     }
     /// Replaces an actual variant assignment while preserving its scoped identity.
     pub fn set_variant(&mut self, id: VariantId, material: MaterialId) -> Result<(), Error> {
@@ -49,7 +82,7 @@ impl Slot {
             .ok_or_else(|| {
                 Error::new("d4.appearance.variant", "variant belongs to another slot")
             })?;
-        value.1 = material;
+        value.1.material = material;
         Ok(())
     }
     /// Removes a variant; checked publication rejects looks that still select it.
@@ -57,14 +90,28 @@ impl Slot {
         self.variants
             .iter()
             .position(|(key, _)| *key == id)
-            .map(|index| self.variants.remove(index).1)
+            .map(|index| self.variants.remove(index).1.material)
     }
     /// Resolves a variant only when this actual slot owns its identity.
     pub fn variant(&self, id: VariantId) -> Option<MaterialId> {
         self.variants
             .iter()
             .find(|(key, _)| *key == id)
-            .map(|(_, value)| *value)
+            .map(|(_, value)| value.material)
+    }
+    /// Reads the complete variant owned by this slot.
+    pub fn variant_definition(&self, id: VariantId) -> Option<&Variant> {
+        self.variants
+            .iter()
+            .find(|(key, _)| *key == id)
+            .map(|(_, value)| value)
+    }
+    /// Edits shader assignment and external selections without changing identity.
+    pub fn variant_definition_mut(&mut self, id: VariantId) -> Option<&mut Variant> {
+        self.variants
+            .iter_mut()
+            .find(|(key, _)| *key == id)
+            .map(|(_, value)| value)
     }
 }
 /// Hashed look assigning actual variants to actual material slots.
@@ -100,6 +147,15 @@ impl Appearance {
         slot: MaterialSlotId,
         material: MaterialId,
     ) -> Result<VariantId, Error> {
+        self.add_variant_with_selection(slot, material, Selection::default())
+    }
+    /// Adds an actual variant with independently authored external selections.
+    pub fn add_variant_with_selection(
+        &mut self,
+        slot: MaterialSlotId,
+        material: MaterialId,
+        selection: Selection,
+    ) -> Result<VariantId, Error> {
         let slot = self
             .slots
             .iter_mut()
@@ -109,7 +165,13 @@ impl Appearance {
                 Error::new("d4.appearance.slot", "slot belongs to another appearance")
             })?;
         let id = slot.scope.allocate();
-        slot.variants.push((id, material));
+        slot.variants.push((
+            id,
+            Variant {
+                material,
+                selection,
+            },
+        ));
         Ok(id)
     }
     /// Adds a hashed look after checking every selected slot and variant.
@@ -216,8 +278,9 @@ impl Appearance {
 impl ValidateLinks for Appearance {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         for (_, slot) in &self.slots {
-            for (_, material) in slot.variants() {
-                material.visit_links(visitor);
+            for (_, variant) in &slot.variants {
+                variant.material.visit_links(visitor);
+                variant.selection.visit_links(visitor);
             }
         }
     }

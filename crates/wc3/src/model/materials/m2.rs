@@ -58,9 +58,9 @@ impl Default for GuildPalette {
         }
     }
 }
-/// Complete logical shader pass. Table addresses are replaced with graph bindings.
+/// An M2 shader step. Table addresses are replaced with graph bindings.
 #[derive(Clone, Debug)]
-pub struct ShaderPass<'a, I = TextureUnit> {
+pub struct MaterialStep<'a, I = TextureUnit> {
     /// Shader family identifier interpreted by the game shader implementation.
     pub shader: u16,
     /// Native batch auxiliary geoset word, distinct from the skin section identity.
@@ -83,7 +83,7 @@ pub struct ShaderPass<'a, I = TextureUnit> {
     /// Optional user-authored shader label.
     pub label: Cow<'a, str>,
 }
-impl<I: ValidateLinks> ValidateLinks for ShaderPass<'_, I> {
+impl<I: ValidateLinks> ValidateLinks for MaterialStep<'_, I> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         self.state.visit_links(v);
         self.color.visit_links(v);
@@ -150,7 +150,7 @@ impl<T: ShaderCoordinates> ShaderInput for TextureUnit<T> {
         }
     }
 }
-impl<I: ShaderInput> SurfacePayload for ShaderPass<'_, I> {
+impl<I: ShaderInput> SurfacePayload for MaterialStep<'_, I> {
     fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
         matches!(
             Target::from_identity(key),
@@ -172,7 +172,7 @@ impl<I: ShaderInput> SurfacePayload for ShaderPass<'_, I> {
     }
 }
 
-impl<I> Default for ShaderPass<'_, I> {
+impl<I> Default for MaterialStep<'_, I> {
     fn default() -> Self {
         Self {
             shader: 0,

@@ -4,15 +4,15 @@ use naga::valid::{Capabilities, ValidationFlags, Validator};
 use wc3::model::values::model::BatchFlags;
 use wc3::model::Animated;
 
-fn surface(shader: u16, coordinates: &[i16]) -> model_shader::ShaderPass<'static> {
-    model_shader::ShaderPass {
+fn surface(shader: u16, coordinates: &[i16]) -> m2::MaterialStep<'static> {
+    m2::MaterialStep {
         shader,
         color: Animated::constant([0.25, 0.5, 0.75]),
         opacity: Animated::constant(0.8),
         textures: coordinates
             .iter()
             .map(|&source| {
-                let mut unit = model_shader::TextureUnit::default();
+                let mut unit = m2::TextureUnit::default();
                 unit.coordinates.source = source;
                 unit.contribution = Animated::constant(0.25);
                 unit
@@ -22,9 +22,9 @@ fn surface(shader: u16, coordinates: &[i16]) -> model_shader::ShaderPass<'static
     }
 }
 
-fn compile(surface: &model_shader::ShaderPass<'_>) -> SurfacePass {
+fn compile(surface: &m2::MaterialStep<'_>) -> SurfacePass {
     let model = Model::builder("shader controls").finish().unwrap();
-    compile_model_shader(&model, surface, &TextureImages::default()).unwrap()
+    compile_m2(&model, surface, &TextureImages::default()).unwrap()
 }
 
 #[test]
@@ -193,7 +193,7 @@ fn legacy_surplus_bindings_use_the_established_two_input_equation_with_diagnosti
 
 #[test]
 fn legacy_guild_programmes_use_external_palettes_and_reject_six_input_layouts() {
-    let palette = model_shader::GuildPalette {
+    let palette = m2::GuildPalette {
         background: [0.2, 0.3, 0.4],
         emblem: [0.5, 0.6, 0.7],
         border: [0.8, 0.9, 1.],

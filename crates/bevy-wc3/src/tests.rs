@@ -5,7 +5,7 @@ use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use std::collections::HashMap;
-use wc3::model::materials::layered::{Layer, LayeredSurface};
+use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::{
     Animated, Billboard, Draw, ExplicitBinding, GeometryData, GeometryInfluences, IdentityBinding,
     Influence, Material as SemanticMaterial, MaterialSurface, Mesh as ModelMesh, MeshInstance,
@@ -74,13 +74,14 @@ fn fixture_geometry<'a>(
     let material = builder
         .add_material(SemanticMaterial {
             name: "plain".into(),
-            surface: MaterialSurface::Layered(Box::new(LayeredSurface {
+            surface: MaterialSurface::try_from(LayeredSurface {
                 layers: vec![Layer {
                     opacity: Animated::constant(1.),
                     ..Default::default()
                 }],
                 ..Default::default()
-            })),
+            })
+            .unwrap(),
         })
         .unwrap();
     let mut instance = MeshInstance::new(mount, mesh);
@@ -513,13 +514,14 @@ fn animated_materials_are_isolated_between_playback_clocks() {
         .edit(|builder| {
             builder.set_material_surface(
                 material,
-                MaterialSurface::Layered(Box::new(LayeredSurface {
+                MaterialSurface::try_from(LayeredSurface {
                     layers: vec![Layer {
                         opacity: Animated::new(1., property.clone()),
                         ..Default::default()
                     }],
                     ..Default::default()
-                })),
+                })
+                .unwrap(),
             )?;
             builder.add_timeline_channel(Channel::Scalar(Track {
                 target: property.widen(),
@@ -895,12 +897,12 @@ fn m2_nonzero_transition_pairs_require_explicit_application_duration() {
 #[test]
 fn programmed_shadow_cast_and_receive_flags_are_independent() {
     use bevy::light::{NotShadowCaster, NotShadowReceiver};
-    use wc3::model::materials::programmed;
+    use wc3::model::materials::m3;
     for cast in [false, true] {
         for receive in [false, true] {
             let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
             let id = source.materials().iter().next().unwrap().0;
-            let mut standard = programmed::Standard::default();
+            let mut standard = m3::StandardMaterialStep::default();
             standard
                 .state
                 .rasterization
@@ -915,9 +917,7 @@ fn programmed_shadow_cast_and_receive_flags_are_independent() {
                 .edit(|builder| {
                     builder.set_material_surface(
                         id,
-                        MaterialSurface::Programmed(Box::new(programmed::Material::Standard(
-                            Box::new(standard),
-                        ))),
+                        MaterialSurface::from(m3::MaterialStep::Standard(Box::new(standard))),
                     )
                 })
                 .unwrap();

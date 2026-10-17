@@ -2,7 +2,7 @@
 use super::{native_anim, nr, surface, Envelope, Error, Writer};
 pub(super) fn encode<E: Envelope>(
     name: &str,
-    r: &surface::Volume,
+    r: &surface::VolumeMaterialStep,
     writer: &mut Writer<'_, '_, '_, '_, E>,
 ) -> Result<nr::VolumeMaterial, Error> {
     Ok(nr::VolumeMaterial {

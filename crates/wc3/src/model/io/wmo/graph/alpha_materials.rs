@@ -64,7 +64,7 @@ pub(super) fn write<'a>(
         let surface = &material.surface;
         if surface.shader.is_some()
             || surface.textures.len() > 2
-            || surface.extension.is_some()
+            || surface.shader_overrides.is_some()
             || surface.legacy_color.is_some()
             || surface.legacy_controls.is_some()
             || surface.legacy_runtime.is_some()

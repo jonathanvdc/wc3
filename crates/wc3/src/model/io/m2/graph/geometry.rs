@@ -2,8 +2,8 @@
 use super::*;
 use crate::model::io::materialize;
 use crate::model::materials::bindings::{Coordinates, ImageSelection};
-use crate::model::materials::model_shader::FrameSampling;
-use crate::model::materials::model_shader::{material_flags, rasterization};
+use crate::model::materials::m2::FrameSampling;
+use crate::model::materials::m2::{material_flags, rasterization};
 use crate::model::materials::state::PassState;
 use semantic::{Draw, Influence, M2Geometry, Mesh, MeshInstance, Skin, Topology};
 use zerovec::ZeroVec;

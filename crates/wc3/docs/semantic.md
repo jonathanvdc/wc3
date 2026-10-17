@@ -196,50 +196,98 @@ attaching arbitrary streams to a narrower native schema.
 
 ## Materials, shader inputs, and draw state
 
-A material combines a rendering program with its input values. Its components
-live under `model::materials`, where profiles select complete compositions
-with their own supported value domains. `LayeredSurface<Layer>` owns ordered
-layers; `ShaderPass<Input>` owns ordered shader inputs. Custom layer and input
-types implement `SurfaceLayer` or `ShaderInput` to participate in property
-selection, local validation, and graph traversal. `SurfaceSet` combines complete
-surface families, with `Unavailable` for families that a selection cannot author.
-Application profiles can reuse these structures or supply their own payloads.
+A material owns a program whose authored steps describe shader execution or
+material composition. Universal's `MaterialSurface` is a
+`MaterialProgram<MaterialStep>`, with an ordered `steps` collection. Applications
+can reuse `MaterialProgram<S>` as storage within their own surface schema, with
+their own step vocabulary and validation.
+
+`MaterialStep` selects the dialect of one operation: `Mdlx`, `M2`, `Wmo`, `M3`,
+`Diablo3`, or `Diablo4`. Each dialect lives under the matching
+`model::materials` namespace and defines its own `MaterialStep`. For example,
+`MaterialStep::M3(m3::MaterialStep::Standard(...))` retains M3 Standard shader semantics;
+it does not describe a portable standard shader. A single program can combine
+steps from different dialects. Shared texture bindings, blend operations, depth
+state, and rasterization components are reused where their meanings agree.
+Shader-specific inputs and rendering settings remain together in their concrete
+step definitions.
+
+A step can expand into several rendering passes. `m3::MaterialStep::Composite` references
+complete materials with independently animated weights and a composition priority.
+References remain graph links; compilation expands them recursively without
+replacing the authored references or copying their definitions. A Diablo III step
+retains shared shader inputs and separate ordered opaque and translucent phase
+declarations. A Diablo IV step carries resolved shader inputs and parameters.
+An unresolved Diablo IV selection retains its external references on its
+appearance variant and uses an empty material program.
+
+Each `mdlx::MaterialStep` owns its shader name, priority, sorting, sampling, culling,
+and unresolved flags alongside its animated `layer` inputs. Importing a native
+layered material copies its shared declarations onto each step. Checked MDLX
+projection requires those declarations to agree, because the native material
+stores them once. An empty program carries no shader declarations. Nondefault
+headers on empty native materials remain editable through the native codecs;
+semantic import rejects them unless an explicit loss policy accepts dropping them.
+
+Diablo appearance variants own external resource selections independently of the
+shader material they execute, as described under [appearance and playback](#appearance-and-playback).
+Native-profile surfaces convert into the universal program without retaining
+another copy. MDLX conversion uses checked `TryFrom` because empty declarations
+may be unrepresentable. Checked projections reject unsupported steps or extra
+operations rather than dropping them. A native M3 surface requires one matching
+shader or composite step; Diablo IV accepts zero or one resolved shader step.
+
+MDLX animation selectors address the ordinal in `steps`. Reordering steps
+therefore requires updating selectors that address their fields. M2 and M3
+selectors have no step ordinal: a selector must identify exactly one operation in
+the program. Adding a second step accepting that selector makes it ambiguous,
+and publication rejects channels or bindings targeting it. Existing typed input
+selectors and animation identities otherwise remain unchanged.
+
+The word layer describes different operations in these dialects. A Warcraft III
+draw layer becomes an MDLX step. An M3 texture layer supplies sampling,
+coordinates, color processing, and a contribution to one shader input; it does
+not add a step. An M3 composite section instead references another complete
+material and can expand into several rendering passes. Native profiles retain
+these exact authoring schemas. Native MDLX surfaces use `LayeredSurface` and its
+`SurfaceLayer` vocabulary; M2 inputs implement `ShaderInput` for property selection,
+local validation, and graph traversal.
 
 Texture inputs compose through `TextureBinding<Image, Coordinates, Sampling,
 Contribution>`. The selected image representation can retain animated texture
 choices, runtime replacement categories, external resource identities, or explicit
 absent-image codes. `Coordinates<Source, Transform>` separates mesh UV or generated
 coordinate selection from its transform. Referenced transforms, inline transforms,
-Diablo matrices and parametric animation, and programmed UV controls remain
+Diablo matrices and parametric animation, and M3 UV controls remain
 explicit choices. Native transform conventions and units are preserved.
 
-Sampling belongs to the input that uses it. Programmed bindings retain sampling programs for flipbook, video, and noise,
+Sampling belongs to the input that uses it. M3 bindings retain sampling programs for flipbook, video, and noise,
 together with independent channel-selection contributions. Simpler bindings
-select smaller components. World materials retain two independently authored scrolling
+select smaller components. WMO steps retain two independently authored scrolling
 slots even when their image bindings are absent. Diablo matrix rows and unresolved
 animation controls retain their authored order. These distinctions do not require
 optional fields on every texture binding.
 
-The following shader pass selects inputs without an inline coordinate transform.
+The following M2 step selects inputs without an inline coordinate transform.
 Its inputs still use the same owning binding structure as other selections:
 
 ```rust
-use wc3::model::materials::model_shader::{ShaderPass, TextureUnit};
+use wc3::model::materials::m2::{MaterialStep as M2MaterialStep, TextureUnit};
 use wc3::model::Animated;
 
 let mut input = TextureUnit::<()>::default();
 input.coordinates.source = 1;
 input.contribution = Animated::constant(0.75);
-let surface = ShaderPass {
+let surface = M2MaterialStep {
     textures: vec![input],
     ..Default::default()
 };
 assert_eq!(surface.textures[0].contribution.default, 0.75);
 ```
 
-A binding supplies a shader input; a pass applies an operation to the draw.
-MDLX layers therefore retain their ordered pass behavior, while programmed
-texture layers remain inputs to a shader. `PassState<Blend, Rasterization,
+A binding supplies a shader input; a step describes an authored operation.
+MDLX layers therefore retain their ordered execution behavior, while M3 texture
+layers remain inputs to a shader. `PassState<Blend, Rasterization,
 Ordering>` owns draw state. `Rasterization<Depth, Faces, Lighting, Controls>`
 selects independent domains, with `DepthState` separating comparison, writes,
 and bias. Common operations have shared names, while each composition limits
@@ -249,7 +297,7 @@ operations remain in their selected domains. M2 rasterization helpers separate
 known lighting, fog, face, and depth controls while retaining the remaining flag bits.
 
 `SurfaceContribution<Input, Parameters>` couples an input with its response
-parameters. Programmed standard surfaces group diffuse, specular, emissive,
+parameters. M3 Standard surfaces group diffuse, specular, emissive,
 opacity, and normal contributions without replacing their shader model with PBR.
 Sparse primary and secondary inputs retain their exact slots. A specular response
 keeps its color and gloss roles; normal contributions retain independent masks and
@@ -257,7 +305,7 @@ the full authored weight vector.
 
 Shader parameters use `ParameterEntry<Key, Value, Controls>`. Their ordered
 collections retain duplicate keys. Diablo tags, Diablo value selectors, and
-programmed hashed names remain different identity domains. Opaque words and byte
+M3 hashed names remain different identity domains. Opaque words and byte
 payloads remain distinct from interpreted scalar or vector values; a bit pattern
 that resembles a nonfinite float is valid opaque data. Graph-absence sentinels,
 light groups, unresolved parameter types, and independently stored hashes are
@@ -553,6 +601,14 @@ rebuilt. Its geometry selects an actual material slot; it does not duplicate tho
 assignments in common draw looks. D3 uses the same ownership pattern with named slots and named alternatives.
 Both profiles retain unused variants independently of the looks that select them;
 neither infers slot identity from mutable material display names.
+
+Each variant's typed `selection` retains its base-material, cloth, effect, and
+appearance qualifiers, including when no Diablo IV shader has been resolved.
+Use `add_variant_with_selection` to author these assignments and
+`slot.variant_definition_mut(id)` to edit a complete variant. `variants()` exposes
+variant/material pairs for assignment traversal. Changing the shader material
+with `set_variant` preserves the variant's selections, so two variants can share
+one shader definition while selecting different external resources.
 
 Draw-based looks are complete assignments, with exactly one material for every
 instance draw. Draws and geometry attributes carry no fallback material. Selecting

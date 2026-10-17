@@ -6,7 +6,7 @@ to editing workflows and runnable tools.
 
 - [Semantic model graphs](semantic.md) explains graph relationships, typed
   authoring profiles, dependency ownership, playback declarations, borrowed arrays,
-  widening, and checked edits.
+  typed material programs and shader dialects, widening, and checked edits.
 - [Model import and export](conversion.md) explains native imports and export plans,
   concrete profiles, selected appearance, and representability policies.
 - [Warcraft III native document editing](models.md) explains version selection, collection

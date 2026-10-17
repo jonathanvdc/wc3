@@ -53,7 +53,7 @@ pub(super) fn lensflare<'a, E: Envelope, D: nr::LensFlareDialect>(
     source: &'a native::Container<'_, E>,
     reader: &mut Reader<'a, '_>,
     r: nr::LensFlare<D>,
-) -> Result<surface::LensFlare<'a>, Error>
+) -> Result<surface::LensFlareMaterialStep<'a>, Error>
 where
     D::LibName: Slot<native::Ref<nr::targets::Character>>,
     D::Color: Slot<nr::AnimationValue<nr::FixedBytes<4>>>,
@@ -61,7 +61,7 @@ where
     D::Size: Slot<nr::AnimationValue<f32>>,
 {
     reader.name = Some(string(source, r.name)?);
-    Ok(surface::LensFlare {
+    Ok(surface::LensFlareMaterialStep {
         flare_map: get_layer(source, reader, r.flare_map)?,
         mask_map: get_layer(source, reader, r.mask_map)?,
         sub_flares: subflares(source, r.sub_flares)?,
@@ -81,7 +81,7 @@ pub(super) fn get_lensflare<'a, E: Envelope>(
     reader: &mut Reader<'a, '_>,
     reference: native::Ref<nr::targets::LensFlare>,
     index: usize,
-) -> Result<surface::LensFlare<'a>, Error> {
+) -> Result<surface::LensFlareMaterialStep<'a>, Error> {
     macro_rules! read {
         ($v:ty) => {{
             let r = source

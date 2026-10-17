@@ -2,7 +2,7 @@
 use super::{nr, surface, Envelope, Error, Writer};
 pub(super) fn encode<E: Envelope>(
     name: &str,
-    r: &surface::Creep,
+    r: &surface::CreepMaterialStep,
     writer: &mut Writer<'_, '_, '_, '_, E>,
 ) -> Result<nr::CreepMaterial<nr::V1>, Error> {
     Ok(nr::CreepMaterial {

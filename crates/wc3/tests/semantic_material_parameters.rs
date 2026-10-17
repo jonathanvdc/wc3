@@ -1,6 +1,6 @@
 use std::borrow::Cow;
+use wc3::model::materials::m3::{DataGroup, DataProperty, NamedShaderKey};
 use wc3::model::materials::parameters::{OpaqueBytes, ParameterEntry};
-use wc3::model::materials::programmed::{DataGroup, DataProperty, NamedShaderKey};
 
 #[test]
 fn named_parameter_groups_preserve_hash_spelling_bytes_and_duplicate_order() {

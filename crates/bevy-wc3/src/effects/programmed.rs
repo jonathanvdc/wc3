@@ -736,11 +736,11 @@ pub(super) fn no_shadow_material() -> ModelMaterial {
     use crate::material::compile_material_with_images;
     use crate::textures::TextureImages;
     use std::sync::Arc;
-    use wc3::model::materials::{programmed, SurfaceSet};
+    use wc3::model::materials::{m3, MaterialSurface};
     use wc3::model::profiles::Universal;
     use wc3::model::{Material, Model};
     let mut builder = Model::<Universal>::builder("effect shadow flags");
-    let mut standard = programmed::Standard::default();
+    let mut standard = m3::StandardMaterialStep::default();
     standard.state.rasterization.flags.set_no_shadows_cast(true);
     standard
         .state
@@ -750,9 +750,7 @@ pub(super) fn no_shadow_material() -> ModelMaterial {
     let id = builder
         .add_material(Material {
             name: "no shadow".into(),
-            surface: SurfaceSet::Programmed(Box::new(programmed::Material::Standard(Box::new(
-                standard,
-            )))),
+            surface: MaterialSurface::from(m3::MaterialStep::Standard(Box::new(standard))),
         })
         .unwrap();
     let model = builder.finish().unwrap();

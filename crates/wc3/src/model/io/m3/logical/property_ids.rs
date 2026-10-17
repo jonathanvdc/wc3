@@ -233,7 +233,7 @@ impl<'a> Collect for surface::Cloth<'a> {
         }
     }
 }
-impl Collect for surface::Reflection {
+impl Collect for surface::ReflectionMaterialStep {
     fn collect(&self, bindings: &mut Bindings) {
         self.reflection.parameters.collect(bindings);
         self.displacement.parameters.collect(bindings);
@@ -251,7 +251,7 @@ impl Collect for surface::Reflection {
         }
     }
 }
-impl Collect for surface::Standard {
+impl Collect for surface::StandardMaterialStep {
     fn collect(&self, bindings: &mut Bindings) {
         if let Some(value) = &self.diffuse {
             value.collect(bindings);
@@ -314,7 +314,7 @@ impl Collect for surface::Standard {
         }
     }
 }
-impl<'a> Collect for surface::LensFlare<'a> {
+impl<'a> Collect for surface::LensFlareMaterialStep<'a> {
     fn collect(&self, bindings: &mut Bindings) {
         if let Some(value) = &self.flare_map {
             value.collect(bindings);
@@ -328,7 +328,7 @@ impl<'a> Collect for surface::LensFlare<'a> {
         self.size.collect(bindings);
     }
 }
-impl Collect for surface::Displacement {
+impl Collect for surface::DisplacementMaterialStep {
     fn collect(&self, bindings: &mut Bindings) {
         self.displacement.parameters.collect(bindings);
         if let Some(value) = &self.displacement.input {
@@ -339,21 +339,21 @@ impl Collect for surface::Displacement {
         }
     }
 }
-impl Collect for surface::Terrain {
+impl Collect for surface::TerrainMaterialStep {
     fn collect(&self, bindings: &mut Bindings) {
         if let Some(value) = &self.terrain_map {
             value.collect(bindings);
         }
     }
 }
-impl Collect for surface::Creep {
+impl Collect for surface::CreepMaterialStep {
     fn collect(&self, bindings: &mut Bindings) {
         if let Some(value) = &self.mask_map {
             value.collect(bindings);
         }
     }
 }
-impl Collect for surface::SplatTerrainBake {
+impl Collect for surface::SplatTerrainBakeMaterialStep {
     fn collect(&self, bindings: &mut Bindings) {
         if let Some(value) = &self.diffuse_map {
             value.collect(bindings);
@@ -366,7 +366,7 @@ impl Collect for surface::SplatTerrainBake {
         }
     }
 }
-impl Collect for surface::Hair {
+impl Collect for surface::HairMaterialStep {
     fn collect(&self, bindings: &mut Bindings) {
         if let Some(value) = &self.diffuse.input {
             value.collect(bindings);
@@ -389,7 +389,7 @@ impl Collect for surface::CompositeSection {
         self.map_multiplier.collect(bindings);
     }
 }
-impl Collect for surface::Composite {
+impl Collect for surface::CompositeMaterialStep {
     fn collect(&self, bindings: &mut Bindings) {
         for value in self.sections.iter() {
             value.collect(bindings);
@@ -442,7 +442,7 @@ impl Collect for surface::TextureLayer {
             .collect(bindings);
     }
 }
-impl Collect for surface::Volume {
+impl Collect for surface::VolumeMaterialStep {
     fn collect(&self, bindings: &mut Bindings) {
         self.density.collect(bindings);
         if let Some(value) = &self.color_map {
@@ -456,7 +456,7 @@ impl Collect for surface::Volume {
         }
     }
 }
-impl Collect for surface::VolumeNoise {
+impl Collect for surface::VolumeNoiseMaterialStep {
     fn collect(&self, bindings: &mut Bindings) {
         self.density.collect(bindings);
         self.near_plane.collect(bindings);
@@ -476,7 +476,7 @@ impl Collect for surface::VolumeNoise {
         self.rotation.collect(bindings);
     }
 }
-impl Collect for surface::Material<'_> {
+impl Collect for surface::MaterialStep<'_> {
     fn collect(&self, bindings: &mut Bindings) {
         match self {
             Self::Standard(value) => value.collect(bindings),

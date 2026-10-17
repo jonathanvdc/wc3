@@ -5,9 +5,9 @@ pub(super) fn map_stbmaterial<'a, E: Envelope>(
     r: nr::STBMaterial,
     source: &'a native::Container<'_, E>,
     reader: &mut Reader<'a, '_>,
-) -> Result<surface::SplatTerrainBake, Error> {
+) -> Result<surface::SplatTerrainBakeMaterialStep, Error> {
     reader.name = Some(string(source, r.name)?);
-    Ok(surface::SplatTerrainBake {
+    Ok(surface::SplatTerrainBakeMaterialStep {
         diffuse_map: get_layer(source, reader, r.diffuse_map)?,
         normal_map: get_layer(source, reader, r.normal_map)?,
         specular_map: get_layer(source, reader, r.specular_map)?,
@@ -19,7 +19,7 @@ pub(super) fn get_stbmaterial<'a, E: Envelope>(
     reader: &mut Reader<'a, '_>,
     reference: native::Ref<nr::targets::STBMaterial>,
     index: usize,
-) -> Result<surface::SplatTerrainBake, Error> {
+) -> Result<surface::SplatTerrainBakeMaterialStep, Error> {
     macro_rules! read {
         ($t:ty) => {{
             let r = source

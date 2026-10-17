@@ -2,7 +2,7 @@
 /// Typed animated destinations for StarCraft II features.
 pub mod properties;
 pub use crate::model::controls::unbound::{OrderedKeys, UnboundBlock, UnboundKeys};
-pub use crate::model::materials::programmed::*;
+pub use crate::model::materials::m3::*;
 /// Logical option domains selected from the shared vocabulary.
 pub use crate::model::values::programmed as values;
 mod effects;

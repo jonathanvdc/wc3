@@ -399,7 +399,8 @@ pub fn compile_model_with_options(
                     geometry_cache.entry(key).or_insert(parts)
                 };
                 let mut extension = surface.state.clone();
-                let (ambient, lighting) = illumination(model, instance, draw_controls, material_id);
+                let (ambient, lighting) =
+                    illumination(model, instance, draw_controls, surface.exterior_lit);
                 let world_state = extension.set_world_illumination(ambient, lighting);
                 for (mesh, skin) in meshes {
                     draws.push(RuntimeDraw {

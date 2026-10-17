@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use wc3::model::materials::SurfaceSet;
+use wc3::model::MaterialStep;
 use wc3::model::{
     DrawId, ImageResource, InstanceId, Model, NodeControls, NodeFeature, NodeId, SocketIdentity,
     TextureId,
@@ -65,7 +65,12 @@ impl CharacterCatalog {
             for draw in &instance.draws {
                 if let Ok(material) = model.material_for_draw(instance_id, draw.id(), None) {
                     if let Some(material) = model.material(material) {
-                        if matches!(material.surface, SurfaceSet::ModelShader(_)) {
+                        if material
+                            .surface
+                            .steps
+                            .iter()
+                            .any(|pass| matches!(pass, MaterialStep::M2(_)))
+                        {
                             if let Ok(geoset) = u16::try_from(instance.selection_group) {
                                 geosets.push(GeosetDraw {
                                     instance: instance_id,

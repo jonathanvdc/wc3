@@ -4,8 +4,8 @@ use crate::model::conversion::Error;
 use crate::model::formats::wmo::{self as native, Dialect};
 use crate::model::materials::bindings::TextureBinding;
 use crate::model::materials::state::{Lighting, PassState};
-use crate::model::materials::world::SurfaceOptions;
-use crate::model::materials::world::WorldBlend;
+use crate::model::materials::wmo::RasterizationOptions;
+use crate::model::materials::wmo::WorldBlend;
 use crate::model::profiles::wmo as profile;
 use crate::model::profiles::Wmo;
 use crate::model::Model;
@@ -98,7 +98,7 @@ pub(super) fn read<'a, 'data: 'a>(
         unclassified.set_clamp_t(false);
         let tail = row.tail.texture_slots();
         let extended = matches!(row.shader, 22..=24);
-        let surface = profile::Material {
+        let surface = profile::MaterialStep {
             shader: Some(row.shader),
             textures: bindings,
             self_illumination: color(row.sidn_color),
@@ -108,7 +108,7 @@ pub(super) fn read<'a, 'data: 'a>(
             uv_scroll: scroll
                 .get(index)
                 .map_or([[0.; 2]; 2], |value| [value.speed0, value.speed1]),
-            extension: extensions.get(index).map(|value| profile::Extension {
+            shader_overrides: extensions.get(index).map(|value| profile::ShaderOverrides {
                 color: color(value.color),
                 texture_override: u64::from(value.override_key[0])
                     | (u64::from(value.override_key[1]) << 32),
@@ -132,14 +132,14 @@ pub(super) fn read<'a, 'data: 'a>(
                     }
                     BlendMode::Unknown(value) => profile::Blend::Unknown(value),
                 },
-                rasterization: profile::Options {
+                rasterization: profile::MaterialRasterization {
                     depth: (),
                     faces: flags.two_sided(),
                     lighting: Lighting {
                         unlit: flags.unlit(),
                         unfogged: flags.unfogged(),
                     },
-                    controls: SurfaceOptions {
+                    controls: RasterizationOptions {
                         exterior_lit: flags.exterior_lit(),
                         clamp_u: flags.clamp_s(),
                         clamp_v: flags.clamp_t(),
@@ -282,7 +282,7 @@ pub(super) fn write<'a, D: Dialect>(
             speed0: source.uv_scroll[0],
             speed1: source.uv_scroll[1],
         });
-        extensions.push(source.extension.as_ref().map_or_else(
+        extensions.push(source.shader_overrides.as_ref().map_or_else(
             native::records::MaterialExtension::default,
             |source| native::records::MaterialExtension {
                 color: color(source.color),
@@ -331,7 +331,7 @@ pub(super) fn write<'a, D: Dialect>(
     if model
         .materials()
         .iter()
-        .any(|(_, material)| material.surface.extension.is_some())
+        .any(|(_, material)| material.surface.shader_overrides.is_some())
     {
         append(
             root,
@@ -410,7 +410,7 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
                 unclassified.set_exterior_lit(false);
                 unclassified.set_clamp_s(false);
                 unclassified.set_clamp_t(false);
-                let surface = profile::Material {
+                let surface = profile::MaterialStep {
                     shader: None,
                     textures: bindings,
                     self_illumination: color(row.sidn_color),
@@ -419,14 +419,14 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
                     ground_type: row.ground_type,
                     state: PassState {
                         blend: blend(row.blend_mode),
-                        rasterization: profile::Options {
+                        rasterization: profile::MaterialRasterization {
                             depth: (),
                             faces: flags.two_sided(),
                             lighting: Lighting {
                                 unlit: flags.unlit(),
                                 unfogged: flags.unfogged(),
                             },
-                            controls: SurfaceOptions {
+                            controls: RasterizationOptions {
                                 exterior_lit: flags.exterior_lit(),
                                 clamp_u: flags.clamp_s(),
                                 clamp_v: flags.clamp_t(),
@@ -479,7 +479,9 @@ pub(super) fn native_blend(value: profile::Blend) -> BlendMode {
         profile::Blend::AdditiveAlpha(value) => match value {},
     }
 }
-pub(super) fn native_flags(value: profile::Options) -> native::records::MaterialFlags {
+pub(super) fn native_flags(
+    value: profile::MaterialRasterization,
+) -> native::records::MaterialFlags {
     let mut flags = native::records::MaterialFlags(value.controls.unclassified.bits());
     flags.set_unlit(value.lighting.unlit);
     flags.set_unfogged(value.lighting.unfogged);

@@ -5,20 +5,20 @@ use crate::textures::TextureImages;
 use crate::ModelError;
 use bevy::math::Affine2;
 use bevy::prelude::*;
-use wc3::model::materials::{model_shader, state::BlendOperations};
+use wc3::model::materials::{m2, state::BlendOperations};
 use wc3::model::profiles::Universal;
 use wc3::model::values::model::ModelBlend;
 use wc3::model::Model;
 
 // IDs agree with the shared composition shader; zero leaves StandardMaterial alone.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Program {
+struct ShaderProgram {
     mode: UVec4,
     environment: [bool; 2],
     inputs: usize,
     edge_fade: bool,
 }
-fn program(shader: u16, inputs: usize) -> Option<Program> {
+fn program(shader: u16, inputs: usize) -> Option<ShaderProgram> {
     if shader & 0x8000 == 0 {
         if shader & !0x40ff != 0 {
             return None;
@@ -34,7 +34,7 @@ fn program(shader: u16, inputs: usize) -> Option<Program> {
         } else {
             legacy_combiner(shader & !0x88, inputs)?
         };
-        return Some(Program {
+        return Some(ShaderProgram {
             mode,
             environment: [shader & 0x80 != 0, shader & 8 != 0],
             inputs,
@@ -69,7 +69,7 @@ fn program(shader: u16, inputs: usize) -> Option<Program> {
         27 => (25, 2, false),
         _ => return None,
     };
-    (inputs == count).then_some(Program {
+    (inputs == count).then_some(ShaderProgram {
         mode: if matches!(offset, 21 | 35) {
             UVec4::new(mode, 1, 1, 0)
         } else if offset == 33 {
@@ -99,7 +99,7 @@ pub(super) fn legacy_combiner(shader: u16, inputs: usize) -> Option<UVec4> {
 
 // Four samples need at most three raw streams. Reuse authored coordinates before
 // requesting another stream, independently of each sample's animated transform.
-fn fourth_route(surface: &model_shader::ShaderPass<'_>) -> Option<u32> {
+fn fourth_route(surface: &m2::MaterialStep<'_>) -> Option<u32> {
     let inputs = &surface.textures;
     let source = inputs.get(3)?.coordinates.source;
     if source < 0 {
@@ -121,9 +121,9 @@ fn fourth_route(surface: &model_shader::ShaderPass<'_>) -> Option<u32> {
     None
 }
 
-pub(super) fn compile_model_shader(
+pub(super) fn compile_m2(
     model: &Model<'_, Universal>,
-    surface: &model_shader::ShaderPass<'_>,
+    surface: &m2::MaterialStep<'_>,
     images: &TextureImages,
 ) -> Result<SurfacePass, ModelError> {
     let mut pass = SurfacePass::default();
@@ -258,13 +258,13 @@ pub(super) fn compile_model_shader(
 }
 
 #[cfg(test)]
-#[path = "model_tests.rs"]
+#[path = "m2_tests.rs"]
 mod tests;
 
 #[cfg(test)]
-#[path = "model_capture_tests.rs"]
+#[path = "m2_capture_tests.rs"]
 mod capture_tests;
 
 #[cfg(test)]
-#[path = "model_routes_tests.rs"]
+#[path = "m2_routes_tests.rs"]
 mod route_tests;

@@ -2,10 +2,10 @@ use super::*;
 use crate::material::compile_material_with_images;
 use bevy::prelude::{Assets, Image};
 use wc3::model::materials::bindings::TextureBinding;
-use wc3::model::{Material, ModelBuilder};
+use wc3::model::{Material, MaterialSurface, ModelBuilder};
 
 #[test]
-fn programmed_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion() {
+fn m3_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion() {
     let mut builder = ModelBuilder::new("M3 layer samplers");
     let mut source = Texture::new(builder.add_image_resource(wc3::model::ImageResource::Path(
         "shared.dds".as_bytes().into(),
@@ -17,14 +17,14 @@ fn programmed_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion(
     let texture = builder.add_texture(source).unwrap();
     let mut materials = Vec::new();
     for (wrap_u, wrap_v) in [(false, false), (true, false), (false, true), (true, true)] {
-        let mut layer = programmed::TextureLayer::default();
+        let mut layer = m3::TextureLayer::default();
         layer.binding.image = Some(texture);
         layer.binding.coordinates.transform.uv_tiling.initial = [1.; 2];
         layer.binding.coordinates.transform.uv_source_related = u32::MAX;
         layer.binding.contribution.map_alpha.initial = 1.;
         layer.binding.sampling.flags.set_uv_wrap_x(wrap_u);
         layer.binding.sampling.flags.set_uv_wrap_y(wrap_v);
-        let mut surface = programmed::Standard {
+        let mut surface = m3::StandardMaterialStep {
             diffuse: Some(layer.clone()),
             ..Default::default()
         };
@@ -34,9 +34,7 @@ fn programmed_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion(
             builder
                 .add_material(Material {
                     name: "M3 independent layer wrapping".into(),
-                    surface: SurfaceSet::Programmed(Box::new(programmed::Material::Standard(
-                        Box::new(surface),
-                    ))),
+                    surface: MaterialSurface::from(m3::MaterialStep::Standard(Box::new(surface))),
                 })
                 .unwrap(),
             Sampler {
@@ -108,7 +106,7 @@ fn world_surface_clamps_resolve_independent_variants_without_mutating_texture() 
     let texture = builder.add_texture(texture).unwrap();
     let mut materials = Vec::new();
     for clamp_u in [false, true, true] {
-        let mut surface = world::Material {
+        let mut surface = wmo::MaterialStep {
             shader: Some(0),
             ..Default::default()
         };
@@ -121,7 +119,7 @@ fn world_surface_clamps_resolve_independent_variants_without_mutating_texture() 
             builder
                 .add_material(Material {
                     name: "world".into(),
-                    surface: SurfaceSet::World(Box::new(surface)),
+                    surface: MaterialSurface::from(surface),
                 })
                 .unwrap(),
         );

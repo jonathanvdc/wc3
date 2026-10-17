@@ -1,5 +1,5 @@
 //! GPU binding layout independent of semantic image/sampler ownership.
-use super::programmed::layers::ProgrammedUniform;
+use super::m3::layers::M3Uniform;
 use super::{
     CombinerUniform, HdUniform, ModelMaterialExtension, ModelMaterialKey, ParticleUniform,
     WorldUniform,
@@ -46,7 +46,7 @@ struct BindingSnapshot {
     #[uniform(113)]
     particle: ParticleUniform,
     #[uniform(116)]
-    programmed: ProgrammedUniform,
+    m3: M3Uniform,
     #[texture(117)]
     normal_secondary: Option<Handle<Image>>,
     #[texture(119)]
@@ -69,7 +69,7 @@ impl From<&ModelMaterialExtension> for BindingSnapshot {
             fourth: material.fourth.clone(),
             world: material.world,
             particle: material.particle,
-            programmed: material.programmed.clone(),
+            m3: material.m3.clone(),
             normal_secondary: material.normal_secondary.clone(),
             normal_secondary_mask: material.normal_secondary_mask.clone(),
             light_map: material.light_map.clone(),
@@ -103,9 +103,9 @@ impl AsBindGroup for ModelMaterialExtension {
             param,
             force_no_bindless,
         )?;
-        if self.programmed.settings.x != 0 {
+        if self.m3.settings.x != 0 {
             for (slot, binding) in SAMPLER_BINDINGS.into_iter().enumerate() {
-                let Some(image) = self.programmed_samplers[slot].as_ref() else {
+                let Some(image) = self.m3_samplers[slot].as_ref() else {
                     continue;
                 };
                 let image = param
@@ -164,14 +164,14 @@ mod tests {
             secondary: Some(ordinary.clone()),
             ..Default::default()
         };
-        material.programmed_samplers[0] = Some(pooled.clone());
+        material.m3_samplers[0] = Some(pooled.clone());
         assert_eq!(
             BindingSnapshot::from(&material).secondary,
             Some(ordinary.clone())
         );
-        material.programmed.settings.x = 1;
+        material.m3.settings.x = 1;
         assert_eq!(BindingSnapshot::from(&material).secondary, Some(ordinary));
-        assert_eq!(material.programmed_samplers[0], Some(pooled));
+        assert_eq!(material.m3_samplers[0], Some(pooled));
         assert_eq!(SAMPLER_BINDINGS.len(), 6);
     }
 }

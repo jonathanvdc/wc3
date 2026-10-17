@@ -4,15 +4,15 @@ use crate::model::values::programmed::{ShaderFresnelFlags, ShaderType};
 use crate::model::{Link, TextureId, ValidateLinks, ZeroVec};
 use std::borrow::Cow;
 
-/// Editable M3 DataDriven values.
+/// Editable M3 DataDrivenMaterialStep values.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct DataDriven<'a> {
+pub struct DataDrivenMaterialStep<'a> {
     /// Supplies U32_ CRC32 identifiers for shader fragments in their linking order.
     pub fragment_hashes: Vec<u32>,
     /// Supplies additional U32_ shader hashes available from revision 2.
     pub extra_hashes: Vec<u32>,
     /// Supplies the CHAR-encoded dictionary of shader properties.
-    pub parameters: Parameters<'a>,
+    pub parameters: DataDrivenParameters<'a>,
     /// Links to SCHR texture filenames selected by texture properties in the dictionary.
     pub textures: Vec<TextureId>,
     /// Unknown-purpose scalar reported as 1.0, 1.5, or 2.0 in the reference samples.
@@ -72,13 +72,13 @@ pub struct DataProperties<'a> {
 
 /// Shader-parameter data whose interpretation depends on the shader family.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Parameters<'a> {
+pub enum DataDrivenParameters<'a> {
     /// Decoded named groups supplied by an authoring format.
     Named(DataProperties<'a>),
     /// Unresolved parameter language bytes; no dictionary schema is claimed.
     Unresolved(ZeroVec<'a, u8>),
 }
-impl Default for Parameters<'_> {
+impl Default for DataDrivenParameters<'_> {
     fn default() -> Self {
         Self::Named(DataProperties::default())
     }

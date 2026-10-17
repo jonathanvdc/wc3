@@ -1,8 +1,8 @@
 //! Native-family surface interpretation into PBR passes and explicit states.
 use super::super::textures::{is_default_unit, TextureImages, TextureRole};
-use super::model::compile_model_shader;
-use super::programmed::compile_programmed_with_targets;
-use super::world::compile_world;
+use super::m2::compile_m2;
+use super::m3::compile_m3_with_targets;
+use super::wmo::compile_wmo;
 use super::{layered_uv, Blend, HdAnimation, ModelMaterial, SurfacePass};
 use crate::animation_targets::AnimationTargets;
 use crate::error::ModelError;
@@ -11,8 +11,11 @@ use bevy::math::Affine2;
 use bevy::prelude::*;
 use bevy::render::render_resource::Face;
 use std::{array::from_fn, collections::HashMap, fmt::Debug, sync::Arc};
+use wc3::model::appearance::UniversalAppearance;
+use wc3::model::materials::m3;
+use wc3::model::materials::program::MaterialStep;
 use wc3::model::materials::state::{BlendOperations, Lighting, Operation};
-use wc3::model::materials::{diablo3, layered, programmed, SurfaceSet};
+use wc3::model::materials::{diablo3, mdlx};
 use wc3::model::profiles::Universal;
 use wc3::model::{Animated, ColorSpace, MaterialId, Model, Sampler, TextureId, TextureTransform};
 
@@ -63,18 +66,16 @@ fn compile_material(
     let material = model
         .material(id)
         .ok_or_else(|| ModelError(format!("missing semantic material {id:?}")))?;
-    let mut passes = match &material.surface {
-        SurfaceSet::Layered(surface) => surface
-            .layers
-            .iter()
-            .map(|layer| compile_layer(model, surface, layer, images))
-            .collect::<Result<Vec<_>, _>>()?,
-        SurfaceSet::ModelShader(surface) => {
-            vec![compile_model_shader(model, surface, resolved_images)?]
-        }
-        SurfaceSet::World(surface) => vec![compile_world(model, surface, resolved_images)?],
-        SurfaceSet::Programmed(surface) => {
-            if let programmed::Material::Composite(composite) = &**surface {
+    let stack = &material.surface;
+    let mut passes = Vec::new();
+    for step in &stack.steps {
+        let compiled = match step {
+            MaterialStep::Mdlx(layer) => vec![compile_mdlx(model, layer, images)?],
+            MaterialStep::M2(surface) => {
+                vec![compile_m2(model, surface, resolved_images)?]
+            }
+            MaterialStep::Wmo(surface) => vec![compile_wmo(model, surface, resolved_images)?],
+            MaterialStep::M3(m3::MaterialStep::Composite(composite)) => {
                 let mut passes = Vec::new();
                 for section in &composite.sections {
                     let mut section_passes =
@@ -126,28 +127,34 @@ fn compile_material(
                     }
                 }
                 passes
-            } else {
-                vec![compile_programmed_with_targets(
-                    model,
-                    surface,
-                    resolved_images,
-                    targets,
-                )?]
             }
-        }
-        SurfaceSet::D3(surface) => vec![compile_diablo3(surface)],
-        SurfaceSet::D4(surface) => {
-            let mut pass = SurfacePass::default();
-            pass.diagnostics.push(match &surface.shader {
-                Some(shader) => format!(
-                    "Diablo IV shader map {} needs an application shader interpreter; texture semantic codes are unresolved",
-                    shader.shader_map
-                ),
-                None => "Diablo IV external material shader is unresolved".into(),
-            });
-            vec![pass]
-        }
-    };
+            MaterialStep::Diablo3(surface) => vec![compile_diablo3(surface)],
+            MaterialStep::Diablo4(shader) => {
+                let mut pass = SurfacePass::default();
+                pass.diagnostics.push(format!(
+                    "Diablo IV shader map {} needs an application shader interpreter; texture semantic codes are unresolved", shader.shader_map
+                ));
+                vec![pass]
+            }
+            MaterialStep::M3(surface) => vec![compile_m3_with_targets(
+                model,
+                surface,
+                resolved_images,
+                targets,
+            )?],
+        };
+        passes.extend(compiled);
+    }
+    // Preserve the diagnostic placeholder for an unresolved external selection;
+    // this is renderer fallback output, not an invented semantic shader pass.
+    if stack.steps.is_empty()
+        && matches!(model.appearance(), UniversalAppearance::D4(appearance) if appearance.slots().any(|(_, slot)| slot.variants().any(|(_, material)| material == id)))
+    {
+        let mut pass = SurfacePass::default();
+        pass.diagnostics
+            .push("Diablo IV external material shader is unresolved".into());
+        passes.push(pass);
+    }
     for pass in &mut passes {
         pass.animation.prune_static_bindings(targets);
         pass.animation.images = images.color_images().clone();
@@ -278,13 +285,15 @@ pub(super) fn transform(pass: &mut SurfacePass, transform: &TextureTransform) {
     }
 }
 
-fn compile_layer(
+fn compile_mdlx(
     model: &Model<'_, Universal>,
-    surface: &layered::LayeredSurface<'_>,
-    layer: &layered::Layer,
+    surface: &mdlx::MaterialStep<'_>,
     images: &Arc<TextureImages>,
 ) -> Result<SurfacePass, ModelError> {
     let mut pass = SurfacePass::default();
+    let layer = &surface.layer;
+    pass.sort_near = surface.sort_near_z;
+    pass.sort_far = surface.sort_far_z;
     blend(&layer.state.blend, &mut pass);
     let raster = &layer.state.rasterization;
     rasterization(
@@ -321,7 +330,7 @@ fn compile_layer(
         pass.diagnostics
             .push("sphere-environment coordinates require a generated-coordinate shader".into());
     }
-    if is_default_unit(surface, layer) {
+    if is_default_unit(surface) {
         let mut slots = from_fn(|_| None);
         slots[0] = Some(layer.binding.image.clone());
         for slot in &layer.textures {
@@ -396,7 +405,7 @@ fn compile_layer(
     Ok(pass)
 }
 
-fn compile_diablo3(surface: &diablo3::Material<'_>) -> SurfacePass {
+fn compile_diablo3(surface: &diablo3::MaterialStep<'_>) -> SurfacePass {
     let mut pass = SurfacePass::default();
     let color = &surface.uber.colors;
     pass.material.base_color = Color::linear_rgba(

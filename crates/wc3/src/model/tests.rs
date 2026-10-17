@@ -132,14 +132,14 @@ fn complete_material_looks_resolve_independently() {
     let base = builder
         .add_material(Material {
             name: "".into(),
-            surface: MaterialSurface::Layered(Box::default()),
+            surface: Default::default(),
         })
         .unwrap();
     let alternative = builder
         .add_material(
             Material {
                 name: "".into(),
-                surface: MaterialSurface::Layered(Box::default()),
+                surface: Default::default(),
             }
             .named("alternate"),
         )
@@ -195,10 +195,12 @@ fn typed_vocabulary_widening_preserves_ids_and_borrowed_storage() {
         .unwrap();
     let narrow = builder.finish().unwrap();
     let universal = narrow.widen::<Universal>();
-    assert!(matches!(
-        universal.material(material).unwrap().surface,
-        MaterialSurface::Layered(_)
-    ));
+    assert!(universal
+        .material(material)
+        .unwrap()
+        .surface
+        .steps
+        .is_empty());
     assert_eq!(
         universal
             .mesh(mesh)

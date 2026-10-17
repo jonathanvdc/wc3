@@ -11,7 +11,7 @@ use std::borrow::Cow;
 pub type Blend = BlendOperations<WorldBlend, (), Unavailable, u32>;
 /// World-shader options beyond common face, lighting, and fog controls.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct SurfaceOptions {
+pub struct RasterizationOptions {
     /// Use exterior lighting even for interior geometry.
     pub exterior_lit: bool,
     /// Clamp the U coordinate.
@@ -24,10 +24,10 @@ pub struct SurfaceOptions {
     pub unclassified: MaterialFlags,
 }
 /// World rasterization selects no independent depth program.
-pub type Options = Rasterization<(), bool, Lighting, SurfaceOptions>;
+pub type MaterialRasterization = Rasterization<(), bool, Lighting, RasterizationOptions>;
 /// Additional shader color and texture override information.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Extension {
+pub struct ShaderOverrides {
     /// Shader-23 override color in RGBA order.
     pub color: [u8; 4],
     /// External texture override-set identity.
@@ -35,15 +35,15 @@ pub struct Extension {
     /// Unresolved shader control value.
     pub control: u32,
 }
-/// Complete world-model material and all shader texture slots.
+/// A WMO shader step and all its texture inputs.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Material<'a> {
+pub struct MaterialStep<'a> {
     /// Optional authoring name.
     pub name: Cow<'a, str>,
     /// External client shader-table selector, absent for fixed-function surfaces.
     pub shader: Option<u32>,
     /// Color composition and shared rasterization controls.
-    pub state: PassState<Blend, Options>,
+    pub state: PassState<Blend, MaterialRasterization>,
     /// Texture bindings in shader-slot order.
     pub textures: Vec<TextureBinding<Option<TextureId>>>,
     /// Self-illumination color in RGBA order.
@@ -57,7 +57,7 @@ pub struct Material<'a> {
     /// UV scroll velocity for the first two texture slots.
     pub uv_scroll: [[f32; 2]; 2],
     /// Optional extended shader overrides.
-    pub extension: Option<Extension>,
+    pub shader_overrides: Option<ShaderOverrides>,
     /// Historical additional material color in RGBA order.
     pub legacy_color: Option<[u8; 4]>,
     /// Historical additional material controls with unresolved meanings.
@@ -66,7 +66,7 @@ pub struct Material<'a> {
     pub legacy_runtime: Option<[u32; 4]>,
 }
 
-impl ValidateLinks for SurfaceOptions {
+impl ValidateLinks for RasterizationOptions {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
 

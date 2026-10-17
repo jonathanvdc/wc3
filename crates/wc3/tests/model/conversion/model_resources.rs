@@ -1,4 +1,4 @@
-use wc3::model::materials::layered::{Layer, LayeredSurface};
+use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::profiles::Universal;
 use wc3::model::{
     Animated, ImageResource, Material, MaterialSurface, Model, ModelBuilder, Texture, TextureId,
@@ -9,10 +9,11 @@ fn textured_material(texture: TextureId) -> Material<'static> {
     layer.binding.image = Animated::constant(Some(texture));
     Material {
         name: "surface".into(),
-        surface: MaterialSurface::Layered(Box::new(LayeredSurface {
+        surface: MaterialSurface::try_from(LayeredSurface {
             layers: vec![layer],
             ..Default::default()
-        })),
+        })
+        .unwrap(),
     }
 }
 

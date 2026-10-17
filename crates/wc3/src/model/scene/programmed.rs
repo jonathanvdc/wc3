@@ -1,5 +1,5 @@
 //! Logical M3 lights, cameras, forces, and geometry-bound effects.
-use crate::model::materials::programmed::Property;
+use crate::model::materials::m3::Property;
 use crate::model::values::programmed::*;
 use crate::model::{MaterialId, MeshId, NodeId};
 use std::borrow::Cow;

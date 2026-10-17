@@ -142,6 +142,12 @@ impl<L: SurfaceLayer> SurfacePayload for LayeredSurface<'_, L> {
             .any(|(ordinal, layer)| layer.supports_property(key, ordinal))
     }
     fn validate(&self) -> Result<(), Error> {
+        if self.has_unexecuted_declarations() {
+            return Err(Error::new(
+                "material.empty",
+                "unused declarations on an empty native material belong to the native codec",
+            ));
+        }
         self.layers.iter().try_for_each(SurfaceLayer::validate)
     }
 }
@@ -185,4 +191,67 @@ impl<L> Default for LayeredSurface<'_, L> {
 
 impl ValidateLinks for LayerOptions {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+}
+
+/// An MDLX shader step with explicit shader selection and draw behavior.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MaterialStep<'a> {
+    /// Texture inputs, animated surface response, and draw state.
+    pub layer: Layer,
+    /// Rendering priority relative to other geometry.
+    pub priority_plane: i32,
+    /// Shader name; empty selects the classic shader family.
+    pub shader: Cow<'a, str>,
+    /// Use constant-color behavior.
+    pub constant_color: bool,
+    /// Render both sides regardless of the layer's face setting.
+    pub two_sided: bool,
+    /// Sort primitives near to far along view Z.
+    pub sort_near_z: bool,
+    /// Sort primitives far to near along view Z.
+    pub sort_far_z: bool,
+    /// Request full-resolution sampling.
+    pub full_resolution: bool,
+    /// Shader/draw flags with unresolved meanings.
+    pub unclassified: MaterialFlags,
+}
+impl<'a> From<Layer> for MaterialStep<'a> {
+    fn from(layer: Layer) -> Self {
+        Self {
+            layer,
+            ..Default::default()
+        }
+    }
+}
+impl MaterialStep<'_> {
+    /// Whether another pass has exactly the same native material-header declaration.
+    pub(crate) fn same_declaration(&self, other: &Self) -> bool {
+        self.priority_plane == other.priority_plane
+            && self.shader == other.shader
+            && self.constant_color == other.constant_color
+            && self.two_sided == other.two_sided
+            && self.sort_near_z == other.sort_near_z
+            && self.sort_far_z == other.sort_far_z
+            && self.full_resolution == other.full_resolution
+            && self.unclassified == other.unclassified
+    }
+}
+impl ValidateLinks for MaterialStep<'_> {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.layer.visit_links(visitor);
+    }
+}
+impl<L> LayeredSurface<'_, L> {
+    /// Unused native declarations cannot describe any shader execution.
+    pub(crate) fn has_unexecuted_declarations(&self) -> bool {
+        self.layers.is_empty()
+            && (self.priority_plane != 0
+                || !self.shader.is_empty()
+                || self.constant_color
+                || self.two_sided
+                || self.sort_near_z
+                || self.sort_far_z
+                || self.full_resolution
+                || self.unclassified.bits() != 0)
+    }
 }

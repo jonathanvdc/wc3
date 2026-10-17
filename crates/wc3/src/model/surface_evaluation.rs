@@ -1,6 +1,7 @@
 //! Surface-value evaluation independent of texture pixels and renderer materials.
-use crate::model::materials::layered::{Layer, LayeredSurface};
-use crate::model::materials::model_shader::{ShaderPass, TextureUnit};
+use crate::model::materials::m2::{MaterialStep as M2MaterialStep, TextureUnit};
+use crate::model::materials::mdlx::{Layer, LayeredSurface, MaterialStep as MdlxMaterialStep};
+use crate::model::materials::program::{MaterialStep, MaterialSurface};
 use crate::model::{
     Animated, BindingValue, ChannelValue, MeshId, Model, NodeFeature, Property, PropertySample,
     PropertyTarget, TextureTransform,
@@ -188,7 +189,7 @@ impl Layer {
     }
 }
 impl LayeredSurface<'_> {
-    /// Freezes ordered passes without converting native layered shading into PBR.
+    /// Freezes ordered steps without converting native layered shading into PBR.
     pub fn sampled(&self, sample: &impl PropertySample) -> Self {
         let mut value = self.clone();
         value.layers = self
@@ -197,6 +198,35 @@ impl LayeredSurface<'_> {
             .map(|layer| layer.sampled(sample))
             .collect();
         value
+    }
+}
+impl MdlxMaterialStep<'_> {
+    /// Freezes shader inputs while preserving this pass's rendering settings.
+    pub fn sampled(&self, sample: &impl PropertySample) -> Self {
+        let mut value = self.clone();
+        value.layer = self.layer.sampled(sample);
+        value
+    }
+}
+impl MaterialSurface<'_> {
+    /// Freezes layered and model-shader inputs while retaining order and pass settings.
+    ///
+    /// Other typed shader programmes and composite references are cloned unchanged;
+    /// this helper does not execute or flatten them.
+    pub fn sampled(&self, sample: &impl PropertySample) -> Self {
+        Self {
+            steps: self
+                .steps
+                .iter()
+                .map(|pass| match pass {
+                    MaterialStep::Mdlx(value) => {
+                        MaterialStep::Mdlx(Box::new(value.sampled(sample)))
+                    }
+                    MaterialStep::M2(value) => MaterialStep::M2(Box::new(value.sampled(sample))),
+                    other => other.clone(),
+                })
+                .collect(),
+        }
     }
 }
 impl TextureUnit {
@@ -209,7 +239,7 @@ impl TextureUnit {
         value
     }
 }
-impl ShaderPass<'_> {
+impl M2MaterialStep<'_> {
     /// Freezes model shader color, opacity and inputs without interpreting its shader programme.
     pub fn sampled(&self, sample: &impl PropertySample) -> Self {
         let mut value = self.clone();

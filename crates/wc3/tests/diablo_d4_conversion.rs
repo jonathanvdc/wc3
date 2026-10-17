@@ -336,3 +336,43 @@ fn unsupported_hardpoint_sentinel_is_not_collapsed_into_an_absent_parent() {
     }];
     assert!(convert::import_with_layouts(&source, &layouts, &ImportOptions::default()).is_err());
 }
+
+#[test]
+fn shared_shader_material_keeps_each_variants_external_resources() {
+    use wc3::model::profiles::{Universal, D4};
+    let source = source();
+    let layouts = [convert::BufferLayout {
+        chunk: 0,
+        buffer: 0,
+        layout: layout(),
+    }];
+    let mut model = convert::import_with_layouts(&source, &layouts, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (slot_id, slot) = model.appearance().slots().next().unwrap();
+    let (first, material) = slot.variants().next().unwrap();
+    let mut selection = slot.variant_definition(first).unwrap().selection.clone();
+    selection.base_material = 123;
+    selection.cloth = 456;
+    selection.effect_group = 789;
+    model
+        .edit(|draft| {
+            let mut appearance = draft.model().appearance().clone();
+            appearance.add_variant_with_selection(slot_id, material, selection)?;
+            draft.set_appearance(appearance);
+            Ok(())
+        })
+        .unwrap();
+    let model = model.widen::<Universal>().try_narrow::<D4>().unwrap();
+    let output = convert::plan(&model, &layout(), &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let variants = &output.root.appearance_materials[0].so_as;
+    assert_eq!(variants.len(), 2);
+    assert_eq!(variants[0].material, 66);
+    assert_eq!(variants[1].material, 123);
+    assert_eq!(variants[1].cloth, 456);
+    assert_eq!(variants[1].effect_group, 789);
+}

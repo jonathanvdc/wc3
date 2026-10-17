@@ -2,7 +2,7 @@
 use super::{native_color, nr, surface, Envelope, Error, Writer};
 pub(super) fn encode<E: Envelope>(
     name: &str,
-    r: &surface::Hair,
+    r: &surface::HairMaterialStep,
     writer: &mut Writer<'_, '_, '_, '_, E>,
 ) -> Result<nr::HairMaterial, Error> {
     Ok(nr::HairMaterial {

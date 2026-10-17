@@ -2,7 +2,7 @@
 use super::{nr, surface, Envelope, Error, Writer};
 pub(super) fn encode<E: Envelope>(
     name: &str,
-    r: &surface::Terrain,
+    r: &surface::TerrainMaterialStep,
     writer: &mut Writer<'_, '_, '_, '_, E>,
 ) -> Result<nr::TerrainMaterial<nr::V1>, Error> {
     Ok(nr::TerrainMaterial {

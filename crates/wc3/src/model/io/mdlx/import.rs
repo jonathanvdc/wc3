@@ -133,9 +133,17 @@ where
         .collect::<Result<Vec<_>, _>>()?;
     let mut material_ids = Vec::new();
     for material in source.materials() {
+        let mut surface = materials::read::<_, S>(material, &texture_ids, &transform_ids)?;
+        if surface.has_unexecuted_declarations() {
+            context.unsupported(
+                "material.empty_declarations",
+                "nondefault declarations on an empty material require the native codec",
+            )?;
+            surface = Default::default();
+        }
         let value = Material::<Mdlx> {
             name: Cow::Borrowed(""),
-            surface: materials::read::<_, S>(material, &texture_ids, &transform_ids)?,
+            surface,
         };
         material_ids.push(builder.add_material(value)?);
     }
@@ -276,6 +284,11 @@ where
             globals: &globals,
         };
         for (source, id) in source.materials().zip(&material_ids) {
+            // Empty declarations were already checked by the import loss policy.
+            // There are no shader inputs to bind or reread from the native header.
+            if source.layers.is_empty() {
+                continue;
+            }
             let surface =
                 materials::bind::<_, S>(source, &texture_ids, &transform_ids, *id, &mut decoder)?;
             decoder.builder.set_material_surface(*id, surface)?;

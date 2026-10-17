@@ -4,7 +4,8 @@ use crate::wow::ModelPart as EquipmentPart;
 use std::collections::HashMap;
 use wc3::model::controls::model::BoneControls;
 use wc3::model::materials::bindings::ImageSelection;
-use wc3::model::materials::model_shader::{ShaderPass, TextureUnit};
+use wc3::model::materials::m2::{MaterialStep as M2MaterialStep, TextureUnit};
+use wc3::model::materials::program::MaterialStep;
 use wc3::model::{
     Animated, Draw, GeometryData, GeometryInfluences, IdentityBinding, Influence, Material,
     MaterialSurface, Mesh, MeshInstance, Node, NodeControls, Skin, Texture, UniversalBinding,
@@ -55,7 +56,7 @@ fn model(name: &str, geosets: &[u16]) -> (Model<'static>, NodeId) {
         let material = builder
             .add_material(Material {
                 name: "M2".into(),
-                surface: MaterialSurface::ModelShader(Box::new(ShaderPass {
+                surface: MaterialSurface::from(M2MaterialStep {
                     geoset: 17,
                     textures: vec![TextureUnit {
                         image: ImageSelection {
@@ -68,7 +69,7 @@ fn model(name: &str, geosets: &[u16]) -> (Model<'static>, NodeId) {
                     color: Animated::constant([1.; 3]),
                     opacity: Animated::constant(1.),
                     ..Default::default()
-                })),
+                }),
             })
             .unwrap();
         let mut instance = MeshInstance::new(joint, mesh);
@@ -223,8 +224,10 @@ fn hidden_hair_texture_is_optional_but_selected_missing_texture_is_an_error() {
         let texture = Texture::new(resource);
         let texture = draft.add_texture(texture)?;
         for (id, mut material) in hidden_materials {
-            if let MaterialSurface::ModelShader(surface) = &mut material.surface {
-                surface.textures[0].image.texture = Some(texture);
+            for pass in &mut material.surface.steps {
+                if let MaterialStep::M2(surface) = pass {
+                    surface.textures[0].image.texture = Some(texture);
+                }
             }
             draft.set_material(id, material)?;
         }

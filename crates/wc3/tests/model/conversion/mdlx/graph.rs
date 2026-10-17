@@ -611,3 +611,39 @@ fn absent_model_info_stays_absent_while_named_drafts_declare_bounds() {
         .is_err());
     assert!(asset.bounds().is_some());
 }
+
+#[test]
+fn empty_material_declarations_require_explicit_semantic_loss() {
+    use wc3::model::conversion::LossPolicy;
+    let mut source = mdlx::Document::<mdlx::V800>::new();
+    let mut material = mdlx::materials::Material::new();
+    material.priority_plane = 7;
+    source.set_materials([material]);
+    assert!(io::mdlx::import(&source, &ImportOptions::default()).is_err());
+    let imported = io::mdlx::import(
+        &source,
+        &ImportOptions {
+            loss_policy: LossPolicy::Drop,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(imported
+        .report
+        .issues
+        .iter()
+        .any(|issue| issue.path == "material.empty_declarations"));
+    assert!(imported
+        .value
+        .widen::<wc3::model::profiles::Universal>()
+        .materials()
+        .iter()
+        .next()
+        .unwrap()
+        .1
+        .surface
+        .steps
+        .is_empty());
+    // The native document still owns its declaration after semantic conversion.
+    assert_eq!(source.materials().next().unwrap().priority_plane, 7);
+}

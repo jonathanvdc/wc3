@@ -34,7 +34,7 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use wc3::model::formats::wmo::Profile as WmoProfile;
-use wc3::model::materials::model_shader::GuildPalette;
+use wc3::model::materials::m2::GuildPalette;
 #[path = "support/character.rs"]
 mod character;
 #[path = "support/resolver.rs"]

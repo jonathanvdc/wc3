@@ -1,6 +1,5 @@
 use wc3::model::io::geometry;
 use wc3::model::profiles::{Mdlx, Universal};
-use wc3::model::MaterialSurface;
 use wc3::model::{
     Draw, DrawId, InstanceId, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshInstance,
     Model, ModelBuilder, Node,
@@ -20,7 +19,7 @@ fn fixture() -> (Model<'static>, InstanceId, [DrawId; 2], [MaterialId; 2]) {
             .add_material(
                 Material {
                     name: "".into(),
-                    surface: MaterialSurface::Layered(Box::default()),
+                    surface: Default::default(),
                 }
                 .named("first"),
             )
@@ -29,7 +28,7 @@ fn fixture() -> (Model<'static>, InstanceId, [DrawId; 2], [MaterialId; 2]) {
             .add_material(
                 Material {
                     name: "".into(),
-                    surface: MaterialSurface::Layered(Box::default()),
+                    surface: Default::default(),
                 }
                 .named("second"),
             )

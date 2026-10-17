@@ -10,6 +10,12 @@ Historical inheritance flag bits remain preserved and diagnostic when populated;
 they do not disable the ordinary hierarchy. See [node flags](node-flags.md) and
 the [renderer overview](renderer.md) for the shared geometry and scene pipeline.
 
+Universal surfaces carry each M3 shader family as a typed `MaterialStep`, alongside
+other shader vocabularies in one ordered stack. Composite entries retain material
+references, weights, and priority and expand during compilation. Texture layers
+remain shader inputs within a pass. This common representation preserves the
+interpreter coverage and limitations described below.
+
 ## Standard roles
 
 The Standard family has eighteen layer roles. Fifteen have an interpreter; the

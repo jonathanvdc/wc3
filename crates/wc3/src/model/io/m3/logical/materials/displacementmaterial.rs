@@ -8,14 +8,14 @@ pub(super) fn map_displacementmaterial<'a, E: Envelope, D: nr::DisplacementMater
     r: nr::DisplacementMaterial<D>,
     source: &'a native::Container<'_, E>,
     reader: &mut Reader<'a, '_>,
-) -> Result<surface::Displacement, Error>
+) -> Result<surface::DisplacementMaterialStep, Error>
 where
     D::Name: Slot<native::Ref<nr::targets::Character>>,
 {
     reader.name = Some(string(source, r.name.value())?);
     let normal_map = get_layer(source, reader, r.normal_map)?;
     let strength_map = get_layer(source, reader, r.strength_map)?;
-    Ok(surface::Displacement {
+    Ok(surface::DisplacementMaterialStep {
         displacement: SurfaceContribution {
             input: normal_map,
             parameters: anim(r.strength),
@@ -34,7 +34,7 @@ pub(super) fn get_displacementmaterial<'a, E: Envelope>(
     reader: &mut Reader<'a, '_>,
     reference: native::Ref<nr::targets::DisplacementMaterial>,
     index: usize,
-) -> Result<surface::Displacement, Error> {
+) -> Result<surface::DisplacementMaterialStep, Error> {
     macro_rules! read {
         ($t:ty) => {{
             let r = source

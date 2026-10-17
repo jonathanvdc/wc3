@@ -1,7 +1,6 @@
 use wc3::model::common::IntoZeroVec;
 use wc3::model::conversion::{Context, ExportOptions};
 use wc3::model::io::geometry;
-use wc3::model::MaterialSurface;
 use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw, DrawSubset, Material,
     Mesh, MeshInstance, ModelBuilder, Node, PrimitiveRange, PrimitiveSelection, Topology,
@@ -21,13 +20,13 @@ fn instances_share_mesh_owned_selections_with_independent_materials() {
     let first = builder
         .add_material(Material {
             name: "".into(),
-            surface: MaterialSurface::Layered(Box::default()),
+            surface: Default::default(),
         })
         .unwrap();
     let second = builder
         .add_material(Material {
             name: "".into(),
-            surface: MaterialSurface::Layered(Box::default()),
+            surface: Default::default(),
         })
         .unwrap();
     let mut source = mesh();
@@ -77,7 +76,7 @@ fn strip_selections_use_their_own_faces_and_explicit_index_counting() {
     let material = builder
         .add_material(Material {
             name: "".into(),
-            surface: MaterialSurface::Layered(Box::default()),
+            surface: Default::default(),
         })
         .unwrap();
     let mut source = mesh();
@@ -135,7 +134,7 @@ fn foreign_subset_and_connectivity_identities_are_rejected() {
     let material = builder
         .add_material(Material {
             name: "".into(),
-            surface: MaterialSurface::Layered(Box::default()),
+            surface: Default::default(),
         })
         .unwrap();
     let other = builder.add_mesh(mesh()).unwrap();

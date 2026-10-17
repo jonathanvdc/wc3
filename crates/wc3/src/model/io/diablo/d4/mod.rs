@@ -163,11 +163,12 @@ pub fn import_with_layouts<'a>(
         ));
         let mut ids = Vec::new();
         for variant in &slot.so_as {
+            let selection = materials::read_appearance(variant, &mut context)?;
             let material = builder.add_material(Material {
                 name: Cow::Borrowed(""),
-                surface: materials::read_appearance(variant, &mut context)?,
+                surface: Default::default(),
             })?;
-            ids.push(appearance.add_variant(slot_id, material)?);
+            ids.push(appearance.add_variant_with_selection(slot_id, material, selection)?);
         }
         if ids.is_empty() {
             return Err(error("appearance material slot has no alternatives"));

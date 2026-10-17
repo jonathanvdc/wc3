@@ -125,8 +125,8 @@ impl<E: ValidateLinks, O: ValidateLinks, F: ValidateLinks, C: ValidateLinks> Val
 /// A world-surface selection cannot author an opacity-weighted additive operation:
 ///
 /// ```compile_fail
-/// use wc3::model::materials::{state::BlendOperations, world};
-/// let _: world::Blend = BlendOperations::AdditiveAlpha(());
+/// use wc3::model::materials::{state::BlendOperations, wmo};
+/// let _: wmo::Blend = BlendOperations::AdditiveAlpha(());
 /// ```
 ///
 /// Programmed blending cannot author a cutout operation:

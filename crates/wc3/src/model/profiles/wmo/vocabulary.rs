@@ -27,7 +27,7 @@ impl Profile for Wmo {
     type Draw = Option<wmo::DrawControls>;
     type ModelMetadata<'a> = wmo::ModelMetadata;
     type System<'a> = wmo::WorldSystem<'a>;
-    type Surface<'a> = wmo::Material<'a>;
+    type Surface<'a> = wmo::MaterialStep<'a>;
     type Feature<'a> = wmo::Node<'a>;
     type Node<'a> = NoControls;
     type Texture<'a> = NoControls;
@@ -42,7 +42,11 @@ impl Profile for Wmo {
         super::validation::model(model)
     }
 }
-impl SurfacePayload for wmo::Material<'_> {
+impl SurfacePayload for wmo::MaterialStep<'_> {
+    fn supports_property(&self, _key: &PropertyIdentityKey) -> bool {
+        false
+    }
+
     fn validate(&self) -> Result<(), Error> {
         Ok(())
     }
@@ -127,7 +131,7 @@ impl Extends<Wmo> for Universal {
         System::Wmo(value)
     }
     fn surface<'a>(value: <Wmo as Profile>::Surface<'a>) -> Self::Surface<'a> {
-        MaterialSurface::World(Box::new(value))
+        MaterialSurface::from(value)
     }
     fn feature<'a>(value: <Wmo as Profile>::Feature<'a>) -> Self::Feature<'a> {
         value.into()

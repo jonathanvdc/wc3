@@ -147,7 +147,10 @@ cloth-vertex mappings in `VertexExtras`. Influence rows use `[Influence; 3]`, pr
 zero-weight slots.
 
 The appearance owns named material slots, slot-local variants, and named looks
-that select actual variants. Renaming a slot preserves its identity and updates
+that select actual variants. Each variant owns its appearance qualifier,
+base-material reference, and cloth reference in `selection`; its shader material
+owns only the shader inputs and phase declarations. Variants can therefore share
+a shader definition while selecting different external resources. Renaming a slot preserves its identity and updates
 native subobject references during export. Unused slots and variants remain
 editable declarations. Slot spelling must be unambiguous at the native boundary;
 independent slots cannot be exported with the same name. Native looks implicitly
@@ -230,6 +233,9 @@ retain scoped identities independent of native array positions. A mesh selects i
 actual chunk and material slot. An alternative selects actual variants owned by actual
 slots, including variants unused by any alternative. The appearance owns material
 selection; independent draw overrides would introduce conflicting edit authorities.
+Each variant's `selection` retains external material, cloth, effect, and related
+appearance declarations. An unresolved shader is an empty material program;
+sharing that material does not merge the variants' external selections.
 Bone bind transforms, inverse skinning transforms, hardpoint controls, and the
 structure's independently authored sphere remain separate declarations rather than
 being reconstructed from unrelated bounds or poses.
@@ -251,7 +257,8 @@ supported record vocabulary even when the semantic adapter rejects a projection.
 ## Convert standalone Diablo IV materials
 
 `io::diablo::d4::import_material` creates a checked material-only graph
-from a native material resource. The shader definition retains external shader-map
+from a native material resource, with one typed shader step in its surface's `steps`.
+The shader definition retains external shader-map
 and value-set selections, ordered texture inputs, constant scalar/vector parameters,
 and its material-resource controls. Texture SNOs are interned as model-owned
 texture definitions with the Diablo IV namespace, so repeated inputs share one editable

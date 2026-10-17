@@ -1,5 +1,5 @@
 use wc3::model::materials::state::BlendOperations;
-use wc3::model::materials::{layered, world};
+use wc3::model::materials::{mdlx, wmo};
 use wc3::model::values::{model, programmed};
 
 #[test]
@@ -31,15 +31,12 @@ fn model_and_programmed_blending_preserve_every_known_and_unknown_selector() {
 
 #[test]
 fn selected_material_blends_use_shared_operations_and_explicit_extra_domains() {
-    let cutout: layered::Blend = BlendOperations::AlphaKey(());
-    assert_eq!(cutout, layered::Blend::AlphaKey(()));
-    let world: world::Blend = BlendOperations::Extension(world::WorldBlend::ModulateAdd);
-    assert_eq!(
-        world,
-        world::Blend::Extension(world::WorldBlend::ModulateAdd)
-    );
-    assert_eq!(layered::Blend::default(), BlendOperations::Opaque);
-    assert_eq!(world::Blend::default(), BlendOperations::Opaque);
+    let cutout: mdlx::Blend = BlendOperations::AlphaKey(());
+    assert_eq!(cutout, mdlx::Blend::AlphaKey(()));
+    let world: wmo::Blend = BlendOperations::Extension(wmo::WorldBlend::ModulateAdd);
+    assert_eq!(world, wmo::Blend::Extension(wmo::WorldBlend::ModulateAdd));
+    assert_eq!(mdlx::Blend::default(), BlendOperations::Opaque);
+    assert_eq!(wmo::Blend::default(), BlendOperations::Opaque);
     assert_eq!(programmed::BlendMode::default(), BlendOperations::Opaque);
 }
 
@@ -47,9 +44,9 @@ use wc3::model::conversion::{ExportOptions, ImportOptions};
 use wc3::model::formats::mdlx::emitters::{Particle2FilterMode, ParticleEmitter2};
 use wc3::model::formats::mdlx::materials::LayerFilterMode;
 use wc3::model::formats::mdlx::scene::Node;
-use wc3::model::formats::mdlx::{self, mdl::Read as _, V800};
+use wc3::model::formats::mdlx::{self as native_mdlx, mdl::Read as _, V800};
 use wc3::model::io::mdlx as semantic_mdlx;
-use wc3::model::materials::layered::AlphaAdditiveEncoding;
+use wc3::model::materials::mdlx::AlphaAdditiveEncoding;
 use wc3::model::profiles::{mdlx as profile, Mdlx};
 use wc3::model::Model;
 
@@ -85,10 +82,10 @@ fn warcraft_layer_additive_selectors_share_weighted_rgb_operation_and_roundtrip_
         let blend = model.materials().iter().next().unwrap().1.surface.layers[0]
             .state
             .blend;
-        assert_eq!(blend, layered::Blend::AdditiveAlpha(encoding));
+        assert_eq!(blend, mdlx::Blend::AdditiveAlpha(encoding));
         // Both declarations carry the shared source-alpha-weighted RGB operation.
         assert!(matches!(blend, BlendOperations::AdditiveAlpha(_)));
-        assert_ne!(blend, layered::Blend::Additive);
+        assert_ne!(blend, mdlx::Blend::Additive);
         let output = semantic_mdlx::plan::<V800>(&model, &ExportOptions::default())
             .unwrap()
             .execute()
@@ -105,7 +102,7 @@ fn unweighted_semantic_addition_has_no_exact_warcraft_layer_encoding() {
     let mut model = layer_model("Additive");
     let (material, source) = model.materials().iter().next().unwrap();
     let mut surface = source.surface.clone();
-    surface.layers[0].state.blend = layered::Blend::Additive;
+    surface.layers[0].state.blend = mdlx::Blend::Additive;
     model
         .edit(|builder| builder.set_material_surface(material, surface))
         .unwrap();
@@ -117,7 +114,7 @@ fn unweighted_semantic_addition_has_no_exact_warcraft_layer_encoding() {
 }
 #[test]
 fn atlas_additive_preserves_its_encoding_and_rejects_material_only_selector() {
-    let mut source = mdlx::Document::<V800>::decode_mdl(
+    let mut source = native_mdlx::Document::<V800>::decode_mdl(
         r#"
         Version { FormatVersion 800, } Model "particle blend" {}
         Textures 1 { Bitmap { Image "white.blp", } }
@@ -137,7 +134,7 @@ fn atlas_additive_preserves_its_encoding_and_rejects_material_only_selector() {
     };
     assert_eq!(
         particle.details.rendering.blend,
-        layered::Blend::AdditiveAlpha(AlphaAdditiveEncoding::Additive)
+        mdlx::Blend::AdditiveAlpha(AlphaAdditiveEncoding::Additive)
     );
     let output = semantic_mdlx::plan::<V800>(&model, &ExportOptions::default())
         .unwrap()
@@ -152,8 +149,7 @@ fn atlas_additive_preserves_its_encoding_and_rejects_material_only_selector() {
     let profile::Node::AtlasParticles(particle) = &mut payload else {
         unreachable!()
     };
-    particle.details.rendering.blend =
-        layered::Blend::AdditiveAlpha(AlphaAdditiveEncoding::AddAlpha);
+    particle.details.rendering.blend = mdlx::Blend::AdditiveAlpha(AlphaAdditiveEncoding::AddAlpha);
     model
         .edit(|builder| builder.set_feature(id, payload))
         .unwrap();

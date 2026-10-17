@@ -2,7 +2,7 @@
 use crate::animation_targets::AnimationTargets;
 use bevy::math::{Affine2, Mat2, Mat3, UVec4, Vec2, Vec4};
 use bevy::render::render_resource::ShaderType;
-use wc3::model::materials::programmed::{Property, TextureLayer};
+use wc3::model::materials::m3::{Property, TextureLayer};
 use wc3::model::{ChannelValue, SampledAnimation};
 
 pub(super) const ROLE_COUNT: usize = 15;
@@ -28,7 +28,7 @@ impl Default for LayerUniform {
     }
 }
 #[derive(Clone, Debug, ShaderType)]
-pub(crate) struct ProgrammedUniform {
+pub(crate) struct M3Uniform {
     // x: enabled, y: vertex RGB, z: vertex alpha, w: specular mode.
     pub settings: UVec4,
     pub blends: UVec4,
@@ -39,7 +39,7 @@ pub(crate) struct ProgrammedUniform {
     pub normal_weights: [Vec4; 2],
     pub layers: [LayerUniform; ROLE_COUNT],
 }
-impl Default for ProgrammedUniform {
+impl Default for M3Uniform {
     fn default() -> Self {
         Self {
             settings: UVec4::ZERO,
@@ -53,7 +53,7 @@ impl Default for ProgrammedUniform {
     }
 }
 #[derive(Clone)]
-pub(crate) struct ProgrammedAnimation {
+pub(crate) struct M3Animation {
     pub layers: [Option<TextureLayer>; ROLE_COUNT],
     pub weights: Vec<Property<f32>>,
 }
@@ -129,16 +129,12 @@ pub(super) fn animated_layer(
     Some(layer)
 }
 
-impl ProgrammedAnimation {
+impl M3Animation {
     pub(crate) fn is_animated(&self) -> bool {
         self.layers.iter().any(Option::is_some)
             || self.weights.iter().any(|weight| weight.binding.is_some())
     }
-    pub(crate) fn apply(
-        &self,
-        sample: &SampledAnimation<'_, '_>,
-        target: &mut ProgrammedUniform,
-    ) -> bool {
+    pub(crate) fn apply(&self, sample: &SampledAnimation<'_, '_>, target: &mut M3Uniform) -> bool {
         let mut changed = false;
         for (slot, layer) in self.layers.iter().enumerate() {
             if let Some(layer) = layer {

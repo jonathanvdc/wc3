@@ -4,7 +4,7 @@ use super::{
 };
 pub(super) fn encode<E: Envelope>(
     name: &str,
-    r: &surface::LensFlare<'_>,
+    r: &surface::LensFlareMaterialStep<'_>,
     writer: &mut Writer<'_, '_, '_, '_, E>,
 ) -> Result<nr::LensFlare<nr::V3>, Error> {
     let sub = r

@@ -3,9 +3,9 @@ use super::{Property, TextureLayer};
 use crate::model::materials::contributions::SurfaceContribution;
 use crate::model::values::programmed::DisplacementFlags;
 
-/// Editable M3 Displacement values.
+/// Editable M3 DisplacementMaterialStep values.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Displacement {
+pub struct DisplacementMaterialStep {
     /// The purpose of this field has not been established.
     pub unknown: u32,
     /// Supplies the mask scaling displacement strength.
@@ -18,27 +18,27 @@ pub struct Displacement {
     pub displacement: SurfaceContribution<Option<TextureLayer>, Property<f32>>,
 }
 
-/// Editable M3 Terrain values.
+/// Editable M3 TerrainMaterialStep values.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Terrain {
+pub struct TerrainMaterialStep {
     /// Supplies the texture layer used for the terrain contribution.
     pub terrain_map: Option<TextureLayer>,
     /// The purpose of this field has not been established.
     pub unknown: u32,
 }
 
-/// Editable M3 Creep values.
+/// Editable M3 CreepMaterialStep values.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Creep {
+pub struct CreepMaterialStep {
     /// Supplies the mask delimiting the creep effect.
     pub mask_map: Option<TextureLayer>,
     /// Controls the lower creep-mask parameter; its numerical interpretation is not established.
     pub creep_low: u32,
 }
 
-/// Editable M3 SplatTerrainBake values.
+/// Editable M3 SplatTerrainBakeMaterialStep values.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct SplatTerrainBake {
+pub struct SplatTerrainBakeMaterialStep {
     /// Supplies the surface diffuse-color map.
     pub diffuse_map: Option<TextureLayer>,
     /// Supplies the map defining the displacement direction.

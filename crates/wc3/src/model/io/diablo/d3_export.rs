@@ -176,7 +176,7 @@ pub(super) fn plan_with_animations(
         }
         slot_names.push(slot.name.as_ref());
         let mut variants = Vec::new();
-        for (_, material_id) in slot.variants() {
+        for (variant_id, material_id) in slot.variants() {
             let material = model
                 .material(material_id)
                 .ok_or_else(|| Error::new("d3.material.variant", "slot material is absent"))?;
@@ -186,7 +186,14 @@ pub(super) fn plan_with_animations(
                     "native variant records have no independent material display label",
                 )?;
             }
-            variants.push(materials::write(&material.surface, &mut context)?);
+            variants.push(materials::write(
+                &material.surface,
+                &slot
+                    .variant_definition(variant_id)
+                    .expect("owned variant")
+                    .selection,
+                &mut context,
+            )?);
             used_materials.push(material_id);
         }
         root.materials.push(native::AppearanceMaterial {

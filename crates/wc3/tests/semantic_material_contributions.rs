@@ -1,7 +1,7 @@
 use wc3::model::materials::contributions::{
     MaskedInput, NormalContributions, PairedInputs, SurfaceContribution,
 };
-use wc3::model::materials::programmed::{Property, Standard, TextureLayer};
+use wc3::model::materials::m3::{Property, StandardMaterialStep, TextureLayer};
 use wc3::model::{Link, ValidateLinks};
 
 #[test]
@@ -42,7 +42,7 @@ fn contribution_compositions_validate_inputs_masks_and_response_independently() 
 
 #[test]
 fn programmed_standard_keeps_sparse_slots_and_independent_weight_count() {
-    let mut value = Standard::default();
+    let mut value = StandardMaterialStep::default();
     value.emissive.input.secondary.input = Some(TextureLayer::default());
     value.normals.primary.mask = Some(TextureLayer::default());
     value.normals.weights = vec![Property::default(); 5];

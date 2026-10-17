@@ -2,7 +2,7 @@
 use super::{append, nr, surface, Envelope, Error, Writer};
 pub(super) fn encode<E: Envelope>(
     name: &str,
-    r: &surface::DataDriven<'_>,
+    r: &surface::DataDrivenMaterialStep<'_>,
     writer: &mut Writer<'_, '_, '_, '_, E>,
 ) -> Result<nr::DataDrivenMaterial<nr::V3>, Error> {
     let mut paths = Vec::with_capacity(r.textures.len());
@@ -13,11 +13,11 @@ pub(super) fn encode<E: Envelope>(
         });
     }
     let parameter_bytes: Vec<nr::Character> = match &r.parameters {
-        surface::Parameters::Unresolved(values) => {
+        surface::DataDrivenParameters::Unresolved(values) => {
             values.iter().map(|value| nr::Character { value }).collect()
         }
-        surface::Parameters::Named(values) if values.groups.is_empty() => Vec::new(),
-        surface::Parameters::Named(_) => {
+        surface::DataDrivenParameters::Named(values) if values.groups.is_empty() => Vec::new(),
+        surface::DataDrivenParameters::Named(_) => {
             return Err(Error::new(
                 "m3.material.parameters",
                 "named shader dictionary encoding is not established for native M3",

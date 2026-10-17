@@ -2,7 +2,8 @@
 use bevy::prelude::{Handle, Image};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use wc3::model::materials::{layered, programmed, world, SurfaceSet};
+use wc3::model::materials::program::MaterialStep;
+use wc3::model::materials::{m3, mdlx, wmo};
 use wc3::model::{
     AddressMode, ColorSpace, ImageResource, Model, NodeFeature, ParticleDetails, ParticleEmitter,
     Sampler, Texture, TextureId,
@@ -112,13 +113,13 @@ pub fn texture_requests<'view, 'data>(
         add(id, TextureRole::Color, None);
     }
     for (_, material) in model.materials() {
-        match &material.surface {
-            SurfaceSet::Layered(surface) => {
-                for layer in &surface.layers {
-                    if !is_default_unit(surface, layer) {
+        for pass in &material.surface.steps {
+            match pass {
+                MaterialStep::Mdlx(layer) => {
+                    if !is_default_unit(layer) {
                         continue;
                     }
-                    for slot in &layer.textures {
+                    for slot in &layer.layer.textures {
                         let role = match slot.slot {
                             1 => TextureRole::Normal,
                             2 => TextureRole::Data,
@@ -136,23 +137,21 @@ pub fn texture_requests<'view, 'data>(
                         }
                     }
                 }
-            }
-            SurfaceSet::World(surface) => {
-                for slot in &surface.textures {
-                    if let Some((id, texture)) = slot
-                        .image
-                        .and_then(|id| model.texture(id).map(|texture| (id, texture)))
-                    {
-                        add(
-                            id,
-                            TextureRole::Color,
-                            Some(world_sampler(surface, texture.sampler)),
-                        );
+                MaterialStep::Wmo(surface) => {
+                    for slot in &surface.textures {
+                        if let Some((id, texture)) = slot
+                            .image
+                            .and_then(|id| model.texture(id).map(|texture| (id, texture)))
+                        {
+                            add(
+                                id,
+                                TextureRole::Color,
+                                Some(world_sampler(surface, texture.sampler)),
+                            );
+                        }
                     }
                 }
-            }
-            SurfaceSet::Programmed(surface) => {
-                if let programmed::Material::Standard(surface) = &**surface {
+                MaterialStep::M3(m3::MaterialStep::Standard(surface)) => {
                     for layer in [
                         &surface.diffuse,
                         &surface.decal_layer,
@@ -173,7 +172,7 @@ pub fn texture_requests<'view, 'data>(
                             add(
                                 id,
                                 TextureRole::Color,
-                                Some(programmed_sampler(layer, texture.sampler)),
+                                Some(m3_sampler(layer, texture.sampler)),
                             );
                         }
                     }
@@ -193,7 +192,7 @@ pub fn texture_requests<'view, 'data>(
                             add(
                                 id,
                                 TextureRole::Normal,
-                                Some(programmed_sampler(layer, texture.sampler)),
+                                Some(m3_sampler(layer, texture.sampler)),
                             );
                         }
                     }
@@ -218,13 +217,13 @@ pub fn texture_requests<'view, 'data>(
                             add(
                                 id,
                                 TextureRole::Data,
-                                Some(programmed_sampler(layer, texture.sampler)),
+                                Some(m3_sampler(layer, texture.sampler)),
                             );
                         }
                     }
                 }
+                _ => {}
             }
-            _ => {}
         }
     }
     for (_, feature) in model.features() {
@@ -253,10 +252,7 @@ pub(crate) fn particle_sampler(mut sampler: Sampler) -> Sampler {
 }
 
 /// M3 layers independently select wrapping on each image axis.
-pub(crate) fn programmed_sampler(
-    layer: &programmed::TextureLayer,
-    mut sampler: Sampler,
-) -> Sampler {
+pub(crate) fn m3_sampler(layer: &m3::TextureLayer, mut sampler: Sampler) -> Sampler {
     let flags = layer.binding.sampling.flags;
     sampler.u = if flags.uv_wrap_x() {
         AddressMode::Repeat
@@ -365,12 +361,9 @@ impl TextureImages {
     }
 }
 
-pub(crate) fn is_default_unit(
-    surface: &layered::LayeredSurface<'_>,
-    layer: &layered::Layer,
-) -> bool {
+pub(crate) fn is_default_unit(surface: &mdlx::MaterialStep<'_>) -> bool {
     // The per-layer shader selector takes precedence in normalized newer files.
-    match layer.shader {
+    match surface.layer.shader {
         Some(1) => true,
         Some(_) => false,
         None => surface.shader == "Shader_HD_DefaultUnit",
@@ -378,7 +371,7 @@ pub(crate) fn is_default_unit(
 }
 
 /// WMO addressing is surface authority; texture definitions remain unchanged.
-pub(crate) fn world_sampler(surface: &world::Material<'_>, mut sampler: Sampler) -> Sampler {
+pub(crate) fn world_sampler(surface: &wmo::MaterialStep<'_>, mut sampler: Sampler) -> Sampler {
     let controls = surface.state.rasterization.controls;
     if controls.clamp_u {
         sampler.u = AddressMode::Clamp;

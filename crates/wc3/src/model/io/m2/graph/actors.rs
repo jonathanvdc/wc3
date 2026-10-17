@@ -1,6 +1,6 @@
 //! Native feature nodes imported directly into independent scene state.
 use super::*;
-use crate::model::materials::model_shader::rasterization;
+use crate::model::materials::m2::rasterization;
 use crate::model::materials::state::PassState;
 use crate::model::LightEmission;
 use crate::model::{

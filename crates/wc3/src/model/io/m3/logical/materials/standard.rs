@@ -7,13 +7,13 @@ use super::{
 use crate::model::materials::contributions::{
     MaskedInput, NormalContributions, PairedInputs, SpecularInputs, SurfaceContribution,
 };
-use crate::model::materials::programmed::SpecularResponse;
-use crate::model::materials::{programmed::PassControls, state::PassState};
+use crate::model::materials::m3::SpecularResponse;
+use crate::model::materials::{m3::StandardRasterization, state::PassState};
 pub(super) fn standard<'a, E: Envelope, D: nr::StandardMaterialDialect>(
     r: nr::StandardMaterial<D>,
     source: &'a native::Container<'_, E>,
     reader: &mut Reader<'a, '_>,
-) -> Result<surface::Standard, Error>
+) -> Result<surface::StandardMaterialStep, Error>
 where
     D::HdrEnvironmentConstant: Slot<f32>,
     D::HdrEnvironmentDiffuse: Slot<f32>,
@@ -44,7 +44,7 @@ where
     let normal_blend2_mask_layer = get_layer(source, reader, r.normal_blend2_mask_layer.value())?;
     let normal_blend1_layer = get_layer(source, reader, r.normal_blend1_layer.value())?;
     let normal_blend2_layer = get_layer(source, reader, r.normal_blend2_layer.value())?;
-    Ok(surface::Standard {
+    Ok(surface::StandardMaterialStep {
         hdr_environment_constant: r.hdr_environment_constant.value(),
         hdr_environment_diffuse: r.hdr_environment_diffuse.value(),
         hdr_environment_specular: r.hdr_environment_specular.value(),
@@ -114,7 +114,7 @@ where
         state: PassState {
             blend: surface::values::BlendMode::from_raw((r.blend_mode).raw()),
             ordering: r.priority,
-            rasterization: PassControls {
+            rasterization: StandardRasterization {
                 additional_flags: surface::values::AdditionalMaterialFlags(
                     (r.additional_flags).bits(),
                 ),
@@ -132,7 +132,7 @@ pub(super) fn get_standard<'a, E: Envelope>(
     reader: &mut Reader<'a, '_>,
     reference: native::Ref<nr::targets::StandardMaterial>,
     index: usize,
-) -> Result<surface::Standard, Error> {
+) -> Result<surface::StandardMaterialStep, Error> {
     macro_rules! read {
         ($v:ty) => {{
             let r = source

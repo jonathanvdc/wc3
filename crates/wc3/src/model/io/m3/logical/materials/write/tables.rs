@@ -46,12 +46,12 @@ pub(in crate::model::io::m3::logical) fn encode<E: Envelope>(
             .expect("material from checked arena");
         let body = &material.surface;
         let (kind, index) = match body {
-            surface::Material::Standard(value) => {
+            surface::MaterialStep::Standard(value) => {
                 let index = standard.len() as u32;
                 standard.push(super::standard::encode(&material.name, value, writer)?);
                 (nr::MaterialKind::Standard, index)
             }
-            surface::Material::Displacement(value) => {
+            surface::MaterialStep::Displacement(value) => {
                 let index = displacement.len() as u32;
                 displacement.push(super::displacementmaterial::encode(
                     &material.name,
@@ -60,7 +60,7 @@ pub(in crate::model::io::m3::logical) fn encode<E: Envelope>(
                 )?);
                 (nr::MaterialKind::Displacement, index)
             }
-            surface::Material::Composite(value) => {
+            surface::MaterialStep::Composite(value) => {
                 let index = composite.len() as u32;
                 composite.push(super::compositematerial::encode(
                     &material.name,
@@ -69,7 +69,7 @@ pub(in crate::model::io::m3::logical) fn encode<E: Envelope>(
                 )?);
                 (nr::MaterialKind::Composite, index)
             }
-            surface::Material::Terrain(value) => {
+            surface::MaterialStep::Terrain(value) => {
                 let index = terrain.len() as u32;
                 terrain.push(super::terrainmaterial::encode(
                     &material.name,
@@ -78,7 +78,7 @@ pub(in crate::model::io::m3::logical) fn encode<E: Envelope>(
                 )?);
                 (nr::MaterialKind::Terrain, index)
             }
-            surface::Material::Volume(value) => {
+            surface::MaterialStep::Volume(value) => {
                 let index = volume.len() as u32;
                 volume.push(super::volumematerial::encode(
                     &material.name,
@@ -87,7 +87,7 @@ pub(in crate::model::io::m3::logical) fn encode<E: Envelope>(
                 )?);
                 (nr::MaterialKind::Volume, index)
             }
-            surface::Material::VolumeNoise(value) => {
+            surface::MaterialStep::VolumeNoise(value) => {
                 let index = volume_noise.len() as u32;
                 volume_noise.push(super::volumenoisematerial::encode(
                     &material.name,
@@ -96,22 +96,22 @@ pub(in crate::model::io::m3::logical) fn encode<E: Envelope>(
                 )?);
                 (nr::MaterialKind::VolumeNoise, index)
             }
-            surface::Material::Creep(value) => {
+            surface::MaterialStep::Creep(value) => {
                 let index = creep.len() as u32;
                 creep.push(super::creepmaterial::encode(&material.name, value, writer)?);
                 (nr::MaterialKind::Creep, index)
             }
-            surface::Material::Hair(value) => {
+            surface::MaterialStep::Hair(value) => {
                 let index = hair.len() as u32;
                 hair.push(super::hair::encode(&material.name, value, writer)?);
                 (nr::MaterialKind::Hair, index)
             }
-            surface::Material::SplatTerrainBake(value) => {
+            surface::MaterialStep::SplatTerrainBake(value) => {
                 let index = splat_terrain_bake.len() as u32;
                 splat_terrain_bake.push(super::stbmaterial::encode(&material.name, value, writer)?);
                 (nr::MaterialKind::SplatTerrainBake, index)
             }
-            surface::Material::Reflection(value) => {
+            surface::MaterialStep::Reflection(value) => {
                 let index = reflection.len() as u32;
                 reflection.push(super::reflectionmaterial::encode(
                     &material.name,
@@ -120,12 +120,12 @@ pub(in crate::model::io::m3::logical) fn encode<E: Envelope>(
                 )?);
                 (nr::MaterialKind::Reflection, index)
             }
-            surface::Material::LensFlare(value) => {
+            surface::MaterialStep::LensFlare(value) => {
                 let index = lens_flare.len() as u32;
                 lens_flare.push(super::flare::encode(&material.name, value, writer)?);
                 (nr::MaterialKind::LensFlare, index)
             }
-            surface::Material::DataDriven(value) => {
+            surface::MaterialStep::DataDriven(value) => {
                 let index = data_driven.len() as u32;
                 data_driven.push(super::data_driven::encode(&material.name, value, writer)?);
                 (nr::MaterialKind::DataDriven, index)

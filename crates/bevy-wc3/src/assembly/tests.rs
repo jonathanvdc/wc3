@@ -1,7 +1,7 @@
 use super::plan::plan;
 use super::*;
 use bevy::prelude::{Assets, Image};
-use wc3::model::materials::layered::LayeredSurface;
+use wc3::model::materials::mdlx::LayeredSurface;
 use wc3::model::profiles::Universal;
 use wc3::model::{
     Draw, DrawId, GeometryData, InstanceId, Material, MaterialSurface, Mesh, MeshInstance, Node,
@@ -13,7 +13,7 @@ fn model() -> (Model<'static>, Vec<(InstanceId, DrawId)>) {
     let material = builder
         .add_material(Material {
             name: "generic".into(),
-            surface: MaterialSurface::Layered(Box::new(LayeredSurface::default())),
+            surface: MaterialSurface::try_from(LayeredSurface::default()).unwrap(),
         })
         .unwrap();
     let mut ids = Vec::new();

@@ -4,10 +4,11 @@ use super::super::{
 use super::layers::layer_uniform;
 use super::*;
 use std::sync::Arc;
-use wc3::model::{AnimationSample, Material, MaterialSurface};
+use wc3::model::materials::m3;
+use wc3::model::{AnimationSample, Material, MaterialStep, MaterialSurface};
 
-fn constant(color: [f32; 4]) -> programmed::TextureLayer {
-    let mut layer = programmed::TextureLayer::default();
+fn constant(color: [f32; 4]) -> m3::TextureLayer {
+    let mut layer = m3::TextureLayer::default();
     layer.binding.sampling.flags.set_color(true);
     layer.binding.contribution.color.initial = color;
     layer.binding.contribution.color_type = ColorChannel::Rgba;
@@ -16,18 +17,18 @@ fn constant(color: [f32; 4]) -> programmed::TextureLayer {
     layer.binding.coordinates.transform.uv_source_related = u32::MAX;
     layer
 }
-fn compile(surface: programmed::Standard) -> SurfacePass {
+fn compile(surface: m3::StandardMaterialStep) -> SurfacePass {
     let model = Model::builder("standard controls").finish().unwrap();
-    compile_programmed(
+    compile_m3(
         &model,
-        &programmed::Material::Standard(Box::new(surface)),
+        &m3::MaterialStep::Standard(Box::new(surface)),
         &TextureImages::default(),
     )
     .unwrap()
 }
 #[test]
 fn constant_layers_keep_role_controls_without_requesting_unused_uv_streams() {
-    let mut surface = programmed::Standard::default();
+    let mut surface = m3::StandardMaterialStep::default();
     let mut diffuse = constant([0.2, 0.4, 0.8, 0.5]);
     diffuse.binding.coordinates.source = UvMappingMode::TriPlanarWorld;
     diffuse.binding.contribution.map_alpha.initial = 0.25;
@@ -36,13 +37,10 @@ fn constant_layers_keep_role_controls_without_requesting_unused_uv_streams() {
     surface.opacity.secondary = Some(constant([0.5; 4]));
     let pass = compile(surface);
     assert_eq!(pass.material.base_color, Color::WHITE);
-    assert_eq!(
-        pass.state.programmed.layers[0].color,
-        Vec4::new(0.2, 0.4, 0.8, 0.5)
-    );
-    assert_eq!(pass.state.programmed.layers[0].controls.z, 0.25);
-    assert_eq!(pass.state.programmed.layers[6].flags.x, 1);
-    assert_eq!(pass.state.programmed.layers[7].flags.x, 1);
+    assert_eq!(pass.state.m3.layers[0].color, Vec4::new(0.2, 0.4, 0.8, 0.5));
+    assert_eq!(pass.state.m3.layers[0].controls.z, 0.25);
+    assert_eq!(pass.state.m3.layers[6].flags.x, 1);
+    assert_eq!(pass.state.m3.layers[7].flags.x, 1);
     assert_eq!(pass.fourth_coordinate, None);
     assert!(!pass.state.fourth_uv);
 }
@@ -69,7 +67,7 @@ fn every_regular_role_has_a_fixed_physical_image_binding() {
     let mut layer = constant([1.; 4]);
     layer.binding.sampling.flags.set_color(false);
     layer.binding.image = Some(texture);
-    let mut surface = programmed::Standard {
+    let mut surface = m3::StandardMaterialStep {
         diffuse: Some(layer.clone()),
         decal_layer: Some(layer.clone()),
         ..Default::default()
@@ -88,23 +86,18 @@ fn every_regular_role_has_a_fixed_physical_image_binding() {
     surface.light_map_layer = Some(layer.clone());
     surface.ambient_occlusion_layer = Some(layer);
     surface.state.rasterization.flags.set_two_sided(true);
-    let surface = programmed::Material::Standard(Box::new(surface));
+    let surface = m3::MaterialStep::Standard(Box::new(surface));
     builder
         .add_material(Material {
             name: "roles".into(),
-            surface: MaterialSurface::Programmed(Box::new(surface.clone())),
+            surface: MaterialSurface::from(surface.clone()),
         })
         .unwrap();
     let model = builder.finish().unwrap();
     let handle = Handle::<Image>::default();
     let images = TextureImages::resolve(&model, |_| Some(handle.clone()));
-    let pass = compile_programmed(&model, &surface, &images).unwrap();
-    assert!(pass
-        .state
-        .programmed
-        .layers
-        .iter()
-        .all(|layer| layer.flags.x == 1));
+    let pass = compile_m3(&model, &surface, &images).unwrap();
+    assert!(pass.state.m3.layers.iter().all(|layer| layer.flags.x == 1));
     assert_eq!(pass.material.base_color_texture, Some(handle.clone()));
     assert_eq!(pass.material.normal_map_texture, Some(handle.clone()));
     assert_eq!(pass.material.occlusion_texture, Some(handle.clone()));
@@ -124,20 +117,20 @@ fn uv3_only_requests_its_raw_stream_and_pipeline_layout() {
     layer.binding.image = Some(texture);
     layer.binding.sampling.flags.set_color(false);
     layer.binding.coordinates.source = UvMappingMode::ExplicitUV3;
-    let surface = programmed::Standard {
+    let surface = m3::StandardMaterialStep {
         diffuse: Some(layer),
         ..Default::default()
     };
-    let surface = programmed::Material::Standard(Box::new(surface));
+    let surface = m3::MaterialStep::Standard(Box::new(surface));
     builder
         .add_material(Material {
             name: "UV route".into(),
-            surface: MaterialSurface::Programmed(Box::new(surface.clone())),
+            surface: MaterialSurface::from(surface.clone()),
         })
         .unwrap();
     let model = builder.finish().unwrap();
     let images = TextureImages::resolve(&model, |_| Some(Handle::default()));
-    let pass = compile_programmed(&model, &surface, &images).unwrap();
+    let pass = compile_m3(&model, &surface, &images).unwrap();
     assert_eq!(pass.fourth_coordinate, Some(3));
     assert_eq!(pass.secondary_coordinate, None);
     assert_eq!(pass.third_coordinate, None);
@@ -147,7 +140,7 @@ fn uv3_only_requests_its_raw_stream_and_pipeline_layout() {
 #[test]
 fn unchanged_sampling_keeps_uniforms_and_team_settings_stable() {
     let model = Model::builder("static animation").finish().unwrap();
-    let surface = programmed::Standard {
+    let surface = m3::StandardMaterialStep {
         diffuse: Some(constant([0.2, 0.4, 0.8, 1.])),
         ..Default::default()
     };
@@ -157,7 +150,7 @@ fn unchanged_sampling_keeps_uniforms_and_team_settings_stable() {
         extension: pass.state,
     };
     assert!(!pass.animation.is_animated());
-    assert!(pass.animation.programmed.is_none());
+    assert!(pass.animation.m3.is_none());
     let sample = model.animation_sample(AnimationSample::default()).unwrap();
     assert!(!pass.animation.apply_to_material(&sample, &mut material));
     let colors = TeamColors {
@@ -184,21 +177,21 @@ fn unresolved_coordinate_generators_skip_only_the_affected_role() {
     let mut builder = Model::builder("unsupported sampled coordinates");
     let texture = builder.add_file_texture("unsupported.dds").unwrap();
     let model = builder.finish().unwrap();
-    let mut surface = programmed::Standard::default();
+    let mut surface = m3::StandardMaterialStep::default();
     let mut layer = constant([1.; 4]);
     layer.binding.sampling.flags.set_color(false);
     layer.binding.image = Some(texture);
     layer.binding.coordinates.source = UvMappingMode::TriPlanarWorld;
     surface.diffuse = Some(layer);
     surface.opacity.primary = Some(constant([0.5; 4]));
-    let pass = compile_programmed(
+    let pass = compile_m3(
         &model,
-        &programmed::Material::Standard(Box::new(surface)),
+        &m3::MaterialStep::Standard(Box::new(surface)),
         &TextureImages::default(),
     )
     .unwrap();
-    assert_eq!(pass.state.programmed.layers[0].flags.x, 0);
-    assert_eq!(pass.state.programmed.layers[6].flags.x, 1);
+    assert_eq!(pass.state.m3.layers[0].flags.x, 0);
+    assert_eq!(pass.state.m3.layers[6].flags.x, 1);
     assert!(pass
         .diagnostics
         .iter()
@@ -207,7 +200,7 @@ fn unresolved_coordinate_generators_skip_only_the_affected_role() {
 
 #[test]
 fn alpha_test_uses_native_byte_threshold_without_losing_custom_clip_on_blend() {
-    let mut surface = programmed::Standard::default();
+    let mut surface = m3::StandardMaterialStep::default();
     surface.state.rasterization.alpha_test_threshold = 128;
     let pass = compile(surface.clone());
     assert_eq!(pass.state.combiner.clip.x, 128. / 255.);
@@ -220,18 +213,18 @@ fn alpha_test_uses_native_byte_threshold_without_losing_custom_clip_on_blend() {
 
 #[test]
 fn effect_context_enables_external_color_without_changing_authored_mesh_state() {
-    let pass = compile(programmed::Standard::default());
-    assert_eq!(pass.state.programmed.settings.y, 0);
-    assert_eq!(pass.state.programmed.settings.z, 0);
+    let pass = compile(m3::StandardMaterialStep::default());
+    assert_eq!(pass.state.m3.settings.y, 0);
+    assert_eq!(pass.state.m3.settings.z, 0);
     let mut effect = pass.state.clone();
     effect.enable_effect_color();
-    assert_eq!(effect.programmed.settings.y, 1);
-    assert_eq!(effect.programmed.settings.z, 1);
-    assert_eq!(pass.state.programmed.settings.y, 0);
-    assert_eq!(pass.state.programmed.settings.z, 0);
+    assert_eq!(effect.m3.settings.y, 1);
+    assert_eq!(effect.m3.settings.z, 1);
+    assert_eq!(pass.state.m3.settings.y, 0);
+    assert_eq!(pass.state.m3.settings.z, 0);
     let mut ordinary = ModelMaterialExtension::default();
     ordinary.enable_effect_color();
-    assert_eq!(ordinary.programmed.settings, UVec4::ZERO);
+    assert_eq!(ordinary.m3.settings, UVec4::ZERO);
 }
 
 #[test]
@@ -243,23 +236,23 @@ fn unresolved_images_use_white_diffuse_and_neutral_optional_roles() {
     layer.binding.sampling.flags.set_color(false);
     layer.binding.image = Some(texture);
     layer.binding.coordinates.source = UvMappingMode::ExplicitUV3;
-    let mut surface = programmed::Standard {
+    let mut surface = m3::StandardMaterialStep {
         diffuse: Some(layer.clone()),
         ..Default::default()
     };
     surface.normals.base = Some(layer.clone());
     surface.opacity.primary = Some(layer.clone());
     surface.ambient_occlusion_layer = Some(layer.clone());
-    let pass = compile_programmed(
+    let pass = compile_m3(
         &model,
-        &programmed::Material::Standard(Box::new(surface)),
+        &m3::MaterialStep::Standard(Box::new(surface)),
         &TextureImages::default(),
     )
     .unwrap();
-    assert_eq!(pass.state.programmed.layers[0].flags.x, 1);
-    assert_eq!(pass.state.programmed.layers[0].flags.y, 0);
+    assert_eq!(pass.state.m3.layers[0].flags.x, 1);
+    assert_eq!(pass.state.m3.layers[0].flags.y, 0);
     for slot in [6, 8, 14] {
-        assert_eq!(pass.state.programmed.layers[slot].flags.x, 0);
+        assert_eq!(pass.state.m3.layers[slot].flags.x, 0);
     }
     assert!(pass.material.normal_map_texture.is_none());
     assert_eq!(pass.fourth_coordinate, None);
@@ -267,13 +260,13 @@ fn unresolved_images_use_white_diffuse_and_neutral_optional_roles() {
         .diagnostics
         .iter()
         .any(|line| line.contains("unresolved")));
-    assert!(pass.animation.programmed.is_none());
-    let mut animation = ProgrammedAnimation {
+    assert!(pass.animation.m3.is_none());
+    let mut animation = M3Animation {
         layers: from_fn(|_| None),
         weights: Vec::new(),
     };
     animation.layers[0] = Some(layer);
-    let mut uniform = pass.state.programmed;
+    let mut uniform = pass.state.m3;
     let sample = model.animation_sample(AnimationSample::default()).unwrap();
     assert!(!animation.apply(&sample, &mut uniform));
     assert_eq!(uniform.layers[0].flags.y, 0);
@@ -298,7 +291,7 @@ fn independent_image_roles_share_each_effective_native_wrap_sampler() {
         layer.binding.sampling.flags.set_uv_wrap_y(v);
         layers.push(layer);
     }
-    let mut surface = programmed::Standard {
+    let mut surface = m3::StandardMaterialStep {
         diffuse: Some(layers[0].clone()),
         decal_layer: Some(layers[1].clone()),
         ..Default::default()
@@ -306,24 +299,22 @@ fn independent_image_roles_share_each_effective_native_wrap_sampler() {
     surface.opacity.primary = Some(layers[2].clone());
     surface.opacity.secondary = Some(layers[3].clone());
     surface.normals.base = Some(layers[4].clone());
-    let surface = programmed::Material::Standard(Box::new(surface));
+    let surface = m3::MaterialStep::Standard(Box::new(surface));
     builder
         .add_material(Material {
             name: "wrap states".into(),
-            surface: MaterialSurface::Programmed(Box::new(surface.clone())),
+            surface: MaterialSurface::from(surface.clone()),
         })
         .unwrap();
     let model = builder.finish().unwrap();
     let images = TextureImages::resolve(&model, |_| Some(Handle::default()));
-    let pass = compile_programmed(&model, &surface, &images).unwrap();
+    let pass = compile_m3(&model, &surface, &images).unwrap();
     assert_eq!(
-        [0, 1, 6, 7, 8].map(|slot| pass.state.programmed.layers[slot].route.y),
+        [0, 1, 6, 7, 8].map(|slot| pass.state.m3.layers[slot].route.y),
         [0, 1, 2, 3, 0]
     );
-    assert_eq!(pass.state.programmed_samplers.iter().flatten().count(), 4);
-    assert!(pass.state.programmed_samplers[4..]
-        .iter()
-        .all(Option::is_none));
+    assert_eq!(pass.state.m3_samplers.iter().flatten().count(), 4);
+    assert!(pass.state.m3_samplers[4..].iter().all(Option::is_none));
 }
 
 #[test]
@@ -334,16 +325,14 @@ fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
     let property = material.opacity();
     let mut opacity = constant([1.; 4]);
     opacity.binding.contribution.map_alpha.binding = Some(property.clone());
-    let mut surface = programmed::Standard::default();
+    let mut surface = m3::StandardMaterialStep::default();
     surface.opacity.primary = Some(opacity);
     builder
         .set_material(
             material,
             Material {
                 name: "animated".into(),
-                surface: MaterialSurface::Programmed(Box::new(programmed::Material::Standard(
-                    Box::new(surface),
-                ))),
+                surface: MaterialSurface::from(m3::MaterialStep::Standard(Box::new(surface))),
             },
         )
         .unwrap();
@@ -370,7 +359,7 @@ fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
         base: pass.material,
         extension: pass.state,
     };
-    material.extension.programmed.layers[6].route.y = 3;
+    material.extension.m3.layers[6].route.y = 3;
     let sample = model
         .animation_sample(AnimationSample {
             timeline_time: ModelTime::seconds(0.5).unwrap(),
@@ -378,32 +367,32 @@ fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
         })
         .unwrap();
     assert!(pass.animation.apply_to_material(&sample, &mut material));
-    assert!((material.extension.programmed.layers[6].controls.z - 0.5).abs() < 1e-6);
-    assert_eq!(material.extension.programmed.layers[6].route.y, 3);
+    assert!((material.extension.m3.layers[6].controls.z - 0.5).abs() < 1e-6);
+    assert_eq!(material.extension.m3.layers[6].route.y, 3);
     assert!(!pass.animation.apply_to_material(&sample, &mut material));
 }
 
 #[test]
 fn native_bound_constants_keep_opaque_composite_base_and_no_animation_sidecar() {
     use wc3::model::conversion::{ExportOptions, ImportOptions};
-    use wc3::model::formats::m3;
+    use wc3::model::formats::m3::StarCraft2;
     use wc3::model::profiles::{Universal, M3};
     use wc3::model::{io, profiles::m3 as native};
     let mut builder = Model::<M3>::builder("constant composite bindings");
-    let standard = native::Standard {
+    let standard = native::StandardMaterialStep {
         diffuse: Some(constant([1.; 4])),
         ..Default::default()
     };
     let leaf = builder
         .add_material(Material {
             name: "constant leaf".into(),
-            surface: native::Material::Standard(Box::new(standard)),
+            surface: native::MaterialStep::Standard(Box::new(standard)),
         })
         .unwrap();
     let _composite = builder
         .add_material(Material {
             name: "constant composite".into(),
-            surface: native::Material::Composite(Box::new(native::Composite {
+            surface: native::MaterialStep::Composite(Box::new(native::CompositeMaterialStep {
                 priority: 0,
                 sections: [1., 0.35]
                     .map(|weight| native::CompositeSection {
@@ -419,7 +408,7 @@ fn native_bound_constants_keep_opaque_composite_base_and_no_animation_sidecar() 
         })
         .unwrap();
     let model = builder.finish().unwrap();
-    let native = io::m3::plan::<m3::StarCraft2>(&model, &ExportOptions::default())
+    let native = io::m3::plan::<StarCraft2>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
@@ -433,11 +422,10 @@ fn native_bound_constants_keep_opaque_composite_base_and_no_animation_sidecar() 
         .iter()
         .find_map(|(id, material)| (material.name == "constant composite").then_some(id))
         .unwrap();
-    let MaterialSurface::Programmed(surface) = &model.material(composite).unwrap().surface else {
-        panic!("programmed surface")
-    };
-    let programmed::Material::Composite(surface) = &**surface else {
-        panic!("composite")
+    let MaterialStep::M3(m3::MaterialStep::Composite(surface)) =
+        &model.material(composite).unwrap().surface.steps[0]
+    else {
+        panic!("composite pass")
     };
     assert!(surface
         .sections
@@ -452,9 +440,7 @@ fn native_bound_constants_keep_opaque_composite_base_and_no_animation_sidecar() 
     assert_eq!(passes[0].material.base_color.alpha(), 1.);
     assert_eq!(passes[1].material.base_color.alpha(), 0.35);
     assert!(passes.iter().all(|pass| !pass.animation.is_animated()));
-    assert!(passes
-        .iter()
-        .all(|pass| pass.animation.programmed.is_none()));
-    assert_eq!(passes[0].state.programmed.layers[0].color, Vec4::ONE);
+    assert!(passes.iter().all(|pass| pass.animation.m3.is_none()));
+    assert_eq!(passes[0].state.m3.layers[0].color, Vec4::ONE);
     let _ = composite;
 }

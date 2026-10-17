@@ -11,9 +11,9 @@ pub struct CompositeSection {
     pub map_multiplier: Property<f32>,
 }
 
-/// Editable M3 Composite values.
+/// Editable M3 CompositeMaterialStep values.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Composite {
+pub struct CompositeMaterialStep {
     /// Sets render priority (lower = earlier).
     pub priority: u32,
     /// Sets sub-material sections (CMS_).

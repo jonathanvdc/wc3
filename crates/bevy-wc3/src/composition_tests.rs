@@ -1,7 +1,7 @@
 use super::*;
 use crate::{compile_model, BakeSpace, Playback, PoseBaker, PoseOptions};
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-use wc3::model::materials::layered::{Layer, LayeredSurface};
+use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::{
     Animated, Channel, Clip, Clock, Curve, Draw, ExplicitBinding, GeometryData, GeometryInfluences,
     Influence, Material, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node as ModelNode,
@@ -68,13 +68,14 @@ fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
     let material = builder
         .add_material(Material {
             name: "plain".into(),
-            surface: MaterialSurface::Layered(Box::new(LayeredSurface {
+            surface: MaterialSurface::try_from(LayeredSurface {
                 layers: vec![Layer {
                     opacity: Animated::constant(1.),
                     ..Default::default()
                 }],
                 ..Default::default()
-            })),
+            })
+            .unwrap(),
         })
         .unwrap();
     let mut instance = MeshInstance::new(joint, mesh);

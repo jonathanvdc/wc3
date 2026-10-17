@@ -1,7 +1,7 @@
 //! Feature-local fields and curves become typed native effect records.
 use super::animation::{animated, animated_spline, fixed_alpha, time_ms};
 use super::*;
-use crate::model::materials::model_shader::material_flags;
+use crate::model::materials::m2::material_flags;
 use crate::model::Axis;
 use zerovec::ZeroVec;
 fn anchor(

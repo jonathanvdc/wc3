@@ -5,12 +5,12 @@ pub(super) fn map_terrainmaterial<'a, E: Envelope, D: nr::TerrainMaterialDialect
     r: nr::TerrainMaterial<D>,
     source: &'a native::Container<'_, E>,
     reader: &mut Reader<'a, '_>,
-) -> Result<surface::Terrain, Error>
+) -> Result<surface::TerrainMaterialStep, Error>
 where
     D::Unknown: Slot<u32>,
 {
     reader.name = Some(string(source, r.name)?);
-    Ok(surface::Terrain {
+    Ok(surface::TerrainMaterialStep {
         terrain_map: get_layer(source, reader, r.terrain_map)?,
         unknown: r.unknown.value(),
     })
@@ -21,7 +21,7 @@ pub(super) fn get_terrainmaterial<'a, E: Envelope>(
     reader: &mut Reader<'a, '_>,
     reference: native::Ref<nr::targets::TerrainMaterial>,
     index: usize,
-) -> Result<surface::Terrain, Error> {
+) -> Result<surface::TerrainMaterialStep, Error> {
     macro_rules! read {
         ($t:ty) => {{
             let r = source
