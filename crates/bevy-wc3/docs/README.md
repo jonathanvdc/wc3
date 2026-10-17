@@ -45,7 +45,7 @@ then choose a topic:
   coordinates, weighted crossfades, edge opacity and PBR integration limits.
 - [M2 programme inventory](rendering/m2-programmes.md): complete known shader-table
   coverage, texture and palette requirements, and bounded unresolved families.
-- [Reforged materials](rendering/reforged-materials.md): texture roles,
+- [Reforged materials](rendering/reforged-materials.md): WC3 shader-specific steps, texture roles,
   surface animation, UV sets, and Bevy shading integration.
 - [WMO materials](rendering/wmo-materials.md): layered texture programmes, native
   vertex-light preparation, regional ambient contributions and scene limits.

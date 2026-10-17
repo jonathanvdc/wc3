@@ -6,8 +6,8 @@ use wc3::model::{
     conversion::{self, ExportOptions, ImportOptions, UnknownPolicy},
     formats::mdlx::{self, mdl::Read as _, mdx::Write as _},
     io,
-    profiles::mdlx as profile,
-    Animated, Channel, Clock,
+    profiles::{mdlx as profile, Mdlx, Universal},
+    Animated, Channel, Clock, Model,
 };
 fn source() -> mdlx::Document<'static, mdlx::V800> {
     mdlx::Document::decode_mdl(include_str!("../../fixtures/mdl/quad_model.mdl")).unwrap()
@@ -112,6 +112,18 @@ fn older_native_shader_string_uses_selected_dialect_layout() {
         "Shader_HD_DefaultUnit"
     );
     assert!(io::mdlx::plan::<mdlx::V1800>(&asset, &ExportOptions::default()).is_err());
+    // Semantic shader variants need no native selector provenance to export again.
+    let universal: Model<'_, Universal> = asset.widen();
+    let canonical = universal.try_narrow::<Mdlx>().unwrap();
+    let output = io::mdlx::plan::<mdlx::V1000>(&canonical, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert_eq!(
+        output.materials().next().unwrap().try_shader().unwrap(),
+        "Shader_HD_DefaultUnit"
+    );
 }
 
 #[test]

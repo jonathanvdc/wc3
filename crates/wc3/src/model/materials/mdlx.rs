@@ -61,7 +61,8 @@ pub struct Fresnel {
     /// Amount of team-color contribution.
     pub team_color: Animated<f32>,
 }
-/// One Warcraft III draw pass. Pass ordering is the order in the material.
+/// A native-profile Warcraft III layer, preserving the complete input vocabulary.
+/// Universal material programs interpret it into a shader-specific [`MaterialStep`].
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Layer {
     /// Color composition and rasterization applied by this pass.
@@ -193,15 +194,11 @@ impl ValidateLinks for LayerOptions {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
 
-/// An MDLX shader step with explicit shader selection and draw behavior.
+/// Material-wide draw declarations shared by the steps of an MDLX material.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct MaterialStep<'a> {
-    /// Texture inputs, animated surface response, and draw state.
-    pub layer: Layer,
+pub struct MaterialDeclaration {
     /// Rendering priority relative to other geometry.
     pub priority_plane: i32,
-    /// Shader name; empty selects the classic shader family.
-    pub shader: Cow<'a, str>,
     /// Use constant-color behavior.
     pub constant_color: bool,
     /// Render both sides regardless of the layer's face setting.
@@ -215,32 +212,220 @@ pub struct MaterialStep<'a> {
     /// Shader/draw flags with unresolved meanings.
     pub unclassified: MaterialFlags,
 }
+
+/// Inputs and draw state shared by the classic and Reforged default shaders.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MaterialInputs {
+    /// Composition and rasterization for this step.
+    pub state: PassState<Blend, Shading>,
+    /// Primary image and referenced coordinates.
+    pub binding:
+        TextureBinding<Animated<Option<TextureId>>, Coordinates<u32, Option<TextureTransformId>>>,
+    /// Opacity multiplier.
+    pub opacity: Animated<f32>,
+    /// Authored emissive multiplier.
+    pub emissive_gain: Option<Animated<f32>>,
+}
+/// A classic Warcraft III texture-composition step.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ClassicMaterialStep {
+    /// Shader inputs and rendering state.
+    pub inputs: MaterialInputs,
+    /// Material-wide draw declarations.
+    pub declaration: MaterialDeclaration,
+}
+/// A Reforged DefaultUnit shader step.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ReforgedDefaultMaterialStep {
+    /// Primary image, opacity, emissive gain, and rendering state.
+    pub inputs: MaterialInputs,
+    /// Material-wide draw declarations.
+    pub declaration: MaterialDeclaration,
+    /// Authored shader texture slots, retaining order and duplicate selectors.
+    pub textures: Vec<TextureSlot>,
+    /// Authored Fresnel response.
+    pub fresnel: Option<Fresnel>,
+}
+/// An uninterpreted shader declaration, retaining all authored inputs.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UnresolvedMaterialStep<'a> {
+    /// Uninterpreted material shader name.
+    pub shader_name: Cow<'a, str>,
+    /// Uninterpreted layer inputs and selectors.
+    pub layer: Layer,
+    /// Material-wide draw declarations.
+    pub declaration: MaterialDeclaration,
+}
+/// A Warcraft III material step with a shader-specific input vocabulary.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MaterialStep<'a> {
+    /// Classic texture composition.
+    Classic(ClassicMaterialStep),
+    /// Reforged's default unit shader.
+    ReforgedDefault(ReforgedDefaultMaterialStep),
+    /// A shader or input combination without an interpreted vocabulary.
+    Unresolved(UnresolvedMaterialStep<'a>),
+}
+impl Default for MaterialStep<'_> {
+    fn default() -> Self {
+        Self::Classic(ClassicMaterialStep::default())
+    }
+}
 impl<'a> From<Layer> for MaterialStep<'a> {
     fn from(layer: Layer) -> Self {
-        Self {
-            layer,
-            ..Default::default()
+        Self::from_layer(layer, MaterialDeclaration::default(), Cow::Borrowed(""))
+    }
+}
+impl<'a> MaterialStep<'a> {
+    /// Interprets native shader selection once, retaining unresolved input combinations.
+    pub fn from_layer(
+        layer: Layer,
+        declaration: MaterialDeclaration,
+        shader_name: Cow<'a, str>,
+    ) -> Self {
+        let family = shader_family(layer.shader, &shader_name);
+        if family == ShaderFamily::Unresolved
+            || (family == ShaderFamily::Classic
+                && (!layer.textures.is_empty() || layer.fresnel.is_some()))
+        {
+            return Self::Unresolved(UnresolvedMaterialStep {
+                layer,
+                declaration,
+                shader_name,
+            });
+        }
+        let Layer {
+            state,
+            binding,
+            opacity,
+            emissive_gain,
+            shader: _,
+            textures,
+            fresnel,
+        } = layer;
+        let inputs = MaterialInputs {
+            state,
+            binding,
+            opacity,
+            emissive_gain,
+        };
+        if family == ShaderFamily::ReforgedDefault {
+            Self::ReforgedDefault(ReforgedDefaultMaterialStep {
+                inputs,
+                declaration,
+                textures,
+                fresnel,
+            })
+        } else {
+            Self::Classic(ClassicMaterialStep {
+                inputs,
+                declaration,
+            })
+        }
+    }
+    /// Material-wide draw declarations.
+    pub fn declaration(&self) -> &MaterialDeclaration {
+        match self {
+            Self::Classic(v) => &v.declaration,
+            Self::ReforgedDefault(v) => &v.declaration,
+            Self::Unresolved(v) => &v.declaration,
+        }
+    }
+    /// Edits the material-wide draw declarations.
+    pub fn declaration_mut(&mut self) -> &mut MaterialDeclaration {
+        match self {
+            Self::Classic(v) => &mut v.declaration,
+            Self::ReforgedDefault(v) => &mut v.declaration,
+            Self::Unresolved(v) => &mut v.declaration,
+        }
+    }
+    /// Projects inputs into native layer vocabulary, deriving known shader selectors.
+    pub fn to_layer(&self) -> Layer {
+        let (inputs, shader, textures, fresnel) = match self {
+            Self::Classic(v) => (&v.inputs, None, Vec::new(), None),
+            Self::ReforgedDefault(v) => (&v.inputs, Some(1), v.textures.clone(), v.fresnel.clone()),
+            Self::Unresolved(v) => return v.layer.clone(),
+        };
+        Layer {
+            state: inputs.state,
+            binding: inputs.binding.clone(),
+            opacity: inputs.opacity.clone(),
+            emissive_gain: inputs.emissive_gain.clone(),
+            shader,
+            textures,
+            fresnel,
+        }
+    }
+    /// Whether material-wide draw declarations agree.
+    pub(crate) fn same_declaration(&self, other: &Self) -> bool {
+        self.declaration() == other.declaration()
+    }
+    /// Whether this step exposes the native structural animation destination.
+    pub fn supports_property(&self, key: &PropertyIdentityKey, ordinal: usize) -> bool {
+        let (inputs, fresnel, slots) = match self {
+            Self::Classic(v) => (&v.inputs, false, 0),
+            Self::ReforgedDefault(v) => (&v.inputs, v.fresnel.is_some(), v.textures.len()),
+            Self::Unresolved(v) => return v.layer.supports_property(key, ordinal),
+        };
+        match Target::from_identity(key) {
+            Some(Target::Layer { index, field }) if index == ordinal => match field {
+                LayerField::EmissiveGain => inputs.emissive_gain.is_some(),
+                LayerField::FresnelColor
+                | LayerField::FresnelOpacity
+                | LayerField::FresnelTeamColor => fresnel,
+                _ => true,
+            },
+            Some(Target::LayerTexture { layer, slot }) => layer == ordinal && slot < slots,
+            _ => false,
         }
     }
 }
-impl MaterialStep<'_> {
-    /// Whether another pass has exactly the same native material-header declaration.
-    pub(crate) fn same_declaration(&self, other: &Self) -> bool {
-        self.priority_plane == other.priority_plane
-            && self.shader == other.shader
-            && self.constant_color == other.constant_color
-            && self.two_sided == other.two_sided
-            && self.sort_near_z == other.sort_near_z
-            && self.sort_far_z == other.sort_far_z
-            && self.full_resolution == other.full_resolution
-            && self.unclassified == other.unclassified
+impl ValidateLinks for MaterialInputs {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.state.visit_links(visitor);
+        self.binding.visit_links(visitor);
+        self.opacity.visit_links(visitor);
+        self.emissive_gain.visit_links(visitor);
     }
 }
 impl ValidateLinks for MaterialStep<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        self.layer.visit_links(visitor);
+        match self {
+            Self::Classic(v) => v.inputs.visit_links(visitor),
+            Self::ReforgedDefault(v) => {
+                v.inputs.visit_links(visitor);
+                for slot in &v.textures {
+                    slot.binding.visit_links(visitor);
+                }
+                if let Some(fresnel) = &v.fresnel {
+                    fresnel.color.visit_links(visitor);
+                    fresnel.opacity.visit_links(visitor);
+                    fresnel.team_color.visit_links(visitor);
+                }
+            }
+            Self::Unresolved(v) => v.layer.visit_links(visitor),
+        }
     }
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ShaderFamily {
+    Classic,
+    ReforgedDefault,
+    Unresolved,
+}
+fn shader_family(selector: Option<u32>, name: &str) -> ShaderFamily {
+    match selector {
+        Some(1) => ShaderFamily::ReforgedDefault,
+        Some(0 | 2) => ShaderFamily::Classic,
+        Some(_) => ShaderFamily::Unresolved,
+        None => match name {
+            "Shader_HD_DefaultUnit" => ShaderFamily::ReforgedDefault,
+            "" | "Shader_SD_FixedFunction" => ShaderFamily::Classic,
+            _ => ShaderFamily::Unresolved,
+        },
+    }
+}
+
 impl<L> LayeredSurface<'_, L> {
     /// Unused native declarations cannot describe any shader execution.
     pub(crate) fn has_unexecuted_declarations(&self) -> bool {

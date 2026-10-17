@@ -39,8 +39,18 @@ pub(super) fn write<'a, V: FormatVersion>(
     material
         .render_mode
         .set_full_resolution(source.full_resolution);
-    if let Err(error) = material.try_set_shader(&source.shader) {
-        if !source.shader.is_empty() {
+    // Older layouts select a single shader by name instead of per-layer IDs.
+    let named_default_unit = matches!(V::NUMBER, 900 | 1000)
+        && source.shader.is_empty()
+        && !source.layers.is_empty()
+        && source.layers.iter().all(|layer| layer.shader == Some(1));
+    let shader_name = if named_default_unit {
+        "Shader_HD_DefaultUnit"
+    } else {
+        &source.shader
+    };
+    if let Err(error) = material.try_set_shader(shader_name) {
+        if !shader_name.is_empty() {
             encoder
                 .context
                 .unsupported(format!("{path}.shader"), error.to_string())?;
@@ -119,7 +129,7 @@ pub(super) fn write<'a, V: FormatVersion>(
                     .unsupported(format!("{path}.fresnel"), error.to_string())?;
             }
         }
-        if let Some(source) = source.shader {
+        if let Some(source) = source.shader.filter(|_| !named_default_unit) {
             if let Err(error) =
                 layer.try_set_shader_type(native::materials::ShaderType::new(source))
             {

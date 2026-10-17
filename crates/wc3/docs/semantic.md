@@ -221,13 +221,31 @@ declarations. A Diablo IV step carries resolved shader inputs and parameters.
 An unresolved Diablo IV selection retains its external references on its
 appearance variant and uses an empty material program.
 
-Each `mdlx::MaterialStep` owns its shader name, priority, sorting, sampling, culling,
-and unresolved flags alongside its animated `layer` inputs. Importing a native
-layered material copies its shared declarations onto each step. Checked MDLX
-projection requires those declarations to agree, because the native material
-stores them once. An empty program carries no shader declarations. Nondefault
-headers on empty native materials remain editable through the native codecs;
-semantic import rejects them unless an explicit loss policy accepts dropping them.
+`mdlx::MaterialStep` distinguishes `Classic(ClassicMaterialStep)`,
+`ReforgedDefault(ReforgedDefaultMaterialStep)`, and
+`Unresolved(UnresolvedMaterialStep)`. Classic and Reforged default steps share
+`MaterialInputs` for their primary texture, opacity, emissive gain, and draw state;
+only Reforged default steps expose additional texture slots and Fresnel inputs.
+Unresolved steps retain the complete uninterpreted layer. Numeric layer selectors
+take precedence over shader names when interpreting native inputs. Texture slot
+order, duplicate selectors, and unknown roles remain intact.
+
+The shader variant is the authority for known shader selection. Known steps carry
+neither shader IDs nor shader names, and their native selectors are derived on
+projection: the implicit classic shader or the Reforged default selector. Known
+native spellings normalize through the semantic program. Unresolved steps retain
+their material shader name and layer selector because their interpretation is not
+known; the native codecs and native-profile layers remain available for editing
+raw encodings.
+
+Each step carries priority, sorting, and additional draw flags in a
+`MaterialDeclaration`. Checked MDLX projection requires those declarations to
+agree, because the native material stores them once. Unresolved names must also
+agree when several unresolved steps share a native material. Known variants can
+coexist with an unresolved name through explicit layer selectors. An empty
+program carries no shader declarations. Nondefault headers on empty native
+materials remain editable through the native codecs; semantic import rejects
+them unless an explicit loss policy accepts dropping them.
 
 Diablo appearance variants own external resource selections independently of the
 shader material they execute, as described under [appearance and playback](#appearance-and-playback).

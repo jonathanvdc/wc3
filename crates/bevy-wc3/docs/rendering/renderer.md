@@ -44,7 +44,7 @@ Unsupported combinations remain diagnostic fallbacks. Unlit and unfogged control
 Bevy's corresponding behavior; mesh priority is a sort/depth bias, not a complete
 game-specific pass ordering scheme.
 
-[DefaultUnit HD materials](reforged-materials.md) support normal/ORM, team color,
+[ReforgedDefault material steps](reforged-materials.md) support normal/ORM, team color,
 emissive, Fresnel, and approximate reflection. Role-aware image requests preserve
 samplers and color-space distinctions without changing shared source images.
 Textures reference model-owned image declarations through typed handles; image

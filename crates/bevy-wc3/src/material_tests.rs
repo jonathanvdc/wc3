@@ -565,7 +565,9 @@ fn mixed_m3_external_and_composite_steps_keep_their_order_and_weights() {
 
 #[test]
 fn layered_passes_compile_independent_culling_priority_and_sorting() {
-    use wc3::model::materials::mdlx::MaterialStep as MdlxMaterialStep;
+    use wc3::model::materials::mdlx::{
+        ClassicMaterialStep, MaterialDeclaration, MaterialStep as MdlxMaterialStep,
+    };
     use wc3::model::materials::program::MaterialStep;
     let mut builder = ModelBuilder::new("independent layered settings");
     let id = builder
@@ -573,18 +575,24 @@ fn layered_passes_compile_independent_culling_priority_and_sorting() {
             name: "mixed".into(),
             surface: MaterialSurface {
                 steps: vec![
-                    MaterialStep::Mdlx(Box::new(MdlxMaterialStep {
-                        priority_plane: -3,
-                        two_sided: true,
-                        sort_far_z: true,
+                    MaterialStep::Mdlx(Box::new(MdlxMaterialStep::Classic(ClassicMaterialStep {
+                        declaration: MaterialDeclaration {
+                            priority_plane: -3,
+                            two_sided: true,
+                            sort_far_z: true,
+                            ..Default::default()
+                        },
                         ..Default::default()
-                    })),
+                    }))),
                     MaterialStep::M3(m3::MaterialStep::Standard(Box::default())),
-                    MaterialStep::Mdlx(Box::new(MdlxMaterialStep {
-                        priority_plane: 9,
-                        sort_near_z: true,
+                    MaterialStep::Mdlx(Box::new(MdlxMaterialStep::Classic(ClassicMaterialStep {
+                        declaration: MaterialDeclaration {
+                            priority_plane: 9,
+                            sort_near_z: true,
+                            ..Default::default()
+                        },
                         ..Default::default()
-                    })),
+                    }))),
                 ],
             },
         })

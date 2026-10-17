@@ -1,6 +1,8 @@
 //! Surface-value evaluation independent of texture pixels and renderer materials.
 use crate::model::materials::m2::{MaterialStep as M2MaterialStep, TextureUnit};
-use crate::model::materials::mdlx::{Layer, LayeredSurface, MaterialStep as MdlxMaterialStep};
+use crate::model::materials::mdlx::{
+    Layer, LayeredSurface, MaterialInputs, MaterialStep as MdlxMaterialStep,
+};
 use crate::model::materials::program::{MaterialStep, MaterialSurface};
 use crate::model::{
     Animated, BindingValue, ChannelValue, MeshId, Model, NodeFeature, Property, PropertySample,
@@ -200,11 +202,35 @@ impl LayeredSurface<'_> {
         value
     }
 }
-impl MdlxMaterialStep<'_> {
-    /// Freezes shader inputs while preserving this pass's rendering settings.
+impl MaterialInputs {
+    /// Freezes shared WC3 shader inputs while retaining their draw state.
     pub fn sampled(&self, sample: &impl PropertySample) -> Self {
         let mut value = self.clone();
-        value.layer = self.layer.sampled(sample);
+        value.binding.image = self.binding.image.sampled(sample);
+        value.opacity = self.opacity.sampled(sample);
+        value.emissive_gain = self.emissive_gain.as_ref().map(|v| v.sampled(sample));
+        value
+    }
+}
+impl MdlxMaterialStep<'_> {
+    /// Freezes shader inputs while preserving this step's shader and rendering settings.
+    pub fn sampled(&self, sample: &impl PropertySample) -> Self {
+        let mut value = self.clone();
+        match &mut value {
+            Self::Classic(step) => step.inputs = step.inputs.sampled(sample),
+            Self::ReforgedDefault(step) => {
+                step.inputs = step.inputs.sampled(sample);
+                for slot in &mut step.textures {
+                    slot.binding.image = slot.binding.image.sampled(sample);
+                }
+                if let Some(fresnel) = &mut step.fresnel {
+                    fresnel.color = fresnel.color.sampled(sample);
+                    fresnel.opacity = fresnel.opacity.sampled(sample);
+                    fresnel.team_color = fresnel.team_color.sampled(sample);
+                }
+            }
+            Self::Unresolved(step) => step.layer = step.layer.sampled(sample),
+        }
         value
     }
 }

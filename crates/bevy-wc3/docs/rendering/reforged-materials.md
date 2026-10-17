@@ -1,6 +1,16 @@
 # Reforged DefaultUnit surfaces
 
-MDLX DefaultUnit materials combine diffuse, normal, surface, emissive, team-color,
+The WC3 material vocabulary distinguishes `MaterialStep::Classic`,
+`MaterialStep::ReforgedDefault`, and `MaterialStep::Unresolved`.
+`ReforgedDefaultMaterialStep` owns the DefaultUnit texture slots and Fresnel inputs;
+`ClassicMaterialStep` contains the classic inputs without those HD fields.
+Shader selection is interpreted before rendering, with a numeric layer selector
+taking precedence over the material shader name. The known variants then own
+shader identity without storing redundant names or IDs. Only unresolved steps
+retain raw shader selection. Native output derives known selectors from the
+variant, while texture slot order remains intact for structural animation targets.
+
+Reforged default materials combine diffuse, normal, surface, emissive, team-color,
 and reflection roles in `ModelMaterial`. Native adapters normalize older
 six-layer forms into semantic roles before rendering. Unknown/Crystal shaders retain
 a diagnosed diffuse fallback; they do not receive DefaultUnit slot rules merely

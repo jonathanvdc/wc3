@@ -1,7 +1,7 @@
 //! Ordered material programs with explicit shader dialects.
 use super::m2::MaterialStep as M2MaterialStep;
 use super::m3::properties::MaterialProperties;
-use super::mdlx::{LayeredSurface, MaterialStep as MdlxMaterialStep, SurfaceLayer};
+use super::mdlx::{LayeredSurface, MaterialDeclaration, MaterialStep as MdlxMaterialStep};
 use super::wmo::MaterialStep as WmoMaterialStep;
 use super::{diablo3, diablo4, m3};
 use crate::model::profiles::m3::properties::Target as M3Target;
@@ -62,7 +62,7 @@ impl MaterialStep<'_> {
     /// Whether this step exposes the structural animation destination.
     pub fn supports_property(&self, key: &PropertyIdentityKey, ordinal: usize) -> bool {
         match self {
-            Self::Mdlx(v) => v.layer.supports_property(key, ordinal),
+            Self::Mdlx(v) => v.supports_property(key, ordinal),
             Self::M2(v) => v.supports_property(key),
             Self::M3(v) => m3_path(key).is_some_and(|path| v.supports_path(path)),
             Self::Wmo(_) | Self::Diablo3(_) | Self::Diablo4(_) => false,
@@ -71,7 +71,7 @@ impl MaterialStep<'_> {
     /// Checks the dialect's local invariants independently of graph relationships.
     pub fn validate(&self) -> Result<(), Error> {
         match self {
-            Self::Mdlx(v) => SurfaceLayer::validate(&v.layer),
+            Self::Mdlx(_) => Ok(()),
             Self::M2(v) => v.validate(),
             Self::Wmo(v) => v.validate(),
             Self::M3(v) => v.validate(),
@@ -126,17 +126,19 @@ impl<'a> TryFrom<LayeredSurface<'a>> for MaterialSurface<'a> {
             steps: layers
                 .into_iter()
                 .map(|layer| {
-                    MaterialStep::Mdlx(Box::new(MdlxMaterialStep {
+                    MaterialStep::Mdlx(Box::new(MdlxMaterialStep::from_layer(
                         layer,
-                        priority_plane,
-                        shader: shader.clone(),
-                        constant_color,
-                        two_sided,
-                        sort_near_z,
-                        sort_far_z,
-                        full_resolution,
-                        unclassified,
-                    }))
+                        MaterialDeclaration {
+                            priority_plane,
+                            constant_color,
+                            two_sided,
+                            sort_near_z,
+                            sort_far_z,
+                            full_resolution,
+                            unclassified,
+                        },
+                        shader.clone(),
+                    )))
                 })
                 .collect(),
         })
@@ -167,29 +169,62 @@ impl<'a> TryFrom<MaterialSurface<'a>> for LayeredSurface<'a> {
             return Err(incompatible("surface contains a non-MDLX step"));
         };
         let mut layers = Vec::new();
+        let mut shader = match first.as_ref() {
+            MdlxMaterialStep::Unresolved(step) => Some(step.shader_name.clone()),
+            _ => None,
+        };
         for pass in steps {
             let MaterialStep::Mdlx(pass) = pass else {
                 return Err(incompatible("surface contains a non-MDLX step"));
             };
             if !first.same_declaration(&pass) {
                 return Err(incompatible(
-                    "MDLX steps have different shader or draw declarations",
+                    "MDLX steps have different material-wide draw declarations",
                 ));
             }
-            layers.push(pass.layer);
+            if let MdlxMaterialStep::Unresolved(step) = pass.as_ref() {
+                if shader
+                    .as_ref()
+                    .is_some_and(|name| name != &step.shader_name)
+                {
+                    return Err(incompatible(
+                        "MDLX unresolved steps require different material shader names",
+                    ));
+                }
+                shader = Some(step.shader_name.clone());
+            }
+            layers.push((
+                matches!(pass.as_ref(), MdlxMaterialStep::Classic(_)),
+                pass.to_layer(),
+            ));
         }
-        let MdlxMaterialStep {
-            layer,
+        let MaterialDeclaration {
             priority_plane,
-            shader,
             constant_color,
             two_sided,
             sort_near_z,
             sort_far_z,
             full_resolution,
             unclassified,
-        } = *first;
-        layers.insert(0, layer);
+        } = first.declaration().clone();
+        layers.insert(
+            0,
+            (
+                matches!(first.as_ref(), MdlxMaterialStep::Classic(_)),
+                first.to_layer(),
+            ),
+        );
+        let shader = shader.unwrap_or_default();
+        let layers = layers
+            .into_iter()
+            .map(|(classic, mut layer)| {
+                // A shared unresolved name must not override a known classic step.
+                if classic && !shader.is_empty() {
+                    layer.shader = Some(0);
+                }
+                layer
+            })
+            .collect();
         Ok(Self {
             layers,
             priority_plane,

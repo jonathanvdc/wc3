@@ -116,10 +116,10 @@ pub fn texture_requests<'view, 'data>(
         for pass in &material.surface.steps {
             match pass {
                 MaterialStep::Mdlx(layer) => {
-                    if !is_default_unit(layer) {
+                    let mdlx::MaterialStep::ReforgedDefault(layer) = layer.as_ref() else {
                         continue;
-                    }
-                    for slot in &layer.layer.textures {
+                    };
+                    for slot in &layer.textures {
                         let role = match slot.slot {
                             1 => TextureRole::Normal,
                             2 => TextureRole::Data,
@@ -358,15 +358,6 @@ impl TextureImages {
         images: HashMap<TextureId, Handle<Image>>,
     ) -> Self {
         Self::resolve(model, |request| images.get(&request.id).cloned())
-    }
-}
-
-pub(crate) fn is_default_unit(surface: &mdlx::MaterialStep<'_>) -> bool {
-    // The per-layer shader selector takes precedence in normalized newer files.
-    match surface.layer.shader {
-        Some(1) => true,
-        Some(_) => false,
-        None => surface.shader == "Shader_HD_DefaultUnit",
     }
 }
 

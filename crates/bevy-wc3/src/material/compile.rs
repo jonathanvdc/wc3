@@ -1,5 +1,5 @@
 //! Native-family surface interpretation into PBR passes and explicit states.
-use super::super::textures::{is_default_unit, TextureImages, TextureRole};
+use super::super::textures::{TextureImages, TextureRole};
 use super::m2::compile_m2;
 use super::m3::compile_m3_with_targets;
 use super::wmo::compile_wmo;
@@ -291,30 +291,49 @@ fn compile_mdlx(
     images: &Arc<TextureImages>,
 ) -> Result<SurfacePass, ModelError> {
     let mut pass = SurfacePass::default();
-    let layer = &surface.layer;
-    pass.sort_near = surface.sort_near_z;
-    pass.sort_far = surface.sort_far_z;
-    blend(&layer.state.blend, &mut pass);
-    let raster = &layer.state.rasterization;
+    let (state, binding, opacity, emissive_gain, hd_inputs) = match surface {
+        mdlx::MaterialStep::Classic(step) => (
+            &step.inputs.state,
+            &step.inputs.binding,
+            &step.inputs.opacity,
+            &step.inputs.emissive_gain,
+            None,
+        ),
+        mdlx::MaterialStep::ReforgedDefault(step) => (
+            &step.inputs.state,
+            &step.inputs.binding,
+            &step.inputs.opacity,
+            &step.inputs.emissive_gain,
+            Some(step),
+        ),
+        mdlx::MaterialStep::Unresolved(step) => (
+            &step.layer.state,
+            &step.layer.binding,
+            &step.layer.opacity,
+            &step.layer.emissive_gain,
+            None,
+        ),
+    };
+    let declaration = surface.declaration();
+    pass.sort_near = declaration.sort_near_z;
+    pass.sort_far = declaration.sort_far_z;
+    blend(&state.blend, &mut pass);
+    let raster = &state.rasterization;
     rasterization(
         &mut pass,
-        surface.two_sided || raster.faces,
+        declaration.two_sided || raster.faces,
         raster.lighting,
     );
     depth(&mut pass, raster.depth.test, raster.depth.write);
-    pass.coordinate = layer.binding.coordinates.source;
-    pass.material.base_color = Color::linear_rgba(1.0, 1.0, 1.0, layer.opacity.default);
-    pass.material.base_color_texture = image(
-        model,
-        layer.binding.image.default,
-        images,
-        &mut pass.diagnostics,
-    )?;
-    pass.animation.opacity = Some(layer.opacity.clone());
-    pass.animation.texture = Some(layer.binding.image.clone());
-    pass.animation.emissive_gain = layer.emissive_gain.clone();
-    pass.material.depth_bias = surface.priority_plane as f32;
-    if let Some(id) = layer.binding.coordinates.transform {
+    pass.coordinate = binding.coordinates.source;
+    pass.material.base_color = Color::linear_rgba(1.0, 1.0, 1.0, opacity.default);
+    pass.material.base_color_texture =
+        image(model, binding.image.default, images, &mut pass.diagnostics)?;
+    pass.animation.opacity = Some(opacity.clone());
+    pass.animation.texture = Some(binding.image.clone());
+    pass.animation.emissive_gain = emissive_gain.clone();
+    pass.material.depth_bias = declaration.priority_plane as f32;
+    if let Some(id) = binding.coordinates.transform {
         let uv = model
             .texture_transform(id)
             .ok_or_else(|| ModelError(format!("missing texture transform {id:?}")))?;
@@ -330,10 +349,10 @@ fn compile_mdlx(
         pass.diagnostics
             .push("sphere-environment coordinates require a generated-coordinate shader".into());
     }
-    if is_default_unit(surface) {
+    if let Some(hd_inputs) = hd_inputs {
         let mut slots = from_fn(|_| None);
-        slots[0] = Some(layer.binding.image.clone());
-        for slot in &layer.textures {
+        slots[0] = Some(binding.image.clone());
+        for slot in &hd_inputs.textures {
             if let Some(binding) = slots.get_mut(slot.slot as usize) {
                 *binding = Some(slot.binding.image.clone());
             } else {
@@ -355,8 +374,8 @@ fn compile_mdlx(
         }
         let hd = HdAnimation {
             slots,
-            fresnel: layer.fresnel.clone(),
-            gain: layer.emissive_gain.clone(),
+            fresnel: hd_inputs.fresnel.clone(),
+            gain: emissive_gain.clone(),
             images: images.clone(),
         };
         let mut compiled = ModelMaterial {
@@ -367,7 +386,7 @@ fn compile_mdlx(
         compiled.base.reflectance = StandardMaterial::default().reflectance;
         pass.material = compiled.base;
         pass.state = compiled.extension;
-        if matches!(layer.state.blend, BlendOperations::AlphaKey(_)) {
+        if matches!(state.blend, BlendOperations::AlphaKey(_)) {
             pass.material.alpha_mode = AlphaMode::Mask(0.75);
         }
         pass.material.opaque_render_method = OpaqueRendererMethod::Forward;
@@ -376,26 +395,19 @@ fn compile_mdlx(
         pass.animation.texture = None;
         pass.animation.hd = Some(hd);
         pass.diagnostics.push("DefaultUnit Fresnel and authored environment reflection use the renderer's PBR approximation; game fidelity remains unverified".into());
-    } else if (!surface.shader.is_empty() && surface.shader != "Shader_SD_FixedFunction")
-        || layer
-            .shader
-            .is_some_and(|shader| shader != 0 && shader != 2)
-        || !layer.textures.is_empty()
-        || layer.fresnel.is_some()
-    {
+    } else if let mdlx::MaterialStep::Unresolved(step) = surface {
         pass.diagnostics.push(format!(
             "extended layered shader {:?} needs its authored texture-slot and Fresnel interpreter",
-            surface.shader
+            step.shader_name
         ));
     }
-    if surface.constant_color || surface.sort_near_z || surface.sort_far_z {
+    if declaration.constant_color || declaration.sort_near_z || declaration.sort_far_z {
         pass.diagnostics.push(
             "constant-color or primitive-level sorting controls are not evaluated by this PBR pass"
                 .into(),
         );
     }
-    if let Some(gain) = layer
-        .emissive_gain
+    if let Some(gain) = emissive_gain
         .as_ref()
         .filter(|_| pass.animation.hd.is_none())
     {
