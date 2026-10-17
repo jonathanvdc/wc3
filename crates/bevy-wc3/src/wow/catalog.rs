@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use wc3::model::MaterialStep;
 use wc3::model::{
     DrawId, ImageResource, InstanceId, Model, NodeControls, NodeFeature, NodeId, SocketIdentity,
-    TextureId,
+    Texture,
 };
 
 /// Stable native matching hints; semantic identities remain scoped to each model.
@@ -39,7 +39,7 @@ pub struct CharacterCatalog {
     /// Native skin-section IDs from instances whose appearance uses M2 model shaders.
     pub geosets: Vec<GeosetDraw>,
     /// Native replacement texture category and its semantic texture identities.
-    pub replacement_textures: BTreeMap<u32, Vec<TextureId>>,
+    pub replacement_textures: BTreeMap<u32, Vec<Texture>>,
     /// Native attachment role and its carrying semantic node.
     pub attachments: BTreeMap<u32, Vec<NodeId>>,
 }
@@ -83,8 +83,9 @@ impl CharacterCatalog {
                 }
             }
         }
-        let mut replacement_textures: BTreeMap<u32, Vec<TextureId>> = BTreeMap::new();
-        for (id, texture) in model.textures() {
+        let mut replacement_textures: BTreeMap<u32, Vec<Texture>> = BTreeMap::new();
+        for texture in model.sampled_images() {
+            let id = texture;
             if let ImageResource::Replaceable(category) = model
                 .image_resource(texture.resource)
                 .expect("validated image resource")

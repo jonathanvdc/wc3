@@ -1,13 +1,14 @@
-use super::{compose_atlas, AtlasLayer, PixelRect, RgbaImage, TextureReplacement};
+use super::{compose_atlas, AtlasLayer, PixelRect, RgbaImage, Source, TextureReplacement};
+use crate::textures::ImageKey;
 use crate::{
-    compile_model_with_options, CompileOptions, CompiledModel, DrawSelection, ModelError,
-    TextureColorSpace, TextureImageKey, TextureRequest,
+    compile_model_with_options, texture_requests, CompileOptions, CompiledModel, ModelError,
+    TextureColorSpace, TextureRequest,
 };
 use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::{Assets, Handle, Image};
 use bevy::render::render_resource::TextureFormat;
-use std::collections::{BTreeMap, HashMap};
-use wc3::model::{AddressMode, ImageResource, Model, Sampler, TextureId};
+use std::collections::{HashMap, HashSet};
+use wc3::model::{AddressMode, ImageResource, Model, Sampler};
 pub(super) struct ImageCompiler<'a, F> {
     pub(super) images: &'a mut Assets<Image>,
     pub(super) resolve: &'a mut F,
@@ -51,34 +52,42 @@ impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCo
     pub(super) fn compile(
         &mut self,
         model: &Model<'_>,
-        draws: DrawSelection,
-        replacements: &BTreeMap<TextureId, TextureReplacement>,
+        source: &Source,
     ) -> Result<CompiledModel, ModelError> {
-        let mut prepared_replacements = HashMap::new();
-        let mut handles: HashMap<TextureImageKey, Handle<Image>> = HashMap::new();
+        let mut handles: Vec<(ImageKey<TextureReplacement>, Handle<Image>)> = Vec::new();
+        let scoped: HashSet<_> = texture_requests(model)
+            .into_iter()
+            .filter(|request| request.input.is_some())
+            .map(|request| request.texture)
+            .collect();
         let mut failure = None;
         let compiled = compile_model_with_options(
             model,
             CompileOptions {
-                draws,
+                draws: source.draws.clone(),
                 ..Default::default()
             },
             |request: TextureRequest<'_, '_>| {
-                if let Some(handle) = handles.get(&request.key()) {
+                if request.input.is_none() && scoped.contains(&request.texture) {
+                    return None;
+                }
+                let selection = request
+                    .input
+                    .and_then(|input| source.inputs.get(&input))
+                    .or_else(|| source.images.get(&request.texture.resource))
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        TextureReplacement::Image(request.resource.clone().into_owned())
+                    });
+                let key = ImageKey {
+                    source: selection.clone(),
+                    color_space: request.color_space,
+                    sampler: request.sampler,
+                };
+                if let Some((_, handle)) = handles.iter().find(|(existing, _)| *existing == key) {
                     return Some(handle.clone());
                 }
-                let pixels = match replacements.get(&request.id) {
-                    Some(replacement) => {
-                        if let Some(image) = prepared_replacements.get(&request.id) {
-                            Ok(RgbaImage::clone(image))
-                        } else {
-                            self.replacement(replacement).inspect(|image| {
-                                prepared_replacements.insert(request.id, image.clone());
-                            })
-                        }
-                    }
-                    None => self.decode(&request.resource.clone().into_owned()),
-                };
+                let pixels = self.replacement(&selection);
                 let pixels = match pixels {
                     Ok(pixels) => pixels,
                     Err(error) => {
@@ -94,7 +103,7 @@ impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCo
                 }
                 image.sampler = ImageSampler::Descriptor(sampler(request.sampler));
                 let handle = self.images.add(image);
-                handles.insert(request.key(), handle.clone());
+                handles.push((key, handle.clone()));
                 Some(handle)
             },
         )?;
@@ -106,7 +115,7 @@ impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCo
 }
 fn sampler(sampler: Sampler) -> ImageSamplerDescriptor {
     let address = |mode| match mode {
-        AddressMode::Repeat | AddressMode::Unknown(_) => ImageAddressMode::Repeat,
+        AddressMode::Repeat => ImageAddressMode::Repeat,
         AddressMode::Mirror => ImageAddressMode::MirrorRepeat,
         AddressMode::Clamp => ImageAddressMode::ClampToEdge,
     };

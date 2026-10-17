@@ -13,20 +13,20 @@ and inverse bind palettes into Bevy assets. `spawn_model` creates an
 independently animated rig beneath an application-owned transform. The encoded
 source and semantic graph can be released after compilation.
 
-The image callback receives a `TextureRequest` with the texture identity and
-complete semantic texture definition. Its `resource` field exposes the image
-declaration resolved from the model-owned image table; the texture itself retains
-the typed image handle. Resource identity, sampler, color space, and producer
-controls remain available to the application. Two textures can share one image
-declaration while requiring different sampling or color interpretation. The native
-loader retains independently labeled image variants for those cases. An unspecified
-transfer function follows the material role: color samples use sRGB, while normal
-and numeric data maps use linear images. A texture used in both roles receives
-distinct handles. Explicit transfer-function declarations remain authoritative.
-WMO clamp flags are
-surface-local: `TextureRequest::sampler` composes enabled clamp controls with the
-texture's declared sampler. Requests and labeled images distinguish those uses
-without changing the semantic texture or duplicating profile authority.
+The image callback receives a `TextureRequest` with a complete sampled-image
+value, its structural input address where applicable, and its resolved declaration from the model-owned image table. Resource
+identity, effective sampler, color space, role, and producer controls remain
+available to the application. Inputs sharing one image dependency can require
+different sampling or color interpretation. `TextureRequestKey` identifies a logical input selection. Assembly replacements
+target image dependencies or structural input addresses, with input choices taking
+precedence. The native
+loader and assembly compiler then share GPU images when resolved resources,
+samplers, and transfer functions agree, even when input metadata differs.
+An unspecified transfer function follows the material role: color samples use sRGB,
+while normal and numeric data maps use linear images. Explicit transfer-function
+declarations remain authoritative. WMO bindings own their sampler; native material
+clamp flags are expanded into those bindings during import. M3 layers retain their
+address selectors in their typed sampling programme, including empty image slots.
 
 Meshes are cached by geometry, subset, selected texture coordinates, and skin.
 After complete attribute projection, skinning, and indexing, byte-identical meshes

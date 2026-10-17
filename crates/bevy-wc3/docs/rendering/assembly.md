@@ -16,8 +16,8 @@ the renderer supplies no race, sex, customization-slot or inventory schema.
 Load or author the required models before resolving graph-scoped identities.
 `Models` maps resource identities to `Model<Universal>` values. An
 `Assembly` has a root `Source` and an ordered list of `Part`s.
-Each source selects its model resource, a `DrawSelection`, and exact `TextureId`
-replacements. Each part supplies a `PartBinding` and optional host-to-part clip
+Each source selects its model resource, a `DrawSelection`, and image replacements
+by dependency or by structural input address. Each part supplies a `PartBinding` and optional host-to-part clip
 mappings. Public assembly plans use concrete `PartBinding` values, so their
 attachment and skeleton relationships are explicit.
 
@@ -46,23 +46,38 @@ the same assembly compiler. Its character database vocabulary is optional.
 ## Select geometry and images
 
 `DrawSelection` chooses typed draws and suppresses complete instances. Its default
-retains authored geometry. Assembly validation rejects draw, instance and texture
-identities that do not belong to the selected source graph. The compiler resolves
+retains authored geometry. Assembly validation rejects foreign draw and instance
+identities, image dependencies and input addresses absent from the source graph. The compiler resolves
 materials and images for selected geometry, together with retained scene features
 and effects; a hidden hair draw therefore does not require its unused image.
 
-`TextureReplacement::Image` replaces one semantic texture with a decoded resource.
+`Source::images` maps `ImageResourceId` to a replacement for every use of that
+image dependency. `Source::inputs` maps `TextureInput` to a replacement for one
+material-step slot or sprite-emitter slot. An input replacement takes precedence
+over a resource replacement and applies throughout that input's animated image
+selections. Both maps replace only the image source: color interpretation,
+sampler and UV transforms remain owned by the authored input. Editing a sampler
+therefore does not change which replacement matches.
+
+Use `texture_requests(model)` to inspect supported input addresses. Material
+addresses contain the owning `MaterialId`, step index and image slot; particle
+addresses contain the owning `FeatureId` and image slot. Equal input values remain
+independently addressable. Addresses refer to structural positions, so changing
+the order of material steps or image slots requires updating the plan.
+
+`TextureReplacement::Image` selects a decoded resource.
 `TextureReplacement::Atlas` defines dimensions, a clear color and ordered
 `TextureLayer` contributions. Layers carry resource identities, optional source
-crops, destination rectangles and byte opacity. The generic compiler targets
-`TextureId`s directly, so it does not infer native replacement categories.
+crops, destination rectangles and byte opacity. The generic compiler uses explicit
+dependencies and input addresses; it does not infer native replacement categories.
 
 `compose_atlas` applies checked source-over composition in the decoded sRGB byte
 domain, including source and destination alpha, with nearest-neighbor scaling.
 Invalid dimensions, pixel storage and rectangles are errors. Image callbacks
 supply `RgbaImage` values; source decoding is cached within an assembly compilation.
-Role-dependent color space and sampler interpretations receive separate Bevy
-images. Atlas composition happens during setup, rather than animation updates.
+After replacement resolution, equal sources, effective color spaces and samplers
+share a Bevy image. Different sampling or color interpretation receives a separate
+image; native metadata and input addresses do not enter the physical cache key. Atlas composition happens during setup, rather than animation updates.
 
 ## Bind components
 

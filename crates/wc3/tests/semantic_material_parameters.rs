@@ -33,11 +33,11 @@ fn named_parameter_groups_preserve_hash_spelling_bytes_and_duplicate_order() {
 #[test]
 fn parameter_entries_traverse_custom_key_value_and_controls_in_order() {
     use wc3::model::profiles::Universal;
-    use wc3::model::{Link, Model, TextureId, ValidateLinks};
-    struct Reference(TextureId);
+    use wc3::model::{Link, Model, Texture, ValidateLinks};
+    struct Reference(Texture);
     impl ValidateLinks for Reference {
         fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-            visitor(Link::Texture(self.0));
+            visitor(Link::SampledImage(self.0));
         }
     }
     let mut resources = Model::<Universal>::builder("textures");
@@ -51,7 +51,7 @@ fn parameter_entries_traverse_custom_key_value_and_controls_in_order() {
     };
     let mut seen = Vec::new();
     parameter.visit_links(&mut |link| match link {
-        Link::Texture(id) => seen.push(id),
+        Link::SampledImage(id) => seen.push(id),
         _ => panic!("unexpected parameter relationship"),
     });
     assert_eq!(seen, [key, value, controls]);

@@ -15,9 +15,9 @@ behavior. Meshes describe geometry, while mesh instances place that geometry at
 a node. Each instance's draws select mesh-owned draw subsets and rendering controls.
 Looks assign materials to those draws. A complete material
 surface owns its rendering and sampling behavior, including the family's layers
-or passes. Shared texture-coordinate transforms describe animated translation,
-rotation, and scale before texture sampling; they belong to the sampling domain
-rather than the hierarchy.
+or passes. Each texture input owns its coordinate transform, including animated
+translation, rotation, and scale before sampling. These values belong to the
+material input rather than the hierarchy or a shared transform table.
 
 Attached features give a node behavior such as a camera, light, or emitter.
 A node can anchor several independently identified features. Systems own
@@ -44,9 +44,13 @@ complete graph validation apply.
 
 External declarations are grouped under `model.dependencies()`, with typed
 `images()`, `models()`, `effects()`, `physics()`, and `bone_overrides()` tables.
-Textures, materials, and meshes remain graph objects with their own IDs. A texture refers to an
-`ImageResourceId`; multiple textures can share that image declaration while
-choosing independent sampling and color interpretation. Child placements and
+Materials and meshes remain graph objects with their own IDs. A material or
+effect input refers to an `ImageResourceId` and owns its sampling behavior.
+Inputs can share an image declaration while choosing independent addressing,
+coordinate transforms, and color interpretation. `Texture` is an inline sampled-image
+value used by MDLX and M2 inputs, including complete animated image selection;
+it has no graph identity. M3, WMO, and Diablo IV shader inputs reference image
+resources directly and compose their own sampling vocabulary. Child placements and
 skyboxes use `ModelResourceId`, while external effect instances use
 `EffectResourceId`. Each handle resolves only in its owning model: for example,
 `model.dependencies().images().get(image)` resolves an image declaration.
@@ -80,9 +84,11 @@ use wc3::model::profiles::Mdlx;
 
 let mut draft = Model::<Mdlx>::builder("Shared image");
 let image = draft.add_image_resource(MdlxImageResource::Path(b"body.blp".as_slice().into()));
-let texture = draft.add_texture(Texture::new(image))?;
+let first = Texture::new(image);
+let mut second = first;
+second.sampler.u = wc3::model::AddressMode::Clamp;
+assert_eq!(first.resource, second.resource);
 let model = draft.finish()?;
-assert_eq!(model.textures().get(texture).unwrap().resource, image);
 assert_eq!(model.dependencies().images().len(), 1);
 Ok::<(), wc3::model::Error>(())
 ```
@@ -187,9 +193,14 @@ publication. M2 and M3 publication requires a bounding declaration; MDLX and
 historical WMO retain optional bounds. A named MDLX model or one with animation-file
 or blend-time controls requires its model-info declaration. WMO bounds use an
 authored axis-aligned box with a sphere radius derived from its half-diagonal.
-Native image definitions also retain the profile's sampler and supplemental texture
-controls. M2 can preserve an alternate filename alongside a replaceable-image or
-file-data-ID selection. Surfaces additionally implement `SurfacePayload`, attached
+Image inputs retain sampling declarations permitted by their profile. M2 can
+preserve an alternate filename alongside a replaceable-image or file-data-ID
+selection; that filename is another shared image dependency. Unknown numeric
+sampling selectors stay within their shader vocabulary. Common `ColorSpace` and
+`Sampler` values describe understood transfer functions and U/V addressing,
+while profile validation rejects choices with no established native mapping.
+MDLX layer bits historically labeled wrap hints remain unresolved layer controls;
+they do not provide another sampler authority. Surfaces additionally implement `SurfacePayload`, attached
 features implement `FeaturePayload` and `FeatureSchema`, and systems implement
 `SystemPayload`. Geometry schemas define their full attribute and connectivity vocabulary rather than
 attaching arbitrary streams to a narrower native schema.
@@ -302,9 +313,19 @@ Texture inputs compose through `TextureBinding<Image, Coordinates, Sampling,
 Contribution>`. The selected image representation can retain animated texture
 choices, runtime replacement categories, external resource identities, or explicit
 absent-image codes. `Coordinates<Source, Transform>` separates mesh UV or generated
-coordinate selection from its transform. Referenced transforms, inline transforms,
-Diablo matrices and parametric animation, and M3 UV controls remain
-explicit choices. Native transform conventions and units are preserved.
+coordinate selection from its input-owned transform. Animated TRS values,
+Diablo matrices and parametric animation, and M3 UV programs retain distinct
+types because their behavior differs. Native transform conventions and units
+are preserved. MDLX transform properties address the owning material layer,
+so editing one imported use does not affect another use of the same native record.
+
+Native import expands texture and transform table references into complete
+input values while sharing image declarations. Animated MDLX image choices carry
+the selected image's sampler and native options with each key. Export rebuilds
+native indirection tables and interns equal records; native table identity and
+unused records are not semantic authoring objects. `Model::sampled_images()`
+collects the distinct inline sampled-image values currently used by materials,
+effects, and animation channels rather than exposing a stored texture table.
 
 Sampling belongs to the input that uses it. M3 bindings retain sampling programs for flipbook, video, and noise,
 together with independent channel-selection contributions. Simpler bindings

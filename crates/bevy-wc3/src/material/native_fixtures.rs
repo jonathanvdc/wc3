@@ -71,7 +71,7 @@ pub mod wmo {
     use wc3::model::materials::bindings::TextureBinding;
     use wc3::model::materials::state::PassState;
     pub use wc3::model::materials::wmo::*;
-    use wc3::model::{Error, MaterialSurface, TextureId};
+    use wc3::model::{Error, MaterialSurface, Texture};
     #[derive(Clone, Debug, Default, PartialEq)]
     pub struct MaterialFixture<'a> {
         /// Optional authoring name.
@@ -81,7 +81,7 @@ pub mod wmo {
         /// Color composition and shared rasterization controls.
         pub state: PassState<Blend, MaterialRasterization>,
         /// Texture bindings in shader-slot order.
-        pub textures: Vec<TextureBinding<Option<TextureId>>>,
+        pub textures: Vec<TextureBinding<Option<Texture>>>,
         /// Self-illumination color in RGBA order.
         pub self_illumination: [u8; 4],
         /// Serialized runtime self-illumination color in RGBA order.
@@ -120,7 +120,14 @@ pub mod wmo {
                     legacy_controls: v.legacy_controls,
                     legacy_runtime: v.legacy_runtime,
                 },
-                v.textures,
+                v.textures
+                    .into_iter()
+                    .map(|binding| TextureBinding {
+                        image: binding.image.map(|image| image.resource),
+                        sampling: binding.image.map(|image| image.sampler).unwrap_or_default(),
+                        ..Default::default()
+                    })
+                    .collect(),
             )
         }
     }
@@ -136,7 +143,18 @@ pub mod wmo {
             let h = v.declaration().clone();
             Ok(Self {
                 shader: v.native_shader(),
-                textures: v.inputs().into_iter().cloned().collect(),
+                textures: v
+                    .inputs()
+                    .into_iter()
+                    .map(|binding| TextureBinding {
+                        image: binding.image.map(|resource| {
+                            let mut image = Texture::new(resource);
+                            image.sampler = binding.sampling;
+                            image
+                        }),
+                        ..Default::default()
+                    })
+                    .collect(),
                 name: h.name,
                 state: h.state,
                 self_illumination: h.self_illumination,

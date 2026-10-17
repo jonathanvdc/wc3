@@ -122,7 +122,6 @@ impl Profile for LightsOnly {
     type System<'a> = <Mdlx as Profile>::System<'a>;
     type Surface<'a> = <Mdlx as Profile>::Surface<'a>;
     type Node<'a> = <Mdlx as Profile>::Node<'a>;
-    type Texture<'a> = <Mdlx as Profile>::Texture<'a>;
     type Mesh<'a> = <Mdlx as Profile>::Mesh<'a>;
     type Instance<'a> = <Mdlx as Profile>::Instance<'a>;
     type Draw = <Mdlx as Profile>::Draw;

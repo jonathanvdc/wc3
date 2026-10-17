@@ -701,7 +701,7 @@ impl ValidateLinks for AnimationControl {
 impl<'a> ValidateLinks for DataDrivenMaterialStep<'a> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         for id in self.textures.iter() {
-            visitor(Link::Texture(*id));
+            visitor(Link::ImageResource(*id));
         }
         if !self.unknown108.is_finite() {
             visitor(Link::InvalidValue);

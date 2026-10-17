@@ -133,7 +133,7 @@ fn wmo_equations_retain_spare_bindings_and_keep_special_paths_unresolved() {
     let texture = draft.add_file_texture("retained.blp").unwrap();
     let mut inputs = vec![Default::default(); 3];
     inputs[2] = TextureBinding {
-        image: Some(texture),
+        image: Some(texture.resource),
         ..Default::default()
     };
     let step = wmo::MaterialStep::from_native(Some(0), Default::default(), inputs);
@@ -141,8 +141,8 @@ fn wmo_equations_retain_spare_bindings_and_keep_special_paths_unresolved() {
         panic!("diffuse")
     };
     assert_eq!(value.unused_inputs.len(), 2);
-    assert_eq!(value.unused_inputs[1].image, Some(texture));
-    assert_eq!(step.inputs()[2].image, Some(texture));
+    assert_eq!(value.unused_inputs[1].image, Some(texture.resource));
+    assert_eq!(step.inputs()[2].image, Some(texture.resource));
 }
 
 #[test]

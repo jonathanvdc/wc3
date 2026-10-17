@@ -5,11 +5,11 @@ use crate::model::conversion::{Context, Conversion, Error, ImportOptions};
 use crate::model::formats::mdlx::{self as native, Chunk, Dialect, ModelChunk};
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
-use crate::model::Model;
 use crate::model::{
     AddressMode, Billboard, Bounds, Channel, Clip, Clock, ImageResource, Inheritance, Material,
-    ModelBuilder, Node, Quaternion, Sampler, SharedClock, Texture, TextureTransform, Time, Track,
+    ModelBuilder, Node, Quaternion, Sampler, SharedClock, Texture, Time, Track,
 };
+use crate::model::{MdlxImageResource, Model, TextureControls};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
@@ -108,9 +108,22 @@ where
                 ImageResource::Path(S::bytes(&bytes[..end]))
             }
         };
-        let resource = builder.add_image_resource(resource.try_into()?);
-        texture_ids.push(builder.add_texture(Texture {
-            controls: Default::default(),
+        let resource = builder.intern_image_resource(resource.try_into()?);
+        texture_ids.push(Texture {
+            controls: Some(TextureControls::Mdlx(profile::TextureControls {
+                fallback_path: if texture.replaceable_id != 0 && !texture.path.text().is_empty() {
+                    let bytes = texture.path.as_bytes();
+                    let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
+                    Some(
+                        builder.intern_image_resource(MdlxImageResource::Path(S::bytes(
+                            &bytes[..end],
+                        ))),
+                    )
+                } else {
+                    None
+                },
+                unclassified: (texture.flags.bits() & !3).into(),
+            })),
             resource,
             color_space: Default::default(),
             sampler: Sampler {
@@ -125,15 +138,12 @@ where
                     AddressMode::Clamp
                 },
             },
-        })?);
+        });
     }
-    let transform_ids = source
-        .texture_animations()
-        .map(|_| builder.add_texture_transform(TextureTransform::default()))
-        .collect::<Result<Vec<_>, _>>()?;
+    let transforms: Vec<_> = source.texture_animations().collect();
     let mut material_ids = Vec::new();
     for material in source.materials() {
-        let mut surface = materials::read::<_, S>(material, &texture_ids, &transform_ids)?;
+        let mut surface = materials::read::<_, S>(material, &texture_ids, &transforms)?;
         if surface.has_unexecuted_declarations() {
             context.unsupported(
                 "material.empty_declarations",
@@ -161,28 +171,6 @@ where
         })
         .collect::<Result<_, _>>()?;
     let mut native_profile = ImportState::default();
-    for (source, id) in source.textures().zip(&texture_ids) {
-        let mut flags = source.flags;
-        flags.set_wrap_width(false);
-        flags.set_wrap_height(false);
-        native_profile.textures.push((
-            *id,
-            profile::TextureControls {
-                fallback_path: if source.replaceable_id == 0 {
-                    Cow::Borrowed(&[][..])
-                } else {
-                    let bytes = source.path.as_bytes();
-                    S::bytes(
-                        &bytes[..bytes
-                            .iter()
-                            .position(|value| *value == 0)
-                            .unwrap_or(bytes.len())],
-                    )
-                },
-                unclassified: flags.bits().into(),
-            },
-        ));
-    }
     for (source, id) in source_nodes.iter().zip(&ids) {
         native_profile
             .node_controls
@@ -290,42 +278,8 @@ where
                 continue;
             }
             let surface =
-                materials::bind::<_, S>(source, &texture_ids, &transform_ids, *id, &mut decoder)?;
+                materials::bind::<_, S>(source, &texture_ids, &transforms, *id, &mut decoder)?;
             decoder.builder.set_material_surface(*id, surface)?;
-        }
-        for (source, id) in source.texture_animations().zip(&transform_ids) {
-            let mut transform = TextureTransform::default();
-            if let Some(track) = source.translation.as_ref() {
-                transform.translation = decoder.track_property(
-                    track,
-                    [0.; 3],
-                    id.translation(),
-                    "texture_transform.translation",
-                    |value| value,
-                    |value| value,
-                )?;
-            }
-            if let Some(track) = source.rotation.as_ref() {
-                transform.rotation = decoder.track_property(
-                    track,
-                    Quaternion::default(),
-                    id.rotation(),
-                    "texture_transform.rotation",
-                    Quaternion,
-                    Quaternion,
-                )?;
-            }
-            if let Some(track) = source.scaling.as_ref() {
-                transform.scale = decoder.track_property(
-                    track,
-                    [1.; 3],
-                    id.scale(),
-                    "texture_transform.scale",
-                    |value| value,
-                    |value| value,
-                )?;
-            }
-            decoder.builder.set_texture_transform(*id, transform)?;
         }
     }
     // Geometry and complete feature payloads are decoded by focused domain adapters.
@@ -347,11 +301,6 @@ where
         &globals,
         &mut native_profile,
     )?;
-    for (id, controls) in native_profile.textures {
-        let mut texture = builder.texture(id).expect("imported texture").clone();
-        texture.controls = controls;
-        builder.set_texture(id, texture)?;
-    }
     for (id, controls) in native_profile.sequences {
         builder.set_clip_controls(id, controls)?;
     }

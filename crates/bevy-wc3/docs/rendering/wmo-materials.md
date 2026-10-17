@@ -33,8 +33,10 @@ The first two authored UV scroll velocities use absolute instance shared time,
 so seeking and repeated sampling do not accumulate error. A reflection input stays
 view-derived; the second scroll velocity moves its accompanying diffuse layer.
 Unused scroll controls do not make a basic single-texture surface dynamic.
-Surface-local clamp controls apply to each sampled input without modifying shared
-texture definitions.
+Each WMO image binding owns its sampler, including authored empty slots. Import
+expands native material clamp flags into those bindings. Native export requires
+the bindings to agree on repeat/clamp addressing because a WMO material stores
+one shared pair of address selectors.
 
 Native modulate-add and inverse-source-alpha-add blends retain their separate
 RGB and alpha factors in Bevy's transparent phase, without premultiplying the

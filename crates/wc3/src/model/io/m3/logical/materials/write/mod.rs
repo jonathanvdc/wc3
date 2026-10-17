@@ -4,7 +4,7 @@ use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::m3::logical::Graph;
 use crate::model::PathResource;
-use crate::model::{profiles::m3 as surface, MaterialId, TextureId};
+use crate::model::{profiles::m3 as surface, ImageResourceId, MaterialId};
 use native::{Envelope, Ref};
 use std::collections::BTreeMap;
 use std::str::from_utf8;
@@ -27,16 +27,8 @@ impl<'model, 'source, 'out, 'draft, E: Envelope> Writer<'model, 'source, 'out, '
         bytes.push(nr::Character { value: 0 });
         Ok(append(self.document, &bytes)?.cast())
     }
-    fn texture(&self, id: TextureId) -> Result<&'model str, Error> {
-        let texture = self
-            .model
-            .texture(id)
-            .ok_or_else(|| Error::new("m3.texture", "texture handle is missing"))?;
-        match self
-            .model
-            .image_resource(texture.resource)
-            .expect("validated image")
-        {
+    fn texture(&self, id: ImageResourceId) -> Result<&'model str, Error> {
+        match self.model.image_resource(id).expect("validated image") {
             PathResource::Path(bytes) => from_utf8(bytes)
                 .map_err(|_| Error::new("m3.texture.path", "M3 texture names must be UTF-8")),
         }

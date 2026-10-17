@@ -124,12 +124,7 @@ fn particle_texture_programs_follow_the_material_prefix_and_round_trip() {
     assert_eq!(programs, vec![Some([3, 11]), Some([0, 0])]);
     for (_, feature) in imported.value.features() {
         if let mp::ActorKind::Particle(particle) = &feature.payload {
-            let textures = imported
-                .value
-                .textures()
-                .iter()
-                .map(|(id, _)| id)
-                .collect::<Vec<_>>();
+            let textures = imported.value.sampled_images();
             let options = ExportOptions::default();
             let error = <m2::V274 as io::m2::ParticleConversion>::write_logical_particle(
                 particle,
@@ -210,7 +205,7 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     assert!(triangles.is_owned());
     assert_eq!(triangles.get(0), Some([0, 1, 2]));
     assert_eq!(mesh.influences().joint_weights(0).unwrap()[0].weight, 1.);
-    let texture = imported.value.textures().iter().next().unwrap().1;
+    let texture = imported.value.sampled_images()[0];
     assert!(
         matches!(imported.value.image_resource(texture.resource).unwrap(),sm::M2ImageResource::Path(Cow::Borrowed(path))if *path==b"textures/checker.blp")
     );
@@ -977,9 +972,12 @@ fn texture_options_keep_unknown_bits_and_reject_unencoded_interpretations() {
     let mut asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let id = asset.textures().iter().next().unwrap().0;
-    let texture = asset.texture(id).unwrap();
-    assert_eq!(texture.controls.flags.bits(), 0x8000_0000);
+    let id = asset.sampled_images()[0];
+    let texture = id;
+    let sm::TextureControls::M2(controls) = texture.controls.unwrap() else {
+        panic!("M2 input options lost")
+    };
+    assert_eq!(controls.flags.bits(), 0x8000_0000);
     assert_eq!(texture.color_space, sm::ColorSpace::Unspecified);
     let native = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
@@ -987,22 +985,36 @@ fn texture_options_keep_unknown_bits_and_reject_unencoded_interpretations() {
         .unwrap()
         .value;
     assert_eq!(native.model.core().textures[0].flags.bits(), 0x8000_0001);
-    let original = texture.sampler;
-    assert!(asset
-        .edit(|draft| {
-            let mut value = draft.texture(id).unwrap().clone();
-            value.sampler.u = sm::AddressMode::Mirror;
-            draft.set_texture(id, value)
-        })
-        .is_err());
-    assert_eq!(asset.texture(id).unwrap().sampler, original);
-    assert!(asset
-        .edit(|draft| {
-            let mut value = draft.texture(id).unwrap().clone();
-            value.color_space = sm::ColorSpace::Srgb;
-            draft.set_texture(id, value)
-        })
-        .is_err());
+    let (material, value) = asset.materials().iter().next().unwrap();
+    let original = value.surface.clone();
+    for invalid_color in [false, true] {
+        assert!(asset
+            .edit(|draft| {
+                let mut value = original.clone();
+                let input = value.steps[0].inputs()[0].clone();
+                let mut changed = input;
+                if invalid_color {
+                    changed.image.texture.as_mut().unwrap().color_space = sm::ColorSpace::Srgb;
+                } else {
+                    changed.image.texture.as_mut().unwrap().sampler.u = sm::AddressMode::Mirror;
+                }
+                let mut inputs = value.steps[0]
+                    .inputs()
+                    .into_iter()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                inputs[0] = changed;
+                let declaration = value.steps[0].declaration().clone();
+                value.steps[0] = mp::MaterialStep::from_native(
+                    value.steps[0].native_shader(),
+                    declaration,
+                    inputs,
+                    Default::default(),
+                );
+                draft.set_material_surface(material, value)
+            })
+            .is_err());
+    }
 }
 
 #[test]
@@ -1012,15 +1024,16 @@ fn replacement_texture_retains_its_separately_declared_filename() {
     let asset = io::m2::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    let texture = asset.textures().iter().next().unwrap().1;
+    let texture = asset.sampled_images()[0];
     assert_eq!(
         asset.image_resource(texture.resource).unwrap(),
         &sm::M2ImageResource::Replaceable(0x1234)
     );
-    assert!(matches!(texture.controls.path, Some(Cow::Borrowed(_))));
-    assert_eq!(
-        texture.controls.path.as_deref(),
-        Some(b"textures/checker.blp".as_slice())
+    let sm::TextureControls::M2(controls) = texture.controls.unwrap() else {
+        panic!("M2 options lost")
+    };
+    assert!(
+        matches!(asset.image_resource(controls.path.unwrap()), Some(sm::M2ImageResource::Path(Cow::Borrowed(path))) if *path == b"textures/checker.blp")
     );
     let native = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
@@ -1597,4 +1610,36 @@ fn ribbon_export_flattens_material_programs_into_ordered_native_materials() {
             .blending_mode,
         BlendMode::from_raw(3)
     );
+}
+
+#[test]
+fn export_interns_equivalent_images_with_independent_resource_declarations() {
+    let source = native_triangle();
+    let mut model = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (material, definition) = model.materials().iter().next().unwrap();
+    let mut surface = definition.surface.clone();
+    let image = surface.steps[0].inputs()[0].image.texture.unwrap();
+    let resource = model.image_resource(image.resource).unwrap().clone();
+    model
+        .edit(|draft| {
+            let mut step = surface.steps[0].clone();
+            step.inputs_mut()[0]
+                .image
+                .texture
+                .as_mut()
+                .unwrap()
+                .resource = draft.add_image_resource(resource);
+            surface.steps.push(step);
+            draft.set_material_surface(material, surface)
+        })
+        .unwrap();
+    assert_eq!(model.sampled_images().len(), 2);
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert_eq!(output.model.core().textures.len(), 1);
 }

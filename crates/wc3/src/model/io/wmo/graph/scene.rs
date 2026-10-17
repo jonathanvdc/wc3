@@ -71,12 +71,12 @@ pub(super) fn read<'a, 'data: 'a>(
                 } else {
                     let resource = builder
                         .add_image_resource(WorldImageResource::FileDataId(row.cookie_file_id));
-                    Some(builder.add_texture(Texture {
+                    Some(Texture {
                         resource,
                         sampler: Sampler::default(),
                         color_space: ColorSpace::Unspecified,
                         controls: Default::default(),
-                    })?)
+                    })
                 };
                 let mut flags = row.flags;
                 flags.set_blend_colors(false);

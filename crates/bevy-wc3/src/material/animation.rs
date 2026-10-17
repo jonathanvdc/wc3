@@ -39,7 +39,7 @@ impl HdAnimation {
                 2 => TextureRole::Data,
                 _ => TextureRole::Color,
             };
-            self.images.for_role(id, role)
+            self.images.for_slot(slot as u32, id, role)
         });
         let mut changed = false;
         changed |= replace_handle(&mut material.base.base_color_texture, handles[0]);

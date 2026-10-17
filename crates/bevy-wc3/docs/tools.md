@@ -20,8 +20,9 @@ resolve beside the model first, then from that root, using the loader's
 [resource provider](usage.md).
 
 Use `--replaceable ID=PATH` or `--bitmap INDEX=PATH` to override textures
-relative to the asset root. Bitmap indices enumerate semantic textures, including
-effect textures; there is no separate native particle texture namespace. For example:
+relative to the asset root. Bitmap indices enumerate the model's image dependency
+table, shared by material and effect inputs; there is no separate native particle
+texture namespace. For example:
 
 ```sh
 cargo run -p bevy-wc3 --example viewer -- path/to/tree.mdx \

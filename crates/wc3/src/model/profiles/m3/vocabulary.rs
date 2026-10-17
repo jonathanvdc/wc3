@@ -5,18 +5,19 @@ use crate::model::materials::m3::properties::MaterialProperties;
 use crate::model::profiles::m3;
 use crate::model::profiles::Unavailable;
 use crate::model::profiles::UniversalProperty;
-use crate::model::profiles::{self, Extends, NoControls, Profile, SurfacePayload, Universal};
+use crate::model::profiles::{self, Extends, Profile, SurfacePayload, Universal};
 use crate::model::resources::PathResource;
 use crate::model::{
-    Basis, Billboard, Channel, ClipControls, Clock, ColorSpace, DrawControls, Error,
-    ExplicitBinding, FeatureKind, GeometrySchema as _, Inheritance, InstanceControls,
-    Interpolation, LengthUnit, Link, M3Geometry, MeshControls, Model, ModelMetadata, NodeControls,
-    PropertyTarget, Sampler, SingleLook, SkinId, System, Topology, Transform, UniversalAppearance,
-    UniversalBinding, ValidateLinks, VertexInfluences,
+    Basis, Billboard, Channel, ClipControls, Clock, DrawControls, Error, ExplicitBinding,
+    FeatureKind, GeometrySchema as _, Inheritance, InstanceControls, Interpolation, LengthUnit,
+    Link, M3Geometry, MeshControls, Model, ModelMetadata, NodeControls, PropertyTarget, SingleLook,
+    SkinId, System, Topology, Transform, UniversalAppearance, UniversalBinding, ValidateLinks,
+    VertexInfluences,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 use crate::model::{PropertyIdentityKey, PropertyPayload};
 use std::collections::HashSet;
+
 use std::str::from_utf8;
 /// Vocabulary that maps mechanically to M3 logical features.
 #[derive(Clone, Debug, Default)]
@@ -41,7 +42,6 @@ impl Profile for M3 {
     type Surface<'a> = profiles::m3::MaterialStep<'a>;
     type Feature<'a> = profiles::m3::Feature<'a>;
     type Node<'a> = profiles::m3::NodeRole;
-    type Texture<'a> = NoControls;
     type Mesh<'a> = Option<profiles::m3::MeshControls>;
     fn mesh_skin(controls: &Self::Mesh<'_>) -> Option<SkinId> {
         controls.as_ref().and_then(|value| value.skin)
@@ -493,42 +493,23 @@ impl Profile for M3 {
     }
 
     fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
-        let mut used = HashSet::new();
-        for (_, material) in model.materials() {
-            material.surface.visit_links(&mut |link| {
-                if let Link::Texture(id) = link {
-                    used.insert(id);
-                }
-            });
-        }
-        for (id, texture) in model.textures() {
-            if !used.contains(&id) {
-                return Err(Error::new(
-                    "m3.texture.unused",
-                    "M3 has no independent declaration for a texture unused by material layers",
-                ));
-            }
-            if texture.sampler != Sampler::default()
-                || texture.color_space != ColorSpace::Unspecified
-            {
-                return Err(Error::new(
-                    "m3.texture.interpretation",
-                    "sampling and transfer functions belong to M3 material layers, not independent texture declarations",
-                ));
-            }
-            match model
-                .image_resource(texture.resource)
-                .expect("validated image")
-            {
+        for (_, resource) in model.dependencies().images().iter() {
+            match resource {
                 PathResource::Path(path)
                     if !path.is_empty() && from_utf8(path).is_ok() && !path.contains(&0) => {}
                 _ => {
                     return Err(Error::new(
-                        "m3.texture.resource",
-                        "M3 texture declarations require nonempty UTF-8 paths without embedded NULs",
-                    ));
+                        "m3.image.resource",
+                        "M3 images require nonempty UTF-8 paths without embedded NULs",
+                    ))
                 }
             }
+        }
+        if !model.sampled_images().is_empty() {
+            return Err(Error::new(
+                "m3.image",
+                "M3 image sampling must be declared by its material inputs",
+            ));
         }
         Ok(())
     }
@@ -624,10 +605,6 @@ impl Extends<M3> for Universal {
     }
     fn node<'a>(value: <M3 as Profile>::Node<'a>) -> Self::Node<'a> {
         Some(NodeControls::M3(value))
-    }
-    fn texture<'a>(value: <M3 as Profile>::Texture<'a>) -> Self::Texture<'a> {
-        let _ = value;
-        None
     }
     fn mesh<'a>(value: <M3 as Profile>::Mesh<'a>) -> Self::Mesh<'a> {
         value.map(MeshControls::M3)

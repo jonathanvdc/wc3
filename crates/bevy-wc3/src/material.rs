@@ -40,7 +40,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::materials::{m2::GuildPalette, mdlx, state::Lighting};
 use wc3::model::values::model::ParticleBlend;
-use wc3::model::{Animated, TextureId, TextureTransform};
+use wc3::model::{Animated, Texture, TextureTransform};
 
 use super::mesh_animation::MeshAnimation;
 use super::mesh_attributes::specialize_mesh_attributes;
@@ -512,7 +512,7 @@ pub(crate) struct SurfaceAnimation {
     weight: Option<Animated<f32>>,
     pass_weights: Vec<Animated<f32>>,
     unweighted_opacity: Option<f32>,
-    texture: Option<Animated<Option<TextureId>>>,
+    texture: Option<Animated<Option<Texture>>>,
     transform: Option<TextureTransform>,
     secondary_transform: Option<TextureTransform>,
     uv_scroll: [[f32; 2]; 2],
@@ -523,7 +523,7 @@ pub(crate) struct SurfaceAnimation {
     emissive_gain: Option<Animated<f32>>,
     emission: Option<Animated<[f32; 4]>>,
     emission_scale: f32,
-    images: Arc<HashMap<TextureId, Handle<Image>>>,
+    images: Arc<HashMap<Texture, Handle<Image>>>,
     centered_transform: bool,
     hd: Option<HdAnimation>,
     m3: Option<M3Animation>,
@@ -531,7 +531,7 @@ pub(crate) struct SurfaceAnimation {
 
 #[derive(Clone)]
 struct HdAnimation {
-    slots: [Option<Animated<Option<TextureId>>>; 6],
+    slots: [Option<Animated<Option<Texture>>>; 6],
     fresnel: Option<mdlx::Fresnel>,
     gain: Option<Animated<f32>>,
     images: Arc<TextureImages>,

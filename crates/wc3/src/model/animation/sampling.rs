@@ -3,7 +3,7 @@ use super::curves::{CurveValue, SampleValue};
 use crate::model::profiles::{Profile, Universal};
 use crate::model::{
     Animated, BindingValue, Channel, ClipId, Clock, ClockId, ControllerId, Error, Model, Property,
-    PropertyTarget, Quaternion, TextureId, Time, Track,
+    PropertyTarget, Quaternion, Texture, Time, Track,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -108,7 +108,7 @@ channel_value! {
     f32 => Scalar, [f32; 2] => Vector2, [f32; 3] => Vector3,
     [f32; 4] => Vector4, u32 => Unsigned, i32 => Signed,
     u16 => Unsigned16, u8 => Byte, bool => Boolean,
-    TextureId => Texture, Option<TextureId> => OptionalTexture,
+    Texture => Texture, Option<Texture> => OptionalTexture,
 }
 
 impl<'data, P: Profile> Model<'data, P> {

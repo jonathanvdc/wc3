@@ -75,12 +75,6 @@ impl Narrows<Universal> for Wmo {
             _ => Err(incompatible("node")),
         }
     }
-    fn texture<'a>(value: <Universal as Profile>::Texture<'a>) -> Result<Self::Texture<'a>, Error> {
-        match value {
-            None => Ok(NoControls),
-            _ => Err(incompatible("texture")),
-        }
-    }
     fn mesh<'a>(value: <Universal as Profile>::Mesh<'a>) -> Result<Self::Mesh<'a>, Error> {
         match value {
             None => Ok(NoControls),

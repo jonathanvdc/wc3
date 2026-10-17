@@ -1,6 +1,6 @@
 //! Exact projections of M3 owner payloads.
 use super::{incompatible, Narrows};
-use crate::model::profiles::{NoControls, Profile, Universal, M3};
+use crate::model::profiles::{Profile, Universal, M3};
 use crate::model::{
     ClipControls, DrawControls, Error, InstanceControls, MeshControls, ModelMetadata, NodeControls,
     System, UniversalAppearance, UniversalBinding,
@@ -75,12 +75,6 @@ impl Narrows<Universal> for M3 {
         match value {
             Some(NodeControls::M3(value)) => Ok(value),
             _ => Err(incompatible("node")),
-        }
-    }
-    fn texture<'a>(value: <Universal as Profile>::Texture<'a>) -> Result<Self::Texture<'a>, Error> {
-        match value {
-            None => Ok(NoControls),
-            _ => Err(incompatible("texture")),
         }
     }
     fn mesh<'a>(value: <Universal as Profile>::Mesh<'a>) -> Result<Self::Mesh<'a>, Error> {

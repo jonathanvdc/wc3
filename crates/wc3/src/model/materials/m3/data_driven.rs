@@ -1,7 +1,7 @@
 //! Logical M3 data driven values.
 use super::super::parameters::{OpaqueBytes, OrderedParameters, ParameterEntry};
 use crate::model::values::programmed::{ShaderFresnelFlags, ShaderType};
-use crate::model::{Link, TextureId, ValidateLinks, ZeroVec};
+use crate::model::{ImageResourceId, Link, ValidateLinks, ZeroVec};
 use std::borrow::Cow;
 
 /// Editable M3 DataDrivenMaterialStep values.
@@ -14,7 +14,7 @@ pub struct DataDrivenMaterialStep<'a> {
     /// Supplies the CHAR-encoded dictionary of shader properties.
     pub parameters: DataDrivenParameters<'a>,
     /// Links to SCHR texture filenames selected by texture properties in the dictionary.
-    pub textures: Vec<TextureId>,
+    pub textures: Vec<ImageResourceId>,
     /// Unknown-purpose scalar reported as 1.0, 1.5, or 2.0 in the reference samples.
     pub unknown108: f32,
     /// Unknown-purpose scalar reported as 1.0 in the reference samples.

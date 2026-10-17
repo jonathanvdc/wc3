@@ -1,5 +1,5 @@
 //! World-model surface interpretation and continuously scrolling UV coordinates.
-use super::super::textures::{world_sampler, TextureImages, TextureRole};
+use super::super::textures::{TextureImages, TextureRole};
 use super::compile::{blend, image_role_with_sampler, rasterization};
 use super::{Blend, SurfacePass};
 use crate::ModelError;
@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use wc3::model::materials::wmo as wmo_shader;
 use wc3::model::materials::{state::BlendOperations, wmo::WorldBlend};
 use wc3::model::profiles::Universal;
-use wc3::model::Model;
+use wc3::model::{Model, Texture};
 
 pub(super) fn compile_wmo(
     model: &Model<'_, Universal>,
@@ -126,17 +126,14 @@ fn world_image(
     images: &TextureImages,
     diagnostics: &mut Vec<String>,
 ) -> Result<Option<Handle<Image>>, ModelError> {
-    let image = surface.inputs().get(slot).and_then(|slot| slot.image);
-    let sampler = image
-        .and_then(|id| model.texture(id))
-        .map(|texture| texture.sampler)
-        .unwrap_or_default();
+    let inputs = surface.inputs();
+    let input = inputs.get(slot);
     image_role_with_sampler(
         model,
-        image,
+        input.and_then(|input| input.image).map(Texture::new),
         TextureRole::Color,
-        Some(world_sampler(surface, sampler)),
-        images,
+        input.map(|input| input.sampling),
+        &images.slot(slot as u32),
         diagnostics,
     )
 }

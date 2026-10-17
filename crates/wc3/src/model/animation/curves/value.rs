@@ -1,5 +1,5 @@
 //! Mathematical value domains and interpolation capabilities.
-use crate::model::{AnimatedValue, Link, Quaternion, TextureId};
+use crate::model::{AnimatedValue, Link, Quaternion, Texture, ValidateLinks as _};
 use std::fmt::Debug;
 use zerovec::ule::AsULE;
 
@@ -202,15 +202,13 @@ macro_rules! resource_domain {
         }
     };
 }
+resource_domain!(Texture, |id: &Texture, visitor: &mut dyn FnMut(Link)| id
+    .visit_links(visitor));
 resource_domain!(
-    TextureId,
-    |id: &TextureId, visitor: &mut dyn FnMut(Link)| visitor(Link::Texture(*id))
-);
-resource_domain!(
-    Option<TextureId>,
-    |id: &Option<TextureId>, visitor: &mut dyn FnMut(Link)| {
+    Option<Texture>,
+    |id: &Option<Texture>, visitor: &mut dyn FnMut(Link)| {
         if let Some(id) = id {
-            visitor(Link::Texture(*id));
+            id.visit_links(visitor);
         }
     }
 );

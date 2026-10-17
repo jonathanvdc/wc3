@@ -23,71 +23,109 @@ pub mod parameters;
 /// Composable draw state and rasterization controls.
 pub mod state;
 
+use crate::model::profiles::{
+    m2::TextureControls as M2TextureControls, mdlx::TextureControls as MdlxTextureControls,
+};
 use crate::model::profiles::{Profile, SurfacePayload, Universal};
-use crate::model::{Error, ImageResourceId, Link, ValidateLinks};
+use crate::model::{Error, ImageResourceId, Link, TextureControls, ValidateLinks};
 use std::borrow::Cow;
 
 /// Texture color interpretation.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[zerovec::make_ule(ColorSpaceULE)]
+#[zerovec::skip_derive(Ord)]
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ColorSpace {
     /// No transfer function is declared; interpretation follows the material role.
     #[default]
-    Unspecified,
+    Unspecified = 0,
     /// Color values use the sRGB transfer function.
-    Srgb,
+    Srgb = 1,
     /// Linear data or color.
-    Linear,
-    /// Transfer-function selector whose meaning has not been established.
-    Unknown(u8),
+    Linear = 2,
 }
 /// Texture address behavior.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[zerovec::make_ule(AddressModeULE)]
+#[zerovec::skip_derive(Ord)]
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AddressMode {
     /// Repeats the image.
     #[default]
-    Repeat,
+    Repeat = 0,
     /// Clamps to the edge.
-    Clamp,
+    Clamp = 1,
     /// Mirrors alternating repetitions.
-    Mirror,
-    /// Address selector whose meaning has not been established.
-    Unknown(u8),
+    Mirror = 2,
 }
 /// Texture sampling choices independent of image ownership.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[zerovec::make_ule(SamplerULE)]
+#[zerovec::skip_derive(Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Sampler {
     /// Horizontal addressing.
     pub u: AddressMode,
     /// Vertical addressing.
     pub v: AddressMode,
 }
-/// A texture resource and its declared interpretation.
-#[derive(Clone, Debug)]
-pub struct Texture<'a, P: Profile = Universal> {
-    /// Additional owner-local behavior permitted by the vocabulary.
-    pub controls: P::Texture<'a>,
-    /// Resource identity.
+/// A complete sampled image value owned by its material or effect input.
+/// Image bytes and resource identities remain shared through `resource`.
+#[zerovec::make_ule(TextureULE)]
+#[zerovec::skip_derive(Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Texture {
+    /// Native sampling declarations with established owner-local semantics.
+    pub controls: Option<TextureControls>,
+    /// Shared image dependency.
     pub resource: ImageResourceId,
-    /// Color interpretation.
+    /// Interpretation of the selected image values.
     pub color_space: ColorSpace,
-    /// Default sampler.
+    /// Complete address behavior for this input.
     pub sampler: Sampler,
 }
-impl<'a, P: Profile> Texture<'a, P> {
-    /// Supplies resource behavior from this graph's vocabulary.
-    pub fn with_controls(mut self, controls: impl Into<P::Texture<'a>>) -> Self {
-        self.controls = controls.into();
-        self
-    }
-
-    /// Creates a texture referencing an image declared in the owning model.
+impl Texture {
+    /// Creates an independently editable input over a shared image dependency.
     pub fn new(resource: ImageResourceId) -> Self {
         Self {
             resource,
-            controls: Default::default(),
+            controls: None,
             color_space: ColorSpace::Unspecified,
             sampler: Sampler::default(),
         }
+    }
+    /// Warcraft III sampling declarations, rejecting incompatible native behavior.
+    pub(crate) fn mdlx_controls(self) -> Result<MdlxTextureControls, Error> {
+        match self.controls {
+            None => Ok(Default::default()),
+            Some(TextureControls::Mdlx(value)) => Ok(value),
+            _ => Err(Error::new(
+                "texture.controls",
+                "input carries sampling declarations outside the Warcraft III vocabulary",
+            )),
+        }
+    }
+    /// World of Warcraft sampling declarations, rejecting incompatible native behavior.
+    pub(crate) fn m2_controls(self) -> Result<M2TextureControls, Error> {
+        match self.controls {
+            None => Ok(Default::default()),
+            Some(TextureControls::M2(value)) => Ok(value),
+            _ => Err(Error::new(
+                "texture.controls",
+                "input carries sampling declarations outside the M2 vocabulary",
+            )),
+        }
+    }
+    /// Attaches native sampling declarations.
+    pub fn with_controls(mut self, controls: impl Into<TextureControls>) -> Self {
+        self.controls = Some(controls.into());
+        self
+    }
+}
+impl ValidateLinks for Texture {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        visitor(Link::SampledImage(*self));
+        self.resource.visit_links(visitor);
+        self.controls.visit_links(visitor);
     }
 }
 impl ValidateLinks for Sampler {

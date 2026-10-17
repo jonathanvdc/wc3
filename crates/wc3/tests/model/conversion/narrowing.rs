@@ -39,17 +39,14 @@ fn resource_narrowing_moves_owned_paths_without_reallocating() {
     let path: Cow<'_, [u8]> = Cow::Owned(b"owned.blp".to_vec());
     let pointer = path.as_ptr();
     let resource = builder.add_image_resource(MdlxImageResource::Path(path));
-    let id = builder.add_texture(Texture::new(resource)).unwrap();
+    let id = Texture::new(resource);
     let asset = builder
         .finish()
         .unwrap()
         .widen::<Universal>()
         .try_narrow::<Mdlx>()
         .unwrap();
-    let MdlxImageResource::Path(path) = asset
-        .image_resource(asset.texture(id).unwrap().resource)
-        .unwrap()
-    else {
+    let MdlxImageResource::Path(path) = asset.image_resource(id.resource).unwrap() else {
         unreachable!()
     };
     assert_eq!(path.as_ptr(), pointer);

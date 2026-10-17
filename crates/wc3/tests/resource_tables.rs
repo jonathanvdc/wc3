@@ -5,12 +5,31 @@ use wc3::model::{
     NodeFeature, PathResource, PlacementAppearance, ResourceLocator, Texture,
 };
 
+fn use_texture(draft: &mut wc3::model::ModelBuilder<'_, Universal>, texture: Texture) {
+    use wc3::model::materials::mdlx::{Layer, LayeredSurface};
+    use wc3::model::{Animated, Material, MaterialSurface};
+    let mut layer = Layer::default();
+    layer.binding.image = Animated::constant(Some(texture));
+    draft
+        .add_material(Material {
+            name: "input".into(),
+            surface: MaterialSurface::try_from(LayeredSurface {
+                layers: vec![layer],
+                ..Default::default()
+            })
+            .unwrap(),
+        })
+        .unwrap();
+}
+
 #[test]
 fn image_sharing_is_explicit_and_edits_are_transactional() {
     let mut draft = Model::<Universal>::builder("shared image");
     let image = draft.add_image_resource(ImageResource::Path(b"body.blp".as_slice().into()));
-    let first = draft.add_texture(Texture::new(image)).unwrap();
-    let second = draft.add_texture(Texture::new(image)).unwrap();
+    let first = Texture::new(image);
+    let second = Texture::new(image);
+    use_texture(&mut draft, first);
+    use_texture(&mut draft, second);
     let independent = draft.add_image_resource(ImageResource::Path(b"body.blp".as_slice().into()));
     assert_ne!(image, independent);
     let mut model = draft.finish().unwrap();
@@ -20,8 +39,8 @@ fn image_sharing_is_explicit_and_edits_are_transactional() {
             draft.set_image_resource(image, ImageResource::Path(b"edited.blp".as_slice().into()))
         })
         .unwrap();
-    assert_eq!(model.texture(first).unwrap().resource, image);
-    assert_eq!(model.texture(second).unwrap().resource, image);
+    assert_eq!(first.resource, image);
+    assert_eq!(second.resource, image);
     assert_ne!(model.image_resource(image), original.image_resource(image));
     assert_eq!(
         model.image_resource(independent),
@@ -41,7 +60,7 @@ fn resource_handles_require_the_owning_table_and_removed_slots_are_not_reused() 
     let mut foreign = Model::<Universal>::builder("foreign");
     let image = foreign.add_image_resource(ImageResource::Path(b"foreign.blp".as_slice().into()));
     let mut draft = Model::<Universal>::builder("invalid");
-    draft.add_texture(Texture::new(image)).unwrap();
+    use_texture(&mut draft, Texture::new(image));
     assert!(draft.finish().is_err());
 
     let mut draft = Model::<Universal>::builder("removed");
@@ -49,7 +68,7 @@ fn resource_handles_require_the_owning_table_and_removed_slots_are_not_reused() 
     draft.remove_image_resource(removed);
     let replacement = draft.add_image_resource(ImageResource::Path(b"new.blp".as_slice().into()));
     assert_ne!(removed, replacement);
-    draft.add_texture(Texture::new(removed)).unwrap();
+    use_texture(&mut draft, Texture::new(removed));
     assert!(draft.finish().is_err());
 }
 

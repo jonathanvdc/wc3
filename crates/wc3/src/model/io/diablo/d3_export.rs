@@ -210,7 +210,7 @@ pub(super) fn plan_with_animations(
             )?;
         }
     }
-    if !asset.textures().is_empty() {
+    if !asset.sampled_images().is_empty() {
         context.unsupported("d3.resources.textures","native D3 materials own external SNO references; model texture definitions have no native appearance table")?;
     }
     let mut used_meshes = Vec::new();

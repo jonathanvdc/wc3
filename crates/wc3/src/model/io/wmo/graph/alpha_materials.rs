@@ -26,14 +26,8 @@ pub(super) fn write<'a>(
         .collect::<BTreeSet<_>>();
     let mut names = vec![0];
     let mut textures = BTreeMap::new();
-    for (id, texture) in model.textures() {
-        if !used.contains(&id) {
-            continue;
-        }
-        let selector = match model
-            .image_resource(texture.resource)
-            .expect("validated image")
-        {
+    for id in used {
+        let selector = match model.image_resource(id).expect("validated image") {
             WorldImageResource::Path(path) => {
                 if path.contains(&0) {
                     return Err(Error::new(
@@ -87,7 +81,7 @@ pub(super) fn write<'a>(
                 .map_or(0, |id| textures[&id])
         };
         let record = Material14 {
-            flags: native_flags(surface.state.rasterization),
+            flags: native_flags(surface.state.rasterization, &material.surface.inputs())?,
             blend_mode: native_blend(surface.state.blend),
             texture0: texture(0),
             texture1: texture(1),

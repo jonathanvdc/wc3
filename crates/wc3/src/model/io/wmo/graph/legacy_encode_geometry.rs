@@ -449,7 +449,7 @@ fn write_lighting<'a, B: RecordLayout>(
             .lightmap_images
             .iter()
             .map(|id| {
-                let texture = model.texture(*id).expect("validated image resource");
+                let texture = id;
                 let WorldImageResource::EmbeddedImage { bytes, .. } = model
                     .image_resource(texture.resource)
                     .expect("validated image")

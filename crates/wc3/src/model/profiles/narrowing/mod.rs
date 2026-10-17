@@ -54,8 +54,6 @@ pub trait Narrows<Source: Profile>: Profile {
     fn feature<'a>(value: Source::Feature<'a>) -> Result<Self::Feature<'a>, Error>;
     /// Projects node controls without changing meaning.
     fn node<'a>(value: Source::Node<'a>) -> Result<Self::Node<'a>, Error>;
-    /// Projects texture controls without changing meaning.
-    fn texture<'a>(value: Source::Texture<'a>) -> Result<Self::Texture<'a>, Error>;
     /// Projects mesh controls without changing meaning.
     fn mesh<'a>(value: Source::Mesh<'a>) -> Result<Self::Mesh<'a>, Error>;
     /// Projects instance controls without changing meaning.
@@ -115,9 +113,6 @@ impl<P: Profile> Narrows<P> for P {
         Ok(value)
     }
     fn node<'a>(value: P::Node<'a>) -> Result<Self::Node<'a>, Error> {
-        Ok(value)
-    }
-    fn texture<'a>(value: P::Texture<'a>) -> Result<Self::Texture<'a>, Error> {
         Ok(value)
     }
     fn mesh<'a>(value: P::Mesh<'a>) -> Result<Self::Mesh<'a>, Error> {

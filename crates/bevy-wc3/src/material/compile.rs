@@ -17,7 +17,7 @@ use wc3::model::materials::program::MaterialStep;
 use wc3::model::materials::state::{BlendOperations, Lighting, Operation};
 use wc3::model::materials::{diablo3, mdlx};
 use wc3::model::profiles::Universal;
-use wc3::model::{Animated, ColorSpace, MaterialId, Model, Sampler, TextureId, TextureTransform};
+use wc3::model::{Animated, MaterialId, Model, Sampler, Texture, TextureTransform};
 
 #[cfg(test)]
 pub(crate) fn compile_material_with_images(
@@ -62,14 +62,16 @@ fn compile_material(
         )));
     }
     path.push(id);
-    let resolved_images = images.as_ref();
     let material = model
         .material(id)
         .ok_or_else(|| ModelError(format!("missing semantic material {id:?}")))?;
     let stack = &material.surface;
     let mut passes = Vec::new();
-    for step in &stack.steps {
-        let compiled = match step {
+    for (step_index, step) in stack.steps.iter().enumerate() {
+        let scoped = Arc::new(images.material(id, step_index as u32));
+        let images = &scoped;
+        let resolved_images = images.as_ref();
+        let mut compiled = match step {
             MaterialStep::Mdlx(layer) => vec![compile_mdlx(model, layer, images)?],
             MaterialStep::M2(surface) => {
                 vec![compile_m2(model, surface, resolved_images)?]
@@ -143,6 +145,11 @@ fn compile_material(
                 targets,
             )?],
         };
+        if !matches!(step, MaterialStep::M3(m3::MaterialStep::Composite(_))) {
+            for pass in &mut compiled {
+                pass.animation.images = images.color_images();
+            }
+        }
         passes.extend(compiled);
     }
     // Preserve the diagnostic placeholder for an unresolved external selection;
@@ -157,7 +164,6 @@ fn compile_material(
     }
     for pass in &mut passes {
         pass.animation.prune_static_bindings(targets);
-        pass.animation.images = images.color_images().clone();
         for diagnostic in &mut pass.diagnostics {
             *diagnostic = format!("material {id:?} ({}): {diagnostic}", material.name);
         }
@@ -168,7 +174,7 @@ fn compile_material(
 
 pub(super) fn image(
     model: &Model<'_, Universal>,
-    id: Option<TextureId>,
+    id: Option<Texture>,
     images: &TextureImages,
     diagnostics: &mut Vec<String>,
 ) -> Result<Option<Handle<Image>>, ModelError> {
@@ -177,7 +183,7 @@ pub(super) fn image(
 
 pub(super) fn image_role(
     model: &Model<'_, Universal>,
-    id: Option<TextureId>,
+    id: Option<Texture>,
     role: TextureRole,
     images: &TextureImages,
     diagnostics: &mut Vec<String>,
@@ -187,16 +193,14 @@ pub(super) fn image_role(
 
 pub(super) fn image_role_with_sampler(
     model: &Model<'_, Universal>,
-    id: Option<TextureId>,
+    id: Option<Texture>,
     role: TextureRole,
     sampler: Option<Sampler>,
     images: &TextureImages,
     diagnostics: &mut Vec<String>,
 ) -> Result<Option<Handle<Image>>, ModelError> {
     let Some(id) = id else { return Ok(None) };
-    let texture = model
-        .texture(id)
-        .ok_or_else(|| ModelError(format!("missing semantic texture {id:?}")))?;
+    let texture = id;
     let resolved = images
         .get_with_sampler(
             id,
@@ -211,11 +215,7 @@ pub(super) fn image_role_with_sampler(
             model.image_resource(texture.resource)
         ));
     }
-    if let ColorSpace::Unknown(code) = texture.color_space {
-        diagnostics.push(format!(
-            "texture {id:?} transfer-function selector {code} is unresolved; using role {role:?}"
-        ));
-    }
+
     Ok(resolved)
 }
 
@@ -327,24 +327,22 @@ fn compile_mdlx(
     depth(&mut pass, raster.depth.test, raster.depth.write);
     pass.coordinate = binding.coordinates.source;
     pass.material.base_color = Color::linear_rgba(1.0, 1.0, 1.0, opacity.default);
-    pass.material.base_color_texture =
-        image(model, binding.image.default, images, &mut pass.diagnostics)?;
+    if hd_inputs.is_none() {
+        pass.material.base_color_texture =
+            image(model, binding.image.default, images, &mut pass.diagnostics)?;
+    }
     pass.animation.opacity = Some(opacity.clone());
     pass.animation.texture = Some(binding.image.clone());
     pass.animation.emissive_gain = emissive_gain.clone();
     pass.material.depth_bias = declaration.priority_plane as f32;
-    if let Some(id) = binding.coordinates.transform {
-        let uv = model
-            .texture_transform(id)
-            .ok_or_else(|| ModelError(format!("missing texture transform {id:?}")))?;
-        pass.material.uv_transform = layered_uv(
-            uv.translation.default,
-            uv.rotation.default.0,
-            uv.scale.default,
-        );
-        pass.animation.centered_transform = true;
-        pass.animation.transform = Some(uv.clone());
-    }
+    let uv = &binding.coordinates.transform;
+    pass.material.uv_transform = layered_uv(
+        uv.translation.default,
+        uv.rotation.default.0,
+        uv.scale.default,
+    );
+    pass.animation.centered_transform = true;
+    pass.animation.transform = Some(uv.clone());
     if raster.controls.sphere_environment {
         pass.diagnostics
             .push("sphere-environment coordinates require a generated-coordinate shader".into());
@@ -369,7 +367,13 @@ fn compile_mdlx(
                     2 => TextureRole::Data,
                     _ => TextureRole::Color,
                 };
-                image_role(model, binding.default, role, images, &mut pass.diagnostics)?;
+                image_role(
+                    model,
+                    binding.default,
+                    role,
+                    &images.slot(slot as u32),
+                    &mut pass.diagnostics,
+                )?;
             }
         }
         let hd = HdAnimation {

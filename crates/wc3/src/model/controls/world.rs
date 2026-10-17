@@ -95,7 +95,7 @@ pub struct RegionControls<'a> {
     /// Environmental fog volumes used within this region.
     pub fogs: Vec<FogId>,
     /// Independently authored embedded baked-light images.
-    pub lightmap_images: Vec<crate::model::TextureId>,
+    pub lightmap_images: Vec<crate::model::Texture>,
     /// Baked-light texel rectangles; selector relationships are not inferred.
     pub lightmap_rectangles: ZeroVec<'a, [u8; 4]>,
     /// Historical interior vertex/draw windows, retained as individual numeric selections.

@@ -8,12 +8,12 @@ use crate::model::materials::mdlx::{AlphaAdditiveEncoding, LayerOptions};
 use crate::model::materials::state::{DepthState, Lighting, Operation, PassState};
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::mdlx::{Blend, Fresnel, Layer, Material, Shading, TextureSlot};
-use crate::model::{Animated, MaterialId, TextureId, TextureTransformId};
+use crate::model::{Animated, MaterialId, Quaternion, Texture, TextureTransform};
 
 pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
     source: &'source native::Material<'_, V>,
-    textures: &[TextureId],
-    transforms: &[TextureTransformId],
+    textures: &[Texture],
+    transforms: &[&native::TextureAnimation<'_>],
 ) -> Result<Material<'a>, Error> {
     let texture = |index: u32| {
         if index == u32::MAX {
@@ -36,8 +36,6 @@ pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
         let mut unresolved = flags;
         unresolved.set_unshaded(false);
         unresolved.set_sphere_env_map(false);
-        unresolved.set_wrap_width(false);
-        unresolved.set_wrap_height(false);
         unresolved.set_two_sided(false);
         unresolved.set_unfogged(false);
         unresolved.set_no_depth_test(false);
@@ -67,18 +65,14 @@ pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                 coordinates: Coordinates {
                     source: layer.coordinate_id,
                     transform: if layer.texture_animation_id == u32::MAX {
-                        None
+                        TextureTransform::default()
                     } else {
-                        Some(
-                            *transforms
-                                .get(layer.texture_animation_id as usize)
-                                .ok_or_else(|| {
-                                    Error::new(
-                                        "material.texture_transform",
-                                        "transform does not exist",
-                                    )
-                                })?,
-                        )
+                        transforms
+                            .get(layer.texture_animation_id as usize)
+                            .ok_or_else(|| {
+                                Error::new("material.texture_transform", "transform does not exist")
+                            })?;
+                        TextureTransform::default()
                     },
                 },
                 ..Default::default()
@@ -119,8 +113,6 @@ pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                     },
                     controls: LayerOptions {
                         sphere_environment: flags.sphere_env_map(),
-                        wrap_u: flags.wrap_width(),
-                        wrap_v: flags.wrap_height(),
                         unclassified: unresolved.bits().into(),
                     },
                 },
@@ -150,8 +142,8 @@ pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
 
 pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
     source: &'source native::Material<'_, V>,
-    textures: &[TextureId],
-    transforms: &[TextureTransformId],
+    textures: &[Texture],
+    transforms: &[&native::TextureAnimation<'_>],
     id: MaterialId,
     decoder: &mut Decoder<'a, '_>,
 ) -> Result<Material<'a>, Error> {
@@ -159,6 +151,32 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
     let owner = id;
     for (index, (source, layer)) in source.layers.iter().zip(&mut material.layers).enumerate() {
         let layer_key = profile::properties::Layer(index);
+        if source.texture_animation_id != u32::MAX {
+            let transform = &transforms[source.texture_animation_id as usize];
+            layer.binding.coordinates.transform = TextureTransform {
+                translation: decoder.track(
+                    transform.translation.as_ref(),
+                    [0.; 3],
+                    owner,
+                    layer_key.translation(),
+                    |value| value,
+                )?,
+                rotation: decoder.track(
+                    transform.rotation.as_ref(),
+                    Quaternion::IDENTITY,
+                    owner,
+                    layer_key.rotation(),
+                    Quaternion,
+                )?,
+                scale: decoder.track(
+                    transform.scaling.as_ref(),
+                    [1.; 3],
+                    owner,
+                    layer_key.scale(),
+                    |value| value,
+                )?,
+            };
+        }
         let map = texture_map(textures, &source.texture_id)?;
         layer.binding.image = decoder.bind(&source.texture_id, owner, layer_key.texture(), map)?;
         layer.opacity = decoder.bind(&source.alpha, owner, layer_key.opacity(), |value| value)?;
@@ -205,9 +223,9 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
 }
 
 fn texture_map<'a>(
-    textures: &[TextureId],
+    textures: &[Texture],
     source: &native::Animatable<'_, u32>,
-) -> Result<impl Fn(u32) -> Option<TextureId> + Clone + Send + Sync + 'a, Error> {
+) -> Result<impl Fn(u32) -> Option<Texture> + Clone + Send + Sync + 'a, Error> {
     let mut selectors = vec![source.value().copied().unwrap_or_default()];
     if let Some(track) = source.track() {
         if let Some(keys) = track.step_keys().or_else(|| track.linear_keys()) {

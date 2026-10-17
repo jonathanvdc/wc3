@@ -1,6 +1,6 @@
 //! Native asset loading without lowering through Warcraft III records.
 use crate::error::ModelError;
-use crate::textures::{texture_requests, TextureImageKey, TextureRequest};
+use crate::textures::{texture_requests, ImageKey, TextureRequest, TextureRequestKey};
 use crate::{compile_model_with_options, CompileOptions, CompiledModel, RenderDiagnostic};
 use bevy::asset::{
     io::{AssetReaderError, Reader, SliceReader},
@@ -195,10 +195,11 @@ pub trait ResourceResolver: Send + Sync + 'static {
     ) -> Vec<AssetPath<'static>>;
     /// Select the resource for one texture before image interpretation.
     ///
-    /// `index` is its zero-based position in the semantic texture list, shared by
-    /// every role variant of that texture. Exact texture selections can precede
-    /// replaceable-category or archive identity mappings here. The request retains
-    /// typed identity, original resource, color role, and authored sampler. Returning
+    /// `index` is the zero-based position in the model's image dependency table,
+    /// shared by every sampling and role variant of that image. Image selections
+    /// can precede replaceable-category or archive identity mappings here. The
+    /// request retains the complete selected input, original resource, color role,
+    /// and effective sampler. Returning
     /// a different resource does not mutate the model or any shared image asset.
     fn texture_resource(
         &self,
@@ -367,7 +368,7 @@ pub struct ModelAsset {
     /// Shared CPU render definitions, ready for GPU preparation.
     pub compiled: CompiledModel,
     /// Resolved image variants keyed by semantic identity and effective color space.
-    pub images: HashMap<TextureImageKey, Handle<Image>>,
+    pub images: HashMap<TextureRequestKey, Handle<Image>>,
     /// Optional images requiring an application resource provider or override.
     pub unresolved_images: Vec<ImageResource<'static>>,
 }
@@ -566,37 +567,30 @@ async fn compile_loaded(
     let mut encoded = HashMap::new();
     let mut missing = HashSet::new();
     let indices: HashMap<_, _> = model
-        .textures()
+        .dependencies()
+        .images()
         .iter()
         .enumerate()
         .map(|(index, (id, _))| (id, index))
         .collect();
     let mut unresolved_images = Vec::new();
     for request in texture_requests(model) {
-        let id = request.id;
-        let _texture = request.texture;
+        let id = request.texture;
         let image_key = request.key();
         let resource = request.resource.clone().into_owned();
-        let candidates = resolver.texture_candidates(indices[&id], &request, owner);
-        let address_key = |mode| match mode {
-            AddressMode::Repeat => 0u16,
-            AddressMode::Clamp => 1,
-            AddressMode::Mirror => 2,
-            AddressMode::Unknown(value) => value as u16 + 3,
-        };
+        let candidates = resolver.texture_candidates(indices[&id.resource], &request, owner);
         let srgb = request.color_space.is_srgb();
-        let key = (
-            candidates.clone(),
-            address_key(request.sampler.u),
-            address_key(request.sampler.v),
-            srgb,
-        );
-        if let Some(handle) = variants.get(&key) {
-            images.insert(image_key, handle.clone());
-            continue;
-        }
         let mut resolved = None;
         for path in candidates {
+            let key = ImageKey {
+                source: path.clone(),
+                color_space: request.color_space,
+                sampler: request.sampler,
+            };
+            if let Some(handle) = variants.get(&key) {
+                resolved = Some(handle.clone());
+                break;
+            }
             if missing.contains(&path) {
                 continue;
             }
@@ -637,21 +631,18 @@ async fn compile_loaded(
                     ModelError(format!("cannot decode image {resource:?}: {error}"))
                 })?;
             let handle = context.add_labeled_asset(
-                format!(
-                    "Texture{id:?}{:?}{:?}",
-                    request.color_space, request.sampler
-                ),
+                format!("Image{}", variants.len()),
                 loaded.take::<Image>().ok_or_else(|| {
                     ModelError(format!(
                         "image resource {resource:?} resolved to a non-image asset"
                     ))
                 })?,
             );
+            variants.insert(key, handle.clone());
             resolved = Some(handle);
             break;
         }
         if let Some(handle) = resolved {
-            variants.insert(key, handle.clone());
             images.insert(image_key, handle);
         } else if !unresolved_images.contains(&resource) {
             unresolved_images.push(resource);

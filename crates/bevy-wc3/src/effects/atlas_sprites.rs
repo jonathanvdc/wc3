@@ -7,6 +7,7 @@ use crate::effects::sprites::{
     ParticleEmitterUniform, ParticleInstance, ParticleInstances as SpriteInstances,
     StagedSpriteParameters,
 };
+use crate::textures::{TextureImages, TextureRole};
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::prelude::*;
 use std::array::from_fn;
@@ -19,7 +20,7 @@ use wc3::model::scene::keyframed::Frames;
 use wc3::model::{
     Animated, ClipId, Clock, FeatureId, Model, NodeFeature, NodeId, ParticleActivation,
     ParticleAppearance, ParticleDetails, ParticleEmitter, ParticleGravity, ParticleScalar,
-    ParticleTrigger, SampledTrack, ScalarBinding, TextureId, Time as ModelTime, ZeroVec,
+    ParticleTrigger, SampledTrack, ScalarBinding, Time as ModelTime, ZeroVec,
 };
 
 enum BurstTrack<'sample, 'data> {
@@ -150,7 +151,7 @@ impl RuntimeAtlasParticles {
     pub fn compile(
         model: &Model<'_>,
         nodes: &HashMap<NodeId, usize>,
-        images: &HashMap<TextureId, Handle<Image>>,
+        images: &TextureImages,
     ) -> Self {
         let mut result = Self {
             clips: model
@@ -219,11 +220,12 @@ impl RuntimeAtlasParticles {
                     EffectBlend::Alpha
                 }
             };
-            let texture = details
-                .rendering
-                .texture
-                .and_then(|id| images.get(&id))
-                .cloned();
+            let texture = details.rendering.texture.and_then(|id| {
+                images
+                    .particle(feature, 0)
+                    .for_role(id, TextureRole::Color)
+                    .cloned()
+            });
             if texture.is_none() {
                 diagnostic(
                     "Staged sprite image is unresolved; texture-provider integration is required",
@@ -839,7 +841,7 @@ mod tests {
             .enumerate()
             .map(|(index, (id, _))| (id, index))
             .collect();
-        let mut runtime = RuntimeAtlasParticles::compile(&model, &nodes, &HashMap::new());
+        let mut runtime = RuntimeAtlasParticles::compile(&model, &nodes, &TextureImages::default());
         runtime.emitters.retain(|value| value.feature == feature);
         runtime.emitters[0].frames = Frames::Head;
         runtime.emitters[0].lifetime = Animated::constant(10000.);

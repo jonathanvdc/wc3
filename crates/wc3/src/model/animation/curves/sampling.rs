@@ -1,6 +1,6 @@
 //! Evaluation of checked semantic curves without a rendering dependency.
 use super::{Curve, CurveShape, CurveValue, TcbParameters};
-use crate::model::{Quaternion, TextureId, Time};
+use crate::model::{Quaternion, Texture, Time};
 use std::array::from_fn;
 use std::ops::RangeInclusive;
 
@@ -50,7 +50,7 @@ macro_rules! discrete {
         }
     )*};
 }
-discrete!(bool, TextureId, Option<TextureId>);
+discrete!(bool, Texture, Option<Texture>);
 fn normalized(value: [f32; 4]) -> Quaternion {
     let length = value
         .iter()

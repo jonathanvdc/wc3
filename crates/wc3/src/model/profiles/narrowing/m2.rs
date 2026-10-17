@@ -3,7 +3,7 @@ use super::{incompatible, Narrows};
 use crate::model::profiles::{NoControls, Profile, Universal, M2};
 use crate::model::{
     ClipControls, DrawControls, Error, MeshControls, ModelMetadata, NodeControls, System,
-    TextureControls, UniversalAppearance, UniversalBinding,
+    UniversalAppearance, UniversalBinding,
 };
 impl Narrows<Universal> for M2 {
     fn image_resource<'a>(
@@ -76,12 +76,6 @@ impl Narrows<Universal> for M2 {
             None => Ok(None),
             Some(NodeControls::M2(value)) => Ok(Some(value)),
             _ => Err(incompatible("node")),
-        }
-    }
-    fn texture<'a>(value: <Universal as Profile>::Texture<'a>) -> Result<Self::Texture<'a>, Error> {
-        match value {
-            Some(TextureControls::M2(value)) => Ok(value),
-            _ => Err(incompatible("texture")),
         }
     }
     fn mesh<'a>(value: <Universal as Profile>::Mesh<'a>) -> Result<Self::Mesh<'a>, Error> {

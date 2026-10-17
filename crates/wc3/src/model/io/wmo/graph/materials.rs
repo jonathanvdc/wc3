@@ -11,7 +11,7 @@ use crate::model::profiles::Wmo;
 use crate::model::Model;
 use crate::model::WorldImageResource;
 use crate::model::{
-    ColorSpace, ImageResource, Material, MaterialId, ModelBuilder, Sampler, Texture, TextureId,
+    AddressMode, ImageResource, ImageResourceId, Material, MaterialId, ModelBuilder, Sampler,
 };
 use native::records::{BlendMode, MaterialTailField};
 use native::root::RootChunk;
@@ -56,7 +56,7 @@ pub(super) fn read<'a, 'data: 'a>(
         .transpose()?
         .unwrap_or_default();
     let mut output = Vec::new();
-    let mut textures = Vec::<(ImageResource<'a>, TextureId)>::new();
+    let mut textures = Vec::<(ImageResource<'a>, ImageResourceId)>::new();
     for (index, row) in rows.iter().enumerate() {
         let mut bindings = Vec::new();
         for slot in 0..row.texture_slots() {
@@ -70,12 +70,7 @@ pub(super) fn read<'a, 'data: 'a>(
                     } else {
                         let image_resource =
                             builder.add_image_resource(resource.clone().try_into()?);
-                        let id = builder.add_texture(Texture {
-                            resource: image_resource,
-                            controls: Default::default(),
-                            color_space: ColorSpace::Unspecified,
-                            sampler: Sampler::default(),
-                        })?;
+                        let id = image_resource;
                         textures.push((resource, id));
                         id
                     },
@@ -85,6 +80,18 @@ pub(super) fn read<'a, 'data: 'a>(
             };
             bindings.push(TextureBinding {
                 image,
+                sampling: Sampler {
+                    u: if row.flags.clamp_s() {
+                        AddressMode::Clamp
+                    } else {
+                        AddressMode::Repeat
+                    },
+                    v: if row.flags.clamp_t() {
+                        AddressMode::Clamp
+                    } else {
+                        AddressMode::Repeat
+                    },
+                },
                 ..Default::default()
             });
         }
@@ -143,8 +150,6 @@ pub(super) fn read<'a, 'data: 'a>(
                         },
                         controls: RasterizationOptions {
                             exterior_lit: flags.exterior_lit(),
-                            clamp_u: flags.clamp_s(),
-                            clamp_v: flags.clamp_t(),
                             self_illuminated: false,
                             unclassified: unclassified.bits().into(),
                         },
@@ -183,14 +188,8 @@ pub(super) fn write<'a, D: Dialect>(
                 .filter_map(|binding| binding.image)
         })
         .collect::<std::collections::BTreeSet<_>>();
-    for (id, texture) in model.textures() {
-        if !used.contains(&id) {
-            continue;
-        }
-        let value = match model
-            .image_resource(texture.resource)
-            .expect("validated image")
-        {
+    for id in used {
+        let value = match model.image_resource(id).expect("validated image") {
             WorldImageResource::Path(path) => {
                 named = true;
                 let offset = u32::try_from(names.len())
@@ -249,7 +248,7 @@ pub(super) fn write<'a, D: Dialect>(
                 0
             },
             blend_mode: native_blend(source.state.blend),
-            flags: native_flags(source.state.rasterization),
+            flags: native_flags(source.state.rasterization, &material.surface.inputs())?,
             ..Default::default()
         };
         if source.state.rasterization.controls.self_illuminated {
@@ -372,7 +371,7 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
 ) -> Result<Vec<MaterialId>, Error> {
     use native::legacy::RootChunk14;
     let mut result = Vec::new();
-    let mut textures = Vec::<(ImageResource<'view>, TextureId)>::new();
+    let mut textures = Vec::<(ImageResource<'view>, ImageResourceId)>::new();
     for chunk in source.chunks() {
         if let RootChunk14::Materials(rows) = chunk {
             for row in rows.iter() {
@@ -389,12 +388,7 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
                         } else {
                             let image_resource =
                                 builder.add_image_resource(resource.clone().try_into()?);
-                            let id = builder.add_texture(Texture {
-                                resource: image_resource,
-                                controls: Default::default(),
-                                color_space: ColorSpace::Unspecified,
-                                sampler: Sampler::default(),
-                            })?;
+                            let id = image_resource;
                             textures.push((resource, id));
                             id
                         };
@@ -404,6 +398,18 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
                     };
                     bindings.push(TextureBinding {
                         image: binding,
+                        sampling: Sampler {
+                            u: if row.flags.clamp_s() {
+                                AddressMode::Clamp
+                            } else {
+                                AddressMode::Repeat
+                            },
+                            v: if row.flags.clamp_t() {
+                                AddressMode::Clamp
+                            } else {
+                                AddressMode::Repeat
+                            },
+                        },
                         ..Default::default()
                     });
                 }
@@ -433,8 +439,6 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
                                 },
                                 controls: RasterizationOptions {
                                     exterior_lit: flags.exterior_lit(),
-                                    clamp_u: flags.clamp_s(),
-                                    clamp_v: flags.clamp_t(),
                                     unclassified: unclassified.bits().into(),
                                     ..Default::default()
                                 },
@@ -488,13 +492,22 @@ pub(super) fn native_blend(value: profile::Blend) -> BlendMode {
 }
 pub(super) fn native_flags(
     value: profile::MaterialRasterization,
-) -> native::records::MaterialFlags {
+    inputs: &[&profile::ImageInput],
+) -> Result<native::records::MaterialFlags, Error> {
     let mut flags = native::records::MaterialFlags(value.controls.unclassified.bits());
     flags.set_unlit(value.lighting.unlit);
     flags.set_unfogged(value.lighting.unfogged);
     flags.set_two_sided(value.faces);
     flags.set_exterior_lit(value.controls.exterior_lit);
-    flags.set_clamp_s(value.controls.clamp_u);
-    flags.set_clamp_t(value.controls.clamp_v);
-    flags
+    let mut samplers = inputs.iter().map(|input| input.sampling);
+    let sampler = samplers.next().unwrap_or_default();
+    if samplers.any(|other| other != sampler) {
+        return Err(Error::new(
+            "world.material.sampler",
+            "WMO requires all image inputs in one material to share address modes",
+        ));
+    }
+    flags.set_clamp_s(sampler.u == AddressMode::Clamp);
+    flags.set_clamp_t(sampler.v == AddressMode::Clamp);
+    Ok(flags)
 }

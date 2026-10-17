@@ -12,10 +12,6 @@ pub type Blend = BlendOperations<WorldBlend, (), Unavailable, u32>;
 pub struct RasterizationOptions {
     /// Use exterior lighting even for interior geometry.
     pub exterior_lit: bool,
-    /// Clamp the U coordinate.
-    pub clamp_u: bool,
-    /// Clamp the V coordinate.
-    pub clamp_v: bool,
     /// Enable the authored self-illumination color.
     pub self_illuminated: bool,
     /// Preserve controls with unresolved meanings.

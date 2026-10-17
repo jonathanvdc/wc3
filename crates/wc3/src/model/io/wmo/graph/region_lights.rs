@@ -54,12 +54,12 @@ pub(super) fn read<'a, D: Dialect>(
                 } else {
                     let image_resource = builder
                         .add_image_resource(WorldImageResource::FileDataId(row.texture_file_id));
-                    Some(builder.add_texture(Texture {
+                    Some(Texture {
                         resource: image_resource,
                         controls: Default::default(),
                         color_space: ColorSpace::Unspecified,
                         sampler: Sampler::default(),
-                    })?)
+                    })
                 };
                 let mut node = Node::named("Region point-light program");
                 node.transform.translation = row.position;
@@ -157,10 +157,7 @@ pub(super) fn write<'a, D: Dialect>(
         let node = model.node(feature.node).expect("validated program anchor");
         absolute(node)?;
         let cookie = source.cookie.map_or(Ok(0), |id| {
-            match model
-                .image_resource(model.texture(id).expect("validated cookie").resource)
-                .expect("validated image")
-            {
+            match model.image_resource(id.resource).expect("validated image") {
                 WorldImageResource::FileDataId(id) => Ok(*id),
                 _ => Err(Error::new(
                     "world.region.program.cookie",

@@ -38,8 +38,8 @@ enum CurveShape<'a, T: CurveValue> {
 /// ```
 /// Texture selections cannot be interpolated:
 /// ```compile_fail
-/// use wc3::model::{Curve, TextureId, Time};
-/// fn invalid(texture: TextureId) {
+/// use wc3::model::{Curve, Texture, Time};
+/// fn invalid(texture: Texture) {
 ///     let curve = Curve::linear([Time::default()], [texture]);
 /// }
 /// ```

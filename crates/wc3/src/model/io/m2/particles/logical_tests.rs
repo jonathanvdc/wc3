@@ -3,7 +3,7 @@ use crate::model::io::ExportOptions;
 use crate::model::profiles::Universal;
 use crate::model::Model;
 
-fn texture() -> semantic::TextureId {
+fn texture() -> semantic::Texture {
     Model::<Universal>::builder("particle geometry controls")
         .add_file_texture("particle.blp")
         .unwrap()

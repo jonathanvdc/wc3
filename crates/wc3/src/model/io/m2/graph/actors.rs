@@ -28,7 +28,7 @@ fn placement<'a>(
 pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     nodes: &[semantic::NodeId],
-    textures: &[semantic::TextureId],
+    textures: &[semantic::Texture],
     clips: &[semantic::ClipId],
     clocks: &[semantic::ClockId],
     builder: &mut GraphBuilder<'a>,

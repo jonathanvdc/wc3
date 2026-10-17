@@ -95,8 +95,8 @@ numerical scale of one meter per unit for conversion.
 
 Surface evaluation does not require texture pixels. `LayeredSurface::sampled`
 freezes Warcraft III pass values, texture selections, opacity, emissive gain, and
-Fresnel controls while retaining native render state and shared texture-transform
-references. Sample those referenced transforms separately. `materials::m2::MaterialStep::sampled`
+Fresnel controls, including each input's inline coordinate transform, while
+retaining native render state. `materials::m2::MaterialStep::sampled`
 freezes model-shader color, opacity, input weights, frames, and inline transforms.
 These operations preserve shader identity and draw state without approximating
 their meaning with PBR.
@@ -109,9 +109,9 @@ programmes or simulate procedural texture playback.
 `MeshAppearance::compile` prepares geometry-owned tint and opacity controls. Rebuild
 this preparation after changing geometry-animation definitions or channel targets.
 Its sampled RGBA multiplier combines with surface color; `SurfaceColor` provides
-the shared color/opacity/weight composition used by Bevy materials. Texture IDs
-continue to resolve through `Model::texture`, retaining resource identities, color
-interpretation, and samplers. `TextureTransform::sampled` freezes all components;
+the shared color/opacity/weight composition used by Bevy materials. Sampled image
+values retain their shared image dependency handles, color interpretation, and
+samplers after evaluation. `TextureTransform::sampled` freezes all components;
 `affine` applies the established layered-center or model-shader-origin UV convention.
 
 For a standing building, select a clip, evaluate its pose, choose the desired LOD,

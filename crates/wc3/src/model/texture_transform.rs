@@ -1,9 +1,6 @@
-//! Shared, animated texture-coordinate transformations.
-use crate::model::profiles::Profile;
-use crate::model::{
-    Animated, Link, Property, PropertyTarget, Quaternion, TextureTransformId, ValidateLinks,
-};
-/// A shared texture-coordinate transform, independent of any surface or file table.
+//! Input-owned, animated texture-coordinate transformations.
+use crate::model::{Animated, Link, Quaternion, ValidateLinks};
+/// An animated coordinate transform owned by one material input.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextureTransform {
     /// Translation in texture-coordinate space.
@@ -27,19 +24,5 @@ impl ValidateLinks for TextureTransform {
         self.translation.visit_links(visitor);
         self.rotation.visit_links(visitor);
         self.scale.visit_links(visitor);
-    }
-}
-impl TextureTransformId {
-    /// Animated coordinate translation of this shared transform.
-    pub fn translation<P: Profile>(self) -> Property<[f32; 3], P> {
-        Property::new(PropertyTarget::TextureTranslation(self))
-    }
-    /// Animated coordinate rotation of this shared transform.
-    pub fn rotation<P: Profile>(self) -> Property<Quaternion, P> {
-        Property::new(PropertyTarget::TextureRotation(self))
-    }
-    /// Animated coordinate scale of this shared transform.
-    pub fn scale<P: Profile>(self) -> Property<[f32; 3], P> {
-        Property::new(PropertyTarget::TextureScale(self))
     }
 }

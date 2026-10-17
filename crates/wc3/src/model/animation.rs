@@ -3,7 +3,7 @@ use std::any::TypeId;
 /// Resettable values with authored sampling controls.
 pub mod programmed;
 use crate::model::profiles::{Extends, Narrows, Profile, Universal};
-use crate::model::{ClipId, ClockId, Error, EventId, FeatureId, NodeId, Quaternion, TextureId};
+use crate::model::{ClipId, ClockId, Error, EventId, FeatureId, NodeId, Quaternion, Texture};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use zerovec::{ule::AsULE, ZeroVec};
@@ -176,9 +176,9 @@ pub enum Channel<'a, P: Profile = Universal> {
     /// Boolean.
     Boolean(Track<'a, bool, P>),
     /// Texture resource.
-    Texture(Track<'a, TextureId, P>),
+    Texture(Track<'a, Texture, P>),
     /// Optional texture selection.
-    OptionalTexture(Track<'a, Option<TextureId>, P>),
+    OptionalTexture(Track<'a, Option<Texture>, P>),
 }
 /// A named playback interval with typed channels and event occurrences.
 #[derive(Clone, Debug)]

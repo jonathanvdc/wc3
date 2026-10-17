@@ -2,8 +2,8 @@
 use super::{incompatible, Narrows};
 use crate::model::profiles::{Mdlx, NoControls, Profile, Universal};
 use crate::model::{
-    ClipControls, Error, MeshControls, ModelMetadata, NodeControls, TextureControls,
-    UniversalAppearance, UniversalBinding,
+    ClipControls, Error, MeshControls, ModelMetadata, NodeControls, UniversalAppearance,
+    UniversalBinding,
 };
 impl Narrows<Universal> for Mdlx {
     fn image_resource<'a>(
@@ -72,12 +72,6 @@ impl Narrows<Universal> for Mdlx {
         match value {
             Some(NodeControls::Mdlx(value)) => Ok(value),
             _ => Err(incompatible("node")),
-        }
-    }
-    fn texture<'a>(value: <Universal as Profile>::Texture<'a>) -> Result<Self::Texture<'a>, Error> {
-        match value {
-            Some(TextureControls::Mdlx(value)) => Ok(value),
-            _ => Err(incompatible("texture")),
         }
     }
     fn mesh<'a>(value: <Universal as Profile>::Mesh<'a>) -> Result<Self::Mesh<'a>, Error> {

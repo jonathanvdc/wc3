@@ -3,7 +3,7 @@ use crate::model::profiles::Mdlx;
 use crate::model::NodeFeature;
 use crate::model::{
     FeatureId, FeatureProperty, MaterialId, OwnerId, PropertyIdentityKey, PropertyKey,
-    PropertyKeyRef, PropertyPayload, TextureId,
+    PropertyKeyRef, PropertyPayload, Quaternion, Texture,
 };
 use std::any::TypeId;
 
@@ -213,8 +213,29 @@ impl Layer {
             field: LayerField::Opacity,
         })
     }
+    /// Animated coordinate translation.
+    pub fn translation(self) -> PropertyKey<MaterialId, [f32; 3], Mdlx> {
+        PropertyKey::new(Target::Layer {
+            index: self.0,
+            field: LayerField::Translation,
+        })
+    }
+    /// Animated coordinate rotation.
+    pub fn rotation(self) -> PropertyKey<MaterialId, Quaternion, Mdlx> {
+        PropertyKey::new(Target::Layer {
+            index: self.0,
+            field: LayerField::Rotation,
+        })
+    }
+    /// Animated coordinate scaling.
+    pub fn scale(self) -> PropertyKey<MaterialId, [f32; 3], Mdlx> {
+        PropertyKey::new(Target::Layer {
+            index: self.0,
+            field: LayerField::Scale,
+        })
+    }
     /// Animated layer texture selection.
-    pub fn texture(self) -> PropertyKey<MaterialId, Option<TextureId>, Mdlx> {
+    pub fn texture(self) -> PropertyKey<MaterialId, Option<Texture>, Mdlx> {
         PropertyKey::new(Target::Layer {
             index: self.0,
             field: LayerField::Texture,
@@ -249,7 +270,7 @@ impl Layer {
         })
     }
     /// Animated texture selection for an additional logical sampling slot.
-    pub fn texture_slot(self, slot: usize) -> PropertyKey<MaterialId, Option<TextureId>, Mdlx> {
+    pub fn texture_slot(self, slot: usize) -> PropertyKey<MaterialId, Option<Texture>, Mdlx> {
         PropertyKey::new(Target::LayerTexture {
             layer: self.0,
             slot,
@@ -436,6 +457,12 @@ pub enum AttachmentField {
 /// Structural layer field selectors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum LayerField {
+    /// Coordinate translation.
+    Translation,
+    /// Coordinate rotation.
+    Rotation,
+    /// Coordinate scaling.
+    Scale,
     /// Animated opacity.
     Opacity,
     /// Animated texture.
@@ -575,7 +602,7 @@ impl PropertyPayload for Target {
             Target::Layer {
                 field: LayerField::Texture,
                 ..
-            } => TypeId::of::<Option<TextureId>>(),
+            } => TypeId::of::<Option<Texture>>(),
             Target::Layer {
                 field: LayerField::EmissiveGain,
                 ..
@@ -592,7 +619,15 @@ impl PropertyPayload for Target {
                 field: LayerField::FresnelTeamColor,
                 ..
             } => TypeId::of::<f32>(),
-            Target::LayerTexture { .. } => TypeId::of::<Option<TextureId>>(),
+            Target::Layer {
+                field: LayerField::Translation | LayerField::Scale,
+                ..
+            } => TypeId::of::<[f32; 3]>(),
+            Target::Layer {
+                field: LayerField::Rotation,
+                ..
+            } => TypeId::of::<Quaternion>(),
+            Target::LayerTexture { .. } => TypeId::of::<Option<Texture>>(),
         })
     }
     fn accepts_owner(&self, owner: OwnerId) -> bool {
@@ -673,6 +708,10 @@ impl PropertyPayload for Target {
             } => matches!(owner, OwnerId::Material(_)),
             Target::Layer {
                 field: LayerField::FresnelTeamColor,
+                ..
+            } => matches!(owner, OwnerId::Material(_)),
+            Target::Layer {
+                field: LayerField::Translation | LayerField::Rotation | LayerField::Scale,
                 ..
             } => matches!(owner, OwnerId::Material(_)),
             Target::LayerTexture { .. } => matches!(owner, OwnerId::Material(_)),

@@ -20,16 +20,17 @@ pub mod world;
 /// Static-world draw semantics.
 pub mod world_draw;
 
-use crate::model::{Link, ValidateLinks};
+use crate::model::{ImageResourceId, Link, ValidateLinks};
+use zerovec::ule::AsULE;
 /// Additional texture behavior permitted by the universal vocabulary.
-#[derive(Clone, Debug)]
-pub enum TextureControls<'a> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TextureControls {
     /// World of Warcraft producer options independent of texture addressing.
-    M2(texture::TextureControls<'a>),
+    M2(texture::TextureControls),
     /// Warcraft III fallback filename and texture behavior.
-    Mdlx(layered::TextureControls<'a>),
+    Mdlx(layered::TextureControls),
 }
-impl ValidateLinks for TextureControls<'_> {
+impl ValidateLinks for TextureControls {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
             Self::M2(value) => value.visit_links(visitor),
@@ -127,5 +128,67 @@ impl ValidateLinks for DrawControls {
             Self::M3(value) => value.visit_links(visitor),
             Self::Wmo(value) => value.visit_links(visitor),
         }
+    }
+}
+
+#[doc(hidden)]
+#[allow(missing_docs)]
+#[zerovec::make_ule(TextureControlsKindULE)]
+#[zerovec::skip_derive(Ord)]
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextureControlsKind {
+    M2 = 0,
+    Mdlx = 1,
+}
+#[doc(hidden)]
+#[allow(missing_docs)]
+#[zerovec::make_ule(TextureControlsEncodingULE)]
+#[zerovec::skip_derive(Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TextureControlsEncoding {
+    kind: TextureControlsKind,
+    path: Option<ImageResourceId>,
+    flags: u32,
+}
+impl AsULE for TextureControls {
+    type ULE = TextureControlsEncodingULE;
+    fn to_unaligned(self) -> Self::ULE {
+        let value = match self {
+            Self::M2(value) => TextureControlsEncoding {
+                kind: TextureControlsKind::M2,
+                path: value.path,
+                flags: value.flags.bits(),
+            },
+            Self::Mdlx(value) => TextureControlsEncoding {
+                kind: TextureControlsKind::Mdlx,
+                path: value.fallback_path,
+                flags: value.unclassified.bits(),
+            },
+        };
+        value.to_unaligned()
+    }
+    fn from_unaligned(value: Self::ULE) -> Self {
+        let value = TextureControlsEncoding::from_unaligned(value);
+        match value.kind {
+            TextureControlsKind::M2 => Self::M2(texture::TextureControls {
+                path: value.path,
+                flags: texture::SupplementalTextureFlags(value.flags),
+            }),
+            TextureControlsKind::Mdlx => Self::Mdlx(layered::TextureControls {
+                fallback_path: value.path,
+                unclassified: value.flags.into(),
+            }),
+        }
+    }
+}
+impl From<texture::TextureControls> for TextureControls {
+    fn from(value: texture::TextureControls) -> Self {
+        Self::M2(value)
+    }
+}
+impl From<layered::TextureControls> for TextureControls {
+    fn from(value: layered::TextureControls) -> Self {
+        Self::Mdlx(value)
     }
 }

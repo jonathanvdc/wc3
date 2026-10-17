@@ -5,7 +5,7 @@ use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::materials::mdlx::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
-use crate::model::{Axis, FeatureId, MaterialId, MeshId, Model, NodeId, TextureId};
+use crate::model::{Axis, FeatureId, MaterialId, MeshId, Model, NodeId, Texture};
 use crate::model::{MdlxImageResource, ParticleResource, PathResource};
 use native::scene::Node;
 use std::collections::{BTreeMap, BTreeSet};
@@ -15,7 +15,7 @@ pub(super) fn write<'a, T: Dialect>(
     target: &mut native::Document<'a, T>,
     encoder: &mut Encoder<'_, '_, '_>,
     nodes: BTreeMap<NodeId, Node<'static>>,
-    textures: &BTreeMap<TextureId, u32>,
+    textures: &BTreeMap<Texture, u32>,
     materials: &BTreeMap<MaterialId, u32>,
     meshes: &BTreeMap<MeshId, Vec<u32>>,
 ) -> Result<(), Error> {

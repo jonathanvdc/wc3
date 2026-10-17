@@ -50,6 +50,7 @@ fn named_source_loads_recursive_models_and_images_across_archives() {
     "#;
     let child = br#"Version { FormatVersion 800, } Model "Child" {}
         Textures 1 { Bitmap { Image "Textures\Body.tif", } }
+        Materials 1 { Material { Layer { FilterMode None, static TextureID 0, } } }
         Attachment "mount" { ObjectId 0, AttachmentID 0, Path "leaf.mdl", }
         PivotPoints 1 { { 0, 0, 0 }, }
     "#;

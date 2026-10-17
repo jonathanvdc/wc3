@@ -119,8 +119,21 @@ fn validate_channel(channel: &Channel<'_, super::Mdlx>) -> Result<(), Error> {
 }
 
 pub(super) fn resources(value: &Model<'_, Mdlx>) -> Result<(), Error> {
-    use crate::model::{AddressMode, ColorSpace};
-    for (_, texture) in value.textures() {
+    use crate::model::{AddressMode, ColorSpace, MdlxImageResource};
+    for texture in value.sampled_images() {
+        let controls = texture.mdlx_controls()?;
+        if let Some(path) = controls.fallback_path {
+            if !matches!(
+                value.image_resource(texture.resource),
+                Some(MdlxImageResource::Replaceable(_))
+            ) || !matches!(value.image_resource(path), Some(MdlxImageResource::Path(_)))
+            {
+                return Err(Error::new(
+                    "texture.fallback_path",
+                    "fallback filenames require a path dependency on a replaceable image input",
+                ));
+            }
+        }
         if texture.color_space != ColorSpace::Unspecified {
             return Err(Error::new(
                 "textures.color_space",

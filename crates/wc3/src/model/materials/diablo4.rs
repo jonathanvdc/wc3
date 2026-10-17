@@ -1,15 +1,15 @@
-//! Diablo IV shader inputs use checked texture identities and explicit parameter selections.
+//! Diablo IV shader inputs use checked image-resource identities and explicit parameter selections.
 use super::bindings::TextureBinding;
 use super::parameters::{OrderedParameters, ParameterEntry, ShaderValue};
 use super::program::MaterialProgram;
 use crate::model::profiles::SurfacePayload;
-use crate::model::{Error, Link, PropertyIdentityKey, TextureId, ValidateLinks};
+use crate::model::{Error, ImageResourceId, Link, PropertyIdentityKey, ValidateLinks};
 
 /// A texture input retains negative source selections independently of image handles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextureSelection {
     /// An image defined in the owning model.
-    Image(TextureId),
+    Image(ImageResourceId),
     /// A negative native selection whose precise absent-image convention is unresolved.
     Absent(i32),
 }

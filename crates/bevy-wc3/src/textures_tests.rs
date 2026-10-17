@@ -15,11 +15,11 @@ fn m3_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion() {
         u: AddressMode::Mirror,
         v: AddressMode::Mirror,
     };
-    let texture = builder.add_texture(source).unwrap();
+    let texture = source;
     let mut materials = Vec::new();
     for (wrap_u, wrap_v) in [(false, false), (true, false), (false, true), (true, true)] {
         let mut layer = m3::TextureLayer::default();
-        layer.binding.image = Some(texture);
+        layer.binding.image = Some(texture.resource);
         layer.binding.coordinates.transform.uv_tiling.initial = [1.; 2];
         layer.binding.coordinates.transform.uv_source_related = u32::MAX;
         layer.binding.contribution.map_alpha.initial = 1.;
@@ -61,7 +61,10 @@ fn m3_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion() {
         let pass = compile_material_with_images(&model, material, resolved.clone())
             .unwrap()
             .remove(0);
-        let data = resolved
+        let scoped = resolved.material(material, 0);
+        let normal = scoped.slot(8);
+        let diffuse = scoped.slot(0);
+        let data = normal
             .get_with_sampler(
                 texture,
                 ColorSpace::Unspecified,
@@ -69,7 +72,7 @@ fn m3_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion() {
                 sampler,
             )
             .unwrap();
-        let color = resolved
+        let color = diffuse
             .get_with_sampler(
                 texture,
                 ColorSpace::Unspecified,
@@ -89,7 +92,7 @@ fn m3_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion() {
         assert_ne!(color, data);
     }
     assert_eq!(
-        model.texture(texture).unwrap().sampler,
+        texture.sampler,
         Sampler {
             u: AddressMode::Mirror,
             v: AddressMode::Mirror,
@@ -104,16 +107,21 @@ fn world_surface_clamps_resolve_independent_variants_without_mutating_texture() 
         "shared.png".as_bytes().into(),
     )));
     texture.sampler.u = AddressMode::Mirror;
-    let texture = builder.add_texture(texture).unwrap();
+
     let mut materials = Vec::new();
     for clamp_u in [false, true, true] {
         let mut surface = wmo::Material {
             shader: Some(0),
             ..Default::default()
         };
-        surface.state.rasterization.controls.clamp_u = clamp_u;
         surface.textures.push(TextureBinding {
-            image: Some(texture),
+            image: Some({
+                let mut image = texture;
+                if clamp_u {
+                    image.sampler.u = AddressMode::Clamp;
+                }
+                image
+            }),
             ..Default::default()
         });
         materials.push(
@@ -127,12 +135,16 @@ fn world_surface_clamps_resolve_independent_variants_without_mutating_texture() 
     }
     let model = builder.finish().unwrap();
     let requests = texture_requests(&model);
-    assert_eq!(requests.len(), 2);
-    assert_ne!(requests[0].key(), requests[1].key());
     assert_eq!(
-        model.texture(texture).unwrap().sampler.u,
-        AddressMode::Mirror
+        requests
+            .iter()
+            .map(|request| (request.texture, request.color_space, request.sampler))
+            .collect::<HashSet<_>>()
+            .len(),
+        2
     );
+    assert_ne!(requests[0].key(), requests[1].key());
+    assert_eq!(texture.sampler.u, AddressMode::Mirror);
     let mut images = Assets::<Image>::default();
     let mirror = images.add(Image::default());
     let clamp = images.add(Image::default());
@@ -179,25 +191,56 @@ fn native_world_clamp_authority_imports_without_texture_sampler_mutation() {
     let model = io::wmo::import(&bundle, &ImportOptions::default())
         .unwrap()
         .value
-        .widen();
+        .widen::<wc3::model::profiles::Universal>();
     assert!(model
-        .textures()
+        .materials()
         .iter()
-        .all(|(_, texture)| texture.sampler == Sampler::default()));
+        .all(|(_, material)| material.surface.steps.iter().all(|step| {
+            let MaterialStep::Wmo(surface) = step else {
+                return true;
+            };
+            surface
+                .inputs()
+                .iter()
+                .all(|input| input.sampling.u == AddressMode::Clamp)
+        })));
     assert!(texture_requests(&model)
         .iter()
         .any(|request| request.sampler.u == AddressMode::Clamp));
 }
 
 #[test]
-fn age_particle_wrapping_leaves_shared_texture_sampler_unchanged() {
-    let source = Sampler {
-        u: AddressMode::Clamp,
-        v: AddressMode::Mirror,
-    };
-    let particle = particle_sampler(source);
-    assert_eq!(particle.u, AddressMode::Repeat);
-    assert_eq!(particle.v, AddressMode::Repeat);
-    assert_eq!(source.u, AddressMode::Clamp);
-    assert_eq!(source.v, AddressMode::Mirror);
+fn image_requests_retain_native_input_metadata_for_replacement_selection() {
+    use wc3::model::materials::mdlx::{Layer, LayeredSurface};
+    use wc3::model::{Animated, TextureControls};
+    let mut builder = ModelBuilder::new("shared decoded image");
+    let first = builder.add_file_texture("shared.png").unwrap();
+    let mut second = first;
+    second.controls = Some(TextureControls::Mdlx(Default::default()));
+    let layers = [first, second].map(|image| {
+        let mut layer = Layer::default();
+        layer.binding.image = Animated::constant(Some(image));
+        layer
+    });
+    builder
+        .add_material(Material {
+            name: "surface".into(),
+            surface: MaterialSurface::try_from(LayeredSurface {
+                layers: layers.into(),
+                ..Default::default()
+            })
+            .unwrap(),
+        })
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let requests = texture_requests(&model);
+    assert_eq!(
+        requests
+            .iter()
+            .map(|request| (request.texture, request.color_space, request.sampler))
+            .collect::<HashSet<_>>()
+            .len(),
+        2
+    );
+    assert_ne!(requests[0].key(), requests[1].key());
 }

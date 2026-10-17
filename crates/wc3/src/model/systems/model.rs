@@ -1,7 +1,7 @@
-//! Model collision, customization matrices, and independent texture programs.
+//! Model collision, customization matrices, and physics systems.
 use super::model_physics::Physics;
 use crate::model::BoneOverrideResourceId;
-use crate::model::{Animated, Bounds, Link, NodeId, TextureTransform, ValidateLinks, ZeroVec};
+use crate::model::{Bounds, Link, NodeId, ValidateLinks, ZeroVec};
 /// Sparse per-bone transform override supplied by a companion asset.
 #[derive(Clone, Debug)]
 pub struct BoneOverride<'a> {
@@ -19,18 +19,8 @@ pub enum System<'a> {
     Collision(Collision<'a>),
     /// Sparse customization matrices and their external resources.
     BoneOverrides(Vec<BoneOverride<'a>>),
-    /// Animated texture controls not assigned to an active surface.
-    TextureAnimations(TextureAnimations),
     /// Physics simulation and constraints.
     Physics(Physics<'a>),
-}
-/// Independently authored texture animation controls.
-#[derive(Clone, Debug, Default)]
-pub struct TextureAnimations {
-    /// Texture-space transformations.
-    pub transforms: Vec<TextureTransform>,
-    /// Animated texture opacity weights.
-    pub weights: Vec<Animated<f32>>,
 }
 /// Collision triangles without native offsets or vertex encodings.
 #[derive(Clone, Debug)]
@@ -48,12 +38,6 @@ impl ValidateLinks for BoneOverride<'_> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         self.resource.visit_links(v);
         self.bones.visit_links(v)
-    }
-}
-impl ValidateLinks for TextureAnimations {
-    fn visit_links(&self, v: &mut dyn FnMut(Link)) {
-        self.transforms.visit_links(v);
-        self.weights.visit_links(v)
     }
 }
 impl ValidateLinks for System<'_> {
@@ -92,7 +76,6 @@ impl ValidateLinks for System<'_> {
                     }
                 }
             }
-            Self::TextureAnimations(value) => value.visit_links(v),
             Self::Physics(value) => {
                 value.visit_links(v);
                 if value.validate().is_err() {

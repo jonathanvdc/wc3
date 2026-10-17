@@ -173,10 +173,11 @@ impl TextureTransform {
     }
 }
 impl Layer {
-    /// Freezes animated pass values, preserving render state, texture identities and shared transform references.
+    /// Freezes animated pass values and input-owned transforms while preserving render state.
     pub fn sampled(&self, sample: &impl PropertySample) -> Self {
         let mut value = self.clone();
         value.binding.image = self.binding.image.sampled(sample);
+        value.binding.coordinates.transform = self.binding.coordinates.transform.sampled(sample);
         value.opacity = self.opacity.sampled(sample);
         value.emissive_gain = self.emissive_gain.as_ref().map(|v| v.sampled(sample));
         if let Some(fresnel) = &mut value.fresnel {
@@ -207,6 +208,7 @@ impl MaterialInputs {
     pub fn sampled(&self, sample: &impl PropertySample) -> Self {
         let mut value = self.clone();
         value.binding.image = self.binding.image.sampled(sample);
+        value.binding.coordinates.transform = self.binding.coordinates.transform.sampled(sample);
         value.opacity = self.opacity.sampled(sample);
         value.emissive_gain = self.emissive_gain.as_ref().map(|v| v.sampled(sample));
         value

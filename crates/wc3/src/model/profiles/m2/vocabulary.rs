@@ -10,7 +10,7 @@ use crate::model::PropertyIdentityKey;
 use crate::model::{
     Basis, Bounds, ClipControls, DrawControls, DrawLooks, Error, FeatureKind, IdentityBinding,
     LengthUnit, M2Geometry, MaterialSurface, MeshControls, Model, ModelMetadata, NodeControls,
-    PropertyPayload, System, TextureControls, UniversalAppearance, UniversalBinding,
+    PropertyPayload, System, UniversalAppearance, UniversalBinding,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 /// Vocabulary that maps mechanically to M2 logical features.
@@ -36,7 +36,6 @@ impl Profile for M2 {
     type Surface<'a> = m2::Material<'a>;
     type Feature<'a> = m2::ActorKind<'a>;
     type Node<'a> = Option<m2::BoneControls>;
-    type Texture<'a> = m2::TextureControls<'a>;
     type Mesh<'a> = Option<m2::GeometryControls>;
     type Instance<'a> = NoControls;
     type Clip<'a> = m2::SequenceControls;
@@ -167,9 +166,6 @@ impl Extends<M2> for Universal {
     }
     fn node<'a>(value: <M2 as Profile>::Node<'a>) -> Self::Node<'a> {
         value.map(NodeControls::M2)
-    }
-    fn texture<'a>(value: <M2 as Profile>::Texture<'a>) -> Self::Texture<'a> {
-        Some(TextureControls::M2(value))
     }
     fn mesh<'a>(value: <M2 as Profile>::Mesh<'a>) -> Self::Mesh<'a> {
         value.map(MeshControls::M2)

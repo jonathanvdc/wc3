@@ -1,6 +1,6 @@
 //! Authoring controls owned by an individual world-surface draw.
 use crate::model::values::world::BatchFlags;
-use crate::model::{Bounds, Link, TextureId, ValidateLinks};
+use crate::model::{Bounds, Link, Texture, ValidateLinks};
 /// Illumination class of a world-surface draw.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Lighting {
@@ -38,7 +38,7 @@ pub struct DrawControls {
     /// Authored culling bounds when explicitly provided.
     pub bounds: Option<Bounds>,
     /// Optional baked-light texture resource.
-    pub lightmap: Option<TextureId>,
+    pub lightmap: Option<Texture>,
     /// Historical baked-light selector whose table interpretation remains unresolved.
     pub lightmap_selector: Option<u8>,
     /// Batch behavior bits whose meanings remain unresolved.

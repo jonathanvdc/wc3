@@ -1,4 +1,5 @@
 //! Fixed M3 standard-material roles evaluated before Bevy PBR lighting.
+use crate::textures::m3_layers;
 use std::array::from_fn;
 pub(super) mod layers;
 mod samplers;
@@ -17,7 +18,7 @@ use wc3::model::materials::state::BlendOperations;
 use wc3::model::profiles::Universal;
 use wc3::model::values::programmed::{ColorChannel, LayerBlendOp, SpecularMode, UvMappingMode};
 
-use wc3::model::Model;
+use wc3::model::{Model, Texture};
 
 /// Application-owned colours for M3 standard team-colour operations.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -156,23 +157,7 @@ pub(super) fn compile_m3_with_targets(
         surface.emissive.parameters,
         if flags.bits() & 4 != 0 { 1. } else { 0. },
     );
-    let sources: [Option<&m3::TextureLayer>; ROLE_COUNT] = [
-        surface.diffuse.as_ref(),
-        surface.decal_layer.as_ref(),
-        surface.specular.input.color.as_ref(),
-        surface.specular.input.gloss.as_ref(),
-        surface.emissive.input.primary.input.as_ref(),
-        surface.emissive.input.secondary.input.as_ref(),
-        surface.opacity.primary.as_ref(),
-        surface.opacity.secondary.as_ref(),
-        surface.normals.base.as_ref(),
-        surface.normals.primary.input.as_ref(),
-        surface.normals.primary.mask.as_ref(),
-        surface.normals.secondary.input.as_ref(),
-        surface.normals.secondary.mask.as_ref(),
-        surface.light_map_layer.as_ref(),
-        surface.ambient_occlusion_layer.as_ref(),
-    ];
+    let sources = m3_layers(surface);
     let mut animations = M3Animation {
         layers: from_fn(|_| None),
         weights: surface
@@ -188,7 +173,7 @@ pub(super) fn compile_m3_with_targets(
             .collect(),
     };
     let mut samplers = SamplerPool::default();
-    for (slot, layer) in sources.into_iter().enumerate() {
+    for (slot, layer) in sources.into_iter().take(ROLE_COUNT).enumerate() {
         let Some(layer) = layer else {
             continue;
         };
@@ -229,7 +214,13 @@ pub(super) fn compile_m3_with_targets(
             } else {
                 TextureRole::Data
             };
-            let image = layer_image(model, layer, role, images, &mut pass.diagnostics)?;
+            let image = layer_image(
+                model,
+                layer,
+                role,
+                &images.slot(slot as u32),
+                &mut pass.diagnostics,
+            )?;
             pass.state.m3.layers[slot].flags.y = u32::from(image.is_some());
             if image.is_none() && slot != 0 {
                 pass.state.m3.layers[slot].flags.x = 0;
@@ -237,13 +228,7 @@ pub(super) fn compile_m3_with_targets(
                 continue;
             }
             if let Some(image) = image.as_ref() {
-                let source_sampler = layer
-                    .binding
-                    .image
-                    .and_then(|id| model.texture(id))
-                    .map(|texture| texture.sampler)
-                    .unwrap_or_default();
-                let sampler = m3_sampler(layer, source_sampler);
+                let sampler = m3_sampler(layer);
                 let Some(selector) = samplers.intern(sampler, image) else {
                     pass.state.m3.layers[slot].flags.x = 0;
                     animations.layers[slot] = None;
@@ -377,17 +362,11 @@ fn layer_image(
     images: &TextureImages,
     diagnostics: &mut Vec<String>,
 ) -> Result<Option<Handle<Image>>, ModelError> {
-    let sampler = layer
-        .binding
-        .image
-        .and_then(|id| model.texture(id))
-        .map(|texture| texture.sampler)
-        .unwrap_or_default();
     image_role_with_sampler(
         model,
-        layer.binding.image,
+        layer.binding.image.map(Texture::new),
         role,
-        Some(m3_sampler(layer, sampler)),
+        Some(m3_sampler(layer)),
         images,
         diagnostics,
     )

@@ -232,7 +232,7 @@ fn application_vocabularies_participate_in_graph_validation() {
     struct Application;
     #[derive(Clone, Debug)]
     struct Surface {
-        texture: TextureId,
+        texture: Texture,
     }
     impl ValidateLinks for Surface {
         fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -261,7 +261,6 @@ fn application_vocabularies_participate_in_graph_validation() {
         type ModelMetadata<'a> = profiles::NoControls;
         type System<'a> = Unavailable;
         type Node<'a> = profiles::NoControls;
-        type Texture<'a> = profiles::NoControls;
         type Mesh<'a> = profiles::NoControls;
         type Instance<'a> = profiles::NoControls;
         type Draw = profiles::NoControls;

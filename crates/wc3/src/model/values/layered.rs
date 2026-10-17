@@ -2,7 +2,7 @@
 use bitfield::bitfield;
 bitfield! {
     /// Unresolved texture flags retained alongside named authoring controls.
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct TextureFlags(u32);
     /// Complete retained option word.
     pub bits, _:31,0;

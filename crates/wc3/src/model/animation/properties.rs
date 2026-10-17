@@ -1,8 +1,8 @@
 //! Structural destinations and their transient, profile-independent validation identities.
 use crate::model::profiles::{Extends, Narrows, Profile, Universal};
 use crate::model::{
-    Error, FeatureId, Link, MaterialId, MeshId, ModelId, NodeId, Quaternion, SystemId, TextureId,
-    TextureTransformId, ValidateLinks,
+    Error, FeatureId, Link, MaterialId, MeshId, ModelId, NodeId, Quaternion, SystemId, Texture,
+    ValidateLinks,
 };
 use std::any::{Any, TypeId};
 use std::fmt::{Debug, Formatter, Result as FmtResult};
@@ -13,8 +13,6 @@ use std::sync::Arc;
 /// An object whose properties may be animated.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum OwnerId {
-    /// Shared texture-coordinate transformation.
-    TextureTransform(TextureTransformId),
     /// Independently authored scene system.
     System(SystemId),
     /// One attached logical feature.
@@ -32,7 +30,6 @@ impl ValidateLinks for OwnerId {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
             Self::Model(id) => id.visit_links(visitor),
-            Self::TextureTransform(id) => id.visit_links(visitor),
             Self::System(id) => id.visit_links(visitor),
             Self::Feature(id) => id.visit_links(visitor),
             Self::Node(id) => id.visit_links(visitor),
@@ -157,12 +154,6 @@ pub enum PropertyIdentity {
     MeshColor(MeshId),
     /// Common geometry opacity.
     MeshOpacity(MeshId),
-    /// Shared sampling translation.
-    TextureTranslation(TextureTransformId),
-    /// Shared sampling rotation.
-    TextureRotation(TextureTransformId),
-    /// Shared sampling scaling.
-    TextureScale(TextureTransformId),
     /// Actual profile selector and owner.
     Profile {
         /// Actual logical owner.
@@ -181,9 +172,6 @@ enum TargetRef<'a> {
     MaterialTexture(MaterialId, u32),
     MeshColor(MeshId),
     MeshOpacity(MeshId),
-    TextureTranslation(TextureTransformId),
-    TextureRotation(TextureTransformId),
-    TextureScale(TextureTransformId),
     Profile(OwnerId, PropertyKeyRef<'a>),
 }
 /// A semantic destination whose profile selects its structural property enum.
@@ -205,12 +193,6 @@ pub enum PropertyTarget<P: Profile = Universal> {
     MeshColor(MeshId),
     /// Common geometry opacity.
     MeshOpacity(MeshId),
-    /// Shared sampling translation.
-    TextureTranslation(TextureTransformId),
-    /// Shared sampling rotation.
-    TextureRotation(TextureTransformId),
-    /// Shared sampling scaling.
-    TextureScale(TextureTransformId),
     /// Profile-owned structural destination.
     Profile {
         /// Actual logical owner.
@@ -230,9 +212,6 @@ impl<P: Profile> PropertyTarget<P> {
             Self::MaterialTexture(id, slot) => TargetRef::MaterialTexture(*id, *slot),
             Self::MeshColor(id) => TargetRef::MeshColor(*id),
             Self::MeshOpacity(id) => TargetRef::MeshOpacity(*id),
-            Self::TextureTranslation(id) => TargetRef::TextureTranslation(*id),
-            Self::TextureRotation(id) => TargetRef::TextureRotation(*id),
-            Self::TextureScale(id) => TargetRef::TextureScale(*id),
             Self::Profile { owner, key } => TargetRef::Profile(*owner, key.identity()),
         }
     }
@@ -247,9 +226,6 @@ impl<P: Profile> PropertyTarget<P> {
             Self::MaterialTexture(id, slot) => PropertyIdentity::MaterialTexture(*id, *slot),
             Self::MeshColor(id) => PropertyIdentity::MeshColor(*id),
             Self::MeshOpacity(id) => PropertyIdentity::MeshOpacity(*id),
-            Self::TextureTranslation(id) => PropertyIdentity::TextureTranslation(*id),
-            Self::TextureRotation(id) => PropertyIdentity::TextureRotation(*id),
-            Self::TextureScale(id) => PropertyIdentity::TextureScale(*id),
             Self::Profile { owner, key } => PropertyIdentity::Profile {
                 owner: *owner,
                 key: key.identity().to_owned(),
@@ -267,9 +243,6 @@ impl<P: Profile> PropertyTarget<P> {
             PropertyIdentity::MaterialTexture(id, slot) => Self::MaterialTexture(*id, *slot),
             PropertyIdentity::MeshColor(id) => Self::MeshColor(*id),
             PropertyIdentity::MeshOpacity(id) => Self::MeshOpacity(*id),
-            PropertyIdentity::TextureTranslation(id) => Self::TextureTranslation(*id),
-            PropertyIdentity::TextureRotation(id) => Self::TextureRotation(*id),
-            PropertyIdentity::TextureScale(id) => Self::TextureScale(*id),
             PropertyIdentity::Profile { owner, key } => Self::Profile {
                 owner: *owner,
                 key: P::Property::from_identity(key).ok_or_else(|| {
@@ -294,9 +267,6 @@ impl<P: Profile> PropertyTarget<P> {
             Self::MaterialTexture(id, slot) => PropertyTarget::MaterialTexture(id, slot),
             Self::MeshColor(id) => PropertyTarget::MeshColor(id),
             Self::MeshOpacity(id) => PropertyTarget::MeshOpacity(id),
-            Self::TextureTranslation(id) => PropertyTarget::TextureTranslation(id),
-            Self::TextureRotation(id) => PropertyTarget::TextureRotation(id),
-            Self::TextureScale(id) => PropertyTarget::TextureScale(id),
             Self::Profile { owner, key } => PropertyTarget::Profile {
                 owner,
                 key: map(key)?,
@@ -315,15 +285,11 @@ impl<P: Profile> PropertyTarget<P> {
     /// Exact value domain selected by this destination.
     pub fn value_type(&self) -> Option<TypeId> {
         Some(match self {
-            Self::Translation(_)
-            | Self::Scale(_)
-            | Self::MeshColor(_)
-            | Self::TextureTranslation(_)
-            | Self::TextureScale(_) => TypeId::of::<[f32; 3]>(),
-            Self::Rotation(_) | Self::TextureRotation(_) => TypeId::of::<Quaternion>(),
+            Self::Translation(_) | Self::Scale(_) | Self::MeshColor(_) => TypeId::of::<[f32; 3]>(),
+            Self::Rotation(_) => TypeId::of::<Quaternion>(),
             Self::Visibility(_) => TypeId::of::<bool>(),
             Self::MaterialOpacity(_) | Self::MeshOpacity(_) => TypeId::of::<f32>(),
-            Self::MaterialTexture(..) => TypeId::of::<TextureId>(),
+            Self::MaterialTexture(..) => TypeId::of::<Texture>(),
             Self::Profile { key, .. } => return key.value_type(),
         })
     }
@@ -458,7 +424,7 @@ impl MaterialId {
         Property::new(PropertyTarget::MaterialOpacity(self))
     }
     /// Common texture selection.
-    pub fn texture<P: Profile>(self, slot: u32) -> Property<TextureId, P> {
+    pub fn texture<P: Profile>(self, slot: u32) -> Property<Texture, P> {
         Property::new(PropertyTarget::MaterialTexture(self, slot))
     }
 }
@@ -513,4 +479,4 @@ macro_rules! owner_identity {
     )*};
 }
 owner_identity!(ModelId => Model, NodeId => Node, MaterialId => Material, MeshId => Mesh,
-    TextureTransformId => TextureTransform, FeatureId => Feature, SystemId => System);
+    FeatureId => Feature, SystemId => System);

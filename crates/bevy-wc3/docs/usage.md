@@ -53,10 +53,14 @@ through the separate [bevy-mpq crate](../../bevy-mpq/README.md); archive mountin
 outside this renderer.
 
 The resolver's `texture_resource` and `texture_candidates` hooks select replacement
-images and lookup policy. Requests retain `TextureId`, the semantic texture/resource,
-role, effective color space, and effective `request.sampler`; provider callbacks receive
-the source-list index separately. Surface-local WMO clamp controls can therefore
-request multiple samplers for one TextureId without editing its declaration.
+images and lookup policy. A request carries its structural input address where applicable, sampled-image
+value, resolved resource declaration, role, effective color space, and effective
+`request.sampler`; provider callbacks receive a source-list index separately.
+Each material input owns its sampling settings. Inputs sharing one image dependency
+can request different sampler or color interpretations, and the loader shares equal resolved image variants after replacement lookup.
+Input addresses distinguish equal material or effect inputs during replacement
+lookup. Native metadata remains available to source resolution; physical image
+reuse depends only on the resolved source and effective sampling and color settings.
 An unspecified color space
 follows the role: color uses sRGB, normal and numeric maps use linear sampling.
 Distinct interpretations receive distinct handles without mutating shared images.
@@ -181,7 +185,7 @@ rigid clips retain their own clocks while following host pause and playback rate
 Controller-driven skinned parts require matching authored timeline origins.
 
 For resource-driven setup, `assembly::Assembly` contains root and component
-sources, typed draw selections, exact texture replacements and explicit bindings.
+sources, typed draw selections, image dependency and per-input replacements and explicit bindings.
 `assembly::compile_assembly` resolves images and compiles the complete plan.
 Applications can implement `assembly::Resolver<Selection>` for their own typed
 configuration schema. Atlas composition and repeated-source compilation happen

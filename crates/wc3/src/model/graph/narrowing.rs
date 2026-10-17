@@ -3,7 +3,7 @@ use crate::model::profiles::{Narrows, Profile};
 use crate::model::GeometrySchema as _;
 use crate::model::{
     AttachedFeature, Clip, Controller, Dependencies, Draw, Error, Material, Mesh, MeshInstance,
-    Model, Node, Skin, Texture,
+    Model, Node, Skin,
 };
 impl<'a, P: Profile> Model<'a, P> {
     fn try_map_payloads<Q: Narrows<P>>(self) -> Result<Model<'a, Q>, Error> {
@@ -53,21 +53,6 @@ impl<'a, P: Profile> Model<'a, P> {
                     .map(|(id, value)| Ok((id, Q::bone_override_resource(value)?)))
                     .collect::<Result<_, Error>>()?,
             },
-            textures: self
-                .textures
-                .into_iter()
-                .map(|(id, texture)| {
-                    Ok((
-                        id,
-                        Texture {
-                            resource: texture.resource,
-                            color_space: texture.color_space,
-                            sampler: texture.sampler,
-                            controls: Q::texture(texture.controls)?,
-                        },
-                    ))
-                })
-                .collect::<Result<_, Error>>()?,
             scope: self.scope,
             id: self.id,
             name: self.name,
@@ -107,7 +92,6 @@ impl<'a, P: Profile> Model<'a, P> {
                 })
                 .collect::<Result<_, Error>>()?,
             clocks: self.clocks,
-            texture_transforms: self.texture_transforms,
             nodes: self
                 .nodes
                 .into_iter()

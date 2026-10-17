@@ -112,7 +112,6 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
         || !value.clocks().is_empty()
         || !value.controllers().is_empty()
         || !value.skins().is_empty()
-        || !value.texture_transforms().is_empty()
         || !value.timeline_channels().is_empty()
         || !value.shared_channels().is_empty()
         || !value.timeline_events().is_empty()
@@ -252,13 +251,25 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
 }
 
 pub(super) fn resources(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
-    use crate::model::{ColorSpace, Sampler};
-    for (_, texture) in value.textures() {
-        if texture.color_space != ColorSpace::Unspecified || texture.sampler != Sampler::default() {
-            return Err(Error::new(
-                "world.textures.sampling",
-                "world texture definitions do not declare transfer functions or global sampling overrides; addressing belongs to the surface",
-            ));
+    use crate::model::{AddressMode, ColorSpace, Sampler};
+    for (_, material) in value.materials() {
+        for input in material.surface.inputs() {
+            if !matches!(input.sampling.u, AddressMode::Repeat | AddressMode::Clamp)
+                || !matches!(input.sampling.v, AddressMode::Repeat | AddressMode::Clamp)
+            {
+                return Err(Error::new(
+                    "world.material.sampler",
+                    "WMO image inputs support repeat and clamp addressing",
+                ));
+            }
+        }
+    }
+    for texture in value.sampled_images() {
+        if texture.color_space != ColorSpace::Unspecified
+            || texture.controls.is_some()
+            || texture.sampler != Sampler::default()
+        {
+            return Err(Error::new("world.images.sampling", "lightmap and light-cookie declarations have no native sampler or transfer-function fields"));
         }
     }
     Ok(())

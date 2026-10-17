@@ -5,8 +5,7 @@ use crate::model::{
     AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, Clock, ClockId, Controller,
     ControllerId, DrawAppearanceSchema, DrawSubsetId, Error, Event, EventId, FeatureId, InstanceId,
     LengthUnit, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Model,
-    ModelId, Node, NodeId, SharedClock, Skin, SkinId, SystemId, Texture, TextureId,
-    TextureTransform, TextureTransformId,
+    ModelId, Node, NodeId, SharedClock, Skin, SkinId, SystemId, Texture,
 };
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
@@ -31,6 +30,22 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
             pending_materials: BTreeSet::new(),
             pending_controllers: BTreeSet::new(),
         }
+    }
+    /// Reuses an equal image declaration when importing native indirection tables.
+    pub(crate) fn intern_image_resource(&mut self, value: P::ImageResource<'a>) -> ImageResourceId
+    where
+        P::ImageResource<'a>: PartialEq,
+    {
+        if let Some((id, _)) = self
+            .model
+            .dependencies
+            .images
+            .iter()
+            .find(|(_, existing)| **existing == value)
+        {
+            return id;
+        }
+        self.add_image_resource(value)
     }
     /// Adds an independent image dependency declaration.
     pub fn add_image_resource(&mut self, value: P::ImageResource<'a>) -> ImageResourceId {
@@ -175,10 +190,6 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     pub fn id(&self) -> ModelId {
         self.model.id()
     }
-    /// Resolves a texture defined in the draft model.
-    pub fn texture(&self, id: TextureId) -> Option<&Texture<'a, P>> {
-        self.model.texture(id)
-    }
 
     /// Begins an unpublished graph using the explicit payload vocabulary `P`.
     pub(crate) fn with_profile(name: impl Into<Cow<'a, str>>) -> Self {
@@ -187,7 +198,6 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         Self {
             model: Model {
                 dependencies: Dependencies::default(),
-                textures: Table::default(),
                 scope,
                 id,
                 name: name.into(),
@@ -210,7 +220,6 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
                 instances: Table::default(),
                 clocks: Table::default(),
                 controllers: Table::default(),
-                texture_transforms: Table::default(),
             },
             pending_nodes: BTreeSet::new(),
             pending_features: BTreeMap::new(),
@@ -223,27 +232,6 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         let id = self.model.scope.allocate();
         self.pending_nodes.insert(id);
         id
-    }
-    /// Adds an independently shared texture-coordinate transform.
-    pub fn add_texture_transform(
-        &mut self,
-        value: TextureTransform,
-    ) -> Result<TextureTransformId, Error> {
-        Ok(self.model.texture_transforms.add(&self.model.scope, value))
-    }
-    /// Replaces a shared texture-coordinate transform belonging to this graph.
-    pub fn set_texture_transform(
-        &mut self,
-        id: TextureTransformId,
-        value: TextureTransform,
-    ) -> Result<(), Error> {
-        let target = self
-            .model
-            .texture_transforms
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("transform", "unknown identity"))?;
-        *target = value;
-        Ok(())
     }
     /// Reserves a animation controller identity for forward references; publication requires its definition.
     pub fn reserve_controller(&mut self) -> ControllerId {
@@ -659,10 +647,6 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         }
         self.model.materials.replace(id, value, "material")
     }
-    /// Replaces a draft texture; publication validates its data and relationships.
-    pub fn set_texture(&mut self, id: TextureId, value: Texture<'a, P>) -> Result<(), Error> {
-        self.model.textures.replace(id, value, "texture")
-    }
     /// Replaces a draft clip; publication validates its data and relationships.
     pub fn set_clip(&mut self, id: ClipId, value: Clip<'a, P>) -> Result<(), Error> {
         self.model.clips.replace(id, value, "clip")
@@ -696,17 +680,13 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         Ok(self.model.materials.add(&self.model.scope, value))
     }
     /// Declares a path image and a texture using its default interpretation.
-    pub fn add_file_texture(&mut self, path: &'a str) -> Result<TextureId, Error>
+    pub fn add_file_texture(&mut self, path: &'a str) -> Result<Texture, Error>
     where
         P::ImageResource<'a>: From<PathResource<'a>>,
     {
         let resource =
             self.add_image_resource(PathResource::Path(Cow::Borrowed(path.as_bytes())).into());
-        self.add_texture(Texture::new(resource))
-    }
-    /// Adds a texture resource to the draft; publication validates its values and relationships.
-    pub fn add_texture(&mut self, value: Texture<'a, P>) -> Result<TextureId, Error> {
-        Ok(self.model.textures.add(&self.model.scope, value))
+        Ok(Texture::new(resource))
     }
     /// Adds a playback clip to the draft; publication validates its values and relationships.
     pub fn add_clip(&mut self, value: Clip<'a, P>) -> Result<ClipId, Error> {
@@ -798,10 +778,6 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         self.pending_materials.remove(&id);
         self.model.materials.remove(&id)
     }
-    /// Removes this texture from the draft; publication rejects references left pointing to it.
-    pub fn remove_texture(&mut self, id: TextureId) -> Option<Texture<'a, P>> {
-        self.model.textures.remove(&id)
-    }
     /// Removes this clip from the draft; publication rejects references left pointing to it.
     pub fn remove_clip(&mut self, id: ClipId) -> Option<Clip<'a, P>> {
         self.model.clips.remove(&id)
@@ -822,10 +798,6 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     pub fn remove_controller(&mut self, id: ControllerId) -> Option<Controller<'a, P>> {
         self.pending_controllers.remove(&id);
         self.model.controllers.remove(&id)
-    }
-    /// Removes this transform from the draft; publication rejects references left pointing to it.
-    pub fn remove_texture_transform(&mut self, id: TextureTransformId) -> Option<TextureTransform> {
-        self.model.texture_transforms.remove(&id)
     }
     /// Removes this system from the draft; publication rejects references left pointing to it.
     pub fn remove_system(&mut self, id: SystemId) -> Option<P::System<'a>> {

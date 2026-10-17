@@ -2,8 +2,18 @@
 use crate::model::profiles::M2;
 use crate::model::{Error, Model};
 pub(super) fn resources(resources: &Model<'_, M2>) -> Result<(), Error> {
-    use crate::model::{AddressMode, ColorSpace, M2ImageResource};
-    for (_, texture) in resources.textures() {
+    use crate::model::{AddressMode, ColorSpace, M2ImageResource, Sampler};
+    for texture in resources.sampled_images() {
+        let controls = texture.m2_controls()?;
+        if let Some(path) = controls.path {
+            if !matches!(resources.image_resource(path), Some(M2ImageResource::Path(bytes)) if !bytes.is_empty() && !bytes.contains(&0))
+            {
+                return Err(Error::new(
+                    "m2.texture.path",
+                    "alternate filenames require nonempty path dependencies without NUL",
+                ));
+            }
+        }
         if !matches!(
             resources
                 .image_resource(texture.resource)
@@ -17,7 +27,7 @@ pub(super) fn resources(resources: &Model<'_, M2>) -> Result<(), Error> {
                 "textures require a filename, nonzero file-data key, or nonzero replacement category",
             ));
         }
-        if texture.controls.path.is_some()
+        if texture.m2_controls()?.path.is_some()
             && matches!(
                 resources
                     .image_resource(texture.resource)
@@ -43,6 +53,22 @@ pub(super) fn resources(resources: &Model<'_, M2>) -> Result<(), Error> {
                 "m2.texture.sampler",
                 "texture definitions support repeat or clamp addressing",
             ));
+        }
+    }
+    for (_, feature) in resources.features() {
+        if let super::ActorKind::Particle(particle) = &feature.payload {
+            if particle
+                .details
+                .rendering
+                .textures
+                .iter()
+                .any(|image| image.sampler != Sampler::default())
+            {
+                return Err(Error::new(
+                    "m2.particle.sampler",
+                    "native age-driven particles repeat both texture axes",
+                ));
+            }
         }
     }
     Ok(())

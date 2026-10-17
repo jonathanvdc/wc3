@@ -12,7 +12,7 @@ use crate::model::{
     ParticleLifetime, ParticleMotion, StagedParticleAppearance,
 };
 use crate::model::{Axis, SocketDefinition};
-use crate::model::{Clock, ClockId, Event, MaterialId, ModelBuilder, NodeId, TextureId, Time};
+use crate::model::{Clock, ClockId, Event, MaterialId, ModelBuilder, NodeId, Texture, Time};
 use crate::model::{GravityTrailControls, LayeredTrailRendering, TrailAppearance, TrailGeometry};
 use crate::model::{MdlxImageResource, ParticleResource, PathResource};
 use std::collections::BTreeMap;
@@ -22,7 +22,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
     source: &'source native::Document<'_, D>,
     builder: &mut ModelBuilder<'a, Mdlx>,
     ids: &BTreeMap<u32, NodeId>,
-    textures: &[TextureId],
+    textures: &[Texture],
     materials: &[MaterialId],
     globals: &[ClockId],
     profile: &mut ImportState<'a>,

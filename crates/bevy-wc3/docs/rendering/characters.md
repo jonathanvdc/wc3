@@ -25,7 +25,7 @@ The resulting `CharacterDefinition` names model resources, native geosets,
 replacement categories and additional parts. Applications can construct it
 directly. Resolved `wow::ModelPart`s have no inventory-slot requirement, so one
 selection can contribute several models or auxiliary components. Numeric native
-categories are translated into scoped `DrawId` and `TextureId` selections before
+categories are translated into scoped `DrawId` and sampled-image selections before
 compilation. Atlas plans and pixels use types from `bevy_wc3::assembly`.
 
 ## Interpret native model structure

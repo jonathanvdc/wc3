@@ -94,7 +94,7 @@ impl RuntimeParticles {
         placements: &HashMap<FeatureId, CoordinatePolicy>,
     ) -> Self {
         let age = RuntimeAgeSprites::compile(model, nodes, images, materials);
-        let atlas = RuntimeAtlasParticles::compile(model, nodes, images.color_images());
+        let atlas = RuntimeAtlasParticles::compile(model, nodes, images);
         let ribbons = RuntimeRibbons::compile(model, nodes, materials);
         let models = RuntimeModelParticles::compile(model, nodes, children, placements);
         let beams = RuntimeProgrammedRibbons::compile(model, nodes, materials);

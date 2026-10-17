@@ -13,7 +13,7 @@ use crate::model::values::programmed::*;
 use crate::model::ImageResourceId;
 use crate::model::ModelResourceId;
 use crate::model::{
-    Animated, FeatureId, Link, MaterialId, MeshId, TextureId, ValidateLinks, ZeroVec,
+    Animated, FeatureId, Link, MaterialId, MeshId, Texture, ValidateLinks, ZeroVec,
 };
 use std::borrow::Cow;
 /// Animated scalar in the model's clock, retaining programmed reset values.
@@ -417,7 +417,7 @@ pub struct AtlasParticleRendering {
     /// Trail time span in seconds.
     pub tail_length: f32,
     /// Atlas texture resource.
-    pub texture: Option<TextureId>,
+    pub texture: Option<Texture>,
     /// Render-order priority.
     pub priority_plane: u32,
     /// External replaceable-texture category.
@@ -451,7 +451,7 @@ pub struct AgeDrivenParticleRendering {
     /// External particle-color table category.
     pub color_index: u16,
     /// Ordered particle texture resources.
-    pub textures: Vec<TextureId>,
+    pub textures: Vec<Texture>,
     /// Native texture-program selectors, when an emitter has a container-level
     /// combiner programme. Byte meanings remain opaque; absence selects the
     /// baseline texture path rather than discarding an unknown programme.

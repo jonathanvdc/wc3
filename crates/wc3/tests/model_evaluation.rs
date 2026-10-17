@@ -62,7 +62,7 @@ fn standing_snapshot_retains_bindings_and_supports_editable_geometry_without_ima
             let surface = LayeredSurface::try_from(material.surface.clone()).unwrap();
             let frozen = surface.sampled(&sample);
             let texture = frozen.layers[0].binding.image.default.unwrap();
-            assert!(model.texture(texture).is_some());
+            assert!(model.image_resource(texture.resource).is_some());
             assert!(frozen.layers[0].binding.image.binding.is_none());
             let tint = appearances
                 .get(&instance.mesh)
@@ -275,7 +275,7 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
     let material_id = model.materials().iter().next().unwrap().0;
     let opacity = Layer(0).opacity().bind(material_id).widen();
     let selection = Layer(0).texture().bind(material_id).widen();
-    let texture = model.textures().iter().next().unwrap().0;
+    let texture = model.sampled_images()[0];
     let mut material = model.material(material_id).unwrap().clone();
     let mut surface = LayeredSurface::try_from(material.surface.clone()).unwrap();
     surface.layers[0].opacity = Animated::new(1., opacity.clone());

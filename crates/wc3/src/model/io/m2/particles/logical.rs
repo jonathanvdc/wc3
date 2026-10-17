@@ -1,5 +1,6 @@
 //! Native particle fields mapped directly into independent authoring state.
 use super::*;
+use crate::model::io::m2::graph::texture_index;
 use crate::model::io::{materialize, owned};
 use crate::model::{self as semantic, profiles::m2 as profile, Animated, Curve, Time};
 use crate::model::{
@@ -194,7 +195,7 @@ impl LogicalAge for native::records::LegacyParticleLifetime {
 }
 pub(super) fn read<'a, 'data: 'a, V: ModelLayout>(
     value: &'a native::records::ParticleEmitter<'data, V>,
-    textures: &[semantic::TextureId],
+    textures: &[semantic::Texture],
     builder: &mut semantic::ModelBuilder<'a, semantic::profiles::M2>,
 ) -> Result<profile::Particle<'a>, Error>
 where
@@ -233,6 +234,10 @@ where
             textures
                 .get(i as usize)
                 .copied()
+                .map(|mut image| {
+                    image.sampler = semantic::Sampler::default();
+                    image
+                })
                 .ok_or_else(|| Error::new("m2.particle.texture", "missing texture resource"))
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -353,7 +358,7 @@ fn encode_age<T: semantic::CurveValue, U: Value>(
 }
 pub(super) fn write<V: ModelLayout>(
     payload: &profile::Particle<'_>,
-    textures: &[semantic::TextureId],
+    textures: &[semantic::Texture],
     context: &mut Context,
     model: &semantic::Model<'_, semantic::profiles::M2>,
 ) -> Result<native::records::ParticleEmitter<'static, V>, Error>
@@ -380,9 +385,7 @@ where
         .textures
         .iter()
         .map(|id| {
-            textures
-                .iter()
-                .position(|t| t == id)
+            texture_index(model, textures, *id)
                 .ok_or_else(|| Error::new("m2.particle.texture", "missing texture resource"))
         })
         .collect::<Result<Vec<_>, _>>()?;

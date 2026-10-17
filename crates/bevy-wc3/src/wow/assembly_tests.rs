@@ -38,7 +38,7 @@ fn model(name: &str, geosets: &[u16]) -> (Model<'static>, NodeId) {
         builder.add_image_resource(wc3::model::ImageResource::Path("unused".as_bytes().into())),
     );
     texture.resource = builder.add_image_resource(ImageResource::Replaceable(1));
-    let texture = builder.add_texture(texture).unwrap();
+
     for geoset in geosets {
         let mut geometry =
             GeometryData::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]])
@@ -221,7 +221,7 @@ fn hidden_hair_texture_is_optional_but_selected_missing_texture_is_an_error() {
     body.edit(|draft| {
         let resource = draft.add_image_resource(ImageResource::Replaceable(6));
         let texture = Texture::new(resource);
-        let texture = draft.add_texture(texture)?;
+
         for (id, mut material) in hidden_materials {
             for pass in &mut material.surface.steps {
                 if let MaterialStep::M2(surface) = pass {

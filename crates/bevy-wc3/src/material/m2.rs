@@ -196,8 +196,12 @@ pub(super) fn compile_m2(
                 {
                     pass.secondary_coordinate = Some(source);
                 }
-                pass.state.secondary =
-                    image(model, input.image.texture, images, &mut pass.diagnostics)?;
+                pass.state.secondary = image(
+                    model,
+                    input.image.texture,
+                    &images.slot(slot as u32),
+                    &mut pass.diagnostics,
+                )?;
                 if !environment {
                     let mut scratch = SurfacePass::default();
                     transform(&mut scratch, &input.coordinates.transform);
@@ -222,8 +226,12 @@ pub(super) fn compile_m2(
                 if matches!(route, 1 | 3) {
                     pass.third_coordinate = Some(source);
                 }
-                pass.state.tertiary =
-                    image(model, input.image.texture, images, &mut pass.diagnostics)?;
+                pass.state.tertiary = image(
+                    model,
+                    input.image.texture,
+                    &images.slot(slot as u32),
+                    &mut pass.diagnostics,
+                )?;
                 if !environment {
                     let mut scratch = SurfacePass::default();
                     transform(&mut scratch, &input.coordinates.transform);
@@ -237,8 +245,12 @@ pub(super) fn compile_m2(
                 if route == 3 && pass.third_coordinate.is_none() {
                     pass.third_coordinate = Some(input.coordinates.source as u32);
                 }
-                pass.state.fourth =
-                    image(model, input.image.texture, images, &mut pass.diagnostics)?;
+                pass.state.fourth = image(
+                    model,
+                    input.image.texture,
+                    &images.slot(slot as u32),
+                    &mut pass.diagnostics,
+                )?;
                 let mut scratch = SurfacePass::default();
                 transform(&mut scratch, &input.coordinates.transform);
                 pass.state.combiner.fourth_transform = Mat3::from(scratch.material.uv_transform);

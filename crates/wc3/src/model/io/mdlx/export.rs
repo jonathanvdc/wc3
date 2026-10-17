@@ -71,15 +71,28 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     result.set_sequences(sequences);
     let mut textures = Vec::new();
     let mut texture_ids = BTreeMap::new();
-    for (id, source) in asset.textures() {
-        texture_ids.insert(id, textures.len() as u32);
-        let metadata = &source.controls;
+    for source in asset.sampled_images() {
+        let id = source;
+        let metadata = source.mdlx_controls()?;
         let path: &[u8] = match asset
             .image_resource(source.resource)
             .expect("validated image")
         {
             MdlxImageResource::Path(bytes) => bytes.as_ref(),
-            MdlxImageResource::Replaceable(_) => metadata.fallback_path.as_ref(),
+            MdlxImageResource::Replaceable(_) => match metadata.fallback_path.map(|id| {
+                asset
+                    .image_resource(id)
+                    .expect("validated fallback filename")
+            }) {
+                Some(MdlxImageResource::Path(path)) => path.as_ref(),
+                Some(_) => {
+                    return Err(Error::new(
+                        "texture.fallback_path",
+                        "fallback filename requires a path resource",
+                    ))
+                }
+                None => &[],
+            },
         };
         if path.len() > 260 || path.contains(&0) {
             return Err(Error::new(
@@ -113,7 +126,14 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
         value
             .flags
             .set_wrap_height(source.sampler.v == AddressMode::Repeat);
-        textures.push(value);
+        let index = textures
+            .iter()
+            .position(|existing| existing == &value)
+            .unwrap_or_else(|| {
+                textures.push(value);
+                textures.len() - 1
+            });
+        texture_ids.insert(id, index as u32);
     }
     result.set_textures(textures);
     let mut encoder = Encoder {
@@ -124,6 +144,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
         used: Default::default(),
     };
     let mut materials = Vec::new();
+    let mut transforms = Vec::new();
     let mut material_ids = BTreeMap::new();
     for (id, source) in model.materials() {
         material_ids.insert(id, materials.len() as u32);
@@ -131,10 +152,12 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
             &source.surface,
             &texture_ids,
             &mut encoder,
+            &mut transforms,
             "material",
         )?);
     }
     result.set_materials(materials);
+    result.set_texture_animations(transforms);
     let node_ids: BTreeMap<NodeId, u32> = model
         .nodes()
         .iter()

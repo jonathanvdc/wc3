@@ -1,11 +1,11 @@
 //! Texture sampling and independent producer options have separate authorities.
+use crate::model::ImageResourceId;
 use crate::model::{Link, ValidateLinks};
 use bitfield::bitfield;
-use std::borrow::Cow;
 
 bitfield! {
     /// Producer options outside the common sampler's U and V address selections.
-    #[derive(Clone,Copy,Debug,Default,PartialEq,Eq)]
+    #[derive(Clone,Copy,Debug,Default,PartialEq,Eq,PartialOrd,Ord,Hash)]
     pub struct SupplementalTextureFlags(u32);
     /// Retained producer option bits.
     pub bits,_:31,0;
@@ -17,16 +17,17 @@ impl SupplementalTextureFlags {
     }
 }
 /// Owner-local options of a World of Warcraft texture definition.
-#[derive(Clone, Debug, Default)]
-pub struct TextureControls<'a> {
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TextureControls {
     /// Separately declared filename paired with a numeric or replacement identity.
-    pub path: Option<Cow<'a, [u8]>>,
+    pub path: Option<ImageResourceId>,
     /// Producer options independent of address modes.
     pub flags: SupplementalTextureFlags,
 }
-impl ValidateLinks for TextureControls<'_> {
+impl ValidateLinks for TextureControls {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        if self.flags.bits() & 3 != 0 || self.path.as_ref().is_some_and(|path| path.is_empty()) {
+        self.path.visit_links(visitor);
+        if self.flags.bits() & 3 != 0 {
             visitor(Link::InvalidValue);
         }
     }

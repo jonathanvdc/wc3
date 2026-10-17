@@ -6,18 +6,18 @@ use crate::model::{
     AppearanceSchema as _, AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, ClockId,
     Controller, ControllerId, Error, Event, EventId, FeatureId, InstanceId, LengthUnit, Look,
     LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, ModelId, Node, NodeId, Skin, SkinId,
-    SystemId, TextureTransform, TextureTransformId, Time,
+    SystemId, Time,
 };
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
 };
 use crate::model::{
     ClipObject, ClockObject, ControllerObject, FeatureObject, InstanceObject, MaterialObject,
-    MeshObject, NodeObject, SkinObject, SystemObject, TextureObject, TextureTransformObject,
+    MeshObject, NodeObject, SkinObject, SystemObject,
 };
-use crate::model::{Dependencies, Table};
-use crate::model::{Texture, TextureId};
+use crate::model::{Dependencies, Link, Table, Texture, ValidateLinks as _};
 use std::borrow::Cow;
+use std::collections::HashSet;
 /// A repeating or frozen clock shared by animation channels.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SharedClock {
@@ -42,7 +42,6 @@ impl SharedClock {
 #[derive(Clone, Debug)]
 pub struct Model<'a, P: Profile = Universal> {
     dependencies: Dependencies<'a, P>,
-    textures: Table<TextureObject, Texture<'a, P>>,
     scope: Scope,
     id: ModelId,
     name: Cow<'a, str>,
@@ -65,7 +64,6 @@ pub struct Model<'a, P: Profile = Universal> {
     instances: Table<InstanceObject, MeshInstance<'a, P>>,
     clocks: Table<ClockObject, SharedClock>,
     controllers: Table<ControllerObject, Controller<'a, P>>,
-    texture_transforms: Table<TextureTransformObject, TextureTransform>,
 }
 impl<'a, P: Profile> Model<'a, P> {
     /// External dependency declarations owned by this model.
@@ -95,13 +93,61 @@ impl<'a, P: Profile> Model<'a, P> {
     ) -> Option<&P::BoneOverrideResource<'a>> {
         self.dependencies.bone_overrides.get(id)
     }
-    /// Resolves a texture identity in this model.
-    pub fn texture(&self, id: TextureId) -> Option<&Texture<'a, P>> {
-        self.textures.get(id)
-    }
-    /// Texture definitions in stable identity order.
-    pub fn textures(&self) -> &Table<TextureObject, Texture<'a, P>> {
-        &self.textures
+    /// Complete sampled image values used by material, effect, and animation inputs.
+    /// Repeated values are returned once; no shared editable texture objects are created.
+    pub fn sampled_images(&self) -> Vec<Texture> {
+        let mut images = Vec::new();
+        let mut seen = HashSet::new();
+        let mut visit = |link| {
+            if let Link::SampledImage(image) = link {
+                if seen.insert(image) {
+                    images.push(image);
+                }
+            }
+        };
+        for material in self.materials.values() {
+            material.surface.visit_links(&mut visit);
+        }
+        for feature in self.features.values() {
+            feature.payload.visit_links(&mut visit);
+        }
+        self.metadata.visit_links(&mut visit);
+        self.appearance.visit_links(&mut visit);
+        for node in self.nodes.values() {
+            node.controls.visit_links(&mut visit);
+        }
+        for skin in self.skins.values() {
+            skin.binding.visit_links(&mut visit);
+        }
+        for mesh in self.meshes.values() {
+            mesh.controls.visit_links(&mut visit);
+            mesh.geometry.visit_links(&mut visit);
+        }
+        for instance in self.instances.values() {
+            instance.controls.visit_links(&mut visit);
+            for draw in &instance.draws {
+                draw.controls.visit_links(&mut visit);
+            }
+        }
+        for system in self.systems.values() {
+            system.visit_links(&mut visit);
+        }
+        for channel in self.timeline_channels.iter().chain(&self.shared_channels) {
+            channel.visit_links(&mut visit);
+        }
+        for clip in self.clips.values() {
+            clip.controls.visit_links(&mut visit);
+            for channel in clip.channels() {
+                channel.visit_links(&mut visit);
+            }
+        }
+        for controller in self.controllers.values() {
+            controller.controls.visit_links(&mut visit);
+            for channel in &controller.channels {
+                channel.visit_links(&mut visit);
+            }
+        }
+        images
     }
     /// Edits a draft and publishes it only after the complete model validates.
     pub fn edit<R>(
@@ -174,14 +220,6 @@ impl<'a, P: Profile> Model<'a, P> {
     /// Resolves an independent scene system belonging to this graph.
     pub fn system(&self, id: SystemId) -> Option<&P::System<'a>> {
         self.systems.get(id)
-    }
-    /// Shared texture-coordinate transform definitions in stable identity order.
-    pub fn texture_transforms(&self) -> &Table<TextureTransformObject, TextureTransform> {
-        &self.texture_transforms
-    }
-    /// Resolves a shared texture-coordinate transform belonging to this graph.
-    pub fn texture_transform(&self, id: TextureTransformId) -> Option<&TextureTransform> {
-        self.texture_transforms.get(id)
     }
     /// Animation controller definitions in stable identity order.
     pub fn controllers(&self) -> &Table<ControllerObject, Controller<'a, P>> {

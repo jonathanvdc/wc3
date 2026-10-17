@@ -3,9 +3,11 @@ use super::{Blend, MaterialRasterization, ShaderOverrides};
 use crate::model::materials::bindings::TextureBinding;
 use crate::model::materials::state::PassState;
 use crate::model::profiles::SurfacePayload;
-use crate::model::{Error, Link, PropertyIdentityKey, TextureId, ValidateLinks};
+use crate::model::{Error, ImageResourceId, Link, PropertyIdentityKey, Sampler, ValidateLinks};
 use std::borrow::Cow;
 
+/// A world shader image input with complete, independently owned address behavior.
+pub type ImageInput = TextureBinding<Option<ImageResourceId>, (), Sampler>;
 /// Material-wide draw, lighting, and retained native declarations.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct MaterialDeclaration<'a> {
@@ -38,9 +40,9 @@ pub struct DiffuseMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
     /// The diffuse shader input.
-    pub diffuse: TextureBinding<Option<TextureId>>,
+    pub diffuse: ImageInput,
     /// Authored trailing bindings not sampled by this equation.
-    pub unused_inputs: Vec<TextureBinding<Option<TextureId>>>,
+    pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO DiffuseWithoutTextureAlpha equation.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -48,9 +50,9 @@ pub struct DiffuseWithoutTextureAlphaMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
     /// The diffuse shader input.
-    pub diffuse: TextureBinding<Option<TextureId>>,
+    pub diffuse: ImageInput,
     /// Authored trailing bindings not sampled by this equation.
-    pub unused_inputs: Vec<TextureBinding<Option<TextureId>>>,
+    pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO ReflectionEmission equation.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -58,11 +60,11 @@ pub struct ReflectionEmissionMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
     /// The diffuse shader input.
-    pub diffuse: TextureBinding<Option<TextureId>>,
+    pub diffuse: ImageInput,
     /// The reflection shader input.
-    pub reflection: TextureBinding<Option<TextureId>>,
+    pub reflection: ImageInput,
     /// Authored trailing bindings not sampled by this equation.
-    pub unused_inputs: Vec<TextureBinding<Option<TextureId>>>,
+    pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO DiffuseWeightedReflectionEmission equation.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -70,11 +72,11 @@ pub struct DiffuseWeightedReflectionEmissionMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
     /// The diffuse shader input.
-    pub diffuse: TextureBinding<Option<TextureId>>,
+    pub diffuse: ImageInput,
     /// The reflection shader input.
-    pub reflection: TextureBinding<Option<TextureId>>,
+    pub reflection: ImageInput,
     /// Authored trailing bindings not sampled by this equation.
-    pub unused_inputs: Vec<TextureBinding<Option<TextureId>>>,
+    pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO LayeredDiffuse equation.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -82,11 +84,11 @@ pub struct LayeredDiffuseMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
     /// The diffuse shader input.
-    pub diffuse: TextureBinding<Option<TextureId>>,
+    pub diffuse: ImageInput,
     /// The secondary diffuse shader input.
-    pub secondary_diffuse: TextureBinding<Option<TextureId>>,
+    pub secondary_diffuse: ImageInput,
     /// Authored trailing bindings not sampled by this equation.
-    pub unused_inputs: Vec<TextureBinding<Option<TextureId>>>,
+    pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO MaskedEmission equation.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -94,11 +96,11 @@ pub struct MaskedEmissionMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
     /// The diffuse shader input.
-    pub diffuse: TextureBinding<Option<TextureId>>,
+    pub diffuse: ImageInput,
     /// The emission shader input.
-    pub emission: TextureBinding<Option<TextureId>>,
+    pub emission: ImageInput,
     /// Authored trailing bindings not sampled by this equation.
-    pub unused_inputs: Vec<TextureBinding<Option<TextureId>>>,
+    pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO MaskedDiffuseModulationReflection equation.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -106,13 +108,13 @@ pub struct MaskedDiffuseModulationReflectionMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
     /// The diffuse shader input.
-    pub diffuse: TextureBinding<Option<TextureId>>,
+    pub diffuse: ImageInput,
     /// The reflection shader input.
-    pub reflection: TextureBinding<Option<TextureId>>,
+    pub reflection: ImageInput,
     /// The secondary diffuse shader input.
-    pub secondary_diffuse: TextureBinding<Option<TextureId>>,
+    pub secondary_diffuse: ImageInput,
     /// Authored trailing bindings not sampled by this equation.
-    pub unused_inputs: Vec<TextureBinding<Option<TextureId>>>,
+    pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO DiffuseMultipleEmission equation.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -120,13 +122,13 @@ pub struct DiffuseMultipleEmissionMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
     /// The diffuse shader input.
-    pub diffuse: TextureBinding<Option<TextureId>>,
+    pub diffuse: ImageInput,
     /// The reflection shader input.
-    pub reflection: TextureBinding<Option<TextureId>>,
+    pub reflection: ImageInput,
     /// The emission shader input.
-    pub emission: TextureBinding<Option<TextureId>>,
+    pub emission: ImageInput,
     /// Authored trailing bindings not sampled by this equation.
-    pub unused_inputs: Vec<TextureBinding<Option<TextureId>>>,
+    pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO OpaqueLayeredDiffuse equation.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -134,11 +136,11 @@ pub struct OpaqueLayeredDiffuseMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
     /// The diffuse shader input.
-    pub diffuse: TextureBinding<Option<TextureId>>,
+    pub diffuse: ImageInput,
     /// The secondary diffuse shader input.
-    pub secondary_diffuse: TextureBinding<Option<TextureId>>,
+    pub secondary_diffuse: ImageInput,
     /// Authored trailing bindings not sampled by this equation.
-    pub unused_inputs: Vec<TextureBinding<Option<TextureId>>>,
+    pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO LayeredDiffuseEmission equation.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -146,11 +148,11 @@ pub struct LayeredDiffuseEmissionMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
     /// The diffuse shader input.
-    pub diffuse: TextureBinding<Option<TextureId>>,
+    pub diffuse: ImageInput,
     /// The secondary diffuse shader input.
-    pub secondary_diffuse: TextureBinding<Option<TextureId>>,
+    pub secondary_diffuse: ImageInput,
     /// Authored trailing bindings not sampled by this equation.
-    pub unused_inputs: Vec<TextureBinding<Option<TextureId>>>,
+    pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO MaskedDiffuseModulation equation.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -158,13 +160,13 @@ pub struct MaskedDiffuseModulationMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
     /// The diffuse shader input.
-    pub diffuse: TextureBinding<Option<TextureId>>,
+    pub diffuse: ImageInput,
     /// The reflection shader input.
-    pub reflection: TextureBinding<Option<TextureId>>,
+    pub reflection: ImageInput,
     /// The modulation shader input.
-    pub modulation: TextureBinding<Option<TextureId>>,
+    pub modulation: ImageInput,
     /// Authored trailing bindings not sampled by this equation.
-    pub unused_inputs: Vec<TextureBinding<Option<TextureId>>>,
+    pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO LayeredDiffuseModulation equation.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -172,13 +174,13 @@ pub struct LayeredDiffuseModulationMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
     /// The diffuse shader input.
-    pub diffuse: TextureBinding<Option<TextureId>>,
+    pub diffuse: ImageInput,
     /// The secondary diffuse shader input.
-    pub secondary_diffuse: TextureBinding<Option<TextureId>>,
+    pub secondary_diffuse: ImageInput,
     /// The modulation shader input.
-    pub modulation: TextureBinding<Option<TextureId>>,
+    pub modulation: ImageInput,
     /// Authored trailing bindings not sampled by this equation.
-    pub unused_inputs: Vec<TextureBinding<Option<TextureId>>>,
+    pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO DiffuseModulation equation.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -186,11 +188,11 @@ pub struct DiffuseModulationMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
     /// The diffuse shader input.
-    pub diffuse: TextureBinding<Option<TextureId>>,
+    pub diffuse: ImageInput,
     /// The modulation shader input.
-    pub modulation: TextureBinding<Option<TextureId>>,
+    pub modulation: ImageInput,
     /// Authored trailing bindings not sampled by this equation.
-    pub unused_inputs: Vec<TextureBinding<Option<TextureId>>>,
+    pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO TextureMaskedLayeredModulation equation.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -198,13 +200,13 @@ pub struct TextureMaskedLayeredModulationMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
     /// The diffuse shader input.
-    pub diffuse: TextureBinding<Option<TextureId>>,
+    pub diffuse: ImageInput,
     /// The secondary diffuse shader input.
-    pub secondary_diffuse: TextureBinding<Option<TextureId>>,
+    pub secondary_diffuse: ImageInput,
     /// The modulation mask shader input.
-    pub modulation_mask: TextureBinding<Option<TextureId>>,
+    pub modulation_mask: ImageInput,
     /// Authored trailing bindings not sampled by this equation.
-    pub unused_inputs: Vec<TextureBinding<Option<TextureId>>>,
+    pub unused_inputs: Vec<ImageInput>,
 }
 /// A shader whose complete input contract is not interpreted.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -214,7 +216,7 @@ pub struct UnresolvedMaterialStep<'a> {
     /// Raw native shader selection.
     pub shader: Option<u32>,
     /// Complete ordered input bindings.
-    pub textures: Vec<TextureBinding<Option<TextureId>>>,
+    pub textures: Vec<ImageInput>,
 }
 /// One WMO shader equation and its named inputs.
 #[derive(Clone, Debug, PartialEq)]
@@ -260,7 +262,7 @@ impl<'a> MaterialStep<'a> {
     pub fn from_native(
         shader: Option<u32>,
         declaration: MaterialDeclaration<'a>,
-        textures: Vec<TextureBinding<Option<TextureId>>>,
+        textures: Vec<ImageInput>,
     ) -> Self {
         let mut inputs = textures.into_iter();
         match shader {
@@ -562,7 +564,7 @@ impl<'a> MaterialStep<'a> {
         }
     }
     /// Texture bindings in stable shader-slot order, including unused authored bindings.
-    pub fn inputs(&self) -> Vec<&TextureBinding<Option<TextureId>>> {
+    pub fn inputs(&self) -> Vec<&ImageInput> {
         match self {
             Self::Diffuse(v) => {
                 let mut inputs = vec![&v.diffuse];

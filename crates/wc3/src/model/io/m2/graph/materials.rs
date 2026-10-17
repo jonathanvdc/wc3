@@ -63,35 +63,42 @@ where
                         fixed_alpha,
                     )?,
                 });
-                let transform = u16::try_from(core.texture_transforms.len())
-                    .map_err(|_| Error::new("m2.material.transform", "too many transforms"))?;
-                core.texture_transforms
-                    .push(native::records::TextureTransform {
-                        translation: animated(
-                            model,
-                            &unit.coordinates.transform.translation,
-                            starts,
-                            globals,
-                            context,
-                            |v, _| Ok(v),
-                        )?,
-                        rotation: animated(
-                            model,
-                            &unit.coordinates.transform.rotation,
-                            starts,
-                            globals,
-                            context,
-                            |v, _| Ok(v.components()),
-                        )?,
-                        scaling: animated(
-                            model,
-                            &unit.coordinates.transform.scale,
-                            starts,
-                            globals,
-                            context,
-                            |v, _| Ok(v),
-                        )?,
+                let encoded = native::records::TextureTransform {
+                    translation: animated(
+                        model,
+                        &unit.coordinates.transform.translation,
+                        starts,
+                        globals,
+                        context,
+                        |v, _| Ok(v),
+                    )?,
+                    rotation: animated(
+                        model,
+                        &unit.coordinates.transform.rotation,
+                        starts,
+                        globals,
+                        context,
+                        |v, _| Ok(v.components()),
+                    )?,
+                    scaling: animated(
+                        model,
+                        &unit.coordinates.transform.scale,
+                        starts,
+                        globals,
+                        context,
+                        |v, _| Ok(v),
+                    )?,
+                };
+                let index = core
+                    .texture_transforms
+                    .iter()
+                    .position(|value| value == &encoded)
+                    .unwrap_or_else(|| {
+                        core.texture_transforms.push(encoded);
+                        core.texture_transforms.len() - 1
                     });
+                let transform = u16::try_from(index)
+                    .map_err(|_| Error::new("m2.material.transform", "too many transforms"))?;
                 units.push((weight, transform))
             }
             controls.insert((id, step_index), Controls { color, units });

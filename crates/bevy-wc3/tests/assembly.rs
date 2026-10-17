@@ -8,7 +8,7 @@ use bevy_wc3::{BakeSpace, ModelError, PartBinding, PoseBaker, PoseOptions};
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::{
     Animated, Draw, GeometryData, ImageResource, Material, MaterialSurface, Mesh as ModelMesh,
-    MeshInstance, Model, ModelMount, MountTarget, Node, NodeId, ResourceLocator, TextureId,
+    MeshInstance, Model, ModelMount, MountTarget, Node, NodeId, ResourceLocator, Texture,
     Transform as ModelTransform,
 };
 
@@ -18,7 +18,7 @@ fn resource(name: &'static str) -> ResourceLocator<'static> {
         name: name.into(),
     }
 }
-fn model(textured: bool) -> (Model<'static>, NodeId, Option<TextureId>) {
+fn model(textured: bool) -> (Model<'static>, NodeId, Option<Texture>) {
     let mut builder = Model::builder("application-authored machine");
     let node = builder.add_node(Node::named("mounting frame")).unwrap();
     let texture = textured.then(|| builder.add_file_texture("original.png").unwrap());
@@ -66,7 +66,7 @@ struct Configuration {
 }
 struct Workshop {
     mounting_frame: NodeId,
-    paint: TextureId,
+    paint: Texture,
 }
 impl Resolver<Configuration> for Workshop {
     type Error = ModelError;
@@ -80,8 +80,8 @@ impl Resolver<Configuration> for Workshop {
                 Module::Sensor(offset) | Module::Counterweight(offset) => *offset,
             };
             let mut source = Source::new(resource("module"));
-            source.textures.insert(
-                self.paint,
+            source.images.insert(
+                self.paint.resource,
                 TextureReplacement::Atlas {
                     atlas: Atlas {
                         width: 1,

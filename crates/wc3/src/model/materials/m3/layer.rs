@@ -2,7 +2,7 @@
 use super::Property;
 use crate::model::materials::bindings::{Coordinates, TextureBinding};
 use crate::model::values::programmed::{ColorChannel, FresnelMode, LayerFlags, UvMappingMode};
-use crate::model::{Link, TextureId, ValidateLinks};
+use crate::model::{ImageResourceId, Link, ValidateLinks};
 /// Animated 2D, 3D, and triplanar coordinate program.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CoordinateTransform {
@@ -80,7 +80,7 @@ pub struct TextureLayer {
     pub id: u32,
     /// Image, coordinate program, playback, and color contribution.
     pub binding: TextureBinding<
-        Option<TextureId>,
+        Option<ImageResourceId>,
         Coordinates<UvMappingMode, CoordinateTransform>,
         SamplingProgram,
         ColorContribution,

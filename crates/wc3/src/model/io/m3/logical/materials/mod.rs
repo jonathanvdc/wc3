@@ -4,19 +4,19 @@ use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::m3::logical::GraphBuilder;
 use crate::model::{self as sem, profiles::m3 as surface};
 use native::Envelope;
-use sem::{MaterialId, TextureId};
+use sem::{ImageResourceId, MaterialId};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 /// Temporary import state; no native document is retained by the finished graph.
 pub(super) struct Reader<'a, 'draft> {
     pub builder: &'draft mut GraphBuilder<'a>,
-    pub textures: BTreeMap<&'a str, TextureId>,
+    pub textures: BTreeMap<&'a str, ImageResourceId>,
     pub materials: Vec<MaterialId>,
     pub name: Option<Cow<'a, str>>,
 }
 impl<'a> Reader<'a, '_> {
-    fn texture(&mut self, path: &'a str) -> Result<Option<TextureId>, Error> {
+    fn texture(&mut self, path: &'a str) -> Result<Option<ImageResourceId>, Error> {
         if path.is_empty() {
             return Ok(None);
         }
@@ -26,7 +26,7 @@ impl<'a> Reader<'a, '_> {
         let resource = self
             .builder
             .add_image_resource(sem::PathResource::Path(path.as_bytes().into()));
-        let id = self.builder.add_texture(sem::Texture::new(resource))?;
+        let id = resource;
         self.textures.insert(path, id);
         Ok(Some(id))
     }

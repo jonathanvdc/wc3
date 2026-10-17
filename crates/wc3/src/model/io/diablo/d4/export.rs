@@ -24,7 +24,7 @@ pub(super) fn plan(
         )?;
     }
 
-    if !asset.textures().is_empty() {
+    if !asset.sampled_images().is_empty() {
         context.unsupported("d4.resources.textures","appearance output cannot retain model texture definitions; texture inputs belong to separately planned material resources")?;
     }
     if options.look.is_some() {

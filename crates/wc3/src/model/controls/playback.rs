@@ -222,9 +222,6 @@ impl ValidateLinks for BlockControls {
                 PropertyTarget::MeshColor(id) | PropertyTarget::MeshOpacity(id) => {
                     id.visit_links(visitor)
                 }
-                PropertyTarget::TextureTranslation(id)
-                | PropertyTarget::TextureRotation(id)
-                | PropertyTarget::TextureScale(id) => id.visit_links(visitor),
                 PropertyTarget::Profile { owner, .. } => owner.visit_links(visitor),
             }
         }

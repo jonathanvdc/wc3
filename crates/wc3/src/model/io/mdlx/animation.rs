@@ -8,7 +8,7 @@ use crate::model::formats::mdlx::{
 use crate::model::profiles::Mdlx;
 use crate::model::{
     Animated, Channel, Clock, ClockId, CurveValue, ModelBuilder, Property, PropertyDescriptor,
-    Quaternion, TextureId, Track,
+    Quaternion, Texture, Track,
 };
 
 pub(super) trait Value: CurveValue {
@@ -30,7 +30,7 @@ macro_rules! value {
     )*};
 }
 value!(f32 => Scalar, [f32; 2] => Vector2, [f32; 3] => Vector3, [f32; 4] => Vector4,
-    u32 => Unsigned, i32 => Signed, TextureId => Texture, Option<TextureId> => OptionalTexture, Quaternion => Rotation);
+    u32 => Unsigned, i32 => Signed, Texture => Texture, Option<Texture> => OptionalTexture, Quaternion => Rotation);
 
 pub(super) struct Decoder<'a, 'b> {
     pub builder: &'b mut ModelBuilder<'a, Mdlx>,

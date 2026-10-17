@@ -1,17 +1,17 @@
 //! Editable model meaning, independent of native encoding and record layout.
 //!
 //! A [`Model`](crate::model::Model) owns its graph, profile-specific metadata, and
-//! texture definitions. It connects hierarchy nodes, shared geometry,
+//! image dependency declarations. It connects hierarchy nodes, shared geometry,
 //! material definitions, resource references, animation, and scene systems through scoped IDs.
 //! A [`MeshInstance`](crate::model::MeshInstance) places a mesh at a node; its [`Draw`](crate::model::Draw) values select the
 //! geometry and rendering controls for individual steps. A [`Look`](crate::model::Look) supplies a complete
-//! material assignment for those draws. Shared [`TextureTransform`](crate::model::TextureTransform) objects animate sampling
-//! coordinates independently of node placement. An [`AttachedFeature`](crate::model::AttachedFeature) gives a node an effect or behavior,
+//! material assignment for those draws. Material inputs own their animated
+//! [`TextureTransform`](crate::model::TextureTransform) values and independently select shared image resources. An [`AttachedFeature`](crate::model::AttachedFeature) gives a node an effect or behavior,
 //! while [`System`](crate::model::System) describes independently authored relationships such as physics
 //! bodies or world portals.
 //!
 //! The [`profiles::Profile`](crate::model::profiles::Profile) parameter selects the payload types allowed on these
-//! objects. `Profile::ModelMetadata` supplies model-wide declarations. Owner-local `controls` belong to their node, texture, mesh, draw,
+//! objects. `Profile::ModelMetadata` supplies model-wide declarations. Owner-local `controls` belong to their node, material input, mesh, draw,
 //! clip, or controller. Complete material surfaces and attached features use the
 //! profile's surface and feature vocabulary. Built-in profiles describe game
 //! semantics; native codec dialects separately select file layouts and revisions.

@@ -28,6 +28,8 @@ states remain separate from lighting. Per-view particle ordering changes draw
 indices rather than birth records.
 
 M2 age-driven particles sample independent color, opacity, scale, and cell curves.
+Import expands their native always-repeat addressing into each particle image
+input, independently of mesh inputs sharing the same image dependency.
 Their reusable meshes upload when population, appearance, or view changes; paused,
 unchanged frames avoid uploads. Native head and tail style bits become a semantic
 head/tail selection during import. That selection can enable either geometry,

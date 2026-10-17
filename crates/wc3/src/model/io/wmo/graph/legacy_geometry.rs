@@ -249,12 +249,12 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
                         builder.add_image_resource(WorldImageResource::EmbeddedImage {
                             bytes: Cow::Borrowed(image),
                         });
-                    region.lightmap_images.push(builder.add_texture(Texture {
+                    region.lightmap_images.push(Texture {
                         resource: image_resource,
                         controls: Default::default(),
                         color_space: ColorSpace::Unspecified,
                         sampler: Sampler::default(),
-                    })?);
+                    });
                 }
             }
             LegacyGroupChunk::Liquid(liquid) => {

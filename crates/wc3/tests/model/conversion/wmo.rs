@@ -227,7 +227,11 @@ fn edited_geometry_rebuilds_native_companions() {
     assert_eq!(positions.get(0).unwrap().unwrap(), [0.25, 0.5, 0.75]);
     assert_eq!(
         asset
-            .image_resource(asset.textures().iter().next().unwrap().1.resource)
+            .image_resource(
+                asset.materials().iter().next().unwrap().1.surface.inputs()[0]
+                    .image
+                    .unwrap()
+            )
             .unwrap(),
         &WorldImageResource::FileDataId(123)
     );

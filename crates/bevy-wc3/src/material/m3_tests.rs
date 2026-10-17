@@ -66,7 +66,7 @@ fn every_regular_role_has_a_fixed_physical_image_binding() {
     let texture = builder.add_file_texture("roles.dds").unwrap();
     let mut layer = constant([1.; 4]);
     layer.binding.sampling.flags.set_color(false);
-    layer.binding.image = Some(texture);
+    layer.binding.image = Some(texture.resource);
     let mut surface = m3::StandardMaterialStep {
         diffuse: Some(layer.clone()),
         decal_layer: Some(layer.clone()),
@@ -114,7 +114,7 @@ fn uv3_only_requests_its_raw_stream_and_pipeline_layout() {
     let mut builder = Model::builder("fourth UV");
     let texture = builder.add_file_texture("uv.dds").unwrap();
     let mut layer = constant([1.; 4]);
-    layer.binding.image = Some(texture);
+    layer.binding.image = Some(texture.resource);
     layer.binding.sampling.flags.set_color(false);
     layer.binding.coordinates.source = UvMappingMode::ExplicitUV3;
     let surface = m3::StandardMaterialStep {
@@ -180,7 +180,7 @@ fn unresolved_coordinate_generators_skip_only_the_affected_role() {
     let mut surface = m3::StandardMaterialStep::default();
     let mut layer = constant([1.; 4]);
     layer.binding.sampling.flags.set_color(false);
-    layer.binding.image = Some(texture);
+    layer.binding.image = Some(texture.resource);
     layer.binding.coordinates.source = UvMappingMode::TriPlanarWorld;
     surface.diffuse = Some(layer);
     surface.opacity.primary = Some(constant([0.5; 4]));
@@ -234,7 +234,7 @@ fn unresolved_images_use_white_diffuse_and_neutral_optional_roles() {
     let model = builder.finish().unwrap();
     let mut layer = constant([1.; 4]);
     layer.binding.sampling.flags.set_color(false);
-    layer.binding.image = Some(texture);
+    layer.binding.image = Some(texture.resource);
     layer.binding.coordinates.source = UvMappingMode::ExplicitUV3;
     let mut surface = m3::StandardMaterialStep {
         diffuse: Some(layer.clone()),
@@ -285,7 +285,7 @@ fn independent_image_roles_share_each_effective_native_wrap_sampler() {
         (false, false),
     ] {
         let mut layer = constant([1.; 4]);
-        layer.binding.image = Some(texture);
+        layer.binding.image = Some(texture.resource);
         layer.binding.sampling.flags.set_color(false);
         layer.binding.sampling.flags.set_uv_wrap_x(u);
         layer.binding.sampling.flags.set_uv_wrap_y(v);

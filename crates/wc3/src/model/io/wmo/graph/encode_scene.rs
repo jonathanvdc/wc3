@@ -81,12 +81,7 @@ pub(super) fn write<'a, D: Dialect>(
                     let cookie = extra
                         .cookie
                         .map(|id| {
-                            match model
-                                .image_resource(
-                                    model.texture(id).expect("validated cookie").resource,
-                                )
-                                .expect("validated image")
-                            {
+                            match model.image_resource(id.resource).expect("validated image") {
                                 WorldImageResource::FileDataId(value) => Ok(*value),
                                 _ => Err(Error::new(
                                     "world.light.cookie",

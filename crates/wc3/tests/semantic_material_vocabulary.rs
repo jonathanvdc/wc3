@@ -215,7 +215,7 @@ fn image_source_vocabularies_can_supply_graph_relationships() {
     };
     let mut found = false;
     binding.visit_links(&mut |link| {
-        if let Link::Texture(id) = link {
+        if let Link::SampledImage(id) = link {
             found |= id == source;
         }
     });

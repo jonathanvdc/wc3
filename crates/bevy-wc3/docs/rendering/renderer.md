@@ -49,8 +49,11 @@ game-specific pass ordering scheme.
 [ReforgedDefault material steps](reforged-materials.md) support normal/ORM, team color,
 emissive, Fresnel, and approximate reflection. Role-aware image requests preserve
 samplers and color-space distinctions without changing shared source images.
-Textures reference model-owned image declarations through typed handles; image
-requests expose the resolved declaration to the application.
+Material and effect inputs reference model-owned image declarations through typed
+handles and own their sampling and coordinate transforms. Native shared texture
+and transform records become independent input values during import. Image
+requests expose the selected value and resolved declaration to the application;
+equal resolved resources, samplers, and transfer functions share GPU images.
 Resource replacement belongs to the application resolver; there is no implicit game
 database or team-selection policy. Materials share assets between instances when
 their compiled appearance is constant. Missing-channel bindings and scalar tracks

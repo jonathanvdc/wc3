@@ -207,7 +207,6 @@ impl Profile for Application {
     type Surface<'a> = <Universal as Profile>::Surface<'a>;
     type Feature<'a> = ApplicationFeature;
     type Node<'a> = <Universal as Profile>::Node<'a>;
-    type Texture<'a> = <Universal as Profile>::Texture<'a>;
     type Mesh<'a> = <Universal as Profile>::Mesh<'a>;
     type Instance<'a> = <Universal as Profile>::Instance<'a>;
     type Draw = <Universal as Profile>::Draw;

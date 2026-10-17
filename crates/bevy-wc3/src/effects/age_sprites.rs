@@ -7,7 +7,7 @@ use super::frame::EffectFrame;
 use super::programmed::{ProgrammedAppearance, ProgrammedSprite, SquirtSchedule};
 use crate::material::{particle_material_layers, ParticleComposition};
 use crate::mesh_attributes::EXTRA_TEXCOORD;
-use crate::textures::{particle_sampler, TextureImages, TextureRole};
+use crate::textures::{TextureImages, TextureRole};
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
@@ -23,8 +23,7 @@ use wc3::model::values::model::{
 use wc3::model::{
     Animated, ClipId, Curve, CurveValue, FeatureId, MaterialId, Model, NodeFeature, NodeId,
     ParticleActivation, ParticleAgeCurves, ParticleAppearance, ParticleDetails, ParticleEmitter,
-    ParticleGravity, ParticleScalar, ParticleTrigger, RetimedAnimation, TextureId,
-    Time as ModelTime,
+    ParticleGravity, ParticleScalar, ParticleTrigger, RetimedAnimation, Texture, Time as ModelTime,
 };
 
 const MAX_PARTICLES: usize = 8192;
@@ -165,17 +164,12 @@ pub(super) struct AgeSpriteInstances {
 }
 
 fn particle_image<'a>(
-    model: &Model<'_>,
+    _model: &Model<'_>,
     images: &'a TextureImages,
-    id: TextureId,
+    id: Texture,
 ) -> Option<&'a Handle<Image>> {
-    let texture = model.texture(id)?;
-    images.get_with_sampler(
-        id,
-        texture.color_space,
-        TextureRole::Color,
-        particle_sampler(texture.sampler),
-    )
+    let texture = id;
+    images.get_with_sampler(id, texture.color_space, TextureRole::Color, texture.sampler)
 }
 
 fn scalar(value: &ParticleScalar) -> Option<Animated<f32>> {
@@ -411,12 +405,10 @@ impl RuntimeAgeSprites {
             diagnostic(
                 "CPU sprite transport limits each emitter to 8192 living particles, 8192 births and 4096 emission intervals per update; omitted births and long-update seconds are reported",
             );
-            let image = details
-                .rendering
-                .textures
-                .first()
-                .and_then(|id| particle_image(model, images, *id))
-                .cloned();
+            let image =
+                details.rendering.textures.first().and_then(|id| {
+                    particle_image(model, &images.particle(feature, 0), *id).cloned()
+                });
             if image.is_none() && !details.rendering.textures.is_empty() {
                 diagnostic(
                     "Unresolved primary particle image uses a visible white sprite fallback",
@@ -498,12 +490,14 @@ impl RuntimeAgeSprites {
                         let lit = !details.flags.disable_lighting();
                         let mut material = if multi_texture {
                             let layers = from_fn(|slot| {
-                                details
-                                    .rendering
-                                    .textures
-                                    .get(slot)
-                                    .and_then(|id| particle_image(model, images, *id))
+                                details.rendering.textures.get(slot).and_then(|id| {
+                                    particle_image(
+                                        model,
+                                        &images.particle(feature, slot as u32),
+                                        *id,
+                                    )
                                     .cloned()
+                                })
                             });
                             particle_material_layers(
                                 details.rendering.blend,

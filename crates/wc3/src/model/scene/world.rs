@@ -5,7 +5,7 @@ use crate::model::values::world::{
     AmbientFlags, FogFlags, GroupFlags, GroupFlags2, LightFlags, PortalFlags, WorldFlags,
 };
 use crate::model::ModelResourceId;
-use crate::model::{Animated, FeatureId, MaterialId, TextureId, ZeroVec};
+use crate::model::{Animated, FeatureId, MaterialId, Texture, ZeroVec};
 use crate::model::{ChildModelDefinition, WorldPlacementAppearance};
 use std::borrow::Cow;
 
@@ -171,7 +171,7 @@ pub struct ModernLight {
     /// Flicker behavior.
     pub flicker: Flicker,
     /// Light projection cookie texture.
-    pub cookie: Option<TextureId>,
+    pub cookie: Option<Texture>,
     /// Authored falloff parameter.
     pub falloff: f32,
     /// Authored scale as a numerical value.

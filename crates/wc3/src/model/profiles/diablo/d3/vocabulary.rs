@@ -35,7 +35,6 @@ impl Profile for D3 {
     type Surface<'a> = Material<'a>;
     type Feature<'a> = Unavailable;
     type Node<'a> = NodeRole<'a>;
-    type Texture<'a> = NoControls;
     type Mesh<'a> = MeshControls;
     type Instance<'a> = NoControls;
     type Draw = NoControls;
@@ -237,10 +236,6 @@ impl Extends<D3> for Universal {
     fn node<'a>(value: <D3 as Profile>::Node<'a>) -> Self::Node<'a> {
         Some(NodeControls::D3(value))
     }
-    fn texture<'a>(value: <D3 as Profile>::Texture<'a>) -> Self::Texture<'a> {
-        let _ = value;
-        None
-    }
     fn mesh<'a>(value: <D3 as Profile>::Mesh<'a>) -> Self::Mesh<'a> {
         Some(AnyMeshControls::D3(value))
     }
@@ -350,15 +345,6 @@ impl Narrows<Universal> for D3 {
             Some(NodeControls::D3(value)) => Ok(value),
             _ => Err(Error::new(
                 "d3.narrow.node",
-                "payload belongs to another authoring vocabulary",
-            )),
-        }
-    }
-    fn texture<'a>(value: <Universal as Profile>::Texture<'a>) -> Result<Self::Texture<'a>, Error> {
-        match value {
-            None => Ok(NoControls),
-            _ => Err(Error::new(
-                "d3.narrow.texture",
                 "payload belongs to another authoring vocabulary",
             )),
         }

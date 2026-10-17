@@ -2,10 +2,10 @@
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
 };
-use crate::model::{ClipId, ClockId, MaterialId, MeshId, ModelId, NodeId, SkinId, TextureId};
+use crate::model::{ClipId, ClockId, MaterialId, MeshId, ModelId, NodeId, SkinId, Texture};
 use crate::model::{
     ControllerId, CurveValue, EventId, FeatureId, FeatureKind, GeometryKind, InstanceId,
-    MaterialSlotId, SystemId, SystemMember, TextureTransformId,
+    MaterialSlotId, SystemId, SystemMember,
 };
 use std::any::TypeId;
 use std::borrow::Cow;
@@ -29,8 +29,6 @@ pub enum Link {
     Event(EventId),
     /// Named material slot owned by the model's appearance vocabulary.
     AppearanceSlot(MaterialSlotId),
-    /// Shared texture-coordinate transformation.
-    TextureTransform(TextureTransformId),
     /// Independently authored scene system.
     System(SystemId),
     /// Authored member of an independently scoped scene system.
@@ -82,8 +80,8 @@ pub enum Link {
     Mesh(MeshId),
     /// Material relationship.
     Material(MaterialId),
-    /// Texture relationship.
-    Texture(TextureId),
+    /// Complete sampled-image declaration carried by an input value.
+    SampledImage(Texture),
     /// Clip relationship.
     Clip(ClipId),
     /// Skin relationship.
@@ -129,11 +127,7 @@ impl ValidateLinks for NodeId {
         v(Link::Node(*self))
     }
 }
-impl ValidateLinks for TextureId {
-    fn visit_links(&self, v: &mut dyn FnMut(Link)) {
-        v(Link::Texture(*self))
-    }
-}
+
 impl ValidateLinks for MaterialId {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         v(Link::Material(*self))
@@ -185,9 +179,6 @@ impl<T: 'static, P: Profile> ValidateLinks for Property<T, P> {
                 id.visit_links(v)
             }
             PropertyTarget::MeshColor(id) | PropertyTarget::MeshOpacity(id) => id.visit_links(v),
-            PropertyTarget::TextureTranslation(id)
-            | PropertyTarget::TextureRotation(id)
-            | PropertyTarget::TextureScale(id) => id.visit_links(v),
             PropertyTarget::Profile { owner, key } => {
                 if !key.accepts_owner(*owner) {
                     v(Link::InvalidValue);
@@ -266,11 +257,6 @@ impl ValidateLinks for ControllerId {
     }
 }
 
-impl ValidateLinks for TextureTransformId {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        visitor(Link::TextureTransform(*self));
-    }
-}
 impl ValidateLinks for SystemId {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         visitor(Link::System(*self));

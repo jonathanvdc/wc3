@@ -12,7 +12,7 @@ use crate::model::{
 use crate::model::{Camera, CameraConvention, FeatureSchema, OwnerId};
 use crate::model::{
     ClipControls, DrawControls, GeometryData, InstanceControls, MeshControls, NodeControls, System,
-    TextureControls, UniversalAppearance, UniversalBinding,
+    UniversalAppearance, UniversalBinding,
 };
 use crate::model::{PropertyIdentityKey, PropertyKeyRef, PropertyPayload, PropertyTarget};
 use std::any::TypeId;
@@ -113,8 +113,6 @@ pub trait Profile: Clone + Debug + 'static {
     type Feature<'a>: FeaturePayload + FeatureSchema<'a>;
     /// Additional logical hierarchy behavior.
     type Node<'a>: ControlsPayload + Default;
-    /// Additional texture behavior, which may borrow its authoring data.
-    type Texture<'a>: ControlsPayload + Default;
     /// Additional geometry behavior.
     type Mesh<'a>: ControlsPayload + Default;
     /// Additional geometry placement behavior.
@@ -240,7 +238,6 @@ impl Profile for Universal {
     type Surface<'a> = MaterialSurface<'a>;
     type Feature<'a> = NodeFeature<'a>;
     type Node<'a> = Option<NodeControls<'a>>;
-    type Texture<'a> = Option<TextureControls<'a>>;
     type Mesh<'a> = Option<MeshControls>;
     type Instance<'a> = Option<InstanceControls<'a>>;
     type Clip<'a> = Option<ClipControls<'a>>;
@@ -288,8 +285,6 @@ pub trait Extends<Source: Profile>: Profile {
     fn feature<'a>(value: Source::Feature<'a>) -> Self::Feature<'a>;
     /// Embeds node controls without changing meaning.
     fn node<'a>(value: Source::Node<'a>) -> Self::Node<'a>;
-    /// Embeds texture controls without changing meaning.
-    fn texture<'a>(value: Source::Texture<'a>) -> Self::Texture<'a>;
     /// Embeds mesh controls without changing meaning.
     fn mesh<'a>(value: Source::Mesh<'a>) -> Self::Mesh<'a>;
     /// Embeds instance controls without changing meaning.
@@ -348,9 +343,6 @@ impl<P: Profile> Extends<P> for P {
         value
     }
     fn node<'a>(value: <P as Profile>::Node<'a>) -> Self::Node<'a> {
-        value
-    }
-    fn texture<'a>(value: <P as Profile>::Texture<'a>) -> Self::Texture<'a> {
         value
     }
     fn mesh<'a>(value: <P as Profile>::Mesh<'a>) -> Self::Mesh<'a> {

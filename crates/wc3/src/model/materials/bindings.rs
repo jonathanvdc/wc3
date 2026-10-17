@@ -1,5 +1,5 @@
 //! Independently selected image, coordinates, sampling, and shader contribution.
-use crate::model::{Link, TextureId, ValidateLinks};
+use crate::model::{Link, Texture, ValidateLinks};
 
 /// One image input, independently composed from its coordinate and shader behavior.
 ///
@@ -25,13 +25,13 @@ pub struct Coordinates<S, T = ()> {
     pub transform: T,
 }
 
-/// Static texture-resource selection; absence remains an authored empty slot.
+/// Static sampled-image selection; absence remains an authored empty slot.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ImageSelection<S = ()> {
     /// Runtime resource-source category, when required by the shader family.
     pub source: S,
-    /// Graph texture identity.
-    pub texture: Option<TextureId>,
+    /// Complete sampled-image value owned by this input.
+    pub texture: Option<Texture>,
 }
 
 impl<I: ValidateLinks, C: ValidateLinks, S: ValidateLinks, V: ValidateLinks> ValidateLinks

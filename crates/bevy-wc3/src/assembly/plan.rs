@@ -1,5 +1,5 @@
 use super::{Models, PendingAssembly, PendingPart, Source};
-use crate::{DrawSelection, ModelError};
+use crate::{texture_requests, DrawSelection, ModelError};
 use std::collections::{HashMap, HashSet};
 use wc3::model::Model;
 
@@ -34,10 +34,19 @@ fn validate_source(source: &Source, model: &Model<'_>) -> Result<(), ModelError>
             ));
         }
     }
-    for (id, replacement) in &source.textures {
-        if model.texture(*id).is_none() {
+    for (id, replacement) in &source.images {
+        if model.image_resource(*id).is_none() {
             return Err(ModelError(
-                "assembly replacement references an absent texture".into(),
+                "assembly replacement references an absent image resource".into(),
+            ));
+        }
+        replacement.validate()?;
+    }
+    let requests = texture_requests(model);
+    for (input, replacement) in &source.inputs {
+        if !requests.iter().any(|request| request.input == Some(*input)) {
+            return Err(ModelError(
+                "assembly replacement references an absent image input".into(),
             ));
         }
         replacement.validate()?;
@@ -104,7 +113,9 @@ pub(super) fn plan<B: Clone + PartialEq>(
                 Some("skeleton bindings")
             } else if existing.clips != part.clips {
                 Some("clip mappings")
-            } else if existing.source.textures != part.source.textures {
+            } else if existing.source.images != part.source.images
+                || existing.source.inputs != part.source.inputs
+            {
                 Some("replacement textures")
             } else {
                 None

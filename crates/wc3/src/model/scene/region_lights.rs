@@ -1,5 +1,5 @@
 //! Region-local point illumination and authored flicker programs.
-use crate::model::{FeatureId, TextureId};
+use crate::model::{FeatureId, Texture};
 /// A point light whose activation belongs to a region rather than the root actor table.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PointLight {
@@ -34,7 +34,7 @@ pub struct PointProgram {
     /// Flicker behavior.
     pub mode: super::world::Flicker,
     /// Optional projected-light cookie.
-    pub cookie: Option<TextureId>,
+    pub cookie: Option<Texture>,
     /// Unresolved controls preceding cookie selection.
     pub controls: [i32; 4],
     /// Unresolved trailing controls.

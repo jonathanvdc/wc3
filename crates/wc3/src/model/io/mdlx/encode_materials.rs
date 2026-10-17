@@ -1,19 +1,21 @@
 //! Complete layered surfaces written directly to the selected Warcraft III dialect.
 use super::encode_animation::Encoder;
+use super::encode_helpers::texture_transform;
 use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, FormatVersion};
 use crate::model::materials::mdlx::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
-use crate::model::TextureId;
+use crate::model::Texture;
 use std::collections::BTreeMap;
 
 pub(super) fn write<'a, V: FormatVersion>(
     source: &profile::Material<'_>,
-    textures: &BTreeMap<TextureId, u32>,
+    textures: &BTreeMap<Texture, u32>,
     encoder: &mut Encoder<'_, '_, '_>,
+    transforms: &mut Vec<native::TextureAnimation<'a>>,
     path: &str,
 ) -> Result<native::Material<'a, V>, Error> {
-    let map = |id: Option<TextureId>| {
+    let map = |id: Option<Texture>| {
         id.map(|id| {
             textures
                 .get(&id)
@@ -78,12 +80,6 @@ pub(super) fn write<'a, V: FormatVersion>(
             .set_sphere_env_map(source.state.rasterization.controls.sphere_environment);
         layer
             .shading_flags
-            .set_wrap_width(source.state.rasterization.controls.wrap_u);
-        layer
-            .shading_flags
-            .set_wrap_height(source.state.rasterization.controls.wrap_v);
-        layer
-            .shading_flags
             .set_two_sided(source.state.rasterization.faces);
         layer
             .shading_flags
@@ -95,14 +91,23 @@ pub(super) fn write<'a, V: FormatVersion>(
             .shading_flags
             .set_no_depth_set(source.state.rasterization.depth.write.is_bypassed());
         layer.texture_id = encoder.value(&source.binding.image, map, &format!("{path}.texture"))?;
-        layer.texture_animation_id = source.binding.coordinates.transform.map_or(u32::MAX, |id| {
-            encoder
-                .model
-                .texture_transforms()
+        let transform = texture_transform(&source.binding.coordinates.transform, encoder)?;
+        layer.texture_animation_id = if transform.translation.is_none()
+            && transform.rotation.is_none()
+            && transform.scaling.is_none()
+        {
+            u32::MAX
+        } else {
+            let index = transforms
                 .iter()
-                .position(|(key, _)| key == id)
-                .expect("validated transform") as u32
-        });
+                .position(|value| value == &transform)
+                .unwrap_or_else(|| {
+                    transforms.push(transform);
+                    transforms.len() - 1
+                });
+            index as u32
+        };
+
         layer.coordinate_id = source.binding.coordinates.source;
         layer.alpha = encoder.value(&source.opacity, Ok, &format!("{path}.opacity"))?;
         if let Some(source) = &source.emissive_gain {

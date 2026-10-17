@@ -2,10 +2,9 @@
 use crate::model::profiles::{Extends, Profile};
 use crate::model::{
     AttachedFeature, Clip, Controller, Dependencies, Draw, Material, Mesh, MeshInstance, Model,
-    Node, Skin, Texture,
+    Node, Skin,
 };
 struct PayloadMap<'a, P: Profile, Q: Profile> {
-    texture: fn(P::Texture<'a>) -> Q::Texture<'a>,
     property: fn(P::Property) -> Q::Property,
     appearance: fn(P::Appearance<'a>) -> Q::Appearance<'a>,
     geometry: fn(P::Geometry<'a>) -> Q::Geometry<'a>,
@@ -25,7 +24,6 @@ impl<'a, P: Profile> Model<'a, P> {
     /// Embeds the complete graph into a containing vocabulary without copying array storage.
     pub fn widen<Q: Extends<P>>(self) -> Model<'a, Q> {
         self.map_payloads(PayloadMap {
-            texture: Q::texture,
             property: Q::property,
             appearance: Q::appearance,
             geometry: Q::geometry,
@@ -76,21 +74,6 @@ impl<'a, P: Profile> Model<'a, P> {
                     .map(|(id, value)| (id, Q::bone_override_resource(value)))
                     .collect(),
             },
-            textures: self
-                .textures
-                .into_iter()
-                .map(|(id, texture)| {
-                    (
-                        id,
-                        Texture {
-                            resource: texture.resource,
-                            color_space: texture.color_space,
-                            sampler: texture.sampler,
-                            controls: (maps.texture)(texture.controls),
-                        },
-                    )
-                })
-                .collect(),
             scope: self.scope,
             id: self.id,
             name: self.name,
@@ -138,7 +121,6 @@ impl<'a, P: Profile> Model<'a, P> {
                 })
                 .collect(),
             clocks: self.clocks,
-            texture_transforms: self.texture_transforms,
             nodes: self
                 .nodes
                 .into_iter()

@@ -7,9 +7,9 @@ use crate::model::profiles::diablo::d4::{
     GraphAbsence, Material, MaterialStep, MaterialValues, ParameterControls, ScalarValue,
     Selection, TextureInput, TextureSelection, VectorValue, D4,
 };
-use crate::model::profiles::NoControls;
+
 use crate::model::SnoResource;
-use crate::model::{Model, ModelBuilder, SnoNamespace, Texture};
+use crate::model::{Model, ModelBuilder, SnoNamespace};
 use zerovec::ZeroVec;
 
 pub(super) fn read_appearance(
@@ -80,24 +80,7 @@ pub(super) fn read_shader(
                     group: 44,
                     id: native.tex as u32,
                 };
-                let existing = model
-                    .model()
-                    .textures()
-                    .iter()
-                    .find(|(_, image)| model.image_resource(image.resource) == Some(&resource))
-                    .map(|(id, _)| id);
-                TextureSelection::Image(match existing {
-                    Some(id) => id,
-                    None => {
-                        let image_resource = model.add_image_resource(resource);
-                        model.add_texture(Texture {
-                            resource: image_resource,
-                            controls: NoControls,
-                            color_space: Default::default(),
-                            sampler: Default::default(),
-                        })?
-                    }
-                })
+                TextureSelection::Image(model.intern_image_resource(resource))
             };
             Ok(TextureInput {
                 image: selection,
@@ -192,13 +175,10 @@ pub(super) fn write_shader(
         .textures
         .iter()
         .map(|input| {
-            let tex = match input.image {
-                TextureSelection::Absent(code) if code < 0 => code,
-                TextureSelection::Image(id) => {
-                    match model
-                        .texture(id)
-                        .and_then(|image| model.image_resource(image.resource))
-                    {
+            let tex =
+                match input.image {
+                    TextureSelection::Absent(code) if code < 0 => code,
+                    TextureSelection::Image(id) => match model.image_resource(id) {
                         Some(SnoResource::Sno {
                             namespace: SnoNamespace::Diablo4,
                             group: 44,
@@ -213,15 +193,14 @@ pub(super) fn write_shader(
                             "d4.material.texture",
                             "shader input requires a Diablo IV texture SNO from its owning model",
                         )),
+                    },
+                    _ => {
+                        return Err(Error::new(
+                            "d4.material.texture",
+                            "absent texture selection must retain a negative native code",
+                        ))
                     }
-                }
-                _ => {
-                    return Err(Error::new(
-                        "d4.material.texture",
-                        "absent texture selection must retain a negative native code",
-                    ))
-                }
-            };
+                };
             Ok(native::MaterialTextureEntry {
                 shader_tex: input.contribution.semantic,
                 mat_tex: native::MaterialTexture {

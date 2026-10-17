@@ -130,7 +130,9 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
     let pass = passes.remove(0);
     assert_eq!(
         pass.material.normal_map_texture.as_ref(),
-        resolved.for_role(ids[1], TextureRole::Normal)
+        resolved
+            .material(id, 0)
+            .for_slot(1, ids[1], TextureRole::Normal)
     );
     assert_ne!(
         pass.material.normal_map_texture.as_ref(),
@@ -138,7 +140,9 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
     );
     assert_eq!(
         pass.material.metallic_roughness_texture.as_ref(),
-        resolved.for_role(ids[2], TextureRole::Data)
+        resolved
+            .material(id, 0)
+            .for_slot(2, ids[2], TextureRole::Data)
     );
     assert_eq!(
         pass.material.occlusion_texture,
@@ -146,7 +150,9 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
     );
     assert_eq!(
         pass.material.emissive_texture.as_ref(),
-        resolved.for_role(ids[3], TextureRole::Color)
+        resolved
+            .material(id, 0)
+            .for_slot(3, ids[3], TextureRole::Color)
     );
     assert_eq!(pass.material.emissive, LinearRgba::rgb(2., 2., 2.));
     assert_eq!(pass.material.alpha_mode, AlphaMode::Mask(0.75));
@@ -228,7 +234,7 @@ fn same_resource_texture_variants_keep_independent_image_handles() {
         "shared.png".as_bytes().into(),
     )));
     linear.color_space = ColorSpace::Linear;
-    let linear = builder.add_texture(linear).unwrap();
+
     let layers = [srgb, linear]
         .map(|texture| {
             let mut layer = mdlx::Layer::default();
@@ -264,7 +270,7 @@ fn m3_normal_and_diffuse_uses_of_one_image_select_distinct_interpretations() {
     let mut builder = ModelBuilder::<Universal>::new("normal interpretation");
     let id = builder.add_file_texture("shared.png").unwrap();
     let mut layer = m3::TextureLayer::default();
-    layer.binding.image = Some(id);
+    layer.binding.image = Some(id.resource);
     let mut standard = m3::StandardMaterialStep {
         diffuse: Some(layer.clone()),
         ..Default::default()

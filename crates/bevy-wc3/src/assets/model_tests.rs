@@ -3,6 +3,7 @@ use crate::BlpImageLoader;
 use bevy::asset::{AssetApp, AssetPlugin, LoadState};
 use bevy::image::ImageLoader;
 use bevy::tasks::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool, TaskPoolBuilder};
+use std::collections::HashSet;
 use std::fs;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -127,6 +128,10 @@ fn semantic_mdl_loader_preserves_same_path_sampler_variants() {
             Bitmap { Image "body.tga", }
             Bitmap { Image "body.tga", WrapWidth, }
         }
+        Materials 1 { Material {
+            Layer { FilterMode None, static TextureID 0, }
+            Layer { FilterMode None, static TextureID 1, }
+        } }
     "#,
     )
     .unwrap();
@@ -179,7 +184,15 @@ fn native_hd_normal_and_orm_requests_keep_linear_gpu_image_formats() {
     wait(&mut app, &handle).unwrap();
     let models = app.world().resource::<Assets<ModelAsset>>();
     let model = models.get(&handle).unwrap();
-    assert_eq!(model.images.len(), 2);
+    assert_eq!(
+        model
+            .images
+            .values()
+            .map(Handle::id)
+            .collect::<HashSet<_>>()
+            .len(),
+        2
+    );
     let images = app.world().resource::<Assets<Image>>();
     for (key, handle) in &model.images {
         let image = images.get(handle).unwrap();
@@ -320,7 +333,15 @@ fn native_m2_external_skin_compiles_geometry_and_animation() {
     let model = models.get(&handle).unwrap();
     assert_eq!(model.compiled.draws.len(), 1);
     assert_eq!(model.compiled.clips.len(), 1);
-    assert_eq!(model.images.len(), 1);
+    assert_eq!(
+        model
+            .images
+            .values()
+            .map(Handle::id)
+            .collect::<HashSet<_>>()
+            .len(),
+        1
+    );
     assert!(model.unresolved_images.is_empty());
     fs::remove_dir_all(directory).unwrap();
 }
@@ -335,10 +356,24 @@ fn image_candidates_preserve_location_priority_case_and_asset_sources() {
     use wc3::model::ModelBuilder;
     let mut builder = ModelBuilder::new("image candidate order");
     let id = builder.add_file_texture("Textures\\Body.BLP").unwrap();
+    let mut layer = wc3::model::materials::mdlx::Layer::default();
+    layer.binding.image = wc3::model::Animated::constant(Some(id));
+    builder
+        .add_material(wc3::model::Material {
+            name: "image input".into(),
+            surface: wc3::model::MaterialSurface::try_from(
+                wc3::model::materials::mdlx::LayeredSurface {
+                    layers: vec![layer],
+                    ..Default::default()
+                },
+            )
+            .unwrap(),
+        })
+        .unwrap();
     let model = builder.finish().unwrap();
     let request = texture_requests(&model)
         .into_iter()
-        .find(|request| request.id == id)
+        .find(|request| request.texture == id)
         .unwrap();
     let paths =
         PathResolver.texture_candidates(0, &request, &AssetPath::parse("casc://Units/Unit.m2"));
@@ -385,7 +420,9 @@ impl ResourceResolver for TextureOverrides {
         _owner: &AssetPath<'_>,
     ) -> ImageResource<'static> {
         assert!(matches!(request.resource, ImageResource::Replaceable(1)));
-        ImageResource::Path(Cow::Owned(format!("mapped{index}.blp").into_bytes()))
+        assert_eq!(index, 0, "both samplers share the same image dependency");
+        let variant = usize::from(request.sampler.u == wc3::model::AddressMode::Repeat);
+        ImageResource::Path(Cow::Owned(format!("mapped{variant}.blp").into_bytes()))
     }
 }
 
@@ -416,6 +453,12 @@ fn per_texture_overrides_keep_role_and_sampler_variants_independent() {
             static TextureID 0 <= 0,
             static TextureID 0 <= 1,
             static TextureID 0 <= 2,
+        }
+        Layer {
+            FilterMode None, Shader "Shader_HD_DefaultUnit",
+            static TextureID 1 <= 0,
+            static TextureID 1 <= 1,
+            static TextureID 1 <= 2,
         } } }
     "#,
     )
@@ -426,7 +469,7 @@ fn per_texture_overrides_keep_role_and_sampler_variants_independent() {
     let models = app.world().resource::<Assets<ModelAsset>>();
     let model = models.get(&handle).unwrap();
     assert!(model.unresolved_images.is_empty());
-    // HD animated role lookup can request both interpretations of every source.
+    // Both active inputs retain their own override and role interpretations.
     let images = app.world().resource::<Assets<Image>>();
     let mut red = 0;
     let mut blue = 0;
@@ -713,7 +756,15 @@ fn native_world_surface_sampler_variants_get_distinct_labeled_gpu_images() {
         .resource::<Assets<ModelAsset>>()
         .get(&handle)
         .unwrap();
-    assert_eq!(model.images.len(), 2);
+    assert_eq!(
+        model
+            .images
+            .values()
+            .map(Handle::id)
+            .collect::<HashSet<_>>()
+            .len(),
+        2
+    );
     let images = app.world().resource::<Assets<Image>>();
     let mut modes = Vec::new();
     for (key, handle) in &model.images {

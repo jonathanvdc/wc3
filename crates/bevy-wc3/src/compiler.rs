@@ -36,7 +36,7 @@ use wc3::model::{
     AnimationProgram, Attachment, Billboard, Camera as ModelCamera, ClipControls, FeatureId,
     Light as SemanticLight, Link, MaterialId, MaterialSelection, MeshControls, Model, NodeControls,
     NodeFeature, ParticleDetails, ParticleEmitter, PoseLayout, PropertyTarget, RibbonEmitter,
-    SkinId, TextureId, ValidateLinks,
+    SkinId, Texture, ValidateLinks,
 };
 
 fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
@@ -203,13 +203,16 @@ pub fn compile_model_with_options(
     let selected_textures = selected_materials
         .as_ref()
         .map(|materials: &HashSet<MaterialId>| {
-            let mut selected = HashSet::<TextureId>::new();
+            let mut selected = HashSet::<Texture>::new();
             let mut animated = false;
             let mut visit = |link| match link {
-                Link::Texture(id) => {
+                Link::SampledImage(id) => {
                     selected.insert(id);
                 }
-                Link::Property { value_type, .. } if value_type == TypeId::of::<TextureId>() => {
+                Link::ImageResource(id) => {
+                    selected.insert(Texture::new(id));
+                }
+                Link::Property { value_type, .. } if value_type == TypeId::of::<Texture>() => {
                     animated = true;
                 }
                 _ => {}
@@ -226,7 +229,7 @@ pub fn compile_model_with_options(
                 }
             }
             if animated {
-                selected.extend(model.textures().iter().map(|(id, _)| id));
+                selected.extend(model.sampled_images());
             }
             selected
         });

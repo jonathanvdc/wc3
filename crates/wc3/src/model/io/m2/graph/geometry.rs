@@ -12,7 +12,7 @@ mod coordinates;
 pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     nodes: &[semantic::NodeId],
-    textures: &[semantic::TextureId],
+    textures: &[semantic::Texture],
     clips: &[semantic::ClipId],
     clocks: &[semantic::ClockId],
     builder: &mut GraphBuilder<'a>,
@@ -412,7 +412,7 @@ where
 pub(super) fn export<D: Dialect>(
     model: &Graph<'_>,
     nodes: &[semantic::NodeId],
-    textures: &[semantic::TextureId],
+    textures: &[semantic::Texture],
     controls: &BTreeMap<(semantic::MaterialId, usize), super::materials::Controls>,
     look: Option<semantic::LookId>,
     bundle: &mut Bundle<'static, D>,
@@ -675,7 +675,7 @@ where
                         Error::new("m2.material.texture", "shader unit has no texture resource")
                     })?;
                     texture_combos.push(
-                        u16::try_from(textures.iter().position(|v| *v == id).ok_or_else(|| {
+                        u16::try_from(texture_index(model, textures, id).ok_or_else(|| {
                             Error::new("m2.material.texture", "missing resource")
                         })?)
                         .map_err(|_| Error::new("m2.material.texture", "index exceeds u16"))?,

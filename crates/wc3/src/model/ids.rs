@@ -81,8 +81,6 @@ pub enum NodeObject {}
 pub enum MeshObject {}
 /// Material identity marker.
 pub enum MaterialObject {}
-/// Texture identity marker.
-pub enum TextureObject {}
 /// Clip identity marker.
 pub enum ClipObject {}
 /// Mesh placement identity marker.
@@ -105,8 +103,6 @@ pub type NodeId = Id<NodeObject>;
 pub type MeshId = Id<MeshObject>;
 /// Material handle.
 pub type MaterialId = Id<MaterialObject>;
-/// Texture handle.
-pub type TextureId = Id<TextureObject>;
 /// Clip handle.
 pub type ClipId = Id<ClipObject>;
 /// Mesh placement handle.
@@ -124,10 +120,6 @@ pub enum FeatureObject {}
 /// Identity of an attached effect or behavior, independent of its hierarchy anchor.
 pub type FeatureId = Id<FeatureObject>;
 
-/// Shared texture-coordinate transform identity marker.
-pub enum TextureTransformObject {}
-/// Graph-scoped shared texture-coordinate transform handle.
-pub type TextureTransformId = Id<TextureTransformObject>;
 /// Independently authored scene system identity marker.
 pub enum SystemObject {}
 /// Graph-scoped scene system handle.
@@ -169,7 +161,7 @@ pub enum ImageResourceObject {}
 /// use wc3::model::profiles::Universal;
 /// let mut draft = Model::<Universal>::builder("typed resources");
 /// let model = draft.add_model_resource(ResourceLocator::FileDataId(1));
-/// let texture = Texture::<Universal>::new(model);
+/// let texture = Texture::new(model);
 /// ```
 pub type ImageResourceId = Id<ImageResourceObject>;
 

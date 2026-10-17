@@ -1,7 +1,7 @@
 //! Typed read bindings, separate from writable animation destinations.
 use super::{ChannelValue, Property, PropertySample, PropertyTarget};
 use crate::model::profiles::{Extends, Profile, Universal};
-use crate::model::{Link, Quaternion, TextureId, ValidateLinks};
+use crate::model::{Link, Quaternion, Texture, ValidateLinks};
 use std::fmt::Debug;
 
 /// Selects the read bindings supported by an animated value domain.
@@ -141,8 +141,8 @@ direct_binding!(
     u32,
     i32,
     Quaternion,
-    TextureId,
-    Option<TextureId>
+    Texture,
+    Option<Texture>
 );
 macro_rules! array_binding {
     ($($value:ty),*) => { $(

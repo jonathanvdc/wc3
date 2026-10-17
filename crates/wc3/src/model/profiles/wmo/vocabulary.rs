@@ -28,7 +28,6 @@ impl Profile for Wmo {
     type Surface<'a> = wmo::Material<'a>;
     type Feature<'a> = wmo::Node<'a>;
     type Node<'a> = NoControls;
-    type Texture<'a> = NoControls;
     type Mesh<'a> = NoControls;
     type Instance<'a> = wmo::RegionControls<'a>;
     type Clip<'a> = NoControls;
@@ -126,10 +125,6 @@ impl Extends<Wmo> for Universal {
         value.into()
     }
     fn node<'a>(value: <Wmo as Profile>::Node<'a>) -> Self::Node<'a> {
-        let _ = value;
-        None
-    }
-    fn texture<'a>(value: <Wmo as Profile>::Texture<'a>) -> Self::Texture<'a> {
         let _ = value;
         None
     }

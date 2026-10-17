@@ -12,7 +12,7 @@ use wc3::model::scene::world::{
     Ambient, Fog, GroupOptions, Liquid, LiquidVertex, PortalConnection, Volume,
 };
 use wc3::model::systems::{ModelMetadata, System};
-use wc3::model::{FeatureId, InstanceId, MaterialId, Model, NodeId, SystemId, TextureId};
+use wc3::model::{FeatureId, InstanceId, MaterialId, Model, NodeId, SystemId, Texture};
 
 use super::Playback;
 use crate::ModelError;
@@ -181,7 +181,7 @@ pub struct WorldRegion {
     /// Supplemental light-program references.
     pub point_programs: Arc<[FeatureId]>,
     /// Baked lightmap textures retained for an application interpreter.
-    pub lightmap_images: Arc<[TextureId]>,
+    pub lightmap_images: Arc<[Texture]>,
     /// Authored packed lightmap rectangle controls.
     pub lightmap_rectangles: Arc<[[u8; 4]]>,
     /// Authored outgoing portal relationships, preserving side/adjustment controls.

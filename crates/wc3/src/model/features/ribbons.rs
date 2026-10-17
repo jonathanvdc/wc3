@@ -1,6 +1,6 @@
 //! Composed ribbon emission, geometry, appearance, and rendering programs.
 use crate::model::profiles::{m2, m3, mdlx};
-use crate::model::{Animated, Axis, MaterialId, TextureId};
+use crate::model::{Animated, Axis, MaterialId, Texture};
 
 /// A persistent trail assembled from successive cross sections.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -90,7 +90,7 @@ pub struct LayeredTrailRendering {
 #[derive(Clone, Debug)]
 pub struct SurfaceTrailRendering {
     /// Ordered texture resources.
-    pub textures: Vec<TextureId>,
+    pub textures: Vec<Texture>,
     /// Ordered surfaces.
     pub materials: Vec<MaterialId>,
 }

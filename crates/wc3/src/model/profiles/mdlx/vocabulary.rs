@@ -8,7 +8,7 @@ use crate::model::Model;
 use crate::model::PropertyIdentityKey;
 use crate::model::{
     ClipControls, Error, FeatureKind, IdentityBinding, MaterialSurface, MdlxGeometry, MeshControls,
-    ModelMetadata, NodeControls, PropertyPayload, SingleLook, TextureControls, UniversalAppearance,
+    ModelMetadata, NodeControls, PropertyPayload, SingleLook, UniversalAppearance,
     UniversalBinding,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
@@ -54,7 +54,6 @@ impl Profile for Mdlx {
     type Surface<'a> = mdlx::Material<'a>;
     type Feature<'a> = mdlx::Node<'a>;
     type Node<'a> = mdlx::NodeControls;
-    type Texture<'a> = mdlx::TextureControls<'a>;
     type Mesh<'a> = mdlx::Geometry;
     type Instance<'a> = NoControls;
     type Clip<'a> = mdlx::Sequence;
@@ -131,9 +130,6 @@ impl Extends<Mdlx> for Universal {
     }
     fn node<'a>(value: <Mdlx as Profile>::Node<'a>) -> Self::Node<'a> {
         Some(NodeControls::Mdlx(value))
-    }
-    fn texture<'a>(value: <Mdlx as Profile>::Texture<'a>) -> Self::Texture<'a> {
-        Some(TextureControls::Mdlx(value))
     }
     fn mesh<'a>(value: <Mdlx as Profile>::Mesh<'a>) -> Self::Mesh<'a> {
         Some(MeshControls::Mdlx(value))

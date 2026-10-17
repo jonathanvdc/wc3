@@ -3,8 +3,8 @@ use super::{Appearance, Geometry, Material, MeshControls, ModelMetadata, NodeRol
 use crate::model::profiles::{Extends, Narrows, NoControls, Profile, Unavailable, Universal};
 use crate::model::resources::SnoResource;
 use crate::model::{
-    Basis, Billboard, Bounds, ColorSpace, Error, ExplicitBinding, Inheritance, LengthUnit, Model,
-    NodeControls, Sampler, SnoNamespace, Transform, UniversalAppearance, UniversalBinding,
+    Basis, Billboard, Bounds, Error, ExplicitBinding, Inheritance, LengthUnit, Model, NodeControls,
+    SnoNamespace, Transform, UniversalAppearance, UniversalBinding,
 };
 use crate::model::{MeshControls as AnyMeshControls, ModelMetadata as AnyModelMetadata};
 
@@ -27,7 +27,6 @@ impl Profile for D4 {
     type Surface<'a> = Material;
     type Feature<'a> = Unavailable;
     type Node<'a> = NodeRole;
-    type Texture<'a> = NoControls;
     type Mesh<'a> = MeshControls;
     type Instance<'a> = NoControls;
     type Draw = NoControls;
@@ -161,16 +160,15 @@ impl Profile for D4 {
         Ok(())
     }
     fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
-        for (_, texture) in model.textures() {
-            if texture.color_space != ColorSpace::Unspecified
-                || texture.sampler != Sampler::default()
-            {
-                return Err(Error::new("d4.texture.controls", "image-level color-space and sampler overrides have no native Diablo IV material-resource mapping"));
-            }
+        if !model.sampled_images().is_empty() {
+            return Err(Error::new(
+                "d4.texture",
+                "Diablo IV sampling belongs to shader inputs",
+            ));
+        }
+        for (_, resource) in model.dependencies().images().iter() {
             if !matches!(
-                model
-                    .image_resource(texture.resource)
-                    .expect("validated image"),
+                resource,
                 SnoResource::Sno {
                     namespace: SnoNamespace::Diablo4,
                     ..
@@ -232,10 +230,6 @@ impl Extends<D4> for Universal {
     }
     fn node<'a>(value: <D4 as Profile>::Node<'a>) -> Self::Node<'a> {
         Some(NodeControls::D4(value))
-    }
-    fn texture<'a>(value: <D4 as Profile>::Texture<'a>) -> Self::Texture<'a> {
-        let _ = value;
-        None
     }
     fn mesh<'a>(value: <D4 as Profile>::Mesh<'a>) -> Self::Mesh<'a> {
         Some(AnyMeshControls::D4(value))
@@ -347,15 +341,6 @@ impl Narrows<Universal> for D4 {
             Some(NodeControls::D4(value)) => Ok(value),
             _ => Err(Error::new(
                 "d4.narrow.node",
-                "payload belongs to another authoring vocabulary",
-            )),
-        }
-    }
-    fn texture<'a>(value: <Universal as Profile>::Texture<'a>) -> Result<Self::Texture<'a>, Error> {
-        match value {
-            None => Ok(NoControls),
-            _ => Err(Error::new(
-                "d4.narrow.texture",
                 "payload belongs to another authoring vocabulary",
             )),
         }

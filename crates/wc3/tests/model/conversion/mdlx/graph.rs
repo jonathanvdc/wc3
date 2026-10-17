@@ -322,13 +322,15 @@ fn shared_uv_transform_links_are_scoped_and_rebuild_animation() {
     source.set_texture_animations([transform]);
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
-    let (id, transform) = graph.texture_transforms().iter().next().unwrap();
+    let (id, material) = graph.materials().iter().next().unwrap();
+    let transform = &material.surface.layers[0].binding.coordinates.transform;
     assert_eq!(
         transform.translation.binding.as_ref().unwrap(),
-        &id.translation::<Mdlx>()
+        &wc3::model::profiles::mdlx::properties::Layer(0)
+            .translation()
+            .bind(id)
+            .widen::<wc3::model::profiles::Universal>()
     );
-    let material = &graph.materials().iter().next().unwrap().1.surface;
-    assert_eq!(material.layers[0].binding.coordinates.transform, Some(id));
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()

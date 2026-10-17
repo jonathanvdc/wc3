@@ -1,10 +1,10 @@
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::profiles::Universal;
 use wc3::model::{
-    Animated, ImageResource, Material, MaterialSurface, Model, ModelBuilder, Texture, TextureId,
+    Animated, ImageResource, Material, MaterialSurface, Model, ModelBuilder, Texture,
 };
 
-fn textured_material(texture: TextureId) -> Material<'static> {
+fn textured_material(texture: Texture) -> Material<'static> {
     let mut layer = Layer::default();
     layer.binding.image = Animated::constant(Some(texture));
     Material {
@@ -27,34 +27,28 @@ fn model_resource_edits_are_transactional_and_clones_are_independent() {
     model
         .edit(|draft| {
             draft.set_image_resource(
-                draft.texture(texture).unwrap().resource,
+                texture.resource,
                 ImageResource::Path(b"edited.blp".as_slice().into()),
             )
         })
         .unwrap();
     assert_eq!(
-        model
-            .image_resource(model.texture(texture).unwrap().resource)
-            .unwrap(),
+        model.image_resource(texture.resource).unwrap(),
         &ImageResource::Path("edited.blp".as_bytes().into())
     );
     assert_eq!(
-        original
-            .image_resource(original.texture(texture).unwrap().resource)
-            .unwrap(),
+        original.image_resource(texture.resource).unwrap(),
         &ImageResource::Path("original.blp".as_bytes().into())
     );
     assert!(model
         .edit(|draft| {
-            draft.remove_texture(texture);
+            draft.remove_image_resource(texture.resource);
             Ok(())
         })
         .is_err());
-    assert_eq!(model.textures().len(), 1);
+    assert_eq!(model.sampled_images().len(), 1);
     assert_eq!(
-        model
-            .image_resource(model.texture(texture).unwrap().resource)
-            .unwrap(),
+        model.image_resource(texture.resource).unwrap(),
         &ImageResource::Path("edited.blp".as_bytes().into())
     );
 }
@@ -64,12 +58,6 @@ fn unanimated_texture_references_are_checked_at_publication() {
     let mut foreign = Model::<Universal>::builder("textures");
     let texture = foreign.add_file_texture("foreign.blp").unwrap();
     let mut draft = ModelBuilder::new("invalid");
-    assert!(draft
-        .set_texture(
-            texture,
-            Texture::new(foreign.texture(texture).unwrap().resource)
-        )
-        .is_err());
     draft.add_material(textured_material(texture)).unwrap();
     assert!(draft.finish().is_err());
 }
@@ -78,10 +66,10 @@ fn unanimated_texture_references_are_checked_at_publication() {
 fn draft_model_exposes_its_owned_resources_before_publication() {
     let mut draft = ModelBuilder::new("draft resources");
     let texture = draft.add_file_texture("model.blp").unwrap();
-    assert!(draft.model().texture(texture).is_some());
+    assert!(draft.model().image_resource(texture.resource).is_some());
     draft.add_material(textured_material(texture)).unwrap();
     let model = draft.finish().unwrap();
-    assert!(model.texture(texture).is_some());
+    assert!(model.image_resource(texture.resource).is_some());
     model.validate().unwrap();
 }
 

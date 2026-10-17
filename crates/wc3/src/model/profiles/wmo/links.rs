@@ -60,7 +60,7 @@ impl Node<'_> {
                     kind: FeatureKind::WmoPointLight,
                 });
                 if let Some(texture) = program.cookie {
-                    visitor(Link::Texture(texture));
+                    visitor(Link::SampledImage(texture));
                 }
                 if !program.intensity.is_finite()
                     || program

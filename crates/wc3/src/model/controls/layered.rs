@@ -1,10 +1,10 @@
 //! Layered-model ownership, sequence bounds, and hierarchy controls.
-use crate::model::{Bounds, ClipId, FeatureId, Link, MeshId, Time, ValidateLinks};
+use crate::model::{Bounds, ClipId, FeatureId, ImageResourceId, Link, MeshId, Time, ValidateLinks};
 /// Texture resource authoring controls beyond the common sampling description.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct TextureControls<'a> {
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TextureControls {
     /// Authored filename retained even when a replaceable category drives sampling.
-    pub fallback_path: Cow<'a, [u8]>,
+    pub fallback_path: Option<ImageResourceId>,
     /// Texture behavior bits with unresolved meanings.
     pub unclassified: TextureFlags,
 }

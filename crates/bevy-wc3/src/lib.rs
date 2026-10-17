@@ -92,7 +92,8 @@ pub use runtime::{
 };
 pub use schedule::Wc3Systems;
 pub use textures::{
-    texture_requests, TextureColorSpace, TextureImageKey, TextureRequest, TextureRole,
+    texture_requests, TextureColorSpace, TextureInput, TextureRequest, TextureRequestKey,
+    TextureRole,
 };
 pub use world::{
     world_volume_weight, DoodadSet, PortalView, WorldEnvironment, WorldEnvironmentSample,

@@ -29,7 +29,7 @@ fn anchor(
 pub(super) fn export<V>(
     model: &Graph<'_>,
     nodes: &[semantic::NodeId],
-    textures: &[semantic::TextureId],
+    textures: &[semantic::Texture],
     core: &mut Core<'static, V>,
     starts: &[u32],
     globals: &mut Vec<u32>,
@@ -156,9 +156,7 @@ where
                     .textures
                     .iter()
                     .map(|id| {
-                        textures
-                            .iter()
-                            .position(|t| t == id)
+                        texture_index(model, textures, *id)
                             .ok_or_else(|| Error::new("m2.ribbon.texture", "missing resource"))
                             .and_then(|i| {
                                 u16::try_from(i).map_err(|_| {

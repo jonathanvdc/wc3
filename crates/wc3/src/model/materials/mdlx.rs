@@ -6,9 +6,9 @@ use crate::model::profiles::mdlx::properties::{LayerField, Target};
 use crate::model::profiles::SurfacePayload;
 use crate::model::profiles::Unavailable;
 use crate::model::values::layered::{LayerFlags, MaterialFlags};
-use crate::model::TextureTransformId;
+use crate::model::TextureTransform;
 use crate::model::{
-    Animated, Error, Link, PropertyIdentityKey, PropertyPayload, TextureId, ValidateLinks,
+    Animated, Error, Link, PropertyIdentityKey, PropertyPayload, Texture, ValidateLinks,
 };
 use std::{borrow::Cow, fmt::Debug};
 
@@ -33,10 +33,6 @@ impl ValidateLinks for AlphaAdditiveEncoding {
 pub struct LayerOptions {
     /// Select sphere-environment sampling.
     pub sphere_environment: bool,
-    /// Wrap the U coordinate at layer scope.
-    pub wrap_u: bool,
-    /// Wrap the V coordinate at layer scope.
-    pub wrap_v: bool,
     /// Preserve controls with unresolved meanings.
     pub unclassified: LayerFlags,
 }
@@ -49,7 +45,7 @@ pub struct TextureSlot {
     /// Semantic shader slot; undocumented selectors remain numeric.
     pub slot: u32,
     /// Texture sampled by this slot, or no texture.
-    pub binding: TextureBinding<Animated<Option<TextureId>>>,
+    pub binding: TextureBinding<Animated<Option<Texture>>>,
 }
 /// Fresnel controls for a material pass.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -68,8 +64,7 @@ pub struct Layer {
     /// Color composition and rasterization applied by this pass.
     pub state: PassState<Blend, Shading>,
     /// Primary image input and its referenced coordinate transform.
-    pub binding:
-        TextureBinding<Animated<Option<TextureId>>, Coordinates<u32, Option<TextureTransformId>>>,
+    pub binding: TextureBinding<Animated<Option<Texture>>, Coordinates<u32, TextureTransform>>,
     /// Opacity multiplier.
     pub opacity: Animated<f32>,
     /// Emissive contribution, when supported by the shader.
@@ -219,8 +214,7 @@ pub struct MaterialInputs {
     /// Composition and rasterization for this step.
     pub state: PassState<Blend, Shading>,
     /// Primary image and referenced coordinates.
-    pub binding:
-        TextureBinding<Animated<Option<TextureId>>, Coordinates<u32, Option<TextureTransformId>>>,
+    pub binding: TextureBinding<Animated<Option<Texture>>, Coordinates<u32, TextureTransform>>,
     /// Opacity multiplier.
     pub opacity: Animated<f32>,
     /// Authored emissive multiplier.

@@ -4,13 +4,14 @@ mod compile;
 mod images;
 mod plan;
 
+use crate::TextureInput;
 use crate::{DrawSelection, ModelError, PartBinding};
 pub use atlas::{compose_atlas, Atlas, AtlasError, AtlasLayer, PixelRect, RgbaImage};
 pub use compile::compile_assembly;
 pub(crate) use compile::compile_with_bindings;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
-use wc3::model::{ClipId, ImageResource, Model, ResourceLocator, TextureId};
+use wc3::model::{ClipId, ImageResource, ImageResourceId, Model, ResourceLocator};
 
 /// Models resolved from a coherent application resource provider.
 pub type Models<'data> = HashMap<ResourceLocator<'static>, Model<'data>>;
@@ -21,8 +22,11 @@ pub struct Source {
     pub model: ResourceLocator<'static>,
     /// Geometry selection before compilation.
     pub draws: DrawSelection,
-    /// Exact semantic textures to replace.
-    pub textures: BTreeMap<TextureId, TextureReplacement>,
+    /// Replace an image dependency wherever it is sampled.
+    pub images: BTreeMap<ImageResourceId, TextureReplacement>,
+    /// Replace one input's image source, overriding a resource-wide replacement.
+    /// Sampling, color interpretation and coordinates remain authored by the input.
+    pub inputs: BTreeMap<TextureInput, TextureReplacement>,
 }
 impl Source {
     /// Select all authored geometry without texture replacements.
@@ -30,7 +34,8 @@ impl Source {
         Self {
             model,
             draws: DrawSelection::default(),
-            textures: BTreeMap::new(),
+            images: BTreeMap::new(),
+            inputs: BTreeMap::new(),
         }
     }
 }

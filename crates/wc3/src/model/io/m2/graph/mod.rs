@@ -16,7 +16,7 @@ use semantic::profiles::M2 as M2Vocabulary;
 pub(in super::super) type Graph<'a> = semantic::Model<'a, M2Vocabulary>;
 pub(in super::super) type GraphBuilder<'a> = semantic::ModelBuilder<'a, M2Vocabulary>;
 pub use export::plan;
-use semantic::{Animated, Channel, ImageResource, Node, SharedClock, Time};
+use semantic::{Animated, Channel, ImageResource, Node, SharedClock, Texture, Time};
 
 /// Imports an M2 bundle without a canonical intermediate encoding.
 pub fn import<'a, 'data: 'a, D: Dialect>(
@@ -91,16 +91,20 @@ where
         } else {
             ImageResource::Replaceable(texture.kind.raw())
         };
-        let image_resource = builder.add_image_resource(resource.clone().try_into()?);
-        textures.push(builder.add_texture(semantic::Texture {
-            controls: profile::TextureControls {
+        let image_resource = builder.intern_image_resource(resource.clone().try_into()?);
+        textures.push(semantic::Texture {
+            controls: Some(semantic::TextureControls::M2(profile::TextureControls {
                 path: if !path.is_empty() && !matches!(resource, ImageResource::Path(_)) {
-                    Some(Cow::Borrowed(path))
+                    Some(
+                        builder.intern_image_resource(semantic::M2ImageResource::Path(
+                            Cow::Borrowed(path),
+                        )),
+                    )
                 } else {
                     None
                 },
                 flags: profile::SupplementalTextureFlags::from_bits_retain(texture.flags.bits()),
-            },
+            })),
             resource: image_resource,
             color_space: semantic::ColorSpace::Unspecified,
             sampler: semantic::Sampler {
@@ -115,7 +119,7 @@ where
                     semantic::AddressMode::Clamp
                 },
             },
-        })?);
+        });
     }
     let (owner, bones) = source.bones().map_err(failure)?;
     let nodes: Vec<_> = bones.iter().map(|_| builder.reserve_node()).collect();
@@ -416,4 +420,25 @@ pub(super) fn bounds(value: native::records::Extent) -> semantic::Bounds {
         maximum: value.maximum,
         sphere_radius: value.radius,
     }
+}
+
+/// Finds a native table entry by encoded sampling meaning rather than resource-table identity.
+pub(in crate::model::io::m2) fn texture_index(
+    model: &Graph<'_>,
+    textures: &[Texture],
+    image: Texture,
+) -> Option<usize> {
+    textures.iter().position(|candidate| {
+        if *candidate == image { return true; }
+        if candidate.sampler != image.sampler || candidate.color_space != image.color_space { return false; }
+        let (Some(left), Some(right)) = (model.image_resource(candidate.resource), model.image_resource(image.resource)) else { return false; };
+        if left != right { return false; }
+        let (Ok(left), Ok(right)) = (candidate.m2_controls(), image.m2_controls()) else { return false; };
+        if left.flags != right.flags { return false; }
+        match (left.path, right.path) {
+            (None, None) => true,
+            (Some(left), Some(right)) => matches!((model.image_resource(left), model.image_resource(right)), (Some(left), Some(right)) if left == right),
+            _ => false,
+        }
+    })
 }

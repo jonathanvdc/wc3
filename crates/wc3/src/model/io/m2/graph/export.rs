@@ -127,9 +127,15 @@ where
             }
         }
     }
-    let textures: Vec<_> = asset.textures().iter().map(|(id, _)| id).collect();
+    let mut textures = Vec::new();
+    for image in asset.sampled_images() {
+        if texture_index(asset, &textures, image).is_none() {
+            textures.push(image);
+        }
+    }
     let mut texture_ids = Vec::new();
-    for (_, texture) in asset.textures() {
+    for texture in &textures {
+        let controls = texture.m2_controls()?;
         let (kind, path, id) = match asset
             .image_resource(texture.resource)
             .expect("validated image")
@@ -138,8 +144,21 @@ where
             M2ImageResource::FileDataId(id) => (TextureSource::File, &[][..], *id),
             M2ImageResource::Replaceable(id) => (TextureSource::from_raw(*id), &[][..], 0),
         };
-        let path = texture.controls.path.as_deref().unwrap_or(path);
-        let mut flags = TextureFlags::from_bits_retain(texture.controls.flags.bits());
+        let path = match controls.path.map(|id| {
+            asset
+                .image_resource(id)
+                .expect("validated alternate filename")
+        }) {
+            Some(M2ImageResource::Path(path)) => path.as_ref(),
+            Some(_) => {
+                return Err(Error::new(
+                    "m2.texture.path",
+                    "alternate filename requires a path resource",
+                ))
+            }
+            None => path,
+        };
+        let mut flags = TextureFlags::from_bits_retain(controls.flags.bits());
         flags.set_wrap_u(texture.sampler.u == semantic::AddressMode::Repeat);
         flags.set_wrap_v(texture.sampler.v == semantic::AddressMode::Repeat);
         core.textures.push(native::records::Texture {

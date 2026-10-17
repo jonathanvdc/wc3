@@ -116,12 +116,11 @@ impl<P: Profile> Model<'_, P> {
                     .is_none_or(|mesh| mesh.geometry.kind() != kind),
                 Link::Mesh(id) => !self.meshes.contains_key(id),
                 Link::Material(id) => !self.materials.contains_key(id),
-                Link::Texture(id) => self.texture(id).is_none(),
+                Link::SampledImage(_) => false,
                 Link::Clip(id) => !self.clips.contains_key(id),
                 Link::Skin(id) => !self.skins.contains_key(id),
                 Link::Clock(id) => !self.clocks.contains_key(id),
                 Link::Controller(id) => !self.controllers.contains_key(id),
-                Link::TextureTransform(id) => !self.texture_transforms.contains_key(id),
                 Link::System(id) => !self.systems.contains_key(id),
             };
         };
@@ -144,9 +143,6 @@ impl<P: Profile> Model<'_, P> {
             node.parent.visit_links(&mut visit);
             node.controls.visit_links(&mut visit);
         }
-        for transform in self.texture_transforms.values() {
-            transform.visit_links(&mut visit);
-        }
         for clip in self.clips.values() {
             clip.controls.visit_links(&mut visit);
         }
@@ -162,10 +158,6 @@ impl<P: Profile> Model<'_, P> {
                     id.visit_links(&mut visit);
                 }
             }
-        }
-        for (_, texture) in self.textures() {
-            texture.resource.visit_links(&mut visit);
-            texture.controls.visit_links(&mut visit);
         }
         for skin in self.skins.values() {
             skin.joints.visit_links(&mut visit);
@@ -244,13 +236,8 @@ impl<P: Profile> Model<'_, P> {
             system.visit_links(&mut visit);
         }
         if animated_properties.iter().any(|target| {
-            matches!(
-                target,
-                PropertyIdentity::Profile { .. }
-                    | PropertyIdentity::TextureTranslation(_)
-                    | PropertyIdentity::TextureRotation(_)
-                    | PropertyIdentity::TextureScale(_)
-            ) && !declared_properties.contains(target)
+            matches!(target, PropertyIdentity::Profile { .. })
+                && !declared_properties.contains(target)
         }) {
             return Err(Error::new(
                 "animation.target",

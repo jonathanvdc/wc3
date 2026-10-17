@@ -6,7 +6,7 @@ use crate::model::profiles::{
 };
 use crate::model::{
     Bounds, Draw, DrawSubset, MaterialId, MeshId, ModelBuilder, PrimitiveRange, PrimitiveSelection,
-    StripSelection, TangentBinding, TextureId,
+    StripSelection, TangentBinding, Texture,
 };
 /// Complete world-surface draw controls independent of batch record revisions.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -18,7 +18,7 @@ pub(crate) struct ImportedDrawControls {
     /// Authored culling bounds when explicitly provided.
     pub bounds: Option<Bounds>,
     /// Optional baked-light texture resource.
-    pub lightmap: Option<TextureId>,
+    pub lightmap: Option<Texture>,
     /// Historical baked-light selector whose table interpretation remains unresolved.
     pub lightmap_selector: Option<u8>,
     /// Inclusive referenced vertex window, when explicitly authored.

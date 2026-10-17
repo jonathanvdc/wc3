@@ -3,7 +3,7 @@ use super::encode_animation::{frame_at, Encoder};
 use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::profiles::mdlx as profile;
-use crate::model::{Animated, Clock, FeatureId, MeshId, Quaternion};
+use crate::model::{Animated, Clock, FeatureId, MeshId, Quaternion, TextureTransform};
 use native::animation::Track;
 use native::scene::Node;
 use std::collections::BTreeMap;
@@ -111,49 +111,6 @@ pub(super) fn controls<T: Dialect>(
 ) -> Result<(), Error> {
     let model = encoder.model;
     {
-        let mut transforms = Vec::new();
-        for (_, source) in model.texture_transforms() {
-            transforms.push(native::TextureAnimation {
-                translation: source
-                    .translation
-                    .binding
-                    .as_ref()
-                    .map(|property| encoder.track(property, Ok, "texture_transform.translation"))
-                    .transpose()?
-                    .flatten(),
-                rotation: source
-                    .rotation
-                    .binding
-                    .as_ref()
-                    .map(|property| {
-                        encoder.track(
-                            property,
-                            |value: Quaternion| Ok(value.components()),
-                            "texture_transform.rotation",
-                        )
-                    })
-                    .transpose()?
-                    .flatten(),
-                scaling: source
-                    .scale
-                    .binding
-                    .as_ref()
-                    .map(|property| encoder.track(property, Ok, "texture_transform.scale"))
-                    .transpose()?
-                    .flatten(),
-            });
-            let transform = transforms.last_mut().expect("just added transform");
-            if transform.translation.is_none() && source.translation.default != [0.; 3] {
-                transform.translation = Some(Track::constant(source.translation.default));
-            }
-            if transform.rotation.is_none() && source.rotation.default != Quaternion::default() {
-                transform.rotation = Some(Track::constant(source.rotation.default.components()));
-            }
-            if transform.scaling.is_none() && source.scale.default != [1.; 3] {
-                transform.scaling = Some(Track::constant(source.scale.default));
-            }
-        }
-        target.set_texture_animations(transforms);
         target.set_gliders(
             model
                 .meshes()
@@ -223,4 +180,49 @@ pub(super) fn controls<T: Dialect>(
     pivots.resize(max.max(pivots.len()), [0.; 3]);
     target.set_pivot_points(&pivots);
     Ok(())
+}
+
+pub(super) fn texture_transform<'a>(
+    source: &TextureTransform,
+    encoder: &mut Encoder<'_, '_, '_>,
+) -> Result<native::TextureAnimation<'a>, Error> {
+    let mut transform = native::TextureAnimation {
+        translation: source
+            .translation
+            .binding
+            .as_ref()
+            .map(|property| encoder.track(property, Ok, "texture_transform.translation"))
+            .transpose()?
+            .flatten(),
+        rotation: source
+            .rotation
+            .binding
+            .as_ref()
+            .map(|property| {
+                encoder.track(
+                    property,
+                    |value: Quaternion| Ok(value.components()),
+                    "texture_transform.rotation",
+                )
+            })
+            .transpose()?
+            .flatten(),
+        scaling: source
+            .scale
+            .binding
+            .as_ref()
+            .map(|property| encoder.track(property, Ok, "texture_transform.scale"))
+            .transpose()?
+            .flatten(),
+    };
+    if transform.translation.is_none() && source.translation.default != [0.; 3] {
+        transform.translation = Some(Track::constant(source.translation.default));
+    }
+    if transform.rotation.is_none() && source.rotation.default != Quaternion::default() {
+        transform.rotation = Some(Track::constant(source.rotation.default.components()));
+    }
+    if transform.scaling.is_none() && source.scale.default != [1.; 3] {
+        transform.scaling = Some(Track::constant(source.scale.default));
+    }
+    Ok(transform)
 }

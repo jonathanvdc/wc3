@@ -77,7 +77,7 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --camera-fov-multiplier NUMBER  Authored FOV scale (default: 1; portraits: 0.75)
   --asset-root PATH      Texture asset root (default: model's directory)
   --replaceable ID=PATH  Replaceable texture override
-  --bitmap INDEX=PATH    Semantic texture override (including effect textures)
+  --bitmap INDEX=PATH    Image dependency override (including effect images)
 Texture override paths are relative to the asset root. Existing captures are overwritten.";
 
 struct TextureChoice {

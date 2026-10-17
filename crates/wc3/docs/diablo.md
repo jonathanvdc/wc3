@@ -261,13 +261,14 @@ from a native material resource, with one typed shader step in its surface's `st
 The shader definition retains external shader-map
 and value-set selections, ordered texture inputs, constant scalar/vector parameters,
 and its material-resource controls. Texture SNOs are interned as model-owned
-texture definitions with the Diablo IV namespace, so repeated inputs share one editable
-image identity. Negative absent-image selections remain distinct from image handles.
+image dependencies with the Diablo IV namespace. Repeated shader inputs reference
+the same image resource while owning their playback and contribution declarations.
+Negative absent-image selections remain distinct from image handles.
 
 `plan_material` selects an actual material identity and rebuilds its native document.
 Appearance output keeps its external material selections and cannot silently absorb
-separate shader edits. Image-level sampler and color-space overrides have no native
-material-resource field and are rejected by the D4 profile. Shader texture-animation
+separate shader edits. D4 image selection uses a resource handle directly;
+sampling and interpretation remain part of its shader vocabulary. Shader texture-animation
 programs, active parameter graphs, decal variants, biome/clutter declarations, and
 playback-controller paths currently require an explicit reported loss. Native codecs
 retain those wider layouts for applications that need their encoded records.

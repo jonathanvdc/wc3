@@ -84,19 +84,15 @@ fn source(
                 .map_err(|error| ModelError(error.to_string()))
         })
         .transpose()?;
-    let textures = model
-        .textures()
+    let images = model
+        .dependencies()
+        .images()
         .iter()
-        .filter_map(|(id, texture)| {
-            match model
-                .image_resource(texture.resource)
-                .expect("validated image resource")
-            {
-                ImageResource::Replaceable(category) => replacements
-                    .get(category)
-                    .map(|replacement| (id, replacement.clone())),
-                _ => None,
-            }
+        .filter_map(|(id, resource)| match resource {
+            ImageResource::Replaceable(category) => replacements
+                .get(category)
+                .map(|replacement| (id, replacement.clone())),
+            _ => None,
         })
         .collect();
     Ok(Source {
@@ -105,7 +101,8 @@ fn source(
             draws,
             ..Default::default()
         },
-        textures,
+        images,
+        inputs: BTreeMap::new(),
     })
 }
 

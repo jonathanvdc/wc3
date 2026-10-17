@@ -57,8 +57,7 @@ pub(crate) fn compile_with_bindings<B: Clone + PartialEq>(
         resolve: &mut resolve_image,
         decoded: &mut decoded,
     };
-    let compiled_root =
-        compiler.compile(root, assembly.root.draws.clone(), &assembly.root.textures)?;
+    let compiled_root = compiler.compile(root, &assembly.root)?;
     let mut compiled_parts = Vec::with_capacity(parts.len());
     let mut bindings = Vec::with_capacity(parts.len());
     let mut sources = Vec::new();
@@ -67,11 +66,12 @@ pub(crate) fn compile_with_bindings<B: Clone + PartialEq>(
         let compiled = if let Some(index) = sources.iter().position(|source: &&Source| {
             source.model == part.source.model
                 && source.draws == part.source.draws
-                && source.textures == part.source.textures
+                && source.images == part.source.images
+                && source.inputs == part.source.inputs
         }) {
             CompiledModel::clone(&compiled_parts[index])
         } else {
-            compiler.compile(model, part.source.draws.clone(), &part.source.textures)?
+            compiler.compile(model, &part.source)?
         };
         sources.push(&part.source);
         bindings.push(resolve_binding(root, model, &compiled, &part.binding)?);
