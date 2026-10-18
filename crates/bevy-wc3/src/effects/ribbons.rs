@@ -9,6 +9,7 @@ use crate::effects::blend::EffectBlend;
 use crate::effects::records::RingCursor;
 use crate::effects::simulation::{split_time, EmissionPhase, EmissionRounding, LiveRecords};
 use crate::effects::trails::{RibbonInstances, RibbonSection, RibbonSegment, RibbonUniform};
+use crate::material::map_material_images;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::math::Affine2;
 use bevy::prelude::*;
@@ -579,5 +580,19 @@ mod tests {
             state.segments.as_slice(),
             &[RibbonSegment([2, 3, 0, 2]), RibbonSegment([3, 4, 1, 2])]
         );
+    }
+}
+
+impl RuntimeRibbons {
+    pub(crate) fn map_images(
+        &mut self,
+        map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
+    ) {
+        for emitter in &mut self.emitters {
+            for pass in &mut emitter.passes {
+                map_material_images(&mut pass.material, map);
+                pass.animation.map_images(map);
+            }
+        }
     }
 }

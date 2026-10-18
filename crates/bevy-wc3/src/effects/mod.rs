@@ -185,3 +185,14 @@ pub(crate) mod sprites;
 pub(crate) mod trails;
 
 mod ribbon_definition;
+
+impl RuntimeParticles {
+    pub(crate) fn map_images(
+        &mut self,
+        map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
+    ) {
+        self.age.map_images(map);
+        self.atlas.map_images(map);
+        self.ribbons.map_images(map);
+    }
+}

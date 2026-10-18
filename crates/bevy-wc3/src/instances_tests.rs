@@ -1,5 +1,8 @@
 use super::super::{compile_model, PoseOverrides};
 use super::*;
+use crate::image_replacements::refresh_image_replacements;
+use crate::{CoordinatePolicy, ImageReplacements};
+use bevy::asset::uuid::Uuid;
 use wc3::model::ModelBuilder;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
@@ -30,8 +33,19 @@ fn app() -> App {
         .init_resource::<Assets<SkinnedMeshInverseBindposes>>()
         .init_resource::<Assets<ModelMaterial>>()
         .init_resource::<PreparedModelCache>()
+        .init_resource::<ReplacementImages>()
+        .init_resource::<Assets<Image>>()
         .add_message::<AssetEvent<ModelAsset>>()
-        .add_systems(Update, (invalidate_models, spawn_loaded_models).chain());
+        .add_message::<AssetEvent<Image>>()
+        .add_systems(
+            Update,
+            (
+                invalidate_models,
+                refresh_image_replacements,
+                spawn_loaded_models,
+            )
+                .chain(),
+        );
     app
 }
 #[test]
@@ -431,4 +445,142 @@ fn failed_asset_and_dependency_requests_remain_observable_and_valid_replacement_
         assert!(app.world().get::<ModelInstance>(root).is_none());
     }
     fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn replacement_rebinding_preserves_root_state_and_application_owned_models() {
+    let mut app = app();
+    let (asset, root_node) = fixture();
+    let root_model = app
+        .world_mut()
+        .resource_mut::<Assets<ModelAsset>>()
+        .add(asset);
+    let (asset, child_node) = fixture();
+    let child_model = app
+        .world_mut()
+        .resource_mut::<Assets<ModelAsset>>()
+        .add(asset);
+    let first_image = app
+        .world_mut()
+        .resource_mut::<Assets<Image>>()
+        .add(Image::default());
+    let second_image = app
+        .world_mut()
+        .resource_mut::<Assets<Image>>()
+        .add(Image::default());
+    let root = app
+        .world_mut()
+        .spawn((
+            ModelInstance(root_model),
+            ImageReplacements::replaceable(1, first_image),
+            Playback {
+                shared_time: 7.,
+                paused: true,
+                ..Default::default()
+            },
+        ))
+        .id();
+    let child = app
+        .world_mut()
+        .spawn((ModelInstance(child_model), ChildOf(root)))
+        .id();
+    app.update();
+    app.update();
+    let old_root_node = app
+        .world()
+        .get::<ModelRig>(root)
+        .unwrap()
+        .node(root_node)
+        .unwrap();
+    let old_child_node = app
+        .world()
+        .get::<ModelRig>(child)
+        .unwrap()
+        .node(child_node)
+        .unwrap();
+    app.world_mut()
+        .entity_mut(root)
+        .insert(ImageReplacements::replaceable(1, second_image));
+    app.update();
+    assert_ne!(
+        app.world()
+            .get::<ModelRig>(root)
+            .unwrap()
+            .node(root_node)
+            .unwrap(),
+        old_root_node
+    );
+    assert_eq!(
+        app.world()
+            .get::<ModelRig>(child)
+            .unwrap()
+            .node(child_node)
+            .unwrap(),
+        old_child_node
+    );
+    assert_eq!(app.world().get::<Playback>(root).unwrap().shared_time, 7.);
+    let changed_root_node = app
+        .world()
+        .get::<ModelRig>(root)
+        .unwrap()
+        .node(root_node)
+        .unwrap();
+    app.world_mut()
+        .entity_mut(root)
+        .remove::<ImageReplacements>();
+    app.update();
+    assert_ne!(
+        app.world()
+            .get::<ModelRig>(root)
+            .unwrap()
+            .node(root_node)
+            .unwrap(),
+        changed_root_node
+    );
+    assert_eq!(app.world().get::<Playback>(root).unwrap().shared_time, 7.);
+}
+
+#[test]
+fn categories_follow_only_authored_owners_and_nearest_category_wins() {
+    use bevy::ecs::system::SystemState;
+    let mut world = World::new();
+    let parent_image = Handle::from(Uuid::new_v4());
+    let child_image = Handle::from(Uuid::new_v4());
+    let parent = world
+        .spawn((
+            ModelSource(Handle::default()),
+            ImageReplacements::replaceable(1, parent_image.clone()),
+        ))
+        .id();
+    let anchor = world.spawn(ChildOf(parent)).id();
+    let child = world
+        .spawn((
+            ChildOf(anchor),
+            ChildCoordinates {
+                coordinates: CoordinatePolicy::Host,
+                parent_basis: Transform::IDENTITY,
+            },
+            ModelInstance(Handle::default()),
+            ImageReplacements::replaceable(2, child_image.clone()),
+        ))
+        .id();
+    let application_child = world
+        .spawn((ChildOf(parent), ModelInstance(Handle::default())))
+        .id();
+    let mut state = SystemState::<ImageOwners>::new(&mut world);
+    let owners = state.get(&world).unwrap();
+    let inherited = effective_replacements(child, &owners);
+    assert_eq!(inherited.categories.get(&1), Some(&parent_image));
+    assert_eq!(inherited.categories.get(&2), Some(&child_image));
+    assert!(effective_replacements(application_child, &owners)
+        .categories
+        .is_empty());
+    world
+        .entity_mut(child)
+        .insert(ImageReplacements::replaceable(1, child_image.clone()));
+    let owners = state.get(&world).unwrap();
+    assert_eq!(
+        effective_replacements(child, &owners).categories.get(&1),
+        Some(&child_image)
+    );
 }

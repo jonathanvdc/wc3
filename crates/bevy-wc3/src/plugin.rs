@@ -3,6 +3,7 @@ use crate::assets::BlpImageLoader;
 use crate::effects::render::configure_effect_views;
 use crate::effects::sprites::ParticleRenderPlugin;
 use crate::effects::trails::RibbonRenderPlugin;
+use crate::image_replacements::{refresh_image_replacements, ReplacementImages};
 use crate::runtime::synchronize_mounted_models;
 use crate::schedule::{configure, Wc3Systems};
 use crate::{
@@ -41,6 +42,7 @@ impl Plugin for Wc3BevyPlugin {
         app.register_asset_loader(ModelLoader::new(resolver));
         app.init_asset_loader::<BlpImageLoader>();
         app.init_resource::<PreparedModelCache>();
+        app.init_resource::<ReplacementImages>();
         app.init_resource::<LodSettings>();
         app.add_plugins((
             MaterialPlugin::<ModelMaterial>::default(),
@@ -51,7 +53,11 @@ impl Plugin for Wc3BevyPlugin {
         configure(app);
         app.add_systems(
             Update,
-            (invalidate_models, spawn_loaded_models)
+            (
+                invalidate_models,
+                refresh_image_replacements,
+                spawn_loaded_models,
+            )
                 .chain()
                 .in_set(Wc3Systems::SpawnInstances),
         );

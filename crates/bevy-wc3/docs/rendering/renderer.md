@@ -59,8 +59,13 @@ filenames live in those resource declarations. Native shared texture
 and transform records become independent input values during import. Image
 requests expose the selected value and resolved declaration to the application;
 equal resolved resources, samplers, and transfer functions share GPU images.
-Resource replacement belongs to the application resolver; there is no implicit game
-database or team-selection policy. Materials share assets between instances when
+Resource replacement belongs to the application resolver or per-instance
+`ImageReplacements`; there is no implicit game database or team-selection policy.
+Per-instance category replacements propagate to authored child models, while
+exact request and resource identities remain source-model local. Replacement
+variants share geometry and effective image interpretations. Changing bindings
+rebinds the owned hierarchy and restarts child clocks, physics and transient
+effects; see the [application guide](../usage.md#resolve-resources-and-textures). Materials share assets between instances when
 their compiled appearance is constant. Unanimated slots and scalar tracks
 that always equal their authored defaults preserve sharing; changing UV transforms
 and other animated appearance retain independent instance state.

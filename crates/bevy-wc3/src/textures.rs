@@ -361,6 +361,17 @@ impl TextureImages {
         };
         self.lookup(key)
     }
+    pub(crate) fn map_images(
+        &mut self,
+        map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
+    ) {
+        self.variants = Arc::new(
+            self.variants
+                .iter()
+                .filter_map(|(key, image)| map(image).map(|image| (*key, image)))
+                .collect(),
+        );
+    }
     fn lookup(&self, key: TextureRequestKey) -> Option<&Handle<Image>> {
         self.variants.get(&key)
     }

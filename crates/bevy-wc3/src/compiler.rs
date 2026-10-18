@@ -16,13 +16,16 @@ use super::textures::TextureImages;
 use super::world::WorldRuntime;
 use super::world_lighting::{illumination, ColorAdjustment};
 use super::{
-    CompiledModel, DrawSource, ModelAsset, ModelMaterial, RenderDiagnostic, TextureRequest,
+    CompiledModel, DrawSource, ModelAsset, ModelMaterial, RenderDiagnostic, TextureInput,
+    TextureRequest,
 };
 use crate::animation_targets::AnimationTargets;
 use crate::compiled::{ClipTiming, RuntimeDraw, RuntimeLiquid, RuntimeNode, RuntimeSkin};
 use crate::composition::DrawSelection;
+use crate::image_replacements::ImageBinding;
 use crate::physics::PhysicsDefinition;
 use crate::ModelError;
+use bevy::asset::uuid::Uuid;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -209,11 +212,31 @@ pub fn compile_model_with_options(
             }
             selected
         });
+    let mut image_bindings = Vec::new();
+    let mut resolve_symbol = |request: TextureRequest<'_, '_>| {
+        let default = resolve_image(TextureRequest {
+            input: request.input,
+            texture: request.texture,
+            resource: request.resource,
+            role: request.role,
+            color_space: request.color_space,
+            sampler: request.sampler,
+        });
+        let symbol = Handle::from(Uuid::new_v4());
+        image_bindings.push(ImageBinding {
+            key: request.key(),
+            resource: request.resource.clone().into_owned(),
+            role: request.role,
+            symbol: symbol.clone(),
+            default,
+        });
+        Some(symbol)
+    };
     let images = Arc::new(match selected_textures.as_ref() {
         Some(selected) => {
-            TextureImages::resolve_selected(model, Some(selected), &mut resolve_image)
+            TextureImages::resolve_selected(model, Some(selected), &mut resolve_symbol)
         }
-        None => TextureImages::resolve(model, &mut resolve_image),
+        None => TextureImages::resolve(model, &mut resolve_symbol),
     });
     let materials = compile_materials_with_images(
         model,
@@ -526,6 +549,8 @@ pub fn compile_model_with_options(
         .any(|node| node.camera_anchored || !matches!(node.billboard, Billboard::None));
     let physics = Arc::new(PhysicsDefinition::compile(model, &nodes, &mut diagnostics));
     let mut compiled = CompiledModel {
+        image_template: None,
+        image_bindings: image_bindings.into(),
         mounts: Vec::new(),
         physics,
         nodes: nodes.into(),
@@ -572,5 +597,39 @@ pub fn compile_model_with_options(
         liquids,
     };
     compiled.rest_bounds = rest_bounds(&compiled, model.bounds());
+    let mut diagnostics = compiled.diagnostics.to_vec();
+    for binding in compiled
+        .image_bindings
+        .iter()
+        .filter(|binding| binding.default.is_none())
+    {
+        let (material, feature) = match binding.key.input {
+            Some(TextureInput::Material { material, .. }) => (Some(material), None),
+            Some(TextureInput::Particle { feature, .. }) => (None, Some(feature)),
+            None => continue,
+        };
+        diagnostics.push(RenderDiagnostic {
+            material,
+            feature,
+            message: format!(
+                "texture {:?} resource {:?} with role {:?} is unresolved",
+                binding.key.resource, binding.resource, binding.role
+            ),
+        });
+    }
+    compiled.diagnostics = diagnostics.into();
+    let template = Arc::new(compiled.clone());
+    let defaults: HashMap<_, _> = compiled
+        .image_bindings
+        .iter()
+        .map(|binding| (binding.symbol.id(), binding.default.clone()))
+        .collect();
+    compiled.map_images(&mut |image| {
+        defaults
+            .get(&image.id())
+            .cloned()
+            .unwrap_or_else(|| Some(image.clone()))
+    });
+    compiled.image_template = Some(template);
     Ok(compiled)
 }

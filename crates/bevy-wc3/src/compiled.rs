@@ -2,11 +2,14 @@
 use crate::effects::RuntimeParticles;
 use crate::events::RuntimeEvents;
 use crate::features::RuntimeFeatures;
+use crate::image_replacements::ImageBinding;
 use crate::lod::LodDefinition;
+use crate::material::map_material_images;
 use crate::material::SurfaceAnimation;
 use crate::mesh_animation::MeshMaterialState;
 use crate::physics::{PhysicsBodyInfo, PhysicsDefinition};
 use crate::world::WorldRuntime;
+use crate::TextureRequest;
 use crate::{
     DoodadSet, ModelFeature, ModelMaterial, WorldEnvironment, WorldEnvironmentSample, WorldGroup,
     WorldLiquid, WorldPortal, WorldRegion, WorldSelection,
@@ -17,6 +20,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use wc3::model::systems::model_physics::Joint;
+use wc3::model::Texture;
 use wc3::model::{
     AnimationProgram, ClipId, DrawId, FeatureId, FeatureKind, InstanceId, MaterialId, MeshId,
     NodeId,
@@ -95,11 +99,13 @@ pub(crate) struct RuntimeMount<M> {
 
 /// Owned render data compiled directly from a Universal graph.
 ///
-/// Compilation does not export through a native format, retain the source graph,
+/// Compilation does not export through a native format or retain the source graph. It does not
 /// insert Bevy assets, or require an ECS world. Geometry and runtime definitions
 /// outlive borrowed source bytes. [`Self::prepare`] inserts shared GPU assets.
 #[derive(Clone)]
 pub struct CompiledModel {
+    pub(crate) image_template: Option<Arc<CompiledModel>>,
+    pub(crate) image_bindings: Arc<[ImageBinding]>,
     pub(crate) mounts: Vec<RuntimeMount<Arc<CompiledModel>>>,
     pub(crate) physics: Arc<PhysicsDefinition>,
     pub(crate) events: Arc<RuntimeEvents>,
@@ -140,6 +146,8 @@ pub struct PreparedMount<'a> {
 /// Shared Bevy meshes and immutable definitions ready for repeated instantiation.
 #[derive(Clone)]
 pub struct PreparedModel {
+    pub(crate) image_template: Option<Arc<PreparedModel>>,
+    pub(crate) image_bindings: Arc<[ImageBinding]>,
     pub(crate) mounts: Arc<[RuntimeMount<PreparedModel>]>,
     pub(crate) physics: Arc<PhysicsDefinition>,
     pub(crate) events: Arc<RuntimeEvents>,
@@ -167,6 +175,23 @@ pub struct PreparedModel {
 }
 
 impl CompiledModel {
+    /// Logical image requests with their source declarations and interpretations.
+    /// Requests include unresolved defaults, scoped material/effect uses and
+    /// unscoped animated selections. Their IDs belong to this source model.
+    pub fn image_requests(&self) -> impl Iterator<Item = TextureRequest<'_, 'static>> {
+        self.image_bindings.iter().map(|binding| TextureRequest {
+            input: binding.key.input,
+            texture: Texture {
+                resource: binding.key.resource,
+                color_space: binding.key.declared,
+                sampler: binding.key.sampler,
+            },
+            resource: &binding.resource,
+            role: binding.role,
+            color_space: binding.key.color_space,
+            sampler: binding.key.sampler,
+        })
+    }
     /// Playback clips in stable source identity order.
     pub fn clips(&self) -> &[(ClipId, String)] {
         &self.clips
@@ -200,6 +225,10 @@ impl CompiledModel {
         palettes: &mut HashMap<(*const Mat4, usize), Handle<SkinnedMeshInverseBindposes>>,
     ) -> PreparedModel {
         PreparedModel {
+            image_template: self.image_template.as_ref().map(|template| {
+                Arc::new(template.prepare_shared(meshes, binds, variants, palettes))
+            }),
+            image_bindings: self.image_bindings.clone(),
             mounts: self
                 .mounts
                 .iter()
@@ -379,5 +408,43 @@ impl PreparedModel {
     /// Cameras available for opt-in playback on application-owned views.
     pub fn cameras(&self) -> impl Iterator<Item = ModelFeature> + '_ {
         self.features.camera_ids()
+    }
+}
+
+impl CompiledModel {
+    pub(crate) fn map_images(
+        &mut self,
+        map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
+    ) {
+        for draw in &mut self.draws {
+            map_material_images(&mut draw.material, map);
+            Arc::make_mut(&mut draw.animation).map_images(map);
+        }
+        Arc::make_mut(&mut self.particles).map_images(map);
+        for liquid in &mut self.liquids {
+            if let Some((material, animation)) = &mut liquid.surface {
+                map_material_images(material, map);
+                Arc::make_mut(animation).map_images(map);
+            }
+        }
+    }
+}
+impl PreparedModel {
+    pub(crate) fn map_images(
+        &mut self,
+        map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
+    ) {
+        for draw in Arc::make_mut(&mut self.draws) {
+            map_material_images(&mut draw.material, map);
+            Arc::make_mut(&mut draw.animation).map_images(map);
+        }
+        Arc::make_mut(&mut self.particles).map_images(map);
+        for liquid in Arc::make_mut(&mut self.liquids) {
+            if let Some((material, animation)) = &mut liquid.surface {
+                map_material_images(material, map);
+                Arc::make_mut(animation).map_images(map);
+            }
+        }
+        self.material_cache = Arc::new(Mutex::new(HashMap::new()));
     }
 }

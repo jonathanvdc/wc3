@@ -5,6 +5,7 @@ use super::effects::model_particles::ModelParticleChild;
 use super::events::EventClocks;
 use super::runtime::populate_model;
 use super::{ModelAsset, ModelMaterial, ModelRig, Playback, PoseOverrides, PreparedModel};
+use crate::image_replacements::{effective_replacements, ImageOwners, ReplacementImages};
 use bevy::asset::{
     AssetEvent, AssetId, AssetLoadError, DependencyLoadState, LoadState,
     RecursiveDependencyLoadState,
@@ -207,6 +208,7 @@ pub(crate) struct PreparedModelCache(HashMap<AssetId<ModelAsset>, PreparedModel>
 pub(crate) fn invalidate_models(
     mut events: MessageReader<AssetEvent<ModelAsset>>,
     mut cache: ResMut<PreparedModelCache>,
+    mut image_cache: ResMut<ReplacementImages>,
     mut commands: Commands,
     sources: Query<(Entity, &ModelSource), Without<ModelInstance>>,
 ) {
@@ -215,6 +217,7 @@ pub(crate) fn invalidate_models(
             event
         {
             cache.0.remove(id);
+            image_cache.invalidate(*id);
             if matches!(event, AssetEvent::Modified { .. }) {
                 for (root, source) in &sources {
                     if source.0.id() == *id {
@@ -321,12 +324,15 @@ pub(crate) struct LoaderResources<'w> {
     binds: ResMut<'w, Assets<SkinnedMeshInverseBindposes>>,
     materials: ResMut<'w, Assets<ModelMaterial>>,
     cache: ResMut<'w, PreparedModelCache>,
+    image_cache: ResMut<'w, ReplacementImages>,
+    images: ResMut<'w, Assets<Image>>,
 }
 
 pub(crate) fn spawn_loaded_models(
     mut commands: Commands,
     requests: ModelRequests<'_, '_>,
     hierarchy: ModelHierarchy<'_, '_>,
+    owners: ImageOwners<'_, '_>,
     resources: LoaderResources<'_>,
 ) {
     let LoaderResources {
@@ -336,6 +342,8 @@ pub(crate) fn spawn_loaded_models(
         mut binds,
         mut materials,
         mut cache,
+        mut image_cache,
+        mut images,
     } = resources;
     for (root, request, playback, previous, placement, overrides, failure) in &requests {
         // Ancestor replacement may despawn this renderer-owned request. Defer
@@ -374,6 +382,14 @@ pub(crate) fn spawn_loaded_models(
             .0
             .entry(request.0.id())
             .or_insert_with(|| source.compiled.prepare(&mut meshes, &mut binds));
+        let replacements = effective_replacements(root, &owners);
+        let Some((prepared, bound)) =
+            image_cache.prepare(request.0.id(), prepared, replacements, &mut images)
+        else {
+            continue;
+        };
+        let prepared = &prepared;
+        commands.entity(root).insert(bound);
         let mut rebound_playback = playback.cloned().unwrap_or_default();
         if placement.is_some() && playback.is_none() && previous.is_none() {
             if let Some((clip, _)) = prepared.clips.first() {

@@ -197,7 +197,28 @@ impl CompiledModel {
         &self,
         parts: impl IntoIterator<Item = ModelPart<'a>>,
     ) -> Result<Self, ModelError> {
+        let parts = parts.into_iter().collect::<Vec<_>>();
+        let template = if self.image_template.is_some()
+            || parts.iter().any(|part| part.model.image_template.is_some())
+        {
+            let source = self.image_template.as_deref().unwrap_or(self);
+            Some(Arc::new(
+                source.compose(
+                    parts
+                        .iter()
+                        .map(|part| ModelPart {
+                            model: part.model.image_template.as_deref().unwrap_or(part.model),
+                            binding: part.binding.clone(),
+                            clips: part.clips.clone(),
+                        })
+                        .collect::<Vec<_>>(),
+                )?,
+            ))
+        } else {
+            None
+        };
         let mut output = self.clone();
+        output.image_template = template;
         let mut identities = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
         for part in parts {
             let source = part.model;
@@ -265,6 +286,9 @@ impl CompiledModel {
                 output.diagnostics = diagnostics.into();
                 continue;
             }
+            let mut bindings = output.image_bindings.to_vec();
+            bindings.extend(source.image_bindings.iter().cloned());
+            output.image_bindings = bindings.into();
             if source_indices
                 .keys()
                 .any(|id| host_indices.contains_key(id))

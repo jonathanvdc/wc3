@@ -44,6 +44,8 @@ mod events;
 mod features;
 mod geometry;
 mod hierarchy;
+mod image_replacements;
+pub use image_replacements::ImageReplacements;
 mod instances;
 mod lod;
 mod material;

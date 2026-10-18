@@ -558,6 +558,7 @@ mod tests {
         use super::super::super::{
             compile_model, ModelInstanceError, ModelMaterial, ModelRig, ModelSource,
         };
+        use crate::image_replacements::ReplacementImages;
         use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
         let model = Model::<wc3::model::profiles::Universal>::empty(ModelMetadata::Mdlx(
             Default::default(),
@@ -569,6 +570,8 @@ mod tests {
             .init_resource::<Assets<SkinnedMeshInverseBindposes>>()
             .init_resource::<Assets<ModelMaterial>>()
             .init_resource::<PreparedModelCache>()
+            .init_resource::<ReplacementImages>()
+            .init_resource::<Assets<Image>>()
             .add_systems(Update, spawn_loaded_models);
         let handle = app
             .world_mut()

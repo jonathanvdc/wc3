@@ -503,3 +503,78 @@ mod static_binding_tests;
 
 #[cfg(test)]
 pub(crate) mod native_fixtures;
+
+/// Substitute symbolic image identities without changing sampled material state.
+pub(crate) fn map_material_images(
+    material: &mut ModelMaterial,
+    map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
+) {
+    let base = &mut material.base;
+    for image in [
+        &mut base.base_color_texture,
+        &mut base.emissive_texture,
+        &mut base.metallic_roughness_texture,
+        &mut base.normal_map_texture,
+        &mut base.occlusion_texture,
+        &mut base.depth_map,
+    ] {
+        *image = image.as_ref().and_then(&mut *map);
+    }
+    let extension = &mut material.extension;
+    for image in [
+        &mut extension.secondary,
+        &mut extension.orm,
+        &mut extension.team_color,
+        &mut extension.environment,
+        &mut extension.tertiary,
+        &mut extension.fourth,
+    ] {
+        *image = image.as_ref().and_then(&mut *map);
+    }
+    if extension.hd.maps.x != 0 {
+        base.metallic = if extension.orm.is_some() { 1. } else { 0. };
+        extension.hd.maps.y = u32::from(extension.orm.is_some());
+        extension.hd.maps.z = u32::from(extension.team_color.is_some());
+        extension.hd.maps.w = u32::from(extension.environment.is_some());
+        if base.emissive_texture.is_none() {
+            base.emissive = LinearRgba::BLACK;
+        }
+    }
+}
+impl SurfaceAnimation {
+    pub(crate) fn map_images(
+        &mut self,
+        map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
+    ) {
+        self.images = Arc::new(
+            self.images
+                .iter()
+                .filter_map(|(key, image)| map(image).map(|image| (*key, image)))
+                .collect(),
+        );
+        if let Some(hd) = &mut self.hd {
+            Arc::make_mut(&mut hd.images).map_images(map);
+        }
+    }
+}
+
+#[cfg(test)]
+mod image_rebinding_tests {
+    use super::*;
+
+    #[test]
+    fn missing_hd_images_restore_presence_dependent_material_defaults() {
+        let mut material = ModelMaterial::default();
+        material.extension.hd.maps = UVec4::ONE;
+        material.extension.orm = Some(Handle::default());
+        material.extension.team_color = Some(Handle::default());
+        material.extension.environment = Some(Handle::default());
+        material.base.emissive_texture = Some(Handle::default());
+        material.base.metallic = 1.;
+        material.base.emissive = LinearRgba::WHITE;
+        map_material_images(&mut material, &mut |_| None);
+        assert_eq!(material.base.metallic, 0.);
+        assert_eq!(material.base.emissive, LinearRgba::BLACK);
+        assert_eq!(material.extension.hd.maps, UVec4::new(1, 0, 0, 0));
+    }
+}

@@ -66,6 +66,33 @@ follows the role: color uses sRGB, normal and numeric maps use linear sampling.
 Distinct interpretations receive distinct handles without mutating shared images.
 Explicit semantic color-space declarations take precedence.
 
+For per-instance choices, insert `ImageReplacements` beside `ModelInstance`.
+Its `categories` map selects native replaceable categories, `resources` selects
+source-model image declarations, and `requests` selects exact `TextureRequestKey`
+interpretations. Exact requests take precedence over resources, then categories.
+`CompiledModel::image_requests()` exposes the complete request inventory, including
+unresolved defaults and their source declarations. Supplied image handles are
+sources: the renderer derives shared sampler and color-space variants without
+modifying the source image or recompiling geometry.
+
+```rust
+use bevy_wc3::{ImageReplacements, ModelInstance};
+
+commands.spawn((ModelInstance::new(model),
+    ImageReplacements::replaceable(1, team_color_image)));
+```
+
+Categories inherit through authored attachments and external model particles,
+with child categories taking precedence. Resource and request identities remain
+local to their source model, and application-owned child models do not inherit
+replacements. Changing or removing replacements rebinds the renderer-owned
+hierarchy while preserving root playback and pose overrides. Independent child
+clocks, physics state, particles and ribbon populations restart during that
+rebind. Keep bindings stable when those transient states must persist. Source
+image changes rebuild derived variants; image sources must be CPU-resident so
+the renderer can construct the requested interpretations. This component applies
+to asset-backed `ModelInstance` roots.
+
 BLP0/1/2 decoding is included. BLP0 requires its sibling `.b00` payload in the same
 asset source. Only base-level pixels are uploaded; authored BLP mip chains are not.
 Compatibility with real beta-game BLP0 assets remains unverified.

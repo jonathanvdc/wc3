@@ -328,6 +328,7 @@ fn rendered_hierarchy_preserves_shear() {
 fn asset_population_retains_existing_root_controls_and_source_identity() {
     let mut slot_values = SlotValues::default();
     use super::instances::{spawn_loaded_models, PreparedModelCache};
+    use crate::image_replacements::ReplacementImages;
     let (source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
     let compiled = compile_model(&source, |_| None).unwrap();
     let mut app = App::new();
@@ -335,7 +336,9 @@ fn asset_population_retains_existing_root_controls_and_source_identity() {
         .init_resource::<Assets<Mesh>>()
         .init_resource::<Assets<SkinnedMeshInverseBindposes>>()
         .init_resource::<Assets<ModelMaterial>>()
-        .init_resource::<PreparedModelCache>();
+        .init_resource::<PreparedModelCache>()
+        .init_resource::<ReplacementImages>()
+        .init_resource::<Assets<Image>>();
     app.add_systems(Update, spawn_loaded_models);
     let handle = app
         .world_mut()
@@ -382,6 +385,7 @@ fn asset_population_retains_existing_root_controls_and_source_identity() {
 fn replacing_asset_population_removes_only_the_owned_old_hierarchy() {
     let mut slot_values = SlotValues::default();
     use super::instances::{spawn_loaded_models, PreparedModelCache};
+    use crate::image_replacements::ReplacementImages;
     let (source, joint) = fixture(UniversalBinding::Identity(IdentityBinding));
     let compiled = compile_model(&source, |_| None).unwrap();
     let mut app = App::new();
@@ -389,7 +393,9 @@ fn replacing_asset_population_removes_only_the_owned_old_hierarchy() {
         .init_resource::<Assets<Mesh>>()
         .init_resource::<Assets<SkinnedMeshInverseBindposes>>()
         .init_resource::<Assets<ModelMaterial>>()
-        .init_resource::<PreparedModelCache>();
+        .init_resource::<PreparedModelCache>()
+        .init_resource::<ReplacementImages>()
+        .init_resource::<Assets<Image>>();
     app.add_systems(Update, spawn_loaded_models);
     let first = app
         .world_mut()
@@ -823,5 +829,72 @@ fn driving_camera_and_root_local_changes_update_billboards_before_propagation() 
             .unwrap()
             .evaluation_count(),
         count
+    );
+}
+
+#[test]
+fn instance_replacements_bind_real_materials_and_share_geometry() {
+    use crate::image_replacements::ReplacementImages;
+    use wc3::model::materials::program::MaterialStep;
+    use wc3::model::{ImageResource, Texture};
+    let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
+    let (material_id, material) = source.materials().iter().next().unwrap();
+    let mut material = material.clone();
+    source
+        .edit(|builder| {
+            let image = Texture::new(builder.add_image_resource(ImageResource::replaceable(1)));
+            let MaterialStep::Mdlx(step) = &mut material.surface.steps[0] else {
+                unreachable!()
+            };
+            let Shader::Classic(inputs) = &mut step.shader else {
+                unreachable!()
+            };
+            inputs.binding.image = builder.values_mut().add(Some(image));
+            builder.set_material(material_id, material)
+        })
+        .unwrap();
+    let mut images = Assets::<Image>::default();
+    let default = images.add(Image::default());
+    let replacement = images.add(Image::default());
+    let compiled = compile_model(&source, |_| Some(default.clone())).unwrap();
+    assert_eq!(
+        compiled.draws[0].material.base.base_color_texture.as_ref(),
+        Some(&default)
+    );
+    let mut meshes = Assets::default();
+    let mut binds = Assets::default();
+    let prepared = compiled.prepare(&mut meshes, &mut binds);
+    let mesh_count = meshes.len();
+    let model = Handle::<ModelAsset>::default();
+    let mut cache = ReplacementImages::default();
+    let (changed, _bound) = cache
+        .prepare(
+            model.id(),
+            &prepared,
+            ImageReplacements::replaceable(1, replacement.clone()),
+            &mut images,
+        )
+        .unwrap();
+    let selected = changed.draws[0]
+        .material
+        .base
+        .base_color_texture
+        .as_ref()
+        .unwrap();
+    assert_ne!(selected, &default);
+    assert_ne!(selected, &replacement);
+    assert_eq!(changed.draws[0].mesh, prepared.draws[0].mesh);
+    assert_eq!(meshes.len(), mesh_count);
+    let (restored, _) = cache
+        .prepare(
+            model.id(),
+            &prepared,
+            ImageReplacements::default(),
+            &mut images,
+        )
+        .unwrap();
+    assert_eq!(
+        restored.draws[0].material.base.base_color_texture.as_ref(),
+        Some(&default)
     );
 }

@@ -915,3 +915,14 @@ mod tests {
         assert_eq!(state.live.len(), 8);
     }
 }
+
+impl RuntimeAtlasParticles {
+    pub(crate) fn map_images(
+        &mut self,
+        map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
+    ) {
+        for emitter in &mut self.emitters {
+            emitter.texture = emitter.texture.as_ref().and_then(&mut *map);
+        }
+    }
+}

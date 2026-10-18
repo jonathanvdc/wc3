@@ -4,6 +4,7 @@ use super::age_appearance::{AgeAppearance, AgeParticleAppearance};
 use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
 use super::frame::EffectFrame;
+use crate::material::map_material_images;
 use crate::material::{particle_material_layers, ParticleComposition};
 use crate::mesh_attributes::EXTRA_TEXCOORD;
 use crate::textures::{TextureImages, TextureRole};
@@ -1241,3 +1242,19 @@ impl SpriteMeshBuffers {
 #[cfg(test)]
 #[path = "age_sprites_tests.rs"]
 mod tests;
+
+impl RuntimeAgeSprites {
+    pub(crate) fn map_images(
+        &mut self,
+        map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
+    ) {
+        for emitter in &mut self.emitters {
+            for pass in &mut emitter.passes {
+                map_material_images(&mut pass.material, map);
+                if let Some(animation) = &mut pass.animation {
+                    Arc::make_mut(animation).map_images(map);
+                }
+            }
+        }
+    }
+}
