@@ -9,9 +9,6 @@ use crate::model::{
     NodeFeature, ParticleEmitter, Property, RibbonEmitter,
 };
 use crate::model::{Axis, ChildModel, Socket};
-use crate::model::{
-    ParticleDefinition, ParticleScalar, ParticleTrigger, TrailAtlasSlot, TrailEmitter,
-};
 use std::fmt::Debug;
 
 /// A vocabulary exposing the behavior of an attached feature without conversion.
@@ -65,31 +62,26 @@ pub enum AttachmentView<'view, 'data> {
 /// Authored alternatives for particles behavior.
 #[derive(Clone, Copy, Debug)]
 pub enum ParticlesView<'view, 'data> {
-    /// Shared owned emitter definition.
-    Definition(&'view ParticleDefinition<'data>),
     /// Indexed socket and external child-model dependency.
     External(&'view EffectResourceId),
     /// Complete Model definition, retaining its authored semantics.
-    Model(&'view mdlx::Particle),
+    MdlxEmitter1(&'view mdlx::ParticleEmitter1),
     /// Complete Sprite definition, retaining its authored semantics.
-    Sprite(&'view mdlx::Particle2),
+    MdlxEmitter2(&'view mdlx::ParticleEmitter2),
     /// Complete Popcorn definition, retaining its authored semantics.
     Popcorn(&'view mdlx::Popcorn<'data>),
     /// Complete M2 definition, retaining its authored semantics.
-    AgeDriven(&'view m2::Particle<'data>),
+    M2(&'view m2::ParticleEmitter<'data>),
 }
 /// Authored alternatives for ribbon behavior.
 #[derive(Clone, Copy, Debug)]
 pub enum RibbonView<'view> {
-    /// Shared persistent-trail definition.
-    Trail(&'view TrailEmitter),
-
     /// Indexed socket and external child-model dependency.
     External(&'view EffectResourceId),
     /// Complete Mdlx definition, retaining its authored semantics.
-    Segmented(&'view mdlx::Ribbon),
+    Mdlx(&'view mdlx::RibbonEmitter),
     /// Complete M2 definition, retaining its authored semantics.
-    Edge(&'view m2::Ribbon),
+    M2(&'view m2::RibbonEmitter),
 }
 /// Authored alternatives for collision behavior.
 #[derive(Clone, Copy, Debug)]
@@ -126,9 +118,9 @@ impl<'data> mdlx::Node<'data> {
     pub(crate) fn profile_feature(&self) -> FeatureView<'_, 'data> {
         match self {
             Self::GeometryAnimation(value) => FeatureView::GeometryAnimation(value),
-            Self::Particle(value) => FeatureView::Particles(ParticlesView::Model(value)),
-            Self::AtlasParticles(value) => FeatureView::Particles(ParticlesView::Sprite(value)),
-            Self::Ribbon(value) => FeatureView::Ribbon(RibbonView::Segmented(value)),
+            Self::Particle(value) => FeatureView::Particles(ParticlesView::MdlxEmitter1(value)),
+            Self::Particle2(value) => FeatureView::Particles(ParticlesView::MdlxEmitter2(value)),
+            Self::Ribbon(value) => FeatureView::Ribbon(RibbonView::Mdlx(value)),
             Self::ParticleProgram(value) => FeatureView::Particles(ParticlesView::Popcorn(value)),
             Self::Light(value) => FeatureView::Light(LightView::VisibleAmbientDiffuse(value)),
             Self::Camera(value) => FeatureView::Camera(CameraView::VerticalAim(value)),
@@ -147,15 +139,15 @@ impl<'data> m2::ActorKind<'data> {
             Self::Attachment(value) => FeatureView::Attachment(AttachmentView::Role(value)),
             Self::Light(value) => FeatureView::Light(LightView::EnabledAmbientDiffuse(value)),
             Self::Camera(value) => FeatureView::Camera(CameraView::DiagonalAim(value)),
-            Self::Ribbon(value) => FeatureView::Ribbon(RibbonView::Edge(value)),
-            Self::Particle(value) => FeatureView::Particles(ParticlesView::AgeDriven(value)),
+            Self::Ribbon(value) => FeatureView::Ribbon(RibbonView::M2(value)),
+            Self::Particle(value) => FeatureView::Particles(ParticlesView::M2(value)),
 
             Self::GeometryAnimation(unavailable)
             | Self::CollisionShape(unavailable)
             | Self::ParticleProgram(unavailable)
             | Self::FaceActor(unavailable)
             | Self::LightProgram(unavailable)
-            | Self::AtlasParticles(unavailable)
+            | Self::Particle2(unavailable)
             | Self::PointLight(unavailable) => match *unavailable {},
         }
     }
@@ -175,7 +167,7 @@ impl<'data> wmo::Node<'data> {
             | Self::CollisionShape(unavailable)
             | Self::ParticleProgram(unavailable)
             | Self::FaceActor(unavailable)
-            | Self::AtlasParticles(unavailable) => match *unavailable {},
+            | Self::Particle2(unavailable) => match *unavailable {},
         }
     }
 }
@@ -357,11 +349,14 @@ impl<'data> NodeFeature<'data> {
             },
             Self::Particle(v) => FeatureView::Particles(match v {
                 ParticleEmitter::Resource(v) => ParticlesView::External(v),
-                ParticleEmitter::Simulated(v) => ParticlesView::Definition(v),
+                ParticleEmitter::MdlxEmitter1(v) => ParticlesView::MdlxEmitter1(v),
+                ParticleEmitter::MdlxEmitter2(v) => ParticlesView::MdlxEmitter2(v),
+                ParticleEmitter::M2(v) => ParticlesView::M2(v),
             }),
             Self::Ribbon(v) => FeatureView::Ribbon(match v {
                 RibbonEmitter::Resource(v) => RibbonView::External(v),
-                RibbonEmitter::Trail(v) => RibbonView::Trail(v),
+                RibbonEmitter::Mdlx(v) => RibbonView::Mdlx(v),
+                RibbonEmitter::M2(v) => RibbonView::M2(v),
             }),
             Self::CollisionShape(v) => FeatureView::Collision(CollisionView::Primitive(v)),
 
@@ -371,9 +366,7 @@ impl<'data> NodeFeature<'data> {
             Self::GeometryAnimation(v) => FeatureView::GeometryAnimation(v),
             Self::FaceActor(v) => FeatureView::FaceActor(v),
 
-            Self::AtlasParticles(unavailable) | Self::PointLight(unavailable) => {
-                match *unavailable {}
-            }
+            Self::Particle2(unavailable) | Self::PointLight(unavailable) => match *unavailable {},
         }
     }
 }
@@ -403,42 +396,31 @@ impl<'view, 'data> ParticlesView<'view, 'data> {
     /// External resources have no local definition; copies expose their local overrides.
     pub fn emission(self) -> Option<EmissionRef<'view>> {
         match self {
-            Self::Definition(v) => Some(match (&v.emission.rate, &v.emission.trigger) {
-                (ParticleScalar::Property(rate), ParticleTrigger::Continuous) => {
-                    EmissionRef::Continuous(rate)
-                }
-                (ParticleScalar::Property(count), ParticleTrigger::KeyedBurst) => {
-                    EmissionRef::BurstAtKeys(count)
-                }
-            }),
             Self::External(_) => None,
-            Self::Model(v) => Some(EmissionRef::Continuous(&v.emission.rate)),
-            Self::Sprite(v) if v.emission.trigger => {
+            Self::MdlxEmitter1(v) => Some(EmissionRef::Continuous(&v.emission.rate)),
+            Self::MdlxEmitter2(v) if v.emission.trigger => {
                 Some(EmissionRef::BurstAtKeys(&v.emission.rate))
             }
-            Self::Sprite(v) => Some(EmissionRef::Continuous(&v.emission.rate)),
+            Self::MdlxEmitter2(v) => Some(EmissionRef::Continuous(&v.emission.rate)),
             Self::Popcorn(v) => Some(EmissionRef::ProgramInput(&v.emission_rate)),
-            Self::AgeDriven(v) => Some(EmissionRef::Continuous(&v.emission.rate)),
+            Self::M2(v) => Some(EmissionRef::Continuous(&v.emission.rate)),
         }
     }
     /// Inspects nominal particle persistence. Random variation remains on the full definition.
     /// Copies inherit lifetime from their referenced emitter, so require graph resolution.
     pub fn lifetime(self) -> Option<LifetimeRef<'view>> {
         match self {
-            Self::Definition(v) => Some(scalar_lifetime(&v.lifetime.duration)),
             Self::External(_) => None,
-            Self::Model(v) => Some(LifetimeRef::AnimatedSeconds(&v.lifetime.duration)),
-            Self::Sprite(v) => Some(LifetimeRef::Seconds(&v.lifetime.duration)),
+            Self::MdlxEmitter1(v) => Some(LifetimeRef::AnimatedSeconds(&v.lifetime.duration)),
+            Self::MdlxEmitter2(v) => Some(LifetimeRef::Seconds(&v.lifetime.duration)),
             Self::Popcorn(v) => Some(LifetimeRef::ProgramInput(&v.life_span)),
-            Self::AgeDriven(v) => Some(LifetimeRef::AnimatedSeconds(&v.lifetime.duration)),
+            Self::M2(v) => Some(LifetimeRef::AnimatedSeconds(&v.lifetime.duration)),
         }
     }
 }
 /// Trail sections per second, retaining the authored numeric domain.
 #[derive(Clone, Copy, Debug)]
 pub enum TrailRateRef<'view> {
-    /// Shared exact numeric domain accommodating integral and fractional rates.
-    Exact(&'view f64),
     /// Integral section frequency.
     Integral(&'view u32),
     /// Fractional edge frequency.
@@ -474,19 +456,7 @@ impl<'view> RibbonView<'view> {
     /// Inspects common section-based trail controls.
     pub fn edge_strip(self) -> Option<EdgeStripRef<'view>> {
         match self {
-            Self::Trail(v) => Some(EdgeStripRef {
-                axis: &v.geometry.axis,
-                color: &v.appearance.color,
-                opacity: &v.appearance.opacity,
-                height: [&v.geometry.height_above, &v.geometry.height_below],
-                lifetime_seconds: &v.lifetime,
-                emission_rate: TrailRateRef::Exact(&v.emission_rate),
-                atlas_cell: match &v.appearance.texture_slot {
-                    TrailAtlasSlot::Wide(v) => AtlasCellRef::U32(v),
-                    TrailAtlasSlot::Compact(v) => AtlasCellRef::U16(v),
-                },
-            }),
-            Self::Segmented(v) => Some(EdgeStripRef {
+            Self::Mdlx(v) => Some(EdgeStripRef {
                 axis: &v.geometry.axis,
                 color: &v.appearance.color,
                 opacity: &v.appearance.opacity,
@@ -495,7 +465,7 @@ impl<'view> RibbonView<'view> {
                 emission_rate: TrailRateRef::Integral(&v.emission_rate),
                 atlas_cell: AtlasCellRef::U32(&v.appearance.texture_slot),
             }),
-            Self::Edge(v) => Some(EdgeStripRef {
+            Self::M2(v) => Some(EdgeStripRef {
                 axis: &v.geometry.axis,
                 color: &v.appearance.color,
                 opacity: &v.appearance.opacity,
@@ -511,17 +481,9 @@ impl<'view> RibbonView<'view> {
     /// Inspects nominal ribbon persistence in seconds.
     pub fn lifetime(self) -> Option<LifetimeRef<'view>> {
         match self {
-            Self::Trail(v) => Some(LifetimeRef::Seconds(&v.lifetime)),
-
             Self::External(_) => None,
-            Self::Segmented(v) => Some(LifetimeRef::Seconds(&v.lifetime)),
-            Self::Edge(v) => Some(LifetimeRef::Seconds(&v.lifetime)),
+            Self::Mdlx(v) => Some(LifetimeRef::Seconds(&v.lifetime)),
+            Self::M2(v) => Some(LifetimeRef::Seconds(&v.lifetime)),
         }
-    }
-}
-
-fn scalar_lifetime(value: &ParticleScalar) -> LifetimeRef<'_> {
-    match value {
-        ParticleScalar::Property(value) => LifetimeRef::AnimatedSeconds(value),
     }
 }

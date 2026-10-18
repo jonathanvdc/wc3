@@ -4,8 +4,8 @@ use crate::model::io::m2::graph::texture_index;
 use crate::model::io::{materialize, owned};
 use crate::model::{self as semantic, profiles::m2 as profile, Curve, Time};
 use crate::model::{
-    AgeDrivenParticle, AgeDrivenParticleRendering, AgeDrivenParticleShape, ParticleEmission,
-    ParticleLifetime, ParticleMotion,
+    M2ParticleDetails, M2ParticleRendering, M2ParticleShape, ParticleEmission, ParticleLifetime,
+    ParticleMotion,
 };
 use profile::values::ParticleHeadTail as GeometrySelection;
 use zerovec::ZeroVec;
@@ -197,7 +197,7 @@ pub(super) fn read<'a, 'data: 'a, V: ModelLayout>(
     value: &'a native::records::ParticleEmitter<'data, V>,
     textures: &[semantic::Texture],
     builder: &mut semantic::ModelBuilder<'a, semantic::profiles::M2>,
-) -> Result<profile::Particle<'a>, Error>
+) -> Result<profile::ParticleEmitter<'a>, Error>
 where
     V::Header: HeaderFields,
     V::Variation: OptionalFloat,
@@ -248,11 +248,11 @@ where
             .then(|| builder.add_model_resource(semantic::PathResource::Path(Cow::Borrowed(bytes))))
     };
     let spline = &value.spline_points;
-    Ok(profile::Particle {
-        details: AgeDrivenParticle {
+    Ok(profile::ParticleEmitter {
+        details: M2ParticleDetails {
             id: value.id,
             flags: profile::values::ParticleFlags::from_bits_retain(value.flags.bits()),
-            rendering: AgeDrivenParticleRendering {
+            rendering: M2ParticleRendering {
                 blend: profile::values::ParticleBlend::from_raw(blend.raw()),
                 color_index: color as u16,
                 textures,
@@ -269,7 +269,7 @@ where
                     .values()
                     .map(|v| v.map(|x| f32::from(x) / 512.)),
             },
-            shape: AgeDrivenParticleShape {
+            shape: M2ParticleShape {
                 generator: profile::values::ParticleGenerator::from_raw(kind.raw()),
                 legacy_shape: legacy[0],
                 vertical_range: builder.add_value(initial(&value.vertical_range).unwrap_or(0.)),
@@ -355,7 +355,7 @@ fn encode_age<T: semantic::CurveValue, U: Value>(
     })
 }
 pub(super) fn write<V: ModelLayout>(
-    payload: &profile::Particle<'_>,
+    payload: &profile::ParticleEmitter<'_>,
     textures: &[semantic::Texture],
     context: &mut Context,
     model: &semantic::Model<'_, semantic::profiles::M2>,

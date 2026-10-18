@@ -3,6 +3,7 @@ use super::super::coordinates::{axis, basis};
 use super::super::material::{effect_state, ModelMaterial, SurfaceAnimation, SurfacePass};
 use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
+use super::ribbon_definition::{TrailAtlasSlot, TrailControls, TrailEmitter, TrailRendering};
 use super::EffectFrame;
 use crate::effects::blend::EffectBlend;
 use crate::effects::records::RingCursor;
@@ -15,8 +16,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::{
     ClipId, FeatureId, MaterialId, Model, NodeFeature, NodeId,
-    RibbonEmitter as SemanticRibbonEmitter, TrailAtlasSlot, TrailControls, TrailEmitter,
-    TrailRendering,
+    RibbonEmitter as SemanticRibbonEmitter,
 };
 
 const CAPACITY: usize = 8192;
@@ -164,9 +164,10 @@ impl RuntimeRibbons {
             ..Default::default()
         };
         for (feature, value) in model.features() {
-            let NodeFeature::Ribbon(SemanticRibbonEmitter::Trail(definition)) = &value.payload
-            else {
-                continue;
+            let definition: TrailEmitter = match &value.payload {
+                NodeFeature::Ribbon(SemanticRibbonEmitter::Mdlx(value)) => (**value).clone().into(),
+                NodeFeature::Ribbon(SemanticRibbonEmitter::M2(value)) => (**value).clone().into(),
+                _ => continue,
             };
             let mut diagnostic =
                 |message: &str| result.diagnostics.push((feature, message.to_string()));
@@ -232,7 +233,7 @@ impl RuntimeRibbons {
                 feature,
                 node: value.node,
                 anchor: nodes[&value.node],
-                definition: (**definition).clone(),
+                definition,
                 passes,
             });
         }

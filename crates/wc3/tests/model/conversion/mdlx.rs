@@ -191,10 +191,10 @@ fn complete_native_emitter_is_an_editable_logical_feature() {
     let (id, mut feature) = graph
         .features()
         .iter()
-        .find(|(_, feature)| matches!(feature.payload, profile::Node::AtlasParticles(_)))
+        .find(|(_, feature)| matches!(feature.payload, profile::Node::Particle2(_)))
         .map(|(id, feature)| (id, feature.payload.clone()))
         .unwrap();
-    let profile::Node::AtlasParticles(emitter) = &mut feature else {
+    let profile::Node::Particle2(emitter) = &mut feature else {
         unreachable!()
     };
     emitter.emission.rate = slot_values.add(17.);

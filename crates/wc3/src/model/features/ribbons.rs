@@ -1,5 +1,5 @@
 //! Composed ribbon emission, geometry, appearance, and rendering programs.
-use crate::model::profiles::{m2, mdlx};
+use crate::model::profiles::m2;
 use crate::model::{Axis, MaterialId, Property, Texture};
 use crate::model::{Construct, PropertyValues};
 
@@ -19,8 +19,6 @@ pub struct TrailComposition<R, S, A, B, C> {
     /// Independent physical and activation controls.
     pub controls: C,
 }
-/// Broad trail composition selected by the Universal profile.
-pub type TrailEmitter = TrailComposition<f64, TrailAtlasSlot, u32, TrailRendering, TrailControls>;
 /// Animated upper and lower extent of a generated trail.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TrailGeometry {
@@ -43,7 +41,7 @@ impl Construct for TrailGeometry {
 }
 /// Animated trail appearance and atlas layout.
 #[derive(Clone, Debug, Construct, PartialEq)]
-pub struct TrailAppearance<S = TrailAtlasSlot, A = u32> {
+pub struct TrailAppearance<S, A = u32> {
     /// RGB tint.
     pub color: Property<[f32; 3]>,
     /// Opacity multiplier.
@@ -53,43 +51,15 @@ pub struct TrailAppearance<S = TrailAtlasSlot, A = u32> {
     /// Atlas selector retaining its typed animated destination.
     pub texture_slot: S,
 }
-/// Typed atlas selectors retain animation identity and value domain.
-#[derive(Clone, Debug)]
-pub enum TrailAtlasSlot {
-    /// Full-width cell selection.
-    Wide(Property<u32>),
-    /// Compact cell selection.
-    Compact(Property<u16>),
-}
-/// Logical rendering alternatives rather than source-file layouts.
-#[derive(Clone, Debug)]
-pub enum TrailRendering {
-    /// A layered material supplies the complete surface program.
-    Layered(LayeredTrailRendering),
-    /// Ordered texture and shader-surface bindings.
-    Surfaces(SurfaceTrailRendering),
-}
-/// Physical and application controls with explicit meanings.
-#[derive(Clone, Debug)]
-#[allow(
-    clippy::large_enum_variant,
-    reason = "Authored controls remain directly editable without an allocation."
-)]
-pub enum TrailControls {
-    /// Gravitational acceleration and fractional visibility.
-    Gravity(GravityTrailControls),
-    /// Emission direction and discrete activation with texture controls.
-    EmissionAngle(AngleTrailControls),
-}
 /// A trail rendered by one layered material.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct LayeredTrailRendering {
+pub struct MdlxRibbonRendering {
     /// Complete layered surface.
     pub material: Option<MaterialId>,
 }
 /// Ordered textures and shader surfaces supplying a trail.
 #[derive(Clone, Debug)]
-pub struct SurfaceTrailRendering {
+pub struct M2RibbonRendering {
     /// Ordered texture resources.
     pub textures: Vec<Texture>,
     /// Ordered surfaces.
@@ -97,7 +67,7 @@ pub struct SurfaceTrailRendering {
 }
 /// Gravitational acceleration and fractional visibility.
 #[derive(Clone, Debug, Construct, PartialEq)]
-pub struct GravityTrailControls {
+pub struct MdlxRibbonControls {
     /// Gravity acceleration.
     pub gravity: f32,
     /// Visibility multiplier.
@@ -105,7 +75,7 @@ pub struct GravityTrailControls {
 }
 /// Emission direction, discrete activation, and texture controls.
 #[derive(Clone, Debug)]
-pub struct AngleTrailControls {
+pub struct M2RibbonControls {
     /// Emission angle, independently of acceleration.
     pub angle: f32,
     /// Runtime effect identifier.
@@ -120,131 +90,11 @@ pub struct AngleTrailControls {
     pub texture_transform: Option<m2::TextureTransform>,
 }
 /// Trail composition with integral section generation and fractional visibility.
-pub type GravityTrail =
-    TrailComposition<u32, Property<u32>, u32, LayeredTrailRendering, GravityTrailControls>;
+pub type MdlxRibbonEmitter =
+    TrailComposition<u32, Property<u32>, u32, MdlxRibbonRendering, MdlxRibbonControls>;
 /// Trail composition with fractional edge generation and discrete activation.
-pub type AngleTrail =
-    TrailComposition<f32, Property<u16>, u16, SurfaceTrailRendering, AngleTrailControls>;
-impl From<mdlx::Ribbon> for TrailEmitter {
-    fn from(v: mdlx::Ribbon) -> Self {
-        Self {
-            emission_rate: f64::from(v.emission_rate),
-            lifetime: v.lifetime,
-            geometry: v.geometry,
-            appearance: TrailAppearance {
-                color: v.appearance.color,
-                opacity: v.appearance.opacity,
-                atlas: v.appearance.atlas,
-                texture_slot: TrailAtlasSlot::Wide(v.appearance.texture_slot),
-            },
-            rendering: TrailRendering::Layered(v.rendering),
-            controls: TrailControls::Gravity(v.controls),
-        }
-    }
-}
-impl From<m2::Ribbon> for TrailEmitter {
-    fn from(v: m2::Ribbon) -> Self {
-        Self {
-            emission_rate: f64::from(v.emission_rate),
-            lifetime: v.lifetime,
-            geometry: v.geometry,
-            appearance: TrailAppearance {
-                color: v.appearance.color,
-                opacity: v.appearance.opacity,
-                atlas: v.appearance.atlas.map(u32::from),
-                texture_slot: TrailAtlasSlot::Compact(v.appearance.texture_slot),
-            },
-            rendering: TrailRendering::Surfaces(v.rendering),
-            controls: TrailControls::EmissionAngle(v.controls),
-        }
-    }
-}
-impl TryFrom<TrailEmitter> for mdlx::Ribbon {
-    type Error = Box<TrailEmitter>;
-    fn try_from(v: TrailEmitter) -> Result<Self, Self::Error> {
-        if !(v.emission_rate >= 0.0
-            && v.emission_rate <= f64::from(u32::MAX)
-            && v.emission_rate.fract() == 0.0
-            && matches!(
-                (&v.appearance.texture_slot, &v.rendering, &v.controls),
-                (
-                    TrailAtlasSlot::Wide(_),
-                    TrailRendering::Layered(_),
-                    TrailControls::Gravity(_)
-                )
-            ))
-        {
-            return Err(Box::new(v));
-        }
-        let emission_rate = v.emission_rate as u32;
-        let TrailAtlasSlot::Wide(texture_slot) = v.appearance.texture_slot else {
-            unreachable!()
-        };
-        let TrailRendering::Layered(rendering) = v.rendering else {
-            unreachable!()
-        };
-        let TrailControls::Gravity(controls) = v.controls else {
-            unreachable!()
-        };
-        Ok(Self {
-            geometry: v.geometry,
-            appearance: TrailAppearance {
-                opacity: v.appearance.opacity,
-                color: v.appearance.color,
-                texture_slot,
-                atlas: v.appearance.atlas,
-            },
-            lifetime: v.lifetime,
-            emission_rate,
-            rendering,
-            controls,
-        })
-    }
-}
-impl TryFrom<TrailEmitter> for m2::Ribbon {
-    type Error = Box<TrailEmitter>;
-    fn try_from(v: TrailEmitter) -> Result<Self, Self::Error> {
-        if f64::from(v.emission_rate as f32).to_bits() != v.emission_rate.to_bits()
-            || v.appearance
-                .atlas
-                .iter()
-                .any(|n| u16::try_from(*n).is_err())
-            || !matches!(
-                (&v.appearance.texture_slot, &v.rendering, &v.controls),
-                (
-                    TrailAtlasSlot::Compact(_),
-                    TrailRendering::Surfaces(_),
-                    TrailControls::EmissionAngle(_)
-                )
-            )
-        {
-            return Err(Box::new(v));
-        }
-        let edges_per_second = v.emission_rate as f32;
-        let TrailAtlasSlot::Compact(texture_slot) = v.appearance.texture_slot else {
-            unreachable!()
-        };
-        let TrailRendering::Surfaces(rendering) = v.rendering else {
-            unreachable!()
-        };
-        let TrailControls::EmissionAngle(controls) = v.controls else {
-            unreachable!()
-        };
-        Ok(Self {
-            controls,
-            rendering,
-            appearance: TrailAppearance {
-                color: v.appearance.color,
-                opacity: v.appearance.opacity,
-                atlas: v.appearance.atlas.map(|n| n as u16),
-                texture_slot,
-            },
-            geometry: v.geometry,
-            emission_rate: edges_per_second,
-            lifetime: v.lifetime,
-        })
-    }
-}
+pub type M2RibbonEmitter =
+    TrailComposition<f32, Property<u16>, u16, M2RibbonRendering, M2RibbonControls>;
 
 use crate::model::{Link, ValidateLinks};
 
@@ -284,51 +134,27 @@ impl<R: TrailRate, S: ValidateLinks, A, B: ValidateLinks, C: ValidateLinks> Vali
         }
     }
 }
-impl ValidateLinks for TrailAtlasSlot {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        match self {
-            Self::Wide(value) => value.visit_links(visitor),
-            Self::Compact(value) => value.visit_links(visitor),
-        }
-    }
-}
-impl ValidateLinks for TrailRendering {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        match self {
-            Self::Layered(value) => value.visit_links(visitor),
-            Self::Surfaces(value) => value.visit_links(visitor),
-        }
-    }
-}
-impl ValidateLinks for LayeredTrailRendering {
+impl ValidateLinks for MdlxRibbonRendering {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.material.visit_links(visitor);
     }
 }
-impl ValidateLinks for SurfaceTrailRendering {
+impl ValidateLinks for M2RibbonRendering {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.textures.visit_links(visitor);
         self.materials.visit_links(visitor);
     }
 }
-impl ValidateLinks for GravityTrailControls {
+impl ValidateLinks for MdlxRibbonControls {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.gravity.visit_links(visitor);
         self.visibility.visit_links(visitor);
     }
 }
-impl ValidateLinks for AngleTrailControls {
+impl ValidateLinks for M2RibbonControls {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.angle.visit_links(visitor);
         self.enabled.visit_links(visitor);
         self.texture_transform.visit_links(visitor);
-    }
-}
-impl ValidateLinks for TrailControls {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        match self {
-            Self::Gravity(value) => value.visit_links(visitor),
-            Self::EmissionAngle(value) => value.visit_links(visitor),
-        }
     }
 }

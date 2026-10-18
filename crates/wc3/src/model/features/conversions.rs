@@ -1,8 +1,6 @@
 //! Lossless movement between constrained and universal feature vocabularies.
-use super::{
-    Attachment, Camera, Light, NodeFeature, ParticleDetails, ParticleEmitter, RibbonEmitter,
-};
-use super::{ChildModel, ParticleDefinition, Socket, TrailEmitter};
+use super::{Attachment, Camera, Light, NodeFeature, ParticleEmitter, RibbonEmitter};
+use super::{ChildModel, Socket};
 use crate::model::profiles::{m2, mdlx, wmo};
 use crate::model::scene;
 use crate::model::PropertyValues;
@@ -10,15 +8,13 @@ impl<'a> FromFeature<mdlx::Node<'a>> for NodeFeature<'a> {
     fn from_feature(value: mdlx::Node<'a>, values: &mut PropertyValues) -> Self {
         match value {
             mdlx::Node::GeometryAnimation(value) => Self::GeometryAnimation(value),
-            mdlx::Node::Particle(value) => Self::Particle(ParticleEmitter::Simulated(Box::new(
-                FromFeature::from_feature(value, values),
-            ))),
-            mdlx::Node::AtlasParticles(value) => Self::Particle(ParticleEmitter::Simulated(
-                Box::new(FromFeature::from_feature(value, values)),
-            )),
-            mdlx::Node::Ribbon(value) => Self::Ribbon(RibbonEmitter::Trail(Box::new(
-                FromFeature::from_feature(value, values),
-            ))),
+            mdlx::Node::Particle(value) => {
+                Self::Particle(ParticleEmitter::MdlxEmitter1(Box::new(value)))
+            }
+            mdlx::Node::Particle2(value) => {
+                Self::Particle(ParticleEmitter::MdlxEmitter2(Box::new(value)))
+            }
+            mdlx::Node::Ribbon(value) => Self::Ribbon(RibbonEmitter::Mdlx(Box::new(value))),
             mdlx::Node::ParticleProgram(value) => Self::ParticleProgram(Box::new(value)),
             mdlx::Node::Light(value) => Self::Light(Light::AmbientDiffuse(Box::new(
                 FromFeature::from_feature(value, values),
@@ -41,31 +37,13 @@ impl<'a> TryFromFeature<NodeFeature<'a>> for mdlx::Node<'a> {
     ) -> Result<Self, Self::Error> {
         match value {
             NodeFeature::GeometryAnimation(value) => Ok(Self::GeometryAnimation(value)),
-            NodeFeature::Particle(ParticleEmitter::Simulated(value)) => match value.details {
-                ParticleDetails::Model(_) => match TryFromFeature::try_from_feature(*value, values)
-                {
-                    Ok(value) => Ok(Self::Particle(value)),
-                    Err(value) => Err(Box::new(NodeFeature::Particle(ParticleEmitter::Simulated(
-                        value,
-                    )))),
-                },
-                ParticleDetails::Atlas(_) => match TryFromFeature::try_from_feature(*value, values)
-                {
-                    Ok(value) => Ok(Self::AtlasParticles(value)),
-                    Err(value) => Err(Box::new(NodeFeature::Particle(ParticleEmitter::Simulated(
-                        value,
-                    )))),
-                },
-                _ => Err(Box::new(NodeFeature::Particle(ParticleEmitter::Simulated(
-                    value,
-                )))),
-            },
-            NodeFeature::Ribbon(RibbonEmitter::Trail(value)) => {
-                match TryFromFeature::try_from_feature(*value, values) {
-                    Ok(value) => Ok(Self::Ribbon(value)),
-                    Err(value) => Err(Box::new(NodeFeature::Ribbon(RibbonEmitter::Trail(value)))),
-                }
+            NodeFeature::Particle(ParticleEmitter::MdlxEmitter1(value)) => {
+                Ok(Self::Particle(*value))
             }
+            NodeFeature::Particle(ParticleEmitter::MdlxEmitter2(value)) => {
+                Ok(Self::Particle2(*value))
+            }
+            NodeFeature::Ribbon(RibbonEmitter::Mdlx(value)) => Ok(Self::Ribbon(*value)),
             NodeFeature::ParticleProgram(value) => Ok(Self::ParticleProgram(*value)),
             NodeFeature::Light(Light::AmbientDiffuse(value)) => {
                 match TryFromFeature::try_from_feature(*value, values) {
@@ -102,12 +80,8 @@ impl<'a> FromFeature<m2::ActorKind<'a>> for NodeFeature<'a> {
             m2::ActorKind::Camera(value) => Self::Camera(Camera::Aimed(Box::new(
                 FromFeature::from_feature(value, values),
             ))),
-            m2::ActorKind::Ribbon(value) => Self::Ribbon(RibbonEmitter::Trail(Box::new(
-                FromFeature::from_feature(*value, values),
-            ))),
-            m2::ActorKind::Particle(value) => Self::Particle(ParticleEmitter::Simulated(Box::new(
-                FromFeature::from_feature(*value, values),
-            ))),
+            m2::ActorKind::Ribbon(value) => Self::Ribbon(RibbonEmitter::M2(value)),
+            m2::ActorKind::Particle(value) => Self::Particle(ParticleEmitter::M2(value)),
         }
     }
 }
@@ -138,20 +112,8 @@ impl<'a> TryFromFeature<NodeFeature<'a>> for m2::ActorKind<'a> {
                     Err(value) => Err(Box::new(NodeFeature::Camera(Camera::Aimed(value)))),
                 }
             }
-            NodeFeature::Ribbon(RibbonEmitter::Trail(value)) => {
-                match TryFromFeature::try_from_feature(*value, values) {
-                    Ok(value) => Ok(Self::Ribbon(Box::new(value))),
-                    Err(value) => Err(Box::new(NodeFeature::Ribbon(RibbonEmitter::Trail(value)))),
-                }
-            }
-            NodeFeature::Particle(ParticleEmitter::Simulated(value)) => {
-                match TryFromFeature::try_from_feature(*value, values) {
-                    Ok(value) => Ok(Self::Particle(Box::new(value))),
-                    Err(value) => Err(Box::new(NodeFeature::Particle(ParticleEmitter::Simulated(
-                        value,
-                    )))),
-                }
-            }
+            NodeFeature::Ribbon(RibbonEmitter::M2(value)) => Ok(Self::Ribbon(value)),
+            NodeFeature::Particle(ParticleEmitter::M2(value)) => Ok(Self::Particle(value)),
             value => Err(Box::new(value)),
         }
     }
@@ -212,14 +174,29 @@ impl<'a> TryFrom<NodeFeature<'a>> for scene::Feature {
     }
 }
 
-impl<'a> From<ParticleDefinition<'a>> for NodeFeature<'a> {
-    fn from(value: ParticleDefinition<'a>) -> Self {
-        Self::Particle(ParticleEmitter::Simulated(Box::new(value)))
+impl<'a> From<mdlx::ParticleEmitter1> for NodeFeature<'a> {
+    fn from(value: mdlx::ParticleEmitter1) -> Self {
+        Self::Particle(ParticleEmitter::MdlxEmitter1(Box::new(value)))
     }
 }
-impl<'a> From<TrailEmitter> for NodeFeature<'a> {
-    fn from(value: TrailEmitter) -> Self {
-        Self::Ribbon(RibbonEmitter::Trail(Box::new(value)))
+impl<'a> From<mdlx::ParticleEmitter2> for NodeFeature<'a> {
+    fn from(value: mdlx::ParticleEmitter2) -> Self {
+        Self::Particle(ParticleEmitter::MdlxEmitter2(Box::new(value)))
+    }
+}
+impl<'a> From<m2::ParticleEmitter<'a>> for NodeFeature<'a> {
+    fn from(value: m2::ParticleEmitter<'a>) -> Self {
+        Self::Particle(ParticleEmitter::M2(Box::new(value)))
+    }
+}
+impl<'a> From<mdlx::RibbonEmitter> for NodeFeature<'a> {
+    fn from(value: mdlx::RibbonEmitter) -> Self {
+        Self::Ribbon(RibbonEmitter::Mdlx(Box::new(value)))
+    }
+}
+impl<'a> From<m2::RibbonEmitter> for NodeFeature<'a> {
+    fn from(value: m2::RibbonEmitter) -> Self {
+        Self::Ribbon(RibbonEmitter::M2(Box::new(value)))
     }
 }
 
@@ -257,3 +234,46 @@ impl<S, T: TryFrom<S>> TryFromFeature<S> for T {
         Self::try_from(source)
     }
 }
+
+macro_rules! particle_family {
+    ($native:ty, $variant:ident) => {
+        impl<'a> From<$native> for ParticleEmitter<'a> {
+            fn from(value: $native) -> Self {
+                Self::$variant(Box::new(value))
+            }
+        }
+        impl<'a> TryFrom<ParticleEmitter<'a>> for $native {
+            type Error = Box<ParticleEmitter<'a>>;
+            fn try_from(value: ParticleEmitter<'a>) -> Result<Self, Self::Error> {
+                match value {
+                    ParticleEmitter::$variant(value) => Ok(*value),
+                    value => Err(Box::new(value)),
+                }
+            }
+        }
+    };
+}
+particle_family!(mdlx::ParticleEmitter1, MdlxEmitter1);
+particle_family!(mdlx::ParticleEmitter2, MdlxEmitter2);
+particle_family!(m2::ParticleEmitter<'a>, M2);
+
+macro_rules! ribbon_family {
+    ($native:ty, $variant:ident) => {
+        impl From<$native> for RibbonEmitter {
+            fn from(value: $native) -> Self {
+                Self::$variant(Box::new(value))
+            }
+        }
+        impl TryFrom<RibbonEmitter> for $native {
+            type Error = Box<RibbonEmitter>;
+            fn try_from(value: RibbonEmitter) -> Result<Self, Self::Error> {
+                match value {
+                    RibbonEmitter::$variant(value) => Ok(*value),
+                    value => Err(Box::new(value)),
+                }
+            }
+        }
+    };
+}
+ribbon_family!(mdlx::RibbonEmitter, Mdlx);
+ribbon_family!(m2::RibbonEmitter, M2);

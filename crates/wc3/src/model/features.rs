@@ -1,5 +1,5 @@
 //! Logical behaviors grouped by purpose rather than their source vocabulary.
-use crate::model::profiles::{Profile, Universal};
+use crate::model::profiles::{m2, mdlx, Profile, Universal};
 use crate::model::EffectResourceId;
 use crate::model::{Link, NodeId, ValidateLinks};
 mod illumination;
@@ -26,16 +26,22 @@ pub type NodeFeature<'a> = FeatureSet<'a, Universal>;
 pub enum ParticleEmitter<'a> {
     /// Instance of an externally defined effect resource.
     Resource(EffectResourceId),
-    /// Authored emission, motion, lifetime, and particle-age appearance.
-    Simulated(Box<ParticleDefinition<'a>>),
+    /// Warcraft III particle emitter 1, instantiating model or image resources.
+    MdlxEmitter1(Box<mdlx::ParticleEmitter1>),
+    /// Warcraft III particle emitter 2, rendering atlas sprites and tails.
+    MdlxEmitter2(Box<mdlx::ParticleEmitter2>),
+    /// World of Warcraft particle emitter.
+    M2(Box<m2::ParticleEmitter<'a>>),
 }
 /// Ribbon generation from persistent cross sections or an external resource.
 #[derive(Clone, Debug)]
 pub enum RibbonEmitter {
     /// Instance of an externally defined effect resource.
     Resource(EffectResourceId),
-    /// Persistent sections with shared geometry, appearance, and rendering.
-    Trail(Box<TrailEmitter>),
+    /// Warcraft III ribbon emitter.
+    Mdlx(Box<mdlx::RibbonEmitter>),
+    /// World of Warcraft ribbon emitter.
+    M2(Box<m2::RibbonEmitter>),
 }
 /// A feature's hierarchy anchor and logical definition.
 #[derive(Clone, Debug)]

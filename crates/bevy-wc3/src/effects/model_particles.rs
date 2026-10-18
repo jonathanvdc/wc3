@@ -12,8 +12,7 @@ use std::f32::consts::TAU;
 #[cfg(test)]
 use wc3::model::ModelMetadata;
 use wc3::model::{
-    ClipId, FeatureId, Model, NodeFeature, NodeId, ParticleActivation, ParticleDetails,
-    ParticleEmitter, ParticleGravity, ParticleResource, ParticleScalar, ParticleTrigger, Property,
+    ClipId, FeatureId, MdlxParticle1Resource, Model, NodeFeature, NodeId, ParticleEmitter, Property,
 };
 
 const CAPACITY: usize = 1024;
@@ -40,9 +39,9 @@ struct Emitter {
     model: Handle<ModelAsset>,
     placement: ChildCoordinates,
     rate: Property<f32>,
-    activation: ParticleActivation,
+    activation: Property<f32>,
     speed: Property<f32>,
-    gravity: ParticleGravity,
+    gravity: Property<f32>,
     lifetime: Property<f32>,
     latitude: Property<f32>,
 }
@@ -91,10 +90,6 @@ impl ModelParticleChild {
     }
 }
 
-fn scalar(value: &ParticleScalar) -> Property<f32> {
-    let ParticleScalar::Property(value) = value;
-    *value
-}
 impl RuntimeModelParticles {
     pub(super) fn append_remapped(
         &mut self,
@@ -145,16 +140,16 @@ impl RuntimeModelParticles {
             ..Default::default()
         };
         for (feature, attached) in model.features() {
-            let NodeFeature::Particle(ParticleEmitter::Simulated(definition)) = &attached.payload
+            let NodeFeature::Particle(ParticleEmitter::MdlxEmitter1(definition)) =
+                &attached.payload
             else {
                 continue;
             };
-            let ParticleDetails::Model(details) = &definition.details else {
-                continue;
-            };
+            let details = &definition.details;
             let mut diagnostic =
                 |message: &str| result.diagnostics.push((feature, message.to_owned()));
-            if !matches!(details.resource, ParticleResource::Model(_)) || details.text_resource {
+            if !matches!(details.resource, MdlxParticle1Resource::Model(_)) || details.text_resource
+            {
                 diagnostic("Model-particle image/text resources require a separate sprite interpretation and are not instantiated");
                 continue;
             }
@@ -163,14 +158,10 @@ impl RuntimeModelParticles {
                 continue;
             };
             let (rate, speed, lifetime) = (
-                scalar(&definition.emission.rate),
-                scalar(&definition.motion.speed),
-                scalar(&definition.lifetime.duration),
+                definition.emission.rate,
+                definition.motion.speed,
+                definition.lifetime.duration,
             );
-            if !matches!(definition.emission.trigger, ParticleTrigger::Continuous) {
-                diagnostic("Model-particle burst triggers are not implemented");
-                continue;
-            }
             diagnostic("Model-particle longitude is retained but unused; latitude uses the Warcraft III radian convention");
             diagnostic("External-model particles retain at most 1024 children and 1024 births per update; rates use the shared bounded 60 Hz emission clock");
             result.emitters.push(Emitter {
@@ -183,9 +174,9 @@ impl RuntimeModelParticles {
                     placements.get(&feature).copied().unwrap_or_default(),
                 ),
                 rate,
-                activation: definition.emission.activation.clone(),
+                activation: definition.emission.activation,
                 speed,
-                gravity: definition.motion.gravity.clone(),
+                gravity: definition.motion.gravity,
                 lifetime,
                 latitude: details.latitude,
             });
@@ -271,10 +262,7 @@ impl RuntimeModelParticles {
                     .clip
                     .and_then(|id| self.clips.get(&id))
                     .is_some_and(|(duration, looping)| !*looping && clip.as_seconds() >= *duration);
-                let active = match &emitter.activation {
-                    ParticleActivation::Boolean(v) => sample.animated(v),
-                    ParticleActivation::Fractional(v) => sample.animated(v) > 0.1,
-                };
+                let active = sample.animated(&emitter.activation) > 0.1;
                 let rate = if active
                     && !ended
                     && frame.root_visible
@@ -333,14 +321,8 @@ impl RuntimeModelParticles {
                     let direction =
                         Quat::from_rotation_z(yaw) * Quat::from_rotation_y(pitch) * Vec3::Z;
                     let velocity = (rotation * direction) * speed * scale;
-                    let acceleration = match &emitter.gravity {
-                        ParticleGravity::Directional(v) => {
-                            -self.gravity_axis * sample.animated(v) * scale.z
-                        }
-                        ParticleGravity::Vector(v) => frame
-                            .basis_world
-                            .transform_vector3(Vec3::from(sample.animated(v))),
-                    };
+                    let acceleration =
+                        -self.gravity_axis * sample.animated(&emitter.gravity) * scale.z;
                     let age = frame.time - time;
                     let (_, source_rotation, _) = frame.basis_world.to_scale_rotation_translation();
                     let spin = source_rotation * Quat::from_rotation_z(state.rng.random() * TAU);

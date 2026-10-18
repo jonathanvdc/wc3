@@ -34,7 +34,7 @@ use wc3::model::systems::System;
 use wc3::model::{
     AnimationProgram, Attachment, Billboard, Camera as ModelCamera, ClipControls, FeatureId,
     Light as SemanticLight, Link, MaterialId, MaterialSelection, Model, NodeFeature,
-    ParticleDetails, ParticleEmitter, PoseLayout, SkinId, Texture, ValidateLinks, ValueSlot,
+    ParticleEmitter, PoseLayout, SkinId, Texture, ValidateLinks, ValueSlot,
 };
 
 fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
@@ -50,7 +50,7 @@ fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
         NodeFeature::FaceActor(_) => "Face animation",
         NodeFeature::LightProgram(_) => "Light programme",
 
-        NodeFeature::AtlasParticles(_) => "Atlas particles",
+        NodeFeature::Particle2(_) => "Atlas particles",
         NodeFeature::PointLight(_) => "Point light",
     }
 }
@@ -434,7 +434,7 @@ pub fn compile_model_with_options(
     );
     for (id, feature) in model.features() {
         let message = match &feature.payload {
-            NodeFeature::Particle(ParticleEmitter::Simulated(definition)) if matches!(definition.details,ParticleDetails::AgeDriven(_)|ParticleDetails::Atlas(_)|ParticleDetails::Model(_)) => continue,
+            NodeFeature::Particle(ParticleEmitter::MdlxEmitter1(_) | ParticleEmitter::MdlxEmitter2(_) | ParticleEmitter::M2(_)) => continue,
 
             NodeFeature::GeometryAnimation(value) if value.mesh.is_some() && !value.drop_shadow && value.unclassified.bits() == 0 => continue,
             NodeFeature::GeometryAnimation(_) => "geometry tint and opacity are rendered; orphan controllers, authored drop shadows, and unclassified geometry flags need application interpretation".to_string(),

@@ -2,15 +2,15 @@ use super::{CameraView, FeatureSchema, FeatureView, LightView, ParticlesView};
 use crate::model::profiles::{m2, mdlx, Either};
 use crate::model::LightEmission;
 use crate::model::{scene, Axis, NodeFeature};
-use crate::model::{AngleTrailControls, SurfaceTrailRendering, TrailAppearance, TrailGeometry};
 use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
+use crate::model::{M2RibbonControls, M2RibbonRendering, TrailAppearance, TrailGeometry};
 use crate::model::{ParticleEmission, ParticleLifetime, ParticleMotion};
 use std::ptr;
 
 #[test]
 fn emission_distinguishes_continuous_rates_from_keyed_burst_counts() {
     let mut slot_values = SlotValues::default();
-    let mut authored = mdlx::Particle2 {
+    let mut authored = mdlx::ParticleEmitter2 {
         emission: ParticleEmission {
             rate: slot_values.add(37.5),
             variation: (),
@@ -23,7 +23,8 @@ fn emission_distinguishes_continuous_rates_from_keyed_burst_counts() {
         ..SlotConstruct::construct(&mut slot_values)
     };
     let view = &authored;
-    let super::EmissionRef::Continuous(rate) = ParticlesView::Sprite(view).emission().unwrap()
+    let super::EmissionRef::Continuous(rate) =
+        ParticlesView::MdlxEmitter2(view).emission().unwrap()
     else {
         panic!("continuous emitter must expose a rate");
     };
@@ -31,13 +32,13 @@ fn emission_distinguishes_continuous_rates_from_keyed_burst_counts() {
     assert_eq!(slot_values[rate], 37.5);
     authored.emission.trigger = true;
     let super::EmissionRef::BurstAtKeys(count) =
-        ParticlesView::Sprite(&authored).emission().unwrap()
+        ParticlesView::MdlxEmitter2(&authored).emission().unwrap()
     else {
         panic!("squirt emitter must expose a burst count");
     };
     assert!(ptr::eq(count, &authored.emission.rate));
     let super::LifetimeRef::Seconds(lifetime) =
-        ParticlesView::Sprite(&authored).lifetime().unwrap()
+        ParticlesView::MdlxEmitter2(&authored).lifetime().unwrap()
     else {
         unreachable!();
     };
@@ -48,7 +49,7 @@ fn emission_distinguishes_continuous_rates_from_keyed_burst_counts() {
 #[test]
 fn model_particle_emission_retains_animated_values_without_copying() {
     let mut slot_values = SlotValues::default();
-    let authored = mdlx::Particle {
+    let authored = mdlx::ParticleEmitter1 {
         emission: ParticleEmission {
             rate: slot_values.add(18.),
             variation: (),
@@ -66,7 +67,7 @@ fn model_particle_emission_retains_animated_values_without_copying() {
         appearance: (),
         ..SlotConstruct::construct(&mut slot_values)
     };
-    let view = ParticlesView::Model(&authored);
+    let view = ParticlesView::MdlxEmitter1(&authored);
     let super::EmissionRef::Continuous(rate) = view.emission().unwrap() else {
         unreachable!()
     };
@@ -82,7 +83,7 @@ fn model_particle_emission_retains_animated_values_without_copying() {
 #[test]
 fn ribbon_components_preserve_distinct_rate_and_atlas_integer_domains() {
     let mut slot_values = SlotValues::default();
-    let segmented = mdlx::Ribbon {
+    let segmented = mdlx::RibbonEmitter {
         appearance: TrailAppearance {
             color: slot_values.add([0.25, 0.5, 0.75]),
             opacity: slot_values.add(0.6),
@@ -97,9 +98,7 @@ fn ribbon_components_preserve_distinct_rate_and_atlas_integer_domains() {
         emission_rate: 17,
         ..SlotConstruct::construct(&mut slot_values)
     };
-    let view = super::RibbonView::Segmented(&segmented)
-        .edge_strip()
-        .unwrap();
+    let view = super::RibbonView::Mdlx(&segmented).edge_strip().unwrap();
     assert!(ptr::eq(view.color, &segmented.appearance.color));
     assert_eq!(*view.axis, Axis::PositiveY);
     assert!(ptr::eq(view.opacity, &segmented.appearance.opacity));
@@ -116,8 +115,8 @@ fn ribbon_components_preserve_distinct_rate_and_atlas_integer_domains() {
     assert_eq!(*rate, 17);
     assert_eq!(slot_values[cell], 70_000);
 
-    let edge = m2::Ribbon {
-        controls: AngleTrailControls {
+    let edge = m2::RibbonEmitter {
+        controls: M2RibbonControls {
             id: 0,
             angle: 0.4,
             enabled: slot_values.add(true),
@@ -125,7 +124,7 @@ fn ribbon_components_preserve_distinct_rate_and_atlas_integer_domains() {
             color_index: -1,
             texture_transform: None,
         },
-        rendering: SurfaceTrailRendering {
+        rendering: M2RibbonRendering {
             textures: vec![],
             materials: vec![],
         },
@@ -143,7 +142,7 @@ fn ribbon_components_preserve_distinct_rate_and_atlas_integer_domains() {
         emission_rate: 12.5,
         lifetime: 3.25,
     };
-    let view = super::RibbonView::Edge(&edge).edge_strip().unwrap();
+    let view = super::RibbonView::M2(&edge).edge_strip().unwrap();
     assert!(ptr::eq(view.color, &edge.appearance.color));
     assert!(ptr::eq(view.opacity, &edge.appearance.opacity));
     assert_eq!(slot_values[view.height[0]], 6.);
@@ -162,11 +161,11 @@ fn ribbon_components_preserve_distinct_rate_and_atlas_integer_domains() {
 #[test]
 fn native_discovery_borrows_the_authored_definition() {
     let mut slot_values = SlotValues::default();
-    let feature = mdlx::Node::AtlasParticles(mdlx::Particle2::construct(&mut slot_values));
-    let FeatureView::Particles(ParticlesView::Sprite(view)) = feature.feature() else {
+    let feature = mdlx::Node::Particle2(mdlx::ParticleEmitter2::construct(&mut slot_values));
+    let FeatureView::Particles(ParticlesView::MdlxEmitter2(view)) = feature.feature() else {
         panic!("sprite emitter must be discoverable as particle behavior");
     };
-    let mdlx::Node::AtlasParticles(authored) = &feature else {
+    let mdlx::Node::Particle2(authored) = &feature else {
         unreachable!();
     };
     assert!(ptr::eq(view, authored));
@@ -246,8 +245,8 @@ fn application_behaviors_can_keep_their_own_complete_vocabulary() {
 #[test]
 fn owned_emitters_expose_the_same_borrowed_emission_and_trail_components() {
     let mut slot_values = SlotValues::default();
-    use crate::model::{ParticleDefinition, ParticleScalar, TrailEmitter};
-    let native = mdlx::Particle2 {
+    use crate::model::{NodeFeature, ParticleEmitter, RibbonEmitter};
+    let native = mdlx::ParticleEmitter2 {
         emission: ParticleEmission {
             trigger: true,
             rate: slot_values.add(12.5),
@@ -260,24 +259,32 @@ fn owned_emitters_expose_the_same_borrowed_emission_and_trail_components() {
         },
         ..SlotConstruct::construct(&mut slot_values)
     };
-    let definition: ParticleDefinition =
-        crate::model::features::FromFeature::from_feature(native, &mut slot_values);
-    let super::EmissionRef::BurstAtKeys(value) =
-        ParticlesView::Definition(&definition).emission().unwrap()
-    else {
-        panic!("owned squirt emitter must expose keyed counts");
+    let feature = NodeFeature::Particle(ParticleEmitter::from(native));
+    let FeatureView::Particles(view) = feature.feature() else {
+        panic!()
     };
-    let ParticleScalar::Property(authored) = &definition.emission.rate;
-    assert!(ptr::eq(value, authored));
-    let trail = TrailEmitter::from(mdlx::Ribbon {
+    let super::EmissionRef::BurstAtKeys(value) = view.emission().unwrap() else {
+        panic!()
+    };
+    let ParticlesView::MdlxEmitter2(definition) = view else {
+        panic!()
+    };
+    assert!(ptr::eq(value, &definition.emission.rate));
+    let feature = NodeFeature::Ribbon(RibbonEmitter::from(mdlx::RibbonEmitter {
         emission_rate: u32::MAX,
         ..SlotConstruct::construct(&mut slot_values)
-    });
-    let edge = super::RibbonView::Trail(&trail).edge_strip().unwrap();
-    let super::TrailRateRef::Exact(rate) = edge.emission_rate else {
+    }));
+    let FeatureView::Ribbon(view) = feature.feature() else {
+        panic!()
+    };
+    let edge = view.edge_strip().unwrap();
+    let super::TrailRateRef::Integral(rate) = edge.emission_rate else {
         unreachable!()
     };
+    assert_eq!(*rate, u32::MAX);
+    let super::RibbonView::Mdlx(trail) = view else {
+        panic!()
+    };
     assert!(ptr::eq(rate, &trail.emission_rate));
-    assert_eq!(*rate, f64::from(u32::MAX));
     assert!(ptr::eq(edge.height[0], &trail.geometry.height_above));
 }

@@ -16,10 +16,10 @@ fn emitter(slot_values: &mut SlotValues) -> Emitter {
         rate: slot_values.add(10.),
         rate_variation: 0.,
         controls: Some(AgeDrivenControls {
-            activation: ParticleActivation::Boolean(slot_values.add(true)),
+            activation: slot_values.add(true),
             speed_variation: slot_values.add(0.1),
-            gravity: ParticleGravity::Directional(slot_values.add(0.)),
-            lifespan_variation: slot_values.add(0.),
+            gravity: slot_values.add([0.; 3]),
+            lifespan_variation: 0.,
             vertical: slot_values.add(0.5),
             horizontal: slot_values.add(TAU),
             width: slot_values.add(0.),
@@ -35,7 +35,7 @@ fn emitter(slot_values: &mut SlotValues) -> Emitter {
         inherit_velocity: 0.,
         follow: [[0.; 2]; 2],
         spin: [0.; 4],
-        appearance: ParticleAgeCurves::default(),
+        appearance: M2ParticleAppearance::default(),
         atlas: [1, 1],
         age_appearance: None,
         multi_texture: false,
@@ -373,8 +373,7 @@ fn semantic_gravity_is_independent_of_the_emitter_bone_and_scalar_packing_flags(
     let mut slot_values = SlotValues::default();
     let mut emitter = emitter(&mut slot_values);
     emitter.flags.set_packed_gravity(true);
-    emitter.controls.as_mut().unwrap().gravity =
-        ParticleGravity::Vector(slot_values.add([1., -2., 3.]));
+    emitter.controls.as_mut().unwrap().gravity = slot_values.add([1., -2., 3.]);
     let node =
         Mat4::from_scale_rotation_translation(Vec3::splat(4.), Quat::from_rotation_x(1.2), Vec3::X);
     let basis = Mat4::from_rotation_y(0.7);

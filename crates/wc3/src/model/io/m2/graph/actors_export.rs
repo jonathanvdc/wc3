@@ -405,7 +405,7 @@ where
             | profile::ActorKind::ParticleProgram(unavailable)
             | profile::ActorKind::FaceActor(unavailable)
             | profile::ActorKind::LightProgram(unavailable)
-            | profile::ActorKind::AtlasParticles(unavailable)
+            | profile::ActorKind::Particle2(unavailable)
             | profile::ActorKind::PointLight(unavailable) => match *unavailable {},
         }
     }

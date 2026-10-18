@@ -328,7 +328,7 @@ impl<'a> FeatureVocabulary<'a> for Universal {
     type FaceActor = EffectResourceId;
     type LightProgram = wmo::PointProgram;
 
-    type AtlasParticles = Unavailable;
+    type Particle2 = Unavailable;
     type PointLight = Unavailable;
     fn visit_links(value: &FeatureSet<'a, Self>, visitor: &mut dyn FnMut(Link)) {
         value.visit_feature_links(visitor);

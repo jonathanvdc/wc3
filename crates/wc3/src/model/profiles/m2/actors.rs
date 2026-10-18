@@ -1,7 +1,7 @@
 //! Bone-attached scene features with typed logical animation bindings.
 use super::values::{CameraKind, LightKind};
 use crate::model::profiles::M2;
-use crate::model::AngleTrail;
+use crate::model::M2RibbonEmitter;
 use crate::model::SocketDefinition;
 use crate::model::{AimedCamera, AmbientDiffuseLight};
 use crate::model::{AttachedFeature, FeatureSet, Link, Property, ValidateLinks};
@@ -18,7 +18,7 @@ pub type Light = AmbientDiffuseLight<LightKind, Property<bool>>;
 /// Camera projection and model-local look-at animation.
 pub type Camera = AimedCamera<Property<f32>, CameraKind>;
 /// A generated ribbon trail with texture and shader graph bindings.
-pub type Ribbon = AngleTrail;
+pub type RibbonEmitter = M2RibbonEmitter;
 
 impl ActorKind<'_> {
     pub(crate) fn visit_profile_links(&self, v: &mut dyn FnMut(Link)) {
@@ -34,7 +34,7 @@ impl ActorKind<'_> {
             | Self::ParticleProgram(unavailable)
             | Self::FaceActor(unavailable)
             | Self::LightProgram(unavailable)
-            | Self::AtlasParticles(unavailable)
+            | Self::Particle2(unavailable)
             | Self::PointLight(unavailable) => match *unavailable {},
         }
     }

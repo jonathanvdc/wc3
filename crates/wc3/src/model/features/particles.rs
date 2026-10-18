@@ -1,7 +1,6 @@
 //! Owned emitter components, with model-clock controls separate from particle-age appearance.
 
 use crate::model::materials::mdlx::Blend;
-use crate::model::profiles::{m2, mdlx};
 use crate::model::scene::keyframed::Frames;
 use crate::model::values::layered::{Particle2Flags, ParticleFlags as ModelParticleFlags};
 use crate::model::values::model::{
@@ -12,20 +11,9 @@ use crate::model::Construct;
 use crate::model::ImageResourceId;
 use crate::model::ModelResourceId;
 use crate::model::{Link, Property, Texture, ValidateLinks, ZeroVec};
-/// Animated scalar in the model's clock.
-#[derive(Clone, Debug)]
-pub enum ParticleScalar {
-    /// A shared clip binding and its baseline value.
-    Property(Property<f32>),
-}
 /// Common emission controls.
 #[derive(Clone, Debug, Construct, PartialEq)]
-pub struct ParticleEmission<
-    R = ParticleScalar,
-    T = ParticleTrigger,
-    A = ParticleActivation,
-    V = f32,
-> {
+pub struct ParticleEmission<R, T, A, V = f32> {
     /// Particles per second, or keyed burst magnitude when selected by trigger.
     pub rate: R,
     /// Independently authored random contribution; its convention follows the simulation details.
@@ -35,25 +23,9 @@ pub struct ParticleEmission<
     /// Fractional visibility and discrete enablement remain distinct.
     pub activation: A,
 }
-/// Emission event interpretation.
-#[derive(Clone, Debug)]
-pub enum ParticleTrigger {
-    /// Generate particles continuously at the authored rate.
-    Continuous,
-    /// Emit a burst when a rate key is encountered.
-    KeyedBurst,
-}
-/// Authored activation semantics.
-#[derive(Clone, Debug)]
-pub enum ParticleActivation {
-    /// Fractional authored visibility.
-    Fractional(Property<f32>),
-    /// Discrete authored activation.
-    Boolean(Property<bool>),
-}
 /// Common initial velocity and acceleration controls.
 #[derive(Clone, Debug, Construct, PartialEq)]
-pub struct ParticleMotion<S = ParticleScalar, V = ParticleScalar, G = ParticleGravity> {
+pub struct ParticleMotion<S, V, G> {
     /// Initial velocity magnitude in model units per second.
     pub speed: S,
     /// Independently authored random contribution; its convention follows the simulation details.
@@ -61,17 +33,9 @@ pub struct ParticleMotion<S = ParticleScalar, V = ParticleScalar, G = ParticleGr
     /// Directional or vector acceleration.
     pub gravity: G,
 }
-/// Gravity represented as a directional magnitude or a vector.
-#[derive(Clone, Debug)]
-pub enum ParticleGravity {
-    /// Acceleration magnitude along the emitter gravity direction.
-    Directional(Property<f32>),
-    /// Acceleration vector in model coordinates.
-    Vector(Property<[f32; 3]>),
-}
 /// Lifetime in seconds with an independently authored random contribution.
 #[derive(Clone, Debug, Construct, PartialEq)]
-pub struct ParticleLifetime<D = ParticleScalar, V = ParticleScalar> {
+pub struct ParticleLifetime<D, V> {
     /// Particle lifetime in seconds.
     pub duration: D,
     /// Independently authored random contribution; its convention follows the simulation details.
@@ -91,38 +55,20 @@ pub struct ParticleComposition<E, M, L, A, D> {
     /// Explicit simulation, source shape, and rendering semantics.
     pub details: D,
 }
-/// Broad particle composition selected by the Universal profile.
-pub type ParticleDefinition<'a> = ParticleComposition<
-    ParticleEmission,
-    ParticleMotion,
-    ParticleLifetime,
-    ParticleAppearance<'a>,
-    ParticleDetails<'a>,
->;
-/// Distinct simulation and appearance rules after common controls are extracted.
-#[derive(Clone, Debug)]
-pub enum ParticleDetails<'a> {
-    /// External-resource particles retaining their source emission-angle convention.
-    Model(ModelParticle),
-    /// Sprite particles with staged appearance and an atlas.
-    Atlas(Box<AtlasParticle>),
-    /// Particles with independently authored normalized-age curves.
-    AgeDriven(Box<AgeDrivenParticle<'a>>),
-}
 /// Dependency instantiated by a Warcraft III resource particle.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ParticleResource {
+pub enum MdlxParticle1Resource {
     /// Child model geometry and animation.
     Model(Option<ModelResourceId>),
     /// Image-based particle content.
     Image(Option<ImageResourceId>),
 }
-impl Default for ParticleResource {
+impl Default for MdlxParticle1Resource {
     fn default() -> Self {
         Self::Image(None)
     }
 }
-impl ValidateLinks for ParticleResource {
+impl ValidateLinks for MdlxParticle1Resource {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
             Self::Model(id) => id.visit_links(visitor),
@@ -132,9 +78,9 @@ impl ValidateLinks for ParticleResource {
 }
 /// Simulation-specific controls composed with common emission, motion and lifetime.
 #[derive(Clone, Debug, Construct, PartialEq)]
-pub struct ModelParticle {
+pub struct MdlxParticle1Details {
     /// Model or image resource instantiated per particle.
-    pub resource: ParticleResource,
+    pub resource: MdlxParticle1Resource,
     /// Source longitude control, retained even when the renderer does not consume it.
     pub longitude: Property<f32>,
     /// Emission-cone latitude in radians for Warcraft III model particles.
@@ -147,21 +93,21 @@ pub struct ModelParticle {
 
 /// Simulation-specific controls composed with common emission, motion and lifetime.
 #[derive(Clone, Debug, Construct, PartialEq)]
-pub struct AtlasParticle {
+pub struct MdlxParticle2Details {
     /// Model-space rather than world-space simulation.
     pub model_space: bool,
     /// Emitter controls with unresolved meanings.
     pub unclassified: Particle2Flags,
 
     /// Rendering controls.
-    pub rendering: AtlasParticleRendering,
+    pub rendering: MdlxParticle2Rendering,
     /// Shape controls.
-    pub shape: AtlasParticleShape,
+    pub shape: MdlxParticle2Shape,
 }
 
 /// Simulation-specific controls composed with common emission, motion and lifetime.
 #[derive(Clone, Debug, PartialEq)]
-pub struct AgeDrivenParticle<'a> {
+pub struct M2ParticleDetails<'a> {
     /// Runtime emitter identifier.
     pub id: u32,
     /// Generator behavior and extension bits.
@@ -190,14 +136,14 @@ pub struct AgeDrivenParticle<'a> {
     pub follow: [[f32; 2]; 2],
 
     /// Rendering controls.
-    pub rendering: AgeDrivenParticleRendering,
+    pub rendering: M2ParticleRendering,
     /// Shape controls.
-    pub shape: AgeDrivenParticleShape<'a>,
+    pub shape: M2ParticleShape<'a>,
 }
 
 /// Appearance controls shared independently of emitter timing.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct StagedParticleAppearance {
+pub struct MdlxParticle2Appearance {
     /// Lifetime fraction at the middle appearance stage.
     pub middle_time: f32,
     /// RGB colors at the three lifetime stages.
@@ -211,7 +157,7 @@ pub struct StagedParticleAppearance {
 }
 /// Rendering controls shared independently of emitter timing.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct AtlasParticleRendering {
+pub struct MdlxParticle2Rendering {
     /// Color composition operation.
     pub blend: Blend,
     /// Atlas dimensions in rows and columns.
@@ -237,7 +183,7 @@ pub struct AtlasParticleRendering {
 }
 /// Shape controls shared independently of emitter timing.
 #[derive(Clone, Debug, Construct, PartialEq)]
-pub struct AtlasParticleShape {
+pub struct MdlxParticle2Shape {
     /// Emission-cone latitude in degrees.
     pub latitude: Property<f32>,
     /// Length of the emission region.
@@ -249,7 +195,7 @@ pub struct AtlasParticleShape {
 }
 /// Rendering controls shared independently of emitter timing.
 #[derive(Clone, Debug, PartialEq)]
-pub struct AgeDrivenParticleRendering {
+pub struct M2ParticleRendering {
     /// Particle compositing operation.
     pub blend: ParticleBlend,
     /// External particle-color table category.
@@ -279,7 +225,7 @@ pub struct AgeDrivenParticleRendering {
 }
 /// Shape controls shared independently of emitter timing.
 #[derive(Clone, Debug, PartialEq)]
-pub struct AgeDrivenParticleShape<'a> {
+pub struct M2ParticleShape<'a> {
     /// Emission shape.
     pub generator: ParticleGenerator,
     /// Legacy particle shape selector whose client meaning is unresolved.
@@ -300,41 +246,29 @@ pub struct AgeDrivenParticleShape<'a> {
 
 mod age;
 pub use age::*;
-mod conversions;
 mod validation;
 
-/// Particle-age appearance programs, separate from emitter animation on the model clock.
-#[derive(Clone, Debug)]
-pub enum ParticleAppearance<'a> {
-    /// The instantiated resource supplies its own appearance; no particle-age controls are authored.
-    Resource,
-    /// Three lifetime stages with independent atlas intervals.
-    Staged(StagedParticleAppearance),
-    /// Independently authored normalized-age color, opacity, scale, and atlas curves.
-    Curves(Box<ParticleAgeCurves<'a>>),
-}
-
 /// External-resource simulation with direction-based gravity and visibility.
-pub type ResourceParticle = ParticleComposition<
+pub type MdlxParticleEmitter1 = ParticleComposition<
     ParticleEmission<Property<f32>, (), Property<f32>, ()>,
     ParticleMotion<Property<f32>, (), Property<f32>>,
     ParticleLifetime<Property<f32>, ()>,
     (),
-    ModelParticle,
+    MdlxParticle1Details,
 >;
 /// Atlas simulation with keyed burst selection and staged particle-age appearance.
-pub type AtlasParticles = ParticleComposition<
+pub type MdlxParticleEmitter2 = ParticleComposition<
     ParticleEmission<Property<f32>, bool, Property<f32>, ()>,
     ParticleMotion<Property<f32>, Property<f32>, Property<f32>>,
     ParticleLifetime<f32, ()>,
-    StagedParticleAppearance,
-    AtlasParticle,
+    MdlxParticle2Appearance,
+    MdlxParticle2Details,
 >;
 /// Curve-driven age appearance and vector-gravity simulation.
-pub type AgeDrivenParticles<'a> = ParticleComposition<
+pub type M2ParticleEmitter<'a> = ParticleComposition<
     ParticleEmission<Property<f32>, (), Property<bool>>,
     ParticleMotion<Property<f32>, Property<f32>, Property<[f32; 3]>>,
     ParticleLifetime<Property<f32>, f32>,
-    ParticleAgeCurves<'a>,
-    AgeDrivenParticle<'a>,
+    M2ParticleAppearance<'a>,
+    M2ParticleDetails<'a>,
 >;

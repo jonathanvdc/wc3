@@ -3,9 +3,7 @@ use super::*;
 use crate::model::materials::m2::rasterization;
 use crate::model::materials::state::PassState;
 use crate::model::LightEmission;
-use crate::model::{
-    AngleTrailControls, Axis, SurfaceTrailRendering, TrailAppearance, TrailGeometry,
-};
+use crate::model::{Axis, M2RibbonControls, M2RibbonRendering, TrailAppearance, TrailGeometry};
 fn placement<'a>(
     builder: &mut GraphBuilder<'a>,
     nodes: &[semantic::NodeId],
@@ -235,8 +233,8 @@ where
         }
         let tail = D::Layout::ribbon_tail(&value.modern);
         let feature = builder.reserve_feature(node);
-        let ribbon = profile::Ribbon {
-            controls: AngleTrailControls {
+        let ribbon = profile::RibbonEmitter {
+            controls: M2RibbonControls {
                 id: value.id,
                 angle: value.gravity,
                 enabled: builder.add_value(initial(&value.visibility).unwrap_or(1) != 0),
@@ -244,7 +242,7 @@ where
                 color_index: tail[1] as i8,
                 texture_transform: None,
             },
-            rendering: SurfaceTrailRendering {
+            rendering: M2RibbonRendering {
                 textures: value
                     .texture_indices
                     .iter()

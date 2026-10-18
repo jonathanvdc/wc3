@@ -6,7 +6,7 @@ use crate::model::materials::mdlx::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
 use crate::model::{Axis, FeatureId, MaterialId, MeshId, Model, NodeId, Texture};
-use crate::model::{MdlxImageResource, ParticleResource, PathResource};
+use crate::model::{MdlxImageResource, MdlxParticle1Resource, PathResource};
 use native::scene::Node;
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::from_utf8;
@@ -103,7 +103,7 @@ pub(super) fn write<'a, T: Dialect>(
         // Object-kind bits belong to the encoded record family, not semantic controls.
         match source {
             profile::Node::Particle(_)
-            | profile::Node::AtlasParticles(_)
+            | profile::Node::Particle2(_)
             | profile::Node::ParticleProgram(_) => node.flags.set_particle_emitter(true),
             profile::Node::Ribbon(_) => node.flags.set_ribbon_emitter(true),
             profile::Node::Attachment(_) => node.flags.set_attachment(true),
@@ -141,13 +141,13 @@ pub(super) fn write<'a, T: Dialect>(
                 let mut flags = record.flags();
                 flags.set_emitter_uses_mdl(matches!(
                     source.details.resource,
-                    ParticleResource::Model(_)
+                    MdlxParticle1Resource::Model(_)
                 ));
                 flags.set_emitter_uses_tga(source.details.text_resource);
                 record.set_flags(flags);
                 particles.push(record);
             }
-            profile::Node::AtlasParticles(source) => {
+            profile::Node::Particle2(source) => {
                 let mut record = native::ParticleEmitter2::new(node);
                 macro_rules! a {
                     ($($field:ident).+) => {
@@ -455,14 +455,14 @@ fn path_text<'a>(resource: &'a PathResource<'_>) -> Result<&'a str, Error> {
 }
 fn particle_path<'a>(
     model: &'a Model<'_, Mdlx>,
-    resource: ParticleResource,
+    resource: MdlxParticle1Resource,
 ) -> Result<&'a str, Error> {
     match resource {
-        ParticleResource::Model(None) | ParticleResource::Image(None) => Ok(""),
-        ParticleResource::Model(Some(id)) => {
+        MdlxParticle1Resource::Model(None) | MdlxParticle1Resource::Image(None) => Ok(""),
+        MdlxParticle1Resource::Model(Some(id)) => {
             path_text(model.model_resource(id).expect("validated model"))
         }
-        ParticleResource::Image(Some(id)) => {
+        MdlxParticle1Resource::Image(Some(id)) => {
             match model.image_resource(id).expect("validated image") {
                 MdlxImageResource::Path(path) => from_utf8(path)
                     .map_err(|_| Error::new("particle.resource", "particle path must be UTF-8")),

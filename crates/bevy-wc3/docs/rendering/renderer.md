@@ -91,8 +91,10 @@ publish typed occurrences for gameplay rather than executing commands. [Static-w
 metadata](universal.md#static-worlds) exposes groups, portal-frustum selection, liquid grids, and
 environment sampling without taking over scene fog or ambient lighting.
 
-[Model particles](prem.md) instantiate child models. [Atlas sprites](pre2.md)
-construct view-facing heads/tails on the GPU; M2 age-driven particles currently use
+Universal retains complete MDLX and M2 particle and ribbon definitions. The
+renderer interprets each family and shares transport mechanics where their
+behavior agrees. [MDLX model particles](prem.md) instantiate child models. [MDLX atlas sprites](pre2.md)
+construct view-facing heads/tails on the GPU; M2 particles currently use
 reusable CPU meshes with authored twinkle and independent secondary UV motion.
 Supported M2 two/three-color particle programmes use the shared Bevy material
 transport with unlit composition and matching alpha-discard prepasses. [Trails](ribbons.md) retain birth-time cross sections and share

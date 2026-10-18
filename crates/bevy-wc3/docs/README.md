@@ -53,11 +53,11 @@ then choose a topic:
   settings, and application customization.
 - [Model cameras](rendering/cameras.md): authored views and opt-in playback.
 - [Model events](rendering/events.md): source identities, action messages, timing, and occurrence poses.
-- [External-model particles](rendering/prem.md): child models,
+- [External-model particles](rendering/prem.md): MDLX resource emitters, child models,
   world-space motion, animation, and lifetime.
-- [Sprite particles](rendering/pre2.md): emission, head/tail geometry,
+- [Sprite particles](rendering/pre2.md): MDLX atlas and M2 emitter families, emission, head/tail geometry,
   lifetime animation, M2 packed gravity/twinkle/secondary textures, and sorting.
-- [Ribbon trails](rendering/ribbons.md): birth-time sections, connected
+- [Ribbon trails](rendering/ribbons.md): MDLX and M2 ribbons, birth-time sections, connected
   geometry, atlas animation, gravity, and material passes.
 
 Each guide describes the implemented behavior and relevant input, resource, or

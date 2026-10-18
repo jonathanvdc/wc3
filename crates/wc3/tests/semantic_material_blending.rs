@@ -90,7 +90,7 @@ fn atlas_additive_preserves_its_encoding_and_rejects_material_only_selector() {
         .unwrap()
         .value;
     let (id, feature) = model.features().iter().next().unwrap();
-    let profile::Node::AtlasParticles(particle) = &feature.payload else {
+    let profile::Node::Particle2(particle) = &feature.payload else {
         panic!("atlas particle lost")
     };
     assert_eq!(
@@ -107,7 +107,7 @@ fn atlas_additive_preserves_its_encoding_and_rejects_material_only_selector() {
         Particle2FilterMode::Additive
     );
     let mut payload = feature.payload.clone();
-    let profile::Node::AtlasParticles(particle) = &mut payload else {
+    let profile::Node::Particle2(particle) = &mut payload else {
         unreachable!()
     };
     particle.details.rendering.blend = mdlx::Blend::AdditiveAlpha(AlphaAdditiveEncoding::AddAlpha);

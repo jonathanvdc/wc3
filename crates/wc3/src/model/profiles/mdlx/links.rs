@@ -16,7 +16,7 @@ impl Node<'_> {
                 value.motion.speed.visit_links(visitor);
                 value.emission.activation.visit_links(visitor);
             }
-            Node::AtlasParticles(value) => {
+            Node::Particle2(value) => {
                 value.motion.speed.visit_links(visitor);
                 value.motion.variation.visit_links(visitor);
                 value.details.shape.latitude.visit_links(visitor);

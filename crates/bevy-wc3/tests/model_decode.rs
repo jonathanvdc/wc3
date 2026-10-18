@@ -1,7 +1,7 @@
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::{Assets, Mesh};
 use bevy_wc3::compile_model;
-use wc3::model::{NodeFeature, ParticleDetails, ParticleEmitter};
+use wc3::model::{NodeFeature, ParticleEmitter};
 
 #[path = "../examples/support/model.rs"]
 mod semantic;
@@ -73,11 +73,7 @@ fn particle_fixture_preserves_distinct_native_emitter_definitions() {
         .features()
         .iter()
         .filter_map(|(id, feature)| match &feature.payload {
-            NodeFeature::Particle(ParticleEmitter::Simulated(value))
-                if matches!(value.details, ParticleDetails::Atlas(_)) =>
-            {
-                Some(id)
-            }
+            NodeFeature::Particle(ParticleEmitter::MdlxEmitter2(_)) => Some(id),
             _ => None,
         })
         .collect();

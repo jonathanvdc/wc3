@@ -24,10 +24,10 @@ use wc3::model::formats::{m2, wmo};
 use wc3::model::io::mdlx as semantic_mdlx;
 use wc3::model::io::{m2 as semantic_m2, wmo as semantic_wmo};
 use wc3::model::{
-    AddressMode, Attachment, FeatureId, Model, NodeFeature, ParticleDetails, ParticleEmitter,
+    AddressMode, Attachment, FeatureId, Model, NodeFeature, ParticleEmitter,
     ResourceLocator as ModelResource,
 };
-use wc3::model::{ImageResource, ParticleResource};
+use wc3::model::{ImageResource, MdlxParticle1Resource};
 use wc3::visit_m2_model;
 
 /// Authored use of an optional child model.
@@ -471,17 +471,15 @@ async fn compile_loaded(
                     .clone()
                     .into_owned(),
             ),
-            NodeFeature::Particle(ParticleEmitter::Simulated(value)) => {
-                let ParticleDetails::Model(definition) = &value.details else {
-                    continue;
-                };
+            NodeFeature::Particle(ParticleEmitter::MdlxEmitter1(value)) => {
+                let definition = &value.details;
                 if definition.text_resource {
                     continue;
                 }
                 (
                     ResourcePurpose::Particle,
                     match definition.resource {
-                        ParticleResource::Model(Some(id)) => model
+                        MdlxParticle1Resource::Model(Some(id)) => model
                             .model_resource(id)
                             .expect("validated particle model")
                             .clone()

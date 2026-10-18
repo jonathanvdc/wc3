@@ -1,13 +1,13 @@
 //! Editable Warcraft III effects and scene features.
 use crate::model::values::layered::{GeometryAnimationFlags, PopcornFlags};
-use crate::model::AtlasParticles;
 use crate::model::Construct;
 use crate::model::EffectResourceId;
-use crate::model::GravityTrail;
 use crate::model::IndexedChildModel;
+use crate::model::MdlxParticleEmitter1;
+use crate::model::MdlxParticleEmitter2;
+use crate::model::MdlxRibbonEmitter;
 use crate::model::ModelResourceId;
 use crate::model::PhotographicControls;
-use crate::model::ResourceParticle;
 use crate::model::{AimedCamera, AmbientDiffuseLight, VisibleLight};
 use crate::model::{MeshId, Property};
 use std::borrow::Cow;
@@ -29,7 +29,7 @@ pub struct GeometryAnimation {
     pub unclassified: GeometryAnimationFlags,
 }
 /// Resource-particle emitter parameters.
-pub type Particle = ResourceParticle;
+pub type ParticleEmitter1 = MdlxParticleEmitter1;
 /// Sprite-particle rendering selection.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Frames {
@@ -44,9 +44,9 @@ pub enum Frames {
     Unknown(u32),
 }
 /// Atlas sprite and tail emitter parameters.
-pub type Particle2 = AtlasParticles;
+pub type ParticleEmitter2 = MdlxParticleEmitter2;
 /// Ribbon trail generation parameters.
-pub type Ribbon = GravityTrail;
+pub type RibbonEmitter = MdlxRibbonEmitter;
 /// External PopcornFX resource and authored input properties.
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct Popcorn<'a> {

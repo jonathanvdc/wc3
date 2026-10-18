@@ -178,7 +178,7 @@ fn unused_resource_values_are_validated() {
 fn resource_particle_modes_round_trip_with_present_and_absent_dependencies() {
     use wc3::model::conversion::{ExportOptions, ImportOptions};
     use wc3::model::formats::mdlx::{self, mdl::Read as _};
-    use wc3::model::{io, ParticleDetails, ParticleEmitter, ParticleResource};
+    use wc3::model::{io, MdlxParticle1Resource, ParticleEmitter};
 
     for path in ["", "particles/child.mdx"] {
         for model_resource in [false, true] {
@@ -204,25 +204,23 @@ fn resource_particle_modes_round_trip_with_present_and_absent_dependencies() {
                     .features()
                     .iter()
                     .find_map(|(_, feature)| {
-                        let NodeFeature::Particle(ParticleEmitter::Simulated(value)) =
+                        let NodeFeature::Particle(ParticleEmitter::MdlxEmitter1(value)) =
                             &feature.payload
                         else {
                             return None;
                         };
-                        let ParticleDetails::Model(details) = &value.details else {
-                            return None;
-                        };
+                        let details = &value.details;
                         Some(details)
                     })
                     .unwrap();
                 assert_eq!(
-                    matches!(details.resource, ParticleResource::Model(_)),
+                    matches!(details.resource, MdlxParticle1Resource::Model(_)),
                     model_resource
                 );
                 assert_eq!(details.text_resource, text_resource);
                 let absent = match details.resource {
-                    ParticleResource::Model(id) => id.is_none(),
-                    ParticleResource::Image(id) => id.is_none(),
+                    MdlxParticle1Resource::Model(id) => id.is_none(),
+                    MdlxParticle1Resource::Image(id) => id.is_none(),
                 };
                 assert_eq!(absent, path.is_empty());
                 let model = model.try_narrow::<Mdlx>().unwrap();

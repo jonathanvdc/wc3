@@ -20,9 +20,8 @@ use wc3::model::scene::keyframed::Frames;
 #[cfg(test)]
 use wc3::model::ModelMetadata;
 use wc3::model::{
-    ClipId, FeatureId, Model, NodeFeature, NodeId, ParticleActivation, ParticleAppearance,
-    ParticleDetails, ParticleEmitter, ParticleGravity, ParticleScalar, ParticleTrigger, Property,
-    SampledTrack, Time as ModelTime, TimeSource, ZeroVec,
+    ClipId, FeatureId, Model, NodeFeature, NodeId, ParticleEmitter, Property, SampledTrack,
+    Time as ModelTime, TimeSource, ZeroVec,
 };
 
 enum BurstTrack<'sample, 'data> {
@@ -68,11 +67,11 @@ struct AtlasEmitter {
     speed: Property<f32>,
     variation: Property<f32>,
     gravity: Property<f32>,
-    lifetime: Property<f32>,
+    lifetime: f32,
     width: Property<f32>,
     length: Property<f32>,
     latitude: Property<f32>,
-    activation: ParticleActivation,
+    activation: Property<f32>,
     burst: bool,
     line: bool,
     frames: Frames,
@@ -116,10 +115,6 @@ struct State {
 pub(crate) struct AtlasParticleInstances {
     states: Vec<State>,
     previous_time: Option<f64>,
-}
-fn scalar(value: &ParticleScalar) -> Property<f32> {
-    let ParticleScalar::Property(value) = value;
-    *value
 }
 impl RuntimeAtlasParticles {
     pub(super) fn append_remapped(
@@ -166,29 +161,21 @@ impl RuntimeAtlasParticles {
             .unwrap_or(Mat4::IDENTITY);
         result.gravity_axis = basis.transform_vector3(Vec3::Z);
         for (feature, value) in model.features() {
-            let NodeFeature::Particle(ParticleEmitter::Simulated(definition)) = &value.payload
+            let NodeFeature::Particle(ParticleEmitter::MdlxEmitter2(definition)) = &value.payload
             else {
                 continue;
             };
-            let ParticleDetails::Atlas(details) = &definition.details else {
-                continue;
-            };
+            let details = &definition.details;
             let mut diagnostic =
                 |message: &str| result.diagnostics.push((feature, message.to_string()));
-            let ParticleAppearance::Staged(appearance) = &definition.appearance else {
-                diagnostic("Staged sprite emitter requires its authored three-stage appearance");
-                continue;
-            };
+            let appearance = &definition.appearance;
             let (rate, speed, variation, lifetime) = (
-                scalar(&definition.emission.rate),
-                scalar(&definition.motion.speed),
-                scalar(&definition.motion.variation),
-                scalar(&definition.lifetime.duration),
+                definition.emission.rate,
+                definition.motion.speed,
+                definition.motion.variation,
+                definition.lifetime.duration,
             );
-            let ParticleGravity::Directional(gravity) = &definition.motion.gravity else {
-                diagnostic("Staged sprite emitter requires directional gravity");
-                continue;
-            };
+            let gravity = definition.motion.gravity;
             if matches!(details.rendering.frames, Frames::Unknown(_)) {
                 diagnostic("Unknown staged sprite head/tail selection is not rendered");
                 continue;
@@ -196,7 +183,7 @@ impl RuntimeAtlasParticles {
             if details.unclassified.bits() != 0 {
                 diagnostic("Additional staged sprite flag bits are retained without a visual interpretation");
             }
-            if matches!(definition.emission.trigger, ParticleTrigger::KeyedBurst) {
+            if definition.emission.trigger {
                 diagnostic("Keyed sprite emission processes at most 4096 crossed key occurrences per update; extreme clock jumps are bounded");
             }
             if !details.rendering.unfogged {
@@ -236,13 +223,13 @@ impl RuntimeAtlasParticles {
                 animated_rate: model.is_animated(rate),
                 speed,
                 variation,
-                gravity: *gravity,
+                gravity,
                 lifetime,
                 width: details.shape.width,
                 length: details.shape.length,
                 latitude: details.shape.latitude,
-                activation: definition.emission.activation.clone(),
-                burst: matches!(definition.emission.trigger, ParticleTrigger::KeyedBurst),
+                activation: definition.emission.activation,
+                burst: definition.emission.trigger,
                 line: details.shape.line_emitter,
                 frames: details.rendering.frames,
                 parameters: StagedSpriteParameters {
@@ -366,14 +353,12 @@ impl RuntimeAtlasParticles {
             state
                 .live
                 .retire(|birth| frame.time - birth.time >= f64::from(birth.lifetime));
-            let enabled = match &emitter.activation {
-                ParticleActivation::Fractional(v) => frame.sample.animated(v) > 0.,
-                ParticleActivation::Boolean(v) => frame.sample.animated(v),
-            } && frame
-                .node_visible
-                .get(emitter.anchor)
-                .copied()
-                .unwrap_or(true);
+            let enabled = frame.sample.animated(&emitter.activation) > 0.
+                && frame
+                    .node_visible
+                    .get(emitter.anchor)
+                    .copied()
+                    .unwrap_or(true);
             let ended = frame
                 .selection
                 .clip
@@ -400,10 +385,7 @@ impl RuntimeAtlasParticles {
                             continue;
                         };
                         let sample = frame.sample.at_times(clip, shared);
-                        let active = match &emitter.activation {
-                            ParticleActivation::Fractional(value) => sample.animated(value) > 0.,
-                            ParticleActivation::Boolean(value) => sample.animated(value),
-                        };
+                        let active = sample.animated(&emitter.activation) > 0.;
                         let rate = if active {
                             f64::from(sample.animated(&emitter.rate).max(0.))
                         } else {
@@ -474,10 +456,7 @@ impl RuntimeAtlasParticles {
             return;
         };
         let sample = frame.sample.at_times(clip, shared);
-        let enabled = match &emitter.activation {
-            ParticleActivation::Fractional(value) => sample.animated(value) > 0.,
-            ParticleActivation::Boolean(value) => sample.animated(value),
-        };
+        let enabled = sample.animated(&emitter.activation) > 0.;
         let ended = frame
             .selection
             .clip
@@ -505,7 +484,7 @@ impl RuntimeAtlasParticles {
         } else {
             node
         };
-        let lifetime = sample.animated(&emitter.lifetime);
+        let lifetime = emitter.lifetime;
         if !lifetime.is_finite() || lifetime <= 0. || age >= f64::from(lifetime) {
             return;
         }
@@ -764,15 +743,14 @@ mod tests {
             .unwrap();
         let mut slot_values = model.values().clone();
         let property = slot_values.add(0.);
-        let NodeFeature::Particle(ParticleEmitter::Simulated(definition)) = &mut payload else {
+        let NodeFeature::Particle(ParticleEmitter::MdlxEmitter2(definition)) = &mut payload else {
             unreachable!()
         };
-        definition.emission.trigger = ParticleTrigger::KeyedBurst;
-        definition.emission.rate = ParticleScalar::Property(property);
+        definition.emission.trigger = true;
+        definition.emission.rate = property;
         let boolean_source = model.nodes().iter().next().unwrap().1.visible;
         if boolean {
-            definition.emission.rate =
-                ParticleScalar::Property(slot_values.scalar_from_boolean(boolean_source).unwrap());
+            definition.emission.rate = slot_values.scalar_from_boolean(boolean_source).unwrap();
         }
         model
             .edit(|builder| {
@@ -808,13 +786,7 @@ mod tests {
         let mut runtime = RuntimeAtlasParticles::compile(&model, &nodes, &TextureImages::default());
         runtime.emitters.retain(|value| value.feature == feature);
         runtime.emitters[0].frames = Frames::Head;
-        let lifetime = runtime.emitters[0].lifetime;
-        model
-            .edit(|builder| {
-                builder.values_mut().set(lifetime, 10000.)?;
-                Ok(())
-            })
-            .unwrap();
+        runtime.emitters[0].lifetime = 10000.;
         let mut world = World::new();
         let mut meshes = Assets::default();
         let mut queue = CommandQueue::default();

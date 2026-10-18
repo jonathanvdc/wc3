@@ -26,7 +26,7 @@ pub trait FeatureVocabulary<'a>: Clone + Debug + Send + Sync {
     type LightProgram: Clone + Debug + Send + Sync;
 
     /// Owning form admitted for this behavior family.
-    type AtlasParticles: Clone + Debug + Send + Sync;
+    type Particle2: Clone + Debug + Send + Sync;
     /// Owning form admitted for this behavior family.
     type PointLight: Clone + Debug + Send + Sync;
     /// Traverses all graph relationships admitted by this vocabulary.
@@ -69,7 +69,7 @@ pub enum FeatureSet<'a, V: FeatureVocabulary<'a>> {
     LightProgram(<V as FeatureVocabulary<'a>>::LightProgram),
 
     /// Complete owning definition of this behavior.
-    AtlasParticles(<V as FeatureVocabulary<'a>>::AtlasParticles),
+    Particle2(<V as FeatureVocabulary<'a>>::Particle2),
     /// Complete owning definition of this behavior.
     PointLight(<V as FeatureVocabulary<'a>>::PointLight),
 }
@@ -107,7 +107,7 @@ where
     V::FaceActor: PartialEq,
     V::LightProgram: PartialEq,
 
-    V::AtlasParticles: PartialEq,
+    V::Particle2: PartialEq,
     V::PointLight: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
@@ -123,7 +123,7 @@ where
             (Self::FaceActor(left), Self::FaceActor(right)) => left == right,
             (Self::LightProgram(left), Self::LightProgram(right)) => left == right,
 
-            (Self::AtlasParticles(left), Self::AtlasParticles(right)) => left == right,
+            (Self::Particle2(left), Self::Particle2(right)) => left == right,
             (Self::PointLight(left), Self::PointLight(right)) => left == right,
             _ => false,
         }

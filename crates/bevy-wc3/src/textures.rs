@@ -6,7 +6,7 @@ use wc3::model::materials::mdlx;
 use wc3::model::materials::program::MaterialStep;
 use wc3::model::{
     ColorSpace, FeatureId, ImageResource, ImageResourceId, MaterialId, Model, NodeFeature,
-    ParticleDetails, ParticleEmitter, Sampler, Texture, TextureControls,
+    ParticleEmitter, Sampler, Texture, TextureControls,
 };
 
 /// Purpose of one sampled image, independent of its resource identity.
@@ -220,10 +220,12 @@ pub fn texture_requests<'view, 'data>(
         }
     }
     for (feature, value) in model.features() {
-        if let NodeFeature::Particle(ParticleEmitter::Simulated(particle)) = &value.payload {
-            let images = match &particle.details {
-                ParticleDetails::AgeDriven(details) => details.rendering.textures.to_vec(),
-                ParticleDetails::Atlas(details) => details.rendering.texture.into_iter().collect(),
+        if let NodeFeature::Particle(particle) = &value.payload {
+            let images = match particle {
+                ParticleEmitter::M2(value) => value.details.rendering.textures.to_vec(),
+                ParticleEmitter::MdlxEmitter2(value) => {
+                    value.details.rendering.texture.into_iter().collect()
+                }
                 _ => Vec::new(),
             };
             for (slot, image) in images.into_iter().enumerate() {

@@ -1,16 +1,12 @@
 use std::borrow::Cow;
 use wc3::model::profiles::mdlx;
-use wc3::model::{
-    AgeDrivenParticle, AgeDrivenParticleRendering, AgeDrivenParticleShape, AtlasParticle,
-    AtlasParticleRendering, ModelParticle, ParticleEmission, ParticleLifetime, ParticleMotion,
-    StagedParticleAppearance,
-};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-use wc3::model::{FromFeature as SlotFromFeature, TryFromFeature as SlotTryFromFeature};
 use wc3::model::{
-    ParticleAppearance, ParticleDefinition, ParticleDetails, ParticleScalar, ParticleTrigger,
-    ZeroVec,
+    M2ParticleDetails, M2ParticleRendering, M2ParticleShape, MdlxParticle1Details,
+    MdlxParticle2Appearance, MdlxParticle2Details, MdlxParticle2Rendering, ParticleEmission,
+    ParticleLifetime, ParticleMotion,
 };
+use wc3::model::{ParticleEmitter, ZeroVec};
 
 #[test]
 fn model_particles_share_editable_rate_speed_and_lifetime() {
@@ -20,9 +16,9 @@ fn model_particles_share_editable_rate_speed_and_lifetime() {
     let resource_id = draft.add_model_resource(wc3::model::PathResource::Path(Cow::Borrowed(
         resource.as_bytes(),
     )));
-    let source = mdlx::Particle {
-        details: ModelParticle {
-            resource: wc3::model::ParticleResource::Model(Some(resource_id)),
+    let source = mdlx::ParticleEmitter1 {
+        details: MdlxParticle1Details {
+            resource: wc3::model::MdlxParticle1Resource::Model(Some(resource_id)),
             longitude: slot_values.add(45.0),
             ..SlotConstruct::construct(&mut slot_values)
         },
@@ -43,13 +39,13 @@ fn model_particles_share_editable_rate_speed_and_lifetime() {
         },
         appearance: (),
     };
-    let mut definition = ParticleDefinition::from_feature(source.clone(), &mut slot_values);
-    let ParticleDetails::Model(details) = &definition.details else {
+    let mut definition = ParticleEmitter::from(source.clone());
+    let ParticleEmitter::MdlxEmitter1(emitter) = &mut definition else {
         panic!()
     };
-    assert_eq!(details.resource, source.details.resource);
-    definition.emission.rate = ParticleScalar::Property(slot_values.add(21.0));
-    let restored = mdlx::Particle::try_from_feature(definition, &slot_values).unwrap();
+    assert_eq!(emitter.details.resource, source.details.resource);
+    emitter.emission.rate = slot_values.add(21.0);
+    let restored = mdlx::ParticleEmitter1::try_from(definition).unwrap();
     assert_eq!(slot_values[restored.emission.rate], 21.0);
     assert_eq!(restored.details.resource, source.details.resource);
     assert_eq!(restored.details.longitude, source.details.longitude);
@@ -60,7 +56,7 @@ fn model_particles_share_editable_rate_speed_and_lifetime() {
 #[test]
 fn atlas_appearance_and_rendering_survive_composition() {
     let mut slot_values = SlotValues::default();
-    let source = mdlx::Particle2 {
+    let source = mdlx::ParticleEmitter2 {
         motion: ParticleMotion {
             speed: slot_values.add(8.0),
             ..SlotConstruct::construct(&mut slot_values)
@@ -74,50 +70,42 @@ fn atlas_appearance_and_rendering_survive_composition() {
             variation: (),
             ..SlotConstruct::construct(&mut slot_values)
         },
-        appearance: StagedParticleAppearance {
+        appearance: MdlxParticle2Appearance {
             colors: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
             alpha: [17, 128, 255],
             uv_intervals: [[1, 3, 2]; 4],
             ..SlotConstruct::construct(&mut slot_values)
         },
-        details: AtlasParticle {
-            rendering: AtlasParticleRendering {
+        details: MdlxParticle2Details {
+            rendering: MdlxParticle2Rendering {
                 atlas: [4, 8],
                 ..SlotConstruct::construct(&mut slot_values)
             },
             ..SlotConstruct::construct(&mut slot_values)
         },
     };
-    let definition = ParticleDefinition::from_feature(source.clone(), &mut slot_values);
-    assert!(matches!(
-        definition.emission.trigger,
-        ParticleTrigger::KeyedBurst
-    ));
-    let ParticleDetails::Atlas(details) = &definition.details else {
+    let definition = ParticleEmitter::from(source.clone());
+    let ParticleEmitter::MdlxEmitter2(emitter) = &definition else {
         panic!()
     };
-    let ParticleAppearance::Staged(appearance) = &definition.appearance else {
-        panic!()
-    };
+    assert!(emitter.emission.trigger);
+    let details = &emitter.details;
+    let appearance = &emitter.appearance;
     assert_eq!(appearance.alpha, source.appearance.alpha);
     assert_eq!(details.rendering.atlas, source.details.rendering.atlas);
     assert_eq!(
-        mdlx::Particle2::try_from_feature(definition, &slot_values).unwrap(),
+        mdlx::ParticleEmitter2::try_from(definition).unwrap(),
         source
     );
 }
 
 #[test]
-fn narrowing_retains_unsupported_authored_variation() {
-    let mut slot_values = SlotValues::default();
-    let mut definition = ParticleDefinition::from_feature(
-        mdlx::Particle::construct(&mut slot_values),
-        &mut slot_values,
-    );
-    definition.motion.variation = ParticleScalar::Property(slot_values.add(0.75));
-    let original = mdlx::Particle::try_from_feature(definition, &slot_values).unwrap_err();
-    let ParticleScalar::Property(value) = &original.motion.variation;
-    assert_eq!(slot_values[value], 0.75);
+fn narrowing_rejects_a_different_particle_family_without_discarding_it() {
+    let mut values = SlotValues::default();
+    let source = mdlx::ParticleEmitter2::construct(&mut values);
+    let rejected =
+        mdlx::ParticleEmitter1::try_from(ParticleEmitter::from(source.clone())).unwrap_err();
+    assert_eq!(mdlx::ParticleEmitter2::try_from(*rejected).unwrap(), source);
 }
 
 use wc3::model::profiles::m2;
@@ -126,11 +114,11 @@ use wc3::model::profiles::m2;
 fn age_driven_roundtrip_preserves_borrowed_spline_and_common_randomness() {
     let mut slot_values = SlotValues::default();
     let spline = ZeroVec::alloc_from_slice(&[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]);
-    let source = m2::Particle {
-        details: AgeDrivenParticle {
+    let source = m2::ParticleEmitter {
+        details: M2ParticleDetails {
             id: SlotConstruct::construct(&mut slot_values),
             flags: SlotConstruct::construct(&mut slot_values),
-            rendering: AgeDrivenParticleRendering {
+            rendering: M2ParticleRendering {
                 blend: SlotConstruct::construct(&mut slot_values),
                 color_index: SlotConstruct::construct(&mut slot_values),
                 textures: vec![],
@@ -144,7 +132,7 @@ fn age_driven_roundtrip_preserves_borrowed_spline_and_common_randomness() {
                 tail_length: SlotConstruct::construct(&mut slot_values),
                 scroll: Some([0.125; 8]),
             },
-            shape: AgeDrivenParticleShape {
+            shape: M2ParticleShape {
                 generator: SlotConstruct::construct(&mut slot_values),
                 legacy_shape: SlotConstruct::construct(&mut slot_values),
                 vertical_range: SlotConstruct::construct(&mut slot_values),
@@ -184,35 +172,18 @@ fn age_driven_roundtrip_preserves_borrowed_spline_and_common_randomness() {
         appearance: SlotConstruct::construct(&mut slot_values),
     };
     let before = format!("{source:?}");
-    let definition = ParticleDefinition::from_feature(source, &mut slot_values);
-    let ParticleDetails::AgeDriven(details) = &definition.details else {
+    let definition = ParticleEmitter::from(source);
+    let ParticleEmitter::M2(emitter) = &definition else {
         panic!()
     };
     assert_eq!(
-        details.shape.spline.as_bytes().as_ptr(),
+        emitter.details.shape.spline.as_bytes().as_ptr(),
         spline.as_bytes().as_ptr()
     );
-    let restored = m2::Particle::try_from_feature(definition, &slot_values).unwrap();
+    let restored = m2::ParticleEmitter::try_from(definition).unwrap();
     assert_eq!(
         restored.details.shape.spline.as_bytes().as_ptr(),
         spline.as_bytes().as_ptr()
     );
     assert_eq!(format!("{restored:?}"), before);
-}
-
-#[test]
-fn independently_authored_age_program_cannot_be_silently_discarded() {
-    let mut slot_values = SlotValues::default();
-    let atlas = ParticleDefinition::from_feature(
-        mdlx::Particle2::construct(&mut slot_values),
-        &mut slot_values,
-    );
-    let mut model = ParticleDefinition::from_feature(
-        mdlx::Particle::construct(&mut slot_values),
-        &mut slot_values,
-    );
-    model.appearance = atlas.appearance;
-    let original = mdlx::Particle::try_from_feature(model, &slot_values).unwrap_err();
-    assert!(matches!(original.appearance, ParticleAppearance::Staged(_)));
-    assert!(matches!(original.details, ParticleDetails::Model(_)));
 }

@@ -192,15 +192,15 @@ impl<'a> FeatureVocabulary<'a> for M2 {
     type Light = m2::Light;
     type Camera = m2::Camera;
     type Attachment = m2::Attachment;
-    type Particle = Box<m2::Particle<'a>>;
-    type Ribbon = Box<m2::Ribbon>;
+    type Particle = Box<m2::ParticleEmitter<'a>>;
+    type Ribbon = Box<m2::RibbonEmitter>;
     type GeometryAnimation = Unavailable;
     type CollisionShape = Unavailable;
     type ParticleProgram = Unavailable;
     type FaceActor = Unavailable;
     type LightProgram = Unavailable;
 
-    type AtlasParticles = Unavailable;
+    type Particle2 = Unavailable;
     type PointLight = Unavailable;
     fn visit_links(value: &FeatureSet<'a, Self>, visitor: &mut dyn FnMut(Link)) {
         value.visit_profile_links(visitor);

@@ -7,16 +7,16 @@ use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::materials::mdlx::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
-use crate::model::{
-    AtlasParticle, AtlasParticleRendering, AtlasParticleShape, ModelParticle, ParticleEmission,
-    ParticleLifetime, ParticleMotion, StagedParticleAppearance,
-};
 use crate::model::{Axis, SocketDefinition};
 use crate::model::{
     ClockId, EventOccurrence, MaterialId, ModelBuilder, NodeId, Texture, Time, TimeSource,
 };
-use crate::model::{GravityTrailControls, LayeredTrailRendering, TrailAppearance, TrailGeometry};
-use crate::model::{MdlxImageResource, ParticleResource, PathResource};
+use crate::model::{MdlxImageResource, MdlxParticle1Resource, PathResource};
+use crate::model::{
+    MdlxParticle1Details, MdlxParticle2Appearance, MdlxParticle2Details, MdlxParticle2Rendering,
+    MdlxParticle2Shape, ParticleEmission, ParticleLifetime, ParticleMotion,
+};
+use crate::model::{MdlxRibbonControls, MdlxRibbonRendering, TrailAppearance, TrailGeometry};
 use std::collections::BTreeMap;
 
 pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
@@ -60,10 +60,10 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         }
         let flags = source.flags();
         {
-            let payload = profile::Node::Particle(profile::Particle {
-                details: ModelParticle {
+            let payload = profile::Node::Particle(profile::ParticleEmitter1 {
+                details: MdlxParticle1Details {
                     resource: if flags.emitter_uses_mdl() {
-                        ParticleResource::Model((!source.path.text().is_empty()).then(|| {
+                        MdlxParticle1Resource::Model((!source.path.text().is_empty()).then(|| {
                             decoder
                                 .builder
                                 .add_model_resource(PathResource::Path(S::bytes(
@@ -76,7 +76,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                                 )))
                         }))
                     } else {
-                        ParticleResource::Image((!source.path.text().is_empty()).then(|| {
+                        MdlxParticle1Resource::Image((!source.path.text().is_empty()).then(|| {
                             decoder
                                 .builder
                                 .add_image_resource(MdlxImageResource::Path(S::bytes(
@@ -150,20 +150,20 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             native::Particle2Frames::Unknown(value) => profile::Frames::Unknown(value),
         };
         {
-            let payload = profile::Node::AtlasParticles(profile::Particle2 {
+            let payload = profile::Node::Particle2(profile::ParticleEmitter2 {
                 motion: ParticleMotion {
                     speed: a!(speed),
                     variation: a!(variation),
                     gravity: a!(gravity),
                 },
-                details: AtlasParticle {
-                    shape: AtlasParticleShape {
+                details: MdlxParticle2Details {
+                    shape: MdlxParticle2Shape {
                         latitude: a!(latitude),
                         length: a!(length),
                         width: a!(width),
                         line_emitter: flags.line_emitter(),
                     },
-                    rendering: AtlasParticleRendering {
+                    rendering: MdlxParticle2Rendering {
                         blend,
                         atlas: [source.rows, source.columns],
                         frames,
@@ -194,7 +194,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     )?,
                     variation: (),
                 },
-                appearance: StagedParticleAppearance {
+                appearance: MdlxParticle2Appearance {
                     middle_time: source.time,
                     colors: source.segment_colors,
                     alpha: source.alpha,
@@ -219,7 +219,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             };
         }
         {
-            let payload = profile::Node::Ribbon(profile::Ribbon {
+            let payload = profile::Node::Ribbon(profile::RibbonEmitter {
                 geometry: TrailGeometry {
                     axis: Axis::PositiveY,
                     height_above: a!(height_above),
@@ -233,7 +233,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                 },
                 lifetime: source.life_span,
                 emission_rate: source.emission_rate,
-                rendering: LayeredTrailRendering {
+                rendering: MdlxRibbonRendering {
                     material: if source.material_id == u32::MAX {
                         None
                     } else {
@@ -242,7 +242,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                         })?)
                     },
                 },
-                controls: GravityTrailControls {
+                controls: MdlxRibbonControls {
                     gravity: source.gravity,
                     visibility: decoder.track(
                         source.visibility.as_ref(),

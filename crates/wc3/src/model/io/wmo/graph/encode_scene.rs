@@ -310,7 +310,7 @@ pub(super) fn write<'a, D: Dialect>(
             | profile::Node::CollisionShape(unavailable)
             | profile::Node::ParticleProgram(unavailable)
             | profile::Node::FaceActor(unavailable)
-            | profile::Node::AtlasParticles(unavailable) => match *unavailable {},
+            | profile::Node::Particle2(unavailable) => match *unavailable {},
         }
     }
     if path_mode && file_mode {

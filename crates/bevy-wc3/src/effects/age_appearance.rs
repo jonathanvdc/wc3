@@ -6,7 +6,7 @@ use super::simulation::EmitterRng;
 use bevy::prelude::Vec2;
 use std::array::from_fn;
 use std::sync::Arc;
-use wc3::model::AgeDrivenParticle;
+use wc3::model::M2ParticleDetails;
 
 #[derive(Clone)]
 pub(super) struct AgeAppearance {
@@ -43,7 +43,7 @@ impl Default for AgeStyle {
     }
 }
 impl AgeAppearance {
-    pub fn new(details: &AgeDrivenParticle<'_>, emitter_seed: u32) -> Self {
+    pub fn new(details: &M2ParticleDetails<'_>, emitter_seed: u32) -> Self {
         let mut random = EmitterRng::new(emitter_seed ^ 0x9e3779b9);
         let scroll = details.rendering.scroll.unwrap_or([0.; 8]);
         Self {

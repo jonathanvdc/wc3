@@ -141,15 +141,15 @@ impl<'a> FeatureVocabulary<'a> for Mdlx {
     type Light = mdlx::Light;
     type Camera = mdlx::Camera;
     type Attachment = mdlx::Attachment;
-    type Particle = mdlx::Particle;
-    type Ribbon = mdlx::Ribbon;
+    type Particle = mdlx::ParticleEmitter1;
+    type Ribbon = mdlx::RibbonEmitter;
     type GeometryAnimation = mdlx::GeometryAnimation;
     type CollisionShape = mdlx::Collision;
     type ParticleProgram = mdlx::Popcorn<'a>;
     type FaceActor = Unavailable;
     type LightProgram = Unavailable;
 
-    type AtlasParticles = mdlx::Particle2;
+    type Particle2 = mdlx::ParticleEmitter2;
     type PointLight = Unavailable;
     fn visit_links(value: &FeatureSet<'a, Self>, visitor: &mut dyn FnMut(Link)) {
         value.visit_profile_links(visitor);

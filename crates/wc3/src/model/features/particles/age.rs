@@ -2,7 +2,7 @@
 use crate::model::Curve;
 /// Appearance evaluated against normalized particle age rather than a model clip.
 #[derive(Clone, Debug, Default)]
-pub struct ParticleAgeCurves<'a> {
+pub struct M2ParticleAppearance<'a> {
     /// Legacy atlas interpolation segments, when independently authored.
     pub legacy_atlas: Option<LegacyAtlas>,
 

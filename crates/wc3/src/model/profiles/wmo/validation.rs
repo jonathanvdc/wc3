@@ -232,7 +232,7 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
             | super::Node::CollisionShape(unavailable)
             | super::Node::ParticleProgram(unavailable)
             | super::Node::FaceActor(unavailable)
-            | super::Node::AtlasParticles(unavailable) => match *unavailable {},
+            | super::Node::Particle2(unavailable) => match *unavailable {},
         }
     }
     Ok(())

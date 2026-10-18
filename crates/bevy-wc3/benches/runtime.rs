@@ -19,7 +19,7 @@ use std::{
     time::{Duration, Instant},
 };
 use wc3::model::formats::mdlx::mdx;
-use wc3::model::{Model, NodeFeature, ParticleDetails, ParticleEmitter};
+use wc3::model::{Model, NodeFeature, ParticleEmitter};
 
 #[path = "../examples/support/model.rs"]
 mod semantic;
@@ -81,8 +81,10 @@ impl Harness {
         let mut options = CompileOptions::default();
         if let Some(handle) = child_handle {
             for (id, feature) in source.features() {
-                if matches!(&feature.payload, NodeFeature::Particle(ParticleEmitter::Simulated(value)) if matches!(value.details, ParticleDetails::Model(_)))
-                {
+                if matches!(
+                    &feature.payload,
+                    NodeFeature::Particle(ParticleEmitter::MdlxEmitter1(_))
+                ) {
                     options.child_models.insert(id, handle.clone());
                 }
             }

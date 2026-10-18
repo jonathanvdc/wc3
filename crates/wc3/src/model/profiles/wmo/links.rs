@@ -99,7 +99,7 @@ impl Node<'_> {
             | Node::CollisionShape(unavailable)
             | Node::ParticleProgram(unavailable)
             | Node::FaceActor(unavailable)
-            | Node::AtlasParticles(unavailable) => match *unavailable {},
+            | Node::Particle2(unavailable) => match *unavailable {},
         }
     }
 }

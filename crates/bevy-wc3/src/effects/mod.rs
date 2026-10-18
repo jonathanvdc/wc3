@@ -183,3 +183,5 @@ pub(crate) mod render;
 pub(crate) mod simulation;
 pub(crate) mod sprites;
 pub(crate) mod trails;
+
+mod ribbon_definition;

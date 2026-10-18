@@ -1,7 +1,8 @@
 # Sprite particles
 
-Staged atlas particles, including MDLX PRE2, use immutable GPU birth records. M2
-normalized-age particles use reusable CPU mesh buffers. Both paths retain semantic
+MDLX `mdlx::ParticleEmitter2` definitions use immutable GPU birth records. M2
+`m2::ParticleEmitter` definitions use reusable CPU mesh buffers. Universal retains
+these complete families in `ParticleEmitter::MdlxEmitter2` and `ParticleEmitter::M2`. Both paths retain semantic
 emitter identities, bounded populations, authored motion, and independent instance
 clocks; they have different geometry and material capabilities.
 

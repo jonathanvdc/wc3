@@ -112,8 +112,11 @@ impl NodeFeature<'_> {
                 value.opacity.visit_links(visitor);
                 value.color.visit_links(visitor);
             }
-            Self::Particle(ParticleEmitter::Simulated(value)) => value.visit_links(visitor),
-            Self::Ribbon(RibbonEmitter::Trail(value)) => value.visit_links(visitor),
+            Self::Particle(ParticleEmitter::MdlxEmitter1(value)) => value.visit_links(visitor),
+            Self::Particle(ParticleEmitter::MdlxEmitter2(value)) => value.visit_links(visitor),
+            Self::Particle(ParticleEmitter::M2(value)) => value.visit_links(visitor),
+            Self::Ribbon(RibbonEmitter::Mdlx(value)) => value.visit_links(visitor),
+            Self::Ribbon(RibbonEmitter::M2(value)) => value.visit_links(visitor),
             Self::ParticleProgram(value) => {
                 value.life_span.visit_links(visitor);
                 value.emission_rate.visit_links(visitor);
@@ -128,9 +131,7 @@ impl NodeFeature<'_> {
             | Self::FaceActor(value) => value.visit_links(visitor),
             Self::CollisionShape(_) => {}
 
-            Self::AtlasParticles(unavailable) | Self::PointLight(unavailable) => {
-                match *unavailable {}
-            }
+            Self::Particle2(unavailable) | Self::PointLight(unavailable) => match *unavailable {},
         }
     }
 }

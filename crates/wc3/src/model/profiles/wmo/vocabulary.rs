@@ -55,7 +55,7 @@ impl wmo::Node<'_> {
             | Self::CollisionShape(unavailable)
             | Self::ParticleProgram(unavailable)
             | Self::FaceActor(unavailable)
-            | Self::AtlasParticles(unavailable) => match *unavailable {},
+            | Self::Particle2(unavailable) => match *unavailable {},
         }
     }
 }
@@ -141,7 +141,7 @@ impl<'a> FeatureVocabulary<'a> for Wmo {
     type FaceActor = Unavailable;
     type LightProgram = wmo::PointProgram;
 
-    type AtlasParticles = Unavailable;
+    type Particle2 = Unavailable;
     type PointLight = wmo::PointLight;
     fn visit_links(value: &FeatureSet<'a, Self>, visitor: &mut dyn FnMut(Link)) {
         value.visit_profile_links(visitor);

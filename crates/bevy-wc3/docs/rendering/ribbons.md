@@ -1,8 +1,10 @@
 # Ribbon trails
 
-Semantic trails retain birth-time cross sections and build connected geometry on the
-GPU. Material passes share immutable section records while retaining distinct
-blend/depth and texture state. `RibbonEmitter` exposes source identity and
+Universal retains `mdlx::RibbonEmitter` and `m2::RibbonEmitter` definitions in
+`wc3::model::RibbonEmitter::Mdlx` and `wc3::model::RibbonEmitter::M2`. The renderer
+prepares both families for a shared trail transport that retains birth-time cross
+sections and builds connected geometry on the GPU. Material passes share immutable
+section records while retaining distinct blend/depth and texture state. `bevy_wc3::RibbonEmitter` exposes source identity and
 bounded simulation statistics.
 
 ## Cross sections and motion

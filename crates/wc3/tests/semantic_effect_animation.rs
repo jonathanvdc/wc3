@@ -14,7 +14,7 @@ fn atlas_speed_keeps_one_shared_identity_through_native_publication() {
     draft
         .set_feature(
             id,
-            mdlx::Node::AtlasParticles(mdlx::Particle2 {
+            mdlx::Node::Particle2(mdlx::ParticleEmitter2 {
                 motion: ParticleMotion {
                     speed: native,
                     ..SlotConstruct::construct(&mut slot_values)
@@ -85,7 +85,7 @@ fn common_trail_fields_bind_the_owned_component_and_export_exactly() {
     draft
         .set_feature(
             id,
-            mdlx::Node::Ribbon(mdlx::Ribbon {
+            mdlx::Node::Ribbon(mdlx::RibbonEmitter {
                 appearance: TrailAppearance {
                     opacity,
                     ..SlotConstruct::construct(&mut slot_values)
@@ -134,7 +134,7 @@ fn a_shared_continuous_rate_narrows_on_non_burst_atlas_emitters() {
     draft
         .set_feature(
             id,
-            mdlx::Node::AtlasParticles(mdlx::Particle2 {
+            mdlx::Node::Particle2(mdlx::ParticleEmitter2 {
                 emission: ParticleEmission {
                     rate,
                     variation: (),

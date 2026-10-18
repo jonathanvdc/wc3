@@ -20,10 +20,8 @@ use wc3::model::values::model::{
     ParticleBlend, ParticleFlags, ParticleGenerator, ParticleHeadTail,
 };
 use wc3::model::{
-    ClipId, Curve, CurveValue, FeatureId, MaterialId, Model, NodeFeature, NodeId,
-    ParticleActivation, ParticleAgeCurves, ParticleAppearance, ParticleDetails, ParticleEmitter,
-    ParticleGravity, ParticleScalar, ParticleTrigger, Property, Texture, Time as ModelTime,
-    ValueSample,
+    ClipId, Curve, CurveValue, FeatureId, M2ParticleAppearance, MaterialId, Model, NodeFeature,
+    NodeId, ParticleEmitter, Property, Texture, Time as ModelTime, ValueSample,
 };
 
 const MAX_PARTICLES: usize = 8192;
@@ -46,10 +44,10 @@ pub struct SpriteEmitter {
 
 #[derive(Clone)]
 struct AgeDrivenControls {
-    activation: ParticleActivation,
+    activation: Property<bool>,
     speed_variation: Property<f32>,
-    gravity: ParticleGravity,
-    lifespan_variation: Property<f32>,
+    gravity: Property<[f32; 3]>,
+    lifespan_variation: f32,
     vertical: Property<f32>,
     horizontal: Property<f32>,
     width: Property<f32>,
@@ -74,7 +72,7 @@ struct Emitter {
     inherit_velocity: f32,
     follow: [[f32; 2]; 2],
     spin: [f32; 4],
-    appearance: ParticleAgeCurves<'static>,
+    appearance: M2ParticleAppearance<'static>,
     atlas: [u16; 2],
     age_appearance: Option<AgeAppearance>,
     multi_texture: bool,
@@ -168,15 +166,11 @@ fn particle_image<'a>(
     images.get_with_sampler(id, texture.color_space, TextureRole::Color, texture.sampler)
 }
 
-fn scalar(value: &ParticleScalar) -> Property<f32> {
-    let ParticleScalar::Property(value) = value;
-    *value
-}
 fn owned_curve<T: CurveValue>(value: &Option<Curve<'_, T>>) -> Option<Curve<'static, T>> {
     value.clone().map(Curve::into_owned)
 }
-fn owned_age(value: &ParticleAgeCurves<'_>) -> ParticleAgeCurves<'static> {
-    ParticleAgeCurves {
+fn owned_age(value: &M2ParticleAppearance<'_>) -> M2ParticleAppearance<'static> {
+    M2ParticleAppearance {
         legacy_atlas: value.legacy_atlas.clone(),
         color: owned_curve(&value.color),
         alpha: owned_curve(&value.alpha),
@@ -239,25 +233,17 @@ impl RuntimeAgeSprites {
             ..Self::default()
         };
         for (feature, value) in model.features() {
-            let NodeFeature::Particle(ParticleEmitter::Simulated(definition)) = &value.payload
-            else {
+            let NodeFeature::Particle(ParticleEmitter::M2(definition)) = &value.payload else {
                 continue;
             };
 
-            let ParticleDetails::AgeDriven(details) = &definition.details else {
-                continue;
-            };
+            let details = &definition.details;
             let mut diagnostic =
                 |message: &str| result.diagnostics.push((feature, message.to_string()));
             if details.rendering.head_tail == ParticleHeadTail::Disabled {
                 continue;
             }
-            let ParticleAppearance::Curves(appearance) = &definition.appearance else {
-                diagnostic(
-                    "M2 emitter has no normalized-age appearance programme; sprite simulation is unavailable",
-                );
-                continue;
-            };
+            let appearance = &definition.appearance;
             if !matches!(
                 details.shape.generator,
                 ParticleGenerator::Plane | ParticleGenerator::Sphere
@@ -267,16 +253,12 @@ impl RuntimeAgeSprites {
                 );
                 continue;
             }
-            if !matches!(definition.emission.trigger, ParticleTrigger::Continuous) {
-                diagnostic("M2 keyed burst timing is not yet simulated");
-                continue;
-            }
             let (rate, speed, speed_variation, lifespan, lifespan_variation) = (
-                scalar(&definition.emission.rate),
-                scalar(&definition.motion.speed),
-                scalar(&definition.motion.variation),
-                scalar(&definition.lifetime.duration),
-                scalar(&definition.lifetime.variation),
+                definition.emission.rate,
+                definition.motion.speed,
+                definition.motion.variation,
+                definition.lifetime.duration,
+                definition.lifetime.variation,
             );
             if details.rendering.model.is_some() || details.rendering.child_model.is_some() {
                 diagnostic(
@@ -369,9 +351,9 @@ impl RuntimeAgeSprites {
                 speed,
                 lifespan,
                 controls: Some(AgeDrivenControls {
-                    activation: definition.emission.activation.clone(),
+                    activation: definition.emission.activation,
                     speed_variation,
-                    gravity: definition.motion.gravity.clone(),
+                    gravity: definition.motion.gravity,
                     lifespan_variation,
                     vertical: details.shape.vertical_range,
                     horizontal: details.shape.horizontal_range,
@@ -615,26 +597,9 @@ impl RuntimeAgeSprites {
                         .copied()
                         .unwrap_or(true)
                 };
-                let active = if visible && !ended {
-                    {
-                        match &emitter
-                            .controls
-                            .as_ref()
-                            .expect("age-driven controls")
-                            .activation
-                        {
-                            ParticleActivation::Boolean(value) => {
-                                if sample.animated(value) {
-                                    1.
-                                } else {
-                                    0.
-                                }
-                            }
-                            ParticleActivation::Fractional(value) => {
-                                sample.animated(value).clamp(0., 1.)
-                            }
-                        }
-                    }
+                let controls = emitter.controls.as_ref().expect("M2 controls");
+                let active = if visible && !ended && sample.animated(&controls.activation) {
+                    1.
                 } else {
                     0.
                 };
@@ -858,15 +823,12 @@ impl Emitter {
         let mut seed = self.seed ^ ordinal.wrapping_mul(0xd6e8feb86659fd93);
 
         let controls = self.controls.as_ref().expect("age-driven emitter controls");
-        let enabled = match &controls.activation {
-            ParticleActivation::Boolean(value) => sample.animated(value),
-            ParticleActivation::Fractional(value) => sample.animated(value) > 0.,
-        };
+        let enabled = sample.animated(&controls.activation);
         if !enabled {
             return None;
         }
-        let lifetime = sample.animated(&self.lifespan)
-            + signed(&mut seed) * sample.animated(&controls.lifespan_variation);
+        let lifetime =
+            sample.animated(&self.lifespan) + signed(&mut seed) * controls.lifespan_variation;
         if !lifetime.is_finite() || lifetime <= 0. {
             return None;
         }
@@ -917,10 +879,7 @@ impl Emitter {
         if !aimed && self.generator == ParticleGenerator::Sphere && self.flags.sphere_up() {
             direction = Vec3::Z;
         }
-        let gravity = match &controls.gravity {
-            ParticleGravity::Directional(v) => Vec3::NEG_Z * sample.animated(v),
-            ParticleGravity::Vector(v) => Vec3::from(sample.animated(v)),
-        };
+        let gravity = Vec3::from(sample.animated(&controls.gravity));
         let local = self.flags.attached();
         let (origin, mut velocity, acceleration) = if local {
             (origin, direction * speed, gravity + self.wind)

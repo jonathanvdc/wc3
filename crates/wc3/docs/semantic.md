@@ -139,8 +139,9 @@ activation domain; `AimedCamera<FieldOfView, Convention>` selects static or
 animated projection and its controls. `SocketDefinition<Identity,
 Visibility, Controls>` separates identity from visibility and unresolved controls.
 `ParticleComposition<Emission, Motion, Lifetime, Appearance, Details>` combines
-complete emitter components. Narrow profiles choose exact types for these
-parameters; Universal chooses explicit alternatives that admit more behavior.
+complete emitter components. Native profiles choose exact types for these
+parameters; Universal selects complete emitter families through `ParticleEmitter`.
+Other shared definitions use explicit alternatives where their interpretations differ.
 No optional field is needed merely because another profile uses a different
 interpretation.
 
@@ -356,8 +357,8 @@ select the same enum with `Mdlx`, `M2`, or `Wmo` as its vocabulary.
 `FeatureVocabulary` chooses each family's payload and supplies its inspection
 and relationship rules. Unsupported families select `Unavailable`.
 For example, an MDLX particle carries a constrained `ParticleComposition`,
-while Universal's particle family also admits resource instances and broader
-simulated definitions. The family names describe behavior in every selection:
+while Universal's particle family admits complete MDLX and M2 definitions
+and external effect resource instances. The family names describe behavior in every selection:
 `Particle`, `Ribbon`, `Attachment`, and `CollisionShape`.
 
 Shared structures retain common authored fields while explicit alternatives
@@ -400,35 +401,31 @@ with socket targets retaining authored visibility. A local transform supplies th
 offset. `CoordinatePolicy::Host` uses the host's authored axes and units;
 `CoordinatePolicy::Child` retains the child's standalone axes and units.
 
-`ParticleDefinition` is Universal's selection of `ParticleComposition`, owning
-shared emission, motion, lifetime, and particle-age appearance components.
-Native profiles select the same composition with narrower component types.
-All simulated particles expose their rate, initial speed, speed variation,
-gravity, duration, and lifetime variation through those same fields.
-`ParticleScalar` carries typed animated values. The emission trigger distinguishes
-continuous rates and keyed burst counts. Fractional visibility and boolean
-activation remain separate, as do scalar and directional gravity.
+Particle emitters retain their native semantic family. MDLX exposes
+`mdlx::ParticleEmitter1` for resource particles and `mdlx::ParticleEmitter2` for
+atlas sprites and tails; M2 exposes `m2::ParticleEmitter`. Each uses
+`ParticleComposition` to group emission, motion, lifetime, appearance, and details,
+with component types that preserve its family's authored controls. Model-clock
+animation changes emitter parameters, while particle-age programs control the
+appearance of each living particle. Native angle conventions, random variation,
+unknown controls, and resource modes retain their original meanings.
 
-`ParticleAppearance` distinguishes resource-defined appearance, staged color,
-opacity and scale, and arbitrary age curves. It is
-owned independently of emitter timing and simulation details. The remaining
-`ParticleDetails` select the simulation, rendering, and source geometry rules:
-resource particles, atlas sprites and tails, or age-driven particles. Atlas and age-driven definitions group rendering and emission shape. Model-clock animation changes emitter parameters, while particle-age
-programs control the appearance of each living particle. Widening does not
-convert degrees to radians, reinterpret unknown controls, or bake an appearance
-program into a different simulation.
+Universal's `ParticleEmitter` selects `MdlxEmitter1`, `MdlxEmitter2`, or `M2`,
+each owning the same complete definition used by its native profile. Its
+`Resource` alternative references an externally defined effect. Widening adds a family tag without
+allocating property slots or changing borrowed curve storage. Narrowing into the
+matching family moves the definition back; another family returns the original
+payload as an error. The family tag keeps MDLX staged appearance and M2 age curves
+paired with their corresponding simulation rules.
 
-MDLX and M2 ribbons select `TrailComposition` with their exact rate, atlas,
-rendering, and physical-control types. They widen to `TrailEmitter`, the
-broader Universal selection of that composition. The shared structure owns section
-geometry, animated appearance, rendering bindings, and physical controls.
-Universal generation rate uses `f64`, which exactly retains either native `u32` or `f32`
-values. Checked export requires an integral in-range rate for MDLX or an exactly
-representable `f32` rate for M2. Atlas dimensions similarly use a shared unsigned
-width, while animated atlas selectors retain their `u16` or `u32` value domain
-and typed slot identity. Gravity and emission angle retain separate
-meanings; layered materials and ordered texture/surface bindings remain explicit
-rendering programs.
+Ribbons follow the same contract. `mdlx::RibbonEmitter` and `m2::RibbonEmitter`
+use `TrailComposition` to share section geometry and appearance while retaining
+their exact rate, atlas selector, rendering bindings, and physical controls.
+Universal's `RibbonEmitter` owns either definition in its `Mdlx` or `M2`
+alternative, or references an external effect through `Resource`. MDLX rates
+remain `u32` and M2 rates remain `f32`; atlas selectors retain their `u32` or
+`u16` property identities. MDLX gravity and M2 emission angle stay in their
+respective definitions, as do their material and texture bindings.
 
 `FeatureSchema::feature` borrows a `FeatureView` from any profile's feature
 payload, including custom enums. Application-specific behaviors can return
@@ -440,19 +437,19 @@ Particle emission views distinguish continuous rates and keyed bursts. Lifetime 
 edge-strip views share color, opacity, heights, and section lifetime while
 retaining exact generation rates and the atlas selector's original animation
 value domain. Inspection neither clones payloads nor materializes their borrowed
-curves. After widening, the shared owned components can be edited without selecting a
-native payload:
+curves. After widening, editing selects the complete emitter family:
 
 ```rust
 use wc3::model::profiles::mdlx;
-use wc3::model::{Construct, FromFeature, TryFromFeature, PropertyValues, ParticleDefinition, ParticleScalar};
+use wc3::model::{Construct, ParticleEmitter, PropertyValues};
 
 let mut values = PropertyValues::default();
-let native = mdlx::Particle2::construct(&mut values);
-let mut emitter = ParticleDefinition::from_feature(native, &mut values);
-emitter.emission.rate = ParticleScalar::Property(values.add(24.));
-emitter.motion.speed = ParticleScalar::Property(values.add(8.));
-let exported = mdlx::Particle2::try_from_feature(emitter, &values).unwrap();
+let native = mdlx::ParticleEmitter2::construct(&mut values);
+let mut emitter = ParticleEmitter::from(native);
+let ParticleEmitter::MdlxEmitter2(definition) = &mut emitter else { unreachable!() };
+definition.emission.rate = values.add(24.);
+definition.motion.speed = values.add(8.);
+let exported = mdlx::ParticleEmitter2::try_from(emitter).unwrap();
 assert_eq!(values[exported.emission.rate], 24.);
 assert_eq!(values[exported.motion.speed], 8.);
 ```
