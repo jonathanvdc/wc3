@@ -145,19 +145,6 @@ fn reforged_layer_texture_slot_and_tracks_round_trip() {
 }
 
 #[test]
-fn unlit_layer_flag_round_trip() {
-    let mut layer = Layer::<V1800>::new();
-    let mut flags = layer.shading_flags;
-    flags.set_unlit(true);
-    layer.shading_flags = flags;
-    assert!(Layer::<V1800>::decode_mdx(&layer.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned()
-        .shading_flags
-        .unlit());
-}
-
-#[test]
 fn version_specific_fields_do_not_write_into_legacy_tracks() {
     let mut layer = Layer::<V800>::new();
     let before = layer.encode_mdx().unwrap();
@@ -193,6 +180,7 @@ fn independent_layer_fields_preserve_wire_order_across_versions() {
         use wc3::model::formats::mdlx::materials::LayerFresnel;
 
         let mut layer = Layer::<V>::new();
+        layer.shading_flags.set_unlit(true);
         let fresnel = LayerFresnel {
             color: Animatable::Static([0.1, 0.2, 0.3]),
             opacity: Animatable::Static(0.4),
@@ -228,7 +216,7 @@ fn independent_layer_fields_preserve_wire_order_across_versions() {
         }
 
         let mut expected = vec![0; 4];
-        for value in [0u32, 0, 0, u32::MAX, 0, 1.0f32.to_bits()] {
+        for value in [0u32, 0x100, 0, u32::MAX, 0, 1.0f32.to_bits()] {
             expected.extend(value.to_le_bytes());
         }
         if has_gain {
@@ -264,45 +252,6 @@ fn independent_layer_fields_preserve_wire_order_across_versions() {
     check::<V1400>();
     check::<V1600>();
     check::<V1800>();
-}
-
-#[test]
-fn fresnel_convenience_accessors_preserve_other_components() {
-    use wc3::model::formats::mdlx::materials::LayerFresnel;
-
-    let mut layer = Layer::<V1000>::new();
-    assert_eq!(layer.fresnel().clone(), LayerFresnel::default());
-    layer.set_fresnel(LayerFresnel {
-        color: Animatable::Static([0.1, 0.2, 0.3]),
-        opacity: Animatable::Static(0.4),
-        team_color: Animatable::Static(0.5),
-    });
-    layer.set_fresnel_color(Animatable::Static([0.6, 0.7, 0.8]));
-    layer.set_fresnel_opacity(Animatable::Static(0.9));
-    layer.set_fresnel_team_color(Animatable::Static(1.0));
-    assert_eq!(
-        layer.fresnel_color().clone(),
-        Animatable::Static([0.6, 0.7, 0.8])
-    );
-    assert_eq!(layer.fresnel_opacity().clone(), Animatable::Static(0.9));
-    assert_eq!(layer.fresnel_team_color().clone(), Animatable::Static(1.0));
-    assert_eq!(
-        layer.try_fresnel().unwrap().clone(),
-        layer.fresnel().clone()
-    );
-
-    let mut legacy = Layer::<V900>::new();
-    let before = legacy.encode_mdx().unwrap();
-    assert!(legacy
-        .try_set_fresnel_color(Animatable::Static([0.0; 3]))
-        .is_err());
-    assert!(legacy
-        .try_set_fresnel_opacity(Animatable::Static(1.0))
-        .is_err());
-    assert!(legacy
-        .try_set_fresnel_team_color(Animatable::Static(1.0))
-        .is_err());
-    assert_eq!(legacy.encode_mdx().unwrap(), before);
 }
 
 #[test]

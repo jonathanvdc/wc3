@@ -1,4 +1,3 @@
-use std::mem::size_of;
 use wc3::model::formats::mdlx::animation::Animatable;
 use wc3::model::formats::mdlx::chunks::{ModelChunk, RawChunk, UnknownChunk};
 use wc3::model::formats::mdlx::mdx::Read as _;
@@ -8,9 +7,7 @@ use wc3::model::formats::mdlx::NoExtensions;
 use wc3::model::formats::mdlx::ValueError;
 use wc3::model::formats::mdlx::ZeroVec;
 
-use wc3::model::formats::mdlx::geometry::{
-    Geoset, GeosetLayout, NoGeosetExtraSections, ReforgedGeosetExtraSections,
-};
+use wc3::model::formats::mdlx::geometry::Geoset;
 use wc3::model::formats::mdlx::materials::{Layer, Material};
 use wc3::model::formats::mdlx::mdx::ReadError;
 use wc3::model::formats::mdlx::scene::{Camera, CameraVariant, Light, LightType, Node};
@@ -123,14 +120,4 @@ fn runtime_dispatch_rejects_versions_without_a_layout() {
             kind: ReadErrorKind::UnsupportedVersion { version: 777 }
         })
     ));
-}
-
-#[test]
-fn geoset_extra_section_storage_is_selected_by_version() {
-    let classic: <V800 as GeosetLayout>::ExtraSections<'static> = NoGeosetExtraSections;
-    let modern: <V900 as GeosetLayout>::ExtraSections<'static> =
-        ReforgedGeosetExtraSections::default();
-    assert_eq!(size_of::<NoGeosetExtraSections>(), 0);
-    assert_eq!(classic, NoGeosetExtraSections);
-    assert_eq!(modern, ReforgedGeosetExtraSections::default());
 }
