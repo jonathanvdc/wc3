@@ -68,7 +68,6 @@ impl Node<'_> {
                 value.convention.f_stop.visit_links(visitor)
             }
             Node::Attachment(value) => value.visit_links(visitor),
-            Node::Event(_) => {}
             Node::CollisionShape(_) => {}
 
             Node::FaceActor(unavailable)

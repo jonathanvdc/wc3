@@ -6,7 +6,6 @@ use crate::model::LightEmission;
 use crate::model::{
     AngleTrailControls, Axis, SurfaceTrailRendering, TrailAppearance, TrailGeometry,
 };
-use zerovec::ZeroVec;
 fn placement<'a>(
     builder: &mut GraphBuilder<'a>,
     nodes: &[semantic::NodeId],
@@ -504,14 +503,22 @@ where
             value.position,
             format!("event-{index}"),
         )?;
-        let feature = builder.add_feature(
-            node,
-            profile::ActorKind::Event(profile::Event {
-                identifier: value.identifier,
-                data: value.data,
-            }),
-        )?;
         let global = value.enabled.global_sequence;
+        let clock = if global == u16::MAX {
+            semantic::TimeSource::Animation
+        } else {
+            semantic::TimeSource::Shared(
+                *clocks
+                    .get(global as usize)
+                    .ok_or_else(|| Error::new("m2.event.clock", "missing clock"))?,
+            )
+        };
+        let event_source = builder.add_event_source(profile::EventSource {
+            node,
+            clock,
+            identifier: value.identifier,
+            data: value.data,
+        });
         let count = if global != u16::MAX { 1 } else { clips.len() };
         for (seq, clip) in (0..count).map(|seq| (seq, clips.get(seq).copied())) {
             let leaf = if global != u16::MAX || D::VERSION < 264 {
@@ -556,21 +563,9 @@ where
                 if range.as_ref().is_some_and(|r| !r.contains(&index)) {
                     continue;
                 }
-                let event = semantic::Event {
+                let event = semantic::EventOccurrence {
                     time: Time::seconds((f64::from(ms) - f64::from(start)) / 1000.)?,
-                    clock: if global == u16::MAX {
-                        semantic::TimeSource::Animation
-                    } else {
-                        semantic::TimeSource::Shared(
-                            *clocks
-                                .get(global as usize)
-                                .ok_or_else(|| Error::new("m2.event.clock", "missing clock"))?,
-                        )
-                    },
-                    name: Cow::Owned(String::from_utf8_lossy(&value.identifier).into_owned()),
-                    node: Some(node),
-                    feature: Some(feature),
-                    payload: ZeroVec::new(),
+                    source: event_source,
                 };
                 if global == u16::MAX {
                     builder.add_event(

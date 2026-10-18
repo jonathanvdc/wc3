@@ -224,6 +224,7 @@ fn application_vocabularies_participate_in_graph_validation() {
         }
     }
     impl Profile for Application {
+        type EventSource<'a> = Unavailable;
         type ImageResource<'a> = PathResource<'a>;
         type ModelResource<'a> = crate::model::profiles::Unavailable;
         type EffectResource<'a> = crate::model::profiles::Unavailable;

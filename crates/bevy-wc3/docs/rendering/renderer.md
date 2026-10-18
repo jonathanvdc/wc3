@@ -21,7 +21,8 @@ the application root. `ModelDraw` preserves typed instance, mesh, material, draw
 and LOD identities.
 
 `Playback` selects typed clips in seconds. Their curves
-and events live in reusable semantic `Animation` definitions. The shared sampler
+and event occurrences live in reusable semantic `Animation` definitions. Each
+occurrence references a model-owned source defining its action, anchor, and clock. The shared sampler
 adds each clip's source start to local playback time and selects keys within its
 inclusive source interval. Shared
 clocks remain independently sampleable. Local-pose transitions retain signed scale

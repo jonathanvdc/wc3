@@ -15,8 +15,6 @@ pub trait FeatureVocabulary<'a>: Clone + Debug + Send + Sync {
     /// Owning form admitted for this behavior family.
     type Ribbon: Clone + Debug + Send + Sync;
     /// Owning form admitted for this behavior family.
-    type Event: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
     type GeometryAnimation: Clone + Debug + Send + Sync;
     /// Owning form admitted for this behavior family.
     type CollisionShape: Clone + Debug + Send + Sync;
@@ -59,8 +57,6 @@ pub enum FeatureSet<'a, V: FeatureVocabulary<'a>> {
     Particle(<V as FeatureVocabulary<'a>>::Particle),
     /// Complete owning definition of this behavior.
     Ribbon(<V as FeatureVocabulary<'a>>::Ribbon),
-    /// Complete owning definition of this behavior.
-    Event(<V as FeatureVocabulary<'a>>::Event),
     /// Complete owning definition of this behavior.
     GeometryAnimation(<V as FeatureVocabulary<'a>>::GeometryAnimation),
     /// Complete owning definition of this behavior.
@@ -105,7 +101,6 @@ where
     V::Attachment: PartialEq,
     V::Particle: PartialEq,
     V::Ribbon: PartialEq,
-    V::Event: PartialEq,
     V::GeometryAnimation: PartialEq,
     V::CollisionShape: PartialEq,
     V::ParticleProgram: PartialEq,
@@ -122,7 +117,6 @@ where
             (Self::Attachment(left), Self::Attachment(right)) => left == right,
             (Self::Particle(left), Self::Particle(right)) => left == right,
             (Self::Ribbon(left), Self::Ribbon(right)) => left == right,
-            (Self::Event(left), Self::Event(right)) => left == right,
             (Self::GeometryAnimation(left), Self::GeometryAnimation(right)) => left == right,
             (Self::CollisionShape(left), Self::CollisionShape(right)) => left == right,
             (Self::ParticleProgram(left), Self::ParticleProgram(right)) => left == right,

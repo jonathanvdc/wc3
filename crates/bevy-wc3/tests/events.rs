@@ -77,9 +77,17 @@ fn plugin_dispatches_public_messages_to_ordered_application_consumers() {
     app.update();
     let received = &app.world().resource::<Received>().0;
     assert_eq!(received.len(), 3);
-    assert_eq!(received[0].name.as_ref(), "Custom notification");
-    assert_eq!(received[1].name.as_ref(), "Custom notification");
-    assert_eq!(received[2].name.as_ref(), "SNDxUnresolved");
+    assert_eq!(received[0].source_id, received[1].source_id);
+    assert_ne!(received[0].source_id, received[2].source_id);
+    assert!(
+        matches!(received[0].source.as_ref(), bevy_wc3::EventSource::Mdlx(name) if name == "Custom notification")
+    );
+    assert!(
+        matches!(received[1].source.as_ref(), bevy_wc3::EventSource::Mdlx(name) if name == "Custom notification")
+    );
+    assert!(
+        matches!(received[2].source.as_ref(), bevy_wc3::EventSource::Mdlx(name) if name == "SNDxUnresolved")
+    );
     assert!(received.iter().all(|event| event.occurrence_time == 0.25));
     assert!((app.world().get::<Playback>(root).unwrap().clip_time - 0.3).abs() < 1e-12);
 }

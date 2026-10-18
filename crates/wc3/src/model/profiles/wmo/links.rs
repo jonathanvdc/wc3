@@ -95,7 +95,6 @@ impl Node<'_> {
             Node::Camera(unavailable)
             | Node::Particle(unavailable)
             | Node::Ribbon(unavailable)
-            | Node::Event(unavailable)
             | Node::GeometryAnimation(unavailable)
             | Node::CollisionShape(unavailable)
             | Node::ParticleProgram(unavailable)

@@ -21,10 +21,15 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
                 .tracks
                 .iter()
                 .any(|channel| matches!(channel.clock(), TimeSource::Shared(_)))
-                || animation
-                    .events
-                    .values()
-                    .any(|event| matches!(event.clock, TimeSource::Shared(_)))
+                || animation.events.values().any(|event| {
+                    matches!(
+                        value
+                            .event_source(event.source)
+                            .expect("validated source")
+                            .clock,
+                        TimeSource::Shared(_)
+                    )
+                })
         }) {
             return Err(Error::new(
                 "clips.animations",
@@ -42,10 +47,13 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
                     .tracks
                     .iter()
                     .any(|channel| channel.clock() == TimeSource::Animation)
-                    || animation
-                        .events
-                        .values()
-                        .any(|event| event.clock == TimeSource::Animation)
+                    || animation.events.values().any(|event| {
+                        value
+                            .event_source(event.source)
+                            .expect("validated source")
+                            .clock
+                            == TimeSource::Animation
+                    })
             })
             .collect();
         if ordinary_selection

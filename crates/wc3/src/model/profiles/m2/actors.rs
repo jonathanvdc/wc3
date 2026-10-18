@@ -13,7 +13,6 @@ pub type Actor<'a> = AttachedFeature<'a, M2>;
 pub type ActorKind<'a> = FeatureSet<'a, M2>;
 /// Runtime attachment role and enable control.
 pub type Attachment = SocketDefinition<u32, Property<bool>, ()>;
-pub use crate::model::scene::model::Event;
 /// Model light with independently animated ambient and diffuse components.
 pub type Light = AmbientDiffuseLight<LightKind, Property<bool>>;
 /// Camera projection and model-local look-at animation.
@@ -29,7 +28,6 @@ impl ActorKind<'_> {
             Self::Camera(x) => x.visit_links(v),
             Self::Ribbon(x) => x.visit_links(v),
             Self::Particle(x) => x.visit_links(v),
-            Self::Event(_) => {}
 
             Self::GeometryAnimation(unavailable)
             | Self::CollisionShape(unavailable)

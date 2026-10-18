@@ -24,6 +24,7 @@ impl Profile for Wmo {
     type Geometry<'a> = WmoGeometry<'a>;
     type Draw = Option<wmo::DrawControls>;
     type ModelMetadata<'a> = wmo::ModelMetadata;
+    type EventSource<'a> = Unavailable;
     type System<'a> = wmo::WorldSystem<'a>;
     type Surface<'a> = wmo::Material<'a>;
     type Feature<'a> = wmo::Node<'a>;
@@ -50,7 +51,6 @@ impl wmo::Node<'_> {
             Self::Camera(unavailable)
             | Self::Particle(unavailable)
             | Self::Ribbon(unavailable)
-            | Self::Event(unavailable)
             | Self::GeometryAnimation(unavailable)
             | Self::CollisionShape(unavailable)
             | Self::ParticleProgram(unavailable)
@@ -97,6 +97,9 @@ impl Extends<Wmo> for Universal {
     fn model_metadata<'a>(value: <Wmo as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
         ModelMetadata::Wmo(value)
     }
+    fn event_source<'a>(value: <Wmo as Profile>::EventSource<'a>) -> Self::EventSource<'a> {
+        match value {}
+    }
     fn system<'a>(value: <Wmo as Profile>::System<'a>) -> Self::System<'a> {
         System::Wmo(value)
     }
@@ -132,7 +135,6 @@ impl<'a> FeatureVocabulary<'a> for Wmo {
     type Attachment = wmo::Doodad;
     type Particle = Unavailable;
     type Ribbon = Unavailable;
-    type Event = Unavailable;
     type GeometryAnimation = Unavailable;
     type CollisionShape = Unavailable;
     type ParticleProgram = Unavailable;

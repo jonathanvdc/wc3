@@ -86,7 +86,13 @@ pub(super) fn write<'a, T: Dialect>(
                 )
             })
             .count();
-        if actors > 1 || native_bones.contains(&feature.node) {
+        if actors > 1
+            || native_bones.contains(&feature.node)
+            || model
+                .event_sources()
+                .values()
+                .any(|source| source.node == feature.node)
+        {
             node = Node::new(&node.name.text(), next)
                 .map_err(|error| Error::new("feature.name", error.to_string()))?;
             node.parent_id = nodes[&feature.node].object_id;
@@ -103,7 +109,6 @@ pub(super) fn write<'a, T: Dialect>(
             profile::Node::Attachment(_) => node.flags.set_attachment(true),
             profile::Node::CollisionShape(_) => node.flags.set_collision_shape(true),
             profile::Node::Light(_) => node.flags.set_light(true),
-            profile::Node::Event(_) => node.flags.set_event_object(true),
             _ => {}
         }
         match source {
@@ -332,9 +337,6 @@ pub(super) fn write<'a, T: Dialect>(
             profile::Node::Light(source) => lights.push(super::encode_lights::light::<T::Version>(
                 source, node, encoder,
             )?),
-            profile::Node::Event(source) => events.extend(super::encode_helpers::events(
-                source, feature_id, node, encoder,
-            )?),
             profile::Node::GeometryAnimation(_) | profile::Node::Camera(_) => {
                 unreachable!("handled non-node record family")
             }
@@ -343,6 +345,36 @@ pub(super) fn write<'a, T: Dialect>(
             | profile::Node::LightProgram(unavailable)
             | profile::Node::PointLight(unavailable) => match *unavailable {},
         }
+    }
+    for (source_id, source) in model.event_sources() {
+        let mut node = nodes[&source.node].clone();
+        if claimed.contains(&source.node)
+            || native_bones.contains(&source.node)
+            || model.features().values().any(|feature| {
+                feature.node == source.node
+                    && !matches!(
+                        feature.payload,
+                        profile::Node::GeometryAnimation(_) | profile::Node::Camera(_)
+                    )
+            })
+            || model
+                .event_sources()
+                .values()
+                .filter(|other| other.node == source.node)
+                .count()
+                > 1
+        {
+            node = Node::new(&node.name.text(), next)
+                .map_err(|error| Error::new("event.name", error.to_string()))?;
+            node.parent_id = nodes[&source.node].object_id;
+            next += 1;
+        } else {
+            claimed.insert(source.node);
+        }
+        node.flags.set_event_object(true);
+        events.push(super::encode_helpers::events(
+            source, source_id, node, encoder,
+        )?);
     }
     for (id, mut node) in nodes {
         if claimed.contains(&id) {

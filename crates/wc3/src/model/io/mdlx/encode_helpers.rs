@@ -3,7 +3,7 @@ use super::encode_animation::{frame_at, Encoder};
 use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::profiles::mdlx as profile;
-use crate::model::{FeatureId, MeshId, Property, Quaternion, TextureTransform, TimeSource};
+use crate::model::{EventSourceId, MeshId, Property, Quaternion, TextureTransform, TimeSource};
 use native::animation::Track;
 use native::scene::Node;
 use std::collections::{BTreeMap, HashSet};
@@ -16,13 +16,12 @@ pub(super) fn visibility(
     encoder.optional(*source, Ok, 1., path)
 }
 pub(super) fn events(
-    source: &profile::Events<'_>,
-    feature: FeatureId,
+    source: &profile::EventSource<'_>,
+    source_id: EventSourceId,
     node: Node<'static>,
     encoder: &mut Encoder<'_, '_, '_>,
-) -> Result<Vec<native::EventObject<'static>>, Error> {
+) -> Result<native::EventObject<'static>, Error> {
     let model = encoder.model;
-    let mut groups = BTreeMap::<(Option<u32>, String), BTreeMap<i32, usize>>::new();
     let mut selections = model.global_animations().to_vec();
     if let Some((_, clip)) = model.clips().iter().next() {
         selections.extend_from_slice(&clip.animations);
@@ -30,66 +29,36 @@ pub(super) fn events(
         selections.extend(model.animations().iter().map(|(id, _)| id));
     }
     let mut seen = HashSet::new();
+    let mut frames = Vec::new();
     for animation in selections.into_iter().filter(|id| seen.insert(*id)) {
-        let events = model
+        for event in model
             .animation(animation)
             .expect("validated animation")
             .events
-            .values();
-        let mut occurrences = BTreeMap::<(Option<u32>, String), BTreeMap<i32, usize>>::new();
-        for event in events {
-            if event.feature != Some(feature) {
-                continue;
-            }
-            let global = match event.clock {
-                TimeSource::Animation => None,
-                TimeSource::Shared(id) => Some(encoder.globals[&id]),
-            };
-            let frame = frame_at(event.time.as_seconds(), 0., encoder.context, "event.time")?;
-            *occurrences
-                .entry((global, event.name.to_string()))
-                .or_default()
-                .entry(frame)
-                .or_default() += 1;
-            if !event.payload.is_empty() {
-                encoder.context.unsupported("event.payload", "Warcraft III event occurrences carry names and timestamps but no binary messages")?;
-            }
-        }
-        for (group, counts) in occurrences {
-            let old = groups.entry(group).or_default();
-            for (frame, count) in counts {
-                let old = old.entry(frame).or_default();
-                *old += count;
+            .values()
+        {
+            if event.source == source_id {
+                frames.push(frame_at(
+                    event.time.as_seconds(),
+                    0.,
+                    encoder.context,
+                    "event.time",
+                )?);
             }
         }
     }
-    if groups.is_empty() {
-        groups.insert((None, source.name.to_string()), BTreeMap::new());
-    }
-    if groups.len() > 1 {
-        encoder.context.unsupported(
-            "event.source",
-            "one Warcraft III event source has one name and evaluation clock",
-        )?;
-    }
-    let mut output = Vec::new();
-    for ((global, name), frames) in groups.into_iter().take(1) {
-        let mut node = node.clone();
-        node.name
-            .set_text(&name)
-            .map_err(|error| Error::new("event.name", error.to_string()))?;
-        let times = frames
-            .into_iter()
-            .flat_map(|(frame, count)| std::iter::repeat_n(frame, count))
-            .collect::<Vec<_>>();
-        output.push(native::EventObject::new(
-            node,
-            global.unwrap_or(u32::MAX),
-            &times,
-        ));
-    }
-    Ok(output)
+    frames.sort_unstable();
+    let mut node = node;
+    node.name
+        .set_text(&source.name)
+        .map_err(|error| Error::new("event.name", error.to_string()))?;
+    let global = match source.clock {
+        TimeSource::Animation => u32::MAX,
+        TimeSource::Shared(id) => encoder.globals[&id],
+    };
+    Ok(native::EventObject::new(node, global, &frames))
 }
+
 pub(super) fn controls<T: Dialect>(
     target: &mut native::Document<'_, T>,
     encoder: &mut Encoder<'_, '_, '_>,

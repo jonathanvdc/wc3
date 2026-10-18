@@ -5,12 +5,10 @@ use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn definition(clock: TimeSource, time: f64) -> EventDefinition {
     EventDefinition {
-        feature: None,
+        source_id: source_id(),
         node: None,
         node_index: None,
-        name: Arc::from("event"),
-        source: None,
-        payload: Arc::from([]),
+        source: Arc::new(EventSource::Mdlx("event".into())),
         program: EventProgram::Global,
         clock,
         time,
@@ -69,16 +67,21 @@ fn compilation_resolves_event_node_index_once() {
     let node = builder
         .add_node(wc3::model::Node::named("anchor", &mut slot_values))
         .unwrap();
-    builder
-        .add_global_event(Event {
-            feature: None,
+    let source = builder.add_event_source(SemanticEventSource::Mdlx(
+        wc3::model::profiles::mdlx::EventSource {
+            node,
             clock: TimeSource::Animation,
-            time: Time::seconds(0.5).unwrap(),
             name: "key".into(),
-            node: Some(node),
-            payload: SlotConstruct::construct(&mut slot_values),
-        })
-        .unwrap();
+        },
+    ));
+    for seconds in [0.5, 0.75] {
+        builder
+            .add_global_event(SemanticEventOccurrence {
+                source,
+                time: Time::seconds(seconds).unwrap(),
+            })
+            .unwrap();
+    }
     let model = {
         builder.import_values(&slot_values).unwrap();
         builder.finish()
@@ -87,6 +90,14 @@ fn compilation_resolves_event_node_index_once() {
     let events = RuntimeEvents::compile(&model);
     assert_eq!(events.definitions[0].node, Some(node));
     assert_eq!(events.definitions[0].node_index, Some(0));
+    assert_eq!(events.definitions[0].source_id, source);
+    assert!(
+        matches!(events.definitions[0].source.as_ref(), EventSource::Mdlx(name) if name == "key")
+    );
+    assert!(Arc::ptr_eq(
+        &events.definitions[0].source,
+        &events.definitions[1].source
+    ));
 }
 fn clocks(value: f64) -> EventClocks {
     EventClocks {
@@ -406,4 +417,19 @@ fn frozen_shared_clock_does_not_traverse_event_windows() {
         collect(&mut state, &events, time, 32);
         assert!(state.occurrences.is_empty());
     }
+}
+
+fn source_id() -> EventSourceId {
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
+    let mut values = SlotValues::default();
+    let node = builder
+        .add_node(wc3::model::Node::named("anchor", &mut values))
+        .unwrap();
+    builder.add_event_source(SemanticEventSource::Mdlx(
+        wc3::model::profiles::mdlx::EventSource {
+            node,
+            clock: TimeSource::Animation,
+            name: "event".into(),
+        },
+    ))
 }

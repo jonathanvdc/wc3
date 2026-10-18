@@ -306,7 +306,6 @@ pub(super) fn write<'a, D: Dialect>(
             profile::Node::Camera(unavailable)
             | profile::Node::Particle(unavailable)
             | profile::Node::Ribbon(unavailable)
-            | profile::Node::Event(unavailable)
             | profile::Node::GeometryAnimation(unavailable)
             | profile::Node::CollisionShape(unavailable)
             | profile::Node::ParticleProgram(unavailable)

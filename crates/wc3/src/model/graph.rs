@@ -4,8 +4,8 @@ use crate::model::profiles::{Profile, Universal};
 use crate::model::DrawId;
 use crate::model::{
     Animation, AnimationId, AnimationObject, AppearanceSchema as _, AttachedFeature, Clip, ClipId,
-    ClockId, DynamicTrack, Error, Event, EventId, FeatureId, InstanceId, Look, LookId, Material,
-    MaterialId, Mesh, MeshId, MeshInstance, Node, NodeId, Skin, SkinId, SystemId, Time,
+    ClockId, DynamicTrack, Error, EventId, EventOccurrence, FeatureId, InstanceId, Look, LookId,
+    Material, MaterialId, Mesh, MeshId, MeshInstance, Node, NodeId, Skin, SkinId, SystemId, Time,
 };
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
@@ -15,6 +15,7 @@ use crate::model::{
     SkinObject, SystemObject,
 };
 use crate::model::{Dependencies, Link, Table, Texture, ValidateLinks as _};
+use crate::model::{EventSourceId, EventSourceObject};
 use crate::model::{Property, PropertyValue, PropertyValues, ValueSlot};
 use std::collections::HashSet;
 /// A repeating or frozen clock shared by animation tracks.
@@ -45,6 +46,7 @@ pub struct Model<'a, P: Profile = Universal> {
     scope: Scope,
     metadata: P::ModelMetadata<'a>,
     systems: Table<SystemObject, P::System<'a>>,
+    event_sources: Table<EventSourceObject, P::EventSource<'a>>,
     animations: Table<AnimationObject, Animation<'a>>,
     global_animations: Vec<AnimationId>,
     features: Table<FeatureObject, AttachedFeature<'a, P>>,
@@ -58,6 +60,14 @@ pub struct Model<'a, P: Profile = Universal> {
     clocks: Table<ClockObject, SharedClock>,
 }
 impl<'a, P: Profile> Model<'a, P> {
+    /// Model-owned action definitions, including sources with no occurrences.
+    pub fn event_sources(&self) -> &Table<EventSourceObject, P::EventSource<'a>> {
+        &self.event_sources
+    }
+    /// Resolves a model-owned action definition.
+    pub fn event_source(&self, id: EventSourceId) -> Option<&P::EventSource<'a>> {
+        self.event_sources.get(id)
+    }
     /// Authored constants for every typed animation slot.
     pub fn values(&self) -> &PropertyValues {
         &self.values
@@ -106,7 +116,7 @@ impl<'a, P: Profile> Model<'a, P> {
     pub fn animation_events<'v>(
         &'v self,
         ids: &'v [AnimationId],
-    ) -> impl Iterator<Item = &'v Event<'a>> {
+    ) -> impl Iterator<Item = &'v EventOccurrence> + use<'v, 'a, P> {
         ids.iter()
             .flat_map(|id| self.animations[id].events.values())
     }
@@ -115,7 +125,7 @@ impl<'a, P: Profile> Model<'a, P> {
         self.animation_tracks(&self.global_animations)
     }
     /// Events active independently of the selected clip.
-    pub fn global_events(&self) -> impl Iterator<Item = &Event<'a>> {
+    pub fn global_events(&self) -> impl Iterator<Item = &EventOccurrence> + use<'_, 'a, P> {
         self.animation_events(&self.global_animations)
     }
     /// Tracks selected by a clip. Missing clip identities yield no tracks.
@@ -123,7 +133,10 @@ impl<'a, P: Profile> Model<'a, P> {
         self.animation_tracks(self.clip(id).map_or(&[], |clip| &clip.animations))
     }
     /// Events selected by a clip. Missing clip identities yield no events.
-    pub fn clip_events(&self, id: ClipId) -> impl Iterator<Item = &Event<'a>> {
+    pub fn clip_events(
+        &self,
+        id: ClipId,
+    ) -> impl Iterator<Item = &EventOccurrence> + use<'_, 'a, P> {
         self.animation_events(self.clip(id).map_or(&[], |clip| &clip.animations))
     }
 
@@ -222,7 +235,7 @@ impl<'a, P: Profile> Model<'a, P> {
         ModelBuilder::<P>::with_profile(metadata).finish()
     }
     /// Resolves a programme's event occurrence by its actual graph identity.
-    pub fn event(&self, id: EventId) -> Option<&Event<'a>> {
+    pub fn event(&self, id: EventId) -> Option<&EventOccurrence> {
         self.animations
             .values()
             .find_map(|animation| animation.events.get(&id))

@@ -85,6 +85,11 @@ pub enum InstanceObject {}
 pub enum SkinObject {}
 /// Shared animation clock identity marker.
 pub enum ClockObject {}
+/// Event-source identity marker.
+pub enum EventSourceObject {}
+/// Handle to a model-owned event source.
+pub type EventSourceId = Id<EventSourceObject>;
+
 /// Programme event-occurrence identity marker.
 pub enum EventObject {}
 /// Programme event-occurrence handle.

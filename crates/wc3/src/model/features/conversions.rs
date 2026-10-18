@@ -1,7 +1,6 @@
 //! Lossless movement between constrained and universal feature vocabularies.
 use super::{
-    Attachment, Camera, EventSource, Light, NodeFeature, ParticleDetails, ParticleEmitter,
-    RibbonEmitter,
+    Attachment, Camera, Light, NodeFeature, ParticleDetails, ParticleEmitter, RibbonEmitter,
 };
 use super::{ChildModel, ParticleDefinition, Socket, TrailEmitter};
 use crate::model::profiles::{m2, mdlx, wmo};
@@ -30,7 +29,6 @@ impl<'a> FromFeature<mdlx::Node<'a>> for NodeFeature<'a> {
             mdlx::Node::Attachment(value) => {
                 Self::Attachment(Attachment::Child(FromFeature::from_feature(value, values)))
             }
-            mdlx::Node::Event(value) => Self::Event(EventSource::Named(value)),
             mdlx::Node::CollisionShape(value) => Self::CollisionShape(value),
         }
     }
@@ -87,7 +85,6 @@ impl<'a> TryFromFeature<NodeFeature<'a>> for mdlx::Node<'a> {
                     Err(value) => Err(Box::new(NodeFeature::Attachment(Attachment::Child(*value)))),
                 }
             }
-            NodeFeature::Event(EventSource::Named(value)) => Ok(Self::Event(value)),
             NodeFeature::CollisionShape(value) => Ok(Self::CollisionShape(value)),
             value => Err(Box::new(value)),
         }
@@ -111,7 +108,6 @@ impl<'a> FromFeature<m2::ActorKind<'a>> for NodeFeature<'a> {
             m2::ActorKind::Particle(value) => Self::Particle(ParticleEmitter::Simulated(Box::new(
                 FromFeature::from_feature(*value, values),
             ))),
-            m2::ActorKind::Event(value) => Self::Event(EventSource::Identifier(value)),
         }
     }
 }
@@ -156,7 +152,6 @@ impl<'a> TryFromFeature<NodeFeature<'a>> for m2::ActorKind<'a> {
                     )))),
                 }
             }
-            NodeFeature::Event(EventSource::Identifier(value)) => Ok(Self::Event(value)),
             value => Err(Box::new(value)),
         }
     }

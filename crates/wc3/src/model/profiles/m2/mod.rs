@@ -29,3 +29,6 @@ use crate::model::MaterialProgram;
 
 /// Ordered shader-specific material steps selected by this profile.
 pub type Material<'a> = MaterialProgram<MaterialStep<'a>>;
+
+mod events;
+pub use events::EventSource;

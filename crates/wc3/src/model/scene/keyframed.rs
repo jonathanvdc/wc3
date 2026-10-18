@@ -98,12 +98,6 @@ pub type Light = AmbientDiffuseLight<LightKind, VisibleLight>;
 pub type Camera = AimedCamera<f32, PhotographicControls>;
 /// External model attachment.
 pub type Attachment = IndexedChildModel<ModelResourceId>;
-/// Events generated on a model or independent looping clock.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Events<'a> {
-    /// Gameplay event name.
-    pub name: Cow<'a, str>,
-}
 /// Collision primitives independent of their native vertex packing.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Collision {

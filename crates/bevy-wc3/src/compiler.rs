@@ -44,7 +44,6 @@ fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
         NodeFeature::Attachment(_) => "Attachment",
         NodeFeature::Particle(_) => "Particle emitter",
         NodeFeature::Ribbon(_) => "Ribbon emitter",
-        NodeFeature::Event(_) => "Event source",
         NodeFeature::GeometryAnimation(_) => "Geometry animation",
         NodeFeature::CollisionShape(_) => "Collision shape",
         NodeFeature::ParticleProgram(_) => "External particle programme",

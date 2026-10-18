@@ -112,13 +112,9 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
             .find(|v| matches!(v.clock(), TimeSource::Shared(_)))
             .is_some()
         || value
-            .global_events()
-            .find(|v| v.clock == TimeSource::Animation)
-            .is_some()
-        || value
-            .global_events()
-            .find(|v| matches!(v.clock, TimeSource::Shared(_)))
-            .is_some()
+            .animations()
+            .values()
+            .any(|animation| !animation.events.is_empty())
     {
         return Err(Error::new(
             "world.animation",
@@ -232,7 +228,6 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
             super::Node::Camera(unavailable)
             | super::Node::Particle(unavailable)
             | super::Node::Ribbon(unavailable)
-            | super::Node::Event(unavailable)
             | super::Node::GeometryAnimation(unavailable)
             | super::Node::CollisionShape(unavailable)
             | super::Node::ParticleProgram(unavailable)

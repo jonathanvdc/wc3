@@ -2,14 +2,17 @@
 
 `ModelEvent` messages expose authored animation occurrences for gameplay.
 The renderer does not execute commands, resolve sound tables, or spawn gameplay
-effects. `EventSource` retains named actions, four-byte identifiers with
-data IDs as distinct payloads.
+effects. Model-owned event sources define the action, node anchor, and clock;
+`EventOccurrence` values in animations reference those sources by ID and supply
+timestamps. MDLX sources own names, M2 sources own four-byte identifiers and data
+IDs, and WMO admits no sources. The runtime `EventSource::Mdlx` and
+`EventSource::M2` retain those action alternatives after compilation.
 
 ## Consume occurrences
 
 Read messages in `PostUpdate` after `Wc3Systems::DispatchEvents`, or in the next
-`Update`. Each notification identifies its root, optional source feature/node, name,
-payload bytes, activating clip or model-level selection, time source, exact key, unwrapped
+`Update`. Each notification identifies its root, source ID and action, rig node,
+activating clip or model-level selection, time source, exact key, unwrapped
 occurrence time, and occurrence-time world transform.
 
 ```rust
@@ -17,7 +20,7 @@ use bevy::prelude::*;
 use bevy_wc3::ModelEvent;
 fn handle(mut events: MessageReader<ModelEvent>) {
     for event in events.read() {
-        // Interpret event.source and event.payload in application code.
+        // Interpret event.source in application code.
     }
 }
 ```
@@ -55,4 +58,4 @@ without enumerating every key in a long jump.
 The shared pose evaluator samples hierarchy, pivots, inheritance, billboards,
 anchors, overrides, and transition progress at the occurrence. Application root and
 camera transforms use current update values; their historical motion is not
-reconstructed. Occurrences without a hierarchy anchor retain no node identity.
+reconstructed. Native MDLX and M2 sources always identify a hierarchy anchor.

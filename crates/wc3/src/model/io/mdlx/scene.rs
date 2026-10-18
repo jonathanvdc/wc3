@@ -12,11 +12,12 @@ use crate::model::{
     ParticleLifetime, ParticleMotion, StagedParticleAppearance,
 };
 use crate::model::{Axis, SocketDefinition};
-use crate::model::{ClockId, Event, MaterialId, ModelBuilder, NodeId, Texture, Time, TimeSource};
+use crate::model::{
+    ClockId, EventOccurrence, MaterialId, ModelBuilder, NodeId, Texture, Time, TimeSource,
+};
 use crate::model::{GravityTrailControls, LayeredTrailRendering, TrailAppearance, TrailGeometry};
 use crate::model::{MdlxImageResource, ParticleResource, PathResource};
 use std::collections::BTreeMap;
-use zerovec::ZeroVec;
 
 pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
     source: &'source native::Document<'_, D>,
@@ -342,41 +343,26 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
     }
     for source in source.event_objects() {
         let id = node(source.node.object_id)?;
-        let feature = decoder.builder.reserve_feature(id);
         let clock = if source.global_sequence_id == u32::MAX {
-            None
+            TimeSource::Animation
         } else {
-            Some(
+            TimeSource::Shared(
                 *globals
                     .get(source.global_sequence_id as usize)
                     .ok_or_else(|| Error::new("events.clock", "shared clock does not exist"))?,
             )
         };
+        let event_source = decoder.builder.add_event_source(profile::EventSource {
+            node: id,
+            clock,
+            name: S::text(source.node.name.text()),
+        });
         for frame in source.frames().iter() {
             let absolute = f64::from(frame) / 1000.;
-            let event = |time, clock| Event {
-                time,
-                name: S::text(source.node.name.text()),
-                node: Some(id),
-                feature: Some(feature),
-                clock,
-                payload: ZeroVec::new(),
-            };
-            if let Some(clock) = clock {
-                decoder
-                    .builder
-                    .add_global_event(event(Time::seconds(absolute)?, TimeSource::Shared(clock)))?;
-            } else {
-                decoder
-                    .builder
-                    .add_global_event(event(Time::seconds(absolute)?, TimeSource::Animation))?;
-            }
-        }
-        {
-            let payload = profile::Node::Event(profile::Events {
-                name: S::text(source.node.name.text()),
-            });
-            decoder.builder.set_feature(feature, payload)?;
+            decoder.builder.add_global_event(EventOccurrence {
+                source: event_source,
+                time: Time::seconds(absolute)?,
+            })?;
         }
     }
     for source in source.collision_shapes() {

@@ -10,6 +10,7 @@ use crate::model::{
     MaterialSurface, MeshControls, Model, ModelMetadata, NodeControls, System, UniversalAppearance,
     UniversalBinding,
 };
+use crate::model::{EventSource, TimeSource};
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 /// Vocabulary that maps mechanically to M2 logical features.
 #[derive(Clone, Debug, Default)]
@@ -26,6 +27,7 @@ impl Profile for M2 {
     type Geometry<'a> = M2Geometry<'a>;
     type Draw = Option<m2::DrawControls>;
     type ModelMetadata<'a> = m2::ModelMetadata<'a>;
+    type EventSource<'a> = m2::EventSource;
     type System<'a> = m2::System<'a>;
     type Surface<'a> = m2::Material<'a>;
     type Feature<'a> = m2::ActorKind<'a>;
@@ -39,6 +41,27 @@ impl Profile for M2 {
     }
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
         model.validate_animation_consumers()?;
+        if model.global_events().any(|event| {
+            model
+                .event_source(event.source)
+                .expect("validated source")
+                .clock
+                == TimeSource::Animation
+        }) || model.clips().iter().any(|(id, _)| {
+            model.clip_events(id).any(|event| {
+                matches!(
+                    model
+                        .event_source(event.source)
+                        .expect("validated source")
+                        .clock,
+                    TimeSource::Shared(_)
+                )
+            })
+        }) {
+            return Err(Error::new("m2.events.selection",
+                "ordinary M2 events require clip selection; shared-clock events require model-level selection"));
+        }
+
         for (_, clip) in model.clips() {
             if let Some(alias) = clip.controls.alias {
                 let target = model.clip(alias).expect("validated alias reference");
@@ -135,6 +158,9 @@ impl Extends<M2> for Universal {
     fn model_metadata<'a>(value: <M2 as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
         ModelMetadata::M2(value)
     }
+    fn event_source<'a>(value: <M2 as Profile>::EventSource<'a>) -> Self::EventSource<'a> {
+        EventSource::M2(value)
+    }
     fn system<'a>(value: <M2 as Profile>::System<'a>) -> Self::System<'a> {
         System::M2(value)
     }
@@ -168,7 +194,6 @@ impl<'a> FeatureVocabulary<'a> for M2 {
     type Attachment = m2::Attachment;
     type Particle = Box<m2::Particle<'a>>;
     type Ribbon = Box<m2::Ribbon>;
-    type Event = m2::Event;
     type GeometryAnimation = Unavailable;
     type CollisionShape = Unavailable;
     type ParticleProgram = Unavailable;

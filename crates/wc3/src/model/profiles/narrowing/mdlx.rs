@@ -1,6 +1,7 @@
 //! Exact projections of Mdlx owner payloads.
 use super::{incompatible, Narrows};
 use crate::model::profiles::{Mdlx, NoControls, Profile, Universal};
+use crate::model::EventSource;
 use crate::model::PropertyValues;
 use crate::model::{
     ClipControls, Error, MeshControls, ModelMetadata, NodeControls, UniversalAppearance,
@@ -58,6 +59,17 @@ impl Narrows<Universal> for Mdlx {
         match value {
             ModelMetadata::Mdlx(value) => Ok(value),
             _ => Err(incompatible("model")),
+        }
+    }
+    fn event_source<'a>(
+        value: <Universal as Profile>::EventSource<'a>,
+    ) -> Result<Self::EventSource<'a>, Error> {
+        match value {
+            EventSource::Mdlx(value) => Ok(value),
+            _ => Err(Error::new(
+                "event.source",
+                "event source belongs to another profile",
+            )),
         }
     }
     fn system<'a>(_value: <Universal as Profile>::System<'a>) -> Result<Self::System<'a>, Error> {

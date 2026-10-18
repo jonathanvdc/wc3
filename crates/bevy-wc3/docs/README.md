@@ -52,7 +52,7 @@ then choose a topic:
 - [Model lights](rendering/lights.md): animated scene lights, conversion
   settings, and application customization.
 - [Model cameras](rendering/cameras.md): authored views and opt-in playback.
-- [Model events](rendering/events.md): messages, timing, and occurrence poses.
+- [Model events](rendering/events.md): source identities, action messages, timing, and occurrence poses.
 - [External-model particles](rendering/prem.md): child models,
   world-space motion, animation, and lifetime.
 - [Sprite particles](rendering/pre2.md): emission, head/tail geometry,

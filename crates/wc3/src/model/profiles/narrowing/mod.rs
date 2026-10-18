@@ -41,6 +41,8 @@ pub trait Narrows<Source: Profile>: Profile {
     fn model_metadata<'a>(
         value: Source::ModelMetadata<'a>,
     ) -> Result<Self::ModelMetadata<'a>, Error>;
+    /// Projects a complete event source without changing its meaning.
+    fn event_source<'a>(value: Source::EventSource<'a>) -> Result<Self::EventSource<'a>, Error>;
     /// Projects an independent scene system without changing its meaning.
     fn system<'a>(value: Source::System<'a>) -> Result<Self::System<'a>, Error>;
     /// Projects a surface without changing its meaning.
@@ -94,6 +96,9 @@ impl<P: Profile> Narrows<P> for P {
         Ok(value)
     }
     fn model_metadata<'a>(value: P::ModelMetadata<'a>) -> Result<Self::ModelMetadata<'a>, Error> {
+        Ok(value)
+    }
+    fn event_source<'a>(value: P::EventSource<'a>) -> Result<Self::EventSource<'a>, Error> {
         Ok(value)
     }
     fn system<'a>(value: P::System<'a>) -> Result<Self::System<'a>, Error> {

@@ -77,6 +77,11 @@ impl<'a, P: Profile> Model<'a, P> {
                 .into_iter()
                 .map(|(id, value)| (id, (maps.system)(value)))
                 .collect(),
+            event_sources: self
+                .event_sources
+                .into_iter()
+                .map(|(id, value)| (id, Q::event_source(value)))
+                .collect(),
             animations: self.animations,
             global_animations: self.global_animations,
             appearance: (maps.appearance)(self.appearance),

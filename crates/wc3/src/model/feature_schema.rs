@@ -8,7 +8,7 @@ use crate::model::{
     scene, AimedCamera, AmbientDiffuseLight, Attachment, Camera, CameraConvention, Light,
     NodeFeature, ParticleEmitter, Property, RibbonEmitter,
 };
-use crate::model::{Axis, ChildModel, EventSource, Socket};
+use crate::model::{Axis, ChildModel, Socket};
 use crate::model::{
     ParticleDefinition, ParticleScalar, ParticleTrigger, TrailAtlasSlot, TrailEmitter,
 };
@@ -91,14 +91,6 @@ pub enum RibbonView<'view> {
     /// Complete M2 definition, retaining its authored semantics.
     Edge(&'view m2::Ribbon),
 }
-/// Authored alternatives for event behavior.
-#[derive(Clone, Copy, Debug)]
-pub enum EventView<'view, 'data> {
-    /// Complete Mdlx definition, retaining its authored semantics.
-    Named(&'view mdlx::Events<'data>),
-    /// Complete M2 definition, retaining its authored semantics.
-    Identifier(&'view m2::Event),
-}
 /// Authored alternatives for collision behavior.
 #[derive(Clone, Copy, Debug)]
 pub enum CollisionView<'view> {
@@ -121,8 +113,6 @@ pub enum FeatureView<'view, 'data> {
     Particles(ParticlesView<'view, 'data>),
     /// Ribbon behavior.
     Ribbon(RibbonView<'view>),
-    /// Event behavior.
-    Event(EventView<'view, 'data>),
     /// Collision behavior.
     Collision(CollisionView<'view>),
     /// Complete GeometryAnimation behavior.
@@ -143,7 +133,6 @@ impl<'data> mdlx::Node<'data> {
             Self::Light(value) => FeatureView::Light(LightView::VisibleAmbientDiffuse(value)),
             Self::Camera(value) => FeatureView::Camera(CameraView::VerticalAim(value)),
             Self::Attachment(value) => FeatureView::Attachment(AttachmentView::External(value)),
-            Self::Event(value) => FeatureView::Event(EventView::Named(value)),
             Self::CollisionShape(value) => FeatureView::Collision(CollisionView::Primitive(value)),
 
             Self::FaceActor(unavailable)
@@ -160,7 +149,6 @@ impl<'data> m2::ActorKind<'data> {
             Self::Camera(value) => FeatureView::Camera(CameraView::DiagonalAim(value)),
             Self::Ribbon(value) => FeatureView::Ribbon(RibbonView::Edge(value)),
             Self::Particle(value) => FeatureView::Particles(ParticlesView::AgeDriven(value)),
-            Self::Event(value) => FeatureView::Event(EventView::Identifier(value)),
 
             Self::GeometryAnimation(unavailable)
             | Self::CollisionShape(unavailable)
@@ -183,7 +171,6 @@ impl<'data> wmo::Node<'data> {
             Self::Camera(unavailable)
             | Self::Particle(unavailable)
             | Self::Ribbon(unavailable)
-            | Self::Event(unavailable)
             | Self::GeometryAnimation(unavailable)
             | Self::CollisionShape(unavailable)
             | Self::ParticleProgram(unavailable)
@@ -375,10 +362,6 @@ impl<'data> NodeFeature<'data> {
             Self::Ribbon(v) => FeatureView::Ribbon(match v {
                 RibbonEmitter::Resource(v) => RibbonView::External(v),
                 RibbonEmitter::Trail(v) => RibbonView::Trail(v),
-            }),
-            Self::Event(v) => FeatureView::Event(match v {
-                EventSource::Named(v) => EventView::Named(v),
-                EventSource::Identifier(v) => EventView::Identifier(v),
             }),
             Self::CollisionShape(v) => FeatureView::Collision(CollisionView::Primitive(v)),
 

@@ -3,7 +3,7 @@ use crate::model::profiles::{FeaturePayload, Profile};
 use crate::model::ValueSlot;
 use crate::model::{
     AppearanceSchema, BindingSchema as _, Error, GeometrySchema, Link, Model, SharedClock,
-    SystemPayload, Time, TimeSource, ValidateLinks, VertexInfluences,
+    SystemPayload, Time, ValidateLinks, VertexInfluences,
 };
 use std::collections::{BTreeSet, HashSet};
 use std::iter::once;
@@ -128,6 +128,7 @@ impl<P: Profile> Model<'_, P> {
                     .features
                     .get(id)
                     .is_none_or(|feature| feature.payload.kind() != kind),
+                Link::EventSource(id) => !self.event_sources.contains_key(id),
                 Link::Event(id) => self.event(id).is_none(),
                 Link::Feature(id) => !self.features.contains_key(id),
                 Link::Instance(id) => !self.instances.contains_key(id),
@@ -146,6 +147,9 @@ impl<P: Profile> Model<'_, P> {
             };
         };
         self.values.visit_values(&mut visit);
+        for source in self.event_sources.values() {
+            source.visit_links(&mut visit);
+        }
         for value in self.dependencies.images.values() {
             value.visit_links(&mut visit);
         }
@@ -178,11 +182,7 @@ impl<P: Profile> Model<'_, P> {
                 track.visit_links(&mut visit);
             }
             for event in animation.events.values() {
-                event.node.visit_links(&mut visit);
-                event.feature.visit_links(&mut visit);
-                if let TimeSource::Shared(id) = event.clock {
-                    id.visit_links(&mut visit);
-                }
+                event.visit_links(&mut visit);
             }
         }
         for skin in self.skins.values() {
@@ -249,20 +249,6 @@ impl<P: Profile> Model<'_, P> {
                     "animation.events",
                     "event identity belongs to another graph or multiple animations",
                 ));
-            }
-        }
-        for event in self
-            .animations
-            .values()
-            .flat_map(|animation| animation.events.values())
-        {
-            if let (Some(feature), Some(node)) = (event.feature, event.node) {
-                if self.features[&feature].node != node {
-                    return Err(Error::new(
-                        "event.anchor",
-                        "feature belongs to a different node",
-                    ));
-                }
             }
         }
         let mut draw_ids = BTreeSet::new();

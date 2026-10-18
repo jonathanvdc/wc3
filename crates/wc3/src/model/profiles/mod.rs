@@ -15,6 +15,7 @@ use crate::model::{
     ClipControls, DrawControls, GeometryData, InstanceControls, MeshControls, NodeControls, System,
     UniversalAppearance, UniversalBinding,
 };
+use crate::model::{EventSourceSchema, TimeSource};
 use std::fmt::Debug;
 
 /// A checked surface supplied by a semantic profile.
@@ -92,6 +93,8 @@ pub trait Profile: Clone + Debug + 'static {
     type Geometry<'a>: GeometrySchema<'a>;
     /// Model-wide authoring metadata.
     type ModelMetadata<'a>: ControlsPayload;
+    /// Complete event-source definitions admitted by this vocabulary.
+    type EventSource<'a>: EventSourceSchema;
     /// Independently authored scene systems.
     type System<'a>: SystemPayload;
     /// Complete surface payload, with no unsupported family variants.
@@ -144,6 +147,14 @@ impl<A: ValidateLinks, B: ValidateLinks> ValidateLinks for Either<A, B> {
         }
     }
 }
+impl<A: EventSourceSchema, B: EventSourceSchema> EventSourceSchema for Either<A, B> {
+    fn clock(&self) -> TimeSource {
+        match self {
+            Self::Left(value) => value.clock(),
+            Self::Right(value) => value.clock(),
+        }
+    }
+}
 impl<A: SurfacePayload, B: SurfacePayload> SurfacePayload for Either<A, B> {
     fn validate(&self) -> Result<(), Error> {
         match self {
@@ -175,6 +186,7 @@ impl Profile for Universal {
     type Geometry<'a> = GeometryData<'a>;
     type Draw = Option<DrawControls>;
     type ModelMetadata<'a> = ModelMetadata<'a>;
+    type EventSource<'a> = EventSource<'a>;
     type System<'a> = System<'a>;
     type Surface<'a> = MaterialSurface<'a>;
     type Feature<'a> = NodeFeature<'a>;
@@ -209,6 +221,8 @@ pub trait Extends<Source: Profile>: Profile {
     fn geometry<'a>(value: Source::Geometry<'a>) -> Self::Geometry<'a>;
     /// Embeds model-wide metadata without changing their meaning.
     fn model_metadata<'a>(value: Source::ModelMetadata<'a>) -> Self::ModelMetadata<'a>;
+    /// Embeds a complete event source without changing its identity or meaning.
+    fn event_source<'a>(value: Source::EventSource<'a>) -> Self::EventSource<'a>;
     /// Embeds an independent scene system without changing its meaning.
     fn system<'a>(value: Source::System<'a>) -> Self::System<'a>;
     /// Embeds a surface without changing its meaning.
@@ -260,6 +274,9 @@ impl<P: Profile> Extends<P> for P {
     fn model_metadata<'a>(value: <P as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
         value
     }
+    fn event_source<'a>(value: P::EventSource<'a>) -> Self::EventSource<'a> {
+        value
+    }
     fn system<'a>(value: <P as Profile>::System<'a>) -> Self::System<'a> {
         value
     }
@@ -305,7 +322,6 @@ impl<'a> FeatureVocabulary<'a> for Universal {
     type Attachment = Attachment<'a>;
     type Particle = ParticleEmitter<'a>;
     type Ribbon = RibbonEmitter;
-    type Event = EventSource<'a>;
     type GeometryAnimation = mdlx::GeometryAnimation;
     type CollisionShape = mdlx::Collision;
     type ParticleProgram = Box<mdlx::Popcorn<'a>>;

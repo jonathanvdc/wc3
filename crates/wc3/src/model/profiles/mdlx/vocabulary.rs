@@ -1,6 +1,7 @@
 //! Built-in MDLX authoring vocabulary and its lossless embeddings.
 use crate::model::profiles::{mdlx, Extends, NoControls, Profile, Unavailable, Universal};
 use crate::model::resources::{MdlxImageResource, PathResource};
+use crate::model::EventSource;
 use crate::model::Link;
 use crate::model::Model;
 use crate::model::PropertyValues;
@@ -43,6 +44,7 @@ impl Profile for Mdlx {
     type Geometry<'a> = MdlxGeometry<'a>;
     type Draw = NoControls;
     type ModelMetadata<'a> = mdlx::ModelMetadata<'a>;
+    type EventSource<'a> = mdlx::EventSource<'a>;
     type System<'a> = Unavailable;
     type Surface<'a> = mdlx::Material<'a>;
     type Feature<'a> = mdlx::Node<'a>;
@@ -105,6 +107,9 @@ impl Extends<Mdlx> for Universal {
     fn model_metadata<'a>(value: <Mdlx as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
         ModelMetadata::Mdlx(value)
     }
+    fn event_source<'a>(value: <Mdlx as Profile>::EventSource<'a>) -> Self::EventSource<'a> {
+        EventSource::Mdlx(value)
+    }
     fn system<'a>(value: <Mdlx as Profile>::System<'a>) -> Self::System<'a> {
         match value {}
     }
@@ -138,7 +143,6 @@ impl<'a> FeatureVocabulary<'a> for Mdlx {
     type Attachment = mdlx::Attachment;
     type Particle = mdlx::Particle;
     type Ribbon = mdlx::Ribbon;
-    type Event = mdlx::Events<'a>;
     type GeometryAnimation = mdlx::GeometryAnimation;
     type CollisionShape = mdlx::Collision;
     type ParticleProgram = mdlx::Popcorn<'a>;

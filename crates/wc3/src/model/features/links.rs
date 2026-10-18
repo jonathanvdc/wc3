@@ -1,7 +1,6 @@
 //! Relationship traversal includes values not representable by a constrained profile.
 use super::{
-    Camera, CameraConvention, EventSource, Light, LightActivation, NodeFeature, ParticleEmitter,
-    RibbonEmitter,
+    Camera, CameraConvention, Light, LightActivation, NodeFeature, ParticleEmitter, RibbonEmitter,
 };
 use crate::model::{FeatureKind, Link, ValidateLinks};
 impl NodeFeature<'_> {
@@ -127,8 +126,7 @@ impl NodeFeature<'_> {
             Self::Particle(ParticleEmitter::Resource(value))
             | Self::Ribbon(RibbonEmitter::Resource(value))
             | Self::FaceActor(value) => value.visit_links(visitor),
-            Self::Event(EventSource::Named(_) | EventSource::Identifier(_))
-            | Self::CollisionShape(_) => {}
+            Self::CollisionShape(_) => {}
 
             Self::AtlasParticles(unavailable) | Self::PointLight(unavailable) => {
                 match *unavailable {}

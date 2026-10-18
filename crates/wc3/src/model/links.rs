@@ -6,6 +6,7 @@ use crate::model::{
 use crate::model::{
     CurveValue, EventId, FeatureId, FeatureKind, GeometryKind, InstanceId, SystemId, SystemMember,
 };
+use crate::model::{EventOccurrence, EventSourceId};
 use crate::model::{PropertyValue, ValueSlot};
 use std::borrow::Cow;
 /// A relationship to another object in the semantic graph.
@@ -26,6 +27,8 @@ pub enum Link {
     /// External boneoverride dependency.
     BoneOverrideResource(BoneOverrideResourceId),
 
+    /// A model-owned action definition.
+    EventSource(EventSourceId),
     /// An identified occurrence in a programme.
     Event(EventId),
     /// Independently authored scene system.
@@ -257,5 +260,24 @@ impl ValidateLinks for BoneOverrideResourceId {
 impl ValidateLinks for AnimationId {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         visitor(Link::Animation(*self));
+    }
+}
+
+impl ValidateLinks for EventSourceId {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        visitor(Link::EventSource(*self));
+    }
+}
+impl ValidateLinks for TimeSource {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if let Self::Shared(id) = self {
+            id.visit_links(visitor);
+        }
+    }
+}
+
+impl ValidateLinks for EventOccurrence {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.source.visit_links(visitor);
     }
 }

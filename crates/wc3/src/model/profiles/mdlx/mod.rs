@@ -18,3 +18,6 @@ pub use crate::model::geometry::layered::*;
 
 /// Image dependency declarations admitted by this profile.
 pub use crate::model::resources::MdlxImageResource as ImageResource;
+
+mod events;
+pub use events::EventSource;

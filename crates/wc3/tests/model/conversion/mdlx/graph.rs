@@ -762,3 +762,62 @@ fn distinct_selected_animations_preserve_coincident_event_occurrences() {
         .value;
     assert_eq!(*output.event_objects().next().unwrap().frames(), [500, 500]);
 }
+
+#[test]
+fn empty_shared_event_source_retains_its_clock_and_name() {
+    let mut source = mdlx::Document::<mdlx::V800>::new();
+    source.set_global_sequences(&[1000]);
+    source.set_event_objects([mdlx::scene::EventObject::new(
+        mdlx::scene::Node::new("Empty action", 0).unwrap(),
+        0,
+        &[],
+    )]);
+    let model = io::mdlx::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    assert_eq!(model.event_sources().len(), 1);
+    assert!(model.features().is_empty());
+    let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let event = output.event_objects().next().unwrap();
+    assert_eq!(event.node.name.text(), "Empty action");
+    assert_eq!(event.global_sequence_id, 0);
+    assert!(event.frames().is_empty());
+}
+
+#[test]
+fn independent_event_sources_can_share_an_anchor_without_becoming_helpers() {
+    use wc3::model::{EventOccurrence, Time};
+    let mut draft = Model::<Mdlx>::builder("");
+    let node = draft.add_named_node("anchor").unwrap();
+    for name in ["Left foot", "Right foot"] {
+        let source = draft.add_event_source(profile::EventSource {
+            node,
+            clock: TimeSource::Animation,
+            name: name.into(),
+        });
+        draft
+            .add_global_event(EventOccurrence {
+                source,
+                time: Time::seconds(0.5).unwrap(),
+            })
+            .unwrap();
+    }
+    let model = draft.finish().unwrap();
+    let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let events: Vec<_> = output.event_objects().collect();
+    assert_eq!(events.len(), 2);
+    assert_ne!(events[0].node.object_id, events[1].node.object_id);
+    assert_eq!(events[0].node.parent_id, events[1].node.parent_id);
+    assert_eq!(events[0].node.name.text(), "Left foot");
+    assert_eq!(events[1].node.name.text(), "Right foot");
+    assert_eq!(*events[0].frames(), [500]);
+    assert_eq!(*events[1].frames(), [500]);
+}

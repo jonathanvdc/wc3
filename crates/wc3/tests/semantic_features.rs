@@ -89,10 +89,6 @@ fn m2_enable_and_camera_conventions_survive_projection() {
             target_offset: slot_values.add([7., 8., 9.]),
             roll: slot_values.add(0.5),
         }),
-        m2::ActorKind::Event(m2::Event {
-            identifier: *b"SNDX",
-            data: 0x8000_0001,
-        }),
     ];
     for source in features {
         let expected = format!("{source:?}");

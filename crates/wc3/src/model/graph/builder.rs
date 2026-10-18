@@ -1,11 +1,12 @@
 //! Transactional graph construction and editing.
 use crate::model::ids::Scope;
 use crate::model::profiles::{Profile, Universal};
+use crate::model::EventSourceId;
 use crate::model::{
     Animation, AnimationId, AttachedFeature, Clip, ClipId, ClockId, DrawAppearanceSchema,
-    DrawSubsetId, DynamicTrack, Error, Event, EventId, FeatureId, InstanceId, Look, LookBinding,
-    LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Model, ModelMetadata, Node, NodeId,
-    SharedClock, Skin, SkinId, SystemId, Texture,
+    DrawSubsetId, DynamicTrack, Error, EventId, EventOccurrence, FeatureId, InstanceId, Look,
+    LookBinding, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Model, ModelMetadata,
+    Node, NodeId, SharedClock, Skin, SkinId, SystemId, Texture,
 };
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
@@ -29,6 +30,22 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
             pending_features: BTreeMap::new(),
             pending_materials: BTreeSet::new(),
         }
+    }
+    /// Declares an independent action definition. Equal insertions remain distinct.
+    pub fn add_event_source(&mut self, value: P::EventSource<'a>) -> EventSourceId {
+        self.model.event_sources.add(&self.model.scope, value)
+    }
+    /// Replaces an action definition without changing occurrence references.
+    pub fn set_event_source(
+        &mut self,
+        id: EventSourceId,
+        value: P::EventSource<'a>,
+    ) -> Result<(), Error> {
+        self.model.event_sources.replace(id, value, "event.source")
+    }
+    /// Removes a source; publication rejects any remaining occurrences referencing it.
+    pub fn remove_event_source(&mut self, id: EventSourceId) -> Option<P::EventSource<'a>> {
+        self.model.event_sources.remove(&id)
     }
     /// Reuses an equal image declaration when importing native indirection tables.
     pub(crate) fn intern_image_resource(&mut self, value: P::ImageResource<'a>) -> ImageResourceId
@@ -221,6 +238,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
                 scope,
                 metadata: metadata.into(),
                 systems: Table::default(),
+                event_sources: Table::default(),
                 animations: Table::default(),
                 global_animations: Vec::new(),
                 features: Table::default(),
@@ -286,7 +304,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     pub fn add_animation_event(
         &mut self,
         id: AnimationId,
-        event: Event<'a>,
+        event: EventOccurrence,
     ) -> Result<EventId, Error> {
         let animation = self
             .model
@@ -363,7 +381,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         self.add_animation_track(id, track)
     }
     /// Appends a model-level event; its time source is authoritative.
-    pub fn add_global_event(&mut self, event: Event<'a>) -> Result<EventId, Error> {
+    pub fn add_global_event(&mut self, event: EventOccurrence) -> Result<EventId, Error> {
         let id = self.global_animation();
         self.add_animation_event(id, event)
     }
@@ -617,7 +635,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         self.add_animation_track(animation, track)
     }
     /// Appends an occurrence to the clip's first animation, creating one if empty.
-    pub fn add_event(&mut self, id: ClipId, event: Event<'a>) -> Result<(), Error> {
+    pub fn add_event(&mut self, id: ClipId, event: EventOccurrence) -> Result<(), Error> {
         let animation = self.clip_animation(id)?;
         self.add_animation_event(animation, event)?;
         Ok(())

@@ -1,5 +1,5 @@
 //! Logical behaviors grouped by purpose rather than their source vocabulary.
-use crate::model::profiles::{m2, mdlx, Profile, Universal};
+use crate::model::profiles::{Profile, Universal};
 use crate::model::EffectResourceId;
 use crate::model::{Link, NodeId, ValidateLinks};
 mod illumination;
@@ -36,14 +36,6 @@ pub enum RibbonEmitter {
     Resource(EffectResourceId),
     /// Persistent sections with shared geometry, appearance, and rendering.
     Trail(Box<TrailEmitter>),
-}
-/// Gameplay event names and identifiers.
-#[derive(Clone, Debug)]
-pub enum EventSource<'a> {
-    /// Named gameplay action emitted at timeline occurrences.
-    Named(mdlx::Events<'a>),
-    /// Four-character action code and external application data identity.
-    Identifier(m2::Event),
 }
 /// A feature's hierarchy anchor and logical definition.
 #[derive(Clone, Debug)]

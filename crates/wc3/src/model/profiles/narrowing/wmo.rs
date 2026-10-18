@@ -58,6 +58,11 @@ impl Narrows<Universal> for Wmo {
             _ => Err(incompatible("model")),
         }
     }
+    fn event_source<'a>(
+        _value: <Universal as Profile>::EventSource<'a>,
+    ) -> Result<Self::EventSource<'a>, Error> {
+        Err(Error::new("event.source", "WMO has no event sources"))
+    }
     fn system<'a>(value: <Universal as Profile>::System<'a>) -> Result<Self::System<'a>, Error> {
         match value {
             System::Wmo(value) => Ok(value),

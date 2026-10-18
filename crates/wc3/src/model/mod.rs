@@ -29,6 +29,10 @@
 //! [`TcbKeyframe`](crate::model::TcbKeyframe) carries authored spline parameters.
 //! Capability traits prevent spherical scalar curves and interpolated discrete resource choices.
 //!
+//! Event sources live in a model-owned table whose complete payload type is
+//! selected by `Profile::EventSource`. [`EventOccurrence`] references a source
+//! and schedules one timestamp on its clock; reusable animations own occurrences.
+//!
 //! Fixed-width arrays use [`ZeroVec`](crate::model::ZeroVec), borrowing compatible packed storage.
 //! Native slices and differing layouts are encoded into owned arrays once. Variable-length
 //! rows use [`ValueGroups`](crate::model::ValueGroups) with flat elements and row offsets. [`ModelBuilder::finish`](crate::model::ModelBuilder::finish) checks relationships and values before
@@ -55,10 +59,13 @@ mod rotation;
 pub use rotation::*;
 pub mod animation;
 pub use animation::{
-    curves::*, Animation, AnimationProgram, AnimationSample, Clip, Construct, DynamicTrack, Event,
-    Interpolation, Property, PropertyValue, PropertyValues, RetimedAnimation, SampledAnimation,
-    SampledTrack, Time, TimeSource, Track, TrackValue, ValueObject, ValueSample, ValueSlot,
+    curves::*, Animation, AnimationProgram, AnimationSample, Clip, Construct, DynamicTrack,
+    EventOccurrence, Interpolation, Property, PropertyValue, PropertyValues, RetimedAnimation,
+    SampledAnimation, SampledTrack, Time, TimeSource, Track, TrackValue, ValueObject, ValueSample,
+    ValueSlot,
 };
+mod events;
+pub use events::*;
 mod playback_controls;
 pub use playback_controls::*;
 pub mod appearance;

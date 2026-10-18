@@ -369,7 +369,12 @@ where
             }
         }
         for (id, event) in source.events {
-            match event.clock {
+            match builder
+                .model()
+                .event_source(event.source)
+                .expect("imported source")
+                .clock
+            {
                 TimeSource::Animation => {
                     ordinary.events.insert(id, event);
                 }

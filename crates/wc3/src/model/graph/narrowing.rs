@@ -59,6 +59,11 @@ impl<'a, P: Profile> Model<'a, P> {
                 .into_iter()
                 .map(|(id, value)| Ok((id, system(value)?)))
                 .collect::<Result<_, Error>>()?,
+            event_sources: self
+                .event_sources
+                .into_iter()
+                .map(|(id, value)| Ok((id, Q::event_source(value)?)))
+                .collect::<Result<_, Error>>()?,
             animations: self.animations,
             global_animations: self.global_animations,
             appearance: appearance(self.appearance)?,

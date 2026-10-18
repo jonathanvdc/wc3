@@ -5,17 +5,18 @@ use std::collections::{BinaryHeap, HashMap};
 use std::iter::once;
 use std::sync::Arc;
 use wc3::model::{
-    AnimationSample, ClipId, ClockId, Event, EventSource as SemanticEventSource, FeatureId, Model,
-    NodeFeature, NodeId, TimeSource,
+    AnimationSample, ClipId, ClockId, EventOccurrence as SemanticEventOccurrence,
+    EventSource as SemanticEventSource, EventSourceId, EventSourceSchema, Model, NodeId,
+    TimeSource,
 };
 
 /// Authored event semantics; applications interpret identities and commands.
 #[derive(Clone, Debug)]
 pub enum EventSource {
-    /// Named action, including names whose prefixes have game-specific meaning.
-    Named(String),
-    /// Four-byte action code with its independent game-data identity.
-    Identifier {
+    /// MDLX named action, including names whose prefixes have game-specific meaning.
+    Mdlx(String),
+    /// M2 four-byte action code with its independent game-data identity.
+    M2 {
         /// Action code bytes.
         identifier: [u8; 4],
         /// External game-data identity.
@@ -39,14 +40,10 @@ pub struct ModelEvent {
     pub node: Option<Entity>,
     /// Source node identity, when authored.
     pub node_id: Option<NodeId>,
-    /// Source event-feature identity, when authored.
-    pub feature: Option<FeatureId>,
-    /// Authored event name.
-    pub name: Arc<str>,
-    /// Typed feature semantics; an occurrence without a feature has no source.
-    pub source: Option<Arc<EventSource>>,
-    /// Logical event payload bytes.
-    pub payload: Arc<[u8]>,
+    /// Model-owned event-source identity.
+    pub source_id: EventSourceId,
+    /// Complete authored action semantics.
+    pub source: Arc<EventSource>,
     /// Playback selection activating this event occurrence.
     pub program: EventProgram,
     /// Time source on which this key is authored.
@@ -70,12 +67,10 @@ pub struct EventDispatchStats {
 
 #[derive(Clone)]
 pub(super) struct EventDefinition {
-    pub feature: Option<FeatureId>,
+    pub source_id: EventSourceId,
     pub node: Option<NodeId>,
     pub node_index: Option<usize>,
-    pub name: Arc<str>,
-    pub source: Option<Arc<EventSource>>,
-    pub payload: Arc<[u8]>,
+    pub source: Arc<EventSource>,
     pub program: EventProgram,
     pub clock: TimeSource,
     pub time: f64,
@@ -172,20 +167,22 @@ impl RuntimeEvents {
             .map(|(index, (id, _))| (id, index))
             .collect();
         let sources: HashMap<_, _> = model
-            .features()
+            .event_sources()
             .iter()
-            .filter_map(|(id, feature)| {
-                let NodeFeature::Event(source) = &feature.payload else {
-                    return None;
+            .map(|(id, source)| {
+                let (node, action) = match source {
+                    SemanticEventSource::Mdlx(value) => {
+                        (value.node, EventSource::Mdlx(value.name.to_string()))
+                    }
+                    SemanticEventSource::M2(value) => (
+                        value.node,
+                        EventSource::M2 {
+                            identifier: value.identifier,
+                            data: value.data,
+                        },
+                    ),
                 };
-                let source = match source {
-                    SemanticEventSource::Named(value) => EventSource::Named(value.name.to_string()),
-                    SemanticEventSource::Identifier(value) => EventSource::Identifier {
-                        identifier: value.identifier,
-                        data: value.data,
-                    },
-                };
-                Some((id, (feature.node, Arc::new(source))))
+                (id, (node, source.clock(), Arc::new(action)))
             })
             .collect();
         let mut result = Self {
@@ -212,18 +209,15 @@ impl RuntimeEvents {
                 })
                 .collect(),
         };
-        let mut add = |event: &Event<'_>, program| {
-            let source = event.feature.and_then(|id| sources.get(&id));
-            let node = event.node.or(source.map(|(node, _)| *node));
+        let mut add = |event: &SemanticEventOccurrence, program| {
+            let (node, clock, source) = &sources[&event.source];
             result.definitions.push(EventDefinition {
-                feature: event.feature,
-                node,
-                node_index: node.and_then(|id| node_indices.get(&id).copied()),
-                name: Arc::from(event.name.as_ref()),
-                source: source.map(|(_, value)| value.clone()),
-                payload: Arc::from(event.payload.iter().collect::<Vec<_>>()),
+                source_id: event.source,
+                node: Some(*node),
+                node_index: node_indices.get(node).copied(),
+                source: source.clone(),
                 program,
-                clock: event.clock,
+                clock: *clock,
                 time: event.time.as_seconds(),
             });
         };

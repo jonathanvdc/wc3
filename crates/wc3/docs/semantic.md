@@ -211,7 +211,9 @@ while profile validation rejects choices with no established native mapping.
 MDLX layer bits historically labeled wrap hints remain unresolved layer controls;
 they do not provide another sampler authority. Surfaces additionally implement `SurfacePayload`, attached
 features implement `FeaturePayload` and `FeatureSchema`, and systems implement
-`SystemPayload`. Geometry schemas define their full attribute and connectivity vocabulary rather than
+`SystemPayload`. Event sources implement `EventSourceSchema` to expose their
+evaluation clock, and their `ValidateLinks` implementation visits anchor and
+shared-clock references even when no occurrences select the source. Geometry schemas define their full attribute and connectivity vocabulary rather than
 attaching arbitrary streams to a narrower native schema.
 
 ## Materials, shader inputs, and draw state
@@ -345,7 +347,7 @@ known lighting, fog, face, and depth controls while retaining the remaining flag
 ## Attached behavior and shared feature inspection
 
 Universal's `NodeFeature` selects behavior directly: lights, cameras, attachments,
-particle and ribbon emitters, events, collision shapes, and geometry animation.
+particle and ribbon emitters, collision shapes, and geometry animation.
 Features are independently identified and anchored to ordinary hierarchy nodes,
 with no outer source-format variant to unwrap before discovering their purpose.
 
@@ -356,7 +358,7 @@ and relationship rules. Unsupported families select `Unavailable`.
 For example, an MDLX particle carries a constrained `ParticleComposition`,
 while Universal's particle family also admits resource instances and broader
 simulated definitions. The family names describe behavior in every selection:
-`Particle`, `Ribbon`, `Attachment`, `Event`, and `CollisionShape`.
+`Particle`, `Ribbon`, `Attachment`, and `CollisionShape`.
 
 Shared structures retain common authored fields while explicit alternatives
 preserve different interpretations. `AmbientDiffuseLight` owns independently
@@ -427,8 +429,6 @@ width, while animated atlas selectors retain their `u16` or `u32` value domain
 and typed slot identity. Gravity and emission angle retain separate
 meanings; layered materials and ordered texture/surface bindings remain explicit
 rendering programs.
-
-Events distinguish named sources and four-character gameplay identifiers.
 
 `FeatureSchema::feature` borrows a `FeatureView` from any profile's feature
 payload, including custom enums. Application-specific behaviors can return
@@ -621,6 +621,25 @@ writes the corresponding native tracks, duplicating a curve when several fields
 share its slot. Exact projection rejects animation that the target
 format cannot attach to a supported field. Slot identities carry their value type
 and ownership domain, so bindings need no separate owner or field selector.
+
+Event sources are independent model-owned definitions. `Profile::EventSource` selects
+the complete source type directly: `mdlx::EventSource` owns a name, node anchor,
+and clock; `m2::EventSource` owns a four-byte identifier, game-data ID, node anchor,
+and clock. Universal's `EventSource::Mdlx` and `EventSource::M2` preserve those
+complete source definitions, while WMO uses `Unavailable`. Sources are separate from attached features and remain
+present even when they have no occurrences. Declare one with
+`ModelBuilder::add_event_source` and inspect it through `Model::event_sources`
+or `Model::event_source`. Equal declarations remain independent; reusing an
+`EventSourceId` explicitly shares one definition.
+
+`EventOccurrence { source, time }` schedules that action on its source's clock.
+The occurrence has no independent name, anchor, clock, or message bytes to
+contradict its source. Publication validates all source links, including unused
+sources, and rejects missing or foreign source identities. Widening preserves
+source and occurrence identities; exact narrowing rejects source kinds outside
+the target vocabulary. M2 requires ordinary event occurrences to be selected by
+clips and shared-clock occurrences to be selected at model level; publication
+rejects the opposite selections because native M2 cannot retain them.
 
 `Animation` owns ordered tracks in `Animation::tracks` and identified event
 occurrences. Add it with `ModelBuilder::add_animation`, then reference its

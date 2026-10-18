@@ -52,7 +52,7 @@ where
     V::SplineValues<'static, f32>: SplineFactory<f32>,
     V::SplineValues<'static, [f32; 3]>: SplineFactory<[f32; 3]>,
 {
-    for (feature_id, attached) in model.features() {
+    for (_, attached) in model.features() {
         let feature = &attached.payload;
         match feature {
             profile::ActorKind::Attachment(value) => {
@@ -296,83 +296,6 @@ where
                 )?;
                 core.cameras.push(camera)
             }
-            profile::ActorKind::Event(value) => {
-                let (bone, position) = anchor(model, attached.node, nodes)?;
-                let shared: Vec<_> = model
-                    .global_events()
-                    .filter(|v| matches!(v.clock, TimeSource::Shared(_)))
-                    .filter(|e| e.feature == Some(feature_id))
-                    .collect();
-                let mut global = u16::MAX;
-                let mut leaves = Vec::new();
-                if let Some(first) = shared.first() {
-                    let semantic::TimeSource::Shared(clock) = first.clock else {
-                        return Err(Error::new(
-                            "m2.event.clock",
-                            "shared event requires shared clock",
-                        ));
-                    };
-                    let duration = time_ms(model.clock(clock).unwrap().period(), context)?;
-                    let i = globals
-                        .iter()
-                        .position(|d| *d == duration)
-                        .unwrap_or_else(|| {
-                            globals.push(duration);
-                            globals.len() - 1
-                        });
-                    global = u16::try_from(i)
-                        .map_err(|_| Error::new("m2.event.clock", "too many clocks"))?;
-                    leaves.push(
-                        shared
-                            .iter()
-                            .map(|e| time_ms(e.time, context))
-                            .collect::<Result<Vec<_>, _>>()?,
-                    )
-                } else {
-                    for (index, (id, clip)) in model.clips().iter().enumerate() {
-                        leaves.push(
-                            model
-                                .clip_events(id)
-                                .filter(|e| {
-                                    e.feature == Some(feature_id)
-                                        && e.time >= clip.source_start
-                                        && e.time.as_seconds()
-                                            <= clip.source_start.as_seconds()
-                                                + clip.duration().as_seconds()
-                                })
-                                .map(|e| {
-                                    time_ms(
-                                        Time::seconds(
-                                            e.time.as_seconds() - clip.source_start.as_seconds(),
-                                        )?,
-                                        context,
-                                    )
-                                    .and_then(|t| {
-                                        if V::VERSION < 264 {
-                                            t.checked_add(starts[index]).ok_or_else(|| {
-                                                Error::new("m2.event", "legacy time overflow")
-                                            })
-                                        } else {
-                                            Ok(t)
-                                        }
-                                    })
-                                })
-                                .collect::<Result<Vec<_>, _>>()?,
-                        )
-                    }
-                }
-                core.events.push(native::records::Event {
-                    identifier: value.identifier,
-                    data: value.data,
-                    bone_id: bone,
-                    position,
-                    enabled: native::records::TrackBase {
-                        interpolation: NativeInterpolation::Step,
-                        global_sequence: global,
-                        timeline: TimelineFactory::build(leaves, global != u16::MAX),
-                    },
-                })
-            }
             profile::ActorKind::Particle(value) => {
                 let (bone, position) = anchor(model, attached.node, nodes)?;
                 // Graph planning emits container-level programmes separately.
@@ -485,6 +408,72 @@ where
             | profile::ActorKind::AtlasParticles(unavailable)
             | profile::ActorKind::PointLight(unavailable) => match *unavailable {},
         }
+    }
+    for (source_id, value) in model.event_sources() {
+        let (bone, position) = anchor(model, value.node, nodes)?;
+        let mut global = u16::MAX;
+        let mut leaves = Vec::new();
+        if let TimeSource::Shared(clock) = value.clock {
+            let duration = time_ms(model.clock(clock).unwrap().period(), context)?;
+            let i = globals
+                .iter()
+                .position(|d| *d == duration)
+                .unwrap_or_else(|| {
+                    globals.push(duration);
+                    globals.len() - 1
+                });
+            global =
+                u16::try_from(i).map_err(|_| Error::new("m2.event.clock", "too many clocks"))?;
+            leaves.push(
+                model
+                    .global_events()
+                    .filter(|event| event.source == source_id)
+                    .map(|event| time_ms(event.time, context))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )
+        } else {
+            for (index, (id, clip)) in model.clips().iter().enumerate() {
+                leaves.push(
+                    model
+                        .clip_events(id)
+                        .filter(|e| {
+                            e.source == source_id
+                                && e.time >= clip.source_start
+                                && e.time.as_seconds()
+                                    <= clip.source_start.as_seconds() + clip.duration().as_seconds()
+                        })
+                        .map(|e| {
+                            time_ms(
+                                Time::seconds(
+                                    e.time.as_seconds() - clip.source_start.as_seconds(),
+                                )?,
+                                context,
+                            )
+                            .and_then(|t| {
+                                if V::VERSION < 264 {
+                                    t.checked_add(starts[index]).ok_or_else(|| {
+                                        Error::new("m2.event", "legacy time overflow")
+                                    })
+                                } else {
+                                    Ok(t)
+                                }
+                            })
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                )
+            }
+        }
+        core.events.push(native::records::Event {
+            identifier: value.identifier,
+            data: value.data,
+            bone_id: bone,
+            position,
+            enabled: native::records::TrackBase {
+                interpolation: NativeInterpolation::Step,
+                global_sequence: global,
+                timeline: TimelineFactory::build(leaves, global != u16::MAX),
+            },
+        })
     }
     Ok(())
 }

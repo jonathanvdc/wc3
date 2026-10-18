@@ -1,10 +1,10 @@
 //! Typed curves and property destinations, independent of file clocks and track numbers.
 
 use crate::model::profiles::{Profile, Universal};
-use crate::model::{AnimationId, ClockId, Error, EventId, FeatureId, NodeId, Quaternion, Texture};
+use crate::model::{AnimationId, ClockId, Error, EventId, EventSourceId, Quaternion, Texture};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use zerovec::{ule::AsULE, ZeroVec};
+use zerovec::ule::AsULE;
 pub mod curves;
 pub use curves::*;
 mod sampling;
@@ -66,7 +66,7 @@ pub struct Animation<'a> {
     /// Typed curves in evaluation order; later applicable curves win.
     pub tracks: Vec<DynamicTrack<'a>>,
     /// Identified event occurrences, traversed separately from value sampling.
-    pub events: BTreeMap<EventId, Event<'a>>,
+    pub events: BTreeMap<EventId, EventOccurrence>,
 }
 /// One typed animation track.
 #[derive(Clone, Debug)]
@@ -186,19 +186,11 @@ impl<'a, P: Profile> Clip<'a, P> {
 }
 /// An event occurrence scheduled on an explicit time source.
 #[derive(Clone, Debug)]
-pub struct Event<'a> {
-    /// Specific event feature, when multiple features share an anchor.
-    pub feature: Option<FeatureId>,
-    /// TimeSource on which the occurrence is scheduled.
-    pub clock: TimeSource,
-    /// Occurrence time.
+pub struct EventOccurrence {
+    /// Model-owned definition of the action and its evaluation clock.
+    pub source: EventSourceId,
+    /// Occurrence time on the source's clock.
     pub time: Time,
-    /// Event name.
-    pub name: Cow<'a, str>,
-    /// Optional node anchor.
-    pub node: Option<NodeId>,
-    /// Logical payload bytes, when a format defines an event message.
-    pub payload: ZeroVec<'a, u8>,
 }
 
 impl DynamicTrack<'_> {

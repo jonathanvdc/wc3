@@ -480,7 +480,6 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
                     | mp::ActorKind::Ribbon(_)
                     | mp::ActorKind::Particle(_)
                     | mp::ActorKind::Camera(_)
-                    | mp::ActorKind::Event(_)
             ))
             .count(),
         3
@@ -1733,4 +1732,158 @@ fn offset_animation_interval_exports_as_native_local_keys() {
         panic!("missing translation")
     };
     assert_eq!(track.curve.times().to_vec(), [time(0.), time(1.)]);
+}
+
+#[test]
+fn event_sources_round_trip_native_codes_data_clocks_and_duplicate_occurrences() {
+    let mut source = native_triangle();
+    let core = source.model.core_mut();
+    core.global_sequences = ZeroVec::alloc_from_slice(&[1000]);
+    for (identifier, timestamps) in [(*b"$SND", vec![250, 250, 750]), (*b"$EMP", vec![])] {
+        core.events.push(m2::records::Event {
+            identifier,
+            data: 0x8000_0001,
+            bone_id: 0,
+            position: [1., 2., 3.],
+            enabled: TrackBase {
+                interpolation: Interpolation::Step,
+                global_sequence: 0,
+                timeline: LegacyTimeline {
+                    ranges: ZeroVec::new(),
+                    timestamps: ZeroVec::alloc_from_slice(&timestamps),
+                },
+            },
+        });
+    }
+    let model = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    assert_eq!(model.event_sources().len(), 2);
+    assert_eq!(model.global_events().count(), 3);
+    let widened = model.widen::<sm::profiles::Universal>();
+    let restored = widened.try_narrow::<sm::profiles::M2>().unwrap();
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&restored, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let events = &output.model.core().events;
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].identifier, *b"$SND");
+    assert_eq!(events[0].data, 0x8000_0001);
+    assert_eq!(events[0].position, [1., 2., 3.]);
+    assert_eq!(*events[0].enabled.timeline.timestamps, [250, 250, 750]);
+    assert_eq!(events[1].identifier, *b"$EMP");
+    assert!(events[1].enabled.timeline.timestamps.is_empty());
+    assert_eq!(
+        events[1].enabled.global_sequence,
+        events[0].enabled.global_sequence
+    );
+}
+
+#[test]
+fn event_sources_reject_selections_that_native_m2_cannot_encode() {
+    let source = native_triangle();
+    let model = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let node = model.nodes().iter().next().unwrap().0;
+    let mut model = model;
+    let result = model.edit(|draft| {
+        let event_source = draft.add_event_source(mp::EventSource {
+            node,
+            clock: TimeSource::Animation,
+            identifier: *b"$SND",
+            data: 1,
+        });
+        draft.add_global_event(sm::EventOccurrence {
+            source: event_source,
+            time: sm::Time::default(),
+        })?;
+        Ok(())
+    });
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("m2.events.selection"));
+    let result = model.edit(|draft| {
+        let clock = draft.add_clock(sm::SharedClock::Frozen)?;
+        let event_source = draft.add_event_source(mp::EventSource {
+            node,
+            clock: TimeSource::Shared(clock),
+            identifier: *b"$SND",
+            data: 1,
+        });
+        let clip = draft.add_clip(sm::Clip::named("clip"))?;
+        draft.add_event(
+            clip,
+            sm::EventOccurrence {
+                source: event_source,
+                time: sm::Time::default(),
+            },
+        )
+    });
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("m2.events.selection"));
+    assert!(model.event_sources().is_empty());
+}
+
+#[test]
+fn ordinary_event_source_retains_sequence_timing_and_duplicate_keys() {
+    let mut source = native_triangle();
+    let core = source.model.core_mut();
+    core.sequences.push(m2::records::Sequence {
+        timing: m2::records::LegacyTiming {
+            start: 2000,
+            end: 3000,
+        },
+        id: 4,
+        flags: SequenceFlags::from_bits_retain(0x20),
+        variation_next: -1,
+        ..Default::default()
+    });
+    core.events.push(m2::records::Event {
+        identifier: *b"$SND",
+        data: 123,
+        bone_id: 0,
+        position: [0.; 3],
+        enabled: TrackBase {
+            interpolation: Interpolation::Step,
+            global_sequence: u16::MAX,
+            timeline: LegacyTimeline {
+                ranges: ZeroVec::alloc_from_slice(&[[0, 2]]),
+                timestamps: ZeroVec::alloc_from_slice(&[2250, 2250, 2750]),
+            },
+        },
+    });
+    let model = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let clip = model.clips().iter().next().unwrap().0;
+    assert_eq!(
+        model
+            .clip_events(clip)
+            .map(|event| event.time.as_seconds())
+            .collect::<Vec<_>>(),
+        [0.25, 0.25, 0.75]
+    );
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let core = output.model.core();
+    let origin = core.sequences[0].timing.start;
+    assert_eq!(
+        core.events[0]
+            .enabled
+            .timeline
+            .timestamps
+            .iter()
+            .map(|ms| ms - origin)
+            .collect::<Vec<_>>(),
+        [250, 250, 750]
+    );
 }
