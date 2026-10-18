@@ -13,7 +13,7 @@ use crate::model::common::IntoZeroVec;
 use crate::model::profiles::{Profile, Universal};
 use crate::model::BindingSchema as _;
 use crate::model::TextureCoordinates;
-use crate::model::{Attributes, BindMatrices, IdentityBinding, SurfaceTriangleControls};
+use crate::model::{BindMatrices, IdentityBinding, SurfaceTriangleControls};
 use crate::model::{
     ConnectivityId, ConnectivitySets, DrawId, DrawSubset, DrawSubsetId, DrawSubsets, Error,
     GeometryData, GeometryEdit, GeometrySchema, InfluenceRows, MeshId, NodeId, PrimitiveRange,
@@ -355,7 +355,7 @@ impl<'a, P: Profile> Mesh<'a, P> {
         self.geometry.colors()
     }
     /// Borrows additional attributes permitted by this geometry vocabulary.
-    pub fn attributes(&self) -> Attributes<'_, 'a> {
+    pub fn attributes(&self) -> &[Attribute<'a>] {
         self.geometry.attributes()
     }
     /// Borrows primitive connectivity without projecting it into another vocabulary.

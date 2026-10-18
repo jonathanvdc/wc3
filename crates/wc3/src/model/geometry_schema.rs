@@ -10,84 +10,7 @@ use crate::model::{
     ValidateLinks, VertexInfluences, ZeroVec,
 };
 use crate::model::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
-use std::fmt::{Debug, Formatter, Result as FmtResult};
-
-/// An owner exposing attribute definitions without requiring contiguous storage.
-pub trait AttributeSource<'data> {
-    /// Number of authored layers in this source.
-    fn len(&self) -> usize;
-    /// Whether this source has no authored layers.
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-    /// Resolves a layer; indices from zero up to `len()` must all be present.
-    fn attribute(&self, index: usize) -> &Attribute<'data>;
-}
-/// Borrowed inspection of attribute layers, including profile-owned identified layers.
-#[derive(Clone, Copy)]
-pub enum Attributes<'view, 'data> {
-    /// Contiguous common attribute definitions.
-    Slice(&'view [Attribute<'data>]),
-    /// Definitions owned by a profile's layer objects.
-    Source(&'view dyn AttributeSource<'data>),
-}
-impl<'view, 'data> Attributes<'view, 'data> {
-    /// Number of authored attribute definitions.
-    pub fn len(self) -> usize {
-        match self {
-            Self::Slice(v) => v.len(),
-            Self::Source(v) => v.len(),
-        }
-    }
-    /// Whether there are no attribute definitions.
-    pub fn is_empty(self) -> bool {
-        self.len() == 0
-    }
-    /// Inspects an attribute without copying its definition or values.
-    pub fn get(self, index: usize) -> Option<&'view Attribute<'data>> {
-        match self {
-            Self::Slice(v) => v.get(index),
-            Self::Source(v) => (index < v.len()).then(|| v.attribute(index)),
-        }
-    }
-    /// Visits definitions in their authored layer order.
-    pub fn iter(self) -> AttributeIter<'view, 'data> {
-        AttributeIter {
-            attributes: self,
-            index: 0,
-        }
-    }
-}
-impl Debug for Attributes<'_, '_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        f.debug_list().entries(self.iter()).finish()
-    }
-}
-/// Ordered borrowed traversal of authored attributes.
-pub struct AttributeIter<'view, 'data> {
-    attributes: Attributes<'view, 'data>,
-    index: usize,
-}
-impl<'view, 'data> Iterator for AttributeIter<'view, 'data> {
-    type Item = &'view Attribute<'data>;
-    fn next(&mut self) -> Option<Self::Item> {
-        let value = self.attributes.get(self.index)?;
-        self.index += 1;
-        Some(value)
-    }
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = self.attributes.len() - self.index;
-        (remaining, Some(remaining))
-    }
-}
-impl ExactSizeIterator for AttributeIter<'_, '_> {}
-impl<'view, 'data> IntoIterator for Attributes<'view, 'data> {
-    type Item = &'view Attribute<'data>;
-    type IntoIter = AttributeIter<'view, 'data>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
-    }
-}
+use std::fmt::Debug;
 
 /// Authored purpose required by relationships that consume a particular geometry vocabulary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -167,7 +90,7 @@ pub trait GeometrySchema<'data>: Clone + Debug + Send + Sync + ValidateLinks {
     /// Vertex colors, when authored.
     fn colors(&self) -> Option<&ZeroVec<'data, [f32; 4]>>;
     /// Additional authoring attributes supported by this vocabulary.
-    fn attributes(&self) -> Attributes<'_, 'data>;
+    fn attributes(&self) -> &[Attribute<'data>];
     /// Logical primitive connectivity.
     fn topology(&self) -> &Topology<'data>;
     /// Vertex joint distributions, before resolving a placement's skin binding.
@@ -503,8 +426,8 @@ impl<'data> GeometrySchema<'data> for GeometryData<'data> {
     fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
         self.attributes.texture_coordinates()
     }
-    fn attributes(&self) -> Attributes<'_, 'data> {
-        Attributes::Slice(self.attributes.as_slice())
+    fn attributes(&self) -> &[Attribute<'data>] {
+        self.attributes.as_slice()
     }
     fn topology(&self) -> &Topology<'data> {
         &self.connectivity.primary
@@ -621,7 +544,7 @@ impl<'data, A: GeometrySchema<'data>, B: GeometrySchema<'data>> GeometrySchema<'
             Self::Right(v) => v.colors(),
         }
     }
-    fn attributes(&self) -> Attributes<'_, 'data> {
+    fn attributes(&self) -> &[Attribute<'data>] {
         match self {
             Self::Left(v) => v.attributes(),
             Self::Right(v) => v.attributes(),

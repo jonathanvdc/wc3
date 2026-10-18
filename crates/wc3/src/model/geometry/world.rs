@@ -8,10 +8,9 @@ use crate::model::geometry_schema::validate_geometry;
 use crate::model::vertex_geometry::VertexStreams;
 use crate::model::VertexData;
 use crate::model::{
-    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Attributes,
-    DrawSubsetCapabilities, Error, GeometryData, GeometryInfluences, GeometryKind, GeometryParts,
-    GeometryPools, GeometrySchema, InfluenceRows, Link, SurfaceTriangleControls, Topology,
-    ValidateLinks, ZeroVec,
+    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, DrawSubsetCapabilities, Error,
+    GeometryData, GeometryInfluences, GeometryKind, GeometryParts, GeometryPools, GeometrySchema,
+    InfluenceRows, Link, SurfaceTriangleControls, Topology, ValidateLinks, ZeroVec,
 };
 use crate::model::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 
@@ -223,8 +222,8 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
     fn colors(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         self.streams.colors.first()
     }
-    fn attributes(&self) -> Attributes<'_, 'data> {
-        Attributes::Slice(&[])
+    fn attributes(&self) -> &[Attribute<'data>] {
+        &[]
     }
     fn topology(&self) -> &Topology<'data> {
         &self.streams.topology

@@ -6,7 +6,7 @@ use crate::model::vertex_geometry::RemapStreams;
 use crate::model::vertex_geometry::{GeometryStreams, VertexStreams};
 use crate::model::TextureCoordinates;
 use crate::model::{
-    Attributes, Error, GeometrySchema, InfluenceRows, JointInfluences, Link, Topology,
+    Attribute, Error, GeometrySchema, InfluenceRows, JointInfluences, Link, Topology,
     ValidateLinks, ZeroVec,
 };
 use crate::model::{GeometryData, GeometryKind, GeometryParts, VertexData};
@@ -181,8 +181,8 @@ impl<'data> GeometrySchema<'data> for MdlxGeometry<'data> {
     fn colors(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         None
     }
-    fn attributes(&self) -> Attributes<'_, 'data> {
-        Attributes::Slice(&[])
+    fn attributes(&self) -> &[Attribute<'data>] {
+        &[]
     }
     fn topology(&self) -> &Topology<'data> {
         &self.streams.topology

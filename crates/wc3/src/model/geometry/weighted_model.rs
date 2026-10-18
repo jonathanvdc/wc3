@@ -5,7 +5,7 @@ use crate::model::geometry_schema::validate_geometry;
 use crate::model::vertex_geometry::{GeometryStreams, VertexStreams};
 use crate::model::TextureCoordinates;
 use crate::model::{
-    Attributes, Error, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks,
+    Attribute, Error, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks,
     ZeroVec,
 };
 use crate::model::{GeometryData, GeometryInfluences, GeometryKind, GeometryParts, VertexData};
@@ -117,8 +117,8 @@ impl<'data> GeometrySchema<'data> for M2Geometry<'data> {
     fn colors(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
         None
     }
-    fn attributes(&self) -> Attributes<'_, 'data> {
-        Attributes::Slice(&[])
+    fn attributes(&self) -> &[Attribute<'data>] {
+        &[]
     }
     fn topology(&self) -> &Topology<'data> {
         &self.streams.topology
