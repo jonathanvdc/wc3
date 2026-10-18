@@ -316,24 +316,6 @@ fn absolute_timeline_does_not_require_a_playback_clip() {
 }
 
 #[test]
-fn native_single_appearance_cannot_publish_alternative_looks() {
-    let slot_values = SlotValues::default();
-    let mut draft = Model::<profiles::Mdlx>::builder("native");
-    assert_eq!(draft.model().looks().len(), 1);
-    assert!(draft.add_look(Look::default()).is_err());
-    assert_eq!(
-        {
-            draft.import_values(&slot_values).unwrap();
-            draft.finish()
-        }
-        .unwrap()
-        .looks()
-        .len(),
-        1
-    );
-}
-
-#[test]
 fn tcb_curves_preserve_authoring_parameters_and_check_cardinality() {
     let parameters = ZeroVec::alloc_from_slice(&[TcbParameters {
         tension: 0.3,

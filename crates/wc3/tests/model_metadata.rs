@@ -11,10 +11,25 @@ fn metadata_replacement_owns_model_identity_and_bounds() {
         blend_time: 0.25,
         ..Default::default()
     });
-    let model = draft.finish().unwrap();
+    let mut model = draft.finish().unwrap();
     assert_eq!(model.name(), "replacement");
     assert_eq!(model.metadata().blend_time, 0.25);
     assert_eq!(model.bounds(), model.metadata().bounds);
+    assert!(model
+        .edit(|draft| {
+            draft.metadata_mut().blend_time = f64::NAN;
+            Ok(())
+        })
+        .is_err());
+    assert_eq!(model.metadata().blend_time, 0.25);
+    model
+        .edit(|draft| {
+            draft.metadata_mut().blend_time = 0.5;
+            Ok(())
+        })
+        .unwrap();
+    let restored = model.widen::<Universal>().try_narrow::<Mdlx>().unwrap();
+    assert_eq!(restored.metadata().blend_time, 0.5);
 }
 
 #[test]

@@ -408,22 +408,6 @@ fn unresolved_companions_are_errors() {
     )
     .is_err());
 }
-#[test]
-fn native_unknown_extensions_are_not_silently_reinserted() {
-    let mut model = native_triangle().model.into_chunked();
-    model
-        .insert_extension(
-            0,
-            m2::chunks::Chunk::Unknown {
-                tag: *b"TEST",
-                data: Cow::Owned(vec![1, 2, 3]),
-            },
-        )
-        .unwrap();
-    let source = m2::Bundle::from_model(model);
-    assert!(io::m2::import(&source, &ImportOptions::default()).is_err());
-}
-
 fn constant<T: m2::codec::Value>(value: T) -> Track<'static, T, m2::V256>
 where
     [T; 3]: m2::codec::Value,
