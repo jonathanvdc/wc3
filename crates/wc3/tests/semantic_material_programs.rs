@@ -672,3 +672,75 @@ fn modern_classic_layers_normalize_only_neutral_extension_storage() {
         }
     }
 }
+
+#[test]
+fn equal_native_bitmap_declarations_retain_independent_identities_and_animation() {
+    use wc3::model::DynamicTrack;
+    use native::animation::{Animatable, Sequence, Track, ValueKeyframe};
+    use native::materials::{Layer, LayerTextureSlot, Material, ShaderType, Texture};
+    let mut document = native::Document::<native::V1800>::new();
+    let mut texture = Texture::new("").unwrap();
+    texture.replaceable_id = 31;
+    document.set_textures([texture.clone(), texture.clone(), texture]);
+    document.set_sequences([Sequence::new("Stand", [0, 1000]).unwrap()]);
+    let mut diffuse = Animatable::Static(0);
+    diffuse.set_track(
+        Track::step(
+            [
+                ValueKeyframe { frame: 0, value: 0 },
+                ValueKeyframe {
+                    frame: 1000,
+                    value: 1,
+                },
+            ],
+            None,
+        )
+        .unwrap(),
+    );
+    let mut layer = Layer::new();
+    layer.set_shader_type(ShaderType::HD_DEFAULT_UNIT);
+    layer.set_texture_slots(&[
+        LayerTextureSlot {
+            texture_type: 0,
+            texture_id: diffuse,
+        },
+        LayerTextureSlot {
+            texture_type: 1,
+            texture_id: Animatable::Static(1),
+        },
+        LayerTextureSlot {
+            texture_type: 2,
+            texture_id: Animatable::Static(2),
+        },
+    ]);
+    let mut material = Material::new();
+    material.layers.push(layer);
+    document.set_materials([material]);
+    let model = io::mdlx::import_owned(&document, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let images = model.dependencies().images().iter().collect::<Vec<_>>();
+    assert_eq!(images.len(), 3);
+    assert_eq!(images[0].1, images[1].1);
+    assert_eq!(images[1].1, images[2].1);
+    assert_ne!(images[0].0, images[1].0);
+    assert_ne!(images[1].0, images[2].0);
+    let shader = &model.materials().iter().next().unwrap().1.surface.steps[0].shader;
+    for (slot, image) in shader.textures().iter().zip(&images) {
+        assert_eq!(
+            model.values()[slot.binding.image].unwrap().resource,
+            image.0
+        );
+    }
+    let target = shader.textures()[0].binding.image.slot();
+    let channel = model
+        .tracks()
+        .find(|track| track.target() == target)
+        .unwrap();
+    let DynamicTrack::OptionalTexture(track) = channel else {
+        panic!("expected image selections")
+    };
+    let selected = track.curve.values();
+    assert_eq!(selected.get(0).unwrap().unwrap().resource, images[0].0);
+    assert_eq!(selected.get(1).unwrap().unwrap().resource, images[1].0);
+}

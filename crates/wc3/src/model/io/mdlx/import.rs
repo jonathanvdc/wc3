@@ -102,7 +102,7 @@ where
         } else {
             ImageResource::Path(filename)
         };
-        let resource = builder.intern_image_resource(resource.try_into()?);
+        let resource = builder.add_image_resource(resource.try_into()?);
         texture_ids.push(Texture {
             resource,
             color_space: Default::default(),

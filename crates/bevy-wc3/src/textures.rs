@@ -1,4 +1,8 @@
 //! Independent image interpretations selected by authored surface roles.
+#[cfg(test)]
+#[path = "textures_tests.rs"]
+mod tests;
+
 use bevy::prelude::{Handle, Image};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

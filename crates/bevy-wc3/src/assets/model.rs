@@ -190,8 +190,10 @@ pub trait ResourceResolver: Send + Sync + 'static {
     /// Select the resource for one texture before image interpretation.
     ///
     /// `index` is the zero-based position in the model's image dependency table,
-    /// shared by every sampling and role variant of that image. Image selections
-    /// can precede replaceable-category or archive identity mappings here. The
+    /// shared by every sampling and role variant of that image. MDLX imports
+    /// retain one declaration per native bitmap entry, including equal
+    /// declarations, in their original table order. Image selections can precede
+    /// replaceable-category or archive identity mappings here. The
     /// request retains the complete selected input, original resource, color role,
     /// and effective sampler. Returning
     /// a different resource does not mutate the model or any shared image asset.

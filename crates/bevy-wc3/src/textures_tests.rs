@@ -3,7 +3,7 @@ use crate::material::compile_material_with_images;
 use crate::material::native_fixtures::wmo;
 use bevy::prelude::{Assets, Image};
 use wc3::model::materials::bindings::TextureBinding;
-use wc3::model::ModelMetadata;
+use wc3::model::{AddressMode, ModelMetadata};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{Material, MaterialSurface, ModelBuilder};
 
@@ -162,4 +162,65 @@ fn image_requests_retain_native_input_metadata_for_replacement_selection() {
         2
     );
     assert_ne!(requests[0].key(), requests[1].key());
+}
+
+#[test]
+fn equal_native_bitmap_declarations_keep_independent_renderer_requests() {
+    use wc3::model::conversion::ImportOptions;
+    use wc3::model::formats::mdlx::materials::{
+        Layer, LayerTextureSlot, Material as NativeMaterial, ShaderType, Texture as NativeTexture,
+    };
+    use wc3::model::formats::mdlx::{Document, V1800};
+    use wc3::model::io::mdlx::import_owned;
+    let mut source = Document::<V1800>::new();
+    let mut texture = NativeTexture::new("").unwrap();
+    texture.replaceable_id = 31;
+    source.set_textures([texture.clone(), texture.clone(), texture]);
+    let mut layer = Layer::new();
+    layer.set_shader_type(ShaderType::HD_DEFAULT_UNIT);
+    layer.set_texture_slots(&[0, 1, 2].map(|slot| LayerTextureSlot {
+        texture_type: slot,
+        texture_id: slot.into(),
+    }));
+    let mut material = NativeMaterial::new();
+    material.layers.push(layer);
+    source.set_materials([material]);
+    let model = import_owned(&source, &ImportOptions::default())
+        .unwrap()
+        .value
+        .widen();
+    let ids = model.dependencies().images().keys().collect::<Vec<_>>();
+    assert_eq!(ids.len(), 3);
+    let mut images = Assets::<Image>::default();
+    let handles: [_; 3] = std::array::from_fn(|_| images.add(Image::default()));
+    let mut observed = Vec::new();
+    let resolved = Arc::new(TextureImages::resolve(&model, |request| {
+        let index = ids
+            .iter()
+            .position(|id| *id == request.texture.resource)
+            .unwrap();
+        observed.push((request.input, request.role, index));
+        Some(handles[index].clone())
+    }));
+    for (slot, role) in [
+        (0, TextureRole::Color),
+        (1, TextureRole::Normal),
+        (2, TextureRole::Data),
+    ] {
+        assert!(observed.iter().any(|(input, selected_role, index)| matches!(input, Some(TextureInput::Material { slot: selected, .. }) if *selected == slot) && *selected_role == role && *index == slot as usize));
+    }
+    let id = model.materials().iter().next().unwrap().0;
+    let passes = compile_material_with_images(&model, id, resolved).unwrap();
+    assert_eq!(
+        passes[0].material.base_color_texture.as_ref(),
+        Some(&handles[0])
+    );
+    assert_eq!(
+        passes[0].material.normal_map_texture.as_ref(),
+        Some(&handles[1])
+    );
+    assert_eq!(
+        passes[0].material.metallic_roughness_texture.as_ref(),
+        Some(&handles[2])
+    );
 }
