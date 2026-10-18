@@ -4,8 +4,8 @@ use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::materialize;
 use crate::model::{
-    profiles::m3 as surface, Channel, Clock, ControllerId, Curve, FeatureId, Interpolation, Time,
-    Track,
+    profiles::m3 as surface, Channel, ControllerId, Curve, FeatureId, Interpolation, Time,
+    TimeSource, Track,
 };
 use native::Envelope;
 
@@ -106,7 +106,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                     }),
                     mode,
                 )?,
-                clock: Clock::Timeline,
+                clock: TimeSource::Timeline,
             }),
         )?;
         builder.add_controller_channel(
@@ -120,7 +120,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                     }),
                     mode,
                 )?,
-                clock: Clock::Timeline,
+                clock: TimeSource::Timeline,
             }),
         )?;
         builder.add_controller_channel(
@@ -134,7 +134,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                     }),
                     mode,
                 )?,
-                clock: Clock::Timeline,
+                clock: TimeSource::Timeline,
             }),
         )?;
         builder.set_feature(feature, surface::Feature::Extent((binding).into()))?;

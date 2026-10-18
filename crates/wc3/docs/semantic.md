@@ -333,9 +333,9 @@ binding vocabulary:
 
 ```rust
 use wc3::model::materials::m2::{MaterialStep, ModulateMaterialStep, TextureUnit};
-use wc3::model::{Construct, Values};
+use wc3::model::{Construct, PropertyValues};
 
-let mut values = Values::default();
+let mut values = PropertyValues::default();
 let mut modulation = TextureUnit::construct(&mut values);
 modulation.coordinates.source = 1;
 values.set(modulation.contribution, 0.75)?;
@@ -415,9 +415,9 @@ metadata rather than collapsing them into a simpler rest value.
 Attachments compose identity, visibility, and placement independently.
 `Socket` exposes a named identity, an application role, or an MDLX point
 index; those namespaces remain distinct even when their numeric values coincide.
-Its `visibility: Animated<f32>` describes mounted content visibility; constant
+Its `visibility: Property<f32>` describes mounted content visibility; constant
 `1.0` represents an uncontrolled socket. Native M2 boolean visibility is read as
-scalar zero or one through `Values::scalar_from_boolean`, preserving the source
+scalar zero or one through `PropertyValues::scalar_from_boolean`, preserving the source
 slot, shared channels, and clocks. The socket also retains unresolved authored
 controls. Exact M2 narrowing requires the original explicit boolean source;
 fractional visibility cannot be represented. Native formats without a visibility
@@ -495,13 +495,13 @@ native payload:
 
 ```rust
 use wc3::model::profiles::mdlx;
-use wc3::model::{Construct, FromFeature, TryFromFeature, Values, ParticleDefinition, ParticleScalar};
+use wc3::model::{Construct, FromFeature, TryFromFeature, PropertyValues, ParticleDefinition, ParticleScalar};
 
-let mut values = Values::default();
+let mut values = PropertyValues::default();
 let native = mdlx::Particle2::construct(&mut values);
 let mut emitter = ParticleDefinition::from_feature(native, &mut values);
-emitter.emission.rate = ParticleScalar::Animated(values.add(24.));
-emitter.motion.speed = ParticleScalar::Animated(values.add(8.));
+emitter.emission.rate = ParticleScalar::Property(values.add(24.));
+emitter.motion.speed = ParticleScalar::Property(values.add(8.));
 let exported = mdlx::Particle2::try_from_feature(emitter, &values).unwrap();
 assert_eq!(values[exported.emission.rate], 24.);
 assert_eq!(values[exported.motion.speed], 8.);
@@ -695,9 +695,10 @@ Diablo resource identities include a game namespace: a D3 group/ID pair does not
 identify the D4 resource with the same numbers. Profile publication checks that
 resource identities belong to the selected game vocabulary.
 
-Playback programs belong to their actual clip or controller owners. MDLX
-non-global channels use one absolute authoring timeline, and sequences select
-intervals on it. Global sequences use shared clocks.
+Animation programs are reusable model-owned definitions. Clips and native
+controllers select them by identity; model-level selections remain active without
+a clip. MDLX non-global channels use one absolute authoring timeline, and clips
+map local playback into bounded intervals on it. Global sequences use shared clocks.
 
 D3 quaternion curves use explicit normalized linear interpolation (`Nlerp`),
 which remains distinct from spherical interpolation (`Slerp`). Both are restricted
@@ -706,7 +707,7 @@ cannot represent rather than substituting another rotation path.
 
 ## Typed animation curves
 
-An `Animated<T>` is a typed identity into the model's `Values` table. Every
+A `Property<T>` is a typed identity into the model's `PropertyValues` table. Every
 potentially animated field owns such a reference, including node translation,
 rotation, scale, and visibility. The table stores authored constants. Copying a
 reference shares both its constant and its animation; allocating a fresh slot
@@ -720,7 +721,35 @@ several fields share its slot. Exact projection rejects animation that the targe
 format cannot attach to a supported field. Profile property descriptors describe
 native schemas; they no longer identify runtime animation destinations.
 
-Allocate constants with `Values::add` or `ModelBuilder::add_value`. Construct
+`Animation` owns ordered channels and identified event occurrences. Add it with
+`ModelBuilder::add_animation`, then reference its `AnimationId` from
+`Clip::animations`, `Controller::animations`, or the model's ordered
+`global_animations` selection. Reusing an identity shares its curves and events;
+clips retain their own duration and loop/clamp policy. `add_global_channel`,
+`add_channel`, and `add_controller_channel` append to the selection's first
+animation, creating one when the selection is empty. Editing that animation affects
+every selection of it. Use `add_animation_channel` for explicit ownership.
+
+`TimeSource` selects a track's time coordinate: `Clip` uses wrapped or clamped local time in seconds,
+`Timeline` uses absolute authoring time, and `Shared(ClockId)` wraps the supplied
+shared time by that clock's period. It is a selector, not mutable playback state.
+`Clip::timeline_origin` maps wrapped or clamped local time in seconds into an absolute interval whose
+length is the clip duration. Keys outside that interval cannot influence
+interpolation. Without a mapped clip, timeline tracks use the caller's explicit
+`timeline_time`.
+
+`AnimationSample` supplies the selected clip, elapsed clip time, shared time, and
+explicit controller selection. Direct model sampling and compiled
+`AnimationProgram` sampling use the same curve evaluator and clip-time mapping.
+Model-level animations run first, followed by the clip's animations, followed by
+controllers in ascending priority; equal priorities preserve caller order. Within
+each selection, animation and channel order are authoritative. Later applicable
+tracks override earlier ones; empty curves fall through to earlier tracks and
+ultimately authored defaults. Native controller concurrency remains application
+playback policy. Value sampling does not advance clocks or dispatch events;
+event traversal separately examines the interval crossed between playback states.
+
+Allocate constants with `PropertyValues::add` or `ModelBuilder::add_value`. Construct
 slot-bearing payloads with `Construct::construct(&mut values)` or
 `builder.construct()`, which recursively allocates their defaults. `builder.new_node`
 and `add_named_node` allocate the node's transform and visibility slots. Changing a
@@ -731,14 +760,14 @@ error. Widening and narrowing retain existing slot identities and may allocate
 additional constants required by the destination payload.
 
 ```rust
-use wc3::model::{Channel, Clock, Curve, Model, Time, Track};
+use wc3::model::{Channel, TimeSource, Curve, Model, Time, Track};
 let mut builder = Model::builder("Moving node");
 let node = builder.new_node("Root");
 let translation = node.transform.translation;
 builder.add_node(node)?;
-builder.add_timeline_channel(Channel::Vector3(Track {
+builder.add_global_channel(Channel::Vector3(Track {
     target: translation,
-    clock: Clock::Timeline,
+    clock: TimeSource::Timeline,
     curve: Curve::linear(
         [Time::seconds(0.)?, Time::seconds(1.)?],
         [[0., 0., 0.], [1., 0., 0.]],
@@ -749,12 +778,12 @@ assert_eq!(model.values()[translation], [0., 0., 0.]);
 # Ok::<(), wc3::model::Error>(())
 ```
 
-The sealed `Animatable` trait selects a subtable for each supported type. The
+The sealed `PropertyValue` trait selects a subtable for each supported type. The
 trait, slots, and storage are profile-independent. Applications can define their
 own payloads using these supported slot types. Standalone curves can use custom
-value types, but those types cannot add subtables to `Values`.
+value types, but those types cannot add subtables to `PropertyValues`.
 
-Boolean-to-scalar reads are explicit: `Values::scalar_from_boolean` allocates a
+Boolean-to-scalar reads are explicit: `PropertyValues::scalar_from_boolean` allocates a
 scalar slot linked to a boolean source, sampled as zero or one. Both identities
 remain available, so native conversions can recover the original boolean field.
 A direct scalar channel on that output takes precedence over its converted read.

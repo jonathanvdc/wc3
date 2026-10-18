@@ -1,5 +1,5 @@
 //! Logical M3 composite values.
-use super::Property;
+use super::PropertyBinding;
 use crate::model::Construct;
 use crate::model::MaterialId;
 
@@ -9,7 +9,7 @@ pub struct CompositeSection {
     /// Selects an entry in the material array chosen by `material_type`.
     pub material: MaterialId,
     /// Controls blend weight through its animation value.
-    pub map_multiplier: Property<f32>,
+    pub map_multiplier: PropertyBinding<f32>,
 }
 
 /// Editable M3 CompositeMaterialStep values.

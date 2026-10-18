@@ -57,11 +57,10 @@ billboards and camera anchoring is explicitly selected on `Playback`.
 
 Playback uses seconds. `wc3` evaluates typed curves, while `AnimationProgram`
 indexes compiled channels by typed slot identity. Authored constants live in the
-model’s value table; node, material, and effect fields retain references to those
-slots. Each playback instance samples against its own clocks and selected programmes. Clip aliases resolve their
-programmes without losing the selected clip's loop or clamp policy. Independent
+model’s `PropertyValues` table; node, material, and effect fields retain references to those
+slots. Each playback instance samples against its own clocks and selected programmes. Clips reference reusable `Animation` definitions without losing their own loop or clamp policy. Independent
 repeating shared clocks wrap by their authored periods; frozen shared clocks
-retain time zero without event traversal. Warcraft III and M3 clip metadata
+retain time zero without event traversal. The common clip timeline origin and duration
 select the corresponding authoring timeline interval, preventing interpolation
 through unrelated sequence keys. Playback uses the selected M3 clip’s authored controller list by default. Applications
 can replace it with an explicit list, including an empty list; priority orders

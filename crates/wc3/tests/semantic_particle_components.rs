@@ -6,7 +6,7 @@ use wc3::model::{
     ProgrammedAge, ProgrammedDirection, ProgrammedForces, ProgrammedNoise, ProgrammedParticle,
     ProgrammedParticleGravity, StagedParticleAppearance,
 };
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{FromFeature as SlotFromFeature, TryFromFeature as SlotTryFromFeature};
 use wc3::model::{
     ParticleAppearance, ParticleDefinition, ParticleDetails, ParticleScalar, ParticleTrigger,
@@ -49,7 +49,7 @@ fn model_particles_share_editable_rate_speed_and_lifetime() {
         panic!()
     };
     assert_eq!(details.resource, source.details.resource);
-    definition.emission.rate = ParticleScalar::Animated(slot_values.add(21.0));
+    definition.emission.rate = ParticleScalar::Property(slot_values.add(21.0));
     let restored = mdlx::Particle::try_from_feature(definition, &slot_values).unwrap();
     assert_eq!(slot_values[restored.emission.rate], 21.0);
     assert_eq!(restored.details.resource, source.details.resource);
@@ -115,9 +115,9 @@ fn narrowing_retains_unsupported_authored_variation() {
         mdlx::Particle::construct(&mut slot_values),
         &mut slot_values,
     );
-    definition.motion.variation = ParticleScalar::Animated(slot_values.add(0.75));
+    definition.motion.variation = ParticleScalar::Property(slot_values.add(0.75));
     let original = mdlx::Particle::try_from_feature(definition, &slot_values).unwrap_err();
-    let ParticleScalar::Animated(value) = &original.motion.variation else {
+    let ParticleScalar::Property(value) = &original.motion.variation else {
         panic!()
     };
     assert_eq!(slot_values[value], 0.75);
@@ -205,7 +205,7 @@ fn age_driven_roundtrip_preserves_borrowed_spline_and_common_randomness() {
 #[test]
 fn programmed_roundtrip_preserves_reset_controls_and_every_detail() {
     let mut slot_values = SlotValues::default();
-    let spline = [m3::Property {
+    let spline = [m3::PropertyBinding {
         value: slot_values.add([1.0, 2.0, 3.0]),
         reset: [9.0; 3],
         ..SlotConstruct::construct(&mut slot_values)
@@ -353,7 +353,7 @@ fn programmed_roundtrip_preserves_reset_controls_and_every_detail() {
             noise_smoothness: SlotConstruct::construct(&mut slot_values),
         },
         motion: ParticleMotion {
-            speed: m3::Property {
+            speed: m3::PropertyBinding {
                 value: slot_values.add(7.0),
                 reset: 11.0,
                 ..SlotConstruct::construct(&mut slot_values)

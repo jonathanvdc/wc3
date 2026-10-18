@@ -24,13 +24,13 @@ impl NodeFeature<'_> {
                 matches!(self, Self::Ribbon(RibbonEmitter::Trail(_)))
             }
             FeatureProperty::ParticleContinuousRate => {
-                matches!(self, Self::Particle(ParticleEmitter::Simulated(value)) if matches!(value.emission.trigger, ParticleTrigger::Continuous) && matches!(value.emission.rate, ParticleScalar::Animated(_)))
+                matches!(self, Self::Particle(ParticleEmitter::Simulated(value)) if matches!(value.emission.trigger, ParticleTrigger::Continuous) && matches!(value.emission.rate, ParticleScalar::Property(_)))
             }
             FeatureProperty::ParticleLifetime => {
-                matches!(self, Self::Particle(ParticleEmitter::Simulated(value)) if matches!(value.lifetime.duration, ParticleScalar::Animated(_)))
+                matches!(self, Self::Particle(ParticleEmitter::Simulated(value)) if matches!(value.lifetime.duration, ParticleScalar::Property(_)))
             }
             FeatureProperty::ParticleSpeed => {
-                matches!(self, Self::Particle(ParticleEmitter::Simulated(value)) if matches!(value.motion.speed, ParticleScalar::Animated(_)))
+                matches!(self, Self::Particle(ParticleEmitter::Simulated(value)) if matches!(value.motion.speed, ParticleScalar::Property(_)))
             }
             _ => return None,
         })
@@ -55,11 +55,11 @@ impl ParticleDefinition<'_> {
                     matches!(self.emission.activation, ParticleActivation::Fractional(_))
                 }
                 Field::EmissionRate => {
-                    matches!(self.emission.rate, ParticleScalar::Animated(_))
+                    matches!(self.emission.rate, ParticleScalar::Property(_))
                         && matches!(self.emission.trigger, ParticleTrigger::Continuous)
                 }
-                Field::LifeSpan => matches!(self.lifetime.duration, ParticleScalar::Animated(_)),
-                Field::InitialVelocity => matches!(self.motion.speed, ParticleScalar::Animated(_)),
+                Field::LifeSpan => matches!(self.lifetime.duration, ParticleScalar::Property(_)),
+                Field::InitialVelocity => matches!(self.motion.speed, ParticleScalar::Property(_)),
                 _ => true,
             }
     }
@@ -72,14 +72,14 @@ impl ParticleDefinition<'_> {
                     matches!(self.emission.activation, ParticleActivation::Fractional(_))
                 }
                 Field::EmissionRate => {
-                    matches!(self.emission.rate, ParticleScalar::Animated(_))
+                    matches!(self.emission.rate, ParticleScalar::Property(_))
                         && matches!(
                             self.emission.trigger,
                             ParticleTrigger::Continuous | ParticleTrigger::KeyedBurst
                         )
                 }
-                Field::Speed => matches!(self.motion.speed, ParticleScalar::Animated(_)),
-                Field::Variation => matches!(self.motion.variation, ParticleScalar::Animated(_)),
+                Field::Speed => matches!(self.motion.speed, ParticleScalar::Property(_)),
+                Field::Variation => matches!(self.motion.variation, ParticleScalar::Property(_)),
                 _ => true,
             }
     }
@@ -95,14 +95,14 @@ impl ParticleDefinition<'_> {
                     matches!(self.emission.activation, ParticleActivation::Boolean(_))
                 }
                 Field::Rate => {
-                    matches!(self.emission.rate, ParticleScalar::Animated(_))
+                    matches!(self.emission.rate, ParticleScalar::Property(_))
                         && matches!(self.emission.trigger, ParticleTrigger::Continuous)
                 }
-                Field::Speed => matches!(self.motion.speed, ParticleScalar::Animated(_)),
+                Field::Speed => matches!(self.motion.speed, ParticleScalar::Property(_)),
                 Field::SpeedVariation => {
-                    matches!(self.motion.variation, ParticleScalar::Animated(_))
+                    matches!(self.motion.variation, ParticleScalar::Property(_))
                 }
-                Field::Lifespan => matches!(self.lifetime.duration, ParticleScalar::Animated(_)),
+                Field::Lifespan => matches!(self.lifetime.duration, ParticleScalar::Property(_)),
                 _ => true,
             }
     }

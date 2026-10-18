@@ -4,7 +4,7 @@ use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::materialize;
 use crate::model::{profiles::m3 as surface, EventId, FeatureId, ValueSlot};
-use crate::model::{Channel, Clock, Curve, Interpolation, Quaternion, Time, Track};
+use crate::model::{Channel, Curve, Interpolation, Quaternion, Time, TimeSource, Track};
 use native::Envelope;
 
 fn read_error(error: native::ReadError) -> Error {
@@ -117,7 +117,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                 Some(Channel::$channel(Track {
                     target: *$property,
                     curve,
-                    clock: Clock::Timeline,
+                    clock: TimeSource::Timeline,
                 }))
             } else {
                 context.unsupported("m3.animation.type", "key family and property type differ")?;

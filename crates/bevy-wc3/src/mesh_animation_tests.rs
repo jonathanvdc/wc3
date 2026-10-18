@@ -5,7 +5,7 @@ use bevy::ecs::world::CommandQueue;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use wc3::model::conversion::ImportOptions;
 use wc3::model::io::mdlx;
-use wc3::model::{AnimationSample, Channel, Clock, Curve, Model, Time as ModelTime, Track};
+use wc3::model::{AnimationSample, Channel, Curve, Model, Time as ModelTime, TimeSource, Track};
 
 fn source() -> Model<'static> {
     mdlx::decode_mdl(
@@ -72,14 +72,14 @@ fn common_mesh_targets_override_feature_values_and_equal_constants_share_keys() 
         .unwrap();
     model
         .edit(|builder| {
-            builder.add_timeline_channel(Channel::Vector3(Track {
+            builder.add_global_channel(Channel::Vector3(Track {
                 target: definition.color,
-                clock: Clock::Timeline,
+                clock: TimeSource::Timeline,
                 curve: Curve::linear([time(0.), time(1.)], [[0.2, 0.4, 0.6], [0.4, 0.6, 0.8]])?,
             }))?;
-            builder.add_timeline_channel(Channel::Scalar(Track {
+            builder.add_global_channel(Channel::Scalar(Track {
                 target: definition.opacity,
-                clock: Clock::Timeline,
+                clock: TimeSource::Timeline,
                 curve: Curve::linear([time(0.), time(1.)], [0.5, 1.])?,
             }))
         })

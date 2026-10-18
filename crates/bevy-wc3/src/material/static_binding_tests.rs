@@ -5,10 +5,10 @@ use crate::material::native_fixtures::m2;
 use wc3::model::profiles::m2::properties;
 use wc3::model::profiles::{mdlx, Universal};
 use wc3::model::{
-    AnimationSample, Channel, Clip, Clock, Controller, Curve, Material, MaterialId,
-    MaterialSurface, Model, ModelBuilder, SharedClock, Time as ModelTime, Track,
+    AnimationSample, Channel, Clip, Controller, Curve, Material, MaterialId, MaterialSurface,
+    Model, ModelBuilder, SharedClock, Time as ModelTime, TimeSource, Track,
 };
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 #[test]
 fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
@@ -85,7 +85,7 @@ fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_controller()
         })
     };
     builder
-        .add_timeline_channel(track(translations[0], Clock::Timeline))
+        .add_global_channel(track(translations[0], TimeSource::Timeline))
         .unwrap();
     let clock = builder
         .add_clock(SharedClock::Repeating {
@@ -93,7 +93,7 @@ fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_controller()
         })
         .unwrap();
     builder
-        .add_shared_channel(track(translations[1], Clock::Shared(clock)))
+        .add_global_channel(track(translations[1], TimeSource::Shared(clock)))
         .unwrap();
     let clip = builder
         .add_clip(
@@ -101,11 +101,11 @@ fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_controller()
         )
         .unwrap();
     builder
-        .add_channel(clip, track(translations[2], Clock::Clip))
+        .add_channel(clip, track(translations[2], TimeSource::Clip))
         .unwrap();
     let controller = builder.add_controller(Controller::default()).unwrap();
     builder
-        .add_controller_channel(controller, track(translations[3], Clock::Timeline))
+        .add_controller_channel(controller, track(translations[3], TimeSource::Timeline))
         .unwrap();
     let model = {
         builder.import_values(&slot_values).unwrap();
@@ -226,9 +226,9 @@ fn constant_scalar_tracks_matching_default_do_not_require_private_materials() {
             Curve::step(vec![times[0]], vec![1.]).unwrap()
         };
         builder
-            .add_timeline_channel(Channel::Scalar(Track {
+            .add_global_channel(Channel::Scalar(Track {
                 target: opacity(&builder, material),
-                clock: Clock::Timeline,
+                clock: TimeSource::Timeline,
                 curve,
             }))
             .unwrap();
@@ -263,17 +263,21 @@ fn conflicting_clip_constants_and_controller_overrides_keep_materials_live() {
         let clip = builder
             .add_clip(Clip::named("first").with_duration(ModelTime::seconds(1.).unwrap()))
             .unwrap();
-        builder.add_channel(clip, track(1., Clock::Clip)).unwrap();
+        builder
+            .add_channel(clip, track(1., TimeSource::Clip))
+            .unwrap();
         if controller_override {
             let controller = builder.add_controller(Controller::default()).unwrap();
             builder
-                .add_controller_channel(controller, track(0.25, Clock::Timeline))
+                .add_controller_channel(controller, track(0.25, TimeSource::Timeline))
                 .unwrap();
         } else {
             let other = builder
                 .add_clip(Clip::named("second").with_duration(ModelTime::seconds(1.).unwrap()))
                 .unwrap();
-            builder.add_channel(other, track(0.5, Clock::Clip)).unwrap();
+            builder
+                .add_channel(other, track(0.5, TimeSource::Clip))
+                .unwrap();
         }
         let model = {
             builder.import_values(&slot_values).unwrap();
@@ -302,7 +306,7 @@ fn constant_track_different_from_fallback_cannot_be_folded() {
             clip,
             Channel::Scalar(Track {
                 target: opacity(&builder, material),
-                clock: Clock::Clip,
+                clock: TimeSource::Clip,
                 curve: Curve::step(vec![ModelTime::default()], vec![0.5]).unwrap(),
             }),
         )
@@ -339,9 +343,9 @@ fn equal_spline_endpoints_do_not_prove_constant_scalar_output() {
         ModelTime::seconds(1.).unwrap(),
     ];
     builder
-        .add_timeline_channel(Channel::Scalar(Track {
+        .add_global_channel(Channel::Scalar(Track {
             target: opacity(&builder, material),
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
             curve: Curve::hermite(times, [1., 1.], [0., -2.], [2., 0.]).unwrap(),
         }))
         .unwrap();
@@ -386,16 +390,16 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
         )
         .unwrap();
     builder
-        .add_timeline_channel(Channel::Scalar(Track {
+        .add_global_channel(Channel::Scalar(Track {
             target: weight,
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
             curve: Curve::step(vec![ModelTime::default()], vec![1.]).unwrap(),
         }))
         .unwrap();
     builder
-        .add_timeline_channel(Channel::Vector3(Track {
+        .add_global_channel(Channel::Vector3(Track {
             target: builder.model().node(node).unwrap().transform.translation,
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
             curve: Curve::linear(
                 [
                     ModelTime::seconds(0.).unwrap(),
@@ -427,7 +431,7 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
     assert!((value.uv_transform.translation.y - 0.5).abs() < 1e-6);
 }
 
-fn opacity(builder: &ModelBuilder<'static>, id: MaterialId) -> Animated<f32> {
+fn opacity(builder: &ModelBuilder<'static>, id: MaterialId) -> Property<f32> {
     let wc3::model::MaterialStep::M2(step) =
         &builder.model().material(id).unwrap().surface.steps[0]
     else {

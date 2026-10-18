@@ -7,10 +7,10 @@ use crate::model::profiles::SurfacePayload;
 use crate::model::profiles::Unavailable;
 use crate::model::values::layered::{LayerFlags, MaterialFlags};
 use crate::model::TextureTransform;
+use crate::model::{Construct, PropertyValues};
 use crate::model::{
-    Animated, Error, Link, PropertyIdentityKey, PropertyPayload, Texture, ValidateLinks,
+    Error, Link, Property, PropertyIdentityKey, PropertyPayload, Texture, ValidateLinks,
 };
-use crate::model::{Construct, Values};
 use std::{borrow::Cow, fmt::Debug};
 
 /// Blending performed by a Warcraft III material layer.
@@ -46,17 +46,17 @@ pub struct TextureSlot {
     /// Semantic shader slot; undocumented selectors remain numeric.
     pub slot: u32,
     /// Texture sampled by this slot, or no texture.
-    pub binding: TextureBinding<Animated<Option<Texture>>>,
+    pub binding: TextureBinding<Property<Option<Texture>>>,
 }
 /// Fresnel controls for a material pass.
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct Fresnel {
     /// Edge color in RGB order.
-    pub color: Animated<[f32; 3]>,
+    pub color: Property<[f32; 3]>,
     /// Edge opacity.
-    pub opacity: Animated<f32>,
+    pub opacity: Property<f32>,
     /// Amount of team-color contribution.
-    pub team_color: Animated<f32>,
+    pub team_color: Property<f32>,
 }
 /// A native-profile Warcraft III layer, preserving the complete input vocabulary.
 /// Universal material programs interpret it into a shader-specific [`MaterialStep`].
@@ -65,11 +65,11 @@ pub struct Layer {
     /// Color composition and rasterization applied by this pass.
     pub state: PassState<Blend, Shading>,
     /// Primary image input and its referenced coordinate transform.
-    pub binding: TextureBinding<Animated<Option<Texture>>, Coordinates<u32, TextureTransform>>,
+    pub binding: TextureBinding<Property<Option<Texture>>, Coordinates<u32, TextureTransform>>,
     /// Opacity multiplier.
-    pub opacity: Animated<f32>,
+    pub opacity: Property<f32>,
     /// Emissive contribution, when supported by the shader.
-    pub emissive_gain: Option<Animated<f32>>,
+    pub emissive_gain: Option<Property<f32>>,
     /// Fresnel contribution, when present.
     pub fresnel: Option<Fresnel>,
     /// Shader-table selector, whose table is external to the file.
@@ -215,11 +215,11 @@ pub struct MaterialInputs {
     /// Composition and rasterization for this step.
     pub state: PassState<Blend, Shading>,
     /// Primary image and referenced coordinates.
-    pub binding: TextureBinding<Animated<Option<Texture>>, Coordinates<u32, TextureTransform>>,
+    pub binding: TextureBinding<Property<Option<Texture>>, Coordinates<u32, TextureTransform>>,
     /// Opacity multiplier.
-    pub opacity: Animated<f32>,
+    pub opacity: Property<f32>,
     /// Authored emissive multiplier.
-    pub emissive_gain: Option<Animated<f32>>,
+    pub emissive_gain: Option<Property<f32>>,
 }
 /// A classic Warcraft III texture-composition step.
 #[derive(Clone, Debug, Construct, PartialEq)]
@@ -262,7 +262,7 @@ pub enum MaterialStep<'a> {
     Unresolved(UnresolvedMaterialStep<'a>),
 }
 impl Construct for MaterialStep<'_> {
-    fn construct(values: &mut Values) -> Self {
+    fn construct(values: &mut PropertyValues) -> Self {
         Self::Classic(Construct::construct(values))
     }
 }

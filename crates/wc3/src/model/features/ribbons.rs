@@ -1,7 +1,7 @@
 //! Composed ribbon emission, geometry, appearance, and rendering programs.
 use crate::model::profiles::{m2, m3, mdlx};
-use crate::model::{Animated, Axis, MaterialId, Texture};
-use crate::model::{Construct, Values};
+use crate::model::{Axis, MaterialId, Property, Texture};
+use crate::model::{Construct, PropertyValues};
 
 /// A persistent trail assembled from successive cross sections.
 #[derive(Clone, Debug, Construct, PartialEq)]
@@ -28,12 +28,12 @@ pub struct TrailGeometry {
     /// This is independent of the model's up axis and world gravity.
     pub axis: Axis,
     /// Extent above the center line.
-    pub height_above: Animated<f32>,
+    pub height_above: Property<f32>,
     /// Extent below the center line.
-    pub height_below: Animated<f32>,
+    pub height_below: Property<f32>,
 }
 impl Construct for TrailGeometry {
-    fn construct(values: &mut Values) -> Self {
+    fn construct(values: &mut PropertyValues) -> Self {
         Self {
             axis: Axis::PositiveY,
             height_above: values.add(0.),
@@ -45,9 +45,9 @@ impl Construct for TrailGeometry {
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct TrailAppearance<S = TrailAtlasSlot, A = u32> {
     /// RGB tint.
-    pub color: Animated<[f32; 3]>,
+    pub color: Property<[f32; 3]>,
     /// Opacity multiplier.
-    pub opacity: Animated<f32>,
+    pub opacity: Property<f32>,
     /// Atlas rows and columns; export checks the destination's integer width.
     pub atlas: [A; 2],
     /// Atlas selector retaining its typed animated destination.
@@ -57,9 +57,9 @@ pub struct TrailAppearance<S = TrailAtlasSlot, A = u32> {
 #[derive(Clone, Debug)]
 pub enum TrailAtlasSlot {
     /// Full-width cell selection.
-    Wide(Animated<u32>),
+    Wide(Property<u32>),
     /// Compact cell selection.
-    Compact(Animated<u16>),
+    Compact(Property<u16>),
 }
 /// Logical rendering alternatives rather than source-file layouts.
 #[derive(Clone, Debug)]
@@ -101,7 +101,7 @@ pub struct GravityTrailControls {
     /// Gravity acceleration.
     pub gravity: f32,
     /// Visibility multiplier.
-    pub visibility: Animated<f32>,
+    pub visibility: Property<f32>,
 }
 /// Emission direction, discrete activation, and texture controls.
 #[derive(Clone, Debug)]
@@ -111,7 +111,7 @@ pub struct AngleTrailControls {
     /// Runtime effect identifier.
     pub id: u32,
     /// Discrete activation.
-    pub enabled: Animated<bool>,
+    pub enabled: Property<bool>,
     /// Signed pass-order plane.
     pub priority_plane: i16,
     /// External color-table selection.
@@ -121,10 +121,10 @@ pub struct AngleTrailControls {
 }
 /// Trail composition with integral section generation and fractional visibility.
 pub type GravityTrail =
-    TrailComposition<u32, Animated<u32>, u32, LayeredTrailRendering, GravityTrailControls>;
+    TrailComposition<u32, Property<u32>, u32, LayeredTrailRendering, GravityTrailControls>;
 /// Trail composition with fractional edge generation and discrete activation.
 pub type AngleTrail =
-    TrailComposition<f32, Animated<u16>, u16, SurfaceTrailRendering, AngleTrailControls>;
+    TrailComposition<f32, Property<u16>, u16, SurfaceTrailRendering, AngleTrailControls>;
 impl From<mdlx::Ribbon> for TrailEmitter {
     fn from(v: mdlx::Ribbon) -> Self {
         Self {
@@ -251,7 +251,7 @@ use super::effect_components::{
 };
 use super::particles::{ParticleGravity, ParticleLifetime, ParticleMotion, ParticleScalar};
 use super::programmed_effects::{SplinePoint, VariationControl};
-use crate::model::animation::programmed::Property;
+use crate::model::animation::programmed::PropertyBinding;
 use crate::model::values::programmed::{RibbonAdditionalFlags, RibbonFlags, RibbonKind, Smoothing};
 use crate::model::NodeId;
 use std::borrow::Cow;
@@ -292,11 +292,11 @@ pub struct ProgrammedRibbonComposition<'a, M, L> {
     /// Inner radius control of the emitter’s source shape.
     pub inner_radius: f32,
     /// Animated maximum-length control for the ribbon.
-    pub max_length: Property<f32>,
+    pub max_length: PropertyBinding<f32>,
     /// Authored spline control points defining the emission curve.
     pub spline_points: Cow<'a, [SplinePoint]>,
     /// Animated ribbon activation control.
-    pub active: Property<u32>,
+    pub active: PropertyBinding<u32>,
     /// Stored state bits; unknown bits are retained.
     pub flags: RibbonFlags,
     /// Interpolation mode for the particle size controls.
@@ -322,9 +322,9 @@ pub struct ProgrammedRibbonComposition<'a, M, L> {
     /// Opacity control for the emitted geometry.
     pub alpha: VariationControl,
     /// Animated particle-velocity control retained in the StarCraft II representation.
-    pub particle_velocity: Property<f32>,
+    pub particle_velocity: PropertyBinding<f32>,
     /// Animated ribbon overlay control; its detailed source semantics are unresolved.
-    pub overlay: Property<f32>,
+    pub overlay: PropertyBinding<f32>,
     /// Unresolved deprecated unknown data retained in its original position and representation.
     pub deprecated_unknown: i32,
 }
@@ -672,6 +672,6 @@ impl ValidateLinks for ProgrammedTrailGravity {
 /// Programmed trail composition with reset-bearing controls.
 pub type ProgrammedTrail<'a> = ProgrammedRibbonComposition<
     'a,
-    ParticleMotion<Property<f32>, Property<f32>, ProgrammedTrailGravity>,
-    ParticleLifetime<Property<f32>, Property<f32>>,
+    ParticleMotion<PropertyBinding<f32>, PropertyBinding<f32>, ProgrammedTrailGravity>,
+    ParticleLifetime<PropertyBinding<f32>, PropertyBinding<f32>>,
 >;

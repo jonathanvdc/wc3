@@ -1,5 +1,5 @@
 //! Logical M3 flare values.
-use super::{Property, TextureLayer};
+use super::{PropertyBinding, TextureLayer};
 use crate::model::Construct;
 use std::borrow::Cow;
 
@@ -44,11 +44,11 @@ pub struct LensFlareMaterialStep<'a> {
     /// Links to the CHAR bytes naming the flare library.
     pub lib_name: Cow<'a, str>,
     /// Controls intensity through its animation value.
-    pub intensity: Property<f32>,
+    pub intensity: PropertyBinding<f32>,
     /// Controls color tint through its animation value.
-    pub color: Property<[f32; 4]>,
+    pub color: PropertyBinding<[f32; 4]>,
     /// Controls HDR multiplier through its animation value.
-    pub hdr: Property<f32>,
+    pub hdr: PropertyBinding<f32>,
     /// Controls size through its animation value.
-    pub size: Property<f32>,
+    pub size: PropertyBinding<f32>,
 }

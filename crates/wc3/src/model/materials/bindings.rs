@@ -1,5 +1,5 @@
 //! Independently selected image, coordinates, sampling, and shader contribution.
-use crate::model::{Animatable, Animated, Construct, Values};
+use crate::model::{Construct, Property, PropertyValue, PropertyValues};
 use crate::model::{Link, Texture, ValidateLinks};
 
 /// One image input, independently composed from its coordinate and shader behavior.
@@ -13,7 +13,7 @@ pub struct TextureBinding<I, C = (), S = (), V = ()> {
     pub coordinates: C,
     /// Input-local sampling and playback choices.
     pub sampling: S,
-    /// Values controlling this input's contribution to the surface.
+    /// PropertyValues controlling this input's contribution to the surface.
     pub contribution: V,
 }
 
@@ -58,10 +58,10 @@ impl<S: ValidateLinks> ValidateLinks for ImageSelection<S> {
     }
 }
 
-impl<T: Animatable + Default, C: Construct, S: Construct, V: Construct> Construct
-    for TextureBinding<Animated<T>, C, S, V>
+impl<T: PropertyValue + Default, C: Construct, S: Construct, V: Construct> Construct
+    for TextureBinding<Property<T>, C, S, V>
 {
-    fn construct(values: &mut Values) -> Self {
+    fn construct(values: &mut PropertyValues) -> Self {
         Self {
             image: values.add(T::default()),
             coordinates: C::construct(values),
@@ -71,7 +71,7 @@ impl<T: Animatable + Default, C: Construct, S: Construct, V: Construct> Construc
     }
 }
 impl<S: Default> Construct for Coordinates<S, crate::model::TextureTransform> {
-    fn construct(values: &mut Values) -> Self {
+    fn construct(values: &mut PropertyValues) -> Self {
         Self {
             source: S::default(),
             transform: crate::model::TextureTransform::construct(values),

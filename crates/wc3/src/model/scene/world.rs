@@ -6,8 +6,8 @@ use crate::model::values::world::{
 };
 use crate::model::Construct;
 use crate::model::ModelResourceId;
-use crate::model::{Animated, FeatureId, MaterialId, Texture, ZeroVec};
 use crate::model::{ChildModelDefinition, WorldPlacementAppearance};
+use crate::model::{FeatureId, MaterialId, Property, Texture, ZeroVec};
 use std::borrow::Cow;
 
 /// Root world rendering options.
@@ -119,9 +119,9 @@ pub struct Light {
     /// Illumination behavior.
     pub kind: LightKind,
     /// Animated color in RGBA order.
-    pub color: Animated<[f32; 4]>,
+    pub color: Property<[f32; 4]>,
     /// Animated intensity.
-    pub intensity: Animated<f32>,
+    pub intensity: Property<f32>,
     /// Enable distance attenuation.
     pub use_attenuation: bool,
     /// Attenuation start and end distances.

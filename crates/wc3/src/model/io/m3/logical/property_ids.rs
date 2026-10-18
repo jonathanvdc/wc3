@@ -7,7 +7,7 @@ use crate::model::profiles::m3 as surface;
 trait Collect {
     fn collect(&self, bindings: &mut Bindings);
 }
-impl<T: Value + Clone> Collect for surface::Property<T> {
+impl<T: Value + Clone> Collect for surface::PropertyBinding<T> {
     fn collect(&self, bindings: &mut Bindings) {
         bindings.entries.entry(self.control.source_id).or_default();
         bindings.register(self.control.source_id, self.value);

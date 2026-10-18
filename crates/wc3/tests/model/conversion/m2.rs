@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use wc3::model::common::{IntoZeroVec, ZeroVec};
 use wc3::model::io;
+use wc3::model::TimeSource;
 use wc3::model::{
     self as sm,
     conversion::{
@@ -18,7 +19,7 @@ use wc3::model::{
     },
     profiles::m2 as mp,
 };
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn native_triangle() -> m2::Bundle<'static, m2::Flat<m2::V256>> {
     let mut model = m2::Document::<m2::Flat<m2::V256>>::new();
@@ -275,8 +276,8 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
     };
     let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
     let model = &imported.value;
-    let clip = model.clips().iter().next().unwrap().1;
-    let sm::Channel::Vector3(track) = &clip.channels()[0] else {
+    let (clip_id, _clip) = model.clips().iter().next().unwrap();
+    let sm::Channel::Vector3(track) = model.clip_channels(clip_id).next().unwrap() else {
         panic!("translation channel lost")
     };
     assert_eq!(track.curve.interpolation(), sm::Interpolation::Hermite);
@@ -372,7 +373,7 @@ fn quantization_requires_an_explicit_tolerance() {
             sm::Channel::Vector3(sm::Track {
                 target: builder.model().node(node).unwrap().transform.translation,
                 curve,
-                clock: sm::Clock::Clip,
+                clock: sm::TimeSource::Clip,
             }),
         )
         .unwrap();
@@ -828,8 +829,8 @@ fn packed_particle_gravity_is_a_direction_and_rejects_malformed_words() {
         })
         .unwrap();
     let sm::Channel::Vector3(track) = semantic
-        .shared_channels()
-        .iter()
+        .global_channels()
+        .filter(|v| matches!(v.clock(), TimeSource::Shared(_)))
         .find(|channel| channel.target() == gravity_slot.slot())
         .unwrap()
     else {
@@ -922,10 +923,10 @@ fn local_effect_transforms_drive_the_effects_emitted_bone() {
                 (vec![sm::Time::default()]).into_zero_vec(),
                 (vec![[5., 0., 0.]]).into_zero_vec(),
             )?;
-            draft.add_shared_channel(sm::Channel::Vector3(sm::Track {
+            draft.add_global_channel(sm::Channel::Vector3(sm::Track {
                 target: draft.model().node(node).unwrap().transform.translation,
                 curve,
-                clock: sm::Clock::Shared(clock),
+                clock: sm::TimeSource::Shared(clock),
             }))
         })
         .unwrap();
@@ -1131,9 +1132,9 @@ fn native_alias_keeps_light_programme_on_its_referenced_clip() {
     let model = &imported.value;
     let clips = model.clips().iter().collect::<Vec<_>>();
     assert_eq!(clips.len(), 2);
-    assert_eq!(clips[1].1.alias(), Some(clips[0].0));
-    assert!(clips[1].1.channels().is_empty());
-    assert!(!clips[0].1.channels().is_empty());
+    assert_eq!(clips[1].1.controls.alias, Some(clips[0].0));
+    assert_eq!(clips[1].1.animations, clips[0].1.animations);
+    assert!(model.clip_channels(clips[0].0).next().is_some());
     let program = sm::AnimationProgram::compile(model);
     let sample = program
         .sample(sm::AnimationSample {
@@ -1142,7 +1143,7 @@ fn native_alias_keeps_light_programme_on_its_referenced_clip() {
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
-    let sm::Channel::Scalar(track) = &clips[0].1.channels()[0] else {
+    let sm::Channel::Scalar(track) = model.clip_channels(clips[0].0).next().unwrap() else {
         panic!("light intensity must remain a typed scalar channel")
     };
     assert_eq!(sample.override_value(&track.target), Some(4.));

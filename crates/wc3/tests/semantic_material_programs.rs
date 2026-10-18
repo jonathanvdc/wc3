@@ -1,4 +1,4 @@
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 #[path = "support/materials.rs"]
 mod native_fixtures;
 use native_fixtures::m2::Material as M2Material;
@@ -158,7 +158,7 @@ fn an_empty_program_does_not_require_a_default_step_type() {
 fn a_mixed_program_samples_each_shader_without_changing_step_order() {
     let mut slot_values = SlotValues::default();
     use wc3::model::profiles::Universal;
-    use wc3::model::{AnimationSample, Channel, Clock, Curve, Material, Model, Time, Track};
+    use wc3::model::{AnimationSample, Channel, Curve, Material, Model, Time, TimeSource, Track};
     let mut draft = Model::<Universal>::builder("mixed step animation");
     let id = draft.reserve_material();
     let layered = slot_values.add(1f32);
@@ -192,9 +192,9 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
         .unwrap();
     for (target, values) in [(layered, [0., 1.]), (shader, [0.5, 1.])] {
         draft
-            .add_timeline_channel(Channel::Scalar(Track {
+            .add_global_channel(Channel::Scalar(Track {
                 target,
-                clock: Clock::Timeline,
+                clock: TimeSource::Timeline,
                 curve: Curve::linear(
                     [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
                     values,
@@ -393,7 +393,7 @@ fn unindexed_programmed_animation_fields_require_one_matching_step() {
 #[test]
 fn programmed_selectors_check_optional_inputs_leaves_and_collection_bounds() {
     let mut slot_values = SlotValues::default();
-    use wc3::model::materials::m3::{Property, StandardMaterialStep, TextureLayer};
+    use wc3::model::materials::m3::{PropertyBinding, StandardMaterialStep, TextureLayer};
     use wc3::model::profiles::m3::properties::{Field, FieldPath, Target};
     let root = FieldPath::root(Field::Material);
     let diffuse = root.child(Field::DiffuseLayer);
@@ -404,7 +404,7 @@ fn programmed_selectors_check_optional_inputs_leaves_and_collection_bounds() {
     let step = MaterialStep::M3(m3::MaterialStep::Standard(Box::new(shader.clone())));
     assert!(!step.supports_property(&color, 0));
     shader.diffuse = Some(TextureLayer::construct(&mut slot_values));
-    shader.normals.weights = vec![Property::construct(&mut slot_values); 2];
+    shader.normals.weights = vec![PropertyBinding::construct(&mut slot_values); 2];
     let step = MaterialStep::M3(m3::MaterialStep::Standard(Box::new(shader)));
     assert!(step.supports_property(&color, 0));
     assert!(!step.supports_property(&Target::Field(diffuse).identity().to_owned(), 0));
@@ -538,7 +538,7 @@ fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassificati
     let mut slot_values = SlotValues::default();
     use wc3::model::materials::mdlx::{Fresnel, MaterialStep as Wc3MaterialStep};
     use wc3::model::profiles::Universal;
-    use wc3::model::{AnimationSample, Channel, Clock, Curve, Material, Model, Time, Track};
+    use wc3::model::{AnimationSample, Channel, Curve, Material, Model, Time, TimeSource, Track};
     for selector in [1, 99] {
         let mut draft = Model::<Universal>::builder("shader inputs");
         let id = draft.reserve_material();
@@ -570,9 +570,9 @@ fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassificati
             .unwrap();
         for target in [opacity, gain, fresnel] {
             draft
-                .add_timeline_channel(Channel::Scalar(Track {
+                .add_global_channel(Channel::Scalar(Track {
                     target,
-                    clock: Clock::Timeline,
+                    clock: TimeSource::Timeline,
                     curve: Curve::linear(
                         [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
                         [0., 1.],

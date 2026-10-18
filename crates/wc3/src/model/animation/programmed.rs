@@ -5,9 +5,9 @@ use crate::model::Construct;
 
 /// M3 animated slots with native reset values and control metadata.
 #[derive(Clone, Debug, Construct, PartialEq)]
-pub struct Property<T: semantic::Animatable> {
+pub struct PropertyBinding<T: semantic::PropertyValue> {
     /// Value used before a curve overrides this property.
-    pub value: semantic::Animated<T>,
+    pub value: semantic::Property<T>,
     /// Value used when the property resets.
     pub reset: T,
     /// Editable native animation controls, independent of storage layout.

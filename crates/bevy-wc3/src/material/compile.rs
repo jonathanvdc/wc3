@@ -17,7 +17,7 @@ use wc3::model::materials::program::MaterialStep;
 use wc3::model::materials::state::{BlendOperations, Lighting, Operation};
 use wc3::model::materials::{diablo3, mdlx};
 use wc3::model::profiles::Universal;
-use wc3::model::Values;
+use wc3::model::PropertyValues;
 use wc3::model::{MaterialId, Model, Sampler, Texture, TextureTransform};
 
 #[cfg(test)]
@@ -259,7 +259,11 @@ pub(super) fn depth(pass: &mut SurfacePass, test: Operation, write: Operation) {
     pass.state.depth_write = Some(!write.is_bypassed());
 }
 
-pub(super) fn transform(pass: &mut SurfacePass, transform: &TextureTransform, values: &Values) {
+pub(super) fn transform(
+    pass: &mut SurfacePass,
+    transform: &TextureTransform,
+    values: &PropertyValues,
+) {
     let translation = values[transform.translation];
     let scale = values[transform.scale];
     let rotation = Quat::from_array(values[transform.rotation].0);

@@ -250,7 +250,7 @@ fn appearance_and_animation_bundle_roundtrip_keeps_independent_declarations() {
         .unwrap()
         .value;
     assert_eq!(asset.clips().len(), 1);
-    assert!(asset.clips().iter().next().unwrap().1.channels().iter().any(|channel| matches!(channel,wc3::model::Channel::Rotation(track) if track.curve.interpolation()==wc3::model::Interpolation::Nlerp)));
+    assert!(asset.clip_channels(asset.clips().iter().next().unwrap().0).any(|channel| matches!(channel,wc3::model::Channel::Rotation(track) if track.curve.interpolation()==wc3::model::Interpolation::Nlerp)));
     assert!(conversion::plan(&asset, &ExportOptions::default()).is_err());
     let out = conversion::plan_bundle(&asset, &ExportOptions::default())
         .unwrap()

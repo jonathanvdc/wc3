@@ -4,8 +4,8 @@ use crate::model::materials::state::PassState;
 use crate::model::profiles::m2::properties::Target;
 use crate::model::profiles::SurfacePayload;
 use crate::model::values::model::{BatchFlags, BlendMode};
-use crate::model::{Animated, Error, Link, PropertyIdentityKey, PropertyPayload, ValidateLinks};
-use crate::model::{Construct, Values};
+use crate::model::{Construct, PropertyValues};
+use crate::model::{Error, Link, Property, PropertyIdentityKey, PropertyPayload, ValidateLinks};
 use std::borrow::Cow;
 
 /// Shared M2 draw declarations and animated surface multipliers.
@@ -16,9 +16,9 @@ pub struct MaterialDeclaration<'a> {
     /// Framebuffer composition, rasterization, and pass priority.
     pub state: PassState<BlendMode, ModelRasterization, i8>,
     /// Animated RGB multiplier.
-    pub color: Animated<[f32; 3]>,
+    pub color: Property<[f32; 3]>,
     /// Animated opacity multiplier.
-    pub opacity: Animated<f32>,
+    pub opacity: Property<f32>,
     /// Optional authoring label, independent of shader selection.
     pub label: Cow<'a, str>,
 }
@@ -432,7 +432,7 @@ pub enum MaterialStep<'a> {
     Unresolved(UnresolvedMaterialStep<'a>),
 }
 impl Construct for MaterialStep<'_> {
-    fn construct(values: &mut Values) -> Self {
+    fn construct(values: &mut PropertyValues) -> Self {
         Self::Unresolved(Construct::construct(values))
     }
 }

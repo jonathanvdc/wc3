@@ -7,7 +7,7 @@ use crate::model::resources::{M2ImageResource, PathResource};
 use crate::model::Link;
 use crate::model::M2ResourceLocator;
 use crate::model::PropertyIdentityKey;
-use crate::model::Values;
+use crate::model::PropertyValues;
 use crate::model::{
     Basis, Bounds, ClipControls, DrawControls, DrawLooks, Error, FeatureKind, IdentityBinding,
     LengthUnit, M2Geometry, MaterialSurface, MeshControls, Model, ModelMetadata, NodeControls,
@@ -58,6 +58,17 @@ impl Profile for M2 {
                 "m2.coordinates",
                 "M2 has fixed authored axes and no physical-unit declaration",
             ));
+        }
+        for (_, clip) in model.clips() {
+            if let Some(alias) = clip.controls.alias {
+                let target = model.clip(alias).expect("validated alias reference");
+                if clip.animations != target.animations {
+                    return Err(Error::new(
+                        "m2.clip.alias",
+                        "native aliases must select the same animation identities",
+                    ));
+                }
+            }
         }
         if model.clips().iter().any(|(_, clip)| !clip.is_looping()) {
             return Err(Error::new(
@@ -163,7 +174,10 @@ impl Extends<M2> for Universal {
     fn surface<'a>(value: <M2 as Profile>::Surface<'a>) -> Self::Surface<'a> {
         MaterialSurface::from(value)
     }
-    fn feature<'a>(value: <M2 as Profile>::Feature<'a>, values: &mut Values) -> Self::Feature<'a> {
+    fn feature<'a>(
+        value: <M2 as Profile>::Feature<'a>,
+        values: &mut PropertyValues,
+    ) -> Self::Feature<'a> {
         crate::model::features::FromFeature::from_feature(value, values)
     }
     fn node<'a>(value: <M2 as Profile>::Node<'a>) -> Self::Node<'a> {

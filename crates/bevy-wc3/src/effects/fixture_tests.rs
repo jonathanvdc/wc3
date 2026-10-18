@@ -7,7 +7,8 @@ use wc3::model::formats::m2::{
 use wc3::model::formats::m3::{self, records as nr};
 use wc3::model::io::m2 as semantic_m2;
 use wc3::model::io::m3 as semantic_m3;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::TimeSource;
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn value<T: Clone + Default>(initial: T) -> nr::AnimationValue<T> {
     nr::AnimationValue {
@@ -266,8 +267,8 @@ fn native_packed_gravity_preserves_sign_and_compiles_emitters() {
             .unwrap()
             .value;
         let gravity = imported
-            .shared_channels()
-            .iter()
+            .global_channels()
+            .filter(|v| matches!(v.clock(), TimeSource::Shared(_)))
             .find_map(|channel| {
                 let Channel::Vector3(track) = channel else {
                     return None;

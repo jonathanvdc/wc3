@@ -663,7 +663,7 @@ impl RuntimeFeatures {
 
 #[cfg(test)]
 mod tests {
-    use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+    use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
     use super::*;
     use wc3::model::{AnimationProgram, AnimationSample, PhotographicControls};
@@ -747,11 +747,11 @@ mod tests {
 mod imported_light_tests {
     use super::*;
     use bevy::ecs::world::CommandQueue;
-    use wc3::model::animation::programmed::Property;
+    use wc3::model::animation::programmed::PropertyBinding;
     use wc3::model::scene::{programmed, world};
     use wc3::model::values::programmed::LightFlags;
     use wc3::model::{AnimationProgram, AnimationSample};
-    use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+    use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
     #[test]
     fn world_and_programmed_diffuse_lights_use_bevy_components_without_global_ambient() {
         let mut slot_values = SlotValues::default();
@@ -778,11 +778,11 @@ mod imported_light_tests {
                     flags: LightFlags::from(1),
                     lod_cut: 0,
                     shadow_lod_cut: 0,
-                    diffuse_color: Property {
+                    diffuse_color: PropertyBinding {
                         value: slot_values.add([0.3, 0.5, 0.7]),
                         ..SlotConstruct::construct(&mut slot_values)
                     },
-                    intensity_multiplier: Property {
+                    intensity_multiplier: PropertyBinding {
                         value: slot_values.add(3.),
                         ..SlotConstruct::construct(&mut slot_values)
                     },

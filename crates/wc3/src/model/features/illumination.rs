@@ -1,7 +1,7 @@
 //! Shared illumination components with explicit activation semantics.
 use crate::model::profiles::{m2, m3, mdlx, wmo};
 use crate::model::Construct;
-use crate::model::{scene, Animated, Link, ValidateLinks};
+use crate::model::{scene, Link, Property, ValidateLinks};
 use m2::values::LightKind as ActorLightKind;
 /// Complete illumination models.
 #[derive(Clone, Debug)]
@@ -41,9 +41,9 @@ pub enum UnknownIlluminationKind {
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct LightEmission {
     /// RGB emission color.
-    pub color: Animated<[f32; 3]>,
+    pub color: Property<[f32; 3]>,
     /// Emission intensity multiplier.
-    pub intensity: Animated<f32>,
+    pub intensity: Property<f32>,
 }
 /// Shared ambient/diffuse light fields.
 #[derive(Clone, Debug, Construct, PartialEq)]
@@ -55,7 +55,7 @@ pub struct AmbientDiffuseLight<K = IlluminationKind, A = LightActivation> {
     /// Ambient illumination.
     pub ambient: LightEmission,
     /// Beginning and ending distance attenuation.
-    pub attenuation: [Animated<f32>; 2],
+    pub attenuation: [Property<f32>; 2],
     /// Fractional visibility or discrete activation, including supported shadow controls.
     pub activation: A,
 }
@@ -65,21 +65,21 @@ pub enum LightActivation {
     /// Fractional visibility with independently authored shadow and falloff controls.
     Visibility(Box<VisibleLight>),
     /// Boolean activation.
-    Enabled(Animated<bool>),
+    Enabled(Property<bool>),
 }
 /// Fractional light visibility and optional shadow/falloff controls.
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct VisibleLight {
     /// Visibility multiplier.
-    pub visibility: Animated<f32>,
+    pub visibility: Property<f32>,
     /// Explicit shadow casting.
     pub shadow_casting: Option<bool>,
     /// Explicit shadow intensity.
     pub shadow_intensity: Option<f32>,
     /// Animated shadow near/far distances.
-    pub shadow_range: Option<[Animated<f32>; 2]>,
+    pub shadow_range: Option<[Property<f32>; 2]>,
     /// Quadratic, linear, and damping attenuation coefficients.
-    pub falloff: Option<[Animated<f32>; 3]>,
+    pub falloff: Option<[Property<f32>; 3]>,
 }
 impl From<mdlx::Light> for AmbientDiffuseLight {
     fn from(v: mdlx::Light) -> Self {

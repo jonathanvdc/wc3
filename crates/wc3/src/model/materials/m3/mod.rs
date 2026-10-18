@@ -1,5 +1,5 @@
 //! M3 shader and material-composition steps as editable logical values.
-pub use crate::model::animation::programmed::{AnimationControl, Property};
+pub use crate::model::animation::programmed::{AnimationControl, PropertyBinding};
 mod layer;
 pub(crate) mod properties;
 pub use layer::*;

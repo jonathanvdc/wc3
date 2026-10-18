@@ -4,7 +4,7 @@ use super::materials::{anim, read_error, string};
 use crate::model::conversion::Error;
 use crate::model::io::materialize;
 use crate::model::AnimatedTransform;
-use crate::model::{Animatable, Animated};
+use crate::model::{Property, PropertyValue};
 use zerovec::ZeroVec;
 
 use crate::model::formats::m3::{self as native, records as nr};
@@ -18,9 +18,9 @@ pub(super) struct Skeleton<'a> {
     pub nodes: Vec<NodeId>,
     pub inverse_bind: ZeroVec<'a, [[f32; 4]; 4]>,
 }
-fn control<T: Animatable>(
-    value: surface::Property<T>,
-    binding: Animated<T>,
+fn control<T: PropertyValue>(
+    value: surface::PropertyBinding<T>,
+    binding: Property<T>,
 ) -> surface::PropertyControl<T> {
     surface::PropertyControl {
         reset: value.reset,
@@ -84,7 +84,7 @@ pub(super) fn read<'a, E: Envelope>(
                         node.transform.translation,
                     ),
                     rotation: control(
-                        surface::Property {
+                        surface::PropertyBinding {
                             value: builder.add_value(Quaternion(
                                 *builder.model().values().get(rotation.value).unwrap(),
                             )),

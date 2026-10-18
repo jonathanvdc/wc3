@@ -1,7 +1,7 @@
 //! Typed native key block construction from authored logical curves.
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
-use crate::model::{profiles::m3 as surface, Channel, Clock, Interpolation, Quaternion, Time};
+use crate::model::{profiles::m3 as surface, Channel, Interpolation, Quaternion, Time, TimeSource};
 use native::{Envelope, Ref};
 
 fn append<E: Envelope, T: native::Record + native::Write<E> + native::RecordLayout<E>>(
@@ -102,7 +102,7 @@ impl Blocks {
         controls: Option<&surface::BlockControls>,
         context: &mut Context,
     ) -> Result<Option<u32>, Error> {
-        if channel.clock() != Clock::Timeline {
+        if channel.clock() != TimeSource::Timeline {
             context.unsupported(
                 "m3.animation.clock",
                 "M3 sequence controllers require absolute timeline clocks",

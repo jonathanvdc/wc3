@@ -344,7 +344,7 @@ pub fn derive_construct(input: TokenStream) -> TokenStream {
     };
     quote::quote! {
         impl #implementation ::wc3::model::Construct for #name #arguments #bounds {
-            fn construct(values: &mut ::wc3::model::Values) -> Self {
+            fn construct(values: &mut ::wc3::model::PropertyValues) -> Self {
                 #construction
             }
         }

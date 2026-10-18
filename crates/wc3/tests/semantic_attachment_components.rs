@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{FromFeature as SlotFromFeature, TryFromFeature as SlotTryFromFeature};
 
 use wc3::model::profiles::{m2, m3, mdlx, wmo};

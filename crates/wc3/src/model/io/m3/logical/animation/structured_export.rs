@@ -11,6 +11,7 @@ use crate::model::profiles::M3;
 use crate::model::ValueSlot;
 use crate::model::{profiles::m3 as surface, Channel, Controller, NodeId, Time};
 use native::Envelope;
+use std::collections::BTreeMap;
 
 pub(super) fn signed_time(
     value: Time,
@@ -113,15 +114,19 @@ pub(super) fn add<E: Envelope>(
             }
         }
     }
-    let ungrouped = clip
-        .events
+    let occurrences: BTreeMap<_, _> = clip
+        .animations
+        .iter()
+        .flat_map(|id| &model.animation(*id).unwrap().events)
+        .map(|(id, event)| (*id, event))
+        .collect();
+    let ungrouped = occurrences
         .keys()
         .filter(|id| !groups.iter().any(|(b, _)| b.events.contains(id)))
         .copied()
         .collect::<Vec<_>>();
     if !ungrouped.is_empty() {
-        let end = clip
-            .events
+        let end = occurrences
             .values()
             .map(|e| e.time)
             .max_by(|a, b| a.as_seconds().total_cmp(&b.as_seconds()))
@@ -143,8 +148,7 @@ pub(super) fn add<E: Envelope>(
         let control = Some(&group);
         let mut times = Vec::new();
         let mut rows = Vec::new();
-        for (_, event) in clip
-            .events
+        for (_, event) in occurrences
             .iter()
             .filter(|(id, _)| control.is_none_or(|c| c.events.contains(id)))
         {
@@ -218,8 +222,11 @@ pub(super) fn add<E: Envelope>(
                         "structured block references another feature kind",
                     ));
                 };
-                let matching =
-                    |target: ValueSlot| clip.channels.iter().find(|c| c.target() == target);
+                let matching = |target: ValueSlot| {
+                    model
+                        .animation_channels(&clip.animations)
+                        .find(|c| c.target() == target)
+                };
                 let (
                     Some(Channel::Vector3(minimum)),
                     Some(Channel::Vector3(maximum)),

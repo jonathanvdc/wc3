@@ -150,13 +150,13 @@ pub(super) fn read<'a, E: Envelope>(
 
 struct OpticalFields {
     legacy: Option<[f32; 2]>,
-    far: Option<surface::Property<f32>>,
-    near: Option<surface::Property<f32>>,
-    start: Option<surface::Property<f32>>,
-    end: Option<surface::Property<f32>>,
+    far: Option<surface::PropertyBinding<f32>>,
+    near: Option<surface::PropertyBinding<f32>>,
+    start: Option<surface::PropertyBinding<f32>>,
+    end: Option<surface::PropertyBinding<f32>>,
     mode: Option<u32>,
-    f_stop: Option<surface::Property<f32>>,
-    maximum_circle: Option<surface::Property<f32>>,
+    f_stop: Option<surface::PropertyBinding<f32>>,
+    maximum_circle: Option<surface::PropertyBinding<f32>>,
 }
 fn optics(fields: OpticalFields) -> Result<surface::CameraOptics, Error> {
     let OpticalFields {

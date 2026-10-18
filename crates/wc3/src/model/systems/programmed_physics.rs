@@ -1,5 +1,5 @@
 //! Logical M3 collision shapes, bodies, joints, and cloth.
-use crate::model::animation::programmed::Property;
+use crate::model::animation::programmed::PropertyBinding;
 use crate::model::common::AsULE;
 use crate::model::ids::Scope;
 use crate::model::values::programmed::*;
@@ -121,7 +121,7 @@ pub struct BodyParameters {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DynamicState {
     /// Animated simulation-state control sampled according to the body flags.
-    pub state: Property<u32>,
+    pub state: PropertyBinding<u32>,
     /// Simulation-transition parameter whose precise runtime interpretation is unresolved.
     pub blend_out: f32,
 }
@@ -263,7 +263,7 @@ pub struct Cloth<'a> {
     /// Numeric cloth flattening mode.
     pub flatten: u32,
     /// Animated cloth-enable value; sampling is controlled by the cloth flag bits.
-    pub active: Option<Property<u32>>,
+    pub active: Option<PropertyBinding<u32>>,
     /// Word enabling collision against the skinned mesh.
     pub use_skin_collision: u32,
     /// Offset parameter for collision against the skinned mesh.

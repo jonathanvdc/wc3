@@ -1,7 +1,7 @@
 use wc3::model::profiles::{Mdlx, Universal};
 use wc3::model::{
-    Animatable, AnimationProgram, AnimationSample, Channel, Clip, Clock, Curve, Model, PoseInputs,
-    Quaternion, Time, Track, Values,
+    AnimationProgram, AnimationSample, Channel, Clip, Curve, Model, PoseInputs, PropertyValue,
+    PropertyValues, Quaternion, Time, TimeSource, Track,
 };
 
 fn time(seconds: f64) -> Time {
@@ -10,7 +10,7 @@ fn time(seconds: f64) -> Time {
 
 #[test]
 fn types_select_independent_subtables_and_copies_share_slots() {
-    let mut values = Values::default();
+    let mut values = PropertyValues::default();
     let scalar = values.add(2f32);
     let rotation = values.add(Quaternion::IDENTITY);
     let shared = scalar;
@@ -19,7 +19,7 @@ fn types_select_independent_subtables_and_copies_share_slots() {
     assert_eq!(values[rotation], Quaternion::IDENTITY);
     assert_eq!(f32::table(&values).len(), 1);
     assert_eq!(Quaternion::table(&values).len(), 1);
-    let foreign = Values::default().add(3f32);
+    let foreign = PropertyValues::default().add(3f32);
     assert!(values.get(foreign).is_none());
     assert!(values.set(foreign, 4.).is_err());
 }
@@ -34,10 +34,10 @@ fn two_nodes_can_consume_the_same_animated_translation() {
     node.transform.translation = translation;
     draft.set_node(second, node).unwrap();
     draft
-        .add_timeline_channel(Channel::Vector3(Track {
+        .add_global_channel(Channel::Vector3(Track {
             target: translation,
             curve: Curve::linear([time(0.), time(1.)], [[0.; 3], [4.; 3]]).unwrap(),
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
         }))
         .unwrap();
     let model = draft.finish().unwrap();
@@ -69,7 +69,7 @@ fn instance_tables_are_independent_and_each_evaluation_resets_constants() {
             Channel::Scalar(Track {
                 target: value,
                 curve: Curve::linear([time(0.), time(2.)], [3., 7.]).unwrap(),
-                clock: Clock::Clip,
+                clock: TimeSource::Clip,
             }),
         )
         .unwrap();
@@ -107,7 +107,7 @@ fn foreign_and_removed_consumer_slots_are_rejected() {
     let mut draft = Model::<Universal>::builder("invalid reference");
     let node = draft.add_named_node("node").unwrap();
     let mut definition = draft.model().node(node).unwrap().clone();
-    definition.transform.translation = Values::default().add([0f32; 3]);
+    definition.transform.translation = PropertyValues::default().add([0f32; 3]);
     draft.set_node(node, definition).unwrap();
     assert!(draft.finish().is_err());
     let mut draft = Model::<Universal>::builder("removed reference");
@@ -123,10 +123,10 @@ fn explicit_boolean_reads_evaluate_the_source_slot() {
     let boolean = draft.add_value(false);
     let scalar = draft.values_mut().scalar_from_boolean(boolean).unwrap();
     draft
-        .add_timeline_channel(Channel::Boolean(Track {
+        .add_global_channel(Channel::Boolean(Track {
             target: boolean,
             curve: Curve::step([time(0.), time(1.)], [false, true]).unwrap(),
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
         }))
         .unwrap();
     let model = draft.finish().unwrap();
@@ -181,9 +181,9 @@ fn boolean_defaults_and_direct_scalar_writers_have_explicit_precedence() {
     draft.values_mut().set(source, true).unwrap();
     assert_eq!(draft.model().values()[output], 1.);
     draft
-        .add_timeline_channel(Channel::Scalar(Track {
+        .add_global_channel(Channel::Scalar(Track {
             target: output,
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
             curve: Curve::step([time(0.)], [0.25]).unwrap(),
         }))
         .unwrap();
@@ -216,18 +216,173 @@ fn prepared_nodes_read_static_slots_from_the_supplied_instance_table() {
 
 #[test]
 fn construction_allocates_nested_fields_and_array_elements_independently() {
-    use wc3::model::{Animated, Construct};
+    use wc3::model::{Construct, Property};
     #[derive(Construct)]
-    struct Pair(Animated<f32>, Animated<f32>);
+    struct Pair(Property<f32>, Property<f32>);
     #[derive(Construct)]
     struct Nested {
         pair: Pair,
-        flags: [Animated<bool>; 2],
+        flags: [Property<bool>; 2],
     }
-    let mut values = Values::default();
+    let mut values = PropertyValues::default();
     let nested = Nested::construct(&mut values);
     assert_ne!(nested.pair.0, nested.pair.1);
     assert_ne!(nested.flags[0], nested.flags[1]);
     assert_eq!(values.len(), 4);
     assert_eq!(values[nested.pair.0], 0.);
+}
+
+#[test]
+fn reusable_programs_keep_clip_mapping_and_defaults_after_compilation() {
+    use wc3::model::Animation;
+    let mut draft = Model::<Universal>::builder("reusable animation");
+    let property = draft.add_value(7f32);
+    let constant = draft.add_value(false);
+    let animation = draft.add_animation(Animation {
+        channels: vec![Channel::Scalar(Track {
+            target: property,
+            clock: TimeSource::Timeline,
+            curve: Curve::linear(
+                [time(9.), time(10.), time(12.), time(13.)],
+                [900., 2., 6., 1300.],
+            )
+            .unwrap(),
+        })],
+        ..Default::default()
+    });
+    let first = draft
+        .add_clip(
+            Clip::named("once")
+                .with_animation(animation)
+                .with_timeline_origin(time(10.))
+                .with_duration(time(2.))
+                .once(),
+        )
+        .unwrap();
+    let second = draft
+        .add_clip(
+            Clip::named("repeat")
+                .with_animation(animation)
+                .with_timeline_origin(time(10.))
+                .with_duration(time(2.)),
+        )
+        .unwrap();
+    let model = draft.finish().unwrap();
+    assert_eq!(model.animations().len(), 1);
+    let compiled = AnimationProgram::compile(&model);
+    for (clip, expected) in [(first, 6.), (second, 4.)] {
+        let input = AnimationSample {
+            clip: Some(clip),
+            clip_time: time(3.),
+            timeline_time: time(-100.),
+            ..Default::default()
+        };
+        let direct = model.animation_sample(input).unwrap();
+        let prepared = compiled.sample(input).unwrap();
+        assert_eq!(direct.animated(&property), expected);
+        assert_eq!(prepared.animated(&property), expected);
+        assert!(!prepared.animated(&constant));
+        assert_eq!(
+            prepared.track(&property).unwrap().interval,
+            Some((time(10.), time(12.)))
+        );
+    }
+    drop(model);
+    assert_eq!(
+        compiled
+            .sample(AnimationSample {
+                clip: Some(second),
+                clip_time: time(1.),
+                ..Default::default()
+            })
+            .unwrap()
+            .animated(&property),
+        4.
+    );
+}
+
+#[test]
+fn animation_selection_rejects_foreign_removed_and_duplicate_identities() {
+    use wc3::model::Animation;
+    let mut foreign = Model::<Universal>::builder("foreign");
+    let foreign_animation = foreign.add_animation(Animation::default());
+    let mut draft = Model::<Universal>::builder("local");
+    draft
+        .add_clip(Clip::named("invalid").with_animation(foreign_animation))
+        .unwrap();
+    assert!(draft.finish().is_err());
+
+    let mut draft = Model::<Universal>::builder("duplicate");
+    let animation = draft.add_animation(Animation::default());
+    draft
+        .add_clip(
+            Clip::named("duplicate")
+                .with_animation(animation)
+                .with_animation(animation),
+        )
+        .unwrap();
+    assert!(draft.finish().is_err());
+
+    let mut draft = Model::<Universal>::builder("removed");
+    let animation = draft.add_animation(Animation::default());
+    draft.add_global_animation(animation).unwrap();
+    let mut model = draft.finish().unwrap();
+    assert!(model
+        .edit(|draft| {
+            draft.remove_animation(animation);
+            Ok(())
+        })
+        .is_err());
+    assert!(model.animation(animation).is_some());
+}
+
+#[test]
+fn global_precedence_follows_selection_order_across_time_sources() {
+    use wc3::model::{Animation, SharedClock};
+    let mut draft = Model::<Universal>::builder("ordered globals");
+    let property = draft.add_value(0f32);
+    let clock = draft
+        .add_clock(SharedClock::Repeating { period: time(2.) })
+        .unwrap();
+    let mut animation = |clock, end| {
+        draft.add_animation(Animation {
+            channels: vec![Channel::Scalar(Track {
+                target: property,
+                clock,
+                curve: Curve::linear([time(0.), time(1.)], [0., end]).unwrap(),
+            })],
+            ..Default::default()
+        })
+    };
+    let shared = animation(TimeSource::Shared(clock), 20.);
+    let timeline = animation(TimeSource::Timeline, 4.);
+    draft.set_global_animations(vec![shared, timeline]);
+    let mut model = draft.finish().unwrap();
+    let input = AnimationSample {
+        timeline_time: time(0.5),
+        shared_time: time(0.5),
+        ..Default::default()
+    };
+    for (order, expected) in [(vec![shared, timeline], 2.), (vec![timeline, shared], 10.)] {
+        model
+            .edit(|draft| {
+                draft.set_global_animations(order);
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            model
+                .animation_sample(input)
+                .unwrap()
+                .override_value(&property),
+            Some(expected)
+        );
+        assert_eq!(
+            AnimationProgram::compile(&model)
+                .sample(input)
+                .unwrap()
+                .override_value(&property),
+            Some(expected)
+        );
+    }
 }

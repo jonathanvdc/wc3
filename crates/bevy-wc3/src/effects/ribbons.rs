@@ -373,9 +373,7 @@ impl RuntimeRibbons {
                     }
                     for index in 0..(schedule.count - skip) as usize {
                         let time = schedule.birth(first, skip + index as f64);
-                        let Some((clip, timeline, shared)) =
-                            retimed_selection(frame, time, &self.clips)
-                        else {
+                        let Some((clip, timeline, shared)) = retimed_selection(frame, time) else {
                             continue;
                         };
                         let sample = frame.sample.at_times(clip, timeline, shared);

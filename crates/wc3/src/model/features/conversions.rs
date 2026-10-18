@@ -6,9 +6,9 @@ use super::{
 use super::{ChildModel, ParticleDefinition, ProgrammedRibbon, Socket, TrailEmitter};
 use crate::model::profiles::{m2, m3, mdlx, wmo};
 use crate::model::scene;
-use crate::model::Values;
+use crate::model::PropertyValues;
 impl<'a> FromFeature<mdlx::Node<'a>> for NodeFeature<'a> {
-    fn from_feature(value: mdlx::Node<'a>, values: &mut Values) -> Self {
+    fn from_feature(value: mdlx::Node<'a>, values: &mut PropertyValues) -> Self {
         match value {
             mdlx::Node::GeometryAnimation(value) => Self::GeometryAnimation(value),
             mdlx::Node::Particle(value) => Self::Particle(ParticleEmitter::Simulated(Box::new(
@@ -37,7 +37,10 @@ impl<'a> FromFeature<mdlx::Node<'a>> for NodeFeature<'a> {
 }
 impl<'a> TryFromFeature<NodeFeature<'a>> for mdlx::Node<'a> {
     type Error = Box<NodeFeature<'a>>;
-    fn try_from_feature(value: NodeFeature<'a>, values: &Values) -> Result<Self, Self::Error> {
+    fn try_from_feature(
+        value: NodeFeature<'a>,
+        values: &PropertyValues,
+    ) -> Result<Self, Self::Error> {
         match value {
             NodeFeature::GeometryAnimation(value) => Ok(Self::GeometryAnimation(value)),
             NodeFeature::Particle(ParticleEmitter::Simulated(value)) => match value.details {
@@ -91,7 +94,7 @@ impl<'a> TryFromFeature<NodeFeature<'a>> for mdlx::Node<'a> {
     }
 }
 impl<'a> FromFeature<m2::ActorKind<'a>> for NodeFeature<'a> {
-    fn from_feature(value: m2::ActorKind<'a>, values: &mut Values) -> Self {
+    fn from_feature(value: m2::ActorKind<'a>, values: &mut PropertyValues) -> Self {
         match value {
             m2::ActorKind::Attachment(value) => {
                 Self::Attachment(Attachment::Socket(FromFeature::from_feature(value, values)))
@@ -114,7 +117,10 @@ impl<'a> FromFeature<m2::ActorKind<'a>> for NodeFeature<'a> {
 }
 impl<'a> TryFromFeature<NodeFeature<'a>> for m2::ActorKind<'a> {
     type Error = Box<NodeFeature<'a>>;
-    fn try_from_feature(value: NodeFeature<'a>, values: &Values) -> Result<Self, Self::Error> {
+    fn try_from_feature(
+        value: NodeFeature<'a>,
+        values: &PropertyValues,
+    ) -> Result<Self, Self::Error> {
         match value {
             NodeFeature::Attachment(Attachment::Socket(value)) => {
                 match TryFromFeature::try_from_feature(value, values) {
@@ -156,7 +162,7 @@ impl<'a> TryFromFeature<NodeFeature<'a>> for m2::ActorKind<'a> {
     }
 }
 impl<'a> FromFeature<m3::Feature<'a>> for NodeFeature<'a> {
-    fn from_feature(value: m3::Feature<'a>, values: &mut Values) -> Self {
+    fn from_feature(value: m3::Feature<'a>, values: &mut PropertyValues) -> Self {
         match value {
             m3::Feature::Extent(value) => Self::Extent(value),
             m3::Feature::ParticleCopy(value) => Self::ParticleCopy(value),
@@ -190,7 +196,10 @@ impl<'a> FromFeature<m3::Feature<'a>> for NodeFeature<'a> {
 }
 impl<'a> TryFromFeature<NodeFeature<'a>> for m3::Feature<'a> {
     type Error = Box<NodeFeature<'a>>;
-    fn try_from_feature(value: NodeFeature<'a>, values: &Values) -> Result<Self, Self::Error> {
+    fn try_from_feature(
+        value: NodeFeature<'a>,
+        values: &PropertyValues,
+    ) -> Result<Self, Self::Error> {
         match value {
             NodeFeature::Extent(value) => Ok(Self::Extent(value)),
             NodeFeature::ParticleCopy(value) => Ok(Self::ParticleCopy(value)),
@@ -322,10 +331,10 @@ impl<'a> From<ChildModel<'a>> for NodeFeature<'a> {
 /// Converts a feature definition, allocating any newly required value slots.
 pub trait FromFeature<S>: Sized {
     /// Converts using the destination model's value allocation context.
-    fn from_feature(source: S, values: &mut Values) -> Self;
+    fn from_feature(source: S, values: &mut PropertyValues) -> Self;
 }
 impl<S, T: From<S>> FromFeature<S> for T {
-    fn from_feature(source: S, _: &mut Values) -> Self {
+    fn from_feature(source: S, _: &mut PropertyValues) -> Self {
         Self::from(source)
     }
 }
@@ -334,11 +343,11 @@ pub trait TryFromFeature<S>: Sized {
     /// The definition that could not be represented.
     type Error;
     /// Projects without changing the identities of retained slots.
-    fn try_from_feature(source: S, values: &Values) -> Result<Self, Self::Error>;
+    fn try_from_feature(source: S, values: &PropertyValues) -> Result<Self, Self::Error>;
 }
 impl<S, T: TryFrom<S>> TryFromFeature<S> for T {
     type Error = T::Error;
-    fn try_from_feature(source: S, _: &Values) -> Result<Self, Self::Error> {
+    fn try_from_feature(source: S, _: &PropertyValues) -> Result<Self, Self::Error> {
         Self::try_from(source)
     }
 }

@@ -1,7 +1,7 @@
 //! Owned emitter components, with model-clock controls separate from particle-age appearance.
 use super::effect_components::*;
 use super::programmed_effects::{ExternalModel, VariationControl};
-use crate::model::animation::programmed::Property;
+use crate::model::animation::programmed::PropertyBinding;
 use crate::model::materials::mdlx::Blend;
 use crate::model::profiles::{m2, m3, mdlx};
 use crate::model::scene::keyframed::Frames;
@@ -14,16 +14,16 @@ use crate::model::Construct;
 use crate::model::ImageResourceId;
 use crate::model::ModelResourceId;
 use crate::model::{
-    Animated, FeatureId, Link, MaterialId, MeshId, Texture, ValidateLinks, ZeroVec,
+    FeatureId, Link, MaterialId, MeshId, Property, Texture, ValidateLinks, ZeroVec,
 };
 use std::borrow::Cow;
 /// Animated scalar in the model's clock, retaining programmed reset values.
 #[derive(Clone, Debug)]
 pub enum ParticleScalar {
     /// A shared clip binding and its baseline value.
-    Animated(Animated<f32>),
+    Property(Property<f32>),
     /// A programmed property retaining null/reset values and interpolation flags.
-    Programmed(Property<f32>),
+    Programmed(PropertyBinding<f32>),
 }
 /// Common emission controls.
 #[derive(Clone, Debug, Construct, PartialEq)]
@@ -50,15 +50,15 @@ pub enum ParticleTrigger {
     /// Emit a burst when a rate key is encountered.
     KeyedBurst,
     /// Independently animated programmed burst count.
-    Programmed(Property<u16>),
+    Programmed(PropertyBinding<u16>),
 }
 /// Authored activation semantics.
 #[derive(Clone, Debug)]
 pub enum ParticleActivation {
     /// Fractional authored visibility.
-    Fractional(Animated<f32>),
+    Fractional(Property<f32>),
     /// Discrete authored activation.
-    Boolean(Animated<bool>),
+    Boolean(Property<bool>),
     /// Activation is determined by the programmed state flags.
     Programmed,
 }
@@ -76,9 +76,9 @@ pub struct ParticleMotion<S = ParticleScalar, V = ParticleScalar, G = ParticleGr
 #[derive(Clone, Debug)]
 pub enum ParticleGravity {
     /// Acceleration magnitude along the emitter gravity direction.
-    Directional(Animated<f32>),
+    Directional(Property<f32>),
     /// Acceleration vector in model coordinates.
-    Vector(Animated<[f32; 3]>),
+    Vector(Property<[f32; 3]>),
     /// Programmed scalar gravity and unresolved integer horizontal words.
     Programmed {
         /// Unresolved source X-gravity control word.
@@ -167,9 +167,9 @@ pub struct ModelParticle {
     /// Model or image resource instantiated per particle.
     pub resource: ParticleResource,
     /// Source longitude control, retained even when the renderer does not consume it.
-    pub longitude: Animated<f32>,
+    pub longitude: Property<f32>,
     /// Emission-cone latitude in radians for Warcraft III model particles.
-    pub latitude: Animated<f32>,
+    pub latitude: Property<f32>,
     /// Interpret the resource as a text image.
     pub text_resource: bool,
     /// Emitter controls with unresolved meanings.
@@ -246,13 +246,13 @@ pub struct ProgrammedParticle<'a> {
     /// Shape from which this StarCraft II emitter produces particles.
     pub emitter_shape: EmitterShape,
     /// Dimensions of the outer emitter shape.
-    pub shape_outer: Property<[f32; 3]>,
+    pub shape_outer: PropertyBinding<[f32; 3]>,
     /// Dimensions of the inner emitter shape.
-    pub shape_inner: Property<[f32; 3]>,
+    pub shape_inner: PropertyBinding<[f32; 3]>,
     /// Outer radius control of the emitter’s source shape.
-    pub outer_radius: Property<f32>,
+    pub outer_radius: PropertyBinding<f32>,
     /// Inner radius control of the emitter’s source shape.
-    pub inner_radius: Property<f32>,
+    pub inner_radius: PropertyBinding<f32>,
     /// Mesh regions sampled by vertex-based emission.
     pub shape_sections: Vec<MeshId>,
     /// Source velocity-mode code; the meanings of its values are unresolved.
@@ -260,19 +260,19 @@ pub struct ProgrammedParticle<'a> {
     /// Source control word enabling size randomization.
     pub size_random_enable: u32,
     /// Random contribution to the three-component size property.
-    pub size_random_animation: Property<[f32; 3]>,
+    pub size_random_animation: PropertyBinding<[f32; 3]>,
     /// Source control word enabling rotation randomization.
     pub rotation_random_enable: u32,
     /// Random contribution to the three-component rotation property.
-    pub rotation_random_animation: Property<[f32; 3]>,
+    pub rotation_random_animation: PropertyBinding<[f32; 3]>,
     /// Source control word enabling color randomization.
     pub color_random_enable: u32,
     /// Random color contribution at the beginning of particle life.
-    pub color_start_random: Property<[f32; 4]>,
+    pub color_start_random: PropertyBinding<[f32; 4]>,
     /// Random color contribution at the intermediate age point.
-    pub color_mid_random: Property<[f32; 4]>,
+    pub color_mid_random: PropertyBinding<[f32; 4]>,
     /// Random color contribution at the end of particle life.
-    pub color_end_random: Property<[f32; 4]>,
+    pub color_end_random: PropertyBinding<[f32; 4]>,
     /// Source control word enabling alpha randomization.
     pub alpha_random_enable: u32,
     /// Flipbook start init index selector; sentinel and unrecognized values are retained.
@@ -336,9 +336,9 @@ pub struct ProgrammedParticle<'a> {
     /// Vertical variation settings, including the function, amplitude, and frequency.
     pub vertical: VariationControl,
     /// Animated particle-velocity control retained in the StarCraft II representation.
-    pub particle_velocity: Property<f32>,
+    pub particle_velocity: PropertyBinding<f32>,
     /// Animated phase-shift control; its effect-specific interpretation is unresolved.
-    pub phase_shift: Property<f32>,
+    pub phase_shift: PropertyBinding<f32>,
     /// Stored state bits; unknown bits are retained.
     pub flags: ParticleFlags,
     /// Rotation behavior flags of the StarCraft II emitter.
@@ -350,15 +350,15 @@ pub struct ProgrammedParticle<'a> {
     /// Interpolation mode for the particle rotation controls.
     pub rotation_smoothing: Smoothing,
     /// Animated alpha cutoff used when drawing particles.
-    pub alpha_threshold: Property<f32>,
+    pub alpha_threshold: PropertyBinding<f32>,
     /// Animated offset of particle texture coordinates.
-    pub uv_offset: Property<[f32; 2]>,
+    pub uv_offset: PropertyBinding<[f32; 2]>,
     /// Animated three-component texture-orientation property.
-    pub uv_angle: Property<[f32; 3]>,
+    pub uv_angle: PropertyBinding<[f32; 3]>,
     /// Animated tiling factors for the two texture-coordinate axes.
-    pub uv_tiling: Property<[f32; 2]>,
+    pub uv_tiling: PropertyBinding<[f32; 2]>,
     /// Authored spline control points defining the emission curve.
-    pub spline_points: Cow<'a, [Property<[f32; 3]>]>,
+    pub spline_points: Cow<'a, [PropertyBinding<[f32; 3]>]>,
     /// Wind multiplier parameter stored as a floating-point value.
     pub wind_multiplier: f32,
     /// Stored level-of-detail reduction control.
@@ -366,15 +366,15 @@ pub struct ProgrammedParticle<'a> {
     /// Stored level-of-detail cutoff control.
     pub lod_cut: u32,
     /// Animated lower-bound control; its source effect semantics are unresolved.
-    pub lower_bound: Property<f32>,
+    pub lower_bound: PropertyBinding<f32>,
     /// Animated upper-bound control; its source effect semantics are unresolved.
-    pub upper_bound: Property<f32>,
+    pub upper_bound: PropertyBinding<f32>,
     /// Original emitter when this instance copies its configuration.
     pub trail: Option<FeatureId>,
     /// Trail chance parameter stored as a floating-point value.
     pub trail_chance: f32,
     /// Animated emission-rate control for the linked trail emitter.
-    pub trail_emission_rate: Property<f32>,
+    pub trail_emission_rate: PropertyBinding<f32>,
     /// Splat projection index selector; sentinel and unrecognized values are retained.
     pub projection: Option<FeatureId>,
     /// Splat chance parameter stored as a floating-point value.
@@ -436,11 +436,11 @@ pub struct AtlasParticleRendering {
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct AtlasParticleShape {
     /// Emission-cone latitude in degrees.
-    pub latitude: Animated<f32>,
+    pub latitude: Property<f32>,
     /// Length of the emission region.
-    pub length: Animated<f32>,
+    pub length: Property<f32>,
     /// Width of the emission region.
-    pub width: Animated<f32>,
+    pub width: Property<f32>,
     /// Apply linear rather than exponential variation.
     pub line_emitter: bool,
 }
@@ -482,15 +482,15 @@ pub struct AgeDrivenParticleShape<'a> {
     /// Legacy particle shape selector whose client meaning is unresolved.
     pub legacy_shape: u8,
     /// Vertical emission spread in radians.
-    pub vertical_range: Animated<f32>,
+    pub vertical_range: Property<f32>,
     /// Horizontal emission spread in radians.
-    pub horizontal_range: Animated<f32>,
+    pub horizontal_range: Property<f32>,
     /// Plane Y extent or sphere maximum radius.
-    pub area_width: Animated<f32>,
+    pub area_width: Property<f32>,
     /// Plane X extent or sphere minimum radius.
-    pub area_length: Animated<f32>,
+    pub area_length: Property<f32>,
     /// Z coordinate of the source point for aimed emission.
-    pub z_source: Animated<f32>,
+    pub z_source: Property<f32>,
     /// Emission path in model coordinates.
     pub spline: ZeroVec<'a, [f32; 3]>,
 }
@@ -525,33 +525,33 @@ pub struct ProgrammedParticleGravity {
 }
 /// External-resource simulation with direction-based gravity and visibility.
 pub type ResourceParticle = ParticleComposition<
-    ParticleEmission<Animated<f32>, (), Animated<f32>, ()>,
-    ParticleMotion<Animated<f32>, (), Animated<f32>>,
-    ParticleLifetime<Animated<f32>, ()>,
+    ParticleEmission<Property<f32>, (), Property<f32>, ()>,
+    ParticleMotion<Property<f32>, (), Property<f32>>,
+    ParticleLifetime<Property<f32>, ()>,
     (),
     ModelParticle,
 >;
 /// Atlas simulation with keyed burst selection and staged particle-age appearance.
 pub type AtlasParticles = ParticleComposition<
-    ParticleEmission<Animated<f32>, bool, Animated<f32>, ()>,
-    ParticleMotion<Animated<f32>, Animated<f32>, Animated<f32>>,
+    ParticleEmission<Property<f32>, bool, Property<f32>, ()>,
+    ParticleMotion<Property<f32>, Property<f32>, Property<f32>>,
     ParticleLifetime<f32, ()>,
     StagedParticleAppearance,
     AtlasParticle,
 >;
 /// Curve-driven age appearance and vector-gravity simulation.
 pub type AgeDrivenParticles<'a> = ParticleComposition<
-    ParticleEmission<Animated<f32>, (), Animated<bool>>,
-    ParticleMotion<Animated<f32>, Animated<f32>, Animated<[f32; 3]>>,
-    ParticleLifetime<Animated<f32>, f32>,
+    ParticleEmission<Property<f32>, (), Property<bool>>,
+    ParticleMotion<Property<f32>, Property<f32>, Property<[f32; 3]>>,
+    ParticleLifetime<Property<f32>, f32>,
     ParticleAgeCurves<'a>,
     AgeDrivenParticle<'a>,
 >;
 /// Programmed simulation with reset values and authored control flags.
 pub type ProgrammedParticles<'a> = ParticleComposition<
-    ParticleEmission<Property<f32>, Property<u16>, (), ()>,
-    ParticleMotion<Property<f32>, Property<f32>, ProgrammedParticleGravity>,
-    ParticleLifetime<Property<f32>, Property<f32>>,
+    ParticleEmission<PropertyBinding<f32>, PropertyBinding<u16>, (), ()>,
+    ParticleMotion<PropertyBinding<f32>, PropertyBinding<f32>, ProgrammedParticleGravity>,
+    ParticleLifetime<PropertyBinding<f32>, PropertyBinding<f32>>,
     ProgrammedAge,
     ProgrammedParticle<'a>,
 >;

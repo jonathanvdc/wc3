@@ -1,7 +1,7 @@
 //! Exact projections of Mdlx owner payloads.
 use super::{incompatible, Narrows};
 use crate::model::profiles::{Mdlx, NoControls, Profile, Universal};
-use crate::model::Values;
+use crate::model::PropertyValues;
 use crate::model::{
     ClipControls, Error, MeshControls, ModelMetadata, NodeControls, UniversalAppearance,
     UniversalBinding,
@@ -68,7 +68,7 @@ impl Narrows<Universal> for Mdlx {
     }
     fn feature<'a>(
         value: <Universal as Profile>::Feature<'a>,
-        values: &Values,
+        values: &PropertyValues,
     ) -> Result<Self::Feature<'a>, Error> {
         crate::model::features::TryFromFeature::try_from_feature(value, values)
             .map_err(|_| incompatible("feature"))

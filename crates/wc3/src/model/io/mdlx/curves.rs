@@ -97,7 +97,7 @@ mod tests {
     use crate::model::formats::mdlx::animation::TangentKeyframe;
     use crate::model::io::animation::crop;
     use crate::model::profiles::Mdlx;
-    use crate::model::{Clock, Model, Quaternion, Track as SemanticTrack};
+    use crate::model::{Model, Quaternion, TimeSource, Track as SemanticTrack};
 
     #[test]
     fn imported_rotation_splines_preserve_native_angular_sampling() {
@@ -137,7 +137,7 @@ mod tests {
             let track: SemanticTrack<'_, Quaternion> = SemanticTrack {
                 target: builder.add_value(Quaternion::IDENTITY),
                 curve,
-                clock: Clock::Clip,
+                clock: TimeSource::Clip,
             };
             let whole = crop(
                 &track,

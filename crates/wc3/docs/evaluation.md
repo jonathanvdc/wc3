@@ -29,6 +29,16 @@ layout.evaluate_into(&sample, PoseInputs::default(), &mut pose)?;
 # Ok::<(), Error>(())
 ```
 
+Each potentially animated field holds a typed `Property<T>` identity. Its supported
+value type implements `PropertyValue`; authored defaults live in `PropertyValues`.
+Reusable `Animation` definitions own curves and events, while clips select animation
+identities and supply playback duration, looping, and optional authoring timeline
+origin. Supply elapsed `clip_time` and `shared_time` in `AnimationSample`; sampling
+resolves mapped timeline time and key bounds from the selected clip. The explicit
+`timeline_time` input applies when the clip has no authoring mapping. See the
+[semantic animation guide](semantic.md#typed-animation-curves) for authoring and
+selection precedence.
+
 `evaluate_into` retains output capacity and allocates nothing once its node and
 visibility buffers are sized. `evaluate` is the allocating convenience method.
 Both return full authored-space affine matrices and signed rotation/scale factors,
@@ -94,9 +104,9 @@ numerical scale of one meter per unit for conversion.
 ## Sampling surfaces and processing the result
 
 Surface evaluation does not require texture pixels. Each potentially animated
-field references a typed slot in the model's authored `Values` table. Read a field
+field references a typed slot in the model's authored `PropertyValues` table. Read a field
 through `sample.animated(&field)` for lazy evaluation, or materialize a complete
-snapshot with `sample.evaluate()`. The resulting `Values` has the same identities
+snapshot with `sample.evaluate()`. The resulting `PropertyValues` has the same identities
 as the authored table, so the same node, material, and effect definitions can be
 used with independently sampled instances.
 
@@ -104,7 +114,7 @@ used with independently sampled instances.
 from the authored constants before sampling. A value without an active writer
 therefore returns to its authored value. This evaluates slot values while
 preserving native shader descriptions and render state; it does not execute
-shader programmes or procedural textures. `Values` itself implements
+shader programmes or procedural textures. `PropertyValues` itself implements
 `ValueSample`, allowing an evaluated snapshot to supply pose and material reads.
 
 `MeshAppearance::compile` prepares geometry-owned tint and opacity controls. Rebuild

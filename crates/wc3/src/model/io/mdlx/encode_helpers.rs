@@ -3,13 +3,13 @@ use super::encode_animation::{frame_at, Encoder};
 use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::profiles::mdlx as profile;
-use crate::model::{Animated, Clock, FeatureId, MeshId, Quaternion, TextureTransform};
+use crate::model::{FeatureId, MeshId, Property, Quaternion, TextureTransform, TimeSource};
 use native::animation::Track;
 use native::scene::Node;
 use std::collections::BTreeMap;
 
 pub(super) fn visibility(
-    source: &Animated<f32>,
+    source: &Property<f32>,
     encoder: &mut Encoder<'_, '_, '_>,
     path: &str,
 ) -> Result<Option<Track<'static, f32>>, Error> {
@@ -29,15 +29,13 @@ pub(super) fn events(
         .map(|(id, _)| {
             (
                 encoder.starts[&id],
-                encoder
-                    .model
-                    .clip_program(id)
-                    .expect("validated clip alias")
-                    .events(),
+                model.clip_events(id).collect::<Vec<_>>(),
             )
         })
-        .chain(std::iter::once((0., model.shared_events())))
-        .chain(std::iter::once((0., model.timeline_events())));
+        .chain(std::iter::once((
+            0.,
+            model.global_events().collect::<Vec<_>>(),
+        )));
     for (start, events) in clips {
         let mut occurrences = BTreeMap::<(Option<u32>, String), BTreeMap<i32, usize>>::new();
         for event in events {
@@ -45,8 +43,8 @@ pub(super) fn events(
                 continue;
             }
             let global = match event.clock {
-                Clock::Clip | Clock::Timeline => None,
-                Clock::Shared(id) => Some(encoder.globals[&id]),
+                TimeSource::Clip | TimeSource::Timeline => None,
+                TimeSource::Shared(id) => Some(encoder.globals[&id]),
             };
             let frame = frame_at(
                 event.time.as_seconds(),

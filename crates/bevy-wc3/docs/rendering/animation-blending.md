@@ -2,8 +2,16 @@
 
 `Playback` selects typed clips and controller programmes with independent
 clip, authoring-timeline, and shared clocks in seconds. Native adapters preserve
-loop/clamp policy, aliases, and sequence intervals; the runtime samples properties
+loop/clamp policy, shared animation identities, and sequence intervals; the runtime samples properties
 through the semantic `AnimationProgram`.
+
+Curves and event occurrences belong to reusable semantic `Animation` definitions.
+Clips and controllers select those definitions rather than owning duplicate tracks.
+The clip's common timeline origin maps local playback into its authoring interval;
+`AnimationProgram` derives both the sample time and the key bounds. Playback's
+explicit `timeline_time` drives timeline channels when no mapped clip is selected.
+Model-level animations run in selection order before clip animations and selected
+controllers; later applicable tracks override earlier ones.
 
 ## Playback controls
 
@@ -15,7 +23,8 @@ issue them when the desired animation changes. Invalid selections become
 `PlaybackError` during evaluation.
 
 `controllers` defaults to `ControllerSelection::Authored`: selecting an
-M3 clip evaluates its authored controller selection in source order. Use
+M3 clip evaluates its authored controller selection in ascending priority, with
+source order breaking ties. Use
 `ControllerSelection::Explicit(programmes)` to replace that list;
 `Explicit(Vec::new())` deliberately selects no controllers. These choices apply to
 node poses, materials, cameras, effect births, events, and offline pose baking.

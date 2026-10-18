@@ -1,5 +1,5 @@
 //! Shared controls for programmed particle and ribbon simulations.
-use crate::model::animation::programmed::Property;
+use crate::model::animation::programmed::PropertyBinding;
 use crate::model::values::programmed::*;
 /// Programmed effect Age controls.
 #[derive(Clone, Debug, PartialEq)]
@@ -21,15 +21,15 @@ pub struct ProgrammedAge {
     /// Rotation mid hold time parameter; units follow the enclosing animation or effect.
     pub rotation_mid_hold_time: f32,
     /// Three-component particle-size property.
-    pub size_animation: Property<[f32; 3]>,
+    pub size_animation: PropertyBinding<[f32; 3]>,
     /// Three-component particle-rotation property.
-    pub rotation_animation: Property<[f32; 3]>,
+    pub rotation_animation: PropertyBinding<[f32; 3]>,
     /// Color property at the beginning of particle life.
-    pub color_start: Property<[f32; 4]>,
+    pub color_start: PropertyBinding<[f32; 4]>,
     /// Color property at the intermediate particle-age point.
-    pub color_mid: Property<[f32; 4]>,
+    pub color_mid: PropertyBinding<[f32; 4]>,
     /// Color property at the end of particle life.
-    pub color_end: Property<[f32; 4]>,
+    pub color_end: PropertyBinding<[f32; 4]>,
 }
 /// Programmed effect Forces controls.
 #[derive(Clone, Debug, PartialEq)]
@@ -67,13 +67,13 @@ pub struct ProgrammedNoise {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProgrammedDirection {
     /// Initial yaw.
-    pub initial_yaw: Property<f32>,
+    pub initial_yaw: PropertyBinding<f32>,
     /// Initial pitch.
-    pub initial_pitch: Property<f32>,
+    pub initial_pitch: PropertyBinding<f32>,
     /// Horizontal emission control in the effect frame.
-    pub initial_horizontal: Property<f32>,
+    pub initial_horizontal: PropertyBinding<f32>,
     /// Vertical emission control in the effect frame.
-    pub initial_vertical: Property<f32>,
+    pub initial_vertical: PropertyBinding<f32>,
     /// Velocity drag.
     pub drag: f32,
 }

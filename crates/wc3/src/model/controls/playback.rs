@@ -2,7 +2,7 @@
 use crate::model::animation::programmed::AnimationControl;
 use crate::model::values::programmed::SequenceFlags;
 use crate::model::{
-    Animated, Bounds, ControllerId, EventId, FeatureId, Link, Time, ValidateLinks, ValueSlot,
+    Bounds, ControllerId, EventId, FeatureId, Link, Property, Time, ValidateLinks, ValueSlot,
 };
 use bitfield::bitfield;
 use std::borrow::Cow;
@@ -18,8 +18,6 @@ pub struct SequenceControls<'a> {
     pub legacy_control: Option<u32>,
     /// Native playback controls; looping remains authoritative on the clip.
     pub flags: SequenceFlags,
-    /// Authored timeline origin used by related event and controller clocks.
-    pub timeline_origin: Time,
     /// Expected movement speed during this playback interval.
     pub movement_speed: f32,
     /// Relative probability of choosing this interval.
@@ -151,11 +149,11 @@ pub struct ExtentBinding {
     /// Source property identity and controller behavior.
     pub control: AnimationControl,
     /// Animated minimum corner of the spatial bounds.
-    pub minimum: Animated<[f32; 3]>,
+    pub minimum: Property<[f32; 3]>,
     /// Animated maximum corner of the spatial bounds.
-    pub maximum: Animated<[f32; 3]>,
+    pub maximum: Property<[f32; 3]>,
     /// Animated sphere radius associated with these bounds.
-    pub radius: Animated<f32>,
+    pub radius: Property<f32>,
 }
 
 impl ValidateLinks for EventCommand<'_> {

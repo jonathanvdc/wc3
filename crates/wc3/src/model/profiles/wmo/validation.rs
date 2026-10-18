@@ -1,6 +1,7 @@
 //! Checks relationships between local world-profile objects.
 use super::{Volume, WorldSystem};
 use crate::model::Model;
+use crate::model::TimeSource;
 use crate::model::{Bounds, Error};
 
 impl WorldSystem<'_> {
@@ -112,10 +113,22 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
         || !value.clocks().is_empty()
         || !value.controllers().is_empty()
         || !value.skins().is_empty()
-        || !value.timeline_channels().is_empty()
-        || !value.shared_channels().is_empty()
-        || !value.timeline_events().is_empty()
-        || !value.shared_events().is_empty()
+        || value
+            .global_channels()
+            .find(|v| v.clock() == TimeSource::Timeline)
+            .is_some()
+        || value
+            .global_channels()
+            .find(|v| matches!(v.clock(), TimeSource::Shared(_)))
+            .is_some()
+        || value
+            .global_events()
+            .find(|v| v.clock == TimeSource::Timeline)
+            .is_some()
+        || value
+            .global_events()
+            .find(|v| matches!(v.clock, TimeSource::Shared(_)))
+            .is_some()
     {
         return Err(Error::new(
             "world.animation",

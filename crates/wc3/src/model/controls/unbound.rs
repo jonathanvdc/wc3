@@ -10,7 +10,7 @@ use crate::model::{
 pub struct OrderedKeys<'a, T: AsULE> {
     /// Absolute model-timeline key times, including authored pre-roll.
     pub times: ZeroVec<'a, Time>,
-    /// Values in the same authored order.
+    /// PropertyValues in the same authored order.
     pub values: ZeroVec<'a, T>,
 }
 impl<T: CurveValue> OrderedKeys<'_, T> {

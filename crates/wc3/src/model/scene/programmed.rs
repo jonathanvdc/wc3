@@ -1,5 +1,5 @@
 //! Logical M3 lights, cameras, forces, and geometry-bound effects.
-use crate::model::materials::m3::Property;
+use crate::model::materials::m3::PropertyBinding;
 use crate::model::values::programmed::*;
 use crate::model::{MaterialId, MeshId, NodeId};
 use std::borrow::Cow;
@@ -12,33 +12,33 @@ pub struct Projector {
     /// Material whose layers are projected onto receiving surfaces.
     pub material: MaterialId,
     /// Animates the position offset.
-    pub offset: Property<[f32; 3]>,
+    pub offset: PropertyBinding<[f32; 3]>,
     /// Animates the pitch angle.
-    pub pitch: Property<f32>,
+    pub pitch: PropertyBinding<f32>,
     /// Animates the yaw angle.
-    pub yaw: Property<f32>,
+    pub yaw: PropertyBinding<f32>,
     /// Animates the roll angle.
-    pub roll: Property<f32>,
+    pub roll: PropertyBinding<f32>,
     /// Animates the field of view.
-    pub field_of_view: Property<f32>,
+    pub field_of_view: PropertyBinding<f32>,
     /// Animates the aspect ratio.
-    pub aspect_ratio: Property<f32>,
+    pub aspect_ratio: PropertyBinding<f32>,
     /// Animates the near clip plane.
-    pub near: Property<f32>,
+    pub near: PropertyBinding<f32>,
     /// Animates the far clip plane.
-    pub far: Property<f32>,
+    pub far: PropertyBinding<f32>,
     /// Animates the box Z bottom offset.
-    pub box_offset_z_bottom: Property<f32>,
+    pub box_offset_z_bottom: PropertyBinding<f32>,
     /// Animates the box Z top offset.
-    pub box_offset_z_top: Property<f32>,
+    pub box_offset_z_top: PropertyBinding<f32>,
     /// Animates the box X left offset.
-    pub box_offset_x_left: Property<f32>,
+    pub box_offset_x_left: PropertyBinding<f32>,
     /// Animates the box X right offset.
-    pub box_offset_x_right: Property<f32>,
+    pub box_offset_x_right: PropertyBinding<f32>,
     /// Animates the box Y front offset.
-    pub box_offset_y_front: Property<f32>,
+    pub box_offset_y_front: PropertyBinding<f32>,
     /// Animates the box Y back offset.
-    pub box_offset_y_back: Property<f32>,
+    pub box_offset_y_back: PropertyBinding<f32>,
     /// Sets the projection falloff distance.
     pub falloff: f32,
     /// Sets opacity at the envelope’s creation.
@@ -62,7 +62,7 @@ pub struct Projector {
     /// Sets the distance-based attenuation.
     pub attenuation_distance: f32,
     /// Animates the active state.
-    pub active: Property<u32>,
+    pub active: PropertyBinding<u32>,
     /// Sets the render layer.
     pub layer: u32,
     /// Selects the detail level at which projector detail is reduced.
@@ -202,13 +202,13 @@ pub struct Force {
     /// Selects force channels; a matching bit connects this force with a body or emitter.
     pub local_channels: ForceChannels,
     /// Animates the force strength.
-    pub strength: Property<f32>,
+    pub strength: PropertyBinding<f32>,
     /// Animates the influence width.
-    pub width: Property<f32>,
+    pub width: PropertyBinding<f32>,
     /// Animates the influence height.
-    pub height: Property<f32>,
+    pub height: PropertyBinding<f32>,
     /// Animates the influence length.
-    pub length: Property<f32>,
+    pub length: PropertyBinding<f32>,
 }
 
 /// Editable M3 Warp values.
@@ -219,17 +219,17 @@ pub struct Warp {
     /// The purpose of this field has not been established.
     pub unknown: u32,
     /// Animates the warp radius.
-    pub radius: Property<f32>,
+    pub radius: PropertyBinding<f32>,
     /// Animates the warp height.
-    pub height: Property<f32>,
+    pub height: PropertyBinding<f32>,
     /// Animates the warp strength.
-    pub strength: Property<f32>,
+    pub strength: PropertyBinding<f32>,
     /// Animates the angular component.
-    pub angular: Property<f32>,
+    pub angular: PropertyBinding<f32>,
     /// Animates the axial component.
-    pub axial: Property<f32>,
+    pub axial: PropertyBinding<f32>,
     /// Animates the radial component.
-    pub radial: Property<f32>,
+    pub radial: PropertyBinding<f32>,
 }
 
 /// Editable M3 Light values.
@@ -244,23 +244,23 @@ pub struct Light {
     /// Sets the shadow LOD cut-off level.
     pub shadow_lod_cut: u32,
     /// Animates the diffuse color using red, green, and blue components.
-    pub diffuse_color: Property<[f32; 3]>,
+    pub diffuse_color: PropertyBinding<[f32; 3]>,
     /// Animates the intensity multiplier.
-    pub intensity_multiplier: Property<f32>,
+    pub intensity_multiplier: PropertyBinding<f32>,
     /// Animates the specular color using red, green, and blue components.
-    pub specular_color: Property<[f32; 3]>,
+    pub specular_color: PropertyBinding<[f32; 3]>,
     /// Animates the specular multiplier.
-    pub specular_multiplier: Property<f32>,
+    pub specular_multiplier: PropertyBinding<f32>,
     /// Animates the distance decay exponent.
-    pub decay: Property<f32>,
+    pub decay: PropertyBinding<f32>,
     /// Sets the attenuation end distance.
     pub attenuation_end: f32,
     /// Animates the attenuation start distance.
-    pub attenuation_start: Property<f32>,
+    pub attenuation_start: PropertyBinding<f32>,
     /// Animates the spot inner cone angle.
-    pub hot_spot: Property<f32>,
+    pub hot_spot: PropertyBinding<f32>,
     /// Animates the spot outer cone falloff.
-    pub falloff: Property<f32>,
+    pub falloff: PropertyBinding<f32>,
 }
 
 /// Editable M3 Camera values.
@@ -269,38 +269,38 @@ pub struct Camera<'a> {
     /// Camera name.
     pub name: Cow<'a, str>,
     /// Animates the camera’s field-of-view angle in radians.
-    pub field_of_view: Property<f32>,
+    pub field_of_view: PropertyBinding<f32>,
     /// Selects vertical rather than horizontal field-of-view measurement; the control uses a zero-or-one value.
     pub use_vertical_f_o_v: u32,
     /// Complete optical controls authored for this camera.
     pub optics: CameraOptics,
     /// Animates the shadow clip distance.
-    pub shadow_clip_distance: Property<f32>,
+    pub shadow_clip_distance: PropertyBinding<f32>,
     /// Animates the depth-of-field focal point distance.
-    pub focus_distance: Property<f32>,
+    pub focus_distance: PropertyBinding<f32>,
     /// Animates the depth-of-field far focus range.
-    pub far_focus_range: Property<f32>,
+    pub far_focus_range: PropertyBinding<f32>,
     /// Animates the depth-of-field near focus range.
-    pub near_focus_range: Property<f32>,
+    pub near_focus_range: PropertyBinding<f32>,
     /// Animates the depth-of-field strength.
-    pub dof_amount: Property<f32>,
+    pub dof_amount: PropertyBinding<f32>,
 }
 
 /// Near and far planes measured from the camera.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CameraClipping {
     /// Distance of the far clipping plane from the camera.
-    pub far: Property<f32>,
+    pub far: PropertyBinding<f32>,
     /// Distance of the near clipping plane from the camera.
-    pub near: Property<f32>,
+    pub near: PropertyBinding<f32>,
 }
 /// Near-field depth-of-field falloff interval.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CameraFalloff {
     /// Beginning of the near-field blur falloff interval.
-    pub start: Property<f32>,
+    pub start: PropertyBinding<f32>,
     /// End of the near-field blur falloff interval.
-    pub end: Property<f32>,
+    pub end: PropertyBinding<f32>,
 }
 /// Bokeh controls, including the unresolved numeric depth-of-field mode.
 #[derive(Clone, Debug, PartialEq)]
@@ -308,9 +308,9 @@ pub struct CameraBokeh {
     /// Authored depth-of-field selector whose numeric meanings are unresolved.
     pub mode: u32,
     /// Aperture f-number controlling bokeh.
-    pub f_stop: Property<f32>,
+    pub f_stop: PropertyBinding<f32>,
     /// Maximum circle-of-confusion diameter; its native measurement convention is unresolved.
-    pub maximum_circle: Property<f32>,
+    pub maximum_circle: PropertyBinding<f32>,
 }
 /// Complete optical shapes supported by native M3 cameras.
 #[derive(Clone, Debug, PartialEq)]

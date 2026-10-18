@@ -1,6 +1,6 @@
 //! Curve restrictions shared by native clocks with bounded unsigned timestamps.
 use super::Error;
-use crate::model::Animatable;
+use crate::model::PropertyValue;
 use crate::model::{Curve, CurveValue, Interpolation, Quaternion, Time, Track};
 
 #[derive(Clone)]
@@ -18,7 +18,7 @@ struct RawTrack {
 }
 
 /// Floating-point channel components supported by exact curve restriction.
-pub trait FloatValue: CurveValue + Animatable {
+pub trait FloatValue: CurveValue + PropertyValue {
     /// Whether component interpolation must honor quaternion rotation semantics.
     const IS_ROTATION: bool = false;
     /// Reads the scalar components in their authored order.
@@ -41,7 +41,7 @@ impl FloatValue for f32 {
 }
 impl<const N: usize> FloatValue for [f32; N]
 where
-    [f32; N]: Animatable,
+    [f32; N]: PropertyValue,
 {
     /// Reads the scalar components in their authored order.
     fn components(&self) -> Vec<f32> {

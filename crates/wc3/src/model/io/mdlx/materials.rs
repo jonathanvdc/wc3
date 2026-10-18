@@ -8,14 +8,14 @@ use crate::model::materials::mdlx::{AlphaAdditiveEncoding, LayerOptions};
 use crate::model::materials::state::{DepthState, Lighting, Operation, PassState};
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::mdlx::{Blend, Fresnel, Layer, Material, Shading, TextureSlot};
-use crate::model::{Construct, Values};
+use crate::model::{Construct, PropertyValues};
 use crate::model::{MaterialId, Quaternion, Texture, TextureTransform};
 
 pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
     source: &'source native::Material<'_, V>,
     textures: &[Texture],
     transforms: &[&native::TextureAnimation<'_>],
-    values: &mut Values,
+    values: &mut PropertyValues,
 ) -> Result<Material<'a>, Error> {
     let texture = |index: u32| {
         if index == u32::MAX {

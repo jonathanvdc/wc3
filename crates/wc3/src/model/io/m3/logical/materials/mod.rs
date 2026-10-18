@@ -60,11 +60,11 @@ pub(super) fn revision<E: Envelope, T: native::Target>(
         .map(|section| section.revision())
         .ok_or_else(|| native::ReadError::invalid(0, "missing material section"))
 }
-pub(super) fn anim<T: sem::Animatable>(
+pub(super) fn anim<T: sem::PropertyValue>(
     r: nr::AnimationValue<T>,
-    values: &mut sem::Values,
-) -> surface::Property<T> {
-    surface::Property {
+    values: &mut sem::PropertyValues,
+) -> surface::PropertyBinding<T> {
+    surface::PropertyBinding {
         value: values.add(r.initial_value),
         reset: r.null_value,
         control: surface::AnimationControl {
@@ -77,8 +77,8 @@ pub(super) fn anim<T: sem::Animatable>(
 }
 pub(super) fn color(
     r: nr::AnimationValue<[u8; 4]>,
-    values: &mut sem::Values,
-) -> surface::Property<[f32; 4]> {
+    values: &mut sem::PropertyValues,
+) -> surface::PropertyBinding<[f32; 4]> {
     let rgba = |value: [u8; 4]| {
         [value[2], value[1], value[0], value[3]].map(|lane| f32::from(lane) / 255.)
     };
@@ -94,8 +94,8 @@ pub(super) fn color(
 }
 pub(super) fn fixed_color(
     r: nr::AnimationValue<nr::FixedBytes<4>>,
-    values: &mut sem::Values,
-) -> surface::Property<[f32; 4]> {
+    values: &mut sem::PropertyValues,
+) -> surface::PropertyBinding<[f32; 4]> {
     color(
         nr::AnimationValue {
             initial_value: r.initial_value.0,

@@ -1,5 +1,5 @@
 //! Collision geometry and body constraints with logical identities.
-use crate::model::{Animated, Id, NodeId, ZeroVec};
+use crate::model::{Id, NodeId, Property, ZeroVec};
 /// Identity marker for collision geometry.
 pub enum ShapeObject {}
 /// Collision geometry identity scoped to one simulation system.
@@ -135,7 +135,7 @@ pub struct Body {
     /// Motion behavior.
     pub motion: Motion,
     /// Simulation activation.
-    pub simulates: Animated<bool>,
+    pub simulates: Property<bool>,
     /// Collision shapes attached to the body.
     pub shapes: Vec<ShapeId>,
     /// Translational and rotational damping coefficients.

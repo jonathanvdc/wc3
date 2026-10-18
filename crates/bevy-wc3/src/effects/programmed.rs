@@ -12,44 +12,45 @@ use bevy::prelude::*;
 use std::array::from_fn;
 use std::collections::HashMap;
 use std::f32::consts::TAU;
-use wc3::model::animation::programmed::Property;
+use wc3::model::animation::programmed::PropertyBinding;
 use wc3::model::values::programmed::{
     EmitterShape, ParticleInstance, Smoothing, Variation, VelocityKind,
 };
 use wc3::model::{
-    Animatable, Animated, ClipId, Clock, ParticleAppearance, ParticleDefinition, ParticleDetails,
-    ParticleGravity, ParticleScalar, ParticleTrigger, ProgrammedAge, ValueSample, VariationControl,
+    ClipId, ParticleAppearance, ParticleDefinition, ParticleDetails, ParticleGravity,
+    ParticleScalar, ParticleTrigger, ProgrammedAge, Property, PropertyValue, TimeSource,
+    ValueSample, VariationControl,
 };
 
 #[derive(Clone)]
 pub(super) struct ProgrammedSprite {
-    pub rate: Animated<f32>,
-    pub squirt: Animated<u16>,
-    pub lifetime: Animated<f32>,
-    pub lifetime_other: Animated<f32>,
+    pub rate: Property<f32>,
+    pub squirt: Property<u16>,
+    pub lifetime: Property<f32>,
+    pub lifetime_other: Property<f32>,
     pub random_lifetime: bool,
-    pub speed: Animated<f32>,
-    pub speed_other: Animated<f32>,
+    pub speed: Property<f32>,
+    pub speed_other: Property<f32>,
     pub random_speed: bool,
     pub shape: EmitterShape,
-    pub dimensions: Animated<[f32; 3]>,
-    pub radius: Animated<f32>,
+    pub dimensions: Property<[f32; 3]>,
+    pub radius: Property<f32>,
     pub velocity: VelocityKind,
-    pub angle_x: Animated<f32>,
-    pub angle_y: Animated<f32>,
-    pub spread_x: Animated<f32>,
-    pub spread_y: Animated<f32>,
+    pub angle_x: Property<f32>,
+    pub angle_y: Property<f32>,
+    pub spread_x: Property<f32>,
+    pub spread_y: Property<f32>,
     pub gravity: f32,
     pub model_space: bool,
     pub max_particles: usize,
     pub lit: bool,
-    sizes: Animated<[f32; 3]>,
-    rotations: Animated<[f32; 3]>,
-    colors: [Animated<[f32; 4]>; 3],
+    sizes: Property<[f32; 3]>,
+    rotations: Property<[f32; 3]>,
+    colors: [Property<[f32; 4]>; 3],
     middle: [f32; 4],
-    size_other: Animated<[f32; 3]>,
-    rotation_other: Animated<[f32; 3]>,
-    color_other: [Animated<[f32; 4]>; 3],
+    size_other: Property<[f32; 3]>,
+    rotation_other: Property<[f32; 3]>,
+    color_other: [Property<[f32; 4]>; 3],
     random_size: bool,
     random_rotation: bool,
     random_color: bool,
@@ -83,18 +84,18 @@ pub(super) struct SpriteStyle {
     pub rotation: f32,
     pub cell: u32,
 }
-pub(super) fn animated<T: Animatable>(property: &Property<T>) -> Animated<T> {
+pub(super) fn animated<T: PropertyValue>(property: &PropertyBinding<T>) -> Property<T> {
     property.value
 }
-fn scalar(value: &ParticleScalar) -> Animated<f32> {
+fn scalar(value: &ParticleScalar) -> Property<f32> {
     match value {
-        ParticleScalar::Animated(value) => *value,
+        ParticleScalar::Property(value) => *value,
         ParticleScalar::Programmed(property) => animated(property),
     }
 }
 impl ProgrammedSprite {
     #[cfg(test)]
-    pub(super) fn fixture(slot_values: &mut wc3::model::Values) -> Self {
+    pub(super) fn fixture(slot_values: &mut wc3::model::PropertyValues) -> Self {
         Self {
             rate: slot_values.add(10.),
             squirt: slot_values.add(0),
@@ -453,7 +454,10 @@ impl ProgrammedSprite {
         }
     }
 }
-pub(super) fn nondefault_scalar(value: &Property<f32>, model: &wc3::model::Model<'_>) -> bool {
+pub(super) fn nondefault_scalar(
+    value: &PropertyBinding<f32>,
+    model: &wc3::model::Model<'_>,
+) -> bool {
     model.values()[value.value] != 0. || model.is_animated(value.value)
 }
 pub(super) fn nondefault_variation(
@@ -473,7 +477,7 @@ pub(super) struct SquirtSchedule {
 impl SquirtSchedule {
     pub fn collect(
         &mut self,
-        amount: &Animated<u16>,
+        amount: &Property<u16>,
         frame: &EffectFrame<'_, '_, '_>,
         clips: &HashMap<ClipId, (f64, bool)>,
         delta: f64,
@@ -483,22 +487,22 @@ impl SquirtSchedule {
         let track = frame.sample.track(amount);
         let clock = track
             .as_ref()
-            .map_or(Clock::Clip, |track| track.track.clock);
-        let origin = if matches!(clock, Clock::Timeline) {
+            .map_or(TimeSource::Clip, |track| track.track.clock);
+        let origin = if matches!(clock, TimeSource::Timeline) {
             frame
-                .selection
-                .timeline_interval
+                .sample
+                .timeline_interval()
                 .map_or(0., |(start, _)| start.as_seconds())
         } else {
             0.
         };
         let raw = match clock {
-            Clock::Clip => frame.selection.clip_time.as_seconds(),
-            Clock::Shared(_) => frame.selection.shared_time.as_seconds(),
-            Clock::Timeline if frame.selection.timeline_interval.is_some() => {
+            TimeSource::Clip => frame.selection.clip_time.as_seconds(),
+            TimeSource::Shared(_) => frame.selection.shared_time.as_seconds(),
+            TimeSource::Timeline if frame.sample.timeline_interval().is_some() => {
                 origin + frame.selection.clip_time.as_seconds()
             }
-            Clock::Timeline => frame.selection.timeline_time.as_seconds(),
+            TimeSource::Timeline => frame.selection.timeline_time.as_seconds(),
         };
         let previous = raw - delta;
         let period =
@@ -529,10 +533,10 @@ impl SquirtSchedule {
                 if times.get(index + 1) == Some(key) {
                     continue;
                 }
-                if matches!(clock, Clock::Timeline)
+                if matches!(clock, TimeSource::Timeline)
                     && frame
-                        .selection
-                        .timeline_interval
+                        .sample
+                        .timeline_interval()
                         .is_some_and(|(start, end)| key < start || key > end)
                 {
                     continue;
@@ -640,8 +644,8 @@ impl ProgrammedAppearance {
         size_smoothing: Smoothing,
         color_smoothing: Smoothing,
     ) -> Self {
-        let value3 = |property: &Property<[f32; 3]>| sample.animated(&property.value);
-        let value4 = |property: &Property<[f32; 4]>| sample.animated(&property.value);
+        let value3 = |property: &PropertyBinding<[f32; 3]>| sample.animated(&property.value);
+        let value4 = |property: &PropertyBinding<[f32; 4]>| sample.animated(&property.value);
         Self {
             size: value3(&age.size_animation),
             rotation: value3(&age.rotation_animation),

@@ -6,7 +6,7 @@ use crate::model::resources::{MdlxImageResource, PathResource};
 use crate::model::Link;
 use crate::model::Model;
 use crate::model::PropertyIdentityKey;
-use crate::model::Values;
+use crate::model::PropertyValues;
 use crate::model::{
     ClipControls, Error, FeatureKind, IdentityBinding, MaterialSurface, MdlxGeometry, MeshControls,
     ModelMetadata, NodeControls, PropertyPayload, SingleLook, UniversalAppearance,
@@ -128,7 +128,7 @@ impl Extends<Mdlx> for Universal {
     }
     fn feature<'a>(
         value: <Mdlx as Profile>::Feature<'a>,
-        values: &mut Values,
+        values: &mut PropertyValues,
     ) -> Self::Feature<'a> {
         crate::model::features::FromFeature::from_feature(value, values)
     }

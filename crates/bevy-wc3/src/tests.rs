@@ -12,7 +12,7 @@ use wc3::model::{
     Material as SemanticMaterial, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node, Skin,
     UniversalBinding, ZeroVec,
 };
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{NodeId, Transform as ModelTransform};
 
 fn fixture(binding: UniversalBinding<'static>) -> (Model<'static>, NodeId) {
@@ -538,7 +538,7 @@ fn constant_materials_share_assets_between_instances() {
 fn animated_materials_are_isolated_between_playback_clocks() {
     let mut slot_values = SlotValues::default();
 
-    use wc3::model::{Channel, Clock, Curve, Time as ModelTime, Track};
+    use wc3::model::{Channel, Curve, Time as ModelTime, TimeSource, Track};
     let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
     let material = source.materials().iter().next().unwrap().0;
     let property = slot_values.add(1.);
@@ -556,13 +556,13 @@ fn animated_materials_are_isolated_between_playback_clocks() {
                     })
                     .unwrap(),
                 )?;
-                builder.add_timeline_channel(Channel::Scalar(Track {
+                builder.add_global_channel(Channel::Scalar(Track {
                     target: property,
                     curve: Curve::linear(
                         [ModelTime::seconds(0.)?, ModelTime::seconds(1.)?],
                         [1.0f32, 0.],
                     )?,
-                    clock: Clock::Timeline,
+                    clock: TimeSource::Timeline,
                 }))
             })();
             builder.import_values(&slot_values)?;
@@ -802,7 +802,7 @@ fn m3_authored_controller_selection_drives_live_and_baked_pose_with_explicit_emp
         ControllerSelection as SemanticControllerSelection, SequenceControls,
     };
     use wc3::model::Time as ModelTime;
-    use wc3::model::{Channel, Clip, ClipControls, Clock, Controller, Curve, Track};
+    use wc3::model::{Channel, Clip, ClipControls, Controller, Curve, TimeSource, Track};
 
     let (mut source, joint) = fixture(UniversalBinding::Identity(IdentityBinding));
     let clip = source
@@ -817,13 +817,13 @@ fn m3_authored_controller_selection_drives_live_and_baked_pose_with_explicit_emp
                             [ModelTime::seconds(1.)?, ModelTime::seconds(2.)?],
                             [[4., 0., 0.], [6., 0., 0.]],
                         )?,
-                        clock: Clock::Timeline,
+                        clock: TimeSource::Timeline,
                     }),
                 )?;
                 let mut clip =
                     Clip::named("M3 selected programme").with_duration(ModelTime::seconds(1.)?);
+                clip.timeline_origin = Some(ModelTime::seconds(1.)?);
                 clip.controls = Some(ClipControls::M3(SequenceControls {
-                    timeline_origin: ModelTime::seconds(1.)?,
                     blend_duration: ModelTime::seconds(0.3)?,
                     selection: Some(SemanticControllerSelection {
                         name: "authored STG".into(),

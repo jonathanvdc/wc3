@@ -5,7 +5,7 @@ use wc3::model::{
     AtlasParticle, AtlasParticleRendering, ModelParticle, ParticleEmission, ParticleLifetime,
     ParticleMotion, StagedParticleAppearance,
 };
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{GravityTrailControls, TrailAppearance};
 use wc3::model::{LightEmission, Model, PhotographicControls, SocketDefinition, VisibleLight};
 
@@ -288,7 +288,7 @@ fn common_animation_destinations_validate_and_narrow_with_borrowed_keys() {
     let mut slot_values = SlotValues::default();
     use wc3::model::common::ZeroVec;
 
-    use wc3::model::{Channel, Clock, Curve, Time, Track};
+    use wc3::model::{Channel, Curve, Time, TimeSource, Track};
     let mut draft = Model::<Mdlx>::builder("animated light");
     let node = draft.add_named_node("light").unwrap();
     let feature = draft.reserve_feature(node);
@@ -320,15 +320,18 @@ fn common_animation_destinations_validate_and_narrow_with_borrowed_keys() {
     let pointer = curve.values().as_bytes().as_ptr();
     model
         .edit(|draft| {
-            draft.add_timeline_channel(Channel::Scalar(Track {
+            draft.add_global_channel(Channel::Scalar(Track {
                 target: intensity,
                 curve,
-                clock: Clock::Timeline,
+                clock: TimeSource::Timeline,
             }))
         })
         .unwrap();
     let native = model.try_narrow::<Mdlx>().unwrap();
-    let channel = native.timeline_channels().first().unwrap();
+    let channel = native
+        .global_channels()
+        .find(|v| v.clock() == TimeSource::Timeline)
+        .unwrap();
     let Channel::Scalar(track) = channel else {
         panic!("channel value domain changed")
     };

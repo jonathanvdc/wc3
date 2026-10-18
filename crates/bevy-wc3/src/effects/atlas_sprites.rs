@@ -18,9 +18,9 @@ use std::sync::Arc;
 use wc3::model::materials::state::BlendOperations;
 use wc3::model::scene::keyframed::Frames;
 use wc3::model::{
-    Animated, ClipId, Clock, FeatureId, Model, NodeFeature, NodeId, ParticleActivation,
-    ParticleAppearance, ParticleDetails, ParticleEmitter, ParticleGravity, ParticleScalar,
-    ParticleTrigger, SampledTrack, Time as ModelTime, ZeroVec,
+    ClipId, FeatureId, Model, NodeFeature, NodeId, ParticleActivation, ParticleAppearance,
+    ParticleDetails, ParticleEmitter, ParticleGravity, ParticleScalar, ParticleTrigger, Property,
+    SampledTrack, Time as ModelTime, TimeSource, ZeroVec,
 };
 
 enum BurstTrack<'sample, 'data> {
@@ -28,7 +28,7 @@ enum BurstTrack<'sample, 'data> {
     Boolean(SampledTrack<'sample, 'data, bool>),
 }
 impl<'data> BurstTrack<'_, 'data> {
-    fn clock(&self) -> (Clock, Option<ModelTime>, ModelTime) {
+    fn clock(&self) -> (TimeSource, Option<ModelTime>, ModelTime) {
         match self {
             Self::Scalar(sample) => (sample.track.clock, sample.period, sample.origin),
             Self::Boolean(sample) => (sample.track.clock, sample.period, sample.origin),
@@ -61,15 +61,15 @@ struct AtlasEmitter {
     feature: FeatureId,
     node: NodeId,
     anchor: usize,
-    rate: Animated<f32>,
+    rate: Property<f32>,
     animated_rate: bool,
-    speed: Animated<f32>,
-    variation: Animated<f32>,
-    gravity: Animated<f32>,
-    lifetime: Animated<f32>,
-    width: Animated<f32>,
-    length: Animated<f32>,
-    latitude: Animated<f32>,
+    speed: Property<f32>,
+    variation: Property<f32>,
+    gravity: Property<f32>,
+    lifetime: Property<f32>,
+    width: Property<f32>,
+    length: Property<f32>,
+    latitude: Property<f32>,
     activation: ParticleActivation,
     burst: bool,
     line: bool,
@@ -115,8 +115,8 @@ pub(crate) struct AtlasParticleInstances {
     states: Vec<State>,
     previous_time: Option<f64>,
 }
-fn scalar(value: &ParticleScalar) -> Option<Animated<f32>> {
-    if let ParticleScalar::Animated(value) = value {
+fn scalar(value: &ParticleScalar) -> Option<Property<f32>> {
+    if let ParticleScalar::Property(value) = value {
         Some(*value)
     } else {
         None
@@ -401,7 +401,7 @@ impl RuntimeAtlasParticles {
                     let mut remaining = CAPACITY;
                     for step in clock.by_ref() {
                         let Some((clip, timeline, shared)) =
-                            retimed_selection(frame, step.sample_time, &self.clips)
+                            retimed_selection(frame, step.sample_time)
                         else {
                             continue;
                         };
@@ -476,7 +476,7 @@ impl RuntimeAtlasParticles {
         node: Mat4,
     ) {
         let age = frame.time - time;
-        let selection = retimed_selection(frame, time, &self.clips);
+        let selection = retimed_selection(frame, time);
         let Some((clip, timeline, shared)) = selection else {
             return;
         };
@@ -604,7 +604,9 @@ impl RuntimeAtlasParticles {
         } else {
             frame.sample.track(&emitter.rate).map(BurstTrack::Scalar)
         };
-        let clock = track.as_ref().map_or(Clock::Clip, |value| value.clock().0);
+        let clock = track
+            .as_ref()
+            .map_or(TimeSource::Clip, |value| value.clock().0);
         let period = track
             .as_ref()
             .and_then(|value| value.clock().1)
@@ -618,19 +620,19 @@ impl RuntimeAtlasParticles {
                         (*looping && *duration > 0.).then_some(*duration)
                     })
             });
-        let origin = if matches!(clock, Clock::Timeline) {
+        let origin = if matches!(clock, TimeSource::Timeline) {
             frame
-                .selection
-                .timeline_interval
+                .sample
+                .timeline_interval()
                 .map_or(0., |(start, _)| start.as_seconds())
         } else {
             0.
         };
         let raw = match clock {
-            Clock::Clip => frame.selection.clip_time.as_seconds(),
-            Clock::Shared(_) => frame.selection.shared_time.as_seconds(),
-            Clock::Timeline => {
-                if frame.selection.timeline_interval.is_some() {
+            TimeSource::Clip => frame.selection.clip_time.as_seconds(),
+            TimeSource::Shared(_) => frame.selection.shared_time.as_seconds(),
+            TimeSource::Timeline => {
+                if frame.sample.timeline_interval().is_some() {
                     origin + frame.selection.clip_time.as_seconds()
                 } else {
                     frame.selection.timeline_time.as_seconds()
@@ -686,8 +688,8 @@ impl RuntimeAtlasParticles {
                 if times.get(index + 1) == Some(key) {
                     continue;
                 }
-                if let Some((start, end)) = frame.selection.timeline_interval {
-                    if matches!(clock, Clock::Timeline) && (key < start || key > end) {
+                if let Some((start, end)) = frame.sample.timeline_interval() {
+                    if matches!(clock, TimeSource::Timeline) && (key < start || key > end) {
                         continue;
                     }
                 }
@@ -730,27 +732,10 @@ fn interpolated(a: Mat4, b: Mat4, t: f32) -> Mat4 {
 pub(super) fn retimed_selection(
     frame: &EffectFrame<'_, '_, '_>,
     time: f64,
-    clips: &HashMap<ClipId, (f64, bool)>,
 ) -> Option<(ModelTime, ModelTime, ModelTime)> {
     let delta = frame.time - time;
     let clip = frame.selection.clip_time.as_seconds() - delta;
-    let timeline = if let Some((start, _)) = frame.selection.timeline_interval {
-        let local = frame.selection.clip.and_then(|id| clips.get(&id)).map_or(
-            clip,
-            |(duration, looping)| {
-                if *duration <= 0. {
-                    0.
-                } else if *looping {
-                    clip.rem_euclid(*duration)
-                } else {
-                    clip.clamp(0., *duration)
-                }
-            },
-        );
-        start.as_seconds() + local
-    } else {
-        frame.selection.timeline_time.as_seconds() - delta
-    };
+    let timeline = frame.selection.timeline_time.as_seconds() - delta;
     Some((
         ModelTime::seconds(clip).ok()?,
         ModelTime::seconds(timeline).ok()?,
@@ -800,11 +785,11 @@ mod tests {
             unreachable!()
         };
         definition.emission.trigger = ParticleTrigger::KeyedBurst;
-        definition.emission.rate = ParticleScalar::Animated(property);
+        definition.emission.rate = ParticleScalar::Property(property);
         let boolean_source = model.nodes().iter().next().unwrap().1.visible;
         if boolean {
             definition.emission.rate =
-                ParticleScalar::Animated(slot_values.scalar_from_boolean(boolean_source).unwrap());
+                ParticleScalar::Property(slot_values.scalar_from_boolean(boolean_source).unwrap());
         }
         model
             .edit(|builder| {
@@ -812,22 +797,22 @@ mod tests {
                 builder.set_feature(feature, payload)?;
                 let clock = builder.add_clock(SharedClock::Repeating { period: time(1.) })?;
                 if boolean {
-                    return builder.add_shared_channel(Channel::Boolean(Track {
+                    return builder.add_global_channel(Channel::Boolean(Track {
                         target: boolean_source,
                         curve: Curve::step(
                             keys.iter().map(|(t, _)| time(*t)).collect::<Vec<_>>(),
                             keys.iter().map(|(_, v)| *v > 0.).collect::<Vec<_>>(),
                         )?,
-                        clock: Clock::Shared(clock),
+                        clock: TimeSource::Shared(clock),
                     }));
                 }
-                builder.add_shared_channel(Channel::Scalar(Track {
+                builder.add_global_channel(Channel::Scalar(Track {
                     target: property,
                     curve: Curve::step(
                         keys.iter().map(|(t, _)| time(*t)).collect::<Vec<_>>(),
                         keys.iter().map(|(_, v)| *v).collect::<Vec<_>>(),
                     )?,
-                    clock: Clock::Shared(clock),
+                    clock: TimeSource::Shared(clock),
                 }))
             })
             .unwrap();

@@ -3,7 +3,7 @@ use wc3::model::materials::{m2, wmo};
 use wc3::model::profiles::m2::properties::{Target, TextureUnitField};
 use wc3::model::profiles::wmo::WorldSystem;
 use wc3::model::profiles::{Universal, Wmo, M2};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{MaterialProgram, MaterialStep, Model, PropertyPayload};
 
 #[test]
@@ -202,7 +202,7 @@ fn native_profiles_use_the_same_shader_specific_steps_as_universal() {
 fn named_crossfade_inputs_keep_native_animation_ordinals_when_frozen() {
     let mut slot_values = SlotValues::default();
 
-    use wc3::model::{AnimationSample, Channel, Clock, Curve, Material, Time, Track};
+    use wc3::model::{AnimationSample, Channel, Curve, Material, Time, TimeSource, Track};
     let mut draft = Model::<Universal>::builder("named input animation");
     let id = draft.reserve_material();
     let target = slot_values.add(0f32);
@@ -218,9 +218,9 @@ fn named_crossfade_inputs_keep_native_animation_ordinals_when_frozen() {
         )
         .unwrap();
     draft
-        .add_timeline_channel(Channel::Scalar(Track {
+        .add_global_channel(Channel::Scalar(Track {
             target,
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
             curve: Curve::linear(
                 [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
                 [0., 1.],

@@ -1,12 +1,12 @@
 //! Sockets and authored child models, composed independently.
 use crate::model::features::{FromFeature, TryFromFeature};
 use crate::model::ModelResourceId;
-use crate::model::{Animatable, Construct, Values};
+use crate::model::{Construct, PropertyValue, PropertyValues};
 use std::borrow::Cow;
 
 use crate::model::profiles::{m2, m3, wmo};
 use crate::model::{
-    scene, Animated, FeatureId, FeatureKind, Link, ModelMount, MountTarget, NodeId,
+    scene, FeatureId, FeatureKind, Link, ModelMount, MountTarget, NodeId, Property,
     SampledAnimation, ValidateLinks,
 };
 
@@ -79,7 +79,7 @@ pub struct SocketDefinition<I, A, C> {
 }
 
 /// Broad built-in socket vocabulary.
-pub type Socket<'a> = SocketDefinition<SocketIdentity<'a>, Animated<f32>, Option<u32>>;
+pub type Socket<'a> = SocketDefinition<SocketIdentity<'a>, Property<f32>, Option<u32>>;
 
 /// Attachment namespaces do not imply correspondence between numeric values.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -128,7 +128,7 @@ pub type ChildModel<'a> =
     ChildModelDefinition<ModelResourceId, Option<Socket<'a>>, PlacementAppearance>;
 /// Child resource carrying an indexed socket with fractional visibility.
 pub type IndexedChildModel<R> =
-    ChildModelDefinition<R, SocketDefinition<u32, Animated<f32>, ()>, ()>;
+    ChildModelDefinition<R, SocketDefinition<u32, Property<f32>, ()>, ()>;
 /// World placement appearance, independently reusable from its resource identity.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WorldPlacementAppearance {
@@ -156,7 +156,7 @@ pub enum PlacementAppearance {
 }
 
 impl<'a> FromFeature<m2::Attachment> for Socket<'a> {
-    fn from_feature(value: m2::Attachment, values: &mut Values) -> Self {
+    fn from_feature(value: m2::Attachment, values: &mut PropertyValues) -> Self {
         Self {
             identity: SocketIdentity::Role(value.identity),
             visibility: values
@@ -168,7 +168,7 @@ impl<'a> FromFeature<m2::Attachment> for Socket<'a> {
 }
 impl<'a> TryFromFeature<Socket<'a>> for m2::Attachment {
     type Error = Box<Socket<'a>>;
-    fn try_from_feature(value: Socket<'a>, values: &Values) -> Result<Self, Self::Error> {
+    fn try_from_feature(value: Socket<'a>, values: &PropertyValues) -> Result<Self, Self::Error> {
         if let Socket {
             identity: SocketIdentity::Role(role),
             visibility,
@@ -187,7 +187,7 @@ impl<'a> TryFromFeature<Socket<'a>> for m2::Attachment {
     }
 }
 impl<'a> FromFeature<m3::Attachment<'a>> for Socket<'a> {
-    fn from_feature(value: m3::Attachment<'a>, values: &mut Values) -> Self {
+    fn from_feature(value: m3::Attachment<'a>, values: &mut PropertyValues) -> Self {
         Self {
             identity: SocketIdentity::Named(value.identity),
             visibility: values.add(1.),
@@ -197,7 +197,7 @@ impl<'a> FromFeature<m3::Attachment<'a>> for Socket<'a> {
 }
 impl<'a> TryFromFeature<Socket<'a>> for m3::Attachment<'a> {
     type Error = Box<Socket<'a>>;
-    fn try_from_feature(value: Socket<'a>, values: &Values) -> Result<Self, Self::Error> {
+    fn try_from_feature(value: Socket<'a>, values: &PropertyValues) -> Result<Self, Self::Error> {
         match value {
             Socket {
                 identity: SocketIdentity::Named(name),
@@ -361,10 +361,10 @@ impl ValidateLinks for Attachment<'_> {
     }
 }
 
-impl<I: Default, T: Animatable + Default, C: Default> Construct
-    for SocketDefinition<I, Animated<T>, C>
+impl<I: Default, T: PropertyValue + Default, C: Default> Construct
+    for SocketDefinition<I, Property<T>, C>
 {
-    fn construct(values: &mut Values) -> Self {
+    fn construct(values: &mut PropertyValues) -> Self {
         Self {
             identity: I::default(),
             visibility: values.add(T::default()),

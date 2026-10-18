@@ -4,7 +4,7 @@ use crate::model::FeatureKind;
 impl ValidateLinks for ParticleScalar {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         match self {
-            Self::Animated(x) => x.visit_links(v),
+            Self::Property(x) => x.visit_links(v),
             Self::Programmed(x) => x.visit_links(v),
         }
     }

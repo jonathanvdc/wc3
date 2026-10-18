@@ -6,8 +6,8 @@ use crate::model::formats::mdlx::{self as native, Chunk, Dialect, ModelChunk};
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
 use crate::model::{
-    AddressMode, Billboard, Bounds, Channel, Clip, Clock, ImageResource, Inheritance, Material,
-    ModelBuilder, Quaternion, Sampler, SharedClock, Texture, Time, Track,
+    AddressMode, Billboard, Bounds, Channel, Clip, ImageResource, Inheritance, Material,
+    ModelBuilder, Quaternion, Sampler, SharedClock, Texture, Time, TimeSource, Track,
 };
 use crate::model::{MdlxImageResource, Model, TextureControls};
 use std::borrow::Cow;
@@ -215,7 +215,9 @@ where
     for sequence in source.sequences() {
         let duration =
             Time::seconds(f64::from(sequence.interval[1] - sequence.interval[0]) / 1000.)?;
-        let mut clip = Clip::named(S::text(sequence.name.text())).with_duration(duration);
+        let mut clip = Clip::named(S::text(sequence.name.text()))
+            .with_duration(duration)
+            .with_timeline_origin(Time::seconds(f64::from(sequence.interval[0]) / 1000.)?);
         if sequence.flags.non_looping() {
             clip = clip.once();
         }
@@ -227,7 +229,6 @@ where
         native_profile.sequences.push((
             id,
             profile::Sequence {
-                start: Time::seconds(start)?,
                 move_speed: sequence.move_speed,
                 rarity: sequence.rarity,
                 sync_point: sequence.sync_point,
@@ -249,16 +250,16 @@ where
                             })
                         })
                         .transpose()?
-                        .map_or(Clock::Timeline, Clock::Shared);
+                        .map_or(TimeSource::Timeline, TimeSource::Shared);
                     let channel = Channel::$variant(Track {
                         target: $property,
                         curve: curves::read(track, 0., $map)?,
                         clock,
                     });
-                    if matches!(clock, Clock::Shared(_)) {
-                        builder.add_shared_channel(channel)?;
+                    if matches!(clock, TimeSource::Shared(_)) {
+                        builder.add_global_channel(channel)?;
                     } else {
-                        builder.add_timeline_channel(channel)?;
+                        builder.add_global_channel(channel)?;
                     }
                 }
             };

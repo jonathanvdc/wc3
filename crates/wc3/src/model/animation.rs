@@ -3,7 +3,7 @@
 /// Resettable values with authored sampling controls.
 pub mod programmed;
 use crate::model::profiles::{Profile, Universal};
-use crate::model::{ClipId, ClockId, Error, EventId, FeatureId, NodeId, Quaternion, Texture};
+use crate::model::{AnimationId, ClockId, Error, EventId, FeatureId, NodeId, Quaternion, Texture};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use zerovec::{ule::AsULE, ZeroVec};
@@ -54,9 +54,9 @@ pub use properties::*;
 mod slots;
 pub use slots::*;
 
-/// Clock used to evaluate a track.
+/// Time coordinate used to evaluate a track or event.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Clock {
+pub enum TimeSource {
     /// Active clip time.
     #[default]
     Clip,
@@ -65,6 +65,14 @@ pub enum Clock {
     /// Independent shared looping clock.
     Shared(ClockId),
 }
+/// Reusable curves and event occurrences, independent of playback selections.
+#[derive(Clone, Debug, Default)]
+pub struct Animation<'a> {
+    /// Typed curves in evaluation order; later applicable curves win.
+    pub channels: Vec<Channel<'a>>,
+    /// Identified event occurrences, traversed separately from value sampling.
+    pub events: BTreeMap<EventId, Event<'a>>,
+}
 /// Layer identity and ordering for a set of channels.
 #[derive(Clone, Debug)]
 pub struct Controller<'a, P: Profile = Universal> {
@@ -72,10 +80,8 @@ pub struct Controller<'a, P: Profile = Universal> {
     pub controls: P::Controller<'a>,
     /// Controller display name.
     pub name: Cow<'a, str>,
-    /// Curves owned by this programme, rather than duplicated by playback clips.
-    pub channels: Vec<Channel<'a>>,
-    /// Event occurrences owned by this programme.
-    pub events: BTreeMap<EventId, Event<'a>>,
+    /// Reusable animations selected by this controller, in evaluation order.
+    pub animations: Vec<AnimationId>,
     /// Evaluation priority.
     pub priority: i32,
     /// Whether this controller runs concurrently.
@@ -87,29 +93,28 @@ impl<P: Profile> Default for Controller<'_, P> {
             name: Cow::Borrowed(""),
             priority: 0,
             concurrent: false,
-            channels: Vec::new(),
-            events: BTreeMap::new(),
+            animations: Vec::new(),
             controls: Default::default(),
         }
     }
 }
 /// One typed animation channel.
 #[derive(Clone, Debug)]
-pub struct Track<'a, T: CurveValue + Animatable> {
+pub struct Track<'a, T: CurveValue + PropertyValue> {
     /// Typed animated destination.
-    pub target: Animated<T>,
+    pub target: Property<T>,
     /// Checked key data.
     pub curve: Curve<'a, T>,
     /// Evaluation clock.
-    pub clock: Clock,
+    pub clock: TimeSource,
 }
 /// Heterogeneous channels targeting typed value slots.
 ///
 /// A channel cannot write a slot of another value type:
 /// ```compile_fail
-/// use wc3::model::{Animated, Clock, Curve, Track};
-/// fn invalid(target: Animated<bool>, curve: Curve<'static, f32>) -> Track<'static, f32> {
-///     Track { target, curve, clock: Clock::Clip }
+/// use wc3::model::{Property, TimeSource, Curve, Track};
+/// fn invalid(target: Property<bool>, curve: Curve<'static, f32>) -> Track<'static, f32> {
+///     Track { target, curve, clock: TimeSource::Clip }
 /// }
 /// ```
 #[derive(Clone, Debug)]
@@ -143,17 +148,18 @@ pub enum Channel<'a> {
     /// Optional texture selection.
     OptionalTexture(Track<'a, Option<Texture>>),
 }
-/// A named playback interval with typed channels and event occurrences.
+/// A named playback selection with timing and reusable animation identities.
 #[derive(Clone, Debug)]
 pub struct Clip<'a, P: Profile = Universal> {
     /// Vocabulary-specific playback controls.
     pub controls: P::Clip<'a>,
-    pub(crate) alias: Option<ClipId>,
+    /// Reusable animations selected by this clip, in evaluation order.
+    pub animations: Vec<AnimationId>,
+    /// Absolute authoring origin; the clip duration bounds the key-selection interval.
+    pub timeline_origin: Option<Time>,
     pub(crate) name: Cow<'a, str>,
     pub(crate) duration: Time,
     pub(crate) looping: bool,
-    pub(crate) channels: Vec<Channel<'a>>,
-    pub(crate) events: Vec<Event<'a>>,
 }
 impl<'a, P: Profile> Clip<'a, P> {
     /// Creates an empty clip.
@@ -161,11 +167,10 @@ impl<'a, P: Profile> Clip<'a, P> {
         Self {
             name: name.into(),
             controls: Default::default(),
-            alias: None,
+            animations: Vec::new(),
+            timeline_origin: None,
             duration: Time::default(),
             looping: true,
-            channels: Vec::new(),
-            events: Vec::new(),
         }
     }
     /// Sets a finite nonnegative duration.
@@ -173,14 +178,15 @@ impl<'a, P: Profile> Clip<'a, P> {
         self.duration = duration;
         self
     }
-    /// Uses another clip's channels and event program.
-    pub fn with_alias(mut self, target: ClipId) -> Self {
-        self.alias = Some(target);
+    /// Selects a reusable animation without copying its curves or events.
+    pub fn with_animation(mut self, animation: AnimationId) -> Self {
+        self.animations.push(animation);
         self
     }
-    /// Referenced playback program, when this clip is an alias.
-    pub fn alias(&self) -> Option<ClipId> {
-        self.alias
+    /// Maps local playback time into an absolute authoring interval.
+    pub fn with_timeline_origin(mut self, origin: Time) -> Self {
+        self.timeline_origin = Some(origin);
+        self
     }
     /// Enables repeating playback.
     pub fn looping(mut self) -> Self {
@@ -204,22 +210,14 @@ impl<'a, P: Profile> Clip<'a, P> {
     pub fn is_looping(&self) -> bool {
         self.looping
     }
-    /// Typed channel definitions.
-    pub fn channels(&self) -> &[Channel<'a>] {
-        &self.channels
-    }
-    /// Event occurrences.
-    pub fn events(&self) -> &[Event<'a>] {
-        &self.events
-    }
 }
-/// An event occurrence evaluated on a clip's timeline.
+/// An event occurrence scheduled on an explicit time source.
 #[derive(Clone, Debug)]
 pub struct Event<'a> {
     /// Specific event feature, when multiple features share an anchor.
     pub feature: Option<FeatureId>,
-    /// Clock on which the occurrence is scheduled.
-    pub clock: Clock,
+    /// TimeSource on which the occurrence is scheduled.
+    pub clock: TimeSource,
     /// Occurrence time.
     pub time: Time,
     /// Event name.
@@ -231,8 +229,8 @@ pub struct Event<'a> {
 }
 
 impl Channel<'_> {
-    /// Clock on which this channel is evaluated.
-    pub fn clock(&self) -> Clock {
+    /// TimeSource on which this channel is evaluated.
+    pub fn clock(&self) -> TimeSource {
         match self {
             Self::Unsigned4(track) => track.clock,
             Self::Bytes4(track) => track.clock,

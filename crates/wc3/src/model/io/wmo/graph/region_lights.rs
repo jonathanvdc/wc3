@@ -7,7 +7,7 @@ use crate::model::formats::wmo::records;
 use crate::model::formats::wmo::{Dialect, Group};
 use crate::model::profiles::wmo::{self, RegionControls};
 use crate::model::profiles::Wmo;
-use crate::model::Values;
+use crate::model::PropertyValues;
 use crate::model::WorldImageResource;
 use crate::model::{ColorSpace, FeatureId, Model, ModelBuilder, Node, Sampler, Texture};
 use std::collections::BTreeMap;
@@ -240,7 +240,7 @@ fn sets(
         })
         .collect()
 }
-fn absolute(node: &Node<'_, Wmo>, values: &Values) -> Result<(), Error> {
+fn absolute(node: &Node<'_, Wmo>, values: &PropertyValues) -> Result<(), Error> {
     if node.parent.is_some()
         || node.transform.defaults(values).rotation != Default::default()
         || node.transform.defaults(values).scale != [1.; 3]

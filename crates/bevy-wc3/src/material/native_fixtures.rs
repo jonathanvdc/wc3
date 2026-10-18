@@ -4,7 +4,7 @@ pub mod m2 {
     pub use wc3::model::materials::m2::*;
     use wc3::model::materials::state::PassState;
     use wc3::model::values::model::{BatchFlags, BlendMode};
-    use wc3::model::{Animated, Construct, Error, MaterialSurface};
+    use wc3::model::{Construct, Error, MaterialSurface, Property};
     #[derive(Clone, Debug, Construct)]
     pub struct MaterialFixture<'a> {
         /// Shader family identifier interpreted by the game shader implementation.
@@ -14,9 +14,9 @@ pub mod m2 {
         /// Color composition, rasterization, and authored pass ordering.
         pub state: PassState<BlendMode, ModelRasterization, i8>,
         /// Animated surface color multiplier.
-        pub color: Animated<[f32; 3]>,
+        pub color: Property<[f32; 3]>,
         /// Animated surface opacity multiplier.
-        pub opacity: Animated<f32>,
+        pub opacity: Property<f32>,
         /// External colours used by legacy guild shader programmes.
         pub guild_palette: GuildPalette,
         /// Ordered shader texture inputs.

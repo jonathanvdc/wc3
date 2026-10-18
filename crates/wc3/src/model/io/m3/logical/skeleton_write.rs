@@ -3,8 +3,9 @@ use super::animation::AnimationIds;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::records as nr;
 use crate::model::io::m3::logical::Graph;
+use crate::model::TimeSource;
 use crate::model::{profiles::m3 as surface, Billboard, Inheritance, NodeId};
-use crate::model::{Animatable, Animated};
+use crate::model::{Property, PropertyValue};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) struct Skeleton {
@@ -14,10 +15,10 @@ pub(super) struct Skeleton {
     pub inverse_bind: Vec<nr::InitialReference>,
     pub skin_bone_count: u32,
 }
-fn value<T: Animatable + Clone>(
+fn value<T: PropertyValue + Clone>(
     initial: T,
     controls: Option<&surface::PropertyControl<T>>,
-    binding: Animated<T>,
+    binding: Property<T>,
     ids: &AnimationIds,
 ) -> nr::AnimationValue<T> {
     let (mut interpolation, mut flags, mut id, reset, reserved) = match controls {
@@ -46,8 +47,8 @@ fn value<T: Animatable + Clone>(
         reserved,
     }
 }
-fn scalar<T: Animatable + Clone>(
-    r: &surface::Property<T>,
+fn scalar<T: PropertyValue + Clone>(
+    r: &surface::PropertyBinding<T>,
     ids: &AnimationIds,
 ) -> nr::AnimationValue<T> {
     let mut value = nr::AnimationValue {
@@ -91,14 +92,17 @@ pub(super) fn prepare(
     for (_, skin) in model.skins() {
         wanted.extend(skin.joints.iter().copied());
     }
-    for (_, clip) in model.clips() {
-        for event in clip.events() {
+    for (id, _) in model.clips() {
+        for event in model.clip_events(id) {
             if let Some(node) = event.node {
                 wanted.insert(node);
             }
         }
     }
-    for event in model.shared_events() {
+    for event in model
+        .global_events()
+        .filter(|v| matches!(v.clock, TimeSource::Shared(_)))
+    {
         if let Some(node) = event.node {
             wanted.insert(node);
         }

@@ -1,6 +1,6 @@
 use super::*;
 use wc3::model::{Clip, Controller, ModelBuilder, Time};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 #[test]
 fn controller_activation_and_reordering_do_not_replay_existing_programmes() {
@@ -8,12 +8,12 @@ fn controller_activation_and_reordering_do_not_replay_existing_programmes() {
     let mut builder = ModelBuilder::new("controller transition");
     let a = builder.add_controller(Controller::default()).unwrap();
     let b = builder.add_controller(Controller::default()).unwrap();
-    let mut controller = definition(Clock::Timeline, 0.5);
+    let mut controller = definition(TimeSource::Timeline, 0.5);
     controller.program = EventProgram::Controller(a);
     let events = RuntimeEvents {
         definitions: vec![
-            definition(Clock::Timeline, 0.5),
-            definition(Clock::Timeline, 0.9),
+            definition(TimeSource::Timeline, 0.5),
+            definition(TimeSource::Timeline, 0.9),
             controller,
         ],
         ..SlotConstruct::construct(&mut slot_values)
@@ -67,7 +67,7 @@ fn controller_activation_and_reordering_do_not_replay_existing_programmes() {
     assert!(state.occurrences.is_empty());
 }
 
-fn definition(clock: Clock, time: f64) -> EventDefinition {
+fn definition(clock: TimeSource, time: f64) -> EventDefinition {
     EventDefinition {
         feature: None,
         node: None,
@@ -94,7 +94,7 @@ fn many_looping_definitions_generate_only_seeds_plus_global_dispatch_budget() {
     let budget = 64;
     let events = RuntimeEvents {
         definitions: (0..definitions)
-            .map(|_| definition(Clock::Shared(clock), 0.))
+            .map(|_| definition(TimeSource::Shared(clock), 0.))
             .collect(),
         clocks: HashMap::from([(clock, 1.)]),
         ..SlotConstruct::construct(&mut slot_values)
@@ -134,9 +134,9 @@ fn compilation_resolves_event_node_index_once() {
         .add_node(wc3::model::Node::named("anchor", &mut slot_values))
         .unwrap();
     builder
-        .add_timeline_event(Event {
+        .add_global_event(Event {
             feature: None,
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
             time: Time::seconds(0.5).unwrap(),
             name: "key".into(),
             node: Some(node),
@@ -174,9 +174,9 @@ fn forward_intervals_keep_duplicate_keys_and_seek_skips_destination() {
     let mut slot_values = SlotValues::default();
     let events = RuntimeEvents {
         definitions: vec![
-            definition(Clock::Timeline, 0.),
-            definition(Clock::Timeline, 0.5),
-            definition(Clock::Timeline, 0.5),
+            definition(TimeSource::Timeline, 0.),
+            definition(TimeSource::Timeline, 0.5),
+            definition(TimeSource::Timeline, 0.5),
         ],
         ..SlotConstruct::construct(&mut slot_values)
     }
@@ -213,8 +213,8 @@ fn paused_start_keys_wait_and_reverse_traversal_does_not_dispatch() {
     let mut slot_values = SlotValues::default();
     let events = RuntimeEvents {
         definitions: vec![
-            definition(Clock::Timeline, 0.),
-            definition(Clock::Timeline, 0.5),
+            definition(TimeSource::Timeline, 0.),
+            definition(TimeSource::Timeline, 0.5),
         ],
         ..SlotConstruct::construct(&mut slot_values)
     }
@@ -249,8 +249,8 @@ fn inclusive_loop_end_and_next_start_are_distinct_and_large_jumps_are_bounded() 
         .unwrap();
     let events = RuntimeEvents {
         definitions: vec![
-            definition(Clock::Shared(id), 0.),
-            definition(Clock::Shared(id), 1.),
+            definition(TimeSource::Shared(id), 0.),
+            definition(TimeSource::Shared(id), 1.),
         ],
         clocks: HashMap::from([(id, 1.)]),
         ..SlotConstruct::construct(&mut slot_values)
@@ -279,10 +279,10 @@ fn timeline_keys_follow_selected_clip_interval_and_alias_identity() {
     let id = builder
         .add_clip(Clip::named("clip").with_duration(Time::seconds(1.).unwrap()))
         .unwrap();
-    let mut source = definition(Clock::Timeline, 10.5);
+    let mut source = definition(TimeSource::Timeline, 10.5);
     source.program = EventProgram::Clip(id);
     let events = RuntimeEvents {
-        definitions: vec![source, definition(Clock::Timeline, 9.5)],
+        definitions: vec![source, definition(TimeSource::Timeline, 9.5)],
         clips: HashMap::from([(
             id,
             ClipPolicy {
@@ -324,9 +324,9 @@ fn seek_origin_preserves_forward_keys_crossed_before_first_dispatch() {
     let mut slot_values = SlotValues::default();
     let events = RuntimeEvents {
         definitions: vec![
-            definition(Clock::Timeline, 0.5),
-            definition(Clock::Timeline, 0.55),
-            definition(Clock::Timeline, 0.6),
+            definition(TimeSource::Timeline, 0.5),
+            definition(TimeSource::Timeline, 0.55),
+            definition(TimeSource::Timeline, 0.6),
         ],
         ..SlotConstruct::construct(&mut slot_values)
     }
@@ -358,7 +358,9 @@ fn inactive_programs_and_unchanged_or_paused_updates_do_not_scan_event_definitio
     let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new("indexed event cost");
     let mut events = RuntimeEvents::default();
-    events.definitions.push(definition(Clock::Timeline, 0.25));
+    events
+        .definitions
+        .push(definition(TimeSource::Timeline, 0.25));
     let mut selected = None;
     for index in 0..4096 {
         let id = builder
@@ -372,7 +374,7 @@ fn inactive_programs_and_unchanged_or_paused_updates_do_not_scan_event_definitio
                 origin: None,
             },
         );
-        let mut event = definition(Clock::Clip, 0.5);
+        let mut event = definition(TimeSource::Clip, 0.5);
         event.program = EventProgram::Clip(id);
         events.definitions.push(event);
         selected = Some(id);
@@ -423,7 +425,7 @@ fn interval_clip_index_limits_global_timeline_scans_to_its_authored_window() {
     let id = builder.add_clip(Clip::named("interval")).unwrap();
     let events = RuntimeEvents {
         definitions: (0..10000)
-            .map(|index| definition(Clock::Timeline, f64::from(index) + 0.5))
+            .map(|index| definition(TimeSource::Timeline, f64::from(index) + 0.5))
             .collect(),
         clips: HashMap::from([(
             id,
@@ -460,7 +462,7 @@ fn frozen_shared_clock_does_not_traverse_event_windows() {
     let mut builder = ModelBuilder::new("frozen clock events");
     let clock = builder.add_clock(wc3::model::SharedClock::Frozen).unwrap();
     let events = RuntimeEvents {
-        definitions: vec![definition(Clock::Shared(clock), 0.)],
+        definitions: vec![definition(TimeSource::Shared(clock), 0.)],
         clocks: [(clock, 0.)].into(),
         ..SlotConstruct::construct(&mut slot_values)
     }

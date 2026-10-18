@@ -1,6 +1,7 @@
 use wc3::model::common::IntoZeroVec;
 use wc3::model::formats::mdlx::mdl::Read as _;
 use wc3::model::io;
+use wc3::model::TimeSource;
 use wc3::model::{
     conversion::{ExportOptions, ImportOptions},
     formats::mdlx::{
@@ -53,8 +54,8 @@ fn additive_camera_keys_remain_exact_and_borrowed() {
     assert_eq!(camera.target, [30_000_000., 40., 50.]);
     let property = camera.eye_offset;
     let curve = graph
-        .timeline_channels()
-        .iter()
+        .global_channels()
+        .filter(|v| v.clock() == TimeSource::Timeline)
         .find_map(|channel| match channel {
             Channel::Vector3(track) if track.target == property => Some(&track.curve),
             _ => None,
@@ -115,8 +116,8 @@ fn native_integer_effect_curves_keep_full_width() {
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     let curve = graph
-        .timeline_channels()
-        .iter()
+        .global_channels()
+        .filter(|v| v.clock() == TimeSource::Timeline)
         .find_map(|channel| match channel {
             Channel::Unsigned(track) => Some(&track.curve),
             _ => None,
@@ -386,7 +387,13 @@ fn absolute_tracks_without_sequences_do_not_invent_playback_clips() {
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let model = &imported.value;
     assert_eq!(model.clips().len(), 0);
-    assert_eq!(model.timeline_channels().len(), 1);
+    assert_eq!(
+        model
+            .global_channels()
+            .filter(|v| v.clock() == TimeSource::Timeline)
+            .count(),
+        1
+    );
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -429,19 +436,35 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
     let mut imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     assert_eq!(graph.clips().len(), 2);
-    assert_eq!(graph.timeline_channels().len(), 1);
+    assert_eq!(
+        graph
+            .global_channels()
+            .filter(|v| v.clock() == TimeSource::Timeline)
+            .count(),
+        1
+    );
     assert!(graph
         .clips()
         .iter()
-        .all(|(_, clip)| clip.channels().is_empty()));
-    let Channel::Vector3(mut track) = graph.timeline_channels()[0].clone() else {
+        .all(|(_, clip)| clip.animations.is_empty()));
+    let Channel::Vector3(mut track) = graph
+        .global_channels()
+        .find(|v| v.clock() == TimeSource::Timeline)
+        .unwrap()
+        .clone()
+    else {
         panic!("translation curve missing")
     };
     track.curve =
         wc3::model::Curve::linear(track.curve.times().clone(), vec![[4., 5., 6.]]).unwrap();
     imported
         .value
-        .edit(|builder| builder.set_timeline_channel(0, Channel::Vector3(track)))
+        .edit(|builder| {
+            let id = builder.model().global_animations()[0];
+            let mut animation = builder.model().animation(id).unwrap().clone();
+            animation.channels[0] = Channel::Vector3(track);
+            builder.set_animation(id, animation)
+        })
         .unwrap();
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
@@ -476,8 +499,17 @@ fn global_tracks_without_sequences_stay_on_the_shared_clock() {
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     assert_eq!(graph.clips().len(), 0);
-    assert!(graph.timeline_channels().is_empty());
-    assert_eq!(graph.shared_channels().len(), 1);
+    assert!(graph
+        .global_channels()
+        .find(|v| v.clock() == TimeSource::Timeline)
+        .is_none());
+    assert_eq!(
+        graph
+            .global_channels()
+            .filter(|v| matches!(v.clock(), TimeSource::Shared(_)))
+            .count(),
+        1
+    );
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -513,7 +545,12 @@ fn tcb_curves_cannot_be_encoded_as_native_mdlx_tracks() {
     source.set_helpers([node]);
     let mut imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
-    let Channel::Vector3(mut track) = graph.timeline_channels()[0].clone() else {
+    let Channel::Vector3(mut track) = graph
+        .global_channels()
+        .find(|v| v.clock() == TimeSource::Timeline)
+        .unwrap()
+        .clone()
+    else {
         panic!("translation missing")
     };
     track.curve = Curve::tcb(
@@ -524,7 +561,12 @@ fn tcb_curves_cannot_be_encoded_as_native_mdlx_tracks() {
     .unwrap();
     if imported
         .value
-        .edit(|builder| builder.set_timeline_channel(0, Channel::Vector3(track)))
+        .edit(|builder| {
+            let id = builder.model().global_animations()[0];
+            let mut animation = builder.model().animation(id).unwrap().clone();
+            animation.channels[0] = Channel::Vector3(track);
+            builder.set_animation(id, animation)
+        })
         .is_ok()
     {
         assert!(io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default()).is_err());

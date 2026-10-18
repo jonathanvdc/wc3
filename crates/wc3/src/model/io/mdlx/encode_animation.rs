@@ -6,9 +6,9 @@ use crate::model::formats::mdlx::{
     Animatable,
 };
 use crate::model::profiles::Mdlx;
-use crate::model::Animatable as SlotAnimatable;
+use crate::model::PropertyValue;
 use crate::model::{
-    Animated, ClipId, Clock, ClockId, CurveDomain, Interpolation, Model, ValueSlot,
+    ClipId, ClockId, CurveDomain, Interpolation, Model, Property, TimeSource, ValueSlot,
 };
 use std::collections::{BTreeMap, HashSet};
 
@@ -21,12 +21,12 @@ pub(super) struct Encoder<'a, 'b, 'c> {
     pub used: HashSet<(ValueSlot, &'static str)>,
 }
 impl Encoder<'_, '_, '_> {
-    pub fn constant<U: SlotAnimatable>(&self, slot: Animated<U>) -> U {
+    pub fn constant<U: PropertyValue>(&self, slot: Property<U>) -> U {
         *self.model.values().get(slot).expect("validated slot")
     }
     pub fn optional<T: TrackValue + PartialEq, U: Value>(
         &mut self,
-        slot: Animated<U>,
+        slot: Property<U>,
         map: impl Fn(U) -> Result<T, Error> + Clone,
         identity: T,
         path: &str,
@@ -38,19 +38,7 @@ impl Encoder<'_, '_, '_> {
     }
     pub fn audit(&mut self) -> Result<(), Error> {
         let model = self.model;
-        for channel in model
-            .clips()
-            .iter()
-            .flat_map(|(id, _)| {
-                model
-                    .clip_program(id)
-                    .expect("validated clip alias")
-                    .channels()
-                    .iter()
-            })
-            .chain(model.shared_channels().iter())
-            .chain(model.timeline_channels().iter())
-        {
+        for channel in model.channels() {
             if !self
                 .used
                 .iter()
@@ -69,7 +57,7 @@ impl Encoder<'_, '_, '_> {
     }
     pub fn value<T, U>(
         &mut self,
-        source: &Animated<U>,
+        source: &Property<U>,
         map: impl Fn(U) -> Result<T, Error> + Clone,
         path: &str,
     ) -> Result<Animatable<'static, T>, Error>
@@ -86,7 +74,7 @@ impl Encoder<'_, '_, '_> {
     }
     pub fn track<T, U>(
         &mut self,
-        binding: &Animated<U>,
+        binding: &Property<U>,
         map: impl Fn(U) -> Result<T, Error> + Clone,
         path: &str,
     ) -> Result<Option<NativeTrack<'static, T>>, Error>
@@ -129,24 +117,10 @@ impl Encoder<'_, '_, '_> {
             .iter()
             .flat_map(|(id, _)| {
                 self.model
-                    .clip_program(id)
-                    .expect("validated clip alias")
-                    .channels()
-                    .iter()
+                    .clip_channels(id)
                     .map(move |channel| (Some(id), channel))
             })
-            .chain(
-                self.model
-                    .shared_channels()
-                    .iter()
-                    .map(|channel| (None, channel)),
-            )
-            .chain(
-                self.model
-                    .timeline_channels()
-                    .iter()
-                    .map(|channel| (None, channel)),
-            );
+            .chain(self.model.global_channels().map(|channel| (None, channel)));
         for (clip_id, channel) in channels {
             let Some(track) = U::track(channel) else {
                 continue;
@@ -163,8 +137,8 @@ impl Encoder<'_, '_, '_> {
                 continue;
             }
             let global = match track.clock {
-                Clock::Clip | Clock::Timeline => None,
-                Clock::Shared(id) => Some(
+                TimeSource::Clip | TimeSource::Timeline => None,
+                TimeSource::Shared(id) => Some(
                     *self
                         .globals
                         .get(&id)
@@ -176,7 +150,7 @@ impl Encoder<'_, '_, '_> {
                 continue;
             }
             behavior = Some((mode, global));
-            let offset = if global.is_some() || matches!(track.clock, Clock::Timeline) {
+            let offset = if global.is_some() || matches!(track.clock, TimeSource::Timeline) {
                 0.
             } else {
                 self.starts[&clip_id.expect("clip channel has a clip")]

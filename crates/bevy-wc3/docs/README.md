@@ -33,7 +33,7 @@ then choose a topic:
   geometry and texture choices, shared skeletons and rigid components.
 - [WoW characters and equipment](rendering/characters.md): the optional native
   table adapter, geoset interpretation, joint matching and secondary motion.
-- [Animation blending](rendering/animation-blending.md): typed clip controls,
+- [Animation and blending](rendering/animation-blending.md): reusable animations, clip time mappings, typed playback controls,
   local-pose transitions, interruption, and effect/event sampling.
 - [Node transforms and flags](rendering/node-flags.md): inheritance,
   billboarding, camera anchoring, and driving-camera selection.

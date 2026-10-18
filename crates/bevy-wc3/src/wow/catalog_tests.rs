@@ -1,6 +1,6 @@
 use super::*;
 use wc3::model::ModelBuilder;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 fn catalog(records: &[(u32, i32, [f32; 3])]) -> CharacterCatalog {
     let mut slot_values = SlotValues::default();
     let mut builder: ModelBuilder<'static> = Model::builder("bone catalog fixture");

@@ -1,5 +1,5 @@
 //! Logical M3 volume values.
-use super::{Property, TextureLayer};
+use super::{PropertyBinding, TextureLayer};
 use crate::model::values::programmed::{
     BlendMode, VolumeCameraMode, VolumeFalloff, VolumeFlags, VolumeNoiseFlags,
 };
@@ -13,7 +13,7 @@ pub struct VolumeMaterialStep {
     /// Selects the behavior used for density falloff type.
     pub falloff_type: VolumeFalloff,
     /// Controls density through its animation value.
-    pub density: Property<f32>,
+    pub density: PropertyBinding<f32>,
     /// Supplies the map supplying color.
     pub color_map: Option<TextureLayer>,
     /// Supplies the first noise texture.
@@ -34,11 +34,11 @@ pub struct VolumeNoiseMaterialStep {
     /// Selects the transparency behavior for a camera inside or outside the volume.
     pub draw_transparency: VolumeCameraMode,
     /// Controls density through its animation value.
-    pub density: Property<f32>,
+    pub density: PropertyBinding<f32>,
     /// Controls near-plane clip through its animation value.
-    pub near_plane: Property<f32>,
+    pub near_plane: PropertyBinding<f32>,
     /// Controls falloff distance through its animation value.
-    pub falloff: Property<f32>,
+    pub falloff: PropertyBinding<f32>,
     /// Supplies the map supplying color.
     pub color_map: Option<TextureLayer>,
     /// Supplies the first noise texture.
@@ -46,13 +46,13 @@ pub struct VolumeNoiseMaterialStep {
     /// Supplies the second noise texture.
     pub noise_map2: Option<TextureLayer>,
     /// Controls noise scroll rate through its animation value.
-    pub scroll_rate: Property<[f32; 3]>,
+    pub scroll_rate: PropertyBinding<[f32; 3]>,
     /// Controls volume position through its animation value.
-    pub position: Property<[f32; 3]>,
+    pub position: PropertyBinding<[f32; 3]>,
     /// Controls volume scale through its animation value.
-    pub scale: Property<[f32; 3]>,
+    pub scale: PropertyBinding<[f32; 3]>,
     /// Controls volume rotation through its animation value.
-    pub rotation: Property<[f32; 3]>,
+    pub rotation: PropertyBinding<[f32; 3]>,
     /// Sets alpha test threshold.
     pub alpha_threshold: u32,
     /// Sets layer flags (wrap, flipbook, video, etc.).

@@ -1,7 +1,7 @@
 //! Reusable hierarchy indexing and allocation-free pose output.
 use crate::model::{
-    Animated, AnimatedTransform, Billboard, BillboardConvention, Error, EvaluatedPose, Inheritance,
-    Model, NodeControls, NodeId, PoseBehavior, Skin, Transform as ModelTransform, ValueSample,
+    AnimatedTransform, Billboard, BillboardConvention, Error, EvaluatedPose, Inheritance, Model,
+    NodeControls, NodeId, PoseBehavior, Property, Skin, Transform as ModelTransform, ValueSample,
 };
 use glam::{Affine3A, Mat4};
 use std::collections::{HashMap, HashSet};
@@ -32,7 +32,7 @@ pub struct PoseNode {
     /// Slot identities read by this hierarchy node.
     pub transform: AnimatedTransform,
     /// Visibility slot.
-    pub visibility: Animated<bool>,
+    pub visibility: Property<bool>,
     /// Presence of channels across all authored programmes.
     pub channels: NodeChannels,
     /// Components inherited from the parent.
@@ -192,18 +192,7 @@ impl PoseLayout {
 impl Model<'_> {
     /// Prepares hierarchy relationships and channel-presence masks once for repeated evaluation.
     pub fn prepare_pose(&self) -> Result<PoseLayout, Error> {
-        let targets: HashSet<_> = self
-            .timeline_channels()
-            .iter()
-            .chain(self.shared_channels())
-            .chain(self.clips().iter().flat_map(|(_, clip)| clip.channels()))
-            .chain(
-                self.controllers()
-                    .iter()
-                    .flat_map(|(_, controller)| &controller.channels),
-            )
-            .map(|channel| channel.target())
-            .collect();
+        let targets: HashSet<_> = self.channels().map(|channel| channel.target()).collect();
         let indices: HashMap<_, _> = self
             .nodes()
             .iter()

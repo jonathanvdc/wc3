@@ -2,30 +2,27 @@
 use super::curves::{CurveValue, SampleValue};
 use crate::model::profiles::Profile;
 use crate::model::{
-    Animatable, Animated, Channel, ClipId, Clock, ClockId, ControllerId, Error, Model, Quaternion,
-    Texture, Time, Track, ValueSlot, Values,
+    AnimationId, Channel, ClipId, ClockId, ControllerId, Error, Model, Property, PropertyValue,
+    PropertyValues, Quaternion, Texture, Time, TimeSource, Track, ValueSlot,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::iter::once;
 
-/// Clock values and explicitly selected programmes for one evaluation.
+/// TimeSource values and explicitly selected programmes for one evaluation.
 ///
-/// The caller supplies authoring timeline time independently of local clip time,
-/// and chooses controllers according to its gameplay policy. Shared clocks wrap
+/// The selected clip maps local time into its authored timeline interval when
+/// an origin is declared; otherwise timeline time is supplied explicitly. The
+/// caller chooses controllers according to its gameplay policy. Shared clocks wrap
 /// `shared_time` by their authored periods; frozen clocks retain time zero.
 /// This operation does not dispatch events.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AnimationSample<'a> {
-    /// Selected playback clip, including aliases.
+    /// Selected playback clip.
     pub clip: Option<ClipId>,
     /// Seconds from the beginning of the selected clip; wrapped or clamped.
     pub clip_time: Time,
     /// Absolute authoring timeline time.
     pub timeline_time: Time,
-    /// Optional inclusive key-selection interval for authored timeline programmes.
-    /// Keys in neighboring sequences cannot influence interpolation within it.
-    pub timeline_interval: Option<(Time, Time)>,
     /// Time driving all independent repeating clocks.
     pub shared_time: Time,
     /// Explicitly enabled controllers, in tie-breaking order.
@@ -34,12 +31,12 @@ pub struct AnimationSample<'a> {
 
 /// A validated playback selection that can evaluate many typed properties.
 ///
-/// Global timeline channels precede global shared channels, then the selected
-/// clip programme, then selected controllers in ascending priority order. Later
+/// Model-level animations precede selected clip animations, then selected
+/// controllers in ascending priority order. Selection order is authoritative. Later
 /// matching channels override earlier channels. Equal-priority controllers keep
 /// caller order. Controller concurrency is playback policy, not implicit selection.
 pub struct SampledAnimation<'view, 'data> {
-    values: &'view Values,
+    values: &'view PropertyValues,
     clocks: Cow<'view, BTreeMap<ClockId, Time>>,
     clip_time: Time,
     clip_policy: Option<(Time, bool)>,
@@ -56,18 +53,22 @@ enum ChannelSelection<'view, 'data> {
 // Ordinary clips need only inline borrowed programme references. Controller
 // storage allocates only when the caller explicitly selects controllers.
 struct IndexedSelection<'view> {
-    global: &'view IndexedChannels,
-    clip: Option<&'view IndexedChannels>,
+    animations: &'view BTreeMap<AnimationId, IndexedChannels>,
+    global: &'view [AnimationId],
+    clip: &'view [AnimationId],
     controllers: Vec<&'view ControllerProgram>,
 }
 impl<'view> IndexedSelection<'view> {
     fn iter(&self) -> impl DoubleEndedIterator<Item = &'view IndexedChannels> + '_ {
-        once(self.global).chain(self.clip).chain(
-            self.controllers
-                .iter()
-                .copied()
-                .map(|controller| &controller.channels),
-        )
+        self.global
+            .iter()
+            .chain(self.clip)
+            .chain(
+                self.controllers
+                    .iter()
+                    .flat_map(|controller| &controller.animations),
+            )
+            .map(|id| &self.animations[id])
     }
 }
 #[derive(Clone, Debug)]
@@ -86,7 +87,7 @@ impl IndexedChannels {
 }
 
 /// A value represented by a typed semantic animation channel.
-pub trait ChannelValue: SampleValue + Animatable {
+pub trait ChannelValue: SampleValue + PropertyValue {
     /// Borrows the matching typed track when this channel carries this value type.
     fn channel_track<'view, 'data>(
         channel: &'view Channel<'data>,
@@ -115,35 +116,22 @@ impl<'data, P: Profile> Model<'data, P> {
         &'view self,
         sample: AnimationSample<'_>,
     ) -> Result<SampledAnimation<'view, 'data>, Error> {
-        let mut channels: Vec<_> = self
-            .timeline_channels()
-            .iter()
-            .chain(self.shared_channels())
-            .collect();
-        validate_interval(sample.timeline_interval)?;
-        let mut clip_time = sample.clip_time;
-        let mut clip_policy = None;
-        if let Some(id) = sample.clip {
-            let clip = self
-                .clip(id)
-                .ok_or_else(|| Error::new("animation.sample.clip", "unknown clip identity"))?;
-            clip_policy = Some((clip.duration(), clip.is_looping()));
-            let duration = clip.duration().as_seconds();
-            let seconds = clip_time.as_seconds();
-            clip_time = Time::seconds(if duration > 0. {
-                if clip.is_looping() {
-                    seconds.rem_euclid(duration)
-                } else {
-                    seconds.clamp(0., duration)
-                }
+        let mut channels: Vec<_> = self.global_channels().collect();
+        let (clip_time, clip_policy, timeline_time, timeline_interval) =
+            if let Some(id) = sample.clip {
+                let clip = self
+                    .clip(id)
+                    .ok_or_else(|| Error::new("animation.sample.clip", "unknown clip identity"))?;
+                channels.extend(self.clip_channels(id));
+                resolve_times(
+                    sample,
+                    clip.duration(),
+                    clip.is_looping(),
+                    clip.timeline_origin,
+                )?
             } else {
-                0.
-            })?;
-            let program = self
-                .clip_program(id)
-                .ok_or_else(|| Error::new("animation.sample.clip", "missing alias programme"))?;
-            channels.extend(program.channels());
-        }
+                (sample.clip_time, None, sample.timeline_time, None)
+            };
         let mut controllers = Vec::with_capacity(sample.controllers.len());
         for (index, id) in sample.controllers.iter().enumerate() {
             if sample.controllers[..index].contains(id) {
@@ -161,7 +149,7 @@ impl<'data, P: Profile> Model<'data, P> {
         }
         controllers.sort_by_key(|controller| controller.priority);
         for controller in controllers {
-            channels.extend(&controller.channels);
+            channels.extend(self.animation_channels(&controller.animations));
         }
         Ok(SampledAnimation {
             values: self.values(),
@@ -173,8 +161,8 @@ impl<'data, P: Profile> Model<'data, P> {
             ),
             clip_time,
             clip_policy,
-            timeline_time: sample.timeline_time,
-            timeline_interval: sample.timeline_interval,
+            timeline_time,
+            timeline_interval,
             shared_time: sample.shared_time,
             channels: ChannelSelection::Flat(channels),
         })
@@ -183,18 +171,26 @@ impl<'data, P: Profile> Model<'data, P> {
 
 impl<'view, 'data> SampledAnimation<'view, 'data> {
     /// Evaluates every slot into instance-owned storage, resetting from authored constants.
-    pub fn evaluate_into(&self, output: &mut Values) {
+    pub fn evaluate_into(&self, output: &mut PropertyValues) {
         self.values.evaluate_into(self, output);
     }
     /// Evaluates every slot into a new table with the same identities.
-    pub fn evaluate(&self) -> Values {
-        let mut values = Values::default();
+    pub fn evaluate(&self) -> PropertyValues {
+        let mut values = PropertyValues::default();
         self.evaluate_into(&mut values);
         values
     }
     /// Authored constants and explicit value conversions.
-    pub fn values(&self) -> &Values {
+    pub fn values(&self) -> &PropertyValues {
         self.values
+    }
+    /// Resolved inclusive authoring interval of the selected clip.
+    pub fn timeline_interval(&self) -> Option<(Time, Time)> {
+        self.timeline_interval
+    }
+    /// Resolved authoring time after applying the selected clip's mapping.
+    pub fn timeline_time(&self) -> Time {
+        self.timeline_time
     }
     /// Absolute shared-clock input before individual periods wrap it.
     /// Useful for continuous procedural controls independent of clip looping.
@@ -203,12 +199,12 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
     }
 
     /// Evaluates the selected channels for a typed property, or returns no override.
-    pub fn override_value<T: ChannelValue>(&self, property: &Animated<T>) -> Option<T> {
+    pub fn override_value<T: ChannelValue>(&self, property: &Property<T>) -> Option<T> {
         self.override_at(property, self.times())
     }
     fn override_at<T: ChannelValue>(
         &self,
-        property: &Animated<T>,
+        property: &Property<T>,
         times: SampleTimes,
     ) -> Option<T> {
         match &self.channels {
@@ -233,7 +229,7 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
     fn sample_channel<T: ChannelValue>(
         &self,
         channel: &Channel<'_>,
-        property: &Animated<T>,
+        property: &Property<T>,
         times: SampleTimes,
     ) -> Option<T> {
         let track = T::channel_track(channel)?;
@@ -245,9 +241,9 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
                 time
             } else {
                 match track.clock {
-                    Clock::Clip => times.clip,
-                    Clock::Timeline => times.timeline,
-                    Clock::Shared(id) => {
+                    TimeSource::Clip => times.clip,
+                    TimeSource::Timeline => times.timeline,
+                    TimeSource::Shared(id) => {
                         let period = self.clocks.get(&id)?.as_seconds();
                         if period > 0. {
                             Time::seconds(times.shared.as_seconds().rem_euclid(period)).ok()?
@@ -257,7 +253,7 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
                     }
                 }
             };
-        if let (Clock::Timeline, Some((start, end))) = (track.clock, self.timeline_interval) {
+        if let (TimeSource::Timeline, Some((start, end))) = (track.clock, self.timeline_interval) {
             track.curve.sample_in(time, start..=end)
         } else {
             track.curve.sample(time)
@@ -290,7 +286,10 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
             selection: self,
             times: SampleTimes {
                 clip,
-                timeline: timeline_time,
+                timeline: self.timeline_interval.map_or(timeline_time, |(origin, _)| {
+                    Time::seconds(origin.as_seconds() + clip.as_seconds())
+                        .expect("validated mapping")
+                }),
                 shared: shared_time,
                 occurrence: None,
             },
@@ -301,20 +300,20 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
     /// fall through to lower-priority tracks, exactly as value sampling does.
     pub fn track<T: ChannelValue>(
         &self,
-        property: &Animated<T>,
+        property: &Property<T>,
     ) -> Option<SampledTrack<'_, 'data, T>> {
         self.track_at(property, self.times())
     }
     fn track_at<T: ChannelValue>(
         &self,
-        property: &Animated<T>,
+        property: &Property<T>,
         times: SampleTimes,
     ) -> Option<SampledTrack<'_, 'data, T>> {
         let resolve = |channel: &'view Channel<'data>| {
             self.sample_channel(channel, property, times)?;
             let track = T::channel_track(channel)?;
             let (time, period, origin, interval) = match track.clock {
-                Clock::Clip => (
+                TimeSource::Clip => (
                     times.clip,
                     self.clip_policy.and_then(|(duration, looping)| {
                         (looping && duration.as_seconds() > 0.).then_some(duration)
@@ -322,7 +321,7 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
                     Time::default(),
                     None,
                 ),
-                Clock::Timeline => (
+                TimeSource::Timeline => (
                     times.timeline,
                     self.clip_policy.and_then(|(duration, looping)| {
                         (looping && duration.as_seconds() > 0. && self.timeline_interval.is_some())
@@ -332,7 +331,7 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
                         .map_or(Time::default(), |(start, _)| start),
                     self.timeline_interval,
                 ),
-                Clock::Shared(id) => {
+                TimeSource::Shared(id) => {
                     let period = *self.clocks.get(&id)?;
                     (
                         if period.as_seconds() > 0. {
@@ -375,7 +374,7 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
         }
     }
     /// Evaluates an animated value, preserving its authored default without a channel.
-    pub fn animated<T: ChannelValue>(&self, value: &Animated<T>) -> T {
+    pub fn animated<T: ChannelValue>(&self, value: &Property<T>) -> T {
         self.override_value(value)
             .unwrap_or_else(|| T::resolve(self.values, *value, self))
     }
@@ -386,7 +385,7 @@ struct SampleTimes {
     clip: Time,
     timeline: Time,
     shared: Time,
-    occurrence: Option<(Clock, Time)>,
+    occurrence: Option<(TimeSource, Time)>,
 }
 fn normalize_clip(time: Time, policy: Option<(Time, bool)>) -> Time {
     let Some((duration, looping)) = policy else {
@@ -411,23 +410,23 @@ pub struct RetimedAnimation<'sample, 'view, 'data> {
 impl RetimedAnimation<'_, '_, '_> {
     /// Samples an occurrence's own clock at its exact authored key, including
     /// inclusive loop-end keys. Other clocks keep their normal wrapped times.
-    pub fn at_occurrence(mut self, clock: Clock, time: Time) -> Self {
+    pub fn at_occurrence(mut self, clock: TimeSource, time: Time) -> Self {
         self.times.occurrence = Some((clock, time));
         self
     }
     /// Evaluates the same selected programmes at the overridden clocks.
-    pub fn override_value<T: ChannelValue>(&self, property: &Animated<T>) -> Option<T> {
+    pub fn override_value<T: ChannelValue>(&self, property: &Property<T>) -> Option<T> {
         self.selection.override_at(property, self.times)
     }
     /// Preserves an authored default when no selected channel supplies a value.
-    pub fn animated<T: ChannelValue>(&self, value: &Animated<T>) -> T {
+    pub fn animated<T: ChannelValue>(&self, value: &Property<T>) -> T {
         self.override_value(value)
             .unwrap_or_else(|| T::resolve(self.selection.values, *value, self))
     }
     /// Borrows the effective source track at the overridden clock values.
     pub fn track<T: ChannelValue>(
         &self,
-        property: &Animated<T>,
+        property: &Property<T>,
     ) -> Option<SampledTrack<'_, '_, T>> {
         self.selection.track_at(property, self.times)
     }
@@ -436,9 +435,9 @@ impl RetimedAnimation<'_, '_, '_> {
 ///
 /// `time` is resolved for value sampling. To enumerate crossed keys, callers keep
 /// their own unwrapped clock times and use `origin`/`period` to enumerate cycles.
-/// A bounded timeline's origin is its inclusive interval start; clip aliases use
+/// A bounded timeline's origin is its inclusive interval start; shared programs use
 /// the selected alias duration rather than the referenced programme's duration.
-pub struct SampledTrack<'sample, 'data, T: CurveValue + Animatable> {
+pub struct SampledTrack<'sample, 'data, T: CurveValue + PropertyValue> {
     /// Effective typed source, without copying its packed key arrays.
     pub track: &'sample Track<'data, T>,
     /// Resolved local time used for the sampled value.
@@ -451,7 +450,7 @@ pub struct SampledTrack<'sample, 'data, T: CurveValue + Animatable> {
     pub interval: Option<(Time, Time)>,
 }
 
-impl<T: CurveValue + Animatable> Track<'_, T> {
+impl<T: CurveValue + PropertyValue> Track<'_, T> {
     /// Detaches borrowed curve storage for a persistent runtime programme.
     pub fn into_owned(self) -> Track<'static, T> {
         Track {
@@ -488,12 +487,13 @@ impl Channel<'_> {
 struct ClipProgram {
     duration: Time,
     looping: bool,
-    channels: IndexedChannels,
+    timeline_origin: Option<Time>,
+    animations: Vec<AnimationId>,
 }
 #[derive(Clone, Debug)]
 struct ControllerProgram {
     priority: i32,
-    channels: IndexedChannels,
+    animations: Vec<AnimationId>,
 }
 /// Owned semantic animation data, independent of geometry and source asset lifetime.
 ///
@@ -501,18 +501,19 @@ struct ControllerProgram {
 /// bake frames, select gameplay controllers, or retain the source model graph.
 #[derive(Clone, Debug)]
 pub struct AnimationProgram {
-    values: Values,
+    values: PropertyValues,
     clocks: BTreeMap<ClockId, Time>,
-    global: IndexedChannels,
+    animations: BTreeMap<AnimationId, IndexedChannels>,
+    global: Vec<AnimationId>,
     clips: BTreeMap<ClipId, ClipProgram>,
     controllers: BTreeMap<ControllerId, ControllerProgram>,
 }
 impl AnimationProgram {
     /// Authored constants retained by this compiled program.
-    pub fn values(&self) -> &Values {
+    pub fn values(&self) -> &PropertyValues {
         &self.values
     }
-    /// Copies borrowed animation buffers and resolves clip alias programmes.
+    /// Copies each reusable animation once and retains playback selections.
     pub fn compile<P: Profile>(model: &Model<'_, P>) -> Self {
         let own = |channels: &[Channel<'_>]| {
             IndexedChannels::new(channels.iter().cloned().map(Channel::into_owned).collect())
@@ -524,15 +525,12 @@ impl AnimationProgram {
                 .iter()
                 .map(|(id, clock)| (id, clock.period()))
                 .collect(),
-            global: IndexedChannels::new(
-                model
-                    .timeline_channels()
-                    .iter()
-                    .chain(model.shared_channels())
-                    .cloned()
-                    .map(Channel::into_owned)
-                    .collect(),
-            ),
+            animations: model
+                .animations()
+                .iter()
+                .map(|(id, animation)| (id, own(&animation.channels)))
+                .collect(),
+            global: model.global_animations().to_vec(),
             clips: model
                 .clips()
                 .iter()
@@ -542,10 +540,8 @@ impl AnimationProgram {
                         ClipProgram {
                             duration: clip.duration(),
                             looping: clip.is_looping(),
-                            channels: own(model
-                                .clip_program(id)
-                                .expect("validated clip alias")
-                                .channels()),
+                            timeline_origin: clip.timeline_origin,
+                            animations: clip.animations.clone(),
                         },
                     )
                 })
@@ -558,7 +554,7 @@ impl AnimationProgram {
                         id,
                         ControllerProgram {
                             priority: controller.priority,
-                            channels: own(&controller.channels),
+                            animations: controller.animations.clone(),
                         },
                     )
                 })
@@ -609,61 +605,48 @@ impl AnimationProgram {
             result.clocks.insert(id, period);
         }
         let owned: HashSet<_> = self
-            .global
-            .index
-            .keys()
-            .chain(
-                self.clips
-                    .values()
-                    .flat_map(|clip| clip.channels.index.keys()),
-            )
-            .chain(
-                self.controllers
-                    .values()
-                    .flat_map(|controller| controller.channels.index.keys()),
-            )
+            .animations
+            .values()
+            .flat_map(|animation| animation.index.keys())
             .collect();
-        let mut append =
-            |target: &mut Vec<Channel<'static>>, channels: &IndexedChannels| -> Result<(), Error> {
-                for channel in &channels.channels {
-                    if !include(channel) {
-                        continue;
-                    }
-                    if owned.contains(&channel.target()) {
-                        return Err(Error::new(
-                            "animation.compose.properties",
-                            "property owners overlap",
-                        ));
-                    }
-                    target.push(channel.clone());
+        for (&id, animation) in &source.animations {
+            if result.animations.contains_key(&id) {
+                return Err(Error::new(
+                    "animation.compose.animations",
+                    "animation identities overlap",
+                ));
+            }
+            let mut channels = Vec::new();
+            for channel in &animation.channels {
+                if !include(channel) {
+                    continue;
                 }
-                Ok(())
-            };
-        let mut global = result.global.channels.clone();
-        append(&mut global, &source.global)?;
-        result.global = IndexedChannels::new(global);
+                if owned.contains(&channel.target()) {
+                    return Err(Error::new(
+                        "animation.compose.properties",
+                        "property owners overlap",
+                    ));
+                }
+                channels.push(channel.clone());
+            }
+            result.animations.insert(id, IndexedChannels::new(channels));
+        }
+        result.global.extend(&source.global);
         for &(destination, source_clip) in clips {
-            let destination = result.clips.get_mut(&destination).unwrap();
-            let mut channels = destination.channels.channels.clone();
-            append(&mut channels, &source.clips[&source_clip].channels)?;
-            destination.channels = IndexedChannels::new(channels);
+            result
+                .clips
+                .get_mut(&destination)
+                .unwrap()
+                .animations
+                .extend(&source.clips[&source_clip].animations);
         }
         for (&id, controller) in &source.controllers {
-            if result.controllers.contains_key(&id) {
+            if result.controllers.insert(id, controller.clone()).is_some() {
                 return Err(Error::new(
                     "animation.compose.controllers",
                     "controller identities overlap",
                 ));
             }
-            let mut channels = Vec::new();
-            append(&mut channels, &controller.channels)?;
-            result.controllers.insert(
-                id,
-                ControllerProgram {
-                    priority: controller.priority,
-                    channels: IndexedChannels::new(channels),
-                },
-            );
         }
         Ok(result)
     }
@@ -672,28 +655,18 @@ impl AnimationProgram {
         &self,
         sample: AnimationSample<'_>,
     ) -> Result<SampledAnimation<'_, 'static>, Error> {
-        validate_interval(sample.timeline_interval)?;
-        let mut selected_clip = None;
-        let mut clip_time = sample.clip_time;
-        let mut clip_policy = None;
-        if let Some(id) = sample.clip {
-            let clip = self
-                .clips
-                .get(&id)
-                .ok_or_else(|| Error::new("animation.sample.clip", "unknown clip identity"))?;
-            clip_policy = Some((clip.duration, clip.looping));
-            let duration = clip.duration.as_seconds();
-            clip_time = Time::seconds(if duration > 0. {
-                if clip.looping {
-                    clip_time.as_seconds().rem_euclid(duration)
-                } else {
-                    clip_time.as_seconds().clamp(0., duration)
-                }
+        let mut selected_clip: &[AnimationId] = &[];
+        let (clip_time, clip_policy, timeline_time, timeline_interval) =
+            if let Some(id) = sample.clip {
+                let clip = self
+                    .clips
+                    .get(&id)
+                    .ok_or_else(|| Error::new("animation.sample.clip", "unknown clip identity"))?;
+                selected_clip = &clip.animations;
+                resolve_times(sample, clip.duration, clip.looping, clip.timeline_origin)?
             } else {
-                0.
-            })?;
-            selected_clip = Some(&clip.channels);
-        }
+                (sample.clip_time, None, sample.timeline_time, None)
+            };
         let mut controllers = Vec::with_capacity(sample.controllers.len());
         for (index, id) in sample.controllers.iter().enumerate() {
             if sample.controllers[..index].contains(id) {
@@ -715,10 +688,11 @@ impl AnimationProgram {
             clocks: Cow::Borrowed(&self.clocks),
             clip_time,
             clip_policy,
-            timeline_time: sample.timeline_time,
-            timeline_interval: sample.timeline_interval,
+            timeline_time,
+            timeline_interval,
             shared_time: sample.shared_time,
             channels: ChannelSelection::Indexed(IndexedSelection {
+                animations: &self.animations,
                 global: &self.global,
                 clip: selected_clip,
                 controllers,
@@ -727,539 +701,70 @@ impl AnimationProgram {
     }
 }
 
-fn validate_interval(interval: Option<(Time, Time)>) -> Result<(), Error> {
-    if interval.is_some_and(|(start, end)| start > end) {
-        return Err(Error::new(
-            "animation.sample.timeline_interval",
-            "interval start exceeds end",
-        ));
-    }
-    Ok(())
+type ResolvedTimes = (Time, Option<(Time, bool)>, Time, Option<(Time, Time)>);
+fn resolve_times(
+    sample: AnimationSample<'_>,
+    duration: Time,
+    looping: bool,
+    origin: Option<Time>,
+) -> Result<ResolvedTimes, Error> {
+    let policy = Some((duration, looping));
+    let clip = normalize_clip(sample.clip_time, policy);
+    let (timeline, interval) = match origin {
+        Some(origin) => (
+            Time::seconds(origin.as_seconds() + clip.as_seconds())?,
+            Some((
+                origin,
+                Time::seconds(origin.as_seconds() + duration.as_seconds())?,
+            )),
+        ),
+        None => (sample.timeline_time, None),
+    };
+    Ok((clip, policy, timeline, interval))
 }
 
 /// Typed slot reads shared by ordinary and occurrence-time animation samples.
 /// Consumers can evaluate poses and surfaces without changing the selected programmes.
 pub trait ValueSample {
     /// Authored constants for the selected model.
-    fn values(&self) -> &Values;
+    fn values(&self) -> &PropertyValues;
     /// Samples an override, returning `None` when no selected channel writes it.
-    fn override_value<T: ChannelValue>(&self, property: &Animated<T>) -> Option<T>;
+    fn override_value<T: ChannelValue>(&self, property: &Property<T>) -> Option<T>;
     /// Reads a slot, using its authored constant when no selected writer supplies it.
     ///
     /// Panics if the slot is absent from this model. Use `values().get(slot)` to
     /// check an identity before reading an externally supplied reference.
-    fn animated<T: ChannelValue>(&self, value: &Animated<T>) -> T {
+    fn animated<T: ChannelValue>(&self, value: &Property<T>) -> T {
         self.override_value(value)
             .unwrap_or_else(|| T::resolve(self.values(), *value, self))
     }
 }
 impl ValueSample for SampledAnimation<'_, '_> {
-    fn values(&self) -> &Values {
+    fn values(&self) -> &PropertyValues {
         self.values
     }
-    fn override_value<T: ChannelValue>(&self, property: &Animated<T>) -> Option<T> {
+    fn override_value<T: ChannelValue>(&self, property: &Property<T>) -> Option<T> {
         self.override_value(property)
     }
 }
 impl ValueSample for RetimedAnimation<'_, '_, '_> {
-    fn values(&self) -> &Values {
+    fn values(&self) -> &PropertyValues {
         self.selection.values
     }
-    fn override_value<T: ChannelValue>(&self, property: &Animated<T>) -> Option<T> {
+    fn override_value<T: ChannelValue>(&self, property: &Property<T>) -> Option<T> {
         self.override_value(property)
     }
 }
 
-impl ValueSample for Values {
-    fn values(&self) -> &Values {
+impl ValueSample for PropertyValues {
+    fn values(&self) -> &PropertyValues {
         self
     }
-    fn override_value<T: ChannelValue>(&self, slot: &Animated<T>) -> Option<T> {
+    fn override_value<T: ChannelValue>(&self, slot: &Property<T>) -> Option<T> {
         self.get(*slot).copied()
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::model::{Construct as SlotConstruct, Values as SlotValues};
-
-    use super::*;
-    use crate::model::{Clip, Controller, Curve, ModelBuilder, SharedClock};
-    use std::ptr::eq;
-    fn time(seconds: f64) -> Time {
-        Time::seconds(seconds).unwrap()
-    }
-    fn channel(property: Animated<[f32; 3]>, clock: Clock, end: f32) -> Channel<'static> {
-        Channel::Vector3(Track {
-            target: property,
-            curve: Curve::linear([time(0.), time(2.)], [[0.; 3], [end; 3]]).unwrap(),
-            clock,
-        })
-    }
-    #[test]
-    fn frozen_shared_clock_keeps_authored_origin_without_a_loop_period() {
-        let mut slot_values = SlotValues::default();
-        let mut builder = ModelBuilder::new("frozen ornament");
-        let node = builder.add_named_node("ornament").unwrap();
-        let node_translation = builder.model().node(node).unwrap().transform.translation;
-        let _node_scale = builder.model().node(node).unwrap().transform.scale;
-        let clock = builder.add_clock(SharedClock::Frozen).unwrap();
-        builder
-            .add_shared_channel(Channel::Vector3(Track {
-                target: node_translation,
-                curve: Curve::linear([time(0.), time(2.)], [[3.; 3], [9.; 3]]).unwrap(),
-                clock: Clock::Shared(clock),
-            }))
-            .unwrap();
-        let model = {
-            builder.import_values(&slot_values).unwrap();
-            builder.finish()
-        }
-        .unwrap();
-        let program = AnimationProgram::compile(&model);
-        for elapsed in [0., 1., 100.] {
-            let sampled = program
-                .sample(AnimationSample {
-                    shared_time: time(elapsed),
-                    ..SlotConstruct::construct(&mut slot_values)
-                })
-                .unwrap();
-            assert_eq!(sampled.override_value(&node_translation), Some([3.; 3]));
-            let track = sampled.track(&node_translation).unwrap();
-            assert_eq!(track.time, time(0.));
-            assert_eq!(track.period, None);
-        }
-    }
-    #[test]
-    fn composed_programs_share_clocks_and_keep_property_owners_disjoint() {
-        let mut slot_values = SlotValues::default();
-        let mut host = ModelBuilder::new("host");
-        let node = host.add_named_node("host bone").unwrap();
-        let node_translation = host.model().node(node).unwrap().transform.translation;
-        let _node_scale = host.model().node(node).unwrap().transform.scale;
-        let clip = host
-            .add_clip(Clip::named("host clip").with_duration(time(2.)))
-            .unwrap();
-        host.add_channel(clip, channel(node_translation, Clock::Clip, 2.))
-            .unwrap();
-        let host = AnimationProgram::compile(
-            &{
-                host.import_values(&slot_values).unwrap();
-                host.finish()
-            }
-            .unwrap(),
-        );
-        let mut part = ModelBuilder::new("part");
-        let extra = part.add_named_node("part bone").unwrap();
-        let extra_translation = part.model().node(extra).unwrap().transform.translation;
-        let extra_scale = part.model().node(extra).unwrap().transform.scale;
-        let part_clip = part
-            .add_clip(Clip::named("part clip").with_duration(time(2.)))
-            .unwrap();
-        part.add_channel(part_clip, channel(extra_translation, Clock::Clip, 4.))
-            .unwrap();
-        part.add_timeline_channel(channel(extra_scale, Clock::Timeline, 6.))
-            .unwrap();
-        let part = AnimationProgram::compile(
-            &{
-                part.import_values(&slot_values).unwrap();
-                part.finish()
-            }
-            .unwrap(),
-        );
-        let combined = host.compose(&part, &[(clip, part_clip)], |_| true).unwrap();
-        let sampled = combined
-            .sample(AnimationSample {
-                clip: Some(clip),
-                clip_time: time(1.),
-                timeline_time: time(1.),
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap();
-        assert_eq!(sampled.override_value(&node_translation), Some([1.; 3]));
-        assert_eq!(sampled.override_value(&extra_translation), Some([2.; 3]));
-        assert_eq!(sampled.override_value(&extra_scale), Some([3.; 3]));
-        assert!(host
-            .compose(&part, &[(clip, part_clip), (clip, part_clip)], |_| true)
-            .is_err());
-        assert!(host
-            .compose(&part, &[(part_clip, part_clip)], |_| true)
-            .is_err());
-        assert!(host.compose(&host, &[(clip, clip)], |_| true).is_err());
-        assert!(host
-            .sample(AnimationSample {
-                clip: Some(clip),
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap()
-            .override_value(&extra_translation)
-            .is_none());
-    }
-    #[test]
-    fn event_boundary_override_keeps_own_clock_end_and_other_clock_start() {
-        let mut slot_values = SlotValues::default();
-        let mut builder = ModelBuilder::new("occurrence");
-        let node = builder.add_named_node("bone").unwrap();
-        let node_translation = builder.model().node(node).unwrap().transform.translation;
-        let node_scale = builder.model().node(node).unwrap().transform.scale;
-        let clock = builder
-            .add_clock(SharedClock::Repeating { period: time(2.) })
-            .unwrap();
-        let clip = builder
-            .add_clip(Clip::named("loop").with_duration(time(2.)))
-            .unwrap();
-        builder
-            .add_channel(clip, channel(node_translation, Clock::Clip, 4.))
-            .unwrap();
-        builder
-            .add_shared_channel(channel(node_scale, Clock::Shared(clock), 8.))
-            .unwrap();
-        let model = {
-            builder.import_values(&slot_values).unwrap();
-            builder.finish()
-        }
-        .unwrap();
-        let sampled = model
-            .animation_sample(AnimationSample {
-                clip: Some(clip),
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap();
-        let end = sampled
-            .at_times(time(2.), time(2.), time(2.))
-            .at_occurrence(Clock::Clip, time(2.));
-        assert_eq!(end.override_value(&node_translation), Some([4.; 3]));
-        assert_eq!(end.override_value(&node_scale), Some([0.; 3]));
-        assert_eq!(end.track(&node_translation).unwrap().time, time(2.));
-        let shared_end = sampled
-            .at_times(time(2.), time(2.), time(2.))
-            .at_occurrence(Clock::Shared(clock), time(2.));
-        assert_eq!(shared_end.override_value(&node_translation), Some([0.; 3]));
-        assert_eq!(shared_end.override_value(&node_scale), Some([8.; 3]));
-    }
-    #[test]
-    fn alias_local_clock_and_owned_program_survive_source_drop() {
-        let mut slot_values = SlotValues::default();
-        let mut builder = ModelBuilder::new("sample");
-        let node = builder.add_named_node("bone").unwrap();
-        let node_translation = builder.model().node(node).unwrap().transform.translation;
-        let _node_scale = builder.model().node(node).unwrap().transform.scale;
-        let property = node_translation;
-        let original = builder
-            .add_clip(Clip::named("original").with_duration(time(2.)))
-            .unwrap();
-        builder
-            .add_channel(original, channel(property, Clock::Clip, 4.))
-            .unwrap();
-        let alias = builder
-            .add_clip(
-                Clip::named("alias")
-                    .with_alias(original)
-                    .with_duration(time(1.))
-                    .once(),
-            )
-            .unwrap();
-        let model = {
-            builder.import_values(&slot_values).unwrap();
-            builder.finish()
-        }
-        .unwrap();
-        let sample = AnimationSample {
-            clip: Some(alias),
-            clip_time: time(8.),
-            ..SlotConstruct::construct(&mut slot_values)
-        };
-        assert_eq!(
-            model
-                .animation_sample(sample)
-                .unwrap()
-                .override_value(&property),
-            Some([2.; 3])
-        );
-        let program = AnimationProgram::compile(&model);
-        drop(model);
-        let sampled = program.sample(sample).unwrap();
-        let ChannelSelection::Indexed(selection) = &sampled.channels else {
-            panic!("owned programs must use indexed selection")
-        };
-        assert_eq!(selection.controllers.capacity(), 0);
-        assert_eq!(selection.iter().count(), 2);
-        assert_eq!(sampled.override_value(&property), Some([2.; 3]));
-    }
-    #[test]
-    fn independent_clocks_and_controller_priority_are_explicit() {
-        let mut slot_values = SlotValues::default();
-        let mut builder = ModelBuilder::new("sample");
-        let node = builder.add_named_node("bone").unwrap();
-        let node_translation = builder.model().node(node).unwrap().transform.translation;
-        let node_scale = builder.model().node(node).unwrap().transform.scale;
-        let translation = node_translation;
-        let scale = node_scale;
-        let clock = builder
-            .add_clock(SharedClock::Repeating { period: time(2.) })
-            .unwrap();
-        builder
-            .add_timeline_channel(channel(translation, Clock::Timeline, 4.))
-            .unwrap();
-        builder
-            .add_shared_channel(channel(scale, Clock::Shared(clock), 8.))
-            .unwrap();
-        let low = builder
-            .add_controller(Controller {
-                priority: -1,
-                channels: vec![channel(translation, Clock::Timeline, 10.)],
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap();
-        let high = builder
-            .add_controller(Controller {
-                priority: 2,
-                channels: vec![channel(translation, Clock::Timeline, 20.)],
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap();
-        let fallback = builder.add_value(7f32);
-        let model = {
-            builder.import_values(&slot_values).unwrap();
-            builder.finish()
-        }
-        .unwrap();
-        let sample = AnimationSample {
-            timeline_time: time(1.),
-            shared_time: time(2.5),
-            controllers: &[high, low],
-            ..SlotConstruct::construct(&mut slot_values)
-        };
-        let selected = model.animation_sample(sample).unwrap();
-        assert_eq!(selected.override_value(&translation), Some([10.; 3]));
-        assert_eq!(selected.override_value(&scale), Some([2.; 3]));
-        assert_eq!(selected.animated(&fallback), 7.);
-        assert!(model
-            .animation_sample(AnimationSample {
-                controllers: &[low, low],
-                ..sample
-            })
-            .is_err());
-        let program = AnimationProgram::compile(&model);
-        assert_eq!(
-            program.sample(sample).unwrap().override_value(&translation),
-            selected.override_value(&translation)
-        );
-    }
-    #[test]
-    fn indexed_empty_override_falls_back_and_timeline_keys_are_bounded() {
-        let mut slot_values = SlotValues::default();
-        let mut builder = ModelBuilder::new("bounded");
-        let node = builder.add_named_node("bone").unwrap();
-        let node_translation = builder.model().node(node).unwrap().transform.translation;
-        let _node_scale = builder.model().node(node).unwrap().transform.scale;
-        let property = node_translation;
-        builder
-            .add_timeline_channel(Channel::Vector3(Track {
-                target: property,
-                clock: Clock::Timeline,
-                curve: Curve::linear(
-                    [time(0.), time(1.), time(4.)],
-                    [[0.; 3], [2.; 3], [100.; 3]],
-                )
-                .unwrap(),
-            }))
-            .unwrap();
-        let controller = builder
-            .add_controller(Controller {
-                channels: vec![Channel::Vector3(Track {
-                    target: property,
-                    clock: Clock::Timeline,
-                    curve: Curve::step(Vec::<Time>::new(), Vec::<[f32; 3]>::new()).unwrap(),
-                })],
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap();
-        let model = {
-            builder.import_values(&slot_values).unwrap();
-            builder.finish()
-        }
-        .unwrap();
-        let program = AnimationProgram::compile(&model);
-        let sample = AnimationSample {
-            timeline_time: time(2.),
-            timeline_interval: Some((time(0.), time(2.))),
-            controllers: &[controller],
-            ..SlotConstruct::construct(&mut slot_values)
-        };
-        assert_eq!(
-            program.sample(sample).unwrap().override_value(&property),
-            Some([2.; 3])
-        );
-        assert_eq!(
-            model
-                .animation_sample(sample)
-                .unwrap()
-                .override_value(&property),
-            Some([2.; 3])
-        );
-        assert!(program
-            .sample(AnimationSample {
-                timeline_interval: Some((time(2.), time(1.))),
-                ..sample
-            })
-            .is_err());
-    }
-    #[test]
-    fn retiming_borrows_indexed_programmes_and_preserves_alias_clock_policy() {
-        let mut slot_values = SlotValues::default();
-        let mut builder = ModelBuilder::new("retime");
-        let node = builder.add_named_node("node").unwrap();
-        let node_translation = builder.model().node(node).unwrap().transform.translation;
-        let _node_scale = builder.model().node(node).unwrap().transform.scale;
-        let property = node_translation;
-        let base = builder
-            .add_clip(Clip::named("base").with_duration(time(2.)))
-            .unwrap();
-        builder
-            .add_channel(base, channel(property, Clock::Clip, 4.))
-            .unwrap();
-        let alias = builder
-            .add_clip(
-                Clip::named("alias")
-                    .with_alias(base)
-                    .with_duration(time(1.)),
-            )
-            .unwrap();
-        let model = {
-            builder.import_values(&slot_values).unwrap();
-            builder.finish()
-        }
-        .unwrap();
-        let program = AnimationProgram::compile(&model);
-        let selected = program
-            .sample(AnimationSample {
-                clip: Some(alias),
-                clip_time: time(0.1),
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap();
-        let original = selected.track(&property).unwrap();
-        let retimed = selected.at_times(time(2.25), time(100.), time(100.));
-        assert!(eq(retimed.selection, &selected));
-        assert_eq!(retimed.override_value(&property), Some([0.5; 3]));
-        let effective = retimed.track(&property).unwrap();
-        assert!(eq(original.track, effective.track));
-        assert_eq!(effective.time, time(0.25));
-        assert_eq!(effective.period, Some(time(1.)));
-        assert_eq!(selected.override_value(&property), Some([0.2; 3]));
-    }
-    #[test]
-    fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
-        let mut slot_values = SlotValues::default();
-        let mut builder = ModelBuilder::new("offsets");
-        let node = builder.add_named_node("node").unwrap();
-        let node_translation = builder.model().node(node).unwrap().transform.translation;
-        let node_scale = builder.model().node(node).unwrap().transform.scale;
-        let translation = node_translation;
-        let scale = node_scale;
-        let period = builder
-            .add_clock(SharedClock::Repeating { period: time(2.) })
-            .unwrap();
-        builder
-            .add_timeline_channel(Channel::Vector3(Track {
-                target: translation,
-                clock: Clock::Timeline,
-                curve: Curve::linear(
-                    [time(9.), time(10.), time(12.), time(13.)],
-                    [[90.; 3], [2.; 3], [6.; 3], [130.; 3]],
-                )
-                .unwrap(),
-            }))
-            .unwrap();
-        builder
-            .add_shared_channel(channel(scale, Clock::Shared(period), 8.))
-            .unwrap();
-        let empty = builder
-            .add_controller(Controller {
-                channels: vec![Channel::Vector3(Track {
-                    target: translation,
-                    clock: Clock::Timeline,
-                    curve: Curve::step(Vec::<Time>::new(), Vec::<[f32; 3]>::new()).unwrap(),
-                })],
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap();
-        let clip = builder
-            .add_clip(Clip::named("interval").with_duration(time(2.)))
-            .unwrap();
-        let model = {
-            builder.import_values(&slot_values).unwrap();
-            builder.finish()
-        }
-        .unwrap();
-        let selected = model
-            .animation_sample(AnimationSample {
-                clip: Some(clip),
-                timeline_time: time(10.5),
-                timeline_interval: Some((time(10.), time(12.))),
-                controllers: &[empty],
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap();
-        let retimed = selected.at_times(time(3.), time(11.5), time(5.));
-        assert_eq!(retimed.override_value(&translation), Some([5.; 3]));
-        assert_eq!(retimed.override_value(&scale), Some([4.; 3]));
-        let track = retimed.track(&translation).unwrap();
-        assert_eq!(track.origin, time(10.));
-        assert_eq!(track.period, Some(time(2.)));
-        assert_eq!(track.interval, Some((time(10.), time(12.))));
-        assert_eq!(track.track.curve.values().len(), 4);
-        let shared = retimed.track(&scale).unwrap();
-        assert_eq!(shared.time, time(1.));
-        assert_eq!(shared.period, Some(time(2.)));
-        assert_eq!(shared.origin, Time::default());
-    }
-    #[test]
-    #[ignore = "explicit animation throughput measurement"]
-    fn compiled_property_sampling_throughput() {
-        let mut slot_values = SlotValues::default();
-        use std::hint::black_box;
-        use std::time::Instant;
-        for node_count in [128, 1024, 4096] {
-            let mut builder = ModelBuilder::new("throughput");
-            let mut properties = Vec::with_capacity(node_count);
-            for _ in 0..node_count {
-                let node = builder.add_named_node("bone").unwrap();
-                let node_translation = builder.model().node(node).unwrap().transform.translation;
-                let _node_scale = builder.model().node(node).unwrap().transform.scale;
-                let property = node_translation;
-                builder
-                    .add_timeline_channel(channel(property, Clock::Timeline, 4.))
-                    .unwrap();
-                properties.push(property);
-            }
-            let model = {
-                builder.import_values(&slot_values).unwrap();
-                builder.finish()
-            }
-            .unwrap();
-            let program = AnimationProgram::compile(&model);
-            let sampled = program
-                .sample(AnimationSample {
-                    timeline_time: time(1.),
-                    ..SlotConstruct::construct(&mut slot_values)
-                })
-                .unwrap();
-            let start = Instant::now();
-            let mut checksum = 0.;
-            let rounds = 100;
-            for _ in 0..rounds {
-                for property in &properties {
-                    checksum += black_box(sampled.override_value(black_box(property)).unwrap()[0]);
-                }
-            }
-            let count = rounds * node_count;
-            eprintln!(
-                "{node_count} animated nodes: {:.1} ns/property",
-                start.elapsed().as_nanos() as f64 / count as f64
-            );
-            assert_eq!(checksum, (count * 2) as f32);
-        }
-    }
-}
+#[path = "sampling_tests.rs"]
+mod tests;

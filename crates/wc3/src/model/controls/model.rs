@@ -10,7 +10,7 @@ pub struct SequenceControls {
     pub variation: u16,
     /// Movement speed associated with playback, in model units per second.
     pub movement_speed: f32,
-    /// Sequence behavior and storage declarations; playback aliases live on the clip.
+    /// Sequence behavior and storage declarations; alias selection is stored separately.
     pub flags: SequenceFlags,
     /// Relative selection frequency among variations.
     pub frequency: i16,
@@ -22,6 +22,8 @@ pub struct SequenceControls {
     pub bounds: Bounds,
     /// Next alternative playback program in this variation chain.
     pub next_variation: Option<ClipId>,
+    /// Native alias selection; common playback shares the target animation identities directly.
+    pub alias: Option<ClipId>,
 }
 impl Default for SequenceControls {
     fn default() -> Self {
@@ -35,12 +37,14 @@ impl Default for SequenceControls {
             blend_time: [0; 2],
             bounds: Bounds::default(),
             next_variation: None,
+            alias: None,
         }
     }
 }
 impl ValidateLinks for SequenceControls {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.next_variation.visit_links(visitor);
+        self.alias.visit_links(visitor);
         if !self.movement_speed.is_finite() || self.bounds.validate().is_err() {
             visitor(Link::InvalidValue);
         }

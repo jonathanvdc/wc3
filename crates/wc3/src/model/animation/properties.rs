@@ -307,35 +307,35 @@ impl<P: Profile> Hash for PropertyTarget<P> {
     }
 }
 /// A property handle with a checked value domain and profile vocabulary.
-pub struct Property<T, P: Profile = Universal> {
+pub struct PropertyBinding<T, P: Profile = Universal> {
     target: PropertyTarget<P>,
     marker: PhantomData<fn() -> T>,
 }
-impl<T, P: Profile> Clone for Property<T, P> {
+impl<T, P: Profile> Clone for PropertyBinding<T, P> {
     fn clone(&self) -> Self {
         Self::new(self.target.clone())
     }
 }
-impl<T, P: Profile> Debug for Property<T, P> {
+impl<T, P: Profile> Debug for PropertyBinding<T, P> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         self.target.fmt(f)
     }
 }
-impl<T, P: Profile, Q: Profile> PartialEq<Property<T, Q>> for Property<T, P> {
-    fn eq(&self, other: &Property<T, Q>) -> bool {
+impl<T, P: Profile, Q: Profile> PartialEq<PropertyBinding<T, Q>> for PropertyBinding<T, P> {
+    fn eq(&self, other: &PropertyBinding<T, Q>) -> bool {
         self.target == other.target
     }
 }
-impl<T, P: Profile> Eq for Property<T, P> {}
-impl<T, P: Profile> Property<T, P> {
+impl<T, P: Profile> Eq for PropertyBinding<T, P> {}
+impl<T, P: Profile> PropertyBinding<T, P> {
     /// Binds a descriptor whose profile, owner, and value types determine its target.
     ///
     /// A descriptor cannot change the value domain:
     /// ```compile_fail
-    /// use wc3::model::{FeatureId, Property};
+    /// use wc3::model::{FeatureId, PropertyBinding};
     /// use wc3::model::profiles::{Mdlx, mdlx::properties::light};
-    /// fn invalid(owner: FeatureId) -> Property<bool, Mdlx> {
-    ///     Property::profile(owner, light::INTENSITY)
+    /// fn invalid(owner: FeatureId) -> PropertyBinding<bool, Mdlx> {
+    ///     PropertyBinding::profile(owner, light::INTENSITY)
     /// }
     /// ```
     /// It cannot select another owner domain:
@@ -364,15 +364,15 @@ impl<T, P: Profile> Property<T, P> {
         }
     }
     /// Embeds the destination in a containing vocabulary, preserving its identity.
-    pub fn widen<Q: Extends<P>>(self) -> Property<T, Q> {
-        Property::new(
+    pub fn widen<Q: Extends<P>>(self) -> PropertyBinding<T, Q> {
+        PropertyBinding::new(
             self.target
                 .map_profile::<Q>(|key| Ok(Q::property(key)))
                 .expect("infallible property embedding"),
         )
     }
     /// Projects a destination without changing its value domain.
-    pub fn try_narrow<Q: Narrows<P>>(self) -> Result<Property<T, Q>, Error>
+    pub fn try_narrow<Q: Narrows<P>>(self) -> Result<PropertyBinding<T, Q>, Error>
     where
         T: 'static,
     {
@@ -384,7 +384,7 @@ impl<T, P: Profile> Property<T, P> {
                 "narrowing changes the binding source value domain",
             ));
         }
-        Ok(Property {
+        Ok(PropertyBinding {
             target,
             marker: PhantomData,
         })
@@ -392,40 +392,40 @@ impl<T, P: Profile> Property<T, P> {
 }
 impl NodeId {
     /// Local translation property in the selected animation vocabulary.
-    pub fn translation<P: Profile>(self) -> Property<[f32; 3], P> {
-        Property::new(PropertyTarget::Translation(self))
+    pub fn translation<P: Profile>(self) -> PropertyBinding<[f32; 3], P> {
+        PropertyBinding::new(PropertyTarget::Translation(self))
     }
     /// Local quaternion property.
-    pub fn rotation<P: Profile>(self) -> Property<Quaternion, P> {
-        Property::new(PropertyTarget::Rotation(self))
+    pub fn rotation<P: Profile>(self) -> PropertyBinding<Quaternion, P> {
+        PropertyBinding::new(PropertyTarget::Rotation(self))
     }
     /// Local scale property.
-    pub fn scale<P: Profile>(self) -> Property<[f32; 3], P> {
-        Property::new(PropertyTarget::Scale(self))
+    pub fn scale<P: Profile>(self) -> PropertyBinding<[f32; 3], P> {
+        PropertyBinding::new(PropertyTarget::Scale(self))
     }
     /// Visibility gate.
-    pub fn visibility<P: Profile>(self) -> Property<bool, P> {
-        Property::new(PropertyTarget::Visibility(self))
+    pub fn visibility<P: Profile>(self) -> PropertyBinding<bool, P> {
+        PropertyBinding::new(PropertyTarget::Visibility(self))
     }
 }
 impl MeshId {
     /// Geometry-owned RGB tint, independent of its assigned surface.
-    pub fn color<P: Profile>(self) -> Property<[f32; 3], P> {
-        Property::new(PropertyTarget::MeshColor(self))
+    pub fn color<P: Profile>(self) -> PropertyBinding<[f32; 3], P> {
+        PropertyBinding::new(PropertyTarget::MeshColor(self))
     }
     /// Geometry-owned opacity multiplier.
-    pub fn opacity<P: Profile>(self) -> Property<f32, P> {
-        Property::new(PropertyTarget::MeshOpacity(self))
+    pub fn opacity<P: Profile>(self) -> PropertyBinding<f32, P> {
+        PropertyBinding::new(PropertyTarget::MeshOpacity(self))
     }
 }
 impl MaterialId {
     /// Common material opacity.
-    pub fn opacity<P: Profile>(self) -> Property<f32, P> {
-        Property::new(PropertyTarget::MaterialOpacity(self))
+    pub fn opacity<P: Profile>(self) -> PropertyBinding<f32, P> {
+        PropertyBinding::new(PropertyTarget::MaterialOpacity(self))
     }
     /// Common texture selection.
-    pub fn texture<P: Profile>(self, slot: u32) -> Property<Texture, P> {
-        Property::new(PropertyTarget::MaterialTexture(self, slot))
+    pub fn texture<P: Profile>(self, slot: u32) -> PropertyBinding<Texture, P> {
+        PropertyBinding::new(PropertyTarget::MaterialTexture(self, slot))
     }
 }
 /// A typed structural selector supplied by a profile.
@@ -469,8 +469,8 @@ impl<O: Into<OwnerId>, T, P: Profile> PropertyKey<O, T, P> {
         }
     }
     /// Binds this structural selector to an owner.
-    pub fn bind(self, owner: O) -> Property<T, P> {
-        Property::profile(owner, self)
+    pub fn bind(self, owner: O) -> PropertyBinding<T, P> {
+        PropertyBinding::profile(owner, self)
     }
 }
 macro_rules! owner_identity {

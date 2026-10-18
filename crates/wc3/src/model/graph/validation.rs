@@ -2,10 +2,11 @@
 use crate::model::profiles::{FeaturePayload, Profile};
 use crate::model::ValueSlot;
 use crate::model::{
-    AppearanceSchema, BindingSchema as _, Clock, Error, GeometrySchema, Link, Model,
-    PropertyIdentity, PropertyTarget, SharedClock, SystemPayload, ValidateLinks, VertexInfluences,
+    AppearanceSchema, BindingSchema as _, Error, GeometrySchema, Link, Model, PropertyIdentity,
+    PropertyTarget, SharedClock, SystemPayload, Time, TimeSource, ValidateLinks, VertexInfluences,
 };
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::iter::once;
 impl<P: Profile> Model<'_, P> {
     /// Checks that native programs only write slots represented by their consuming definitions.
     pub(crate) fn validate_animation_consumers(&self) -> Result<(), Error> {
@@ -85,6 +86,9 @@ impl<P: Profile> Model<'_, P> {
             material.validate()?;
         }
         for clip in self.clips.values() {
+            if let Some(origin) = clip.timeline_origin {
+                Time::seconds(origin.as_seconds() + clip.duration.as_seconds())?;
+            }
             if clip.duration.as_seconds() < 0. {
                 return Err(Error::new("clip.duration", "duration must be nonnegative"));
             }
@@ -170,6 +174,7 @@ impl<P: Profile> Model<'_, P> {
                 Link::Clip(id) => !self.clips.contains_key(id),
                 Link::Skin(id) => !self.skins.contains_key(id),
                 Link::Clock(id) => !self.clocks.contains_key(id),
+                Link::Animation(id) => !self.animations.contains_key(id),
                 Link::Controller(id) => !self.controllers.contains_key(id),
                 Link::System(id) => !self.systems.contains_key(id),
             };
@@ -201,15 +206,19 @@ impl<P: Profile> Model<'_, P> {
         for clip in self.clips.values() {
             clip.controls.visit_links(&mut visit);
         }
+        self.global_animations.visit_links(&mut visit);
         for controller in self.controllers.values() {
             controller.controls.visit_links(&mut visit);
-            for channel in &controller.channels {
+            controller.animations.visit_links(&mut visit);
+        }
+        for animation in self.animations.values() {
+            for channel in &animation.channels {
                 channel.visit_links(&mut visit);
             }
-            for event in controller.events.values() {
+            for event in animation.events.values() {
                 event.node.visit_links(&mut visit);
                 event.feature.visit_links(&mut visit);
-                if let Clock::Shared(id) = event.clock {
+                if let TimeSource::Shared(id) = event.clock {
                     id.visit_links(&mut visit);
                 }
             }
@@ -235,55 +244,11 @@ impl<P: Profile> Model<'_, P> {
             material.surface.visit_links(&mut visit);
         }
         for clip in self.clips.values() {
-            clip.alias.visit_links(&mut visit);
-            for channel in &clip.channels {
-                channel.visit_links(&mut visit);
-            }
-            for event in &clip.events {
-                event.node.visit_links(&mut visit);
-                event.feature.visit_links(&mut visit);
-                if let Clock::Shared(id) = event.clock {
-                    id.visit_links(&mut visit);
-                }
-            }
+            clip.animations.visit_links(&mut visit);
         }
         for feature in self.features.values() {
             feature.node.visit_links(&mut visit);
             feature.payload.visit_links(&mut visit);
-        }
-        for channel in &self.timeline_channels {
-            if channel.clock() != Clock::Timeline {
-                return Err(Error::new(
-                    "timeline_channels.clock",
-                    "expected the absolute authoring clock",
-                ));
-            }
-            channel.visit_links(&mut visit);
-        }
-        for event in &self.timeline_events {
-            event.node.visit_links(&mut visit);
-            event.feature.visit_links(&mut visit);
-            if event.clock != Clock::Timeline {
-                return Err(Error::new(
-                    "timeline_events.clock",
-                    "expected the absolute authoring clock",
-                ));
-            }
-        }
-        for channel in &self.shared_channels {
-            channel.visit_links(&mut visit);
-        }
-        for event in &self.shared_events {
-            event.node.visit_links(&mut visit);
-            event.feature.visit_links(&mut visit);
-            if let Clock::Shared(id) = event.clock {
-                id.visit_links(&mut visit);
-            } else {
-                return Err(Error::new(
-                    "shared_events.clock",
-                    "event must use a shared clock",
-                ));
-            }
         }
         self.appearance.visit_links(&mut visit);
         self.metadata.visit_links(&mut visit);
@@ -316,28 +281,42 @@ impl<P: Profile> Model<'_, P> {
             ));
         }
 
-        for (id, clip) in self.clips.iter() {
-            let mut chain = BTreeSet::new();
-            chain.insert(id);
-            let mut alias = clip.alias;
-            if alias.is_some() && (!clip.channels.is_empty() || !clip.events.is_empty()) {
+        for ids in self
+            .clips
+            .values()
+            .map(|clip| &clip.animations)
+            .chain(
+                self.controllers
+                    .values()
+                    .map(|controller| &controller.animations),
+            )
+            .chain(once(&self.global_animations))
+        {
+            let mut seen = HashSet::new();
+            if ids.iter().any(|id| !seen.insert(id)) {
                 return Err(Error::new(
-                    "clip.alias",
-                    "an alias cannot define its own channels or events",
+                    "animation.selection",
+                    "animation selected more than once",
                 ));
             }
-            while let Some(target) = alias {
-                if !chain.insert(target) {
-                    return Err(Error::new("clip.alias", "playback aliases form a cycle"));
-                }
-                alias = self.clips[&target].alias;
+        }
+        let mut event_ids = HashSet::new();
+        for animation in self.animations.values() {
+            if animation
+                .events
+                .keys()
+                .any(|id| !self.scope.contains(*id) || !event_ids.insert(*id))
+            {
+                return Err(Error::new(
+                    "animation.events",
+                    "event identity belongs to another graph or multiple animations",
+                ));
             }
         }
         for event in self
-            .shared_events
-            .iter()
-            .chain(self.timeline_events.iter())
-            .chain(self.clips.values().flat_map(|clip| clip.events.iter()))
+            .animations
+            .values()
+            .flat_map(|animation| animation.events.values())
         {
             if let (Some(feature), Some(node)) = (event.feature, event.node) {
                 if self.features[&feature].node != node {

@@ -52,7 +52,7 @@ fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
         NodeFeature::ParticleProgram(_) => "External particle programme",
         NodeFeature::FaceActor(_) => "Face animation",
         NodeFeature::LightProgram(_) => "Light programme",
-        NodeFeature::Extent(_) => "Animated extent",
+        NodeFeature::Extent(_) => "Property extent",
         NodeFeature::ParticleCopy(_) => "Particle copy",
         NodeFeature::Projector(_) => "Projector",
         NodeFeature::Force(_) => "Force",
@@ -556,16 +556,7 @@ pub fn compile_model_with_options(
                 .as_ref()
                 .is_some_and(|(_, animation)| animation.uses_shared_time())
         })
-        || !model.timeline_channels().is_empty()
-        || !model.shared_channels().is_empty()
-        || model
-            .clips()
-            .iter()
-            .any(|(_, clip)| !clip.channels().is_empty())
-        || model
-            .controllers()
-            .iter()
-            .any(|(_, controller)| !controller.channels.is_empty());
+        || model.channels().next().is_some();
     let pose_animated = nodes.iter().any(|node| {
         node.channels.translation
             || node.channels.rotation
@@ -610,18 +601,12 @@ pub fn compile_model_with_options(
             model
                 .clips()
                 .iter()
-                .filter_map(|(id, clip)| {
-                    let origin = match &clip.controls {
-                        Some(ClipControls::Mdlx(controls)) => controls.start.as_seconds(),
-                        Some(ClipControls::M3(controls)) => controls.timeline_origin.as_seconds(),
-                        _ => return None,
-                    };
-                    Some((
+                .map(|(id, clip)| {
+                    let origin = clip.timeline_origin.unwrap_or_default().as_seconds();
+                    (
                         id,
                         ClipTiming {
                             origin,
-                            duration: clip.duration().as_seconds(),
-                            looping: clip.is_looping(),
                             controllers: match &clip.controls {
                                 Some(ClipControls::M3(controls)) => controls
                                     .selection
@@ -638,7 +623,7 @@ pub fn compile_model_with_options(
                                 _ => None,
                             },
                         },
-                    ))
+                    )
                 })
                 .collect(),
         ),

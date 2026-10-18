@@ -3,7 +3,7 @@ use super::*;
 use wc3::model::appearance::{diablo3, diablo4, UniversalAppearance};
 use wc3::model::controls::{diablo3 as d3_controls, diablo4 as d4_controls};
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     InstanceId, Material as SemanticMaterial, MaterialId, MaterialSurface, Mesh as ModelMesh,
     MeshInstance, ModelBuilder,

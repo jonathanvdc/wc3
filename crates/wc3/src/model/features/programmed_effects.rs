@@ -1,5 +1,5 @@
 //! Resource references, variation functions, and shared programmed effect controls.
-use crate::model::animation::programmed::Property;
+use crate::model::animation::programmed::PropertyBinding;
 use crate::model::values::programmed::*;
 use crate::model::{FeatureId, NodeId};
 use std::borrow::Cow;
@@ -18,9 +18,9 @@ pub struct VariationControl {
     /// Variation function code retained from the source emitter.
     pub kind: Variation,
     /// Magnitude of variation applied to the associated property.
-    pub amplitude: Property<f32>,
+    pub amplitude: PropertyBinding<f32>,
     /// Frequency parameter of the selected variation function.
-    pub frequency: Property<f32>,
+    pub frequency: PropertyBinding<f32>,
 }
 
 /// An emitter instance inheriting its definition from an independent particle emitter.
@@ -29,9 +29,9 @@ pub struct ParticleCopy {
     /// Independent emitter supplying all controls not overridden here.
     pub source: FeatureId,
     /// Emission-rate override for this instance.
-    pub emission_rate: Property<f32>,
+    pub emission_rate: PropertyBinding<f32>,
     /// Burst-count override for this instance.
-    pub squirt_amount: Property<u16>,
+    pub squirt_amount: PropertyBinding<u16>,
 }
 
 /// Editable M3 RibbonSplinePoint values.
@@ -44,13 +44,13 @@ pub struct SplinePoint {
     /// Emission direction vector at this spline point.
     pub emission_vector: [f32; 3],
     /// Animated velocity control at this spline point.
-    pub velocity: Property<f32>,
+    pub velocity: PropertyBinding<f32>,
     /// Unresolved reserved data retained in its original position and representation.
     pub reserved: u32,
     /// Animated velocity multiplier at the spline base.
-    pub velocity_base_factor: Property<f32>,
+    pub velocity_base_factor: PropertyBinding<f32>,
     /// Animated velocity multiplier at the spline end.
-    pub velocity_end_factor: Property<f32>,
+    pub velocity_end_factor: PropertyBinding<f32>,
     /// Yaw variation variation settings, including the function, amplitude, and frequency.
     pub yaw_variation: VariationControl,
     /// Pitch variation variation settings, including the function, amplitude, and frequency.
@@ -58,9 +58,9 @@ pub struct SplinePoint {
     /// Velocity variation variation settings, including the function, amplitude, and frequency.
     pub velocity_variation: VariationControl,
     /// Animated yaw control at this spline point.
-    pub yaw: Property<f32>,
+    pub yaw: PropertyBinding<f32>,
     /// Animated pitch control at this spline point.
-    pub pitch: Property<f32>,
+    pub pitch: PropertyBinding<f32>,
     /// Emission vector norm factor parameter stored as a floating-point value.
     pub emission_vector_norm_factor: f32,
     /// Velocity norm factor parameter stored as a floating-point value.

@@ -65,10 +65,8 @@ impl<'a, P: Profile> Model<'a, P> {
                 .into_iter()
                 .map(|(id, value)| Ok((id, system(value)?)))
                 .collect::<Result<_, Error>>()?,
-            timeline_channels: self.timeline_channels.into_iter().collect(),
-            timeline_events: self.timeline_events,
-            shared_channels: self.shared_channels.into_iter().collect(),
-            shared_events: self.shared_events,
+            animations: self.animations,
+            global_animations: self.global_animations,
             appearance: appearance(self.appearance)?,
             skins: self
                 .skins
@@ -174,23 +172,23 @@ impl<'a, P: Profile> Model<'a, P> {
                 .into_iter()
                 .map(|(id, value)| {
                     let Clip {
-                        alias,
+                        animations,
+                        timeline_origin,
                         name,
                         duration,
                         looping,
-                        channels,
-                        events,
+
                         controls,
                     } = value;
                     Ok((
                         id,
                         Clip {
-                            alias,
+                            animations,
+                            timeline_origin,
                             name,
                             duration,
                             looping,
-                            channels: channels.into_iter().collect(),
-                            events,
+
                             controls: clip(controls)?,
                         },
                     ))
@@ -246,8 +244,7 @@ impl<'a, P: Profile> Model<'a, P> {
                         name,
                         priority,
                         concurrent,
-                        channels,
-                        events,
+                        animations,
                         controls,
                     } = value;
                     Ok((
@@ -256,8 +253,7 @@ impl<'a, P: Profile> Model<'a, P> {
                             name,
                             priority,
                             concurrent,
-                            channels: channels.into_iter().collect(),
-                            events,
+                            animations,
                             controls: controller(controls)?,
                         },
                     ))

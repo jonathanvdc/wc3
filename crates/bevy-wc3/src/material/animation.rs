@@ -6,7 +6,7 @@ use crate::animation_targets::AnimationTargets;
 use bevy::math::Affine2;
 use bevy::prelude::*;
 use std::array::from_fn;
-use wc3::model::{Animatable, Animated, SampledAnimation, ValueSample};
+use wc3::model::{Property, PropertyValue, SampledAnimation, ValueSample};
 use wc3::model::{SurfaceColor, TextureTransform};
 
 impl HdAnimation {
@@ -116,10 +116,13 @@ pub(crate) fn mesh_alpha_mode(authored: AlphaMode, opacity: f32) -> AlphaMode {
 impl SurfaceAnimation {
     /// Records whether the retained slots require instance-owned material updates.
     pub(super) fn prune_static_bindings(&mut self, targets: &AnimationTargets) {
-        fn contains<T: Animatable>(slot: &Option<Animated<T>>, targets: &AnimationTargets) -> bool {
+        fn contains<T: PropertyValue>(
+            slot: &Option<Property<T>>,
+            targets: &AnimationTargets,
+        ) -> bool {
             slot.as_ref().is_some_and(|slot| targets.contains(slot))
         }
-        fn scalar(slot: &Option<Animated<f32>>, targets: &AnimationTargets) -> bool {
+        fn scalar(slot: &Option<Property<f32>>, targets: &AnimationTargets) -> bool {
             slot.as_ref().is_some_and(|slot| targets.scalar(slot))
         }
         self.animated = contains(&self.color, targets)

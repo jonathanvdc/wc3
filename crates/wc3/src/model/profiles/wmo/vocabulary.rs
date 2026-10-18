@@ -2,7 +2,7 @@
 use crate::model::profiles::{wmo, Extends, NoControls, Profile, Unavailable, Universal};
 use crate::model::resources::{WorldImageResource, WorldModelResource};
 use crate::model::Model;
-use crate::model::Values;
+use crate::model::PropertyValues;
 use crate::model::{
     DrawControls, Error, FeatureKind, InstanceControls, MaterialSurface, ModelMetadata, SingleLook,
     System, UniversalAppearance, WmoGeometry,
@@ -124,7 +124,7 @@ impl Extends<Wmo> for Universal {
     }
     fn feature<'a>(
         value: <Wmo as Profile>::Feature<'a>,
-        _values: &mut Values,
+        _values: &mut PropertyValues,
     ) -> Self::Feature<'a> {
         value.into()
     }

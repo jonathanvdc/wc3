@@ -1,5 +1,5 @@
 //! Anisotropic M3 hair surface parameters.
-use super::{Property, TextureLayer};
+use super::{PropertyBinding, TextureLayer};
 use crate::model::materials::contributions::SurfaceContribution;
 use crate::model::Construct;
 /// Two-lobe anisotropic hair shading with independently animated colors.
@@ -16,11 +16,11 @@ pub struct HairMaterialStep {
     /// Offset of the secondary specular lobe.
     pub shift_secondary: f32,
     /// Specular tint in normalized RGBA order.
-    pub color_specular: Property<[f32; 4]>,
+    pub color_specular: PropertyBinding<[f32; 4]>,
     /// Primary specular exponent.
     pub specular_exponent_primary: f32,
     /// Secondary specular exponent.
     pub specular_exponent_secondary: f32,
     /// Authored diffuse input and response.
-    pub diffuse: SurfaceContribution<Option<TextureLayer>, Property<[f32; 4]>>,
+    pub diffuse: SurfaceContribution<Option<TextureLayer>, PropertyBinding<[f32; 4]>>,
 }

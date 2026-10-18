@@ -1,8 +1,8 @@
 //! Logical cameras, illumination, resource systems, and attachments.
 use crate::model::features::IndexedChildModel;
 use crate::model::Construct;
-use crate::model::{Animated, Link, ValidateLinks};
 use crate::model::{EffectResourceId, ModelResourceId};
+use crate::model::{Link, Property, ValidateLinks};
 /// A portable feature attached to a graph hierarchy node.
 #[derive(Clone, Debug)]
 pub enum Feature {
@@ -55,17 +55,17 @@ impl ValidateLinks for Feature {
 #[derive(Clone, Debug, Construct)]
 pub struct Camera {
     /// Authored field of view in radians.
-    pub field_of_view: Animated<f32>,
+    pub field_of_view: Property<f32>,
     /// Near and far clipping distance.
     pub clipping: [f32; 2],
     /// Aim point in model coordinates.
-    pub target: Option<Animated<[f32; 3]>>,
+    pub target: Option<Property<[f32; 3]>>,
     /// Depth-of-field focus distance.
-    pub focus_distance: Option<Animated<f32>>,
+    pub focus_distance: Option<Property<f32>>,
     /// Photographic focal length.
-    pub focal_length: Option<Animated<f32>>,
+    pub focal_length: Option<Property<f32>>,
     /// Photographic aperture f-stop.
-    pub f_stop: Option<Animated<f32>>,
+    pub f_stop: Option<Property<f32>>,
 }
 /// Portable illumination behavior.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -88,17 +88,17 @@ pub struct Light {
     /// Illumination behavior.
     pub kind: LightKind,
     /// Animated RGB color.
-    pub color: Animated<[f32; 3]>,
+    pub color: Property<[f32; 3]>,
     /// Animated intensity multiplier.
-    pub intensity: Animated<f32>,
+    pub intensity: Property<f32>,
     /// Range-attenuation start and end.
-    pub attenuation: [Animated<f32>; 2],
+    pub attenuation: [Property<f32>; 2],
     /// Inner and outer cone angles.
-    pub cone: [Animated<f32>; 2],
+    pub cone: [Property<f32>; 2],
     /// Explicit shadow-casting setting.
     pub shadow_casting: Option<bool>,
     /// Shadow-volume near and far distances.
-    pub shadow_range: Option<[Animated<f32>; 2]>,
+    pub shadow_range: Option<[Property<f32>; 2]>,
     /// Quadratic, linear, and exponential attenuation coefficients.
     pub attenuation_coefficients: [Option<f32>; 3],
 }

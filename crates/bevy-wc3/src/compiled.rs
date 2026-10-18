@@ -84,8 +84,6 @@ pub(crate) struct RuntimeLiquid<M> {
 #[derive(Clone)]
 pub(crate) struct ClipTiming {
     pub(crate) origin: f64,
-    pub(crate) duration: f64,
-    pub(crate) looping: bool,
     pub(crate) controllers: Arc<[ControllerId]>,
     pub(crate) blend_duration: Option<f64>,
 }

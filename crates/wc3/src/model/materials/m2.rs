@@ -3,8 +3,8 @@ use super::bindings::{Coordinates, ImageSelection, TextureBinding};
 use super::state::{DepthState, Lighting, Operation, Rasterization};
 use crate::model::profiles::m2::properties::{Target, TextureUnitField};
 use crate::model::values::model::{MaterialFlags, TextureSource};
-use crate::model::{Animated, Error, Link, PropertyIdentityKey, PropertyPayload, ValidateLinks};
-use crate::model::{Construct, Values};
+use crate::model::{Construct, PropertyValues};
+use crate::model::{Error, Link, Property, PropertyIdentityKey, PropertyPayload, ValidateLinks};
 use std::fmt::Debug;
 
 pub use crate::model::TextureTransform;
@@ -12,7 +12,7 @@ pub use crate::model::TextureTransform;
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct FrameSampling {
     /// Animated legacy texture frame selection.
-    pub frame: Animated<u16>,
+    pub frame: Property<u16>,
 }
 impl ValidateLinks for FrameSampling {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -24,7 +24,7 @@ pub type TextureUnit<T = TextureTransform> = TextureBinding<
     ImageSelection<TextureSource>,
     Coordinates<i16, T>,
     FrameSampling,
-    Animated<f32>,
+    Property<f32>,
 >;
 /// Application-supplied linear RGB multipliers for legacy guild programmes.
 ///
@@ -164,7 +164,7 @@ mod steps;
 pub use steps::*;
 
 impl Construct for TextureUnit {
-    fn construct(values: &mut Values) -> Self {
+    fn construct(values: &mut PropertyValues) -> Self {
         Self {
             image: Default::default(),
             coordinates: Construct::construct(values),

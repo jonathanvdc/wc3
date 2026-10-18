@@ -6,12 +6,12 @@ use super::{
     DataDrivenParameters, DataProperties, DisplacementMaterialStep, DynamicState, ExternalModel,
     Feature, Force, HairMaterialStep, HitTestShape, IkCcd, IkJoint, IkTwoJoint, Joint,
     LensFlareMaterialStep, Light, MaterialStep, ModelMetadata, NodeRole, OneBoneSolver, Projector,
-    Property, PropertyControl, ReflectionMaterialStep, ShadowBox, Shape, ShapeGeometry,
+    PropertyBinding, PropertyControl, ReflectionMaterialStep, ShadowBox, Shape, ShapeGeometry,
     SplatTerrainBakeMaterialStep, SplinePoint, StandardMaterialStep, SubFlare, TerrainMaterialStep,
     TextureLayer, TurretBehavior, VariationControl, ViewVolume, VolumeMaterialStep,
     VolumeNoiseMaterialStep, Warp,
 };
-use crate::model::Animatable;
+use crate::model::PropertyValue;
 use crate::model::{CurveValue, FeatureKind, GeometryKind, Link, Quaternion, ValidateLinks};
 
 impl ValidateLinks for Projector {
@@ -906,7 +906,7 @@ impl ValidateLinks for VolumeNoiseMaterialStep {
     }
 }
 
-impl<T: Animatable + CurveValue + 'static> ValidateLinks for Property<T> {
+impl<T: PropertyValue + CurveValue + 'static> ValidateLinks for PropertyBinding<T> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if !reset_valid(&self.reset, self.control.flags.bits()) {
             visitor(Link::InvalidValue);
@@ -914,7 +914,7 @@ impl<T: Animatable + CurveValue + 'static> ValidateLinks for Property<T> {
         self.value.visit_links(visitor);
     }
 }
-impl<T: Animatable + CurveValue + 'static> ValidateLinks for PropertyControl<T> {
+impl<T: PropertyValue + CurveValue + 'static> ValidateLinks for PropertyControl<T> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if !reset_valid(&self.reset, self.control.flags.bits()) {
             visitor(Link::InvalidValue);

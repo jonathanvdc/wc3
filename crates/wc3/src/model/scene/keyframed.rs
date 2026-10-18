@@ -8,7 +8,7 @@ use crate::model::IndexedChildModel;
 use crate::model::ModelResourceId;
 use crate::model::ResourceParticle;
 use crate::model::{AimedCamera, AmbientDiffuseLight, PhotographicControls, VisibleLight};
-use crate::model::{Animated, MeshId};
+use crate::model::{MeshId, Property};
 use std::borrow::Cow;
 
 /// Opacity, tint, and shadow behavior for one geometry controller.
@@ -17,9 +17,9 @@ pub struct GeometryAnimation {
     /// Geometry controlled by this feature.
     pub mesh: Option<MeshId>,
     /// Geometry opacity.
-    pub opacity: Animated<f32>,
+    pub opacity: Property<f32>,
     /// Geometry RGB tint.
-    pub color: Animated<[f32; 3]>,
+    pub color: Property<[f32; 3]>,
     /// Enable authored tint.
     pub use_color: bool,
     /// Enable authored shadow-drop behavior.
@@ -54,19 +54,19 @@ pub struct Popcorn<'a> {
     /// Animation-name visibility rules with literal line breaks.
     pub visibility_guide: Cow<'a, str>,
     /// Particle lifetime.
-    pub life_span: Animated<f32>,
+    pub life_span: Property<f32>,
     /// Particle emission rate.
-    pub emission_rate: Animated<f32>,
+    pub emission_rate: Property<f32>,
     /// Initial particle speed.
-    pub speed: Animated<f32>,
+    pub speed: Property<f32>,
     /// Particle RGB tint.
-    pub color: Animated<[f32; 3]>,
+    pub color: Property<[f32; 3]>,
     /// Particle opacity.
-    pub opacity: Animated<f32>,
+    pub opacity: Property<f32>,
     /// Replaceable-texture category.
     pub replaceable: u32,
     /// Visibility multiplier.
-    pub visibility: Animated<f32>,
+    pub visibility: Property<f32>,
     /// Bypass lighting.
     pub unlit: bool,
     /// Sort generated primitives far to near.

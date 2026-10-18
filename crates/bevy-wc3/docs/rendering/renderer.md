@@ -21,7 +21,9 @@ Models convert declared axes and units into Bevy's frame beneath the application
 root. `ModelDraw` preserves typed instance, mesh, material, draw-source, pass,
 and LOD identities.
 
-`Playback` selects typed clips and controller programmes in seconds. Shared
+`Playback` selects typed clips and controller programmes in seconds. Their curves
+and events live in reusable semantic `Animation` definitions, and clip timeline
+mappings are resolved by the shared sampler. Shared
 clocks remain independently sampleable. Local-pose transitions retain signed scale
 and shortest-path quaternion rotation; surface and visibility properties sample the
 destination directly. The shared `wc3` pose evaluator handles hierarchy, pivots, native billboard

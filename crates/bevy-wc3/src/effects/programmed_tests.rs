@@ -1,5 +1,5 @@
 use super::*;
-use wc3::model::Values as SlotValues;
+use wc3::model::PropertyValues as SlotValues;
 #[test]
 fn collapsed_age_stages_preserve_explicit_endpoints() {
     for middle in [0., 1.] {

@@ -3,7 +3,7 @@ use crate::material::native_fixtures::m2;
 use naga::front::wgsl::parse_str;
 use naga::valid::{Capabilities, ValidationFlags, Validator};
 use wc3::model::values::model::BatchFlags;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn surface(
     slot_values: &mut SlotValues,

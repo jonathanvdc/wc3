@@ -5,7 +5,7 @@ use wc3::model::{
     BezierKeyframe, ContinuousDomain, Curve, CurveValue, HermiteKeyframe, Interpolation, Material,
     Model, OwnerId, PropertyTarget, Quaternion, TcbKeyframe, TcbParameters, Time, ValueKeyframe,
 };
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use zerovec::ule::AsULE;
 
 fn time(seconds: f64) -> Time {

@@ -7,7 +7,7 @@ use crate::model::profiles::diablo::d3::ClipControls;
 use crate::model::profiles::diablo::d3::{NodeRole, D3};
 use crate::model::Model;
 use crate::model::Quaternion;
-use crate::model::{Channel, Clip, Clock, Curve, Interpolation, Time, Track};
+use crate::model::{Channel, Clip, Curve, Interpolation, Time, TimeSource, Track};
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
 pub(super) fn read<'a>(
@@ -137,7 +137,7 @@ pub(super) fn read<'a>(
                     channels.push(Channel::Vector3(Track {
                         target: model.node(node).unwrap().transform.translation,
                         curve: Curve::linear(times, values)?,
-                        clock: Clock::Clip,
+                        clock: TimeSource::Clip,
                     }));
                 }
                 let keys = &p.rotation_curves[i].keys;
@@ -151,7 +151,7 @@ pub(super) fn read<'a>(
                     channels.push(Channel::Rotation(Track {
                         target: model.node(node).unwrap().transform.rotation,
                         curve: Curve::nlerp(times, values)?,
-                        clock: Clock::Clip,
+                        clock: TimeSource::Clip,
                     }));
                 }
                 let keys = &p.scale_curves[i].keys;
@@ -163,7 +163,7 @@ pub(super) fn read<'a>(
                     channels.push(Channel::Vector3(Track {
                         target: model.node(node).unwrap().transform.scale,
                         curve: Curve::linear(times, values)?,
-                        clock: Clock::Clip,
+                        clock: TimeSource::Clip,
                     }));
                 }
             }
@@ -230,14 +230,14 @@ pub(super) fn write(
     asset.validate()?;
     let model = asset;
     let mut groups: Vec<native::AnimationRecord<'static>> = Vec::new();
-    for (_, clip) in model.clips() {
-        if clip.alias().is_some() || !clip.is_looping() {
+    for (id, clip) in model.clips() {
+        if !clip.is_looping() {
             return Err(Error::new(
                 "d3.animation.playback",
                 "native permutations require independent looping programs",
             ));
         }
-        if !clip.events().is_empty() {
+        if model.clip_events(id).next().is_some() {
             context.unsupported(
                 "d3.animation.events",
                 "logical events cannot be exported as unestablished native trigger payloads",
@@ -321,8 +321,8 @@ pub(super) fn write(
             ..Default::default()
         };
         let mut seen = Vec::new();
-        for channel in clip.channels() {
-            if channel.clock() != Clock::Clip {
+        for channel in model.clip_channels(id) {
+            if channel.clock() != TimeSource::Clip {
                 return Err(Error::new(
                     "d3.animation.clock",
                     "native permutation channels require clip-local clocks",

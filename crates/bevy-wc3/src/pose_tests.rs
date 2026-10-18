@@ -2,8 +2,10 @@ use super::*;
 use crate::compile_model;
 use crate::compiled::RuntimeNode;
 use std::f32::consts::FRAC_PI_2;
-use wc3::model::{AnimationSample, Channel, Clock, Curve, Model, Node, Quaternion, Time, Track};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{
+    AnimationSample, Channel, Curve, Model, Node, Quaternion, Time, TimeSource, Track,
+};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn runtime_node() -> RuntimeNode {
     let slot_values = SlotValues::default();
@@ -159,9 +161,9 @@ fn birth_pose_follows_parent_rotation_between_frame_endpoints() {
         .unwrap();
     let time = |value| Time::seconds(value).unwrap();
     builder
-        .add_timeline_channel(Channel::Rotation(Track {
+        .add_global_channel(Channel::Rotation(Track {
             target: builder.model().node(parent).unwrap().transform.rotation,
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
             curve: Curve::linear(
                 [time(0.), time(1.)],
                 [
@@ -415,9 +417,9 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
         .unwrap();
     let times = [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()];
     builder
-        .add_timeline_channel(Channel::Vector3(Track {
+        .add_global_channel(Channel::Vector3(Track {
             target: builder.model().node(parent).unwrap().transform.translation,
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
             curve: Curve::linear(times, [[0.; 3], [2., 0., 0.]]).unwrap(),
         }))
         .unwrap();
@@ -427,9 +429,9 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
         })
         .unwrap();
     builder
-        .add_shared_channel(Channel::Rotation(Track {
+        .add_global_channel(Channel::Rotation(Track {
             target: builder.model().node(parent).unwrap().transform.rotation,
-            clock: Clock::Shared(shared),
+            clock: TimeSource::Shared(shared),
             curve: Curve::linear(
                 times,
                 [
@@ -451,7 +453,7 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
             clip,
             Channel::Vector3(Track {
                 target: builder.model().node(parent).unwrap().transform.scale,
-                clock: Clock::Clip,
+                clock: TimeSource::Clip,
                 curve: Curve::linear(times, [[1.; 3], [3.; 3]]).unwrap(),
             }),
         )
@@ -462,7 +464,7 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
             controller,
             Channel::Boolean(Track {
                 target: builder.model().node(parent).unwrap().visible,
-                clock: Clock::Timeline,
+                clock: TimeSource::Timeline,
                 curve: Curve::step(times, [true, false]).unwrap(),
             }),
         )
@@ -506,7 +508,6 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
             clip_time: time,
             timeline_time: time,
             shared_time: time,
-            ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
     let retimed = sample.at_times(time, time, time);

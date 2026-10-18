@@ -1,12 +1,12 @@
 //! Surface-value evaluation independent of texture pixels and renderer materials.
-use crate::model::{Animated, MeshId, Model, NodeFeature, TextureTransform, ValueSample};
+use crate::model::{MeshId, Model, NodeFeature, Property, TextureTransform, ValueSample};
 use glam::{Affine2, EulerRot, Mat4, Quat, Vec2, Vec3};
 use std::collections::HashMap;
 /// Prepared geometry color and opacity slots, reusable across samples.
 #[derive(Clone, Debug)]
 pub struct MeshAppearance {
-    color: Option<Animated<[f32; 3]>>,
-    opacity: Animated<f32>,
+    color: Option<Property<[f32; 3]>>,
+    opacity: Property<f32>,
     defaults: [f32; 4],
     animated: bool,
 }
@@ -96,15 +96,15 @@ impl TextureTransform {
 #[derive(Default)]
 pub struct SurfaceColor<'a> {
     /// RGB override, taking precedence over RGBA RGB.
-    pub color: Option<&'a Animated<[f32; 3]>>,
+    pub color: Option<&'a Property<[f32; 3]>>,
     /// RGBA surface multiplier.
-    pub rgba: Option<&'a Animated<[f32; 4]>>,
+    pub rgba: Option<&'a Property<[f32; 4]>>,
     /// Explicit opacity multiplier.
-    pub opacity: Option<&'a Animated<f32>>,
+    pub opacity: Option<&'a Property<f32>>,
     /// Additional input weight.
-    pub weight: Option<&'a Animated<f32>>,
+    pub weight: Option<&'a Property<f32>>,
     /// Ordered pass contribution weights.
-    pub pass_weights: &'a [Animated<f32>],
+    pub pass_weights: &'a [Property<f32>],
     /// Authored untinted color.
     pub fallback: [f32; 4],
     /// Authored opacity before weight multiplication.

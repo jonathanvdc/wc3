@@ -3,9 +3,9 @@ use glam::Quat;
 use std::hint::black_box;
 use wc3::model::profiles::Universal;
 use wc3::model::{
-    AnimationProgram, AnimationSample, BillboardConvention, Channel, Clock, Curve, EvaluatedPose,
-    GeometryData, Mesh, Model, ModelPose, PoseBehavior, PoseInputs, Quaternion, Time, Track,
-    Transform,
+    AnimationProgram, AnimationSample, BillboardConvention, Channel, Curve, EvaluatedPose,
+    GeometryData, Mesh, Model, ModelPose, PoseBehavior, PoseInputs, Quaternion, Time, TimeSource,
+    Track, Transform,
 };
 
 fn poses(c: &mut Criterion) {
@@ -23,9 +23,9 @@ fn poses(c: &mut Criterion) {
             let rotation = node.transform.rotation;
             let id = builder.add_node(node).unwrap();
             builder
-                .add_timeline_channel(Channel::Rotation(Track {
+                .add_global_channel(Channel::Rotation(Track {
                     target: rotation,
-                    clock: Clock::Timeline,
+                    clock: TimeSource::Timeline,
                     curve: Curve::linear(
                         [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
                         [Quaternion::IDENTITY, Quaternion([0., 0., 0.1, 0.995])],

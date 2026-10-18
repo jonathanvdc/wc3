@@ -1,8 +1,8 @@
 //! Borrowed native curves expressed as typed logical channels.
 use super::*;
 use crate::model::io::materialize;
-use crate::model::Animatable;
-use semantic::{Clock, Curve, CurveValue, Time};
+use crate::model::PropertyValue;
+use semantic::{Curve, CurveValue, Time, TimeSource};
 
 pub(super) fn curve<'a, 'data: 'a, D: Dialect, T, U: CurveValue + 'a>(
     source: &'a Bundle<'data, D>,
@@ -124,19 +124,19 @@ where
     };
     Ok(Some((curve, global)))
 }
-pub(in super::super) fn bind<'a, T: CurveValue + Animatable + 'a>(
+pub(in super::super) fn bind<'a, T: CurveValue + PropertyValue + 'a>(
     curve: Curve<'a, T>,
     global: u16,
-    target: Animated<T>,
+    target: Property<T>,
     clocks: &[semantic::ClockId],
 ) -> Result<semantic::Track<'a, T>, Error> {
     Ok(semantic::Track {
         target,
         curve,
         clock: if global == u16::MAX {
-            Clock::Clip
+            TimeSource::Clip
         } else {
-            Clock::Shared(
+            TimeSource::Shared(
                 *clocks
                     .get(global as usize)
                     .ok_or_else(|| Error::new("m2.animation.clock", "missing shared clock"))?,
@@ -145,7 +145,7 @@ pub(in super::super) fn bind<'a, T: CurveValue + Animatable + 'a>(
     })
 }
 
-pub(in super::super) trait ChannelValue: Animatable + CurveValue {
+pub(in super::super) trait ChannelValue: PropertyValue + CurveValue {
     fn restrict<'a>(
         track: &semantic::Track<'a, Self>,
         start: Time,
@@ -175,7 +175,7 @@ macro_rules! float_channel {($($ty:ty=>$variant:ident),*)=>{$(impl ChannelValue 
 float_channel!(f32=>Scalar,[f32;2]=>Vector2,[f32;3]=>Vector3,[f32;4]=>Vector4,semantic::Quaternion=>Rotation);
 pub(super) fn encode<V: ModelLayout, U: ChannelValue, T: Value>(
     model: &Graph<'_>,
-    target: &Animated<U>,
+    target: &Property<U>,
     starts: &[u32],
     globals: &mut Vec<u32>,
     context: &mut Context,
@@ -187,8 +187,8 @@ where
     V::TrackValues<'static, T>: ValuesFactory<T>,
 {
     let shared = model
-        .shared_channels()
-        .iter()
+        .global_channels()
+        .filter(|v| matches!(v.clock(), TimeSource::Shared(_)))
         .filter_map(U::channel)
         .find(|t| t.target == *target);
     let tracks: Vec<_> = if let Some(shared) = shared {
@@ -197,9 +197,9 @@ where
         model
             .clips()
             .iter()
-            .map(|(_, clip)| {
-                clip.channels()
-                    .iter()
+            .map(|(id, _clip)| {
+                model
+                    .clip_channels(id)
                     .filter_map(U::channel)
                     .find(|t| t.target == *target)
             })
@@ -229,14 +229,14 @@ where
         ));
     }
     let global = match first.clock {
-        Clock::Timeline => {
+        TimeSource::Timeline => {
             return Err(Error::new(
                 "m2.animation.clock",
                 "M2 requires a clip or shared sequence clock",
             ));
         }
-        Clock::Clip => u16::MAX,
-        Clock::Shared(id) => {
+        TimeSource::Clip => u16::MAX,
+        TimeSource::Shared(id) => {
             let duration = time_ms(
                 model
                     .clock(id)
@@ -285,14 +285,14 @@ where
         let mut ss = Vec::new();
         if let Some(track) = track {
             let period = match track.clock {
-                Clock::Timeline => {
+                TimeSource::Timeline => {
                     return Err(Error::new(
                         "m2.animation.clock",
                         "M2 requires a clip or shared sequence clock",
                     ));
                 }
-                Clock::Clip => model.clips().iter().nth(index).unwrap().1.duration(),
-                Clock::Shared(id) => model.clock(id).unwrap().period(),
+                TimeSource::Clip => model.clips().iter().nth(index).unwrap().1.duration(),
+                TimeSource::Shared(id) => model.clock(id).unwrap().period(),
             };
             let clipped = U::restrict(track, Time::default(), period)?;
             let track = &clipped;
@@ -427,7 +427,7 @@ where
 
 pub(super) fn animated<V: ModelLayout, U: ChannelValue, T: Value>(
     model: &Graph<'_>,
-    value: &Animated<U>,
+    value: &Property<U>,
     starts: &[u32],
     globals: &mut Vec<u32>,
     context: &mut Context,
@@ -463,7 +463,7 @@ pub(super) fn fixed_alpha(value: f32, context: &mut Context) -> Result<i16, Erro
 }
 pub(in super::super) fn animated_spline<V: ModelLayout, U: ChannelValue, T: Value>(
     model: &Graph<'_>,
-    value: &Animated<U>,
+    value: &Property<U>,
     starts: &[u32],
     globals: &mut Vec<u32>,
     context: &mut Context,
@@ -509,13 +509,13 @@ pub(in super::super) fn insert<'a>(
 ) -> Result<(), Error> {
     let (target, clock) = (channel.target(), channel.clock());
     match clock {
-        Clock::Timeline => {
+        TimeSource::Timeline => {
             return Err(Error::new(
                 "m2.animation.clock",
                 "M2 cannot attach absolute timeline channels",
             ));
         }
-        Clock::Clip => {
+        TimeSource::Clip => {
             if let Some(clip) = clip {
                 // Alias clips select another sequence's programme. Native track tables
                 // may still have a leaf for their index, but it is not an independent
@@ -523,7 +523,7 @@ pub(in super::super) fn insert<'a>(
                 if builder
                     .model()
                     .clip(clip)
-                    .is_some_and(|clip| clip.alias().is_some())
+                    .is_some_and(|clip| clip.controls.alias.is_some())
                 {
                     return Ok(());
                 }
@@ -535,14 +535,14 @@ pub(in super::super) fn insert<'a>(
                 ));
             }
         }
-        Clock::Shared(_) => {
+        TimeSource::Shared(_) => {
             if !builder
                 .model()
-                .shared_channels()
-                .iter()
+                .global_channels()
+                .filter(|v| matches!(v.clock(), TimeSource::Shared(_)))
                 .any(|v| (v.target(), v.clock()) == (target, clock))
             {
-                builder.add_shared_channel(channel)?
+                builder.add_global_channel(channel)?
             }
         }
     }

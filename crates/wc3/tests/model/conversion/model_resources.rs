@@ -1,6 +1,6 @@
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::profiles::Universal;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{ImageResource, Material, MaterialSurface, Model, ModelBuilder, Texture};
 
 fn textured_material(texture: Texture, slot_values: &mut SlotValues) -> Material<'static> {

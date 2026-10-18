@@ -1,24 +1,24 @@
 //! Checked projection of shared components into constrained simulation vocabularies.
 use super::*;
 use crate::model::features::{FromFeature, TryFromFeature};
-use crate::model::Values;
+use crate::model::PropertyValues;
 impl<'a> FromFeature<mdlx::Particle> for ParticleDefinition<'a> {
-    fn from_feature(v: mdlx::Particle, values: &mut Values) -> Self {
+    fn from_feature(v: mdlx::Particle, values: &mut PropertyValues) -> Self {
         Self {
             emission: ParticleEmission {
-                rate: ParticleScalar::Animated(v.emission.rate),
+                rate: ParticleScalar::Property(v.emission.rate),
                 variation: 0.0,
                 trigger: ParticleTrigger::Continuous,
                 activation: ParticleActivation::Fractional(v.emission.activation),
             },
             motion: ParticleMotion {
-                speed: ParticleScalar::Animated(v.motion.speed),
-                variation: ParticleScalar::Animated(values.add(0.0)),
+                speed: ParticleScalar::Property(v.motion.speed),
+                variation: ParticleScalar::Property(values.add(0.0)),
                 gravity: ParticleGravity::Directional(v.motion.gravity),
             },
             lifetime: ParticleLifetime {
-                duration: ParticleScalar::Animated(v.lifetime.duration),
-                variation: ParticleScalar::Animated(values.add(0.0)),
+                duration: ParticleScalar::Property(v.lifetime.duration),
+                variation: ParticleScalar::Property(values.add(0.0)),
             },
             appearance: ParticleAppearance::Resource,
             details: ParticleDetails::Model(v.details),
@@ -27,34 +27,37 @@ impl<'a> FromFeature<mdlx::Particle> for ParticleDefinition<'a> {
 }
 impl<'a> TryFromFeature<ParticleDefinition<'a>> for mdlx::Particle {
     type Error = Box<ParticleDefinition<'a>>;
-    fn try_from_feature(v: ParticleDefinition<'a>, values: &Values) -> Result<Self, Self::Error> {
-        if !(matches!(&v.emission.rate, ParticleScalar::Animated(_))
+    fn try_from_feature(
+        v: ParticleDefinition<'a>,
+        values: &PropertyValues,
+    ) -> Result<Self, Self::Error> {
+        if !(matches!(&v.emission.rate, ParticleScalar::Property(_))
             && matches!(&v.emission.activation, ParticleActivation::Fractional(_))
-            && matches!(&v.motion.speed, ParticleScalar::Animated(_))
+            && matches!(&v.motion.speed, ParticleScalar::Property(_))
             && matches!(&v.motion.gravity, ParticleGravity::Directional(_))
-            && matches!(&v.lifetime.duration, ParticleScalar::Animated(_))
+            && matches!(&v.lifetime.duration, ParticleScalar::Property(_))
             && v.emission.variation == 0.0
-            && matches!(&v.motion.variation, ParticleScalar::Animated(a) if values.get(*a) == Some(&0.))
-            && matches!(&v.lifetime.variation, ParticleScalar::Animated(a) if values.get(*a) == Some(&0.))
+            && matches!(&v.motion.variation, ParticleScalar::Property(a) if values.get(*a) == Some(&0.))
+            && matches!(&v.lifetime.variation, ParticleScalar::Property(a) if values.get(*a) == Some(&0.))
             && matches!(v.emission.trigger, ParticleTrigger::Continuous))
             || !matches!(&v.details, ParticleDetails::Model(_))
             || !matches!(&v.appearance, ParticleAppearance::Resource)
         {
             return Err(Box::new(v));
         }
-        let ParticleScalar::Animated(emission_rate) = v.emission.rate else {
+        let ParticleScalar::Property(emission_rate) = v.emission.rate else {
             unreachable!()
         };
         let ParticleActivation::Fractional(visibility) = v.emission.activation else {
             unreachable!()
         };
-        let ParticleScalar::Animated(initial_velocity) = v.motion.speed else {
+        let ParticleScalar::Property(initial_velocity) = v.motion.speed else {
             unreachable!()
         };
         let ParticleGravity::Directional(gravity) = v.motion.gravity else {
             unreachable!()
         };
-        let ParticleScalar::Animated(life_span) = v.lifetime.duration else {
+        let ParticleScalar::Property(life_span) = v.lifetime.duration else {
             unreachable!()
         };
         let ParticleDetails::Model(d) = v.details else {
@@ -82,10 +85,10 @@ impl<'a> TryFromFeature<ParticleDefinition<'a>> for mdlx::Particle {
     }
 }
 impl<'a> FromFeature<mdlx::Particle2> for ParticleDefinition<'a> {
-    fn from_feature(v: mdlx::Particle2, values: &mut Values) -> Self {
+    fn from_feature(v: mdlx::Particle2, values: &mut PropertyValues) -> Self {
         Self {
             emission: ParticleEmission {
-                rate: ParticleScalar::Animated(v.emission.rate),
+                rate: ParticleScalar::Property(v.emission.rate),
                 variation: 0.0,
                 trigger: if v.emission.trigger {
                     ParticleTrigger::KeyedBurst
@@ -95,13 +98,13 @@ impl<'a> FromFeature<mdlx::Particle2> for ParticleDefinition<'a> {
                 activation: ParticleActivation::Fractional(v.emission.activation),
             },
             motion: ParticleMotion {
-                speed: ParticleScalar::Animated(v.motion.speed),
-                variation: ParticleScalar::Animated(v.motion.variation),
+                speed: ParticleScalar::Property(v.motion.speed),
+                variation: ParticleScalar::Property(v.motion.variation),
                 gravity: ParticleGravity::Directional(v.motion.gravity),
             },
             lifetime: ParticleLifetime {
-                duration: ParticleScalar::Animated(values.add(v.lifetime.duration)),
-                variation: ParticleScalar::Animated(values.add(0.0)),
+                duration: ParticleScalar::Property(values.add(v.lifetime.duration)),
+                variation: ParticleScalar::Property(values.add(0.0)),
             },
             appearance: ParticleAppearance::Staged(v.appearance),
             details: ParticleDetails::Atlas(Box::new(v.details)),
@@ -110,40 +113,43 @@ impl<'a> FromFeature<mdlx::Particle2> for ParticleDefinition<'a> {
 }
 impl<'a> TryFromFeature<ParticleDefinition<'a>> for mdlx::Particle2 {
     type Error = Box<ParticleDefinition<'a>>;
-    fn try_from_feature(v: ParticleDefinition<'a>, values: &Values) -> Result<Self, Self::Error> {
-        if !(matches!(&v.emission.rate, ParticleScalar::Animated(_))
+    fn try_from_feature(
+        v: ParticleDefinition<'a>,
+        values: &PropertyValues,
+    ) -> Result<Self, Self::Error> {
+        if !(matches!(&v.emission.rate, ParticleScalar::Property(_))
             && matches!(&v.emission.activation, ParticleActivation::Fractional(_))
-            && matches!(&v.motion.speed, ParticleScalar::Animated(_))
-            && matches!(&v.motion.variation, ParticleScalar::Animated(_))
+            && matches!(&v.motion.speed, ParticleScalar::Property(_))
+            && matches!(&v.motion.variation, ParticleScalar::Property(_))
             && matches!(&v.motion.gravity, ParticleGravity::Directional(_))
-            && matches!(&v.lifetime.duration, ParticleScalar::Animated(a) if values.get(*a).is_some())
+            && matches!(&v.lifetime.duration, ParticleScalar::Property(a) if values.get(*a).is_some())
             && matches!(
                 &v.emission.trigger,
                 ParticleTrigger::Continuous | ParticleTrigger::KeyedBurst
             )
             && v.emission.variation == 0.0
-            && matches!(&v.lifetime.variation, ParticleScalar::Animated(a) if values.get(*a) == Some(&0.)))
+            && matches!(&v.lifetime.variation, ParticleScalar::Property(a) if values.get(*a) == Some(&0.)))
             || !matches!(&v.details, ParticleDetails::Atlas(_))
             || !matches!(&v.appearance, ParticleAppearance::Staged(_))
         {
             return Err(Box::new(v));
         }
-        let ParticleScalar::Animated(emission_rate) = v.emission.rate else {
+        let ParticleScalar::Property(emission_rate) = v.emission.rate else {
             unreachable!()
         };
         let ParticleActivation::Fractional(visibility) = v.emission.activation else {
             unreachable!()
         };
-        let ParticleScalar::Animated(speed) = v.motion.speed else {
+        let ParticleScalar::Property(speed) = v.motion.speed else {
             unreachable!()
         };
-        let ParticleScalar::Animated(variation) = v.motion.variation else {
+        let ParticleScalar::Property(variation) = v.motion.variation else {
             unreachable!()
         };
         let ParticleGravity::Directional(gravity) = v.motion.gravity else {
             unreachable!()
         };
-        let ParticleScalar::Animated(life_span) = v.lifetime.duration else {
+        let ParticleScalar::Property(life_span) = v.lifetime.duration else {
             unreachable!()
         };
         let life_span = *values.get(life_span).expect("validated source slot");
@@ -176,22 +182,22 @@ impl<'a> TryFromFeature<ParticleDefinition<'a>> for mdlx::Particle2 {
     }
 }
 impl<'a> FromFeature<m2::Particle<'a>> for ParticleDefinition<'a> {
-    fn from_feature(v: m2::Particle<'a>, values: &mut Values) -> Self {
+    fn from_feature(v: m2::Particle<'a>, values: &mut PropertyValues) -> Self {
         Self {
             emission: ParticleEmission {
-                rate: ParticleScalar::Animated(v.emission.rate),
+                rate: ParticleScalar::Property(v.emission.rate),
                 variation: v.emission.variation,
                 trigger: ParticleTrigger::Continuous,
                 activation: ParticleActivation::Boolean(v.emission.activation),
             },
             motion: ParticleMotion {
-                speed: ParticleScalar::Animated(v.motion.speed),
-                variation: ParticleScalar::Animated(v.motion.variation),
+                speed: ParticleScalar::Property(v.motion.speed),
+                variation: ParticleScalar::Property(v.motion.variation),
                 gravity: ParticleGravity::Vector(v.motion.gravity),
             },
             lifetime: ParticleLifetime {
-                duration: ParticleScalar::Animated(v.lifetime.duration),
-                variation: ParticleScalar::Animated(values.add(v.lifetime.variation)),
+                duration: ParticleScalar::Property(v.lifetime.duration),
+                variation: ParticleScalar::Property(values.add(v.lifetime.variation)),
             },
             appearance: ParticleAppearance::Curves(Box::new(v.appearance)),
             details: ParticleDetails::AgeDriven(Box::new(v.details)),
@@ -200,39 +206,42 @@ impl<'a> FromFeature<m2::Particle<'a>> for ParticleDefinition<'a> {
 }
 impl<'a> TryFromFeature<ParticleDefinition<'a>> for m2::Particle<'a> {
     type Error = Box<ParticleDefinition<'a>>;
-    fn try_from_feature(v: ParticleDefinition<'a>, values: &Values) -> Result<Self, Self::Error> {
-        if !(matches!(&v.emission.rate, ParticleScalar::Animated(_))
+    fn try_from_feature(
+        v: ParticleDefinition<'a>,
+        values: &PropertyValues,
+    ) -> Result<Self, Self::Error> {
+        if !(matches!(&v.emission.rate, ParticleScalar::Property(_))
             && matches!(&v.emission.activation, ParticleActivation::Boolean(_))
-            && matches!(&v.motion.speed, ParticleScalar::Animated(_))
-            && matches!(&v.motion.variation, ParticleScalar::Animated(_))
+            && matches!(&v.motion.speed, ParticleScalar::Property(_))
+            && matches!(&v.motion.variation, ParticleScalar::Property(_))
             && matches!(&v.motion.gravity, ParticleGravity::Vector(_))
-            && matches!(&v.lifetime.duration, ParticleScalar::Animated(_))
-            && matches!(&v.lifetime.variation, ParticleScalar::Animated(a) if values.get(*a).is_some())
+            && matches!(&v.lifetime.duration, ParticleScalar::Property(_))
+            && matches!(&v.lifetime.variation, ParticleScalar::Property(a) if values.get(*a).is_some())
             && matches!(v.emission.trigger, ParticleTrigger::Continuous))
             || !matches!(&v.details, ParticleDetails::AgeDriven(_))
             || !matches!(&v.appearance, ParticleAppearance::Curves(_))
         {
             return Err(Box::new(v));
         }
-        let ParticleScalar::Animated(rate) = v.emission.rate else {
+        let ParticleScalar::Property(rate) = v.emission.rate else {
             unreachable!()
         };
         let ParticleActivation::Boolean(enabled) = v.emission.activation else {
             unreachable!()
         };
-        let ParticleScalar::Animated(speed) = v.motion.speed else {
+        let ParticleScalar::Property(speed) = v.motion.speed else {
             unreachable!()
         };
-        let ParticleScalar::Animated(speed_variation) = v.motion.variation else {
+        let ParticleScalar::Property(speed_variation) = v.motion.variation else {
             unreachable!()
         };
         let ParticleGravity::Vector(gravity) = v.motion.gravity else {
             unreachable!()
         };
-        let ParticleScalar::Animated(lifespan) = v.lifetime.duration else {
+        let ParticleScalar::Property(lifespan) = v.lifetime.duration else {
             unreachable!()
         };
-        let ParticleScalar::Animated(lifespan_variation) = v.lifetime.variation else {
+        let ParticleScalar::Property(lifespan_variation) = v.lifetime.variation else {
             unreachable!()
         };
         let lifespan_variation = *values

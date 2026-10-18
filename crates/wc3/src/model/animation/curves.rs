@@ -135,7 +135,7 @@ impl<'a, T: CurveValue> Curve<'a, T> {
     pub fn times(&self) -> &ZeroVec<'a, Time> {
         &self.times
     }
-    /// Values matching key times.
+    /// PropertyValues matching key times.
     pub fn values(&self) -> &ZeroVec<'a, T> {
         &self.values
     }

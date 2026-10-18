@@ -4,7 +4,7 @@ use wc3::model::profiles::Universal;
 use wc3::model::{
     Attribute, ConnectivitySets, GeometryData, Mesh as ModelMesh, ModelBuilder, PrimitiveSelection,
 };
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn positions(mesh: &Mesh) -> &[[f32; 3]] {
     let Some(VertexAttributeValues::Float32x3(values)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)

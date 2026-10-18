@@ -10,8 +10,8 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 use std::f32::consts::TAU;
 use wc3::model::{
-    Animated, ClipId, FeatureId, Model, NodeFeature, NodeId, ParticleActivation, ParticleDetails,
-    ParticleEmitter, ParticleGravity, ParticleResource, ParticleScalar, ParticleTrigger,
+    ClipId, FeatureId, Model, NodeFeature, NodeId, ParticleActivation, ParticleDetails,
+    ParticleEmitter, ParticleGravity, ParticleResource, ParticleScalar, ParticleTrigger, Property,
 };
 
 const CAPACITY: usize = 1024;
@@ -37,12 +37,12 @@ struct Emitter {
     anchor: usize,
     model: Handle<ModelAsset>,
     placement: ChildCoordinates,
-    rate: Animated<f32>,
+    rate: Property<f32>,
     activation: ParticleActivation,
-    speed: Animated<f32>,
+    speed: Property<f32>,
     gravity: ParticleGravity,
-    lifetime: Animated<f32>,
-    latitude: Animated<f32>,
+    lifetime: Property<f32>,
+    latitude: Property<f32>,
 }
 #[derive(Clone, Default)]
 pub(crate) struct RuntimeModelParticles {
@@ -89,9 +89,9 @@ impl ModelParticleChild {
     }
 }
 
-fn scalar(value: &ParticleScalar) -> Option<Animated<f32>> {
+fn scalar(value: &ParticleScalar) -> Option<Property<f32>> {
     match value {
-        ParticleScalar::Animated(value) => Some(*value),
+        ParticleScalar::Property(value) => Some(*value),
         _ => None,
     }
 }
@@ -272,8 +272,7 @@ impl RuntimeModelParticles {
             let mut clock = EmissionClock::new(start, frame.time);
             let mut budget = CAPACITY;
             for step in clock.by_ref() {
-                let Some((clip, timeline, shared)) =
-                    retimed_selection(frame, step.sample_time, &self.clips)
+                let Some((clip, timeline, shared)) = retimed_selection(frame, step.sample_time)
                 else {
                     continue;
                 };
@@ -314,9 +313,7 @@ impl RuntimeModelParticles {
                         continue;
                     }
                     let time = step.start + schedule.offset(index);
-                    let Some((clip, timeline, shared)) =
-                        retimed_selection(frame, time, &self.clips)
-                    else {
+                    let Some((clip, timeline, shared)) = retimed_selection(frame, time) else {
                         continue;
                     };
                     let sample = frame.sample.at_times(clip, timeline, shared);
@@ -512,7 +509,7 @@ pub(crate) fn synchronize_model_particles(
 
 #[cfg(test)]
 mod tests {
-    use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+    use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
     use super::*;
     fn child(app: &mut App, root: Entity, owner: Entity) -> Entity {

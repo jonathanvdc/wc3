@@ -2,6 +2,7 @@
 use super::animation::{encode, time_ms};
 use super::*;
 use crate::model::M2ImageResource;
+use crate::model::TimeSource;
 use zerovec::ZeroVec;
 
 /// Plans a typed M2 bundle, checking index limits, curves and resource identities.
@@ -120,8 +121,12 @@ where
             let animated = model
                 .clips()
                 .iter()
-                .flat_map(|(_, clip)| clip.channels().iter())
-                .chain(model.shared_channels().iter())
+                .flat_map(|(id, _)| model.clip_channels(id))
+                .chain(
+                    model
+                        .global_channels()
+                        .filter(|v| matches!(v.clock(), TimeSource::Shared(_))),
+                )
                 .any(|channel| match channel {
                     semantic::Channel::Vector3(t) => {
                         t.target == node.transform.translation || t.target == node.transform.scale
@@ -197,7 +202,7 @@ where
         starts.push(start);
         let data = &clip.controls;
         let mut flags = SequenceFlags::from_bits_retain(data.flags.bits());
-        flags.set_alias(clip.alias().is_some());
+        flags.set_alias(clip.controls.alias.is_some());
         flags.set_primary_bone_sequence(true);
         flags.set_load_low_priority(false);
         flags.set_stored_in_model(false);
@@ -213,7 +218,8 @@ where
             blend_time: BlendField::make(data.blend_time, &mut context)?,
             bounding: native_bounds(data.bounds),
             alias_next: clip
-                .alias()
+                .controls
+                .alias
                 .map(|id| clips.iter().position(|v| *v == id).unwrap() as u16)
                 .unwrap_or(0),
             variation_next: data

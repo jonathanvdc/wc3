@@ -1,6 +1,6 @@
 //! Infallible payload embeddings preserve identities and encoded storage.
 use crate::model::profiles::{Extends, Profile};
-use crate::model::Values;
+use crate::model::PropertyValues;
 use crate::model::{
     AttachedFeature, Clip, Controller, Dependencies, Draw, Material, Mesh, MeshInstance, Model,
     Node, Skin,
@@ -12,7 +12,7 @@ struct PayloadMap<'a, P: Profile, Q: Profile> {
     model: fn(P::ModelMetadata<'a>) -> Q::ModelMetadata<'a>,
     system: fn(P::System<'a>) -> Q::System<'a>,
     map_surface: fn(P::Surface<'a>) -> Q::Surface<'a>,
-    feature: fn(P::Feature<'a>, &mut Values) -> Q::Feature<'a>,
+    feature: fn(P::Feature<'a>, &mut PropertyValues) -> Q::Feature<'a>,
     node: fn(P::Node<'a>) -> Q::Node<'a>,
     mesh: fn(P::Mesh<'a>) -> Q::Mesh<'a>,
     instance: fn(P::Instance<'a>) -> Q::Instance<'a>,
@@ -85,10 +85,8 @@ impl<'a, P: Profile> Model<'a, P> {
                 .into_iter()
                 .map(|(id, value)| (id, (maps.system)(value)))
                 .collect(),
-            timeline_channels: self.timeline_channels.into_iter().collect(),
-            timeline_events: self.timeline_events,
-            shared_channels: self.shared_channels.into_iter().collect(),
-            shared_events: self.shared_events,
+            animations: self.animations,
+            global_animations: self.global_animations,
             appearance: (maps.appearance)(self.appearance),
             skins: self
                 .skins
@@ -193,23 +191,23 @@ impl<'a, P: Profile> Model<'a, P> {
                 .into_iter()
                 .map(|(id, value)| {
                     let Clip {
-                        alias,
+                        animations,
+                        timeline_origin,
                         name,
                         duration,
                         looping,
-                        channels,
-                        events,
+
                         controls,
                     } = value;
                     (
                         id,
                         Clip {
-                            alias,
+                            animations,
+                            timeline_origin,
                             name,
                             duration,
                             looping,
-                            channels: channels.into_iter().collect(),
-                            events,
+
                             controls: (maps.clip)(controls),
                         },
                     )
@@ -263,8 +261,7 @@ impl<'a, P: Profile> Model<'a, P> {
                         name,
                         priority,
                         concurrent,
-                        channels,
-                        events,
+                        animations,
                         controls,
                     } = value;
                     (
@@ -273,8 +270,7 @@ impl<'a, P: Profile> Model<'a, P> {
                             name,
                             priority,
                             concurrent,
-                            channels: channels.into_iter().collect(),
-                            events,
+                            animations,
                             controls: (maps.controller)(controls),
                         },
                     )

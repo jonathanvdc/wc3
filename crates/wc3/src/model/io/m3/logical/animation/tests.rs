@@ -4,9 +4,9 @@ use crate::model::io::owned;
 use crate::model::{
     conversion::{Context, ExportOptions},
     formats::m3::{self as native, records as nr},
-    Channel, Clip, Clock, Controller, Curve, Interpolation, Quaternion, Time, Track,
+    Channel, Clip, Controller, Curve, Interpolation, Quaternion, Time, TimeSource, Track,
 };
-use crate::model::{Construct as SlotConstruct, Values as SlotValues};
+use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use zerovec::ZeroVec;
 
 #[test]
@@ -35,7 +35,7 @@ fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
             control: Default::default(),
             binding: Some(definition.transform.scale),
         },
-        batching: surface::Property {
+        batching: surface::PropertyBinding {
             value: batching,
             reset: 0,
             control: surface::AnimationControl {
@@ -76,7 +76,7 @@ fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
                     Interpolation::Linear,
                 )
                 .unwrap(),
-                clock: Clock::Timeline,
+                clock: TimeSource::Timeline,
             }),
         )
         .unwrap();
@@ -247,7 +247,7 @@ fn event_blocks_select_occurrences_instead_of_command_features() {
                     controller,
                     Event {
                         feature: Some(command),
-                        clock: Clock::Timeline,
+                        clock: TimeSource::Timeline,
                         time: Time::seconds(time).unwrap(),
                         name: "shared command".into(),
                         node: None,

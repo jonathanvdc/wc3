@@ -1,4 +1,4 @@
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     Link, ParticleComposition, ParticleEmission, TrailAppearance, TrailComposition, TrailGeometry,
     ValidateLinks,

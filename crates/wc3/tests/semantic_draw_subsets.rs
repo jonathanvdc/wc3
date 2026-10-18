@@ -5,7 +5,7 @@ use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw, DrawSubset, Material,
     Mesh, MeshInstance, ModelBuilder, PrimitiveRange, PrimitiveSelection, Topology,
 };
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn mesh() -> Mesh<'static> {
     Mesh::triangles(

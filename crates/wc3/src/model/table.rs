@@ -66,7 +66,7 @@ impl<K, V> Table<K, V> {
     pub fn keys(&self) -> impl ExactSizeIterator<Item = Id<K>> + DoubleEndedIterator + '_ {
         self.entries.keys().copied()
     }
-    /// Values in stable identity order.
+    /// PropertyValues in stable identity order.
     pub fn values(&self) -> btree_map::Values<'_, Id<K>, V> {
         self.entries.values()
     }

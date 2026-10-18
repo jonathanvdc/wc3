@@ -1,7 +1,7 @@
 use super::super::ModelMaterialKey;
 use super::*;
 use crate::material::native_fixtures::m2;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 #[test]
 fn third_input_reuses_raw_streams_with_its_own_transform() {

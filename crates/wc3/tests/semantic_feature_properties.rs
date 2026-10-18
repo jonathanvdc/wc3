@@ -1,12 +1,12 @@
 use wc3::model::profiles::{m2, mdlx, Mdlx, Universal, M2};
 use wc3::model::{
-    AnimationSample, Camera, Channel, Clip, Clock, Construct, Curve, FromFeature, Model,
-    NodeFeature, Time, Track, Values,
+    AnimationSample, Camera, Channel, Clip, Construct, Curve, FromFeature, Model, NodeFeature,
+    PropertyValues, Time, TimeSource, Track,
 };
 
 #[test]
 fn vertical_fov_animation_cannot_narrow_to_a_static_native_field() {
-    let mut values = Values::default();
+    let mut values = PropertyValues::default();
     let camera: mdlx::Camera = Construct::construct(&mut values);
     let mut feature = NodeFeature::from_feature(mdlx::Node::Camera(camera), &mut values);
     let NodeFeature::Camera(Camera::Aimed(camera)) = &mut feature else {
@@ -18,11 +18,11 @@ fn vertical_fov_animation_cannot_narrow_to_a_static_native_field() {
     let node = draft.add_named_node("camera").unwrap();
     draft.add_feature(node, feature).unwrap();
     draft
-        .add_timeline_channel(Channel::Scalar(Track {
+        .add_global_channel(Channel::Scalar(Track {
             target: fov,
             curve: Curve::linear([Time::default(), Time::seconds(1.).unwrap()], [0.5f32, 1.])
                 .unwrap(),
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
         }))
         .unwrap();
     assert!(draft.finish().unwrap().try_narrow::<Mdlx>().is_err());
@@ -48,7 +48,7 @@ fn a_fov_slot_keeps_its_diagonal_camera_convention() {
             Channel::Scalar(Track {
                 target: fov,
                 curve: Curve::step([Time::default()], [0.75f32]).unwrap(),
-                clock: Clock::Clip,
+                clock: TimeSource::Clip,
             }),
         )
         .unwrap();

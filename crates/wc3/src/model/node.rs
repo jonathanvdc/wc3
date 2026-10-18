@@ -1,6 +1,6 @@
 //! Hierarchy and authored transform behavior.
 use crate::model::profiles::{Profile, Universal};
-use crate::model::{Animated, Construct, Error, NodeId, Quaternion, ValueSample, Values};
+use crate::model::{Construct, Error, NodeId, Property, PropertyValues, Quaternion, ValueSample};
 use std::borrow::Cow;
 /// Transform inheritance along a parent relationship.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -87,17 +87,17 @@ impl Transform {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AnimatedTransform {
     /// Local translation slot.
-    pub translation: Animated<[f32; 3]>,
+    pub translation: Property<[f32; 3]>,
     /// Local rotation slot.
-    pub rotation: Animated<Quaternion>,
+    pub rotation: Property<Quaternion>,
     /// Local scale slot.
-    pub scale: Animated<[f32; 3]>,
+    pub scale: Property<[f32; 3]>,
     /// Pivot relative to the parent frame.
     pub pivot: [f32; 3],
 }
 impl AnimatedTransform {
     /// Allocates the components of an authored transform.
-    pub fn new(value: Transform, values: &mut Values) -> Self {
+    pub fn new(value: Transform, values: &mut PropertyValues) -> Self {
         Self {
             translation: values.add(value.translation),
             rotation: values.add(value.rotation),
@@ -105,7 +105,7 @@ impl AnimatedTransform {
             pivot: value.pivot,
         }
     }
-    pub(crate) fn validate(&self, values: &Values) -> Result<(), Error> {
+    pub(crate) fn validate(&self, values: &PropertyValues) -> Result<(), Error> {
         let transform = Transform {
             translation: *values
                 .get(self.translation)
@@ -121,7 +121,7 @@ impl AnimatedTransform {
         transform.validate()
     }
     /// Resolves authored constants.
-    pub fn defaults(&self, values: &Values) -> Transform {
+    pub fn defaults(&self, values: &PropertyValues) -> Transform {
         Transform {
             translation: *values.get(self.translation).expect("validated slot"),
             rotation: *values.get(self.rotation).expect("validated slot"),
@@ -155,13 +155,13 @@ pub struct Node<'a, P: Profile = Universal> {
     /// Camera-facing behavior.
     pub billboard: Billboard,
     /// Whether this node is initially visible.
-    pub visible: Animated<bool>,
+    pub visible: Property<bool>,
     /// Whether its origin follows the driving camera.
     pub camera_anchored: bool,
 }
 impl<'a, P: Profile> Node<'a, P> {
     /// Creates a visible root node with an identity transform.
-    pub fn named(name: impl Into<Cow<'a, str>>, values: &mut Values) -> Self {
+    pub fn named(name: impl Into<Cow<'a, str>>, values: &mut PropertyValues) -> Self {
         Self {
             name: name.into(),
             controls: Default::default(),
@@ -187,7 +187,7 @@ impl<'a, P: Profile> Node<'a, P> {
     pub fn with_transform(
         mut self,
         transform: Transform,
-        values: &mut Values,
+        values: &mut PropertyValues,
     ) -> Result<Self, Error> {
         transform.validate()?;
         values.set(self.transform.translation, transform.translation)?;
@@ -199,7 +199,7 @@ impl<'a, P: Profile> Node<'a, P> {
 }
 
 impl Construct for AnimatedTransform {
-    fn construct(values: &mut Values) -> Self {
+    fn construct(values: &mut PropertyValues) -> Self {
         Self::new(Transform::default(), values)
     }
 }

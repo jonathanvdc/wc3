@@ -42,7 +42,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     let mut starts = BTreeMap::new();
     for (id, clip) in model.clips() {
         let metadata = &clip.controls;
-        let start = metadata.start.as_seconds();
+        let start = clip.timeline_origin.unwrap_or_default().as_seconds();
         let first = unsigned_frame(start, &mut context, "clip.start")?;
         let last = unsigned_frame(
             start + clip.duration().as_seconds(),

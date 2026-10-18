@@ -1,5 +1,5 @@
 //! Layered-model ownership, sequence bounds, and hierarchy controls.
-use crate::model::{Bounds, ClipId, FeatureId, ImageResourceId, Link, MeshId, Time, ValidateLinks};
+use crate::model::{Bounds, ClipId, FeatureId, ImageResourceId, Link, MeshId, ValidateLinks};
 /// Texture resource authoring controls beyond the common sampling description.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TextureControls {
@@ -14,8 +14,6 @@ use std::borrow::Cow;
 /// Authored sequence controls beyond common animation timing.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Sequence {
-    /// Start of this playback interval on the authored model timeline.
-    pub start: Time,
     /// Movement speed used by the game animation controller.
     pub move_speed: f32,
     /// Selection rarity within a sequence family.

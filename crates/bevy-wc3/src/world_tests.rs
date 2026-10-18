@@ -3,7 +3,7 @@ use super::*;
 use bevy::mesh::VertexAttributeValues;
 use wc3::model::profiles::Universal;
 use wc3::model::{controls::world::WorldSystem, ModelBuilder};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn system_id() -> SystemId {
     ModelBuilder::<Universal>::new("world identities")

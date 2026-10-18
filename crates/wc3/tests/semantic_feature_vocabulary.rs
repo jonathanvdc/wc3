@@ -1,6 +1,7 @@
 use wc3::model::profiles::mdlx;
 use wc3::model::profiles::{Mdlx, Profile, Unavailable};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::TimeSource;
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     FeatureKind, FeatureSet, FeatureView, FeatureVocabulary, LightEmission, LightView, Link, Model,
     PropertyIdentityKey,
@@ -181,9 +182,9 @@ fn custom_vocabulary_uses_profile_independent_slots() {
         .unwrap();
     builder.import_values(&slot_values).unwrap();
     builder
-        .add_timeline_channel(wc3::model::Channel::Scalar(wc3::model::Track {
+        .add_global_channel(wc3::model::Channel::Scalar(wc3::model::Track {
             target: intensity,
-            clock: wc3::model::Clock::Timeline,
+            clock: TimeSource::Timeline,
             curve: wc3::model::Curve::step([wc3::model::Time::default()], [2.]).unwrap(),
         }))
         .unwrap();

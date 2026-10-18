@@ -7,7 +7,7 @@ use super::{blocks::Blocks, AnimationId, AnimationIds};
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::{
-    profiles::m3 as surface, Channel, Clock, Interpolation, NodeId, Time, ValueSlot,
+    profiles::m3 as surface, Channel, Interpolation, NodeId, Time, TimeSource, ValueSlot,
 };
 use native::{Envelope, Ref};
 use std::collections::{BTreeSet, HashMap};
@@ -113,7 +113,7 @@ pub(in crate::model::io::m3::logical) fn prepare(
     let mut ids = AnimationIds::new(model.values());
     let mut claimed = HashMap::new();
     for (_, program) in model.controllers() {
-        for channel in &program.channels {
+        for channel in model.animation_channels(&program.animations) {
             let mode = match interpolation(channel) {
                 Interpolation::Step => surface::values::Interpolation::Constant,
                 Interpolation::Linear => surface::values::Interpolation::Linear,
@@ -158,7 +158,15 @@ pub(in crate::model::io::m3::logical) fn prepare(
             claimed.insert(id, channel.target());
         }
     }
-    if !model.shared_channels().is_empty() || !model.shared_events().is_empty() {
+    if model
+        .global_channels()
+        .find(|v| matches!(v.clock(), TimeSource::Shared(_)))
+        .is_some()
+        || model
+            .global_events()
+            .find(|v| matches!(v.clock, TimeSource::Shared(_)))
+            .is_some()
+    {
         context.unsupported(
             "m3.animation.clock",
             "native M3 animation belongs to controller programs",
@@ -202,8 +210,8 @@ pub(in crate::model::io::m3::logical) fn write<E: Envelope>(
         let mut identities = Vec::new();
         let mut selectors = Vec::new();
         let mut used = BTreeSet::new();
-        for channel in logical.channels.iter() {
-            if channel.clock() != Clock::Timeline {
+        for channel in model.animation_channels(&logical.animations) {
+            if channel.clock() != TimeSource::Timeline {
                 context.unsupported("m3.animation.clock", "controller uses a foreign clock")?;
                 continue;
             }
@@ -316,7 +324,7 @@ pub(in crate::model::io::m3::logical) fn write<E: Envelope>(
     }
     for (_, clip) in model.clips() {
         let controls = &clip.controls;
-        let start = unsigned_time(controls.timeline_origin, context)?;
+        let start = unsigned_time(clip.timeline_origin.unwrap_or_default(), context)?;
         let end = start
             .checked_add(unsigned_time(clip.duration(), context)?)
             .ok_or_else(|| {
@@ -325,7 +333,7 @@ pub(in crate::model::io::m3::logical) fn write<E: Envelope>(
                     "timeline overflows native milliseconds",
                 )
             })?;
-        if !clip.channels().is_empty() || !clip.events().is_empty() || clip.alias().is_some() {
+        if !clip.animations.is_empty() {
             context.unsupported(
                 "m3.sequence.program",
                 "M3 clips select controllers rather than owning channels or events",

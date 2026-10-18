@@ -1,7 +1,7 @@
 //! Exact projections of M3 owner payloads.
 use super::{incompatible, Narrows};
 use crate::model::profiles::{Profile, Universal, M3};
-use crate::model::Values;
+use crate::model::PropertyValues;
 use crate::model::{
     ClipControls, DrawControls, Error, InstanceControls, MeshControls, ModelMetadata, NodeControls,
     System, UniversalAppearance, UniversalBinding,
@@ -71,7 +71,7 @@ impl Narrows<Universal> for M3 {
     }
     fn feature<'a>(
         value: <Universal as Profile>::Feature<'a>,
-        values: &Values,
+        values: &PropertyValues,
     ) -> Result<Self::Feature<'a>, Error> {
         crate::model::features::TryFromFeature::try_from_feature(value, values)
             .map_err(|_| incompatible("feature"))

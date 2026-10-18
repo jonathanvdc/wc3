@@ -1,10 +1,10 @@
 //! Programmed-model owner metadata and skeletal property controls.
-use crate::model::animation::programmed::{AnimationControl, Property};
+use crate::model::animation::programmed::{AnimationControl, PropertyBinding};
 use crate::model::values::programmed::{BatchFlags, RegionFlags};
 use crate::model::values::programmed::{BoneFlags, ModelFlags};
-use crate::model::{Animatable, Construct};
+use crate::model::{Construct, PropertyValue};
 use crate::model::{
-    Animated as Destination, FeatureId, FeatureKind, Link, NodeId, Quaternion, SkinId,
+    FeatureId, FeatureKind, Link, NodeId, Property as Destination, Quaternion, SkinId,
     ValidateLinks,
 };
 /// Game-wide model behavior settings.
@@ -17,7 +17,7 @@ pub struct ModelMetadata {
 }
 /// Reset and animation behavior for a value whose initial state belongs to its owner.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct PropertyControl<T: Animatable> {
+pub struct PropertyControl<T: PropertyValue> {
     /// Value used when resetting the source animation property.
     pub reset: T,
     /// Authored interpolation, source identity, and sampling controls.
@@ -41,7 +41,7 @@ pub struct BoneControls {
     /// Scale reset and sampling behavior; initial scale belongs to the node.
     pub scale: PropertyControl<[f32; 3]>,
     /// Animated batch selection control, independent of node visibility.
-    pub batching: Property<u32>,
+    pub batching: PropertyBinding<u32>,
 }
 /// Authored role of a node in an M3 scene.
 #[derive(Clone, Debug, Default, PartialEq)]

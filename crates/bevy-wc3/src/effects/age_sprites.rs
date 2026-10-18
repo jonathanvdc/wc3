@@ -21,9 +21,10 @@ use wc3::model::values::model::{
     ParticleBlend, ParticleFlags, ParticleGenerator, ParticleHeadTail,
 };
 use wc3::model::{
-    Animated, ClipId, Curve, CurveValue, FeatureId, MaterialId, Model, NodeFeature, NodeId,
+    ClipId, Curve, CurveValue, FeatureId, MaterialId, Model, NodeFeature, NodeId,
     ParticleActivation, ParticleAgeCurves, ParticleAppearance, ParticleDetails, ParticleEmitter,
-    ParticleGravity, ParticleScalar, ParticleTrigger, Texture, Time as ModelTime, ValueSample,
+    ParticleGravity, ParticleScalar, ParticleTrigger, Property, Texture, Time as ModelTime,
+    ValueSample,
 };
 
 const MAX_PARTICLES: usize = 8192;
@@ -47,14 +48,14 @@ pub struct SpriteEmitter {
 #[derive(Clone)]
 struct AgeDrivenControls {
     activation: ParticleActivation,
-    speed_variation: Animated<f32>,
+    speed_variation: Property<f32>,
     gravity: ParticleGravity,
-    lifespan_variation: Animated<f32>,
-    vertical: Animated<f32>,
-    horizontal: Animated<f32>,
-    width: Animated<f32>,
-    length: Animated<f32>,
-    z_source: Animated<f32>,
+    lifespan_variation: Property<f32>,
+    vertical: Property<f32>,
+    horizontal: Property<f32>,
+    width: Property<f32>,
+    length: Property<f32>,
+    z_source: Property<f32>,
 }
 
 #[derive(Clone)]
@@ -62,11 +63,11 @@ struct Emitter {
     feature: FeatureId,
     node: NodeId,
     node_index: usize,
-    rate: Animated<f32>,
+    rate: Property<f32>,
     rate_variation: f32,
     controls: Option<AgeDrivenControls>,
-    speed: Animated<f32>,
-    lifespan: Animated<f32>,
+    speed: Property<f32>,
+    lifespan: Property<f32>,
     generator: ParticleGenerator,
     flags: ParticleFlags,
     drag: f32,
@@ -177,8 +178,8 @@ fn particle_image<'a>(
     images.get_with_sampler(id, texture.color_space, TextureRole::Color, texture.sampler)
 }
 
-fn scalar(value: &ParticleScalar) -> Option<Animated<f32>> {
-    if let ParticleScalar::Animated(value) = value {
+fn scalar(value: &ParticleScalar) -> Option<Property<f32>> {
+    if let ParticleScalar::Property(value) = value {
         Some(*value)
     } else {
         None
@@ -693,9 +694,7 @@ impl RuntimeAgeSprites {
                 let end = step.end;
                 let tick = step.tick;
                 let rate_time = step.sample_time;
-                let Some((clip, timeline, shared)) =
-                    retimed_selection(&frame, rate_time, &self.clips)
-                else {
+                let Some((clip, timeline, shared)) = retimed_selection(&frame, rate_time) else {
                     continue;
                 };
                 let sample = frame.sample.at_times(clip, timeline, shared);
@@ -855,7 +854,7 @@ impl BirthContext<'_, '_, '_> {
             1.
         };
         let birth_basis = interpolated_transform(self.previous_basis, frame.basis_world, fraction);
-        let Some((clip, timeline, shared)) = retimed_selection(frame, time, self.clips) else {
+        let Some((clip, timeline, shared)) = retimed_selection(frame, time) else {
             return;
         };
         if frame

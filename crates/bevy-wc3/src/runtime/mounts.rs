@@ -306,7 +306,7 @@ mod camera_tests {
     use wc3::model::{
         Billboard, Model, ModelMount, MountTarget, Node, Quaternion, Transform as ModelTransform,
     };
-    use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+    use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
     #[test]
     fn mounted_billboards_resolve_current_carrier_frame_without_transform_propagation() {
@@ -416,10 +416,10 @@ mod activation_tests {
     use bevy::ecs::world::CommandQueue;
     use wc3::model::profiles::Universal;
 
-    use wc3::model::Values as SlotValues;
+    use wc3::model::PropertyValues as SlotValues;
     use wc3::model::{
-        Attachment, Channel, Clip, Clock, Curve, Model, NodeFeature, Socket as SemanticSocket,
-        SocketIdentity, Time, Track,
+        Attachment, Channel, Clip, Curve, Model, NodeFeature, Socket as SemanticSocket,
+        SocketIdentity, Time, TimeSource, Track,
     };
     use wc3::model::{ModelMount, MountTarget};
 
@@ -451,7 +451,7 @@ mod activation_tests {
                     vec![1., 0.],
                 )
                 .unwrap(),
-                clock: Clock::Clip,
+                clock: TimeSource::Clip,
             }),
         )
         .unwrap();

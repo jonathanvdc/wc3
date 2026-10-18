@@ -2,13 +2,13 @@ use std::borrow::Cow;
 use wc3::model::profiles::m3;
 use wc3::model::FeatureSchema;
 use wc3::model::{Camera, EventSource, FeatureView, Light, NodeFeature};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{FromFeature as SlotFromFeature, TryFromFeature as SlotTryFromFeature};
 
 #[test]
 fn optical_programs_keep_initial_reset_and_reference_controls() {
     let mut slot_values = SlotValues::default();
-    let authored = m3::Property {
+    let authored = m3::PropertyBinding {
         value: slot_values.add(0.6),
         reset: 0.9,
         control: m3::AnimationControl {
@@ -62,13 +62,13 @@ fn specular_light_and_command_options_round_trip_without_flattening() {
         flags: SlotConstruct::construct(&mut slot_values),
         lod_cut: 2,
         shadow_lod_cut: 5,
-        diffuse_color: m3::Property {
+        diffuse_color: m3::PropertyBinding {
             value: slot_values.add([0.1, 0.2, 0.3]),
             reset: [0.7, 0.8, 0.9],
             ..SlotConstruct::construct(&mut slot_values)
         },
         intensity_multiplier: SlotConstruct::construct(&mut slot_values),
-        specular_color: m3::Property {
+        specular_color: m3::PropertyBinding {
             value: slot_values.add([0.9, 0.1, 0.8]),
             ..SlotConstruct::construct(&mut slot_values)
         },

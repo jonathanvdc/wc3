@@ -6,7 +6,7 @@ use bevy_wc3::assembly::{
 };
 use bevy_wc3::{BakeSpace, ModelError, PartBinding, PoseBaker, PoseOptions};
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     Draw, GeometryData, ImageResource, Material, MaterialSurface, Mesh as ModelMesh, MeshInstance,
     Model, ModelMount, MountTarget, NodeId, ResourceLocator, Texture, Transform as ModelTransform,

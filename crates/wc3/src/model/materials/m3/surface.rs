@@ -1,5 +1,5 @@
 //! Logical M3 surface values.
-use super::{Property, TextureLayer};
+use super::{PropertyBinding, TextureLayer};
 use crate::model::materials::contributions::SurfaceContribution;
 use crate::model::values::programmed::DisplacementFlags;
 use crate::model::Construct;
@@ -16,7 +16,7 @@ pub struct DisplacementMaterialStep {
     /// Sets render priority (lower = earlier).
     pub priority: u32,
     /// Authored displacement input and response.
-    pub displacement: SurfaceContribution<Option<TextureLayer>, Property<f32>>,
+    pub displacement: SurfaceContribution<Option<TextureLayer>, PropertyBinding<f32>>,
 }
 
 /// Editable M3 TerrainMaterialStep values.

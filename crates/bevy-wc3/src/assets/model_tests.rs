@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn app(directory: &Path) -> App {
     app_with_resolver(directory, Arc::new(PathResolver))

@@ -1,5 +1,5 @@
 //! Logical M3 standard values.
-use super::{Property, TextureLayer};
+use super::{PropertyBinding, TextureLayer};
 use crate::model::materials::contributions::{
     NormalContributions, PairedInputs, SpecularInputs, SurfaceContribution,
 };
@@ -37,9 +37,9 @@ pub struct StandardMaterialStep {
     /// Sets material class (unit, building, etc.).
     pub material_class: MaterialClass,
     /// Controls parallax height through its animation value.
-    pub parallax_height: Property<f32>,
+    pub parallax_height: PropertyBinding<f32>,
     /// Controls motion blur amount through its animation value.
-    pub motion_blur_amount: Property<f32>,
+    pub motion_blur_amount: PropertyBinding<f32>,
     /// Base diffuse input.
     pub diffuse: Option<TextureLayer>,
     /// Shared composition operation for the decal and environment layers.
@@ -54,7 +54,7 @@ pub struct StandardMaterialStep {
     /// Two independent authored opacity slots.
     pub opacity: PairedInputs<Option<TextureLayer>>,
     /// Base and masked additional normal inputs with authored weights.
-    pub normals: NormalContributions<Option<TextureLayer>, Vec<Property<f32>>>,
+    pub normals: NormalContributions<Option<TextureLayer>, Vec<PropertyBinding<f32>>>,
 }
 
 /// Specular response parameters of the programmed standard shader.

@@ -1,7 +1,7 @@
 use wc3::model::common::{IntoZeroVec, ZeroVec};
 use wc3::model::profiles::diablo::d3::{self, Geometry, NodeRole, VertexExtras, VertexStreams, D3};
 use wc3::model::profiles::Universal;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{Mesh, Model, SnoNamespace, SnoResource};
 
 fn triangle<'a>(positions: &'a [[f32; 3]]) -> Geometry<'a> {

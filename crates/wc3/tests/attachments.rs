@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use wc3::model::profiles::{m3, mdlx, Universal};
-use wc3::model::Values as SlotValues;
+use wc3::model::PropertyValues as SlotValues;
 use wc3::model::{
     AnimationProgram, AnimationSample, Attachment, ChildModel, Model, MountTarget, NodeFeature,
     PlacementAppearance, ResourceLocator, Socket, SocketDefinition, SocketIdentity,

@@ -1,6 +1,6 @@
 use wc3::model::profiles::{m2, mdlx};
 use wc3::model::{AngleTrailControls, SurfaceTrailRendering};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     GravityTrailControls, ParticleLifetime, ParticleMotion, ProgrammedAge, ProgrammedDirection,
     ProgrammedForces, ProgrammedNoise, ProgrammedTrailGravity, TrailAppearance,
@@ -74,8 +74,8 @@ fn programmed_ribbon_composition_preserves_native_controls_and_borrowed_splines(
             frequency: property(slot_values),
         }
     }
-    fn property(slot_values: &mut SlotValues) -> m3::Property<f32> {
-        m3::Property {
+    fn property(slot_values: &mut SlotValues) -> m3::PropertyBinding<f32> {
+        m3::PropertyBinding {
             value: slot_values.add(2.5),
             reset: -1.25,
             control: m3::AnimationControl {
@@ -200,9 +200,9 @@ fn programmed_ribbon_composition_preserves_native_controls_and_borrowed_splines(
     );
     assert_eq!(edited.motion.gravity.x, 1.375);
     assert_eq!(edited.motion.gravity.y, -0.625);
-    ribbon.motion.speed = ParticleScalar::Animated(slot_values.add(33.));
+    ribbon.motion.speed = ParticleScalar::Property(slot_values.add(33.));
     let rejected = m3::Ribbon::try_from(ribbon).unwrap_err();
-    let ParticleScalar::Animated(speed) = &rejected.motion.speed else {
+    let ParticleScalar::Property(speed) = &rejected.motion.speed else {
         unreachable!()
     };
     assert_eq!(slot_values[speed], 33.);

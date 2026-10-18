@@ -134,12 +134,12 @@ fn enum_shapes_dispatch_only_the_selected_variant() {
     );
 }
 #[derive(m2::Validate, m2::VisitArrays)]
-struct Animated<'data> {
+struct Property<'data> {
     track: Track<'data, f32, V264>,
 }
 #[test]
 fn native_tracks_keep_sequence_and_global_context() {
-    let mut animated = Animated {
+    let mut animated = Property {
         track: Track {
             base: TrackBase {
                 interpolation: Interpolation::Linear,

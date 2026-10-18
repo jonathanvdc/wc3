@@ -1,8 +1,8 @@
 use wc3::model::profiles::{mdlx, Mdlx, Universal};
 use wc3::model::FromFeature as SlotFromFeature;
 use wc3::model::TrailAppearance;
-use wc3::model::{Channel, Clock, Curve, Model, Time, Track};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Channel, Curve, Model, Time, TimeSource, Track};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{ParticleEmission, ParticleLifetime, ParticleMotion};
 
 #[test]
@@ -33,14 +33,14 @@ fn atlas_speed_keeps_one_shared_identity_through_native_publication() {
         )
         .unwrap();
     draft
-        .add_timeline_channel(Channel::Scalar(Track {
+        .add_global_channel(Channel::Scalar(Track {
             target: native,
             curve: Curve::linear(
                 [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
                 [2f32, 4.],
             )
             .unwrap(),
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
         }))
         .unwrap();
     let model = {
@@ -49,10 +49,30 @@ fn atlas_speed_keeps_one_shared_identity_through_native_publication() {
     }
     .unwrap()
     .widen::<Universal>();
-    assert_eq!(model.timeline_channels()[0].target(), native.slot());
+    assert_eq!(
+        model
+            .global_channels()
+            .find(|v| v.clock() == TimeSource::Timeline)
+            .unwrap()
+            .target(),
+        native.slot()
+    );
     let restored = model.try_narrow::<Mdlx>().unwrap();
-    assert_eq!(restored.timeline_channels().len(), 1);
-    assert_eq!(restored.timeline_channels()[0].target(), native.slot());
+    assert_eq!(
+        restored
+            .global_channels()
+            .filter(|v| v.clock() == TimeSource::Timeline)
+            .count(),
+        1
+    );
+    assert_eq!(
+        restored
+            .global_channels()
+            .find(|v| v.clock() == TimeSource::Timeline)
+            .unwrap()
+            .target(),
+        native.slot()
+    );
 }
 
 #[test]
@@ -83,19 +103,25 @@ fn common_trail_fields_bind_the_owned_component_and_export_exactly() {
     .widen::<Universal>();
     model
         .edit(|draft| {
-            draft.add_timeline_channel(Channel::Scalar(Track {
+            draft.add_global_channel(Channel::Scalar(Track {
                 target: opacity,
                 curve: Curve::linear(
                     [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
                     [1f32, 0.],
                 )
                 .unwrap(),
-                clock: Clock::Timeline,
+                clock: TimeSource::Timeline,
             }))
         })
         .unwrap();
     let restored = model.try_narrow::<Mdlx>().unwrap();
-    assert_eq!(restored.timeline_channels().len(), 1);
+    assert_eq!(
+        restored
+            .global_channels()
+            .filter(|v| v.clock() == TimeSource::Timeline)
+            .count(),
+        1
+    );
 }
 
 #[test]
@@ -124,10 +150,10 @@ fn a_shared_continuous_rate_narrows_on_non_burst_atlas_emitters() {
         )
         .unwrap();
     draft
-        .add_timeline_channel(Channel::Scalar(Track {
+        .add_global_channel(Channel::Scalar(Track {
             target: rate,
             curve: Curve::linear([Time::seconds(0.).unwrap()], [12f32]).unwrap(),
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
         }))
         .unwrap();
     let model = {

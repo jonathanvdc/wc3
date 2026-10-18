@@ -3,6 +3,7 @@ use super::animation::{animated, animated_spline, fixed_alpha, time_ms};
 use super::*;
 use crate::model::materials::m2::material_flags;
 use crate::model::Axis;
+use crate::model::TimeSource;
 use zerovec::ZeroVec;
 fn anchor(
     model: &Graph<'_>,
@@ -298,14 +299,14 @@ where
             profile::ActorKind::Event(value) => {
                 let (bone, position) = anchor(model, attached.node, nodes)?;
                 let shared: Vec<_> = model
-                    .shared_events()
-                    .iter()
+                    .global_events()
+                    .filter(|v| matches!(v.clock, TimeSource::Shared(_)))
                     .filter(|e| e.feature == Some(feature_id))
                     .collect();
                 let mut global = u16::MAX;
                 let mut leaves = Vec::new();
                 if let Some(first) = shared.first() {
-                    let semantic::Clock::Shared(clock) = first.clock else {
+                    let semantic::TimeSource::Shared(clock) = first.clock else {
                         return Err(Error::new(
                             "m2.event.clock",
                             "shared event requires shared clock",
@@ -328,10 +329,10 @@ where
                             .collect::<Result<Vec<_>, _>>()?,
                     )
                 } else {
-                    for (index, (_, clip)) in model.clips().iter().enumerate() {
+                    for (index, (id, _clip)) in model.clips().iter().enumerate() {
                         leaves.push(
-                            clip.events()
-                                .iter()
+                            model
+                                .clip_events(id)
                                 .filter(|e| e.feature == Some(feature_id))
                                 .map(|e| {
                                     time_ms(e.time, context).and_then(|t| {

@@ -3,7 +3,7 @@ use crate::model::profiles::{m2, mdlx, Either};
 use crate::model::LightEmission;
 use crate::model::{scene, Axis, NodeFeature};
 use crate::model::{AngleTrailControls, SurfaceTrailRendering, TrailAppearance, TrailGeometry};
-use crate::model::{Construct as SlotConstruct, Values as SlotValues};
+use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use crate::model::{ParticleEmission, ParticleLifetime, ParticleMotion};
 use std::ptr;
 
@@ -235,12 +235,12 @@ fn particle_copy_exposes_only_overrides_and_keeps_program_reset_metadata() {
     let source = builder.reserve_feature(node);
     let copy = m3::ParticleCopy {
         source,
-        emission_rate: m3::Property {
+        emission_rate: m3::PropertyBinding {
             value: slot_values.add(12.5),
             reset: 3.5,
             ..SlotConstruct::construct(&mut slot_values)
         },
-        squirt_amount: m3::Property {
+        squirt_amount: m3::PropertyBinding {
             value: slot_values.add(19),
             reset: 2,
             ..SlotConstruct::construct(&mut slot_values)
@@ -299,7 +299,7 @@ fn owned_emitters_expose_the_same_borrowed_emission_and_trail_components() {
     else {
         panic!("owned squirt emitter must expose keyed counts");
     };
-    let ParticleScalar::Animated(authored) = &definition.emission.rate else {
+    let ParticleScalar::Property(authored) = &definition.emission.rate else {
         unreachable!()
     };
     assert!(ptr::eq(value, authored));

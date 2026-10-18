@@ -5,7 +5,7 @@ use super::super::{
 };
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
-use crate::model::Animatable;
+use crate::model::PropertyValue;
 use crate::model::{profiles::m3 as surface, FeatureId, MaterialId, MeshId};
 use native::{Envelope, Ref};
 use std::collections::BTreeMap;
@@ -20,9 +20,9 @@ pub(in crate::model::io::m3::logical) struct Writer<'out, 'draft, E: Envelope> {
     pub projectors: &'draft BTreeMap<FeatureId, u32>,
 }
 impl<E: Envelope> Writer<'_, '_, E> {
-    pub fn property_is_set<T: Animatable + Default + PartialEq>(
+    pub fn property_is_set<T: PropertyValue + Default + PartialEq>(
         &self,
-        value: &surface::Property<T>,
+        value: &surface::PropertyBinding<T>,
     ) -> bool {
         self.ids.values.get(value.value) != Some(&T::default())
             || value.reset != T::default()
@@ -62,7 +62,7 @@ impl<E: Envelope> Writer<'_, '_, E> {
     }
     pub fn spline(
         &mut self,
-        points: &[surface::Property<[f32; 3]>],
+        points: &[surface::PropertyBinding<[f32; 3]>],
     ) -> Result<Ref<nr::targets::AnimationValueVector3>, Error> {
         let rows = points
             .iter()

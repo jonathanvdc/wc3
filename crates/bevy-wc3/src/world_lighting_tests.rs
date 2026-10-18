@@ -1,5 +1,5 @@
 use super::*;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn policy() -> ColorAdjustment {
     ColorAdjustment {

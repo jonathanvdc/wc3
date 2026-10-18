@@ -127,27 +127,11 @@ impl Playback {
         timings: &'a HashMap<ClipId, ClipTiming>,
     ) -> Result<AnimationSample<'a>, AnimationError> {
         let timing = self.clip.and_then(|id| timings.get(&id));
-        let (timeline, interval) = timing.map_or((self.timeline_time, None), |timing| {
-            let t = if timing.duration <= 0. {
-                0.
-            } else if timing.looping {
-                self.clip_time.rem_euclid(timing.duration)
-            } else {
-                self.clip_time.clamp(0., timing.duration)
-            };
-            (
-                timing.origin + t,
-                Some((timing.origin, timing.origin + timing.duration)),
-            )
-        });
         Ok(AnimationSample {
             clip: self.clip,
             clip_time: ModelTime::seconds(self.clip_time)?,
-            timeline_time: ModelTime::seconds(timeline)?,
+            timeline_time: ModelTime::seconds(self.timeline_time)?,
             shared_time: ModelTime::seconds(self.shared_time)?,
-            timeline_interval: interval
-                .map(|(a, b)| Ok((ModelTime::seconds(a)?, ModelTime::seconds(b)?)))
-                .transpose()?,
             controllers: match &self.controllers {
                 ControllerSelection::Authored => {
                     timing.map_or(&[], |timing| timing.controllers.as_ref())

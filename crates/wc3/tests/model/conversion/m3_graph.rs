@@ -6,7 +6,7 @@ use wc3::model::{
     profiles::m3 as surface,
     profiles::M3,
 };
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn source() -> m3::Bundle<'static> {
     let model = m3::Document::new::<m3::StarCraft2>().unwrap();
@@ -104,7 +104,7 @@ fn complete_camera_optics_rebuild_without_editable_document_backing() {
         .iter()
         .find(|(_, node)| node.name == "b")
         .unwrap();
-    let mut constant = |value| surface::Property {
+    let mut constant = |value| surface::PropertyBinding {
         value: slot_values.add(value),
         reset: value,
         control: surface::AnimationControl::default(),

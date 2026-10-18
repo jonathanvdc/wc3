@@ -1,5 +1,5 @@
 //! Direct native timelines and checked logical animation programs.
-use crate::model::Values;
+use crate::model::PropertyValues;
 use crate::model::{profiles::m3 as surface, ValueSlot};
 use std::collections::HashMap;
 
@@ -11,11 +11,11 @@ pub(super) struct AnimationId {
     pub keyed: bool,
 }
 pub(super) struct AnimationIds {
-    pub values: Values,
+    pub values: PropertyValues,
     entries: HashMap<ValueSlot, AnimationId>,
 }
 impl AnimationIds {
-    fn new(values: &Values) -> Self {
+    fn new(values: &PropertyValues) -> Self {
         Self {
             values: values.clone(),
             entries: HashMap::new(),

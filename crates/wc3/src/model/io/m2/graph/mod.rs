@@ -2,6 +2,7 @@
 use super::*;
 use crate::model::io::materialize;
 use crate::model::{self as semantic, profiles::m2 as profile};
+use std::collections::HashSet;
 mod actors;
 mod actors_export;
 pub(super) mod animation;
@@ -16,7 +17,7 @@ use semantic::profiles::M2 as M2Vocabulary;
 pub(in super::super) type Graph<'a> = semantic::Model<'a, M2Vocabulary>;
 pub(in super::super) type GraphBuilder<'a> = semantic::ModelBuilder<'a, M2Vocabulary>;
 pub use export::plan;
-use semantic::{Animated, Channel, ImageResource, SharedClock, Texture, Time};
+use semantic::{Channel, ImageResource, Property, SharedClock, Texture, Time};
 
 /// Imports an M2 bundle without a canonical intermediate encoding.
 pub fn import<'a, 'data: 'a, D: Dialect>(
@@ -251,6 +252,15 @@ where
         builder.set_clip_controls(
             id,
             profile::SequenceControls {
+                alias: if sequence.flags.alias() {
+                    Some(
+                        *clips
+                            .get(sequence.alias_next as usize)
+                            .ok_or_else(|| Error::new("m2.sequence.alias", "missing clip"))?,
+                    )
+                } else {
+                    None
+                },
                 animation_id: sequence.id,
                 variation: sequence.variation_index,
                 movement_speed: sequence.move_speed,
@@ -271,11 +281,6 @@ where
             },
         )?;
         if sequence.flags.alias() {
-            let target = *clips
-                .get(sequence.alias_next as usize)
-                .ok_or_else(|| Error::new("m2.sequence.alias", "missing clip"))?;
-            let clip = builder.model().clip(id).unwrap().clone().with_alias(target);
-            builder.set_clip(id, clip)?;
             continue;
         }
         for (bone_index, bone) in bones.iter().enumerate() {
@@ -407,6 +412,24 @@ where
     }
     for physics in physics::import(source, &nodes, &mut builder, &mut context)? {
         builder.add_system(profile::System::Physics(physics))?;
+    }
+    // Native aliases may precede their target and form chains. Resolve only after
+    // every independently authored program has been imported.
+    for &id in &clips {
+        let mut target = id;
+        let mut seen = HashSet::new();
+        while let Some(next) = builder.model().clip(target).unwrap().controls.alias {
+            if !seen.insert(target) {
+                return Err(Error::new("m2.sequence.alias", "alias cycle"));
+            }
+            target = next;
+        }
+        if target != id {
+            let animations = builder.model().clip(target).unwrap().animations.clone();
+            let mut clip = builder.model().clip(id).unwrap().clone();
+            clip.animations = animations;
+            builder.set_clip(id, clip)?;
+        }
     }
     builder.set_metadata(family);
     let asset = builder.finish()?;

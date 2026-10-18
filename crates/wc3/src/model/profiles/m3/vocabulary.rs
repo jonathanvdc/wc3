@@ -7,12 +7,13 @@ use crate::model::profiles::Unavailable;
 use crate::model::profiles::UniversalProperty;
 use crate::model::profiles::{self, Extends, Profile, SurfacePayload, Universal};
 use crate::model::resources::PathResource;
-use crate::model::Values;
+use crate::model::PropertyValues;
 use crate::model::{
-    Basis, Billboard, Channel, ClipControls, Clock, DrawControls, Error, ExplicitBinding,
-    FeatureKind, GeometrySchema as _, Inheritance, InstanceControls, Interpolation, LengthUnit,
-    Link, M3Geometry, MeshControls, Model, ModelMetadata, NodeControls, SingleLook, SkinId, System,
-    Topology, Transform, UniversalAppearance, UniversalBinding, ValidateLinks, VertexInfluences,
+    Basis, Billboard, Channel, ClipControls, DrawControls, Error, ExplicitBinding, FeatureKind,
+    GeometrySchema as _, Inheritance, InstanceControls, Interpolation, LengthUnit, Link,
+    M3Geometry, MeshControls, Model, ModelMetadata, NodeControls, SingleLook, SkinId, System,
+    TimeSource, Topology, Transform, UniversalAppearance, UniversalBinding, ValidateLinks,
+    VertexInfluences,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 use crate::model::{PropertyIdentityKey, PropertyPayload};
@@ -150,15 +151,21 @@ impl Profile for M3 {
         if model
             .clips()
             .iter()
-            .any(|(_, clip)| !clip.channels().is_empty() || !clip.events().is_empty())
+            .any(|(_, clip)| !clip.animations.is_empty())
         {
             return Err(Error::new(
                 "m3.clip.program",
                 "M3 sequence selectors use controller-owned programs",
             ));
         }
+        if model.global_channels().next().is_some() || model.global_events().next().is_some() {
+            return Err(Error::new(
+                "m3.animation",
+                "M3 animation programs require native controller selections",
+            ));
+        }
         for (_, controller) in model.controllers() {
-            for channel in &controller.channels {
+            for channel in model.animation_channels(&controller.animations) {
                 let mode = match channel {
                     Channel::Scalar(t) => t.curve.interpolation(),
                     Channel::Vector2(t) => t.curve.interpolation(),
@@ -185,14 +192,12 @@ impl Profile for M3 {
                 }
             }
 
-            if controller
-                .channels
-                .iter()
-                .any(|channel| channel.clock() != Clock::Timeline)
-                || controller
-                    .events
-                    .values()
-                    .any(|event| event.clock != Clock::Timeline)
+            if model
+                .animation_channels(&controller.animations)
+                .any(|channel| channel.clock() != TimeSource::Timeline)
+                || model
+                    .animation_events(&controller.animations)
+                    .any(|event| event.clock != TimeSource::Timeline)
             {
                 return Err(Error::new(
                     "m3.controller.clock",
@@ -200,22 +205,17 @@ impl Profile for M3 {
                 ));
             }
             if controller.controls.blocks.iter().any(|block| {
-                block
-                    .events
-                    .iter()
-                    .any(|id| !controller.events.contains_key(id))
+                block.events.iter().any(|id| {
+                    !controller.animations.iter().any(|animation| {
+                        model.animation(*animation).unwrap().events.contains_key(id)
+                    })
+                })
             }) {
                 return Err(Error::new(
                     "m3.controller.events",
                     "a block occurrence must belong to its owning controller program",
                 ));
             }
-        }
-        if model.clips().iter().any(|(_, clip)| clip.alias().is_some()) {
-            return Err(Error::new(
-                "m3.clip.alias",
-                "M3 sequences select controller programs directly",
-            ));
         }
         if model.skins().iter().any(|(_, skin)| {
             skin.joints.iter().any(|id| {
@@ -589,7 +589,10 @@ impl Extends<M3> for Universal {
     fn surface<'a>(value: <M3 as Profile>::Surface<'a>) -> Self::Surface<'a> {
         value.into()
     }
-    fn feature<'a>(value: <M3 as Profile>::Feature<'a>, values: &mut Values) -> Self::Feature<'a> {
+    fn feature<'a>(
+        value: <M3 as Profile>::Feature<'a>,
+        values: &mut PropertyValues,
+    ) -> Self::Feature<'a> {
         crate::model::features::FromFeature::from_feature(value, values)
     }
     fn node<'a>(value: <M3 as Profile>::Node<'a>) -> Self::Node<'a> {

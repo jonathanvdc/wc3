@@ -1,6 +1,6 @@
 use super::*;
 use crate::model::controls::{diablo3 as d3_controls, diablo4 as d4_controls};
-use crate::model::{Construct as SlotConstruct, Values as SlotValues};
+use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use crate::model::{Material, Mesh, MeshInstance, ModelBuilder};
 
 fn fixture(

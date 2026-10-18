@@ -1,8 +1,8 @@
 //! Shared aimed cameras keep projection conventions explicit.
 use crate::model::features::{FromFeature, TryFromFeature};
 use crate::model::profiles::{m2, m3, mdlx};
-use crate::model::{scene, Animated, Link, ValidateLinks};
-use crate::model::{Construct, Values};
+use crate::model::{scene, Link, Property, ValidateLinks};
+use crate::model::{Construct, PropertyValues};
 use m2::values::CameraKind;
 /// Complete authored camera models.
 #[derive(Clone, Debug)]
@@ -16,19 +16,19 @@ pub enum Camera<'a> {
 }
 /// Shared model-space aim and displacement components.
 #[derive(Clone, Debug, Construct, PartialEq)]
-pub struct AimedCamera<F = Animated<f32>, C = CameraConvention> {
+pub struct AimedCamera<F = Property<f32>, C = CameraConvention> {
     /// Eye displacement from the carrying node's rest translation.
-    pub eye_offset: Animated<[f32; 3]>,
+    pub eye_offset: Property<[f32; 3]>,
     /// Base model-space look-at target.
     pub target: [f32; 3],
     /// Displacement from the base target.
-    pub target_offset: Animated<[f32; 3]>,
+    pub target_offset: Property<[f32; 3]>,
     /// Field of view in radians, interpreted by the projection convention.
     pub field_of_view: F,
     /// Near and far clipping distance.
     pub clipping: [f32; 2],
     /// Roll angle in radians.
-    pub roll: Animated<f32>,
+    pub roll: Property<f32>,
     /// Explicit projection and authored optional controls.
     pub convention: C,
 }
@@ -44,16 +44,16 @@ pub enum CameraConvention {
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct PhotographicControls {
     /// Camera visibility multiplier.
-    pub visibility: Animated<f32>,
+    pub visibility: Property<f32>,
     /// Depth-of-field focus distance.
-    pub focus_distance: Option<Animated<f32>>,
+    pub focus_distance: Option<Property<f32>>,
     /// Photographic focal length.
-    pub focal_length: Option<Animated<f32>>,
+    pub focal_length: Option<Property<f32>>,
     /// Photographic aperture f-stop.
-    pub f_stop: Option<Animated<f32>>,
+    pub f_stop: Option<Property<f32>>,
 }
 impl FromFeature<mdlx::Camera> for AimedCamera {
-    fn from_feature(v: mdlx::Camera, values: &mut Values) -> Self {
+    fn from_feature(v: mdlx::Camera, values: &mut PropertyValues) -> Self {
         Self {
             eye_offset: v.eye_offset,
             target: v.target,
@@ -80,7 +80,7 @@ impl From<m2::Camera> for AimedCamera {
 }
 impl TryFromFeature<AimedCamera> for mdlx::Camera {
     type Error = Box<AimedCamera>;
-    fn try_from_feature(v: AimedCamera, values: &Values) -> Result<Self, Self::Error> {
+    fn try_from_feature(v: AimedCamera, values: &PropertyValues) -> Result<Self, Self::Error> {
         let CameraConvention::Vertical(control) = v.convention else {
             return Err(Box::new(v));
         };

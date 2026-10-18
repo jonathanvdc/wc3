@@ -7,7 +7,7 @@ use wc3::model::formats::mdlx::{
 use wc3::model::io;
 use wc3::model::profiles::Universal;
 use wc3::model::AddressMode;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn source() -> mdlx::Document<'static, mdlx::V800> {
     let mut source = mdlx::Document::new();

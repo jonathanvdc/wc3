@@ -8,7 +8,7 @@ use wc3::model::{
     formats::m3::{self, records as nr},
     profiles::{m3 as surface, M3},
 };
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 pub(super) fn asset() -> Model<'static, M3> {
     let mut slot_values = SlotValues::default();
     let mut builder = sem::Model::<M3>::builder("Triangle");
@@ -96,7 +96,7 @@ pub(super) fn asset() -> Model<'static, M3> {
             controller,
             sem::Channel::Vector3(sem::Track {
                 target: builder.model().node(node).unwrap().transform.translation,
-                clock: sem::Clock::Timeline,
+                clock: sem::TimeSource::Timeline,
                 curve: sem::Curve::linear(
                     (vec![
                         sem::Time::seconds(0.).unwrap(),
@@ -157,7 +157,11 @@ fn geometry_skin_and_animation_survive_native_round_trip() {
         "Root"
     );
     let (_, controller) = model.controllers().iter().next().unwrap();
-    let sem::Channel::Vector3(track) = &controller.channels[0] else {
+    let sem::Channel::Vector3(track) = model
+        .animation_channels(&controller.animations)
+        .next()
+        .unwrap()
+    else {
         panic!("vector track")
     };
     assert_eq!(track.curve.values().get(1), Some([1., 2., 3.]));
@@ -382,7 +386,7 @@ fn contribution_groups_round_trip_sparse_slots_and_arbitrary_normal_weights() {
         ..SlotConstruct::construct(&mut slot_values)
     });
     standard.normals.weights = (0..5)
-        .map(|index| surface::Property {
+        .map(|index| surface::PropertyBinding {
             value: slot_values.add(index as f32 * 0.2),
             reset: index as f32 * 0.1,
             ..SlotConstruct::construct(&mut slot_values)

@@ -3,7 +3,7 @@ use super::super::GraphBuilder;
 use crate::model::conversion::Error;
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::{
-    profiles::m3 as surface, Clock, ControllerId, Event, EventId, FeatureId, NodeId, Time,
+    profiles::m3 as surface, ControllerId, Event, EventId, FeatureId, NodeId, Time, TimeSource,
 };
 use native::Envelope;
 use std::collections::BTreeMap;
@@ -100,7 +100,7 @@ pub(super) fn read<'a, E: Envelope>(
                     layer,
                     Event {
                         time: Time::seconds(f64::from(time) / 1000.)?,
-                        clock: Clock::Timeline,
+                        clock: TimeSource::Timeline,
                         name: name.into(),
                         node: anchor,
                         feature: Some(feature),

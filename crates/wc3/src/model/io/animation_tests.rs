@@ -72,7 +72,7 @@ fn spherical_restriction_preserves_rotation_and_clamped_intervals() {
 
 #[test]
 fn typed_restriction_retains_clock_and_target() {
-    use crate::model::{profiles::Universal, Clock, Material, Model};
+    use crate::model::{profiles::Universal, Material, Model, TimeSource};
     let mut builder = Model::<Universal>::builder("crop");
     let _material = builder
         .add_material(Material {
@@ -88,7 +88,7 @@ fn typed_restriction_retains_clock_and_target() {
             Interpolation::Linear,
         )
         .unwrap(),
-        clock: Clock::Clip,
+        clock: TimeSource::Clip,
     };
     let result = crop(
         &track,

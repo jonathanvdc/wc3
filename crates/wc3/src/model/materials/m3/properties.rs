@@ -1,28 +1,28 @@
 //! One structural schema for native binding construction and pass-field selection.
 use super::{
     CompositeMaterialStep, CompositeSection, CreepMaterialStep, DataDrivenMaterialStep,
-    DisplacementMaterialStep, HairMaterialStep, LensFlareMaterialStep, MaterialStep, Property,
-    ReflectionMaterialStep, SplatTerrainBakeMaterialStep, StandardMaterialStep,
+    DisplacementMaterialStep, HairMaterialStep, LensFlareMaterialStep, MaterialStep,
+    PropertyBinding, ReflectionMaterialStep, SplatTerrainBakeMaterialStep, StandardMaterialStep,
     TerrainMaterialStep, TextureLayer, VolumeMaterialStep, VolumeNoiseMaterialStep,
 };
 use crate::model::profiles::m3::properties::{Field, FieldPath, FieldSegment};
-use crate::model::Animatable;
+use crate::model::PropertyValue;
 
 pub(crate) enum PropertyMut<'a> {
-    Scalar(&'a mut Property<f32>),
-    Vector2(&'a mut Property<[f32; 2]>),
-    Vector3(&'a mut Property<[f32; 3]>),
-    Vector4(&'a mut Property<[f32; 4]>),
-    Unsigned(&'a mut Property<u32>),
-    Unsigned16(&'a mut Property<u16>),
+    Scalar(&'a mut PropertyBinding<f32>),
+    Vector2(&'a mut PropertyBinding<[f32; 2]>),
+    Vector3(&'a mut PropertyBinding<[f32; 3]>),
+    Vector4(&'a mut PropertyBinding<[f32; 4]>),
+    Unsigned(&'a mut PropertyBinding<u32>),
+    Unsigned16(&'a mut PropertyBinding<u16>),
 }
-pub(crate) trait PropertyValue: Animatable + Sized {
-    fn as_mut(value: &mut Property<Self>) -> PropertyMut<'_>;
+pub(crate) trait M3PropertyValue: PropertyValue + Sized {
+    fn as_mut(value: &mut PropertyBinding<Self>) -> PropertyMut<'_>;
 }
 macro_rules! property_values {
     ($($ty:ty => $variant:ident),* $(,)?) => {$(
-        impl PropertyValue for $ty {
-            fn as_mut(value: &mut Property<Self>) -> PropertyMut<'_> { PropertyMut::$variant(value) }
+        impl M3PropertyValue for $ty {
+            fn as_mut(value: &mut PropertyBinding<Self>) -> PropertyMut<'_> { PropertyMut::$variant(value) }
         }
     )*};
 }
@@ -36,7 +36,7 @@ pub(crate) trait MaterialProperties {
         visitor: &mut dyn FnMut(PropertyMut<'_>, &FieldPath),
     );
 }
-impl<T: PropertyValue> MaterialProperties for Property<T> {
+impl<T: M3PropertyValue> MaterialProperties for PropertyBinding<T> {
     fn supports_path(&self, segments: &[FieldSegment]) -> bool {
         segments.is_empty()
     }

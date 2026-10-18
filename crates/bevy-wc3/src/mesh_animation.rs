@@ -7,11 +7,11 @@ pub(super) enum MeshMaterialState {
     #[default]
     Plain,
     Constant([u32; 4]),
-    Animated(MeshId),
+    Property(MeshId),
 }
 pub(super) fn state(value: &MeshAnimation, mesh: MeshId) -> MeshMaterialState {
     if value.is_animated() {
-        MeshMaterialState::Animated(mesh)
+        MeshMaterialState::Property(mesh)
     } else {
         let rgba = value.defaults();
         if rgba == [1.; 4] {

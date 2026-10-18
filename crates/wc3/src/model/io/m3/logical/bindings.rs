@@ -1,9 +1,9 @@
 //! Logical material properties bind to typed graph destinations, never section addresses.
 use crate::model::materials::m3::properties::{MaterialProperties, PropertyMut};
 use crate::model::profiles::m3::properties::{Field, FieldPath};
-use crate::model::Animatable;
+use crate::model::PropertyValue;
 use crate::model::{
-    profiles::m3 as surface, Animated as Destination, OwnerId, Quaternion, ValueSlot,
+    profiles::m3 as surface, OwnerId, Property as Destination, Quaternion, ValueSlot,
 };
 use std::collections::{BTreeMap, HashMap};
 #[derive(Clone, Debug)]
@@ -25,7 +25,7 @@ pub(super) struct Bindings {
     pub entries: BTreeMap<u32, Vec<Target>>,
     pub modes: HashMap<ValueSlot, surface::values::Interpolation>,
 }
-pub(super) trait Value: Animatable {
+pub(super) trait Value: PropertyValue {
     fn target(value: Destination<Self>) -> Target
     where
         Self: Sized;
@@ -86,7 +86,7 @@ impl Value for [u32; 4] {
     }
 }
 impl Bindings {
-    pub fn register_mode<T: Animatable>(
+    pub fn register_mode<T: PropertyValue>(
         &mut self,
         destination: &Destination<T>,
         interpolation: surface::values::Interpolation,
@@ -103,7 +103,7 @@ impl Bindings {
 trait Bind {
     fn bind(&mut self, owner: OwnerId, path: &FieldPath, bindings: &mut Bindings);
 }
-impl<T: Value> Bind for surface::Property<T> {
+impl<T: Value> Bind for surface::PropertyBinding<T> {
     fn bind(&mut self, _owner: OwnerId, _path: &FieldPath, bindings: &mut Bindings) {
         let destination = self.value;
         bindings.register_mode(&destination, self.control.interpolation);
@@ -132,7 +132,7 @@ pub(super) fn material(
     );
 }
 pub(super) fn field<T: Value>(
-    value: &mut surface::Property<T>,
+    value: &mut surface::PropertyBinding<T>,
     owner: OwnerId,
     path: &FieldPath,
     bindings: &mut Bindings,

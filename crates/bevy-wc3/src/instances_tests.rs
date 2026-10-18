@@ -1,7 +1,7 @@
 use super::super::{compile_model, PoseOverrides};
 use super::*;
 use wc3::model::profiles::Universal;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{Model, NodeId, Transform as ModelTransform};
 
 fn fixture() -> (ModelAsset, NodeId) {

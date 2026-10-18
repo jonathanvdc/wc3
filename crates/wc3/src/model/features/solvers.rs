@@ -1,5 +1,5 @@
 //! Authored constraint solvers and influence volumes.
-use crate::model::animation::programmed::Property;
+use crate::model::animation::programmed::PropertyBinding;
 use crate::model::NodeId;
 /// Ground-contact inverse kinematics for two bone links.
 #[derive(Clone, Debug, PartialEq)]
@@ -57,15 +57,15 @@ pub struct ShadowBox {
     /// Unresolved native shadow control word.
     pub reserved: u16,
     /// Length-axis extent.
-    pub length: Property<f32>,
+    pub length: PropertyBinding<f32>,
     /// Width-axis extent.
-    pub width: Property<f32>,
+    pub width: PropertyBinding<f32>,
     /// Height-axis extent.
-    pub height: Property<f32>,
+    pub height: PropertyBinding<f32>,
 }
 /// Animated half-size of a node influence volume.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ViewVolume {
     /// Half-size along each axis.
-    pub size: Property<[f32; 3]>,
+    pub size: PropertyBinding<[f32; 3]>,
 }

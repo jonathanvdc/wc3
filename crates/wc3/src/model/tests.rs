@@ -1,6 +1,7 @@
 use crate::model::common::Borrowed as _;
 use crate::model::PathResource;
-use crate::model::Values as SlotValues;
+use crate::model::PropertyValues as SlotValues;
+use crate::model::TimeSource;
 use crate::model::*;
 use zerovec::ZeroVec;
 #[test]
@@ -107,7 +108,7 @@ fn graph_can_cross_thread_boundaries() {
 
 #[test]
 fn scalar_and_vector_slots_cannot_alias() {
-    let mut values = Values::default();
+    let mut values = PropertyValues::default();
     let scalar = values.add(1f32);
     let vector = values.add([1f32; 3]);
     assert_ne!(scalar.slot(), vector.slot());
@@ -335,11 +336,11 @@ fn absolute_timeline_does_not_require_a_playback_clip() {
     let mut builder = ModelBuilder::new("timeline");
     let node = builder.add_named_node("animated").unwrap();
     builder
-        .add_timeline_channel(Channel::Vector3(Track {
+        .add_global_channel(Channel::Vector3(Track {
             target: builder.model().node(node).unwrap().transform.translation,
             curve: Curve::from_samples([Time::default()], [[1., 2., 3.]], Interpolation::Step)
                 .unwrap(),
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
         }))
         .unwrap();
     let model = {
@@ -348,7 +349,13 @@ fn absolute_timeline_does_not_require_a_playback_clip() {
     }
     .unwrap();
     assert_eq!(model.clips().len(), 0);
-    assert_eq!(model.timeline_channels().len(), 1);
+    assert_eq!(
+        model
+            .global_channels()
+            .filter(|v| v.clock() == TimeSource::Timeline)
+            .count(),
+        1
+    );
 }
 
 #[test]

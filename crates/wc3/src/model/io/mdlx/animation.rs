@@ -7,11 +7,11 @@ use crate::model::formats::mdlx::{
 };
 use crate::model::profiles::Mdlx;
 use crate::model::{
-    Animatable as SlotValue, Animated, Channel, Clock, ClockId, CurveValue, ModelBuilder,
-    PropertyDescriptor, Quaternion, Texture, Track,
+    Channel, ClockId, CurveValue, ModelBuilder, Property, PropertyDescriptor, PropertyValue,
+    Quaternion, Texture, TimeSource, Track,
 };
 
-pub(super) trait Value: CurveValue + SlotValue {
+pub(super) trait Value: CurveValue + PropertyValue {
     fn kind() -> &'static str;
     fn channel<'a>(track: Track<'a, Self>) -> Channel<'a>
     where
@@ -43,7 +43,7 @@ impl<'a> Decoder<'a, '_> {
         owner: D::Owner,
         descriptor: D,
         map: impl Fn(T) -> U + Clone + Send + Sync + 'a,
-    ) -> Result<Animated<U>, Error>
+    ) -> Result<Property<U>, Error>
     where
         T: TrackValue + Send + Sync + 'a,
         T::ULE: Sync,
@@ -60,7 +60,7 @@ impl<'a> Decoder<'a, '_> {
         _owner: D::Owner,
         descriptor: D,
         map: impl Fn(T) -> U + Clone + Send + Sync + 'a,
-    ) -> Result<Animated<U>, Error>
+    ) -> Result<Property<U>, Error>
     where
         T: TrackValue + Send + Sync + 'a,
         T::ULE: Sync,
@@ -80,7 +80,7 @@ impl<'a> Decoder<'a, '_> {
         name: &str,
         map: impl Fn(T) -> U + Clone + Send + Sync + 'a,
         tangents: impl Fn(T) -> U + Clone + Send + Sync + 'a,
-    ) -> Result<Animated<U>, Error>
+    ) -> Result<Property<U>, Error>
     where
         T: TrackValue + Send + Sync + 'a,
         T::ULE: Sync,
@@ -96,22 +96,13 @@ impl<'a> Decoder<'a, '_> {
                     .ok_or_else(|| Error::new(name, "shared animation clock does not exist"))
             })
             .transpose()?
-            .map_or(Clock::Timeline, Clock::Shared);
-        if matches!(clock, Clock::Shared(_)) {
-            let curve = curves::read_maps(source, 0., map, tangents)?;
-            self.builder.add_shared_channel(U::channel(Track {
-                target: slot,
-                curve,
-                clock,
-            }))?;
-        } else {
-            let curve = curves::read_maps(source, 0., map, tangents)?;
-            self.builder.add_timeline_channel(U::channel(Track {
-                target: slot,
-                curve,
-                clock,
-            }))?;
-        }
+            .map_or(TimeSource::Timeline, TimeSource::Shared);
+        let curve = curves::read_maps(source, 0., map, tangents)?;
+        self.builder.add_global_channel(U::channel(Track {
+            target: slot,
+            curve,
+            clock,
+        }))?;
         Ok(slot)
     }
 }

@@ -40,7 +40,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::materials::{m2::GuildPalette, mdlx, state::Lighting};
 use wc3::model::values::model::ParticleBlend;
-use wc3::model::{Animated, Texture, TextureTransform};
+use wc3::model::{Property, Texture, TextureTransform};
 
 use super::mesh_animation::MeshAnimation;
 use super::mesh_attributes::specialize_mesh_attributes;
@@ -507,22 +507,22 @@ pub(crate) struct SurfaceAnimation {
     untinted: Option<LinearRgba>,
     untinted_alpha_mode: Option<AlphaMode>,
     mesh: Option<MeshAnimation>,
-    color: Option<Animated<[f32; 3]>>,
-    rgba: Option<Animated<[f32; 4]>>,
-    opacity: Option<Animated<f32>>,
-    weight: Option<Animated<f32>>,
-    pass_weights: Vec<Animated<f32>>,
+    color: Option<Property<[f32; 3]>>,
+    rgba: Option<Property<[f32; 4]>>,
+    opacity: Option<Property<f32>>,
+    weight: Option<Property<f32>>,
+    pass_weights: Vec<Property<f32>>,
     unweighted_opacity: Option<f32>,
-    texture: Option<Animated<Option<Texture>>>,
+    texture: Option<Property<Option<Texture>>>,
     transform: Option<TextureTransform>,
     secondary_transform: Option<TextureTransform>,
     uv_scroll: [[f32; 2]; 2],
     third_transform: Option<TextureTransform>,
     third_uv_scroll: [f32; 2],
     fourth_transform: Option<TextureTransform>,
-    input_weights: [Option<Animated<f32>>; 4],
-    emissive_gain: Option<Animated<f32>>,
-    emission: Option<Animated<[f32; 4]>>,
+    input_weights: [Option<Property<f32>>; 4],
+    emissive_gain: Option<Property<f32>>,
+    emission: Option<Property<[f32; 4]>>,
     emission_scale: f32,
     images: Arc<HashMap<Texture, Handle<Image>>>,
     centered_transform: bool,
@@ -532,9 +532,9 @@ pub(crate) struct SurfaceAnimation {
 
 #[derive(Clone)]
 struct HdAnimation {
-    slots: [Option<Animated<Option<Texture>>>; 6],
+    slots: [Option<Property<Option<Texture>>>; 6],
     fresnel: Option<mdlx::Fresnel>,
-    gain: Option<Animated<f32>>,
+    gain: Option<Property<f32>>,
     images: Arc<TextureImages>,
 }
 impl Default for SurfacePass {

@@ -5,7 +5,7 @@ use super::super::{
 };
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{records, Container, Envelope, Ref};
-use crate::model::Values;
+use crate::model::PropertyValues;
 use crate::model::{
     profiles::m3::{values, Body, BodyParameters, DynamicState},
     NodeId,
@@ -46,7 +46,7 @@ pub(super) fn read<'view, E: Envelope>(
     reference: Ref<records::targets::RigidBody>,
     nodes: &[NodeId],
     context: &mut Context,
-    values: &mut Values,
+    values: &mut PropertyValues,
 ) -> Result<Vec<Input<'view>>, Error> {
     if reference.is_empty() {
         return Ok(Vec::new());

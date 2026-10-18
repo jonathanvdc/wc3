@@ -4,7 +4,7 @@ use bevy::prelude::{Assets, Image};
 use std::collections::HashSet;
 use wc3::model::materials::mdlx::LayeredSurface;
 use wc3::model::profiles::Universal;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     Draw, DrawId, GeometryData, InstanceId, Material, MaterialSurface, Mesh, MeshInstance,
 };
@@ -186,7 +186,7 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
     use bevy::image::{ImageAddressMode, ImageSampler};
     use wc3::model::materials::mdlx::Layer;
 
-    use wc3::model::{AddressMode, AnimationSample, Channel, Clock, Curve, Time, Track};
+    use wc3::model::{AddressMode, AnimationSample, Channel, Curve, Time, TimeSource, Track};
     let (mut model, _) = model();
     let material = model.materials().iter().next().unwrap().0;
     let time = |value| Time::seconds(value).unwrap();
@@ -214,9 +214,9 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
                     })?,
                 )?;
                 for target in targets {
-                    draft.add_timeline_channel(Channel::OptionalTexture(Track {
+                    draft.add_global_channel(Channel::OptionalTexture(Track {
                         target,
-                        clock: Clock::Timeline,
+                        clock: TimeSource::Timeline,
                         curve: Curve::step([time(0.), time(1.)], [Some(first), Some(second)])?,
                     }))?;
                 }

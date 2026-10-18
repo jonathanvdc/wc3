@@ -3,11 +3,11 @@ use crate::{compile_model, BakeSpace, Playback, PoseBaker, PoseOptions};
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::{
-    Channel, Clip, Clock, Curve, Draw, ExplicitBinding, GeometryData, GeometryInfluences,
-    Influence, Material, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node as ModelNode,
-    Quaternion, Skin, Time, Track, UniversalBinding,
+    Channel, Clip, Curve, Draw, ExplicitBinding, GeometryData, GeometryInfluences, Influence,
+    Material, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node as ModelNode, Quaternion,
+    Skin, Time, TimeSource, Track, UniversalBinding,
 };
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{ModelMount, MountTarget, Transform as ModelTransform};
 
 fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
@@ -108,7 +108,7 @@ fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
                     ],
                 )
                 .unwrap(),
-                clock: Clock::Clip,
+                clock: TimeSource::Clip,
             }),
         )
         .unwrap();
@@ -442,12 +442,16 @@ fn mapped_controller_clips_activate_part_programmes_on_checked_host_timeline() {
     let (mut host, joint, host_clip) = model(1.);
     let controls = || {
         Some(ClipControls::M3(SequenceControls {
-            timeline_origin: Time::seconds(1.).unwrap(),
             ..Default::default()
         }))
     };
-    host.edit(|builder| builder.set_clip_controls(host_clip, controls()))
-        .unwrap();
+    host.edit(|builder| {
+        let mut clip = builder.model().clip(host_clip).unwrap().clone();
+        clip.timeline_origin = Some(Time::seconds(1.)?);
+        clip.controls = controls();
+        builder.set_clip(host_clip, clip)
+    })
+    .unwrap();
     let (mut source, source_joint, part_clip) = model(3.);
     let (controller, extra) = source
         .edit(|builder| {
@@ -464,7 +468,7 @@ fn mapped_controller_clips_activate_part_programmes_on_checked_host_timeline() {
                             [Time::seconds(1.)?, Time::seconds(2.)?],
                             [[0., 0., 0.], [2., 0., 0.]],
                         )?,
-                        clock: Clock::Timeline,
+                        clock: TimeSource::Timeline,
                     }),
                 )?;
                 let mut controls = controls();
@@ -474,7 +478,10 @@ fn mapped_controller_clips_activate_part_programmes_on_checked_host_timeline() {
                         controllers: vec![controller],
                     });
                 }
-                builder.set_clip_controls(part_clip, controls)?;
+                let mut clip = builder.model().clip(part_clip).unwrap().clone();
+                clip.timeline_origin = Some(Time::seconds(1.)?);
+                clip.controls = controls;
+                builder.set_clip(part_clip, clip)?;
                 Ok((controller, extra))
             })();
             builder.import_values(&slot_values)?;

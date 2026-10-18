@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::values::programmed::{RibbonKind, Smoothing};
 use wc3::model::{
-    Animated, ClipId, FeatureId, MaterialId, Model, NodeFeature, NodeId, ProgrammedAge,
+    ClipId, FeatureId, MaterialId, Model, NodeFeature, NodeId, ProgrammedAge, Property,
     RibbonEmitter as SemanticRibbonEmitter,
 };
 
@@ -28,8 +28,8 @@ struct Definition {
     smoothing: [Smoothing; 2],
     kind: RibbonKind,
     segments: usize,
-    max_length: Animated<f32>,
-    active: Animated<u32>,
+    max_length: Property<f32>,
+    active: Property<u32>,
     passes: Vec<Pass>,
 }
 #[derive(Clone)]
@@ -504,7 +504,7 @@ fn draw_mesh(
 }
 #[cfg(test)]
 mod tests {
-    use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+    use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
     use super::*;
     #[test]

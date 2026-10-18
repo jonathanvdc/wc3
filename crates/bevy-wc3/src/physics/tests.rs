@@ -1,7 +1,7 @@
 use super::*;
 use std::f64::consts::FRAC_PI_2;
 use wc3::model::systems::model_physics::Spring;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{ModelMount, MountTarget};
 use wc3::model::{Node, Quaternion};
 

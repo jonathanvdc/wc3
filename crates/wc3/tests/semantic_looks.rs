@@ -1,6 +1,6 @@
 use wc3::model::io::geometry;
 use wc3::model::profiles::{Mdlx, Universal};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     Draw, DrawId, InstanceId, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshInstance,
     Model, ModelBuilder,

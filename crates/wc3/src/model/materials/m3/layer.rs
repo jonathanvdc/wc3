@@ -1,26 +1,26 @@
 //! Programmed image inputs, coordinates, playback, and color contributions.
-use super::Property;
+use super::PropertyBinding;
 use crate::model::materials::bindings::{Coordinates, TextureBinding};
 use crate::model::values::programmed::{ColorChannel, FresnelMode, LayerFlags, UvMappingMode};
-use crate::model::{Construct, Values};
+use crate::model::{Construct, PropertyValues};
 use crate::model::{ImageResourceId, Link, ValidateLinks};
 /// Animated 2D, 3D, and triplanar coordinate program.
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct CoordinateTransform {
     /// Controls UV offset through its animation value.
-    pub uv_offset: Property<[f32; 2]>,
+    pub uv_offset: PropertyBinding<[f32; 2]>,
     /// Controls UV rotation angles through its animation value.
-    pub uv_angle: Property<[f32; 3]>,
+    pub uv_angle: PropertyBinding<[f32; 3]>,
     /// Controls UV tiling through its animation value.
-    pub uv_tiling: Property<[f32; 2]>,
+    pub uv_tiling: PropertyBinding<[f32; 2]>,
     /// Controls w offset (3D textures) through its animation value.
-    pub w_offset: Property<f32>,
+    pub w_offset: PropertyBinding<f32>,
     /// Controls w tiling (3D textures) through its animation value.
-    pub w_tiling: Property<f32>,
+    pub w_tiling: PropertyBinding<f32>,
     /// Sets tri-planar UV offset.
-    pub triplanar_offset: Property<[f32; 3]>,
+    pub triplanar_offset: PropertyBinding<[f32; 3]>,
     /// Sets tri-planar UV scale.
-    pub triplanar_scale: Property<[f32; 3]>,
+    pub triplanar_scale: PropertyBinding<[f32; 3]>,
     /// Selects the layer supplying shared UV settings; all bits set selects this layer’s own settings.
     pub uv_source_related: u32,
     /// Sets UV density hint.
@@ -50,29 +50,29 @@ pub struct SamplingProgram {
     /// Selects the behavior used for avi sync mode.
     pub avi_sync: u32,
     /// Sets AVI play control.
-    pub avi_play: Property<u32>,
+    pub avi_play: PropertyBinding<u32>,
     /// Sets AVI restart control.
-    pub avi_restart: Property<u32>,
+    pub avi_restart: PropertyBinding<u32>,
     /// Sets flipbook grid rows.
     pub flipbook_rows: u32,
     /// Sets flipbook grid columns.
     pub flipbook_columns: u32,
     /// Controls flipbook frame index through its animation value.
-    pub current_frame: Property<u16>,
+    pub current_frame: PropertyBinding<u16>,
 }
 /// Channel selection and animated sampled-color contribution.
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ColorContribution {
     /// Controls color tint through its animation value.
-    pub color: Property<[f32; 4]>,
+    pub color: PropertyBinding<[f32; 4]>,
     /// Selects the behavior used for channel selection.
     pub color_type: ColorChannel,
     /// Sets RGB multiply factor.
-    pub rgb_multiply: Property<f32>,
+    pub rgb_multiply: PropertyBinding<f32>,
     /// Sets RGB additive factor.
-    pub rgb_add: Property<f32>,
+    pub rgb_add: PropertyBinding<f32>,
     /// Controls the texture contribution’s alpha through an animation value.
-    pub map_alpha: Property<f32>,
+    pub map_alpha: PropertyBinding<f32>,
 }
 /// A programmed shader input, retaining independently authored Fresnel behavior.
 #[derive(Clone, Debug, Construct, PartialEq)]
@@ -139,7 +139,7 @@ impl ValidateLinks for UvMappingMode {
 }
 
 impl Construct for Coordinates<UvMappingMode, CoordinateTransform> {
-    fn construct(values: &mut Values) -> Self {
+    fn construct(values: &mut PropertyValues) -> Self {
         Self {
             source: Default::default(),
             transform: Construct::construct(values),
@@ -154,7 +154,7 @@ impl Construct
         ColorContribution,
     >
 {
-    fn construct(values: &mut Values) -> Self {
+    fn construct(values: &mut PropertyValues) -> Self {
         Self {
             image: None,
             coordinates: Construct::construct(values),

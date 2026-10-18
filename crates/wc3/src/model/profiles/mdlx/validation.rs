@@ -1,5 +1,6 @@
 //! Authoring limits inherent to Warcraft III rather than a particular native dialect.
 use super::Mdlx;
+use crate::model::TimeSource;
 use crate::model::{Billboard, Channel, Error, Interpolation, Model, Transform};
 pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
     value.validate_animation_consumers()?;
@@ -28,25 +29,21 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
             "Warcraft III has one authored timeline per property, without layered controllers",
         ));
     }
-    for (_, clip) in value.clips() {
-        if clip.alias().is_some() {
-            return Err(Error::new(
-                "clips.alias",
-                "Warcraft III playback intervals cannot alias other intervals",
-            ));
-        }
-        if !clip.channels().is_empty() || !clip.events().is_empty() {
-            return Err(Error::new(
-                "clips.program",
-                "Warcraft III curves and event occurrences belong to the model timeline or a shared clock",
-            ));
-        }
+    if value.clips().iter().any(|(id, _)| {
+        value.clip_channels(id).next().is_some() || value.clip_events(id).next().is_some()
+    }) {
+        return Err(Error::new(
+            "clips.program",
+            "Warcraft III clips select intervals of model-level animation",
+        ));
     }
-    for channel in value
-        .timeline_channels()
-        .iter()
-        .chain(value.shared_channels())
-    {
+    for channel in value.channels() {
+        if channel.clock() == TimeSource::Clip {
+            return Err(Error::new(
+                "animation.clock",
+                "Warcraft III curves require authoring timeline or shared time",
+            ));
+        }
         validate_channel(channel)?;
     }
     for (_, instance) in value.instances() {

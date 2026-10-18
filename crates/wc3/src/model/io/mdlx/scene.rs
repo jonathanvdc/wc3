@@ -12,7 +12,7 @@ use crate::model::{
     ParticleLifetime, ParticleMotion, StagedParticleAppearance,
 };
 use crate::model::{Axis, SocketDefinition};
-use crate::model::{Clock, ClockId, Event, MaterialId, ModelBuilder, NodeId, Texture, Time};
+use crate::model::{ClockId, Event, MaterialId, ModelBuilder, NodeId, Texture, Time, TimeSource};
 use crate::model::{GravityTrailControls, LayeredTrailRendering, TrailAppearance, TrailGeometry};
 use crate::model::{MdlxImageResource, ParticleResource, PathResource};
 use std::collections::BTreeMap;
@@ -374,11 +374,11 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             if let Some(clock) = clock {
                 decoder
                     .builder
-                    .add_shared_event(event(Time::seconds(absolute)?, Clock::Shared(clock)))?;
+                    .add_global_event(event(Time::seconds(absolute)?, TimeSource::Shared(clock)))?;
             } else {
                 decoder
                     .builder
-                    .add_timeline_event(event(Time::seconds(absolute)?, Clock::Timeline))?;
+                    .add_global_event(event(Time::seconds(absolute)?, TimeSource::Timeline))?;
             }
         }
         {

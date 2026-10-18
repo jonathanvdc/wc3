@@ -1,4 +1,4 @@
-//! Clock components for native animation conversion.
+//! TimeSource components for native animation conversion.
 use super::*;
 
 /// Decodes the two native animation clock representations.

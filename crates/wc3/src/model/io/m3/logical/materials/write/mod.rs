@@ -3,8 +3,8 @@ use super::super::animation::AnimationIds;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::m3::logical::Graph;
-use crate::model::Animatable;
 use crate::model::PathResource;
+use crate::model::PropertyValue;
 use crate::model::{profiles::m3 as surface, ImageResourceId, MaterialId};
 use native::{Envelope, Ref};
 use std::collections::BTreeMap;
@@ -65,8 +65,8 @@ fn append<E: Envelope, T: native::Record + native::Write<E> + native::RecordLayo
         .map_err(|e| Error::new("m3.write", e.to_string()))?;
     Ok(Ref::from_section(count, id.index()))
 }
-fn native_anim<T: Animatable + Clone>(
-    r: &surface::Property<T>,
+fn native_anim<T: PropertyValue + Clone>(
+    r: &surface::PropertyBinding<T>,
     ids: &AnimationIds,
 ) -> nr::AnimationValue<T> {
     let mut interpolation = r.control.interpolation;
@@ -89,7 +89,7 @@ fn native_anim<T: Animatable + Clone>(
     }
 }
 fn native_color<E: Envelope>(
-    r: &surface::Property<[f32; 4]>,
+    r: &surface::PropertyBinding<[f32; 4]>,
     writer: &mut Writer<'_, '_, '_, '_, E>,
 ) -> Result<nr::AnimationValue<[u8; 4]>, Error> {
     let initial = quantize_color(

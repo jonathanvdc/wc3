@@ -1,9 +1,11 @@
 //! Shared node-channel presence and conservative material constant analysis.
 use std::collections::{HashMap, HashSet};
-use wc3::model::{Animatable, Animated, Channel, Interpolation, Model, ValueSlot, Values};
+use wc3::model::{
+    Channel, Interpolation, Model, Property, PropertyValue, PropertyValues, ValueSlot,
+};
 
 pub(crate) struct AnimationTargets<'a> {
-    pub(crate) values: &'a Values,
+    pub(crate) values: &'a PropertyValues,
     targets: HashSet<ValueSlot>,
     scalar_constants: HashMap<ValueSlot, Option<f32>>,
 }
@@ -11,18 +13,7 @@ impl<'a> AnimationTargets<'a> {
     pub(crate) fn new(model: &'a Model<'_>) -> Self {
         let mut targets = HashSet::new();
         let mut scalar_constants = HashMap::<ValueSlot, Option<f32>>::new();
-        for channel in model
-            .timeline_channels()
-            .iter()
-            .chain(model.shared_channels())
-            .chain(model.clips().iter().flat_map(|(_, clip)| clip.channels()))
-            .chain(
-                model
-                    .controllers()
-                    .iter()
-                    .flat_map(|(_, controller)| &controller.channels),
-            )
-        {
+        for channel in model.channels() {
             targets.insert(channel.target());
             if let Channel::Scalar(track) = channel {
                 let values = track.curve.values();
@@ -54,7 +45,7 @@ impl<'a> AnimationTargets<'a> {
         }
     }
 
-    pub(crate) fn contains<T: Animatable>(&self, slot: &Animated<T>) -> bool {
+    pub(crate) fn contains<T: PropertyValue>(&self, slot: &Property<T>) -> bool {
         self.targets.contains(&slot.slot())
             || match slot.slot() {
                 ValueSlot::Scalar(id) => self
@@ -64,7 +55,7 @@ impl<'a> AnimationTargets<'a> {
                 _ => false,
             }
     }
-    pub(crate) fn scalar_changes(&self, default: f32, slot: &Animated<f32>) -> bool {
+    pub(crate) fn scalar_changes(&self, default: f32, slot: &Property<f32>) -> bool {
         self.contains(slot)
             && self
                 .scalar_constants
@@ -73,7 +64,7 @@ impl<'a> AnimationTargets<'a> {
                 .flatten()
                 .is_none_or(|value| value.to_bits() != default.to_bits())
     }
-    pub(crate) fn scalar(&self, slot: &Animated<f32>) -> bool {
+    pub(crate) fn scalar(&self, slot: &Property<f32>) -> bool {
         self.scalar_changes(*self.values.get(*slot).expect("validated slot"), slot)
     }
 }

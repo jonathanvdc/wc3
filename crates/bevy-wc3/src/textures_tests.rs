@@ -3,7 +3,7 @@ use crate::material::compile_material_with_images;
 use crate::material::native_fixtures::wmo;
 use bevy::prelude::{Assets, Image};
 use wc3::model::materials::bindings::TextureBinding;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{Material, MaterialSurface, ModelBuilder};
 
 #[test]

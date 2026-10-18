@@ -7,7 +7,8 @@ use crate::model::profiles::{
     Extends, Narrows, NoControls, Profile, SurfacePayload, Unavailable, Universal,
 };
 use crate::model::resources::SnoResource;
-use crate::model::Values;
+use crate::model::PropertyValues;
+use crate::model::TimeSource;
 use crate::model::{
     Basis, Billboard, Bounds, Error, ExplicitBinding, Inheritance, LengthUnit, Model, NodeControls,
     SnoNamespace, Transform, UniversalAppearance, UniversalBinding,
@@ -143,8 +144,14 @@ impl Profile for D3 {
                 "material assignments belong to actual appearance slots",
             ));
         }
-        if !model.timeline_channels().is_empty()
-            || !model.shared_channels().is_empty()
+        if model
+            .global_channels()
+            .find(|v| v.clock() == TimeSource::Timeline)
+            .is_some()
+            || model
+                .global_channels()
+                .find(|v| matches!(v.clock(), TimeSource::Shared(_)))
+                .is_some()
             || !model.controllers().is_empty()
         {
             return Err(Error::new(
@@ -232,7 +239,10 @@ impl Extends<D3> for Universal {
     fn surface<'a>(value: <D3 as Profile>::Surface<'a>) -> Self::Surface<'a> {
         value.into()
     }
-    fn feature<'a>(value: <D3 as Profile>::Feature<'a>, _values: &mut Values) -> Self::Feature<'a> {
+    fn feature<'a>(
+        value: <D3 as Profile>::Feature<'a>,
+        _values: &mut PropertyValues,
+    ) -> Self::Feature<'a> {
         match value {}
     }
     fn node<'a>(value: <D3 as Profile>::Node<'a>) -> Self::Node<'a> {
@@ -337,7 +347,7 @@ impl Narrows<Universal> for D3 {
     }
     fn feature<'a>(
         value: <Universal as Profile>::Feature<'a>,
-        _values: &Values,
+        _values: &PropertyValues,
     ) -> Result<Self::Feature<'a>, Error> {
         let _ = value;
         Err(Error::new(

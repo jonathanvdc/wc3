@@ -184,3 +184,8 @@ pub type PhysicsResourceId = Id<PhysicsResourceObject>;
 pub enum BoneOverrideResourceObject {}
 /// Handle to a model-owned boneoverride dependency declaration.
 pub type BoneOverrideResourceId = Id<BoneOverrideResourceObject>;
+
+/// Reusable animation identity marker.
+pub enum AnimationObject {}
+/// Handle to a reusable model-owned curve and event program.
+pub type AnimationId = Id<AnimationObject>;

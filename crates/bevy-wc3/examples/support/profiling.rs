@@ -33,19 +33,19 @@ struct Measurements {
 #[derive(Resource, Clone, Default)]
 struct Shared(Arc<Mutex<Measurements>>, Arc<Condvar>);
 #[derive(Resource, Default)]
-struct Clock(Option<Instant>);
+struct TimeSource(Option<Instant>);
 
 pub fn install(app: &mut App) {
     let shared = Shared::default();
     let mut extract = app.sub_app_mut(RenderApp).take_extract().unwrap();
     let extraction = shared.clone();
     app.sub_app_mut(RenderApp).set_extract(move |main, render| {
-        let clock = Clock(Some(Instant::now()));
+        let clock = TimeSource(Some(Instant::now()));
         extract(main, render);
         finish(&clock, &extraction, "extract_cpu_ms");
     });
     app.insert_resource(shared.clone())
-        .init_resource::<Clock>()
+        .init_resource::<TimeSource>()
         .add_systems(First, start)
         .add_systems(Last, (finish_main, collect).chain());
     app.add_systems(
@@ -72,7 +72,7 @@ pub fn install(app: &mut App) {
     );
     app.sub_app_mut(RenderApp)
         .insert_resource(shared)
-        .init_resource::<Clock>()
+        .init_resource::<TimeSource>()
         .add_systems(Render, start.before(RenderSystems::ExtractCommands))
         .add_systems(Render, finish_render.after(RenderSystems::PostCleanup));
 }
@@ -93,10 +93,10 @@ fn stage_end(shared: &Shared, name: &str) {
         }
     }
 }
-fn start(mut clock: ResMut<Clock>) {
+fn start(mut clock: ResMut<TimeSource>) {
     clock.0 = Some(Instant::now());
 }
-fn finish(clock: &Clock, shared: &Shared, name: &str) {
+fn finish(clock: &TimeSource, shared: &Shared, name: &str) {
     if let Some(start) = clock.0 {
         let mut data = shared.0.lock().unwrap();
         if data.active {
@@ -107,11 +107,11 @@ fn finish(clock: &Clock, shared: &Shared, name: &str) {
         }
     }
 }
-fn finish_main(clock: Res<Clock>, shared: Res<Shared>) {
+fn finish_main(clock: Res<TimeSource>, shared: Res<Shared>) {
     finish(&clock, &shared, "main_schedule_cpu_ms");
 }
 fn finish_render(
-    clock: Res<Clock>,
+    clock: Res<TimeSource>,
     shared: Res<Shared>,
     cache: Res<PipelineCache>,
     device: Res<RenderDevice>,

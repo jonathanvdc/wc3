@@ -1,5 +1,5 @@
 use wc3::model::common::IntoZeroVec;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 #[path = "mdlx/graph.rs"]
 mod graph;
 use std::borrow::Cow;
@@ -8,7 +8,7 @@ use wc3::model::{
     formats::mdlx::{self, mdl::Read as _, mdx::Write as _},
     io,
     profiles::{mdlx as profile, Mdlx, Universal},
-    Channel, Clock, Model,
+    Channel, Model, TimeSource,
 };
 fn source() -> mdlx::Document<'static, mdlx::V800> {
     mdlx::Document::decode_mdl(include_str!("../../fixtures/mdl/quad_model.mdl")).unwrap()
@@ -294,10 +294,15 @@ fn spline_keys_materialize_once_and_remain_editable() {
     source.set_global_sequences(&[2000]);
     let mut imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
-    let Channel::Vector3(mut track) = graph.shared_channels()[0].clone() else {
+    let Channel::Vector3(mut track) = graph
+        .global_channels()
+        .find(|v| matches!(v.clock(), TimeSource::Shared(_)))
+        .unwrap()
+        .clone()
+    else {
         panic!("translation curve missing")
     };
-    assert!(matches!(track.clock, Clock::Shared(_)));
+    assert!(matches!(track.clock, TimeSource::Shared(_)));
     assert!(track.curve.values().is_owned());
     let mut values = track.curve.values().to_vec();
     values[1] = [3.; 3];
@@ -310,7 +315,12 @@ fn spline_keys_materialize_once_and_remain_editable() {
     .unwrap();
     imported
         .value
-        .edit(|builder| builder.set_shared_channel(0, Channel::Vector3(track)))
+        .edit(|builder| {
+            let id = builder.model().global_animations()[0];
+            let mut animation = builder.model().animation(id).unwrap().clone();
+            animation.channels[0] = Channel::Vector3(track);
+            builder.set_animation(id, animation)
+        })
         .unwrap();
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()

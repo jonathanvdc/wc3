@@ -6,7 +6,7 @@ use super::*;
 use std::sync::Arc;
 use wc3::model::materials::m3;
 use wc3::model::{AnimationSample, Material, MaterialStep, MaterialSurface};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn constant(slot_values: &mut SlotValues, color: [f32; 4]) -> m3::TextureLayer {
     let mut layer = m3::TextureLayer::construct(slot_values);
@@ -405,7 +405,7 @@ fn independent_image_roles_share_each_effective_native_wrap_sampler() {
 #[test]
 fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
     let mut slot_values = SlotValues::default();
-    use wc3::model::{Channel, Clock, Curve, Time as ModelTime, Track};
+    use wc3::model::{Channel, Curve, Time as ModelTime, TimeSource, Track};
     let mut builder = Model::builder("animated material roles");
     let material = builder.reserve_material();
     let property = slot_values.add(1.);
@@ -423,9 +423,9 @@ fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
         )
         .unwrap();
     builder
-        .add_timeline_channel(Channel::Scalar(Track {
+        .add_global_channel(Channel::Scalar(Track {
             target: property,
-            clock: Clock::Timeline,
+            clock: TimeSource::Timeline,
             curve: Curve::linear(
                 [
                     ModelTime::seconds(0.).unwrap(),
@@ -488,7 +488,7 @@ fn native_bound_constants_keep_opaque_composite_base_and_no_animation_sidecar() 
                 sections: [1., 0.35]
                     .map(|weight| native::CompositeSection {
                         material: leaf,
-                        map_multiplier: native::Property {
+                        map_multiplier: native::PropertyBinding {
                             value: slot_values.add(weight),
                             reset: weight,
                             ..SlotConstruct::construct(&mut slot_values)

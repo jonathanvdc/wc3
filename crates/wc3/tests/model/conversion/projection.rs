@@ -5,7 +5,7 @@ use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, Draw,
     GeometryData, InstanceId, Material, Mesh, MeshId, MeshInstance, Model, ModelBuilder, Topology,
 };
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn fixture() -> (Model<'static>, MeshId, InstanceId) {
     let mut slot_values = SlotValues::default();

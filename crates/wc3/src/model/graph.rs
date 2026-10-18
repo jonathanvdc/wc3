@@ -2,12 +2,11 @@
 use crate::model::ids::Scope;
 use crate::model::profiles::{Profile, Universal};
 use crate::model::DrawId;
-use crate::model::{Animatable, Animated, ValueSlot, Values};
 use crate::model::{
-    AppearanceSchema as _, AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, ClockId,
-    Controller, ControllerId, Error, Event, EventId, FeatureId, InstanceId, LengthUnit, Look,
-    LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, ModelId, Node, NodeId, Skin, SkinId,
-    SystemId, Time,
+    Animation, AnimationId, AnimationObject, AppearanceSchema as _, AttachedFeature, Basis, Bounds,
+    Channel, Clip, ClipId, ClockId, Controller, ControllerId, Error, Event, EventId, FeatureId,
+    InstanceId, LengthUnit, Look, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance,
+    ModelId, Node, NodeId, Skin, SkinId, SystemId, Time,
 };
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
@@ -17,6 +16,7 @@ use crate::model::{
     MeshObject, NodeObject, SkinObject, SystemObject,
 };
 use crate::model::{Dependencies, Link, Table, Texture, ValidateLinks as _};
+use crate::model::{Property, PropertyValue, PropertyValues, ValueSlot};
 use std::borrow::Cow;
 use std::collections::HashSet;
 /// A repeating or frozen clock shared by animation channels.
@@ -42,7 +42,7 @@ impl SharedClock {
 /// An encoding-independent model. All public access is immutable; edits are checked before publication.
 #[derive(Clone, Debug)]
 pub struct Model<'a, P: Profile = Universal> {
-    values: Values,
+    values: PropertyValues,
     dependencies: Dependencies<'a, P>,
     scope: Scope,
     id: ModelId,
@@ -52,10 +52,8 @@ pub struct Model<'a, P: Profile = Universal> {
     bounds: Option<Bounds>,
     metadata: P::ModelMetadata<'a>,
     systems: Table<SystemObject, P::System<'a>>,
-    timeline_channels: Vec<Channel<'a>>,
-    timeline_events: Vec<Event<'a>>,
-    shared_channels: Vec<Channel<'a>>,
-    shared_events: Vec<Event<'a>>,
+    animations: Table<AnimationObject, Animation<'a>>,
+    global_animations: Vec<AnimationId>,
     features: Table<FeatureObject, AttachedFeature<'a, P>>,
     appearance: P::Appearance<'a>,
     nodes: Table<NodeObject, Node<'a, P>>,
@@ -69,11 +67,11 @@ pub struct Model<'a, P: Profile = Universal> {
 }
 impl<'a, P: Profile> Model<'a, P> {
     /// Authored constants for every typed animation slot.
-    pub fn values(&self) -> &Values {
+    pub fn values(&self) -> &PropertyValues {
         &self.values
     }
     /// Whether any authored program writes this slot.
-    pub fn is_animated<T: Animatable>(&self, slot: Animated<T>) -> bool {
+    pub fn is_animated<T: PropertyValue>(&self, slot: Property<T>) -> bool {
         self.channels()
             .any(|channel| channel.target() == slot.slot())
             || match slot.slot() {
@@ -86,16 +84,59 @@ impl<'a, P: Profile> Model<'a, P> {
     }
     /// Channels in every authored program, independent of playback selection.
     pub fn channels(&self) -> impl Iterator<Item = &Channel<'a>> {
-        self.timeline_channels
-            .iter()
-            .chain(&self.shared_channels)
-            .chain(self.clips.values().flat_map(|clip| &clip.channels))
-            .chain(
-                self.controllers
-                    .values()
-                    .flat_map(|controller| &controller.channels),
-            )
+        self.animations
+            .values()
+            .flat_map(|animation| &animation.channels)
     }
+    /// Reusable animation definitions in stable identity order.
+    pub fn animations(&self) -> &Table<AnimationObject, Animation<'a>> {
+        &self.animations
+    }
+    /// Resolves a reusable animation definition.
+    pub fn animation(&self, id: AnimationId) -> Option<&Animation<'a>> {
+        self.animations.get(id)
+    }
+    /// Ordered animations active independently of clip selection.
+    pub fn global_animations(&self) -> &[AnimationId] {
+        &self.global_animations
+    }
+    /// Channels selected by reusable animation identities, in evaluation order.
+    ///
+    /// Panics if an identity is absent from this model.
+    pub fn animation_channels<'v>(
+        &'v self,
+        ids: &'v [AnimationId],
+    ) -> impl DoubleEndedIterator<Item = &'v Channel<'a>> {
+        ids.iter()
+            .flat_map(|id| self.animations[id].channels.iter())
+    }
+    /// Events selected by reusable animation identities.
+    ///
+    /// Panics if an identity is absent from this model.
+    pub fn animation_events<'v>(
+        &'v self,
+        ids: &'v [AnimationId],
+    ) -> impl Iterator<Item = &'v Event<'a>> {
+        ids.iter()
+            .flat_map(|id| self.animations[id].events.values())
+    }
+    /// Channels active independently of the selected clip.
+    pub fn global_channels(&self) -> impl DoubleEndedIterator<Item = &Channel<'a>> {
+        self.animation_channels(&self.global_animations)
+    }
+    /// Events active independently of the selected clip.
+    pub fn global_events(&self) -> impl Iterator<Item = &Event<'a>> {
+        self.animation_events(&self.global_animations)
+    }
+    /// Channels selected by a clip. Missing clip identities yield no channels.
+    pub fn clip_channels(&self, id: ClipId) -> impl DoubleEndedIterator<Item = &Channel<'a>> {
+        self.animation_channels(self.clip(id).map_or(&[], |clip| &clip.animations))
+    }
+    /// Events selected by a clip. Missing clip identities yield no events.
+    pub fn clip_events(&self, id: ClipId) -> impl Iterator<Item = &Event<'a>> {
+        self.animation_events(self.clip(id).map_or(&[], |clip| &clip.animations))
+    }
+
     /// External dependency declarations owned by this model.
     pub fn dependencies(&self) -> &Dependencies<'a, P> {
         &self.dependencies
@@ -163,20 +204,14 @@ impl<'a, P: Profile> Model<'a, P> {
             system.visit_links(&mut visit);
         }
         self.values.visit_values(&mut visit);
-        for channel in self.timeline_channels.iter().chain(&self.shared_channels) {
+        for channel in self.channels() {
             channel.visit_links(&mut visit);
         }
         for clip in self.clips.values() {
             clip.controls.visit_links(&mut visit);
-            for channel in clip.channels() {
-                channel.visit_links(&mut visit);
-            }
         }
         for controller in self.controllers.values() {
             controller.controls.visit_links(&mut visit);
-            for channel in &controller.channels {
-                channel.visit_links(&mut visit);
-            }
         }
         images
     }
@@ -220,25 +255,9 @@ impl<'a, P: Profile> Model<'a, P> {
     }
     /// Resolves a programme's event occurrence by its actual graph identity.
     pub fn event(&self, id: EventId) -> Option<&Event<'a>> {
-        self.controllers
+        self.animations
             .values()
-            .find_map(|controller| controller.events.get(&id))
-    }
-    /// Channels authored on the absolute model timeline, independent of playback intervals.
-    pub fn timeline_channels(&self) -> &[Channel<'a>] {
-        &self.timeline_channels
-    }
-    /// Event occurrences authored on the absolute model timeline.
-    pub fn timeline_events(&self) -> &[Event<'a>] {
-        &self.timeline_events
-    }
-    /// Channels governed by shared clocks rather than an individual playback clip.
-    pub fn shared_channels(&self) -> &[Channel<'a>] {
-        &self.shared_channels
-    }
-    /// Event occurrences governed by shared clocks.
-    pub fn shared_events(&self) -> &[Event<'a>] {
-        &self.shared_events
+            .find_map(|animation| animation.events.get(&id))
     }
     /// Model-wide authoring metadata selected by this vocabulary.
     pub fn metadata(&self) -> &P::ModelMetadata<'a> {
@@ -347,14 +366,6 @@ impl<'a, P: Profile> Model<'a, P> {
     /// Resolves a surface; returns `None` when the identity is absent from this graph.
     pub fn material(&self, id: MaterialId) -> Option<&Material<'a, P>> {
         self.materials.get(id)
-    }
-    /// Resolves a clip's playback program through its alias chain.
-    pub fn clip_program(&self, id: ClipId) -> Option<&Clip<'a, P>> {
-        let mut clip = self.clip(id)?;
-        while let Some(target) = clip.alias {
-            clip = self.clip(target)?;
-        }
-        Some(clip)
     }
     /// Playback clip definitions in stable identity order.
     pub fn clips(&self) -> &Table<ClipObject, Clip<'a, P>> {

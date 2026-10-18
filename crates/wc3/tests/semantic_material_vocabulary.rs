@@ -6,7 +6,7 @@ use wc3::model::materials::m2::{
 };
 use wc3::model::materials::mdlx::{LayeredSurface, SurfaceLayer};
 use wc3::model::profiles::{m2, mdlx, SurfacePayload};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{Error, Link, PropertyPayload, TextureTransform, ValidateLinks};
 
 #[derive(Clone, Debug, Default)]

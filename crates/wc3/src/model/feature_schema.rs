@@ -5,8 +5,8 @@
 use crate::model::profiles::{m2, m3, mdlx, wmo, Either, Unavailable};
 use crate::model::EffectResourceId;
 use crate::model::{
-    scene, AimedCamera, AmbientDiffuseLight, Animated, Attachment, Camera, CameraConvention, Light,
-    NodeFeature, ParticleEmitter, RibbonEmitter,
+    scene, AimedCamera, AmbientDiffuseLight, Attachment, Camera, CameraConvention, Light,
+    NodeFeature, ParticleEmitter, Property, RibbonEmitter,
 };
 use crate::model::{Axis, ChildModel, EventSource, Socket};
 use crate::model::{
@@ -351,9 +351,9 @@ mod tests;
 #[derive(Clone, Copy, Debug)]
 pub struct IlluminationRef<'view> {
     /// RGB color animation.
-    pub color: &'view Animated<[f32; 3]>,
+    pub color: &'view Property<[f32; 3]>,
     /// Intensity animation.
-    pub intensity: &'view Animated<f32>,
+    pub intensity: &'view Property<f32>,
 }
 /// Shared ambient/diffuse authoring semantics across native and Universal lights.
 #[derive(Clone, Copy, Debug)]
@@ -363,7 +363,7 @@ pub struct AmbientDiffuseLightRef<'view> {
     /// Direct illumination component.
     pub diffuse: IlluminationRef<'view>,
     /// Attenuation start and end animations.
-    pub attenuation: [&'view Animated<f32>; 2],
+    pub attenuation: [&'view Property<f32>; 2],
 }
 impl<'view> LightView<'view> {
     /// Inspects shared ambient/diffuse components without knowing their source vocabulary.
@@ -410,23 +410,23 @@ impl<'view> LightView<'view> {
 #[derive(Clone, Copy, Debug)]
 pub enum AimedFieldOfViewRef<'view> {
     /// Animated vertical angle in radians.
-    AnimatedVertical(&'view Animated<f32>),
+    AnimatedVertical(&'view Property<f32>),
     /// Static vertical angle in radians.
     Vertical(&'view f32),
     /// Animated diagonal angle in radians.
-    Diagonal(&'view Animated<f32>),
+    Diagonal(&'view Property<f32>),
 }
 /// Shared additive eye/target and roll semantics of authored aim-point cameras.
 #[derive(Clone, Copy, Debug)]
 pub struct AimedCameraRef<'view> {
     /// Offset from the carrying node's rest translation.
-    pub eye_offset: &'view Animated<[f32; 3]>,
+    pub eye_offset: &'view Property<[f32; 3]>,
     /// Model-space base target.
     pub target: &'view [f32; 3],
     /// Additive offset from the base target.
-    pub target_offset: &'view Animated<[f32; 3]>,
+    pub target_offset: &'view Property<[f32; 3]>,
     /// Roll angle in radians.
-    pub roll: &'view Animated<f32>,
+    pub roll: &'view Property<f32>,
     /// Near and far clipping distances.
     pub clipping: &'view [f32; 2],
     /// Angle and its explicitly authored axis convention.
@@ -544,18 +544,18 @@ pub enum EmissionRef<'view> {
         trigger: &'view ParticleTrigger,
     },
     /// Particles per second evaluated on the model clock.
-    Continuous(&'view Animated<f32>),
+    Continuous(&'view Property<f32>),
     /// Particle count emitted at emission-property keys.
-    BurstAtKeys(&'view Animated<f32>),
+    BurstAtKeys(&'view Property<f32>),
     /// Emission-rate input interpreted by an external effect program.
-    ProgramInput(&'view Animated<f32>),
+    ProgramInput(&'view Property<f32>),
     /// Separate rate and burst controls, preserving reset values and property metadata.
     /// The native emitter program determines how these controls are scheduled.
     Programmed {
         /// Authored rate control.
-        rate: &'view m3::Property<f32>,
+        rate: &'view m3::PropertyBinding<f32>,
         /// Independently authored discrete burst count.
-        burst_count: &'view m3::Property<u16>,
+        burst_count: &'view m3::PropertyBinding<u16>,
     },
 }
 /// Nominal lifetime control, preserving animation metadata and native program semantics.
@@ -564,11 +564,11 @@ pub enum LifetimeRef<'view> {
     /// Fixed persistence in seconds.
     Seconds(&'view f32),
     /// Model-clock animation of persistence in seconds.
-    AnimatedSeconds(&'view Animated<f32>),
+    AnimatedSeconds(&'view Property<f32>),
     /// Lifetime input interpreted by an external effect program.
-    ProgramInput(&'view Animated<f32>),
+    ProgramInput(&'view Property<f32>),
     /// Native programmed lifetime control with reset values and metadata.
-    Programmed(&'view m3::Property<f32>),
+    Programmed(&'view m3::PropertyBinding<f32>),
 }
 impl<'view, 'data> ParticlesView<'view, 'data> {
     /// Inspects authored emission controls without conflating continuous rates and bursts.
@@ -576,10 +576,10 @@ impl<'view, 'data> ParticlesView<'view, 'data> {
     pub fn emission(self) -> Option<EmissionRef<'view>> {
         match self {
             Self::Definition(v) => Some(match (&v.emission.rate, &v.emission.trigger) {
-                (ParticleScalar::Animated(rate), ParticleTrigger::Continuous) => {
+                (ParticleScalar::Property(rate), ParticleTrigger::Continuous) => {
                     EmissionRef::Continuous(rate)
                 }
-                (ParticleScalar::Animated(count), ParticleTrigger::KeyedBurst) => {
+                (ParticleScalar::Property(count), ParticleTrigger::KeyedBurst) => {
                     EmissionRef::BurstAtKeys(count)
                 }
                 (ParticleScalar::Programmed(rate), ParticleTrigger::Programmed(burst_count)) => {
@@ -633,9 +633,9 @@ pub enum TrailRateRef<'view> {
 #[derive(Clone, Copy, Debug)]
 pub enum AtlasCellRef<'view> {
     /// Full-width cell selection.
-    U32(&'view Animated<u32>),
+    U32(&'view Property<u32>),
     /// Sixteen-bit cell selection.
-    U16(&'view Animated<u16>),
+    U16(&'view Property<u16>),
 }
 /// Shared section-based ribbon controls, borrowing complete model-clock animations.
 #[derive(Clone, Copy, Debug)]
@@ -643,11 +643,11 @@ pub struct EdgeStripRef<'view> {
     /// Emitter-local direction of positive cross-section extent.
     pub axis: &'view Axis,
     /// RGB tint of emitted trail geometry.
-    pub color: &'view Animated<[f32; 3]>,
+    pub color: &'view Property<[f32; 3]>,
     /// Fractional opacity.
-    pub opacity: &'view Animated<f32>,
+    pub opacity: &'view Property<f32>,
     /// Extent above and below the center line.
-    pub height: [&'view Animated<f32>; 2],
+    pub height: [&'view Property<f32>; 2],
     /// Persistence of each emitted section in seconds.
     pub lifetime_seconds: &'view f32,
     /// Section generation frequency.
@@ -708,7 +708,7 @@ impl<'view, 'data> RibbonView<'view, 'data> {
 
 fn scalar_lifetime(value: &ParticleScalar) -> LifetimeRef<'_> {
     match value {
-        ParticleScalar::Animated(value) => LifetimeRef::AnimatedSeconds(value),
+        ParticleScalar::Property(value) => LifetimeRef::AnimatedSeconds(value),
         ParticleScalar::Programmed(value) => LifetimeRef::Programmed(value),
     }
 }

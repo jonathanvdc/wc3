@@ -4,7 +4,7 @@ use crate::model::profiles::M2;
 use crate::model::AngleTrail;
 use crate::model::SocketDefinition;
 use crate::model::{AimedCamera, AmbientDiffuseLight};
-use crate::model::{Animated, AttachedFeature, FeatureSet, Link, ValidateLinks};
+use crate::model::{AttachedFeature, FeatureSet, Link, Property, ValidateLinks};
 
 use super::BoneControls;
 /// A hierarchy node carrying a model-family feature.
@@ -12,12 +12,12 @@ pub type Actor<'a> = AttachedFeature<'a, M2>;
 /// Distinct scene feature families.
 pub type ActorKind<'a> = FeatureSet<'a, M2>;
 /// Runtime attachment role and enable control.
-pub type Attachment = SocketDefinition<u32, Animated<bool>, ()>;
+pub type Attachment = SocketDefinition<u32, Property<bool>, ()>;
 pub use crate::model::scene::model::Event;
 /// Model light with independently animated ambient and diffuse components.
-pub type Light = AmbientDiffuseLight<LightKind, Animated<bool>>;
+pub type Light = AmbientDiffuseLight<LightKind, Property<bool>>;
 /// Camera projection and model-local look-at animation.
-pub type Camera = AimedCamera<Animated<f32>, CameraKind>;
+pub type Camera = AimedCamera<Property<f32>, CameraKind>;
 /// A generated ribbon trail with texture and shader graph bindings.
 pub type Ribbon = AngleTrail;
 

@@ -544,7 +544,7 @@ where
                 && builder
                     .model()
                     .clip(clip.ok_or_else(|| Error::new("m2.event.clip", "sequence has no clip"))?)
-                    .is_some_and(|c| c.alias().is_some())
+                    .is_some_and(|c| c.controls.alias.is_some())
             {
                 continue;
             }
@@ -555,9 +555,9 @@ where
                 let event = semantic::Event {
                     time: Time::seconds((f64::from(ms) - f64::from(start)) / 1000.)?,
                     clock: if global == u16::MAX {
-                        semantic::Clock::Clip
+                        semantic::TimeSource::Clip
                     } else {
-                        semantic::Clock::Shared(
+                        semantic::TimeSource::Shared(
                             *clocks
                                 .get(global as usize)
                                 .ok_or_else(|| Error::new("m2.event.clock", "missing clock"))?,
@@ -574,7 +574,7 @@ where
                         event,
                     )?
                 } else {
-                    builder.add_shared_event(event)?
+                    builder.add_global_event(event)?;
                 }
             }
         }

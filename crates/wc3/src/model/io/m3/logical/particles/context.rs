@@ -27,7 +27,7 @@ impl<'view, E: Envelope> Reader<'view, '_, '_, E> {
         &mut self,
         path: &FieldPath,
         value: nr::AnimationValue<T>,
-    ) -> surface::Property<T> {
+    ) -> surface::PropertyBinding<T> {
         let mut result = anim(value, self.builder.values_mut());
         bindings::field(
             &mut result,
@@ -41,7 +41,7 @@ impl<'view, E: Envelope> Reader<'view, '_, '_, E> {
         &mut self,
         path: &FieldPath,
         value: nr::AnimationValue<[u8; 4]>,
-    ) -> surface::Property<[f32; 4]> {
+    ) -> surface::PropertyBinding<[f32; 4]> {
         let mut result = color(value, self.builder.values_mut());
         bindings::field(
             &mut result,
@@ -55,7 +55,7 @@ impl<'view, E: Envelope> Reader<'view, '_, '_, E> {
         &mut self,
         path: &FieldPath,
         value: nr::AnimationValue<nr::FixedBytes<4>>,
-    ) -> surface::Property<[f32; 4]> {
+    ) -> surface::PropertyBinding<[f32; 4]> {
         let mut result = fixed_color(value, self.builder.values_mut());
         bindings::field(
             &mut result,
@@ -99,7 +99,7 @@ impl<'view, E: Envelope> Reader<'view, '_, '_, E> {
     pub fn spline(
         &mut self,
         reference: Ref<nr::targets::AnimationValueVector3>,
-    ) -> Result<Cow<'view, [surface::Property<[f32; 3]>]>, Error> {
+    ) -> Result<Cow<'view, [surface::PropertyBinding<[f32; 3]>]>, Error> {
         let mut points = Vec::new();
         for (index, row) in self
             .source

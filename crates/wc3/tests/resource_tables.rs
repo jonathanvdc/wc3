@@ -4,7 +4,7 @@ use wc3::model::{
     Attachment, ChildModel, ImageResource, M2ImageResource, MdlxImageResource, Model, NodeFeature,
     PathResource, PlacementAppearance, ResourceLocator, Texture,
 };
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn use_texture(draft: &mut wc3::model::ModelBuilder<'_, Universal>, texture: Texture) {
     let mut slot_values = SlotValues::default();

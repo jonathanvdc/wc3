@@ -3,7 +3,7 @@ use bevy::ecs::world::CommandQueue;
 use std::f32::consts::TAU;
 use wc3::model::profiles::Universal;
 use wc3::model::{AnimationProgram, AnimationSample};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 fn emitter(slot_values: &mut SlotValues) -> Emitter {
     let mut builder = Model::<Universal>::builder("particle identity");
     let node = builder.reserve_node();

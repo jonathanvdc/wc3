@@ -1,18 +1,22 @@
 //! Logical relationship traversal for checked graph construction.
-use crate::model::{Animatable, ValueSlot};
+use crate::model::{
+    AnimationId, ClipId, ClockId, MaterialId, MeshId, ModelId, NodeId, SkinId, Texture,
+};
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
 };
-use crate::model::{ClipId, ClockId, MaterialId, MeshId, ModelId, NodeId, SkinId, Texture};
 use crate::model::{
     ControllerId, CurveValue, EventId, FeatureId, FeatureKind, GeometryKind, InstanceId,
     MaterialSlotId, SystemId, SystemMember,
 };
+use crate::model::{PropertyValue, ValueSlot};
 use std::any::TypeId;
 use std::borrow::Cow;
 /// A relationship to another object in the semantic graph.
 #[derive(Clone, Debug)]
 pub enum Link {
+    /// Reusable animation selected by a clip, controller, or model.
+    Animation(AnimationId),
     /// Typed animation value slot.
     Value(ValueSlot),
     /// External image dependency.
@@ -158,8 +162,8 @@ impl ValidateLinks for ClockId {
 }
 
 use crate::model::profiles::Profile;
-use crate::model::{Property, PropertyIdentity, PropertyPayload, PropertyTarget};
-impl<T: 'static, P: Profile> ValidateLinks for Property<T, P> {
+use crate::model::{PropertyBinding, PropertyIdentity, PropertyPayload, PropertyTarget};
+impl<T: 'static, P: Profile> ValidateLinks for PropertyBinding<T, P> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         v(Link::Property {
             target: self.target().identity(),
@@ -191,15 +195,15 @@ impl<T: 'static, P: Profile> ValidateLinks for Property<T, P> {
         }
     }
 }
-use crate::model::{Channel, Clock, Track};
-impl<T: CurveValue + Animatable + 'static> ValidateLinks for Track<'_, T> {
+use crate::model::{Channel, TimeSource, Track};
+impl<T: CurveValue + PropertyValue + 'static> ValidateLinks for Track<'_, T> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         for value in self.curve.values().iter() {
             value.visit_value_links(v);
         }
         self.curve.visit_control_links(v);
         self.target.visit_links(v);
-        if let Clock::Shared(id) = self.clock {
+        if let TimeSource::Shared(id) = self.clock {
             id.visit_links(v);
         }
     }
@@ -315,5 +319,11 @@ impl ValidateLinks for PhysicsResourceId {
 impl ValidateLinks for BoneOverrideResourceId {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         v(Link::BoneOverrideResource(*self))
+    }
+}
+
+impl ValidateLinks for AnimationId {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        visitor(Link::Animation(*self));
     }
 }

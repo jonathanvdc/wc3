@@ -6,7 +6,7 @@ use wc3::model::materials::{m3, MaterialSurface};
 use wc3::model::profiles::Unavailable;
 use wc3::model::profiles::Universal;
 use wc3::model::{AnimationSample, ColorSpace, Material, ModelBuilder, Texture};
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 #[test]
 fn default_extension_preserves_base_blend_and_depth_while_authored_pass_overrides() {
@@ -489,7 +489,7 @@ fn nested_composites_expand_ordered_passes_and_multiply_opacity_once() {
                     priority: 3,
                     sections: vec![m3::CompositeSection {
                         material: leaf,
-                        map_multiplier: m3::Property {
+                        map_multiplier: m3::PropertyBinding {
                             value: slot_values.add(0.5),
                             ..SlotConstruct::construct(&mut slot_values)
                         },
@@ -507,14 +507,14 @@ fn nested_composites_expand_ordered_passes_and_multiply_opacity_once() {
                     sections: vec![
                         m3::CompositeSection {
                             material: inner,
-                            map_multiplier: m3::Property {
+                            map_multiplier: m3::PropertyBinding {
                                 value: slot_values.add(0.25),
                                 ..SlotConstruct::construct(&mut slot_values)
                             },
                         },
                         m3::CompositeSection {
                             material: leaf,
-                            map_multiplier: m3::Property {
+                            map_multiplier: m3::PropertyBinding {
                                 value: slot_values.add(1.),
                                 ..SlotConstruct::construct(&mut slot_values)
                             },
@@ -596,7 +596,7 @@ fn mixed_m3_external_and_composite_steps_keep_their_order_and_weights() {
                             priority: 13,
                             sections: vec![m3::CompositeSection {
                                 material: child,
-                                map_multiplier: m3::Property {
+                                map_multiplier: m3::PropertyBinding {
                                     value: slot_values.add(0.5),
                                     ..SlotConstruct::construct(&mut slot_values)
                                 },

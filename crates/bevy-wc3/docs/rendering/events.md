@@ -9,7 +9,7 @@ data IDs, and typed engine commands as distinct payloads.
 
 Read messages in `PostUpdate` after `Wc3Systems::DispatchEvents`, or in the next
 `Update`. Each notification identifies its root, optional source feature/node, name,
-payload bytes, owning clip/controller/global programme, clock, exact key, unwrapped
+payload bytes, activating clip/controller/model-level selection, time source, exact key, unwrapped
 occurrence time, and occurrence-time world transform.
 
 ```rust
@@ -22,7 +22,9 @@ fn handle(mut events: MessageReader<ModelEvent>) {
 }
 ```
 
-Definitions are shared; dispatch cursors are private to instances. Ordering within
+Occurrences belong to reusable `Animation` definitions. Clips, controllers, and
+model-level selections activate those definitions; value sampling itself never
+dispatches an event. Definitions are shared; dispatch cursors are private to instances. Ordering within
 one instance follows occurrence time and deterministic definition/key order.
 Ordering between instances is unspecified. Consume buffered messages regularly;
 entity IDs can become stale after despawn.

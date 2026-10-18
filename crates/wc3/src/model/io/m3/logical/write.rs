@@ -2,8 +2,8 @@
 use super::animation::AnimationIds;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
-use crate::model::profiles::m3::Property;
-use crate::model::Animatable;
+use crate::model::profiles::m3::PropertyBinding;
+use crate::model::PropertyValue;
 use native::{Envelope, Ref};
 pub(super) fn append<
     E: Envelope,
@@ -22,8 +22,8 @@ pub(super) fn append<
         .map_err(|e| Error::new("m3.write", e.to_string()))?;
     Ok(Ref::from_section(count, id.index()))
 }
-pub(super) fn animated<T: Animatable + Clone>(
-    property: &Property<T>,
+pub(super) fn animated<T: PropertyValue + Clone>(
+    property: &PropertyBinding<T>,
     ids: &AnimationIds,
 ) -> nr::AnimationValue<T> {
     let mapped = ids.get(&property.value.slot());
@@ -64,7 +64,7 @@ pub(super) fn string<E: Envelope>(
 
 /// Quantize the source color leaf while retaining its independent animation control.
 pub(super) fn color(
-    property: &Property<[f32; 4]>,
+    property: &PropertyBinding<[f32; 4]>,
     ids: &AnimationIds,
     context: &mut Context,
 ) -> Result<nr::AnimationValue<[u8; 4]>, Error> {
@@ -98,7 +98,7 @@ pub(super) fn color(
     })
 }
 pub(super) fn fixed_color(
-    property: &Property<[f32; 4]>,
+    property: &PropertyBinding<[f32; 4]>,
     ids: &AnimationIds,
     context: &mut Context,
 ) -> Result<nr::AnimationValue<nr::FixedBytes<4>>, Error> {

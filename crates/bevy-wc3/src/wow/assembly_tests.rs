@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use wc3::model::controls::model::BoneControls;
 use wc3::model::materials::bindings::ImageSelection;
 use wc3::model::materials::program::MaterialStep;
-use wc3::model::{Construct as SlotConstruct, Values as SlotValues};
+use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     Draw, GeometryData, GeometryInfluences, IdentityBinding, Influence, Material, MaterialSurface,
     Mesh, MeshInstance, Node, NodeControls, Skin, Texture, UniversalBinding, ValueGroups,

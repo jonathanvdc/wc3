@@ -1,16 +1,16 @@
 //! Transactional graph construction and editing.
 use crate::model::ids::Scope;
 use crate::model::profiles::{Profile, Universal};
-use crate::model::{Animatable, Animated, Construct, Values};
 use crate::model::{
-    AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, Clock, ClockId, Controller,
-    ControllerId, DrawAppearanceSchema, DrawSubsetId, Error, Event, EventId, FeatureId, InstanceId,
-    LengthUnit, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Model,
-    ModelId, Node, NodeId, SharedClock, Skin, SkinId, SystemId, Texture,
+    Animation, AnimationId, AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, ClockId,
+    Controller, ControllerId, DrawAppearanceSchema, DrawSubsetId, Error, Event, EventId, FeatureId,
+    InstanceId, LengthUnit, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshId,
+    MeshInstance, Model, ModelId, Node, NodeId, SharedClock, Skin, SkinId, SystemId, Texture,
 };
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
 };
+use crate::model::{Construct, Property, PropertyValue, PropertyValues};
 use crate::model::{Dependencies, PathResource, Table};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -197,7 +197,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         self.add_node(node)
     }
     /// Allocates an independently animatable value in this model.
-    pub fn add_value<T: Animatable>(&mut self, value: T) -> Animated<T> {
+    pub fn add_value<T: PropertyValue>(&mut self, value: T) -> Property<T> {
         self.model.values.add(value)
     }
     /// Constructs a definition and allocates its animation slots.
@@ -205,11 +205,11 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         T::construct(&mut self.model.values)
     }
     /// Adopts separately constructed values while preserving their scoped identities.
-    pub fn import_values(&mut self, values: &Values) -> Result<(), Error> {
+    pub fn import_values(&mut self, values: &PropertyValues) -> Result<(), Error> {
         self.model.values.extend(values)
     }
     /// Mutable authored constants while constructing or editing a model.
-    pub fn values_mut(&mut self) -> &mut Values {
+    pub fn values_mut(&mut self) -> &mut PropertyValues {
         &mut self.model.values
     }
     /// Identity reserved for this model before publication.
@@ -223,7 +223,7 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         let id = scope.allocate();
         Self {
             model: Model {
-                values: Values::scoped(scope.clone()),
+                values: PropertyValues::scoped(scope.clone()),
                 dependencies: Dependencies::default(),
                 scope,
                 id,
@@ -233,10 +233,8 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
                 bounds: P::default_bounds(),
                 metadata: Default::default(),
                 systems: Table::default(),
-                timeline_channels: Vec::new(),
-                timeline_events: Vec::new(),
-                shared_channels: Vec::new(),
-                shared_events: Vec::new(),
+                animations: Table::default(),
+                global_animations: Vec::new(),
                 features: Table::default(),
                 appearance: Default::default(),
                 nodes: Table::default(),
@@ -284,34 +282,94 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         self.model.controllers.insert(id, value);
         Ok(())
     }
-    /// Adds a curve to its actual programme owner.
+    /// Adds a reusable animation definition.
+    pub fn add_animation(&mut self, value: Animation<'a>) -> AnimationId {
+        self.model.animations.add(&self.model.scope, value)
+    }
+    /// Replaces an animation while preserving all selections of its identity.
+    pub fn set_animation(&mut self, id: AnimationId, value: Animation<'a>) -> Result<(), Error> {
+        self.model.animations.replace(id, value, "animation")
+    }
+    /// Removes an animation; publication rejects remaining selections.
+    pub fn remove_animation(&mut self, id: AnimationId) -> Option<Animation<'a>> {
+        self.model.animations.remove(&id)
+    }
+    /// Selects a reusable animation independently of clip playback.
+    pub fn add_global_animation(&mut self, id: AnimationId) -> Result<(), Error> {
+        if !self.model.animations.contains_key(id) {
+            return Err(Error::new("animation", "unknown identity"));
+        }
+        self.model.global_animations.push(id);
+        Ok(())
+    }
+    /// Replaces the ordered model-level selection.
+    pub fn set_global_animations(&mut self, ids: Vec<AnimationId>) {
+        self.model.global_animations = ids;
+    }
+    /// Appends a curve to its reusable owner.
+    pub fn add_animation_channel(
+        &mut self,
+        id: AnimationId,
+        channel: Channel<'a>,
+    ) -> Result<(), Error> {
+        self.model
+            .animations
+            .get_mut(&id)
+            .ok_or_else(|| Error::new("animation", "unknown identity"))?
+            .channels
+            .push(channel);
+        Ok(())
+    }
+    /// Adds an identified event occurrence to its reusable owner.
+    pub fn add_animation_event(
+        &mut self,
+        id: AnimationId,
+        event: Event<'a>,
+    ) -> Result<EventId, Error> {
+        let animation = self
+            .model
+            .animations
+            .get_mut(&id)
+            .ok_or_else(|| Error::new("animation", "unknown identity"))?;
+        let event_id = self.model.scope.allocate();
+        animation.events.insert(event_id, event);
+        Ok(event_id)
+    }
+    fn controller_animation(&mut self, id: ControllerId) -> Result<AnimationId, Error> {
+        let controller = self
+            .model
+            .controllers
+            .get(id)
+            .ok_or_else(|| Error::new("controller", "unknown identity"))?;
+        if let Some(&animation) = controller.animations.first() {
+            return Ok(animation);
+        }
+        let animation = self.add_animation(Animation::default());
+        self.model
+            .controllers
+            .get_mut(&id)
+            .unwrap()
+            .animations
+            .push(animation);
+        Ok(animation)
+    }
+    /// Appends a curve to the controller's first animation, creating one if empty.
     pub fn add_controller_channel(
         &mut self,
         id: ControllerId,
         channel: Channel<'a>,
     ) -> Result<(), Error> {
-        self.model
-            .controllers
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("controller", "unknown identity"))?
-            .channels
-            .push(channel);
-        Ok(())
+        let animation = self.controller_animation(id)?;
+        self.add_animation_channel(animation, channel)
     }
-    /// Adds an event occurrence to its actual programme owner.
+    /// Appends an occurrence to the controller's first animation, creating one if empty.
     pub fn add_controller_event(
         &mut self,
         id: ControllerId,
         event: Event<'a>,
     ) -> Result<EventId, Error> {
-        let programme = self
-            .model
-            .controllers
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("controller", "unknown identity"))?;
-        let event_id = self.model.scope.allocate();
-        programme.events.insert(event_id, event);
-        Ok(event_id)
+        let animation = self.controller_animation(id)?;
+        self.add_animation_event(animation, event)
     }
     /// Replaces playback behavior directly on an existing clip.
     pub fn set_clip_controls(
@@ -393,117 +451,23 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     pub fn set_bounds(&mut self, bounds: Option<Bounds>) {
         self.model.bounds = bounds;
     }
-    /// Adds a channel authored on the absolute model timeline.
-    pub fn add_timeline_channel(&mut self, channel: Channel<'a>) -> Result<(), Error> {
-        if channel.clock() != Clock::Timeline {
-            return Err(Error::new(
-                "timeline_channels.clock",
-                "expected the absolute authoring clock",
-            ));
+    fn global_animation(&mut self) -> AnimationId {
+        if let Some(&id) = self.model.global_animations.first() {
+            return id;
         }
-        self.model.timeline_channels.push(channel);
-        Ok(())
+        let id = self.add_animation(Animation::default());
+        self.model.global_animations.push(id);
+        id
     }
-    /// Replaces an absolute-timeline channel by its authoring order.
-    pub fn set_timeline_channel(
-        &mut self,
-        index: usize,
-        channel: Channel<'a>,
-    ) -> Result<(), Error> {
-        if channel.clock() != Clock::Timeline {
-            return Err(Error::new(
-                "timeline_channels.clock",
-                "expected the absolute authoring clock",
-            ));
-        }
-        let slot = self
-            .model
-            .timeline_channels
-            .get_mut(index)
-            .ok_or_else(|| Error::new("timeline_channels", "unknown index"))?;
-        *slot = channel;
-        Ok(())
+    /// Appends a model-level curve; its time source is authoritative.
+    pub fn add_global_channel(&mut self, channel: Channel<'a>) -> Result<(), Error> {
+        let id = self.global_animation();
+        self.add_animation_channel(id, channel)
     }
-    /// Adds an event occurrence on the absolute model timeline.
-    pub fn add_timeline_event(&mut self, event: Event<'a>) -> Result<(), Error> {
-        if event.clock != Clock::Timeline {
-            return Err(Error::new(
-                "timeline_events.clock",
-                "expected the absolute authoring clock",
-            ));
-        }
-        self.model.timeline_events.push(event);
-        Ok(())
-    }
-    /// Replaces an absolute-timeline event occurrence by its authoring order.
-    pub fn set_timeline_event(&mut self, index: usize, event: Event<'a>) -> Result<(), Error> {
-        if event.clock != Clock::Timeline {
-            return Err(Error::new(
-                "timeline_events.clock",
-                "expected the absolute authoring clock",
-            ));
-        }
-        let slot = self
-            .model
-            .timeline_events
-            .get_mut(index)
-            .ok_or_else(|| Error::new("timeline_events", "unknown index"))?;
-        *slot = event;
-        Ok(())
-    }
-    /// Adds a channel that must use a shared repeating clock.
-    pub fn add_shared_channel(&mut self, channel: Channel<'a>) -> Result<(), Error> {
-        if !matches!(channel.clock(), Clock::Shared(_)) {
-            return Err(Error::new(
-                "shared_channels.clock",
-                "shared channel requires a shared clock",
-            ));
-        }
-        self.model.shared_channels.push(channel);
-        Ok(())
-    }
-    /// Replaces an existing shared-clock channel without appending a duplicate program.
-    pub fn set_shared_channel(&mut self, index: usize, channel: Channel<'a>) -> Result<(), Error> {
-        if !matches!(channel.clock(), Clock::Shared(_)) {
-            return Err(Error::new(
-                "shared_channels.clock",
-                "shared channel requires a shared clock",
-            ));
-        }
-        let slot = self
-            .model
-            .shared_channels
-            .get_mut(index)
-            .ok_or_else(|| Error::new("shared_channels", "unknown index"))?;
-        *slot = channel;
-        Ok(())
-    }
-    /// Replaces an existing shared-clock event occurrence.
-    pub fn set_shared_event(&mut self, index: usize, event: Event<'a>) -> Result<(), Error> {
-        if !matches!(event.clock, Clock::Shared(_)) {
-            return Err(Error::new(
-                "shared_events.clock",
-                "shared event requires a shared clock",
-            ));
-        }
-        let slot = self
-            .model
-            .shared_events
-            .get_mut(index)
-            .ok_or_else(|| Error::new("shared_events", "unknown index"))?;
-        *slot = event;
-        Ok(())
-    }
-    /// Adds an event occurrence that must use a shared repeating clock.
-    pub fn add_shared_event(&mut self, event: Event<'a>) -> Result<(), Error> {
-        if !matches!(event.clock, Clock::Shared(_)) {
-            return Err(Error::new(
-                "shared_events.clock",
-                "a shared event requires a shared clock",
-            ));
-        }
-        self.model.shared_events.push(event);
-        Ok(())
+    /// Appends a model-level event; its time source is authoritative.
+    pub fn add_global_event(&mut self, event: Event<'a>) -> Result<EventId, Error> {
+        let id = self.global_animation();
+        self.add_animation_event(id, event)
     }
     /// Adds a attached behavior to the draft; publication validates its values and relationships.
     pub fn add_feature(
@@ -727,24 +691,33 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     pub fn add_clock(&mut self, value: SharedClock) -> Result<ClockId, Error> {
         Ok(self.model.clocks.add(&self.model.scope, value))
     }
-    /// Appends a typed channel to an existing playback clip.
-    pub fn add_channel(&mut self, id: ClipId, channel: Channel<'a>) -> Result<(), Error> {
+    fn clip_animation(&mut self, id: ClipId) -> Result<AnimationId, Error> {
+        let clip = self
+            .model
+            .clips
+            .get(id)
+            .ok_or_else(|| Error::new("clip", "unknown identity"))?;
+        if let Some(&animation) = clip.animations.first() {
+            return Ok(animation);
+        }
+        let animation = self.add_animation(Animation::default());
         self.model
             .clips
             .get_mut(&id)
-            .ok_or_else(|| Error::new("clip", "unknown identity"))?
-            .channels
-            .push(channel);
-        Ok(())
+            .unwrap()
+            .animations
+            .push(animation);
+        Ok(animation)
     }
-    /// Appends an event occurrence to an existing playback clip.
+    /// Appends a curve to the clip's first animation, creating one if empty.
+    pub fn add_channel(&mut self, id: ClipId, channel: Channel<'a>) -> Result<(), Error> {
+        let animation = self.clip_animation(id)?;
+        self.add_animation_channel(animation, channel)
+    }
+    /// Appends an occurrence to the clip's first animation, creating one if empty.
     pub fn add_event(&mut self, id: ClipId, event: Event<'a>) -> Result<(), Error> {
-        self.model
-            .clips
-            .get_mut(&id)
-            .ok_or_else(|| Error::new("clip", "unknown identity"))?
-            .events
-            .push(event);
+        let animation = self.clip_animation(id)?;
+        self.add_animation_event(animation, event)?;
         Ok(())
     }
     /// Publishes an immutable graph after validating all values, identities, and relationships.
