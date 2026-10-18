@@ -463,7 +463,9 @@ fn project_geometry_with_color(
             } else if size == 3 {
                 output.normals = output
                     .positions
-                    .chunks_exact(3)
+                    .as_chunks::<3>()
+                    .0
+                    .iter()
                     .flat_map(|t| {
                         let a = Vec3::from_array(t[0]);
                         let normal = (Vec3::from_array(t[1]) - a)

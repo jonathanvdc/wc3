@@ -6,8 +6,8 @@ use crate::model::Link;
 use crate::model::Model;
 use crate::model::PropertyValues;
 use crate::model::{
-    ClipControls, Error, FeatureKind, IdentityBinding, MaterialSurface, MdlxGeometry, MeshControls,
-    ModelMetadata, NodeControls, SingleLook, UniversalAppearance, UniversalBinding,
+    ClipControls, Error, FeatureKind, IdentityBinding, MdlxGeometry, MeshControls, ModelMetadata,
+    NodeControls, SingleLook, UniversalAppearance, UniversalBinding,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 /// Vocabulary that maps mechanically to Warcraft III logical features.
@@ -114,7 +114,7 @@ impl Extends<Mdlx> for Universal {
         match value {}
     }
     fn surface<'a>(value: <Mdlx as Profile>::Surface<'a>) -> Self::Surface<'a> {
-        MaterialSurface::try_from(value).expect("validated MDLX surface")
+        value.into()
     }
     fn feature<'a>(
         value: <Mdlx as Profile>::Feature<'a>,

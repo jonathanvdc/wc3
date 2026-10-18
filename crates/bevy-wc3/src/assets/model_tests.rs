@@ -364,10 +364,7 @@ fn image_candidates_preserve_location_priority_case_and_asset_sources() {
     builder
         .add_material(wc3::model::Material {
             name: "image input".into(),
-            surface: wc3::model::MaterialSurface::try_from(wc3::model::profiles::mdlx::Material {
-                steps: vec![layer],
-            })
-            .unwrap(),
+            surface: wc3::model::profiles::mdlx::Material { steps: vec![layer] }.into(),
         })
         .unwrap();
     let model = {

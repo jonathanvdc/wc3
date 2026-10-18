@@ -42,7 +42,7 @@ fn concave_polygon_triangulation_preserves_area_and_winding() {
     let vertices = positions(&parts[0].mesh);
     assert_eq!(vertices.len(), 9);
     let mut area = 0.;
-    for triangle in vertices.chunks_exact(3) {
+    for triangle in vertices.as_chunks::<3>().0 {
         let [a, b, c] = [
             Vec3::from(triangle[0]),
             Vec3::from(triangle[1]),
@@ -96,7 +96,7 @@ fn strip_triangles_have_consistent_winding() {
     let id = source.add_primary_subset(0, 2);
     let parts = compile_geometry(&source, source.subset(id).unwrap(), 0).unwrap();
     assert_eq!(positions(&parts[0].mesh).len(), 6);
-    for triangle in positions(&parts[0].mesh).chunks_exact(3) {
+    for triangle in positions(&parts[0].mesh).as_chunks::<3>().0 {
         let a = Vec3::from(triangle[0]);
         let b = Vec3::from(triangle[1]);
         let c = Vec3::from(triangle[2]);

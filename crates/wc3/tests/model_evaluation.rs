@@ -303,7 +303,7 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
     let mut surface = MdlxMaterial::try_from(material.surface.clone()).unwrap();
     surface.steps[0].shader.inputs_mut().opacity = opacity;
     surface.steps[0].shader.inputs_mut().binding.image = selection;
-    material.surface = surface.try_into().unwrap();
+    material.surface = surface.into();
     model
         .edit(|draft| {
             draft.set_material(material_id, material)?;

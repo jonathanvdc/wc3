@@ -456,7 +456,6 @@ fn zero_and_offset_source_intervals_use_the_same_sampling_rule() {
             clip: Some(clip),
             clip_time: time(elapsed),
             shared_time: time(2.5),
-            ..Default::default()
         };
         for sample in [
             model.animation_sample(input).unwrap(),

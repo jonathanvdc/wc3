@@ -145,7 +145,7 @@ pub fn compose_atlas(atlas: Atlas, layers: &[AtlasLayer<'_>]) -> Result<RgbaImag
         }
     }
     let mut pixels = vec![0; len];
-    for pixel in pixels.chunks_exact_mut(4) {
+    for pixel in pixels.as_chunks_mut::<4>().0 {
         pixel.copy_from_slice(&atlas.clear);
     }
     for layer in layers {
