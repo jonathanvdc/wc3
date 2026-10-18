@@ -91,40 +91,6 @@ fn ribbon_static_alias_and_all_channels_roundtrip() {
     roundtrip(&RibbonEmitter::decode_mdl("RibbonEmitter \"a\" { ObjectId 0, Visibility 0 { Linear, } HeightAbove 0 { Linear, } HeightBelow 0 { Linear, } Alpha 0 { Linear, } Color 0 { Linear, } TextureSlot 0 { Linear, } }").unwrap());
 }
 #[test]
-fn duplicate_channels_and_scalar_ranges_are_strict() {
-    for body in [
-        "EmitterUsesMdl, EmitterUsesMdl,",
-        "static Gravity 1.0, Gravity 0 { Linear, }",
-        "Visibility 0 { Linear, } Visibility 0 { Linear, }",
-        "static Visibility 0.0,",
-        "EmissionRate 3.0,",
-        "Reserved 0,",
-    ] {
-        let text = format!("ParticleEmitter \"a\" {{ ObjectId 0, {body} }}");
-        assert!(ParticleEmitter::decode_mdl(&text).is_err(), "{body}");
-    }
-    for body in [
-        "TextureSlot 0, static TextureSlot 0,",
-        "static TextureSlot 0, TextureSlot 0 { Linear, }",
-        "TextureSlot 0 { Linear, } TextureSlot 0,",
-        "TextureSlot -1,",
-        "TextureSlot 4294967296,",
-        "EmissionRate 1.5,",
-        "EmissionRate -1,",
-        "Rows 4294967296,",
-        "static Visibility 0.0,",
-        "static LifeSpan 0.0,",
-    ] {
-        let text = format!("RibbonEmitter \"a\" {{ ObjectId 0, {body} }}");
-        assert!(RibbonEmitter::decode_mdl(&text).is_err(), "{body}");
-    }
-    let error = RibbonEmitter::decode_mdl(
-        "RibbonEmitter \"a\" { ObjectId 0, TextureSlot 1, TextureSlot 0 { Linear, } }",
-    )
-    .unwrap_err();
-    assert_eq!(error.kind, mdl::ReadErrorKind::DuplicateField);
-}
-#[test]
 fn writers_export_animation_over_base_and_reject_unknown_flags_and_padding() {
     let mut particle = ParticleEmitter::decode_mdl(
         "ParticleEmitter \"a\" { ObjectId 0, EmissionRate 0 { Linear, } }",

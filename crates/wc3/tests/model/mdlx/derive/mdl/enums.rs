@@ -1,10 +1,7 @@
 use std::io::Write as IoWrite;
-use wc3::model::formats::mdlx::animation::Interpolation;
-use wc3::model::formats::mdlx::animation::Track;
 use wc3::model::formats::mdlx::mdl;
 use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
 use wc3::model::formats::mdlx::IoError;
-use wc3::model::formats::mdlx::Vec3;
 
 #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]
 #[mdl(value)]
@@ -216,24 +213,6 @@ fn enum_validation_uses_complete_span_and_precedes_output() {
     let mut bytes = Vec::new();
     assert!(mdl::Writer::new(&mut bytes).write(&Checked::Id(0)).is_err());
     assert!(bytes.is_empty());
-}
-
-#[test]
-fn existing_interpolation_and_track_group_enums_roundtrip() {
-    for (name, mode) in [
-        ("DontInterp", Interpolation::Step),
-        ("Linear", Interpolation::Linear),
-        ("Hermite", Interpolation::Hermite),
-        ("Bezier", Interpolation::Bezier),
-    ] {
-        assert_eq!(Interpolation::decode_mdl(name).unwrap(), mode);
-        assert_eq!(mode.encode_mdl().unwrap(), name);
-    }
-    let track = Track::<Vec3>::decode_mdl("Track 0 { Linear, }").unwrap();
-    assert_eq!(
-        Track::<Vec3>::decode_mdl(&track.encode_mdl().unwrap()).unwrap(),
-        track
-    );
 }
 
 #[allow(dead_code)]

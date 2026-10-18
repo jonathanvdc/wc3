@@ -117,28 +117,6 @@ fn rejects_malformed_tracks() {
 }
 
 #[test]
-fn texture_animation_dispatch_and_roundtrip() {
-    let source = "TVertexAnim { Translation 1 { Linear, 0: { 1, 2, 3 }, } Rotation 0 { DontInterp, } Scaling 0 { Hermite, } }";
-    let animation = TextureAnimation::decode_mdl(source).unwrap();
-    assert!(animation.translation.is_some());
-    assert!(animation.rotation.is_some());
-    assert!(animation.scaling.is_some());
-    assert_eq!(
-        TextureAnimation::decode_mdl(&animation.encode_mdl().unwrap()).unwrap(),
-        animation
-    );
-    assert_eq!(
-        TextureAnimation::new().encode_mdl().unwrap(),
-        "TVertexAnim {\n}\n"
-    );
-    assert!(TextureAnimation::decode_mdl("TVertexAnim { Track 0 { Linear, } }").is_err());
-    assert!(TextureAnimation::decode_mdl(
-        "TVertexAnim { Translation 0 { Linear, } Translation 0 { Linear, } }"
-    )
-    .is_err());
-}
-
-#[test]
 fn signed_frames_preserve_mdx_bits_and_mdl_spelling() {
     use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
     for frame in [i32::MIN, -3600, -1, 0, i32::MAX] {

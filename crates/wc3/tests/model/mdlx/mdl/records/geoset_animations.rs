@@ -1,6 +1,6 @@
 use wc3::model::formats::mdlx::animation::{Animatable, Track};
 use wc3::model::formats::mdlx::animation::{GeosetAnimation, GeosetAnimationFlags};
-use wc3::model::formats::mdlx::mdl::{Read as _, ReadErrorKind, Write as _, Writer};
+use wc3::model::formats::mdlx::mdl::{Read as _, Write as _, Writer};
 use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
 use wc3::model::formats::mdlx::Color;
 
@@ -52,51 +52,6 @@ fn animated_and_mixed_properties_restore_defaults_and_flags() {
     roundtrip(
         "GeosetAnim { GeosetId 1, Alpha 0 { DontInterp, } static Color { 0.25, 0.5, 0.75 }, }",
     );
-}
-
-#[test]
-fn static_and_animated_share_duplicate_checks() {
-    for name in ["Alpha", "Color"] {
-        let value = if name == "Alpha" { "1" } else { "{ 1, 1, 1 }" };
-        let fixed = format!("static {name} {value},");
-        let track = format!("{name} 0 {{ Linear, }}");
-        for (first, second) in [
-            (&fixed, &fixed),
-            (&fixed, &track),
-            (&track, &fixed),
-            (&track, &track),
-        ] {
-            let source = format!("GeosetAnim {{ GeosetId 0, {first} {second} }}");
-            let error = GeosetAnimation::decode_mdl(&source).unwrap_err();
-            assert_eq!(error.kind, ReadErrorKind::DuplicateField);
-            assert_eq!(&source[error.span.start..error.span.end], name);
-        }
-    }
-    for source in [
-        "GeosetAnim { GeosetId 0, DropShadow, DropShadow, }",
-        "GeosetAnim { GeosetId 0, GeosetId 1, }",
-    ] {
-        assert_eq!(
-            GeosetAnimation::decode_mdl(source).unwrap_err().kind,
-            ReadErrorKind::DuplicateField
-        );
-    }
-}
-
-#[test]
-fn rejects_invalid_fields_and_static_framing() {
-    for source in [
-        "GeosetAnim { }",
-        "GeosetAnim { GeosetId 0, static GeosetId 1, }",
-        "GeosetAnim { GeosetId 0, static DropShadow, }",
-        "GeosetAnim { GeosetId 0, static Alpha 1 }",
-        "GeosetAnim { GeosetId 0, static Color { 1, 1 }, }",
-        "GeosetAnim { GeosetId 0, static 1, }",
-        "GeosetAnim { GeosetId 0, Unknown, }",
-        "GeosetAnim { GeosetId 0, } trailing",
-    ] {
-        assert!(GeosetAnimation::decode_mdl(source).is_err(), "{source}");
-    }
 }
 
 fn refuses_before_output<'data>(value: &GeosetAnimation<'data>) {

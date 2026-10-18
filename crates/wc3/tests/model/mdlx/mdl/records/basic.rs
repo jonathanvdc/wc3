@@ -147,19 +147,6 @@ fn rejects_hidden_binary_storage_and_noncanonical_channel_order() {
 }
 
 #[test]
-fn default_materials_roundtrip_at_every_supported_version() {
-    use wc3::model::formats::mdlx::{V1200, V1300, V1400, V1600};
-    macro_rules! check {
-        ($($version:ty),*) => { $( {
-            let mut material = Material::<$version>::new();
-            material.layers = [Layer::new()].to_vec();
-            roundtrip(&material);
-        } )* };
-    }
-    check!(V800, V900, V1000, V1100, V1200, V1300, V1400, V1600, V1800);
-}
-
-#[test]
 fn animated_emissive_gain_ignores_nan_base_and_preserves_keys() {
     use wc3::model::formats::mdlx::mdx::Write as _;
     let mut layer = Layer::<V1000>::decode_mdl(

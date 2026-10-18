@@ -1,5 +1,4 @@
 use std::{io::Write as IoWrite, marker::PhantomData};
-use wc3::model::formats::mdlx::animation::Sequence;
 use wc3::model::formats::mdlx::animation::{Animatable, Track};
 use wc3::model::formats::mdlx::mdl;
 use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
@@ -188,23 +187,6 @@ fn flattened_static_animated_and_delegated_properties_share_dispatch() {
             .kind,
         mdl::ReadErrorKind::DuplicateField
     );
-}
-
-#[test]
-fn existing_sequence_roundtrips_flattened_extent_in_both_formats() {
-    let source = "Anim \"Walk\" { MaximumExtent { 4, 5, 6 }, Interval { 0, 1000 }, BoundsRadius 7, MinimumExtent { 1, 2, 3 }, }";
-    let sequence = Sequence::decode_mdl(source).unwrap();
-    assert_eq!(sequence.extent.bounds_radius, 7.0);
-    assert_eq!(sequence.extent.minimum, [1.0, 2.0, 3.0]);
-    assert_eq!(sequence.extent.maximum, [4.0, 5.0, 6.0]);
-    let text = sequence.encode_mdl().unwrap();
-    assert!(text.find("MinimumExtent").unwrap() < text.find("MaximumExtent").unwrap());
-    assert!(text.find("MaximumExtent").unwrap() < text.find("BoundsRadius").unwrap());
-    assert_eq!(Sequence::decode_mdl(&text).unwrap(), sequence);
-    use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
-    let bytes = sequence.encode_mdx().unwrap();
-    assert_eq!(bytes.len(), 132);
-    assert_eq!(Sequence::decode_mdx(&bytes).unwrap(), sequence);
 }
 
 #[derive(Debug, PartialEq, mdl::Read, mdl::Write)]

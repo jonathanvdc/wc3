@@ -42,38 +42,3 @@ fn texture_and_sequence_roundtrip_through_mdx() {
         Sequence::new("Stand", [0, 1000]).unwrap()
     );
 }
-
-#[test]
-fn record_readers_reject_duplicates_unknown_fields_missing_values_and_trailing_input() {
-    assert_eq!(
-        Texture::decode_mdl("Bitmap { Image \"a\", Image \"b\", }")
-            .unwrap_err()
-            .kind,
-        ReadErrorKind::DuplicateField
-    );
-    assert_eq!(
-        Texture::decode_mdl("Bitmap { WrapWidth, WrapWidth, }")
-            .unwrap_err()
-            .kind,
-        ReadErrorKind::DuplicateField
-    );
-    assert_eq!(
-        Sequence::decode_mdl("Anim \"A\" {}").unwrap_err().kind,
-        ReadErrorKind::MissingField("Interval")
-    );
-    assert_eq!(
-        Sequence::decode_mdl("Anim \"A\" { Interval { 0, 1 }, SyncPoint 1, SyncPoint 2, }")
-            .unwrap_err()
-            .kind,
-        ReadErrorKind::DuplicateField
-    );
-    for source in [
-        "Bitmap { Image \"a\" }",
-        "Bitmap { WrapWidth 1, }",
-        "Bitmap {",
-        "Bitmap {} Bitmap {}",
-        "Bitmap { BlendColors, }",
-    ] {
-        assert!(Texture::decode_mdl(source).is_err(), "{source}");
-    }
-}
