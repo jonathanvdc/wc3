@@ -6,7 +6,7 @@ use crate::model::formats::mdlx::{self as native, Chunk, Dialect, ModelChunk};
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
 use crate::model::{
-    AddressMode, Billboard, Bounds, Channel, Clip, ImageResource, Inheritance, Material,
+    AddressMode, Animation, Billboard, Bounds, Channel, Clip, ImageResource, Inheritance, Material,
     ModelBuilder, Quaternion, Sampler, SharedClock, Texture, Time, TimeSource, Track,
 };
 use crate::model::{MdlxImageResource, Model, TextureControls};
@@ -217,7 +217,7 @@ where
             Time::seconds(f64::from(sequence.interval[1] - sequence.interval[0]) / 1000.)?;
         let mut clip = Clip::named(S::text(sequence.name.text()))
             .with_duration(duration)
-            .with_timeline_origin(Time::seconds(f64::from(sequence.interval[0]) / 1000.)?);
+            .with_source_start(Time::seconds(f64::from(sequence.interval[0]) / 1000.)?);
         if sequence.flags.non_looping() {
             clip = clip.once();
         }
@@ -250,17 +250,13 @@ where
                             })
                         })
                         .transpose()?
-                        .map_or(TimeSource::Timeline, TimeSource::Shared);
+                        .map_or(TimeSource::Animation, TimeSource::Shared);
                     let channel = Channel::$variant(Track {
                         target: $property,
                         curve: curves::read(track, 0., $map)?,
                         clock,
                     });
-                    if matches!(clock, TimeSource::Shared(_)) {
-                        builder.add_global_channel(channel)?;
-                    } else {
-                        builder.add_global_channel(channel)?;
-                    }
+                    builder.add_global_channel(channel)?;
                 }
             };
         }
@@ -358,6 +354,43 @@ where
         let mut node = builder.model().node(id).expect("imported node").clone();
         node.controls = controls;
         builder.set_node(id, node)?;
+    }
+    // Native ordinary tracks share one authored timeline. Only independent clocks
+    // remain model-selected; clips explicitly select the ordinary animation.
+    let globals = builder.model().global_animations().to_vec();
+    builder.set_global_animations(Vec::new());
+    for id in globals {
+        let source = builder.remove_animation(id).expect("imported animation");
+        let mut ordinary = Animation::default();
+        let mut shared = Animation::default();
+        for channel in source.channels {
+            match channel.clock() {
+                TimeSource::Animation => ordinary.channels.push(channel),
+                TimeSource::Shared(_) => shared.channels.push(channel),
+            }
+        }
+        for (id, event) in source.events {
+            match event.clock {
+                TimeSource::Animation => {
+                    ordinary.events.insert(id, event);
+                }
+                TimeSource::Shared(_) => {
+                    shared.events.insert(id, event);
+                }
+            }
+        }
+        if !shared.channels.is_empty() || !shared.events.is_empty() {
+            let animation = builder.add_animation(shared);
+            builder.add_global_animation(animation)?;
+        }
+        if !ordinary.channels.is_empty() || !ordinary.events.is_empty() {
+            let animation = builder.add_animation(ordinary);
+            for &(clip, _) in &clips {
+                let mut selection = builder.model().clip(clip).expect("imported clip").clone();
+                selection.animations.push(animation);
+                builder.set_clip(clip, selection)?;
+            }
+        }
     }
     builder.set_metadata(native_profile.metadata);
     let asset = builder.finish()?;

@@ -340,7 +340,7 @@ fn absolute_timeline_does_not_require_a_playback_clip() {
             target: builder.model().node(node).unwrap().transform.translation,
             curve: Curve::from_samples([Time::default()], [[1., 2., 3.]], Interpolation::Step)
                 .unwrap(),
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
         }))
         .unwrap();
     let model = {
@@ -352,7 +352,7 @@ fn absolute_timeline_does_not_require_a_playback_clip() {
     assert_eq!(
         model
             .global_channels()
-            .filter(|v| v.clock() == TimeSource::Timeline)
+            .filter(|v| v.clock() == TimeSource::Animation)
             .count(),
         1
     );

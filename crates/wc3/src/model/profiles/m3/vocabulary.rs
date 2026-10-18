@@ -194,10 +194,10 @@ impl Profile for M3 {
 
             if model
                 .animation_channels(&controller.animations)
-                .any(|channel| channel.clock() != TimeSource::Timeline)
+                .any(|channel| channel.clock() != TimeSource::Animation)
                 || model
                     .animation_events(&controller.animations)
-                    .any(|event| event.clock != TimeSource::Timeline)
+                    .any(|event| event.clock != TimeSource::Animation)
             {
                 return Err(Error::new(
                     "m3.controller.clock",

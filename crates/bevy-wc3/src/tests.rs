@@ -351,7 +351,6 @@ fn asset_population_retains_existing_root_controls_and_source_identity() {
             transform,
             Playback {
                 clip_time: 0.42,
-                timeline_time: 1.25,
                 shared_time: 3.5,
                 speed: 0.37,
                 paused: true,
@@ -370,7 +369,6 @@ fn asset_population_retains_existing_root_controls_and_source_identity() {
     assert_eq!(*app.world().get::<Transform>(root).unwrap(), transform);
     let playback = app.world().get::<Playback>(root).unwrap();
     assert_eq!(playback.clip_time, 0.42);
-    assert_eq!(playback.timeline_time, 1.25);
     assert_eq!(playback.shared_time, 3.5);
     assert_eq!(playback.speed, 0.37);
     assert!(playback.paused);
@@ -562,7 +560,7 @@ fn animated_materials_are_isolated_between_playback_clocks() {
                         [ModelTime::seconds(0.)?, ModelTime::seconds(1.)?],
                         [1.0f32, 0.],
                     )?,
-                    clock: TimeSource::Timeline,
+                    clock: TimeSource::Animation,
                 }))
             })();
             builder.import_values(&slot_values)?;
@@ -573,11 +571,11 @@ fn animated_materials_are_isolated_between_playback_clocks() {
     app.world_mut()
         .get_mut::<Playback>(first)
         .unwrap()
-        .timeline_time = 0.25;
+        .clip_time = 0.25;
     app.world_mut()
         .get_mut::<Playback>(second)
         .unwrap()
-        .timeline_time = 0.75;
+        .clip_time = 0.75;
     app.update();
     let first_material = material_handle(&mut app, first, node);
     let second_material = material_handle(&mut app, second, node);
@@ -623,7 +621,6 @@ fn unchanged_static_instances_skip_sampling_but_external_alpha_still_updates_vis
             let mut playback = app.world_mut().get_mut::<Playback>(first).unwrap();
             playback.shared_time = time;
             playback.clip_time = time;
-            playback.timeline_time = time;
         }
         app.update();
     }
@@ -817,12 +814,12 @@ fn m3_authored_controller_selection_drives_live_and_baked_pose_with_explicit_emp
                             [ModelTime::seconds(1.)?, ModelTime::seconds(2.)?],
                             [[4., 0., 0.], [6., 0., 0.]],
                         )?,
-                        clock: TimeSource::Timeline,
+                        clock: TimeSource::Animation,
                     }),
                 )?;
                 let mut clip =
                     Clip::named("M3 selected programme").with_duration(ModelTime::seconds(1.)?);
-                clip.timeline_origin = Some(ModelTime::seconds(1.)?);
+                clip.source_start = ModelTime::seconds(1.)?;
                 clip.controls = Some(ClipControls::M3(SequenceControls {
                     blend_duration: ModelTime::seconds(0.3)?,
                     selection: Some(SemanticControllerSelection {

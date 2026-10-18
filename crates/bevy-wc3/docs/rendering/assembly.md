@@ -101,8 +101,8 @@ mapped joint. Extra chains, effects and nested rigid children remain available.
 No generic bone-name, joint-index or native checksum matching is inferred.
 
 Clip mappings use host seconds without stretching curves. Independently animated
-rigid components follow the host's pause state and playback rate. Controller-driven
-skinned parts require matching authored timeline origins. `PoseBaker` includes
+rigid components follow the host's pause state and playback rate. Skinned clip mappings
+require matching clip source starts. `PoseBaker` includes
 composed components and attachment visibility; explicit mounted playback snapshots
 can supply independent child clocks.
 

@@ -108,7 +108,7 @@ fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
                     ],
                 )
                 .unwrap(),
-                clock: TimeSource::Clip,
+                clock: TimeSource::Animation,
             }),
         )
         .unwrap();
@@ -298,11 +298,7 @@ fn mapped_attachment_anchor_retains_source_pivot_and_rest_space() {
     let sampled = pose
         .sample_feature_node(
             index,
-            &sample.at_times(
-                Time::seconds(0.).unwrap(),
-                Time::seconds(0.).unwrap(),
-                Time::seconds(0.).unwrap(),
-            ),
+            &sample.at_times(Time::seconds(0.).unwrap(), Time::seconds(0.).unwrap()),
             &mut Vec::new(),
         )
         .0;
@@ -447,7 +443,7 @@ fn mapped_controller_clips_activate_part_programmes_on_checked_host_timeline() {
     };
     host.edit(|builder| {
         let mut clip = builder.model().clip(host_clip).unwrap().clone();
-        clip.timeline_origin = Some(Time::seconds(1.)?);
+        clip.source_start = Time::seconds(1.)?;
         clip.controls = controls();
         builder.set_clip(host_clip, clip)
     })
@@ -468,7 +464,7 @@ fn mapped_controller_clips_activate_part_programmes_on_checked_host_timeline() {
                             [Time::seconds(1.)?, Time::seconds(2.)?],
                             [[0., 0., 0.], [2., 0., 0.]],
                         )?,
-                        clock: TimeSource::Timeline,
+                        clock: TimeSource::Animation,
                     }),
                 )?;
                 let mut controls = controls();
@@ -479,7 +475,7 @@ fn mapped_controller_clips_activate_part_programmes_on_checked_host_timeline() {
                     });
                 }
                 let mut clip = builder.model().clip(part_clip).unwrap().clone();
-                clip.timeline_origin = Some(Time::seconds(1.)?);
+                clip.source_start = Time::seconds(1.)?;
                 clip.controls = controls;
                 builder.set_clip(part_clip, clip)?;
                 Ok((controller, extra))

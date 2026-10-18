@@ -76,7 +76,7 @@ fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
                     Interpolation::Linear,
                 )
                 .unwrap(),
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
             }),
         )
         .unwrap();
@@ -247,7 +247,7 @@ fn event_blocks_select_occurrences_instead_of_command_features() {
                     controller,
                     Event {
                         feature: Some(command),
-                        clock: TimeSource::Timeline,
+                        clock: TimeSource::Animation,
                         time: Time::seconds(time).unwrap(),
                         name: "shared command".into(),
                         node: None,

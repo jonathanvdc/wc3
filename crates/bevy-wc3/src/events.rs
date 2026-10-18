@@ -90,26 +90,22 @@ pub(super) struct EventDefinition {
 struct ClipPolicy {
     duration: f64,
     looping: bool,
-    origin: Option<f64>,
+    origin: f64,
 }
 #[derive(Clone, Default)]
 struct ProgramEvents {
-    clip: Vec<usize>,
-    timeline: Vec<usize>,
+    animation: Vec<usize>,
     shared: HashMap<ClockId, Vec<usize>>,
 }
 impl ProgramEvents {
     fn groups(&self) -> impl Iterator<Item = (TimeSource, &[usize])> {
-        [
-            (TimeSource::Clip, self.clip.as_slice()),
-            (TimeSource::Timeline, self.timeline.as_slice()),
-        ]
-        .into_iter()
-        .chain(
-            self.shared
-                .iter()
-                .map(|(id, indices)| (TimeSource::Shared(*id), indices.as_slice())),
-        )
+        [(TimeSource::Animation, self.animation.as_slice())]
+            .into_iter()
+            .chain(
+                self.shared
+                    .iter()
+                    .map(|(id, indices)| (TimeSource::Shared(*id), indices.as_slice())),
+            )
     }
 }
 
@@ -126,13 +122,12 @@ impl RuntimeEvents {
         for (index, definition) in self.definitions.iter().enumerate() {
             let program = self.programs.entry(definition.program).or_default();
             match definition.clock {
-                TimeSource::Clip => program.clip.push(index),
-                TimeSource::Timeline => program.timeline.push(index),
+                TimeSource::Animation => program.animation.push(index),
                 TimeSource::Shared(id) => program.shared.entry(id).or_default().push(index),
             }
         }
         for program in self.programs.values_mut() {
-            for indices in [&mut program.clip, &mut program.timeline]
+            for indices in [&mut program.animation]
                 .into_iter()
                 .chain(program.shared.values_mut())
             {
@@ -219,7 +214,7 @@ impl RuntimeEvents {
                 .clips()
                 .iter()
                 .map(|(id, value)| {
-                    let origin = value.timeline_origin.map(|origin| origin.as_seconds());
+                    let origin = value.source_start.as_seconds();
                     (
                         id,
                         ClipPolicy {
@@ -270,7 +265,6 @@ impl RuntimeEvents {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(super) struct EventClocks {
     pub clip: f64,
-    pub timeline: f64,
     pub shared: f64,
 }
 #[derive(Clone, Copy, Debug)]
@@ -292,7 +286,6 @@ impl EventClocks {
     fn interpolate(self, next: Self, fraction: f64) -> Self {
         Self {
             clip: self.clip + (next.clip - self.clip) * fraction,
-            timeline: self.timeline + (next.timeline - self.timeline) * fraction,
             shared: self.shared + (next.shared - self.shared) * fraction,
         }
     }
@@ -410,7 +403,7 @@ impl EventState {
             self.generated = 0;
             self.scanned = 0;
         }
-        if ![current.clip, current.timeline, current.shared]
+        if ![current.clip, current.shared]
             .iter()
             .all(|value| value.is_finite())
         {
@@ -431,10 +424,7 @@ impl EventState {
         }
         let previous = self.previous.unwrap();
         if paused {
-            if current.clip != previous.clip
-                || current.timeline != previous.timeline
-                || current.shared != previous.shared
-            {
+            if current.clip != previous.clip || current.shared != previous.shared {
                 self.include_origin = false;
             }
             self.previous = Some(current);
@@ -465,15 +455,9 @@ impl EventState {
         for program in programs.filter_map(|program| events.programs.get(&program)) {
             for (clock, indices) in program.groups() {
                 let (from, to, minimum, maximum) = match clock {
-                    TimeSource::Clip => {
-                        let Some(policy) = policy else {
-                            continue;
-                        };
-                        (previous.clip, current.clip, 0., policy.duration)
-                    }
-                    TimeSource::Timeline => {
-                        if let Some(policy) = policy.filter(|value| value.origin.is_some()) {
-                            let origin = policy.origin.unwrap();
+                    TimeSource::Animation => {
+                        if let Some(policy) = policy {
+                            let origin = policy.origin;
                             (
                                 previous.clip,
                                 current.clip,
@@ -481,12 +465,7 @@ impl EventState {
                                 origin + policy.duration,
                             )
                         } else {
-                            (
-                                previous.timeline,
-                                current.timeline,
-                                previous.timeline,
-                                current.timeline,
-                            )
+                            (previous.clip, current.clip, previous.clip, current.clip)
                         }
                     }
                     TimeSource::Shared(id) => {
@@ -510,21 +489,9 @@ impl EventState {
                     }
                     let definition = &events.definitions[index];
                     let (from, to, key, period) = match definition.clock {
-                        TimeSource::Clip => {
-                            let Some(policy) = policy else { continue };
-                            if definition.time > policy.duration {
-                                continue;
-                            }
-                            (
-                                previous.clip,
-                                current.clip,
-                                definition.time,
-                                (policy.looping && policy.duration > 0.).then_some(policy.duration),
-                            )
-                        }
-                        TimeSource::Timeline => {
-                            if let Some(policy) = policy.filter(|value| value.origin.is_some()) {
-                                let origin = policy.origin.unwrap();
+                        TimeSource::Animation => {
+                            if let Some(policy) = policy {
+                                let origin = policy.origin;
                                 if definition.time < origin
                                     || definition.time > origin + policy.duration
                                 {
@@ -538,7 +505,7 @@ impl EventState {
                                         .then_some(policy.duration),
                                 )
                             } else {
-                                (previous.timeline, current.timeline, definition.time, None)
+                                (previous.clip, current.clip, definition.time, None)
                             }
                         }
                         TimeSource::Shared(id) => {
@@ -628,29 +595,8 @@ impl EventState {
     }
     /// Converts raw occurrence clocks to sample times. The event's own clock is
     /// overridden separately with RetimedAnimation::at_occurrence.
-    pub fn sample_times(
-        events: &RuntimeEvents,
-        selection: AnimationSample<'_>,
-        occurrence: &EventOccurrence,
-    ) -> (f64, f64, f64) {
-        let clocks = occurrence.clocks;
-        let timeline = selection
-            .clip
-            .and_then(|id| events.clips.get(&id))
-            .and_then(|policy| {
-                policy.origin.map(|origin| {
-                    origin
-                        + if policy.duration <= 0. {
-                            0.
-                        } else if policy.looping {
-                            clocks.clip.rem_euclid(policy.duration)
-                        } else {
-                            clocks.clip.clamp(0., policy.duration)
-                        }
-                })
-            })
-            .unwrap_or(clocks.timeline);
-        (clocks.clip, timeline, clocks.shared)
+    pub fn sample_times(occurrence: &EventOccurrence) -> (f64, f64) {
+        (occurrence.clocks.clip, occurrence.clocks.shared)
     }
 }
 

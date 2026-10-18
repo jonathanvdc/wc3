@@ -20,7 +20,7 @@ pub(super) struct EvaluationState {
     pub(super) initialized: bool,
     pub(super) clip: Option<ClipId>,
     pub(super) controllers: ControllerSelection,
-    pub(super) clocks: [f64; 3],
+    pub(super) clocks: [f64; 2],
     pub(super) lod: u32,
     pub(super) driving_camera: Option<Entity>,
     pub(super) has_settings: bool,
@@ -34,13 +34,7 @@ impl EvaluationState {
         !self.initialized
             || self.clip != playback.clip
             || self.controllers != playback.controllers
-            || (animated
-                && self.clocks
-                    != [
-                        playback.clip_time,
-                        playback.timeline_time,
-                        playback.shared_time,
-                    ])
+            || (animated && self.clocks != [playback.clip_time, playback.shared_time])
     }
     pub(super) fn remember(
         &mut self,
@@ -51,11 +45,7 @@ impl EvaluationState {
         self.initialized = true;
         self.clip = playback.clip;
         self.controllers.clone_from(&playback.controllers);
-        self.clocks = [
-            playback.clip_time,
-            playback.timeline_time,
-            playback.shared_time,
-        ];
+        self.clocks = [playback.clip_time, playback.shared_time];
         self.lod = playback.lod;
         self.driving_camera = playback.driving_camera;
         self.has_settings = has_settings;

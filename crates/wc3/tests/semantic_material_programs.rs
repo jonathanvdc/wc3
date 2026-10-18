@@ -194,7 +194,7 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
         draft
             .add_global_channel(Channel::Scalar(Track {
                 target,
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
                 curve: Curve::linear(
                     [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
                     values,
@@ -210,7 +210,7 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
     .unwrap();
     let sample = model
         .animation_sample(AnimationSample {
-            timeline_time: Time::seconds(0.5).unwrap(),
+            clip_time: Time::seconds(0.5).unwrap(),
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
@@ -572,7 +572,7 @@ fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassificati
             draft
                 .add_global_channel(Channel::Scalar(Track {
                     target,
-                    clock: TimeSource::Timeline,
+                    clock: TimeSource::Animation,
                     curve: Curve::linear(
                         [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
                         [0., 1.],
@@ -588,7 +588,7 @@ fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassificati
         .unwrap();
         let sample = model
             .animation_sample(AnimationSample {
-                timeline_time: Time::seconds(0.5).unwrap(),
+                clip_time: Time::seconds(0.5).unwrap(),
                 ..SlotConstruct::construct(&mut slot_values)
             })
             .unwrap();

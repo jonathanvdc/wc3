@@ -216,7 +216,7 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
                 for target in targets {
                     draft.add_global_channel(Channel::OptionalTexture(Track {
                         target,
-                        clock: TimeSource::Timeline,
+                        clock: TimeSource::Animation,
                         curve: Curve::step([time(0.), time(1.)], [Some(first), Some(second)])?,
                     }))?;
                 }
@@ -254,7 +254,7 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
     let model = models.values().next().unwrap();
     let sample = model
         .animation_sample(AnimationSample {
-            timeline_time: time(1.),
+            clip_time: time(1.),
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();

@@ -487,22 +487,18 @@ impl SquirtSchedule {
         let track = frame.sample.track(amount);
         let clock = track
             .as_ref()
-            .map_or(TimeSource::Clip, |track| track.track.clock);
-        let origin = if matches!(clock, TimeSource::Timeline) {
+            .map_or(TimeSource::Animation, |track| track.track.clock);
+        let origin = if matches!(clock, TimeSource::Animation) {
             frame
                 .sample
-                .timeline_interval()
+                .source_interval()
                 .map_or(0., |(start, _)| start.as_seconds())
         } else {
             0.
         };
         let raw = match clock {
-            TimeSource::Clip => frame.selection.clip_time.as_seconds(),
+            TimeSource::Animation => origin + frame.selection.clip_time.as_seconds(),
             TimeSource::Shared(_) => frame.selection.shared_time.as_seconds(),
-            TimeSource::Timeline if frame.sample.timeline_interval().is_some() => {
-                origin + frame.selection.clip_time.as_seconds()
-            }
-            TimeSource::Timeline => frame.selection.timeline_time.as_seconds(),
         };
         let previous = raw - delta;
         let period =
@@ -533,10 +529,10 @@ impl SquirtSchedule {
                 if times.get(index + 1) == Some(key) {
                     continue;
                 }
-                if matches!(clock, TimeSource::Timeline)
+                if matches!(clock, TimeSource::Animation)
                     && frame
                         .sample
-                        .timeline_interval()
+                        .source_interval()
                         .is_some_and(|(start, end)| key < start || key > end)
                 {
                     continue;

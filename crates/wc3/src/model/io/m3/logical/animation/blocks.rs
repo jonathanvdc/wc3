@@ -102,7 +102,7 @@ impl Blocks {
         controls: Option<&surface::BlockControls>,
         context: &mut Context,
     ) -> Result<Option<u32>, Error> {
-        if channel.clock() != TimeSource::Timeline {
+        if channel.clock() != TimeSource::Animation {
             context.unsupported(
                 "m3.animation.clock",
                 "M3 sequence controllers require absolute timeline clocks",

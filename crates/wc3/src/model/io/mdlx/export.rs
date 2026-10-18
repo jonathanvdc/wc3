@@ -39,10 +39,9 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     }
     result.set_global_sequences(&periods);
     let mut sequences = Vec::new();
-    let mut starts = BTreeMap::new();
-    for (id, clip) in model.clips() {
+    for (_, clip) in model.clips() {
         let metadata = &clip.controls;
-        let start = clip.timeline_origin.unwrap_or_default().as_seconds();
+        let start = clip.source_start.as_seconds();
         let first = unsigned_frame(start, &mut context, "clip.start")?;
         let last = unsigned_frame(
             start + clip.duration().as_seconds(),
@@ -64,7 +63,6 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
                 bounds_radius: metadata.radius,
             };
         }
-        starts.insert(id, start);
         sequences.push(sequence);
     }
     result.set_sequences(sequences);
@@ -137,7 +135,6 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     result.set_textures(textures);
     let mut encoder = Encoder {
         model,
-        starts,
         globals,
         context: &mut context,
         used: Default::default(),

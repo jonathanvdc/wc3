@@ -137,7 +137,7 @@ mod tests {
             let track: SemanticTrack<'_, Quaternion> = SemanticTrack {
                 target: builder.add_value(Quaternion::IDENTITY),
                 curve,
-                clock: TimeSource::Clip,
+                clock: TimeSource::Animation,
             };
             let whole = crop(
                 &track,

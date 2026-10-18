@@ -43,7 +43,6 @@ fn playback(prepared: &PreparedModel, local: f64, shared: f64) -> Playback {
     let mut value = Playback::default();
     value.play(prepared.clips()[0].0);
     value.clip_time = local;
-    value.timeline_time = local;
     value.shared_time = shared;
     value
 }
@@ -143,12 +142,14 @@ fn mirrored_and_collapsed_scales_keep_finite_geometry() {
         let mut native = source();
         native.bones_mut().next().unwrap().node.scaling = Some(Track::constant(scale));
         let (prepared, meshes, binds) = prepare(&native, None);
+        let state = playback(&prepared, 0., 0.);
         let baked = PoseBaker::default()
             .bake(
                 &prepared,
                 &meshes,
                 &binds,
                 PoseOptions {
+                    playback: Some(&state),
                     space: BakeSpace::Authored,
                     ..default()
                 },

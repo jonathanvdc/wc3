@@ -192,7 +192,7 @@ impl<'a, P: Profile> Model<'a, P> {
                 .map(|(id, value)| {
                     let Clip {
                         animations,
-                        timeline_origin,
+                        source_start,
                         name,
                         duration,
                         looping,
@@ -203,7 +203,7 @@ impl<'a, P: Profile> Model<'a, P> {
                         id,
                         Clip {
                             animations,
-                            timeline_origin,
+                            source_start,
                             name,
                             duration,
                             looping,

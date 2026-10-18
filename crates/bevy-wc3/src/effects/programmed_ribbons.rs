@@ -276,11 +276,9 @@ impl RuntimeProgrammedRibbons {
         materials: &mut Assets<ModelMaterial>,
         statistics: &mut Query<&mut RibbonEmitter>,
     ) {
-        let sample = frame.sample.at_times(
-            frame.selection.clip_time,
-            frame.selection.timeline_time,
-            frame.selection.shared_time,
-        );
+        let sample = frame
+            .sample
+            .at_times(frame.selection.clip_time, frame.selection.shared_time);
         for (definition, state) in self.definitions.iter().zip(&mut states.states) {
             for (pass, state) in definition.passes.iter().zip(&state.passes) {
                 if pass.animation.is_animated() {

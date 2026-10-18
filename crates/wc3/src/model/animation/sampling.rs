@@ -10,8 +10,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 /// TimeSource values and explicitly selected programmes for one evaluation.
 ///
-/// The selected clip maps local time into its authored timeline interval when
-/// an origin is declared; otherwise timeline time is supplied explicitly. The
+/// The selected clip maps local time into its authored source interval. Without
+/// a clip, ordinary tracks use `clip_time` directly without interval bounds. The
 /// caller chooses controllers according to its gameplay policy. Shared clocks wrap
 /// `shared_time` by their authored periods; frozen clocks retain time zero.
 /// This operation does not dispatch events.
@@ -21,8 +21,6 @@ pub struct AnimationSample<'a> {
     pub clip: Option<ClipId>,
     /// Seconds from the beginning of the selected clip; wrapped or clamped.
     pub clip_time: Time,
-    /// Absolute authoring timeline time.
-    pub timeline_time: Time,
     /// Time driving all independent repeating clocks.
     pub shared_time: Time,
     /// Explicitly enabled controllers, in tie-breaking order.
@@ -38,10 +36,9 @@ pub struct AnimationSample<'a> {
 pub struct SampledAnimation<'view, 'data> {
     values: &'view PropertyValues,
     clocks: Cow<'view, BTreeMap<ClockId, Time>>,
-    clip_time: Time,
     clip_policy: Option<(Time, bool)>,
-    timeline_time: Time,
-    timeline_interval: Option<(Time, Time)>,
+    animation_time: Time,
+    source_interval: Option<(Time, Time)>,
     shared_time: Time,
     channels: ChannelSelection<'view, 'data>,
 }
@@ -117,21 +114,20 @@ impl<'data, P: Profile> Model<'data, P> {
         sample: AnimationSample<'_>,
     ) -> Result<SampledAnimation<'view, 'data>, Error> {
         let mut channels: Vec<_> = self.global_channels().collect();
-        let (clip_time, clip_policy, timeline_time, timeline_interval) =
-            if let Some(id) = sample.clip {
-                let clip = self
-                    .clip(id)
-                    .ok_or_else(|| Error::new("animation.sample.clip", "unknown clip identity"))?;
-                channels.extend(self.clip_channels(id));
-                resolve_times(
-                    sample,
-                    clip.duration(),
-                    clip.is_looping(),
-                    clip.timeline_origin,
-                )?
-            } else {
-                (sample.clip_time, None, sample.timeline_time, None)
-            };
+        let (clip_policy, animation_time, source_interval) = if let Some(id) = sample.clip {
+            let clip = self
+                .clip(id)
+                .ok_or_else(|| Error::new("animation.sample.clip", "unknown clip identity"))?;
+            channels.extend(self.clip_channels(id));
+            resolve_times(
+                sample,
+                clip.duration(),
+                clip.is_looping(),
+                clip.source_start,
+            )?
+        } else {
+            (None, sample.clip_time, None)
+        };
         let mut controllers = Vec::with_capacity(sample.controllers.len());
         for (index, id) in sample.controllers.iter().enumerate() {
             if sample.controllers[..index].contains(id) {
@@ -159,10 +155,9 @@ impl<'data, P: Profile> Model<'data, P> {
                     .map(|(id, clock)| (id, clock.period()))
                     .collect(),
             ),
-            clip_time,
             clip_policy,
-            timeline_time,
-            timeline_interval,
+            animation_time,
+            source_interval,
             shared_time: sample.shared_time,
             channels: ChannelSelection::Flat(channels),
         })
@@ -185,12 +180,12 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
         self.values
     }
     /// Resolved inclusive authoring interval of the selected clip.
-    pub fn timeline_interval(&self) -> Option<(Time, Time)> {
-        self.timeline_interval
+    pub fn source_interval(&self) -> Option<(Time, Time)> {
+        self.source_interval
     }
     /// Resolved authoring time after applying the selected clip's mapping.
-    pub fn timeline_time(&self) -> Time {
-        self.timeline_time
+    pub fn animation_time(&self) -> Time {
+        self.animation_time
     }
     /// Absolute shared-clock input before individual periods wrap it.
     /// Useful for continuous procedural controls independent of clip looping.
@@ -241,8 +236,7 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
                 time
             } else {
                 match track.clock {
-                    TimeSource::Clip => times.clip,
-                    TimeSource::Timeline => times.timeline,
+                    TimeSource::Animation => times.animation,
                     TimeSource::Shared(id) => {
                         let period = self.clocks.get(&id)?.as_seconds();
                         if period > 0. {
@@ -253,7 +247,7 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
                     }
                 }
             };
-        if let (TimeSource::Timeline, Some((start, end))) = (track.clock, self.timeline_interval) {
+        if let (TimeSource::Animation, Some((start, end))) = (track.clock, self.source_interval) {
             track.curve.sample_in(time, start..=end)
         } else {
             track.curve.sample(time)
@@ -262,8 +256,7 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
 
     fn times(&self) -> SampleTimes {
         SampleTimes {
-            clip: self.clip_time,
-            timeline: self.timeline_time,
+            animation: self.animation_time,
             shared: self.shared_time,
             occurrence: None,
         }
@@ -271,22 +264,20 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
     /// Borrows this programme selection at different clock values, without allocating.
     ///
     /// Local clip time wraps or clamps using the selected clip's own policy,
-    /// including an alias's duration. Timeline time remains an explicitly supplied
-    /// absolute authoring time; the existing inclusive key interval is retained.
+    /// including an alias's duration. Animation time is derived from the source
+    /// start, and the existing inclusive key interval is retained.
     /// Shared clocks independently wrap the supplied shared time. No programmes
     /// are selected again and no events are dispatched.
     pub fn at_times(
         &self,
         clip_time: Time,
-        timeline_time: Time,
         shared_time: Time,
     ) -> RetimedAnimation<'_, 'view, 'data> {
         let clip = normalize_clip(clip_time, self.clip_policy);
         RetimedAnimation {
             selection: self,
             times: SampleTimes {
-                clip,
-                timeline: self.timeline_interval.map_or(timeline_time, |(origin, _)| {
+                animation: self.source_interval.map_or(clip, |(origin, _)| {
                     Time::seconds(origin.as_seconds() + clip.as_seconds())
                         .expect("validated mapping")
                 }),
@@ -296,7 +287,7 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
         }
     }
     /// Borrows the effective typed source track and its clock metadata.
-    /// Empty curves and curves without keys in the selected timeline interval
+    /// Empty curves and curves without keys in the selected source interval
     /// fall through to lower-priority tracks, exactly as value sampling does.
     pub fn track<T: ChannelValue>(
         &self,
@@ -313,23 +304,15 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
             self.sample_channel(channel, property, times)?;
             let track = T::channel_track(channel)?;
             let (time, period, origin, interval) = match track.clock {
-                TimeSource::Clip => (
-                    times.clip,
+                TimeSource::Animation => (
+                    times.animation,
                     self.clip_policy.and_then(|(duration, looping)| {
-                        (looping && duration.as_seconds() > 0.).then_some(duration)
-                    }),
-                    Time::default(),
-                    None,
-                ),
-                TimeSource::Timeline => (
-                    times.timeline,
-                    self.clip_policy.and_then(|(duration, looping)| {
-                        (looping && duration.as_seconds() > 0. && self.timeline_interval.is_some())
+                        (looping && duration.as_seconds() > 0. && self.source_interval.is_some())
                             .then_some(duration)
                     }),
-                    self.timeline_interval
+                    self.source_interval
                         .map_or(Time::default(), |(start, _)| start),
-                    self.timeline_interval,
+                    self.source_interval,
                 ),
                 TimeSource::Shared(id) => {
                     let period = *self.clocks.get(&id)?;
@@ -382,8 +365,7 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
 
 #[derive(Clone, Copy)]
 struct SampleTimes {
-    clip: Time,
-    timeline: Time,
+    animation: Time,
     shared: Time,
     occurrence: Option<(TimeSource, Time)>,
 }
@@ -446,7 +428,7 @@ pub struct SampledTrack<'sample, 'data, T: CurveValue + PropertyValue> {
     pub period: Option<Time>,
     /// Absolute origin of a bounded authoring timeline, otherwise zero.
     pub origin: Time,
-    /// Inclusive timeline-key selection, absent for clip and shared tracks.
+    /// Inclusive source-key selection, absent without a clip and for shared tracks.
     pub interval: Option<(Time, Time)>,
 }
 
@@ -487,7 +469,7 @@ impl Channel<'_> {
 struct ClipProgram {
     duration: Time,
     looping: bool,
-    timeline_origin: Option<Time>,
+    source_start: Time,
     animations: Vec<AnimationId>,
 }
 #[derive(Clone, Debug)]
@@ -540,7 +522,7 @@ impl AnimationProgram {
                         ClipProgram {
                             duration: clip.duration(),
                             looping: clip.is_looping(),
-                            timeline_origin: clip.timeline_origin,
+                            source_start: clip.source_start,
                             animations: clip.animations.clone(),
                         },
                     )
@@ -567,7 +549,8 @@ impl AnimationProgram {
     /// destination's time in seconds; curves are not stretched. Source global and
     /// shared-clock channels remain active. `include` can exclude properties whose
     /// ownership is supplied by another rig. No source clip becomes independently
-    /// selectable, and a failed combination leaves both inputs unchanged.
+    /// selectable. Mapped clips must have matching source starts; a failed
+    /// combination leaves both inputs unchanged.
     pub fn compose(
         &self,
         source: &Self,
@@ -588,6 +571,12 @@ impl AnimationProgram {
                 return Err(Error::new(
                     "animation.compose.clips",
                     "unknown destination or source clip",
+                ));
+            }
+            if self.clips[&destination].source_start != source.clips[&source_clip].source_start {
+                return Err(Error::new(
+                    "animation.compose.clips",
+                    "mapped clips must have matching source starts",
                 ));
             }
         }
@@ -656,17 +645,16 @@ impl AnimationProgram {
         sample: AnimationSample<'_>,
     ) -> Result<SampledAnimation<'_, 'static>, Error> {
         let mut selected_clip: &[AnimationId] = &[];
-        let (clip_time, clip_policy, timeline_time, timeline_interval) =
-            if let Some(id) = sample.clip {
-                let clip = self
-                    .clips
-                    .get(&id)
-                    .ok_or_else(|| Error::new("animation.sample.clip", "unknown clip identity"))?;
-                selected_clip = &clip.animations;
-                resolve_times(sample, clip.duration, clip.looping, clip.timeline_origin)?
-            } else {
-                (sample.clip_time, None, sample.timeline_time, None)
-            };
+        let (clip_policy, animation_time, source_interval) = if let Some(id) = sample.clip {
+            let clip = self
+                .clips
+                .get(&id)
+                .ok_or_else(|| Error::new("animation.sample.clip", "unknown clip identity"))?;
+            selected_clip = &clip.animations;
+            resolve_times(sample, clip.duration, clip.looping, clip.source_start)?
+        } else {
+            (None, sample.clip_time, None)
+        };
         let mut controllers = Vec::with_capacity(sample.controllers.len());
         for (index, id) in sample.controllers.iter().enumerate() {
             if sample.controllers[..index].contains(id) {
@@ -686,10 +674,9 @@ impl AnimationProgram {
         Ok(SampledAnimation {
             values: &self.values,
             clocks: Cow::Borrowed(&self.clocks),
-            clip_time,
             clip_policy,
-            timeline_time,
-            timeline_interval,
+            animation_time,
+            source_interval,
             shared_time: sample.shared_time,
             channels: ChannelSelection::Indexed(IndexedSelection {
                 animations: &self.animations,
@@ -701,26 +688,21 @@ impl AnimationProgram {
     }
 }
 
-type ResolvedTimes = (Time, Option<(Time, bool)>, Time, Option<(Time, Time)>);
+type ResolvedTimes = (Option<(Time, bool)>, Time, Option<(Time, Time)>);
 fn resolve_times(
     sample: AnimationSample<'_>,
     duration: Time,
     looping: bool,
-    origin: Option<Time>,
+    origin: Time,
 ) -> Result<ResolvedTimes, Error> {
     let policy = Some((duration, looping));
     let clip = normalize_clip(sample.clip_time, policy);
-    let (timeline, interval) = match origin {
-        Some(origin) => (
-            Time::seconds(origin.as_seconds() + clip.as_seconds())?,
-            Some((
-                origin,
-                Time::seconds(origin.as_seconds() + duration.as_seconds())?,
-            )),
-        ),
-        None => (sample.timeline_time, None),
-    };
-    Ok((clip, policy, timeline, interval))
+    let animation = Time::seconds(origin.as_seconds() + clip.as_seconds())?;
+    let interval = Some((
+        origin,
+        Time::seconds(origin.as_seconds() + duration.as_seconds())?,
+    ));
+    Ok((policy, animation, interval))
 }
 
 /// Typed slot reads shared by ordinary and occurrence-time animation samples.

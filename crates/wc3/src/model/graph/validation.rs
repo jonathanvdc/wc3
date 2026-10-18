@@ -86,9 +86,7 @@ impl<P: Profile> Model<'_, P> {
             material.validate()?;
         }
         for clip in self.clips.values() {
-            if let Some(origin) = clip.timeline_origin {
-                Time::seconds(origin.as_seconds() + clip.duration.as_seconds())?;
-            }
+            Time::seconds(clip.source_start.as_seconds() + clip.duration.as_seconds())?;
             if clip.duration.as_seconds() < 0. {
                 return Err(Error::new("clip.duration", "duration must be nonnegative"));
             }

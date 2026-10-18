@@ -272,11 +272,10 @@ impl RuntimeModelParticles {
             let mut clock = EmissionClock::new(start, frame.time);
             let mut budget = CAPACITY;
             for step in clock.by_ref() {
-                let Some((clip, timeline, shared)) = retimed_selection(frame, step.sample_time)
-                else {
+                let Some((clip, shared)) = retimed_selection(frame, step.sample_time) else {
                     continue;
                 };
-                let sample = frame.sample.at_times(clip, timeline, shared);
+                let sample = frame.sample.at_times(clip, shared);
                 let ended = frame
                     .selection
                     .clip
@@ -313,10 +312,10 @@ impl RuntimeModelParticles {
                         continue;
                     }
                     let time = step.start + schedule.offset(index);
-                    let Some((clip, timeline, shared)) = retimed_selection(frame, time) else {
+                    let Some((clip, shared)) = retimed_selection(frame, time) else {
                         continue;
                     };
-                    let sample = frame.sample.at_times(clip, timeline, shared);
+                    let sample = frame.sample.at_times(clip, shared);
                     let lifetime = f64::from(sample.animated(&emitter.lifetime));
                     let speed = sample.animated(&emitter.speed);
                     let latitude = sample.animated(&emitter.latitude);
@@ -375,7 +374,6 @@ impl RuntimeModelParticles {
                             Playback {
                                 clip: asset.compiled.clips.first().map(|(id, _)| *id),
                                 clip_time: age,
-                                timeline_time: age,
                                 shared_time: age,
                                 paused: true,
                                 ..Default::default()
@@ -497,7 +495,6 @@ pub(crate) fn synchronize_model_particles(
             }
             if clock.clip_time != age {
                 clock.clip_time = age;
-                clock.timeline_time = age;
                 clock.shared_time = age;
             }
             if !clock.paused {
@@ -555,14 +552,7 @@ mod tests {
             Vec3::new(7., 4., -3.)
         );
         let playback = app.world().get::<Playback>(child).unwrap();
-        assert_eq!(
-            (
-                playback.clip_time,
-                playback.timeline_time,
-                playback.shared_time
-            ),
-            (2., 2., 2.)
-        );
+        assert_eq!((playback.clip_time, playback.shared_time), (2., 2.));
         assert!(playback.paused);
         app.world_mut()
             .get_mut::<Transform>(root)

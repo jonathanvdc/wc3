@@ -602,7 +602,7 @@ pub fn compile_model_with_options(
                 .clips()
                 .iter()
                 .map(|(id, clip)| {
-                    let origin = clip.timeline_origin.unwrap_or_default().as_seconds();
+                    let origin = clip.source_start.as_seconds();
                     (
                         id,
                         ClipTiming {

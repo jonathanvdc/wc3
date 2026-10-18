@@ -137,7 +137,7 @@ pub(super) fn read<'a>(
                     channels.push(Channel::Vector3(Track {
                         target: model.node(node).unwrap().transform.translation,
                         curve: Curve::linear(times, values)?,
-                        clock: TimeSource::Clip,
+                        clock: TimeSource::Animation,
                     }));
                 }
                 let keys = &p.rotation_curves[i].keys;
@@ -151,7 +151,7 @@ pub(super) fn read<'a>(
                     channels.push(Channel::Rotation(Track {
                         target: model.node(node).unwrap().transform.rotation,
                         curve: Curve::nlerp(times, values)?,
-                        clock: TimeSource::Clip,
+                        clock: TimeSource::Animation,
                     }));
                 }
                 let keys = &p.scale_curves[i].keys;
@@ -163,7 +163,7 @@ pub(super) fn read<'a>(
                     channels.push(Channel::Vector3(Track {
                         target: model.node(node).unwrap().transform.scale,
                         curve: Curve::linear(times, values)?,
-                        clock: TimeSource::Clip,
+                        clock: TimeSource::Animation,
                     }));
                 }
             }
@@ -322,10 +322,10 @@ pub(super) fn write(
         };
         let mut seen = Vec::new();
         for channel in model.clip_channels(id) {
-            if channel.clock() != TimeSource::Clip {
+            if channel.clock() != TimeSource::Animation {
                 return Err(Error::new(
                     "d3.animation.clock",
-                    "native permutation channels require clip-local clocks",
+                    "native permutation channels require ordinary animation time",
                 ));
             }
             let destinations: Vec<_> = model
@@ -383,7 +383,13 @@ pub(super) fn write(
                             .zip(track.curve.values().iter())
                             .map(|(time, position)| {
                                 Ok(native::TranslationKey {
-                                    frame: frame(time, c.frames_per_second, context)?,
+                                    frame: frame(
+                                        Time::seconds(
+                                            time.as_seconds() - clip.source_start.as_seconds(),
+                                        )?,
+                                        c.frames_per_second,
+                                        context,
+                                    )?,
                                     position,
                                 })
                             })
@@ -406,9 +412,21 @@ pub(super) fn write(
                             .times()
                             .iter()
                             .zip(track.curve.values().iter())
+                            .filter(|(time, _)| {
+                                *time >= clip.source_start
+                                    && time.as_seconds()
+                                        <= clip.source_start.as_seconds()
+                                            + clip.duration().as_seconds()
+                            })
                             .map(|(time, value)| {
                                 Ok(native::RotationKey {
-                                    frame: frame(time, c.frames_per_second, context)?,
+                                    frame: frame(
+                                        Time::seconds(
+                                            time.as_seconds() - clip.source_start.as_seconds(),
+                                        )?,
+                                        c.frames_per_second,
+                                        context,
+                                    )?,
                                     rotation: rotation(value, context)?,
                                 })
                             })
@@ -431,6 +449,12 @@ pub(super) fn write(
                             .times()
                             .iter()
                             .zip(track.curve.values().iter())
+                            .filter(|(time, _)| {
+                                *time >= clip.source_start
+                                    && time.as_seconds()
+                                        <= clip.source_start.as_seconds()
+                                            + clip.duration().as_seconds()
+                            })
                             .map(|(time, value)| {
                                 if value[0] != value[1] || value[0] != value[2] {
                                     return Err(Error::new(
@@ -439,7 +463,13 @@ pub(super) fn write(
                                     ));
                                 }
                                 Ok(native::ScaleKey {
-                                    frame: frame(time, c.frames_per_second, context)?,
+                                    frame: frame(
+                                        Time::seconds(
+                                            time.as_seconds() - clip.source_start.as_seconds(),
+                                        )?,
+                                        c.frames_per_second,
+                                        context,
+                                    )?,
                                     scale: value[0],
                                 })
                             })

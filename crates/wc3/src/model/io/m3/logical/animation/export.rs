@@ -211,7 +211,7 @@ pub(in crate::model::io::m3::logical) fn write<E: Envelope>(
         let mut selectors = Vec::new();
         let mut used = BTreeSet::new();
         for channel in model.animation_channels(&logical.animations) {
-            if channel.clock() != TimeSource::Timeline {
+            if channel.clock() != TimeSource::Animation {
                 context.unsupported("m3.animation.clock", "controller uses a foreign clock")?;
                 continue;
             }
@@ -324,7 +324,7 @@ pub(in crate::model::io::m3::logical) fn write<E: Envelope>(
     }
     for (_, clip) in model.clips() {
         let controls = &clip.controls;
-        let start = unsigned_time(clip.timeline_origin.unwrap_or_default(), context)?;
+        let start = unsigned_time(clip.source_start, context)?;
         let end = start
             .checked_add(unsigned_time(clip.duration(), context)?)
             .ok_or_else(|| {

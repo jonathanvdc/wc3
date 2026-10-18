@@ -1,5 +1,6 @@
 //! Borrowed native curves expressed as typed logical channels.
 use super::*;
+use crate::model::io::animation::crop;
 use crate::model::io::materialize;
 use crate::model::PropertyValue;
 use semantic::{Curve, CurveValue, Time, TimeSource};
@@ -134,7 +135,7 @@ pub(in super::super) fn bind<'a, T: CurveValue + PropertyValue + 'a>(
         target,
         curve,
         clock: if global == u16::MAX {
-            TimeSource::Clip
+            TimeSource::Animation
         } else {
             TimeSource::Shared(
                 *clocks
@@ -171,7 +172,7 @@ pub(in super::super) trait ChannelValue: PropertyValue + CurveValue {
 }
 macro_rules! channel_value {($($ty:ty=>$variant:ident),*)=>{$(impl ChannelValue for $ty{fn channel<'v,'data>(value:&'v semantic::Channel<'data>)->Option<&'v semantic::Track<'data,Self>>{if let semantic::Channel::$variant(value)=value{Some(value)}else{None}}})*};}
 channel_value!(u32=>Unsigned,i32=>Signed,u16=>Unsigned16,u8=>Byte,bool=>Boolean);
-macro_rules! float_channel {($($ty:ty=>$variant:ident),*)=>{$(impl ChannelValue for $ty{fn channel<'v,'data>(value:&'v semantic::Channel<'data>)->Option<&'v semantic::Track<'data,Self>>{if let semantic::Channel::$variant(value)=value{Some(value)}else{None}}fn restrict<'a>(track:&semantic::Track<'a,Self>,start:Time,end:Time)->Result<semantic::Track<'a,Self>,Error>{if track.curve.times().iter().any(|t|t<start||t>end){crate::model::io::animation::crop(track,start,end)}else{Ok(track.clone())}}})*};}
+macro_rules! float_channel {($($ty:ty=>$variant:ident),*)=>{$(impl ChannelValue for $ty{fn channel<'v,'data>(value:&'v semantic::Channel<'data>)->Option<&'v semantic::Track<'data,Self>>{if let semantic::Channel::$variant(value)=value{Some(value)}else{None}}fn restrict<'a>(track:&semantic::Track<'a,Self>,start:Time,end:Time)->Result<semantic::Track<'a,Self>,Error>{if track.curve.times().iter().any(|t|t<start||t>end){crop(track,start,end)}else{Ok(track.clone())}}})*};}
 float_channel!(f32=>Scalar,[f32;2]=>Vector2,[f32;3]=>Vector3,[f32;4]=>Vector4,semantic::Quaternion=>Rotation);
 pub(super) fn encode<V: ModelLayout, U: ChannelValue, T: Value>(
     model: &Graph<'_>,
@@ -229,13 +230,7 @@ where
         ));
     }
     let global = match first.clock {
-        TimeSource::Timeline => {
-            return Err(Error::new(
-                "m2.animation.clock",
-                "M2 requires a clip or shared sequence clock",
-            ));
-        }
-        TimeSource::Clip => u16::MAX,
+        TimeSource::Animation => u16::MAX,
         TimeSource::Shared(id) => {
             let duration = time_ms(
                 model
@@ -284,20 +279,25 @@ where
         let mut vs = Vec::new();
         let mut ss = Vec::new();
         if let Some(track) = track {
-            let period = match track.clock {
-                TimeSource::Timeline => {
-                    return Err(Error::new(
-                        "m2.animation.clock",
-                        "M2 requires a clip or shared sequence clock",
-                    ));
+            let (source_start, duration) = match track.clock {
+                TimeSource::Animation => {
+                    let clip = model.clips().iter().nth(index).unwrap().1;
+                    (clip.source_start, clip.duration())
                 }
-                TimeSource::Clip => model.clips().iter().nth(index).unwrap().1.duration(),
-                TimeSource::Shared(id) => model.clock(id).unwrap().period(),
+                TimeSource::Shared(id) => (Time::default(), model.clock(id).unwrap().period()),
             };
-            let clipped = U::restrict(track, Time::default(), period)?;
+            let end = Time::seconds(source_start.as_seconds() + duration.as_seconds())?;
+            let mut clipped = track.clone();
+            clipped.curve = match track.clock {
+                TimeSource::Animation => track.curve.select_interval(source_start, end),
+                TimeSource::Shared(_) => U::restrict(track, source_start, end)?.curve,
+            };
             let track = &clipped;
             for (key, time) in track.curve.times().iter().enumerate() {
-                let time = time_ms(time, context)?;
+                let time = time_ms(
+                    Time::seconds(time.as_seconds() - source_start.as_seconds())?,
+                    context,
+                )?;
                 ts.push(if V::VERSION < 264 && global == u16::MAX {
                     time.checked_add(starts[index])
                         .ok_or_else(|| Error::new("m2.animation", "legacy time overflow"))?
@@ -509,13 +509,7 @@ pub(in super::super) fn insert<'a>(
 ) -> Result<(), Error> {
     let (target, clock) = (channel.target(), channel.clock());
     match clock {
-        TimeSource::Timeline => {
-            return Err(Error::new(
-                "m2.animation.clock",
-                "M2 cannot attach absolute timeline channels",
-            ));
-        }
-        TimeSource::Clip => {
+        TimeSource::Animation => {
             if let Some(clip) = clip {
                 // Alias clips select another sequence's programme. Native track tables
                 // may still have a leaf for their index, but it is not an independent

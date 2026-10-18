@@ -425,7 +425,7 @@ fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
     builder
         .add_global_channel(Channel::Scalar(Track {
             target: property,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::linear(
                 [
                     ModelTime::seconds(0.).unwrap(),
@@ -452,7 +452,7 @@ fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
     material.extension.m3.layers[6].route.y = 3;
     let sample = model
         .animation_sample(AnimationSample {
-            timeline_time: ModelTime::seconds(0.5).unwrap(),
+            clip_time: ModelTime::seconds(0.5).unwrap(),
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();

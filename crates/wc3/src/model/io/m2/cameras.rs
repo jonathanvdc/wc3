@@ -57,7 +57,7 @@ mod tests {
             .add_global_channel(Channel::Boolean(Track {
                 target: source,
                 curve: Curve::step([Time::default()], [true]).unwrap(),
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
             }))
             .unwrap();
         let model = builder.model();

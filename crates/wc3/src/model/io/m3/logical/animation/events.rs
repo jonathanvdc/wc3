@@ -100,7 +100,7 @@ pub(super) fn read<'a, E: Envelope>(
                     layer,
                     Event {
                         time: Time::seconds(f64::from(time) / 1000.)?,
-                        clock: TimeSource::Timeline,
+                        clock: TimeSource::Animation,
                         name: name.into(),
                         node: anchor,
                         feature: Some(feature),

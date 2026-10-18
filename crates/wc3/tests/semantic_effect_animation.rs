@@ -40,7 +40,7 @@ fn atlas_speed_keeps_one_shared_identity_through_native_publication() {
                 [2f32, 4.],
             )
             .unwrap(),
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
         }))
         .unwrap();
     let model = {
@@ -52,7 +52,7 @@ fn atlas_speed_keeps_one_shared_identity_through_native_publication() {
     assert_eq!(
         model
             .global_channels()
-            .find(|v| v.clock() == TimeSource::Timeline)
+            .find(|v| v.clock() == TimeSource::Animation)
             .unwrap()
             .target(),
         native.slot()
@@ -61,14 +61,14 @@ fn atlas_speed_keeps_one_shared_identity_through_native_publication() {
     assert_eq!(
         restored
             .global_channels()
-            .filter(|v| v.clock() == TimeSource::Timeline)
+            .filter(|v| v.clock() == TimeSource::Animation)
             .count(),
         1
     );
     assert_eq!(
         restored
             .global_channels()
-            .find(|v| v.clock() == TimeSource::Timeline)
+            .find(|v| v.clock() == TimeSource::Animation)
             .unwrap()
             .target(),
         native.slot()
@@ -110,7 +110,7 @@ fn common_trail_fields_bind_the_owned_component_and_export_exactly() {
                     [1f32, 0.],
                 )
                 .unwrap(),
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
             }))
         })
         .unwrap();
@@ -118,7 +118,7 @@ fn common_trail_fields_bind_the_owned_component_and_export_exactly() {
     assert_eq!(
         restored
             .global_channels()
-            .filter(|v| v.clock() == TimeSource::Timeline)
+            .filter(|v| v.clock() == TimeSource::Animation)
             .count(),
         1
     );
@@ -153,7 +153,7 @@ fn a_shared_continuous_rate_narrows_on_non_burst_atlas_emitters() {
         .add_global_channel(Channel::Scalar(Track {
             target: rate,
             curve: Curve::linear([Time::seconds(0.).unwrap()], [12f32]).unwrap(),
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
         }))
         .unwrap();
     let model = {

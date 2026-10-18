@@ -96,7 +96,7 @@ pub(super) fn asset() -> Model<'static, M3> {
             controller,
             sem::Channel::Vector3(sem::Track {
                 target: builder.model().node(node).unwrap().transform.translation,
-                clock: sem::TimeSource::Timeline,
+                clock: sem::TimeSource::Animation,
                 curve: sem::Curve::linear(
                     (vec![
                         sem::Time::seconds(0.).unwrap(),

@@ -378,7 +378,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             } else {
                 decoder
                     .builder
-                    .add_global_event(event(Time::seconds(absolute)?, TimeSource::Timeline))?;
+                    .add_global_event(event(Time::seconds(absolute)?, TimeSource::Animation))?;
             }
         }
         {

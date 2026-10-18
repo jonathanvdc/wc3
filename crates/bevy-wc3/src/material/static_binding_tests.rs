@@ -85,7 +85,7 @@ fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_controller()
         })
     };
     builder
-        .add_global_channel(track(translations[0], TimeSource::Timeline))
+        .add_global_channel(track(translations[0], TimeSource::Animation))
         .unwrap();
     let clock = builder
         .add_clock(SharedClock::Repeating {
@@ -101,11 +101,11 @@ fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_controller()
         )
         .unwrap();
     builder
-        .add_channel(clip, track(translations[2], TimeSource::Clip))
+        .add_channel(clip, track(translations[2], TimeSource::Animation))
         .unwrap();
     let controller = builder.add_controller(Controller::default()).unwrap();
     builder
-        .add_controller_channel(controller, track(translations[3], TimeSource::Timeline))
+        .add_controller_channel(controller, track(translations[3], TimeSource::Animation))
         .unwrap();
     let model = {
         builder.import_values(&slot_values).unwrap();
@@ -228,7 +228,7 @@ fn constant_scalar_tracks_matching_default_do_not_require_private_materials() {
         builder
             .add_global_channel(Channel::Scalar(Track {
                 target: opacity(&builder, material),
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
                 curve,
             }))
             .unwrap();
@@ -264,19 +264,19 @@ fn conflicting_clip_constants_and_controller_overrides_keep_materials_live() {
             .add_clip(Clip::named("first").with_duration(ModelTime::seconds(1.).unwrap()))
             .unwrap();
         builder
-            .add_channel(clip, track(1., TimeSource::Clip))
+            .add_channel(clip, track(1., TimeSource::Animation))
             .unwrap();
         if controller_override {
             let controller = builder.add_controller(Controller::default()).unwrap();
             builder
-                .add_controller_channel(controller, track(0.25, TimeSource::Timeline))
+                .add_controller_channel(controller, track(0.25, TimeSource::Animation))
                 .unwrap();
         } else {
             let other = builder
                 .add_clip(Clip::named("second").with_duration(ModelTime::seconds(1.).unwrap()))
                 .unwrap();
             builder
-                .add_channel(other, track(0.5, TimeSource::Clip))
+                .add_channel(other, track(0.5, TimeSource::Animation))
                 .unwrap();
         }
         let model = {
@@ -306,7 +306,7 @@ fn constant_track_different_from_fallback_cannot_be_folded() {
             clip,
             Channel::Scalar(Track {
                 target: opacity(&builder, material),
-                clock: TimeSource::Clip,
+                clock: TimeSource::Animation,
                 curve: Curve::step(vec![ModelTime::default()], vec![0.5]).unwrap(),
             }),
         )
@@ -345,7 +345,7 @@ fn equal_spline_endpoints_do_not_prove_constant_scalar_output() {
     builder
         .add_global_channel(Channel::Scalar(Track {
             target: opacity(&builder, material),
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::hermite(times, [1., 1.], [0., -2.], [2., 0.]).unwrap(),
         }))
         .unwrap();
@@ -392,14 +392,14 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
     builder
         .add_global_channel(Channel::Scalar(Track {
             target: weight,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::step(vec![ModelTime::default()], vec![1.]).unwrap(),
         }))
         .unwrap();
     builder
         .add_global_channel(Channel::Vector3(Track {
             target: builder.model().node(node).unwrap().transform.translation,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::linear(
                 [
                     ModelTime::seconds(0.).unwrap(),
@@ -423,7 +423,7 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
     let mut value = pass.material;
     let sample = model
         .animation_sample(AnimationSample {
-            timeline_time: ModelTime::seconds(0.5).unwrap(),
+            clip_time: ModelTime::seconds(0.5).unwrap(),
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();

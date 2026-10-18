@@ -44,6 +44,10 @@ fn spawned_instances_expose_authored_views_without_creating_bevy_cameras() {
     );
     queue.apply(&mut world);
     assert_eq!(world.query::<&Camera3d>().iter(&world).count(), 0);
+    world
+        .get_mut::<Playback>(first)
+        .unwrap()
+        .play(source.clips().iter().next().unwrap().0);
     world.get_mut::<Playback>(first).unwrap().seek(0.5).unwrap();
     let sample = world
         .get::<ModelRig>(first)

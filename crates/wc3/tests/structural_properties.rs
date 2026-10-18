@@ -21,7 +21,7 @@ fn profile_mapping_preserves_slot_targets_and_key_buffers() {
         .add_global_channel(Channel::Scalar(Track {
             target: slot,
             curve: Curve::linear(times, keys).unwrap(),
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
         }))
         .unwrap();
     let model = draft
@@ -32,7 +32,7 @@ fn profile_mapping_preserves_slot_targets_and_key_buffers() {
         .unwrap();
     let Channel::Scalar(track) = &model
         .global_channels()
-        .find(|v| v.clock() == TimeSource::Timeline)
+        .find(|v| v.clock() == TimeSource::Animation)
         .unwrap()
     else {
         panic!()
@@ -58,7 +58,7 @@ fn native_export_duplicates_curves_for_fields_sharing_a_slot() {
         .add_global_channel(Channel::Scalar(Track {
             target: slot,
             curve: Curve::step([Time::default()], [2.]).unwrap(),
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
         }))
         .unwrap();
     let model = draft.finish().unwrap();
@@ -82,7 +82,7 @@ fn native_profiles_reject_animation_without_a_consuming_field() {
         .add_global_channel(Channel::Scalar(Track {
             target: slot,
             curve: Curve::step([Time::default()], [2.]).unwrap(),
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
         }))
         .unwrap();
     assert!(draft.finish().is_err());

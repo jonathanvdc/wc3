@@ -163,7 +163,7 @@ fn birth_pose_follows_parent_rotation_between_frame_endpoints() {
     builder
         .add_global_channel(Channel::Rotation(Track {
             target: builder.model().node(parent).unwrap().transform.rotation,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::linear(
                 [time(0.), time(1.)],
                 [
@@ -184,7 +184,7 @@ fn birth_pose_follows_parent_rotation_between_frame_endpoints() {
         .animation
         .sample(AnimationSample::default())
         .unwrap();
-    let retimed = sample.at_times(time(0.5), time(0.5), time(0.5));
+    let retimed = sample.at_times(time(0.5), time(0.5));
     let overrides = HashMap::new();
     let context = PoseContext {
         nodes: &compiled.nodes,
@@ -256,7 +256,7 @@ fn feature_origins_use_node_pivots_without_moving_geometry_coordinates() {
         .animation
         .sample(AnimationSample::default())
         .unwrap();
-    let sample = sample.at_times(Time::default(), Time::default(), Time::default());
+    let sample = sample.at_times(Time::default(), Time::default());
     let overrides = HashMap::new();
     let context = PoseContext {
         nodes: &compiled.nodes,
@@ -419,7 +419,7 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
     builder
         .add_global_channel(Channel::Vector3(Track {
             target: builder.model().node(parent).unwrap().transform.translation,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::linear(times, [[0.; 3], [2., 0., 0.]]).unwrap(),
         }))
         .unwrap();
@@ -446,14 +446,14 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
         .add_clip(Clip::named("initial empty").with_duration(times[1]))
         .unwrap();
     let clip = builder
-        .add_clip(Clip::named("late scale").with_duration(times[1]))
+        .add_clip(Clip::named("late scale").with_duration(times[1]).once())
         .unwrap();
     builder
         .add_channel(
             clip,
             Channel::Vector3(Track {
                 target: builder.model().node(parent).unwrap().transform.scale,
-                clock: TimeSource::Clip,
+                clock: TimeSource::Animation,
                 curve: Curve::linear(times, [[1.; 3], [3.; 3]]).unwrap(),
             }),
         )
@@ -464,7 +464,7 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
             controller,
             Channel::Boolean(Track {
                 target: builder.model().node(parent).unwrap().visible,
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
                 curve: Curve::step(times, [true, false]).unwrap(),
             }),
         )
@@ -506,11 +506,10 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
             clip: Some(clip),
             controllers: &controllers,
             clip_time: time,
-            timeline_time: time,
             shared_time: time,
         })
         .unwrap();
-    let retimed = sample.at_times(time, time, time);
+    let retimed = sample.at_times(time, time);
     let overrides = HashMap::new();
     let context = PoseContext {
         nodes: &compiled.nodes,
@@ -527,8 +526,7 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
     ) * Mat4::from_translation(Vec3::Y);
     assert!(matrix.abs_diff_eq(expected, 1e-5));
     assert!(visible);
-    let end = Time::seconds(1.).unwrap();
-    let retimed = sample.at_times(time, end, time);
+    let retimed = sample.at_times(Time::seconds(1.).unwrap(), time);
     let (_, visible) = context.sample_node(child_index, &retimed, &mut scratch);
     assert!(
         !visible,

@@ -37,14 +37,14 @@ fn two_nodes_can_consume_the_same_animated_translation() {
         .add_global_channel(Channel::Vector3(Track {
             target: translation,
             curve: Curve::linear([time(0.), time(1.)], [[0.; 3], [4.; 3]]).unwrap(),
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
         }))
         .unwrap();
     let model = draft.finish().unwrap();
     let layout = model.prepare_pose().unwrap();
     let sample = model
         .animation_sample(AnimationSample {
-            timeline_time: time(0.5),
+            clip_time: time(0.5),
             ..Default::default()
         })
         .unwrap();
@@ -69,7 +69,7 @@ fn instance_tables_are_independent_and_each_evaluation_resets_constants() {
             Channel::Scalar(Track {
                 target: value,
                 curve: Curve::linear([time(0.), time(2.)], [3., 7.]).unwrap(),
-                clock: TimeSource::Clip,
+                clock: TimeSource::Animation,
             }),
         )
         .unwrap();
@@ -126,13 +126,13 @@ fn explicit_boolean_reads_evaluate_the_source_slot() {
         .add_global_channel(Channel::Boolean(Track {
             target: boolean,
             curve: Curve::step([time(0.), time(1.)], [false, true]).unwrap(),
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
         }))
         .unwrap();
     let model = draft.finish().unwrap();
     let values = model
         .animation_sample(AnimationSample {
-            timeline_time: time(1.),
+            clip_time: time(1.),
             ..Default::default()
         })
         .unwrap()
@@ -183,7 +183,7 @@ fn boolean_defaults_and_direct_scalar_writers_have_explicit_precedence() {
     draft
         .add_global_channel(Channel::Scalar(Track {
             target: output,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::step([time(0.)], [0.25]).unwrap(),
         }))
         .unwrap();
@@ -241,7 +241,7 @@ fn reusable_programs_keep_clip_mapping_and_defaults_after_compilation() {
     let animation = draft.add_animation(Animation {
         channels: vec![Channel::Scalar(Track {
             target: property,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::linear(
                 [time(9.), time(10.), time(12.), time(13.)],
                 [900., 2., 6., 1300.],
@@ -254,7 +254,7 @@ fn reusable_programs_keep_clip_mapping_and_defaults_after_compilation() {
         .add_clip(
             Clip::named("once")
                 .with_animation(animation)
-                .with_timeline_origin(time(10.))
+                .with_source_start(time(10.))
                 .with_duration(time(2.))
                 .once(),
         )
@@ -263,7 +263,7 @@ fn reusable_programs_keep_clip_mapping_and_defaults_after_compilation() {
         .add_clip(
             Clip::named("repeat")
                 .with_animation(animation)
-                .with_timeline_origin(time(10.))
+                .with_source_start(time(10.))
                 .with_duration(time(2.)),
         )
         .unwrap();
@@ -274,7 +274,6 @@ fn reusable_programs_keep_clip_mapping_and_defaults_after_compilation() {
         let input = AnimationSample {
             clip: Some(clip),
             clip_time: time(3.),
-            timeline_time: time(-100.),
             ..Default::default()
         };
         let direct = model.animation_sample(input).unwrap();
@@ -355,11 +354,11 @@ fn global_precedence_follows_selection_order_across_time_sources() {
         })
     };
     let shared = animation(TimeSource::Shared(clock), 20.);
-    let timeline = animation(TimeSource::Timeline, 4.);
+    let timeline = animation(TimeSource::Animation, 4.);
     draft.set_global_animations(vec![shared, timeline]);
     let mut model = draft.finish().unwrap();
     let input = AnimationSample {
-        timeline_time: time(0.5),
+        clip_time: time(0.5),
         shared_time: time(0.5),
         ..Default::default()
     };
@@ -385,4 +384,119 @@ fn global_precedence_follows_selection_order_across_time_sources() {
             Some(expected)
         );
     }
+}
+
+#[test]
+fn zero_and_offset_source_intervals_use_the_same_sampling_rule() {
+    use wc3::model::{Animation, SharedClock};
+    let mut draft = Model::<Universal>::builder("source intervals");
+    let property = draft.add_value(-1f32);
+    let independent = draft.add_value(0f32);
+    let clock = draft
+        .add_clock(SharedClock::Repeating { period: time(2.) })
+        .unwrap();
+    draft
+        .add_global_channel(Channel::Scalar(Track {
+            target: independent,
+            clock: TimeSource::Shared(clock),
+            curve: Curve::linear([time(0.), time(2.)], [0., 8.]).unwrap(),
+        }))
+        .unwrap();
+    let animation = draft.add_animation(Animation {
+        channels: vec![Channel::Scalar(Track {
+            target: property,
+            clock: TimeSource::Animation,
+            curve: Curve::linear(
+                [
+                    time(0.),
+                    time(1.),
+                    time(2.),
+                    time(9.),
+                    time(10.),
+                    time(11.),
+                    time(12.),
+                ],
+                [0., 2., 200., 900., 10., 14., 1200.],
+            )
+            .unwrap(),
+        })],
+        ..Default::default()
+    });
+    let zero = draft
+        .add_clip(
+            Clip::named("zero")
+                .with_duration(time(1.))
+                .with_animation(animation),
+        )
+        .unwrap();
+    let offset = draft
+        .add_clip(
+            Clip::named("offset")
+                .with_source_start(time(10.))
+                .with_duration(time(1.))
+                .with_animation(animation)
+                .once(),
+        )
+        .unwrap();
+    let absent = draft
+        .add_clip(Clip::named("unselected").with_duration(time(1.)))
+        .unwrap();
+    let model = draft.finish().unwrap();
+    let compiled = AnimationProgram::compile(&model);
+    for (clip, elapsed, expected, source) in [
+        (zero, 1.5, 1., 0.5),
+        (offset, 0.5, 12., 10.5),
+        (offset, 3., 14., 11.),
+    ] {
+        let input = AnimationSample {
+            clip: Some(clip),
+            clip_time: time(elapsed),
+            shared_time: time(2.5),
+            ..Default::default()
+        };
+        for sample in [
+            model.animation_sample(input).unwrap(),
+            compiled.sample(input).unwrap(),
+        ] {
+            assert_eq!(sample.animated(&property), expected);
+            assert_eq!(sample.animation_time(), time(source));
+            assert_eq!(sample.animated(&independent), 2.);
+            let retimed = sample.at_times(time(0.25), time(1.));
+            assert_eq!(
+                retimed.animated(&property),
+                if clip == zero { 0.5 } else { 11. }
+            );
+        }
+    }
+    for clip in [None, Some(absent)] {
+        let sample = compiled
+            .sample(AnimationSample {
+                clip,
+                clip_time: time(0.5),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(sample.animated(&property), -1.);
+    }
+}
+
+#[test]
+fn composition_rejects_mismatched_source_intervals() {
+    let mut host = Model::<Universal>::builder("host");
+    let destination = host
+        .add_clip(
+            Clip::named("host clip")
+                .with_duration(time(1.))
+                .with_source_start(time(10.)),
+        )
+        .unwrap();
+    let mut part = Model::<Universal>::builder("part");
+    let source = part
+        .add_clip(Clip::named("part clip").with_duration(time(1.)))
+        .unwrap();
+    let host = AnimationProgram::compile(&host.finish().unwrap());
+    let part = AnimationProgram::compile(&part.finish().unwrap());
+    assert!(host
+        .compose(&part, &[(destination, source)], |_| true)
+        .is_err());
 }

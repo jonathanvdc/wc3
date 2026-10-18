@@ -81,5 +81,5 @@ fn plugin_dispatches_public_messages_to_ordered_application_consumers() {
     assert_eq!(received[1].name.as_ref(), "Custom notification");
     assert_eq!(received[2].name.as_ref(), "SNDxUnresolved");
     assert!(received.iter().all(|event| event.occurrence_time == 0.25));
-    assert!((app.world().get::<Playback>(root).unwrap().timeline_time - 0.3).abs() < 1e-12);
+    assert!((app.world().get::<Playback>(root).unwrap().clip_time - 0.3).abs() < 1e-12);
 }

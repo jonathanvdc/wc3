@@ -119,7 +119,7 @@ cross section at zero height. Radial sampling is uniform over area or volume.
 Positive native gravity accelerates down model Z; negative gravity accelerates
 upward, independently of the emitter bone orientation. Continuous emission and
 independent squirt-count keys sample authored occurrence poses. Squirt keys follow
-their selected clip, timeline, or shared clock, including repeating clock crossings;
+animation time within the selected clip source interval or their independent shared clock, including repeating clock crossings;
 seek jumps skip crossed births. A nonanimated count emits at the clock origin.
 Occurrence scratch is reused and bounded to 4,096 keys per update, and squirt births
 share the continuous emitter's population and birth budgets. Optional speed/lifespan

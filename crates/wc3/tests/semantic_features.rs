@@ -323,14 +323,14 @@ fn common_animation_destinations_validate_and_narrow_with_borrowed_keys() {
             draft.add_global_channel(Channel::Scalar(Track {
                 target: intensity,
                 curve,
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
             }))
         })
         .unwrap();
     let native = model.try_narrow::<Mdlx>().unwrap();
     let channel = native
         .global_channels()
-        .find(|v| v.clock() == TimeSource::Timeline)
+        .find(|v| v.clock() == TimeSource::Animation)
         .unwrap();
     let Channel::Scalar(track) = channel else {
         panic!("channel value domain changed")

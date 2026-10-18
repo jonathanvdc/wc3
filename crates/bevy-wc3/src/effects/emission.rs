@@ -185,7 +185,6 @@ mod discontinuity_tests {
             revision: 1,
             origin: EventClocks {
                 clip: 10.,
-                timeline: 10.,
                 shared: 10.,
             },
             include_origin: false,

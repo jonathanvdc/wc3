@@ -9,7 +9,11 @@ fn time(seconds: f64) -> Time {
 fn channel(property: Property<[f32; 3]>, clock: TimeSource, end: f32) -> Channel<'static> {
     Channel::Vector3(Track {
         target: property,
-        curve: Curve::linear([time(0.), time(2.)], [[0.; 3], [end; 3]]).unwrap(),
+        curve: Curve::linear(
+            [time(0.), time(1.), time(2.)],
+            [[0.; 3], [end / 2.; 3], [end; 3]],
+        )
+        .unwrap(),
         clock,
     })
 }
@@ -57,7 +61,7 @@ fn composed_programs_share_clocks_and_keep_property_owners_disjoint() {
     let clip = host
         .add_clip(Clip::named("host clip").with_duration(time(2.)))
         .unwrap();
-    host.add_channel(clip, channel(node_translation, TimeSource::Clip, 2.))
+    host.add_channel(clip, channel(node_translation, TimeSource::Animation, 2.))
         .unwrap();
     let host = AnimationProgram::compile(
         &{
@@ -73,9 +77,12 @@ fn composed_programs_share_clocks_and_keep_property_owners_disjoint() {
     let part_clip = part
         .add_clip(Clip::named("part clip").with_duration(time(2.)))
         .unwrap();
-    part.add_channel(part_clip, channel(extra_translation, TimeSource::Clip, 4.))
-        .unwrap();
-    part.add_global_channel(channel(extra_scale, TimeSource::Timeline, 6.))
+    part.add_channel(
+        part_clip,
+        channel(extra_translation, TimeSource::Animation, 4.),
+    )
+    .unwrap();
+    part.add_global_channel(channel(extra_scale, TimeSource::Animation, 6.))
         .unwrap();
     let part = AnimationProgram::compile(
         &{
@@ -89,7 +96,6 @@ fn composed_programs_share_clocks_and_keep_property_owners_disjoint() {
         .sample(AnimationSample {
             clip: Some(clip),
             clip_time: time(1.),
-            timeline_time: time(1.),
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
@@ -126,7 +132,7 @@ fn event_boundary_override_keeps_own_clock_end_and_other_clock_start() {
         .add_clip(Clip::named("loop").with_duration(time(2.)))
         .unwrap();
     builder
-        .add_channel(clip, channel(node_translation, TimeSource::Clip, 4.))
+        .add_channel(clip, channel(node_translation, TimeSource::Animation, 4.))
         .unwrap();
     builder
         .add_global_channel(channel(node_scale, TimeSource::Shared(clock), 8.))
@@ -143,13 +149,13 @@ fn event_boundary_override_keeps_own_clock_end_and_other_clock_start() {
         })
         .unwrap();
     let end = sampled
-        .at_times(time(2.), time(2.), time(2.))
-        .at_occurrence(TimeSource::Clip, time(2.));
+        .at_times(time(2.), time(2.))
+        .at_occurrence(TimeSource::Animation, time(2.));
     assert_eq!(end.override_value(&node_translation), Some([4.; 3]));
     assert_eq!(end.override_value(&node_scale), Some([0.; 3]));
     assert_eq!(end.track(&node_translation).unwrap().time, time(2.));
     let shared_end = sampled
-        .at_times(time(2.), time(2.), time(2.))
+        .at_times(time(2.), time(2.))
         .at_occurrence(TimeSource::Shared(clock), time(2.));
     assert_eq!(shared_end.override_value(&node_translation), Some([0.; 3]));
     assert_eq!(shared_end.override_value(&node_scale), Some([8.; 3]));
@@ -166,7 +172,7 @@ fn alias_local_clock_and_owned_program_survive_source_drop() {
         .add_clip(Clip::named("original").with_duration(time(2.)))
         .unwrap();
     builder
-        .add_channel(original, channel(property, TimeSource::Clip, 4.))
+        .add_channel(original, channel(property, TimeSource::Animation, 4.))
         .unwrap();
     let alias = builder
         .add_clip(
@@ -216,13 +222,13 @@ fn independent_clocks_and_controller_priority_are_explicit() {
         .add_clock(SharedClock::Repeating { period: time(2.) })
         .unwrap();
     builder
-        .add_global_channel(channel(translation, TimeSource::Timeline, 4.))
+        .add_global_channel(channel(translation, TimeSource::Animation, 4.))
         .unwrap();
     builder
         .add_global_channel(channel(scale, TimeSource::Shared(clock), 8.))
         .unwrap();
     let animation_0 = builder.add_animation(crate::model::Animation {
-        channels: vec![channel(translation, TimeSource::Timeline, 10.)],
+        channels: vec![channel(translation, TimeSource::Animation, 10.)],
         ..Default::default()
     });
     let low = builder
@@ -233,7 +239,7 @@ fn independent_clocks_and_controller_priority_are_explicit() {
         })
         .unwrap();
     let animation_1 = builder.add_animation(crate::model::Animation {
-        channels: vec![channel(translation, TimeSource::Timeline, 20.)],
+        channels: vec![channel(translation, TimeSource::Animation, 20.)],
         ..Default::default()
     });
     let high = builder
@@ -250,7 +256,7 @@ fn independent_clocks_and_controller_priority_are_explicit() {
     }
     .unwrap();
     let sample = AnimationSample {
-        timeline_time: time(1.),
+        clip_time: time(1.),
         shared_time: time(2.5),
         controllers: &[high, low],
         ..SlotConstruct::construct(&mut slot_values)
@@ -282,7 +288,7 @@ fn indexed_empty_override_falls_back_and_timeline_keys_are_bounded() {
     builder
         .add_global_channel(Channel::Vector3(Track {
             target: property,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::linear(
                 [time(0.), time(1.), time(4.)],
                 [[0.; 3], [2.; 3], [100.; 3]],
@@ -293,7 +299,7 @@ fn indexed_empty_override_falls_back_and_timeline_keys_are_bounded() {
     let animation_2 = builder.add_animation(crate::model::Animation {
         channels: vec![Channel::Vector3(Track {
             target: property,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::step(Vec::<Time>::new(), Vec::<[f32; 3]>::new()).unwrap(),
         })],
         ..Default::default()
@@ -309,7 +315,7 @@ fn indexed_empty_override_falls_back_and_timeline_keys_are_bounded() {
             Clip::named("bounded")
                 .with_duration(time(2.))
                 .once()
-                .with_timeline_origin(time(0.)),
+                .with_source_start(time(0.)),
         )
         .unwrap();
     let model = {
@@ -348,7 +354,7 @@ fn retiming_borrows_indexed_programmes_and_preserves_alias_clock_policy() {
         .add_clip(Clip::named("base").with_duration(time(2.)))
         .unwrap();
     builder
-        .add_channel(base, channel(property, TimeSource::Clip, 4.))
+        .add_channel(base, channel(property, TimeSource::Animation, 4.))
         .unwrap();
     let alias = builder
         .add_clip(
@@ -371,7 +377,7 @@ fn retiming_borrows_indexed_programmes_and_preserves_alias_clock_policy() {
         })
         .unwrap();
     let original = selected.track(&property).unwrap();
-    let retimed = selected.at_times(time(2.25), time(100.), time(100.));
+    let retimed = selected.at_times(time(2.25), time(100.));
     assert!(eq(retimed.selection, &selected));
     assert_eq!(retimed.override_value(&property), Some([0.5; 3]));
     let effective = retimed.track(&property).unwrap();
@@ -395,7 +401,7 @@ fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
     builder
         .add_global_channel(Channel::Vector3(Track {
             target: translation,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::linear(
                 [time(9.), time(10.), time(12.), time(13.)],
                 [[90.; 3], [2.; 3], [6.; 3], [130.; 3]],
@@ -409,7 +415,7 @@ fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
     let animation_3 = builder.add_animation(crate::model::Animation {
         channels: vec![Channel::Vector3(Track {
             target: translation,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::step(Vec::<Time>::new(), Vec::<[f32; 3]>::new()).unwrap(),
         })],
         ..Default::default()
@@ -424,7 +430,7 @@ fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
         .add_clip(
             Clip::named("interval")
                 .with_duration(time(2.))
-                .with_timeline_origin(time(10.)),
+                .with_source_start(time(10.)),
         )
         .unwrap();
     let model = {
@@ -440,7 +446,7 @@ fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
-    let retimed = selected.at_times(time(3.5), time(11.5), time(5.));
+    let retimed = selected.at_times(time(3.5), time(5.));
     assert_eq!(retimed.override_value(&translation), Some([5.; 3]));
     assert_eq!(retimed.override_value(&scale), Some([4.; 3]));
     let track = retimed.track(&translation).unwrap();
@@ -468,7 +474,7 @@ fn compiled_property_sampling_throughput() {
             let _node_scale = builder.model().node(node).unwrap().transform.scale;
             let property = node_translation;
             builder
-                .add_global_channel(channel(property, TimeSource::Timeline, 4.))
+                .add_global_channel(channel(property, TimeSource::Animation, 4.))
                 .unwrap();
             properties.push(property);
         }
@@ -480,7 +486,7 @@ fn compiled_property_sampling_throughput() {
         let program = AnimationProgram::compile(&model);
         let sampled = program
             .sample(AnimationSample {
-                timeline_time: time(1.),
+                clip_time: time(1.),
                 ..SlotConstruct::construct(&mut slot_values)
             })
             .unwrap();

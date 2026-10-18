@@ -34,7 +34,7 @@ fn standing_snapshot_retains_bindings_and_supports_editable_geometry_without_ima
         .edit(|draft| {
             draft.add_global_channel(Channel::Vector3(Track {
                 target: draft.model().node(root).unwrap().transform.translation,
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
                 curve: Curve::linear([time(0.), time(1.)], [[0.; 3], [0., 0., 4.]])?,
             }))
         })
@@ -42,7 +42,7 @@ fn standing_snapshot_retains_bindings_and_supports_editable_geometry_without_ima
     let layout = model.prepare_pose().unwrap();
     let sample = model
         .animation_sample(AnimationSample {
-            timeline_time: time(0.5),
+            clip_time: time(0.5),
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
@@ -152,7 +152,7 @@ fn repeated_pose_sampling_reuses_buffers_and_retimed_sampling_preserves_override
     builder
         .add_global_channel(Channel::Vector3(Track {
             target: builder.model().node(root).unwrap().transform.translation,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::linear([time(0.), time(1.)], [[0.; 3], [4., 0., 0.]]).unwrap(),
         }))
         .unwrap();
@@ -168,7 +168,7 @@ fn repeated_pose_sampling_reuses_buffers_and_retimed_sampling_preserves_override
         .evaluate_into(&sample, PoseInputs::default(), &mut output)
         .unwrap();
     let pointers = (output.nodes.as_ptr(), output.visible.as_ptr());
-    let retimed = sample.at_times(time(0.5), time(0.5), time(0.5));
+    let retimed = sample.at_times(time(0.5), time(0.5));
     layout
         .evaluate_into(&retimed, PoseInputs::default(), &mut output)
         .unwrap();
@@ -303,19 +303,19 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
             draft.set_material(material_id, material)?;
             draft.add_global_channel(Channel::Scalar(Track {
                 target: opacity,
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
                 curve: Curve::linear([time(0.), time(1.)], [0.2, 0.8])?,
             }))?;
             draft.add_global_channel(Channel::OptionalTexture(Track {
                 target: selection,
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
                 curve: Curve::step([time(0.), time(1.)], [None, Some(texture)])?,
             }))
         })
         .unwrap();
     let sample = model
         .animation_sample(AnimationSample {
-            timeline_time: time(0.5),
+            clip_time: time(0.5),
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();

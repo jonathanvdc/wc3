@@ -694,10 +694,10 @@ impl RuntimeAgeSprites {
                 let end = step.end;
                 let tick = step.tick;
                 let rate_time = step.sample_time;
-                let Some((clip, timeline, shared)) = retimed_selection(&frame, rate_time) else {
+                let Some((clip, shared)) = retimed_selection(&frame, rate_time) else {
                     continue;
                 };
-                let sample = frame.sample.at_times(clip, timeline, shared);
+                let sample = frame.sample.at_times(clip, shared);
                 let ended = frame
                     .selection
                     .clip
@@ -854,7 +854,7 @@ impl BirthContext<'_, '_, '_> {
             1.
         };
         let birth_basis = interpolated_transform(self.previous_basis, frame.basis_world, fraction);
-        let Some((clip, timeline, shared)) = retimed_selection(frame, time) else {
+        let Some((clip, shared)) = retimed_selection(frame, time) else {
             return;
         };
         if frame
@@ -865,7 +865,7 @@ impl BirthContext<'_, '_, '_> {
         {
             return;
         }
-        let sample = frame.sample.at_times(clip, timeline, shared);
+        let sample = frame.sample.at_times(clip, shared);
         let birth_node = if let Some(pose) = frame.pose {
             let (authored, visible) = pose.at_offset(time - frame.time).sample_feature_node(
                 emitter.node_index,

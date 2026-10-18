@@ -96,7 +96,7 @@ impl<'a> Decoder<'a, '_> {
                     .ok_or_else(|| Error::new(name, "shared animation clock does not exist"))
             })
             .transpose()?
-            .map_or(TimeSource::Timeline, TimeSource::Shared);
+            .map_or(TimeSource::Animation, TimeSource::Shared);
         let curve = curves::read_maps(source, 0., map, tangents)?;
         self.builder.add_global_channel(U::channel(Track {
             target: slot,

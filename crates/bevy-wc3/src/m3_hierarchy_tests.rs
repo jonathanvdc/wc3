@@ -142,7 +142,7 @@ fn native_zero_flag_hierarchy_preserves_skinned_rest_and_animated_parent_placeme
         .edit(|builder| {
             builder.add_global_channel(Channel::Vector3(Track {
                 target: builder.model().node(parent).unwrap().transform.translation,
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
                 curve: Curve::linear(
                     [ModelTime::seconds(0.)?, ModelTime::seconds(1.)?],
                     [[3., 4., 5.], [5., 4., 5.]],
@@ -156,7 +156,7 @@ fn native_zero_flag_hierarchy_preserves_skinned_rest_and_animated_parent_placeme
     let prepared = compiled.prepare(&mut meshes, &mut binds);
     for (time, displacement) in [(0., 0.), (0.5, 1.), (1., 2.)] {
         let playback = Playback {
-            timeline_time: time,
+            clip_time: time,
             ..SlotConstruct::construct(&mut slot_values)
         };
         let pose = PoseBaker::default()

@@ -88,7 +88,7 @@ fn typed_restriction_retains_clock_and_target() {
             Interpolation::Linear,
         )
         .unwrap(),
-        clock: TimeSource::Clip,
+        clock: TimeSource::Animation,
     };
     let result = crop(
         &track,

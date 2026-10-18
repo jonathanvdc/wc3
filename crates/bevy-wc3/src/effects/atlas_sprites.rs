@@ -400,12 +400,11 @@ impl RuntimeAtlasParticles {
                     let mut clock = EmissionClock::new(previous, frame.time);
                     let mut remaining = CAPACITY;
                     for step in clock.by_ref() {
-                        let Some((clip, timeline, shared)) =
-                            retimed_selection(frame, step.sample_time)
+                        let Some((clip, shared)) = retimed_selection(frame, step.sample_time)
                         else {
                             continue;
                         };
-                        let sample = frame.sample.at_times(clip, timeline, shared);
+                        let sample = frame.sample.at_times(clip, shared);
                         let active = match &emitter.activation {
                             ParticleActivation::Fractional(value) => sample.animated(value) > 0.,
                             ParticleActivation::Boolean(value) => sample.animated(value),
@@ -477,10 +476,10 @@ impl RuntimeAtlasParticles {
     ) {
         let age = frame.time - time;
         let selection = retimed_selection(frame, time);
-        let Some((clip, timeline, shared)) = selection else {
+        let Some((clip, shared)) = selection else {
             return;
         };
-        let sample = frame.sample.at_times(clip, timeline, shared);
+        let sample = frame.sample.at_times(clip, shared);
         let enabled = match &emitter.activation {
             ParticleActivation::Fractional(value) => sample.animated(value) > 0.,
             ParticleActivation::Boolean(value) => sample.animated(value),
@@ -606,7 +605,7 @@ impl RuntimeAtlasParticles {
         };
         let clock = track
             .as_ref()
-            .map_or(TimeSource::Clip, |value| value.clock().0);
+            .map_or(TimeSource::Animation, |value| value.clock().0);
         let period = track
             .as_ref()
             .and_then(|value| value.clock().1)
@@ -620,24 +619,17 @@ impl RuntimeAtlasParticles {
                         (*looping && *duration > 0.).then_some(*duration)
                     })
             });
-        let origin = if matches!(clock, TimeSource::Timeline) {
+        let origin = if matches!(clock, TimeSource::Animation) {
             frame
                 .sample
-                .timeline_interval()
+                .source_interval()
                 .map_or(0., |(start, _)| start.as_seconds())
         } else {
             0.
         };
         let raw = match clock {
-            TimeSource::Clip => frame.selection.clip_time.as_seconds(),
             TimeSource::Shared(_) => frame.selection.shared_time.as_seconds(),
-            TimeSource::Timeline => {
-                if frame.sample.timeline_interval().is_some() {
-                    origin + frame.selection.clip_time.as_seconds()
-                } else {
-                    frame.selection.timeline_time.as_seconds()
-                }
-            }
+            TimeSource::Animation => origin + frame.selection.clip_time.as_seconds(),
         };
         let identity = track
             .as_ref()
@@ -688,8 +680,8 @@ impl RuntimeAtlasParticles {
                 if times.get(index + 1) == Some(key) {
                     continue;
                 }
-                if let Some((start, end)) = frame.sample.timeline_interval() {
-                    if matches!(clock, TimeSource::Timeline) && (key < start || key > end) {
+                if let Some((start, end)) = frame.sample.source_interval() {
+                    if matches!(clock, TimeSource::Animation) && (key < start || key > end) {
                         continue;
                     }
                 }
@@ -732,13 +724,11 @@ fn interpolated(a: Mat4, b: Mat4, t: f32) -> Mat4 {
 pub(super) fn retimed_selection(
     frame: &EffectFrame<'_, '_, '_>,
     time: f64,
-) -> Option<(ModelTime, ModelTime, ModelTime)> {
+) -> Option<(ModelTime, ModelTime)> {
     let delta = frame.time - time;
     let clip = frame.selection.clip_time.as_seconds() - delta;
-    let timeline = frame.selection.timeline_time.as_seconds() - delta;
     Some((
         ModelTime::seconds(clip).ok()?,
-        ModelTime::seconds(timeline).ok()?,
         ModelTime::seconds(frame.selection.shared_time.as_seconds() - delta).ok()?,
     ))
 }

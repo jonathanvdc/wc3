@@ -153,7 +153,7 @@ impl Profile for D4 {
         if !model.clips().is_empty()
             || model
                 .global_channels()
-                .find(|v| v.clock() == TimeSource::Timeline)
+                .find(|v| v.clock() == TimeSource::Animation)
                 .is_some()
             || model
                 .global_channels()

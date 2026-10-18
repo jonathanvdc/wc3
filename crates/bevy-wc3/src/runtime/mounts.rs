@@ -19,7 +19,6 @@ pub(crate) struct MountedModel {
 struct PlaybackSnapshot {
     clip: Option<ClipId>,
     clip_time: f64,
-    timeline_time: f64,
     shared_time: f64,
     speed: f64,
     paused: bool,
@@ -33,7 +32,6 @@ impl From<&Playback> for PlaybackSnapshot {
         Self {
             clip: playback.clip,
             clip_time: playback.clip_time,
-            timeline_time: playback.timeline_time,
             shared_time: playback.shared_time,
             speed: playback.speed,
             paused: playback.paused,
@@ -151,7 +149,6 @@ pub(crate) fn synchronize_mounted_models(
             let playback = playback.bypass_change_detection();
             playback.clip = Some(clip);
             playback.clip_time = source.playback.clip_time;
-            playback.timeline_time = source.playback.timeline_time;
             playback.shared_time = source.playback.shared_time;
             playback.transition_request = source.playback.transition_request;
             playback.transition_clock = source.playback.transition_clock;
@@ -451,7 +448,7 @@ mod activation_tests {
                     vec![1., 0.],
                 )
                 .unwrap(),
-                clock: TimeSource::Clip,
+                clock: TimeSource::Animation,
             }),
         )
         .unwrap();

@@ -329,13 +329,25 @@ where
                             .collect::<Result<Vec<_>, _>>()?,
                     )
                 } else {
-                    for (index, (id, _clip)) in model.clips().iter().enumerate() {
+                    for (index, (id, clip)) in model.clips().iter().enumerate() {
                         leaves.push(
                             model
                                 .clip_events(id)
-                                .filter(|e| e.feature == Some(feature_id))
+                                .filter(|e| {
+                                    e.feature == Some(feature_id)
+                                        && e.time >= clip.source_start
+                                        && e.time.as_seconds()
+                                            <= clip.source_start.as_seconds()
+                                                + clip.duration().as_seconds()
+                                })
                                 .map(|e| {
-                                    time_ms(e.time, context).and_then(|t| {
+                                    time_ms(
+                                        Time::seconds(
+                                            e.time.as_seconds() - clip.source_start.as_seconds(),
+                                        )?,
+                                        context,
+                                    )
+                                    .and_then(|t| {
                                         if V::VERSION < 264 {
                                             t.checked_add(starts[index]).ok_or_else(|| {
                                                 Error::new("m2.event", "legacy time overflow")

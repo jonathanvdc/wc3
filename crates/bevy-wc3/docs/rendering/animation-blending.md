@@ -1,15 +1,18 @@
 # Animation and pose transitions
 
 `Playback` selects typed clips and controller programmes with independent
-clip, authoring-timeline, and shared clocks in seconds. Native adapters preserve
+playback and shared clocks in seconds. Native adapters preserve
 loop/clamp policy, shared animation identities, and sequence intervals; the runtime samples properties
 through the semantic `AnimationProgram`.
 
 Curves and event occurrences belong to reusable semantic `Animation` definitions.
 Clips and controllers select those definitions rather than owning duplicate tracks.
-The clip's common timeline origin maps local playback into its authoring interval;
-`AnimationProgram` derives both the sample time and the key bounds. Playback's
-explicit `timeline_time` drives timeline channels when no mapped clip is selected.
+Every clip maps local playback into a source interval beginning at `source_start`,
+which defaults to zero. `AnimationProgram` derives ordinary animation time and
+inclusive key bounds from that interval. MDLX clips select the same ordinary
+animation at their authored sequence intervals; M2 clips select separate animations
+at zero. Without a clip, ordinary model-level and controller tracks use `clip_time`
+directly without interval bounds.
 Model-level animations run in selection order before clip animations and selected
 controllers; later applicable tracks override earlier ones.
 

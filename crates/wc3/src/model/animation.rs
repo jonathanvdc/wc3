@@ -57,11 +57,9 @@ pub use slots::*;
 /// Time coordinate used to evaluate a track or event.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TimeSource {
-    /// Active clip time.
+    /// Authored animation time, mapped from the selected clip source interval.
     #[default]
-    Clip,
-    /// Absolute authoring time shared by interval-based playback selections.
-    Timeline,
+    Animation,
     /// Independent shared looping clock.
     Shared(ClockId),
 }
@@ -114,7 +112,7 @@ pub struct Track<'a, T: CurveValue + PropertyValue> {
 /// ```compile_fail
 /// use wc3::model::{Property, TimeSource, Curve, Track};
 /// fn invalid(target: Property<bool>, curve: Curve<'static, f32>) -> Track<'static, f32> {
-///     Track { target, curve, clock: TimeSource::Clip }
+///     Track { target, curve, clock: TimeSource::Animation }
 /// }
 /// ```
 #[derive(Clone, Debug)]
@@ -155,8 +153,8 @@ pub struct Clip<'a, P: Profile = Universal> {
     pub controls: P::Clip<'a>,
     /// Reusable animations selected by this clip, in evaluation order.
     pub animations: Vec<AnimationId>,
-    /// Absolute authoring origin; the clip duration bounds the key-selection interval.
-    pub timeline_origin: Option<Time>,
+    /// Start of the authored source interval; duration bounds key selection.
+    pub source_start: Time,
     pub(crate) name: Cow<'a, str>,
     pub(crate) duration: Time,
     pub(crate) looping: bool,
@@ -168,7 +166,7 @@ impl<'a, P: Profile> Clip<'a, P> {
             name: name.into(),
             controls: Default::default(),
             animations: Vec::new(),
-            timeline_origin: None,
+            source_start: Time::default(),
             duration: Time::default(),
             looping: true,
         }
@@ -184,8 +182,8 @@ impl<'a, P: Profile> Clip<'a, P> {
         self
     }
     /// Maps local playback time into an absolute authoring interval.
-    pub fn with_timeline_origin(mut self, origin: Time) -> Self {
-        self.timeline_origin = Some(origin);
+    pub fn with_source_start(mut self, origin: Time) -> Self {
+        self.source_start = origin;
         self
     }
     /// Enables repeating playback.

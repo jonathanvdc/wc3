@@ -32,10 +32,11 @@ layout.evaluate_into(&sample, PoseInputs::default(), &mut pose)?;
 Each potentially animated field holds a typed `Property<T>` identity. Its supported
 value type implements `PropertyValue`; authored defaults live in `PropertyValues`.
 Reusable `Animation` definitions own curves and events, while clips select animation
-identities and supply playback duration, looping, and optional authoring timeline
-origin. Supply elapsed `clip_time` and `shared_time` in `AnimationSample`; sampling
-resolves mapped timeline time and key bounds from the selected clip. The explicit
-`timeline_time` input applies when the clip has no authoring mapping. See the
+identities and supply playback duration, looping, and a `source_start` that defaults
+to zero. Supply elapsed `clip_time` and independent `shared_time` in `AnimationSample`.
+Sampling adds the source start to wrapped or clamped clip time and restricts ordinary
+keys to the selected inclusive interval. Without a clip, ordinary tracks use
+`clip_time` directly without interval bounds. See the
 [semantic animation guide](semantic.md#typed-animation-curves) for authoring and
 selection precedence.
 

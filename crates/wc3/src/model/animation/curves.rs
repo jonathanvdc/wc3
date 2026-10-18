@@ -131,6 +131,56 @@ impl<'a, T: CurveValue> Curve<'a, T> {
         self.spherical_controls = spherical;
         Ok(self)
     }
+    /// Keeps authored keys within an inclusive playback interval, without changing controls.
+    pub(crate) fn select_interval(&self, start: Time, end: Time) -> Self {
+        let indices: Vec<_> = self
+            .times
+            .iter()
+            .enumerate()
+            .filter_map(|(i, time)| (time >= start && time <= end).then_some(i))
+            .collect();
+        let shape = match &self.shape {
+            CurveShape::Step => CurveShape::Step,
+            CurveShape::Linear => CurveShape::Linear,
+            CurveShape::Slerp => CurveShape::Slerp,
+            CurveShape::Nlerp => CurveShape::Nlerp,
+            CurveShape::Hermite(v) => CurveShape::Hermite(HermiteDerivatives {
+                incoming: indices
+                    .iter()
+                    .map(|&i| v.incoming.get(i).unwrap())
+                    .collect(),
+                outgoing: indices
+                    .iter()
+                    .map(|&i| v.outgoing.get(i).unwrap())
+                    .collect(),
+            }),
+            CurveShape::Bezier(v) => CurveShape::Bezier(BezierControls {
+                incoming: indices
+                    .iter()
+                    .map(|&i| v.incoming.get(i).unwrap())
+                    .collect(),
+                outgoing: indices
+                    .iter()
+                    .map(|&i| v.outgoing.get(i).unwrap())
+                    .collect(),
+            }),
+            CurveShape::Tcb(v) => {
+                CurveShape::Tcb(indices.iter().map(|&i| v.get(i).unwrap()).collect())
+            }
+        };
+        Self {
+            times: indices
+                .iter()
+                .map(|&i| self.times.get(i).unwrap())
+                .collect(),
+            values: indices
+                .iter()
+                .map(|&i| self.values.get(i).unwrap())
+                .collect(),
+            shape,
+            spherical_controls: self.spherical_controls,
+        }
+    }
     /// Ordered key times.
     pub fn times(&self) -> &ZeroVec<'a, Time> {
         &self.times

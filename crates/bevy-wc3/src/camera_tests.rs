@@ -15,7 +15,7 @@ fn binding_samples_current_animation_and_root_without_pose_or_global_update_lag(
     builder
         .add_global_channel(Channel::Vector3(Track {
             target: builder.model().node(node).unwrap().transform.translation,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::linear(
                 [
                     ModelTime::seconds(0.).unwrap(),
@@ -67,10 +67,7 @@ fn binding_samples_current_animation_and_root_without_pose_or_global_update_lag(
         .world_mut()
         .spawn((Camera3d::default(), CameraBinding::new(root, feature)))
         .id();
-    app.world_mut()
-        .get_mut::<Playback>(root)
-        .unwrap()
-        .timeline_time = 1.;
+    app.world_mut().get_mut::<Playback>(root).unwrap().clip_time = 1.;
     app.world_mut()
         .get_mut::<Transform>(root)
         .unwrap()

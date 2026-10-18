@@ -25,7 +25,7 @@ fn poses(c: &mut Criterion) {
             builder
                 .add_global_channel(Channel::Rotation(Track {
                     target: rotation,
-                    clock: TimeSource::Timeline,
+                    clock: TimeSource::Animation,
                     curve: Curve::linear(
                         [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
                         [Quaternion::IDENTITY, Quaternion([0., 0., 0.1, 0.995])],
@@ -40,7 +40,7 @@ fn poses(c: &mut Criterion) {
         let animation = AnimationProgram::compile(&model);
         let sample = animation
             .sample(AnimationSample {
-                timeline_time: Time::seconds(0.5).unwrap(),
+                clip_time: Time::seconds(0.5).unwrap(),
                 ..Default::default()
             })
             .unwrap();

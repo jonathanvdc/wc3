@@ -29,7 +29,6 @@ pub(crate) fn dispatch_events(
             selection,
             EventClocks {
                 clip: playback.clip_time,
-                timeline: playback.timeline_time,
                 shared: playback.shared_time,
             },
             playback.event_traversal,
@@ -76,17 +75,16 @@ pub(crate) fn dispatch_events(
         };
         for occurrence in &state.occurrences {
             let definition = &events.definitions[occurrence.definition];
-            let (clip, timeline, shared) = EventState::sample_times(&events, selection, occurrence);
-            let (Ok(clip), Ok(timeline), Ok(shared), Ok(key)) = (
+            let (clip, shared) = EventState::sample_times(occurrence);
+            let (Ok(clip), Ok(shared), Ok(key)) = (
                 ModelTime::seconds(clip),
-                ModelTime::seconds(timeline),
                 ModelTime::seconds(shared),
                 ModelTime::seconds(definition.time),
             ) else {
                 continue;
             };
             let retimed = sample
-                .at_times(clip, timeline, shared)
+                .at_times(clip, shared)
                 .at_occurrence(definition.clock, key);
             let node_index = definition.node_index;
             let transform = node_index.map_or(basis.to_matrix(), |index| {

@@ -42,7 +42,7 @@ fn boolean_sources_remain_shared_across_socket_and_light_slots() {
                 Channel::Boolean(Track {
                     target,
                     curve: Curve::step([time(0.), time(0.5)], keys).unwrap(),
-                    clock: TimeSource::Clip,
+                    clock: TimeSource::Animation,
                 }),
             )
             .unwrap();
@@ -93,22 +93,20 @@ fn explicit_boolean_conversion_samples_at_retimed_clocks() {
         .add_global_channel(Channel::Boolean(Track {
             target: source,
             curve: Curve::step([time(0.), time(1.)], [true, false]).unwrap(),
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
         }))
         .unwrap();
     let model = draft.finish().unwrap();
     let animation = AnimationProgram::compile(&model);
     let sample = animation
         .sample(AnimationSample {
-            timeline_time: time(1.5),
+            clip_time: time(1.5),
             ..Default::default()
         })
         .unwrap();
     assert_eq!(sample.animated(&visibility), 0.);
     assert_eq!(
-        sample
-            .at_times(time(0.), time(0.5), time(0.))
-            .animated(&visibility),
+        sample.at_times(time(0.), time(0.)).animated(&visibility),
         1.
     );
     assert!(Model::<Universal>::builder("other")

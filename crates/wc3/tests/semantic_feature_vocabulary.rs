@@ -184,7 +184,7 @@ fn custom_vocabulary_uses_profile_independent_slots() {
     builder
         .add_global_channel(wc3::model::Channel::Scalar(wc3::model::Track {
             target: intensity,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: wc3::model::Curve::step([wc3::model::Time::default()], [2.]).unwrap(),
         }))
         .unwrap();

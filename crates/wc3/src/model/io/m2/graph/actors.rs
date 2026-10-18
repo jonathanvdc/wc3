@@ -555,7 +555,7 @@ where
                 let event = semantic::Event {
                     time: Time::seconds((f64::from(ms) - f64::from(start)) / 1000.)?,
                     clock: if global == u16::MAX {
-                        semantic::TimeSource::Clip
+                        semantic::TimeSource::Animation
                     } else {
                         semantic::TimeSource::Shared(
                             *clocks

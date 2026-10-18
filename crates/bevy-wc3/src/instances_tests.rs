@@ -264,7 +264,6 @@ fn separately_decoded_replacement_rebinds_clip_and_pose_scoped_identities() {
             Playback {
                 clip: Some(old_clip),
                 clip_time: 0.42,
-                timeline_time: 7.,
                 shared_time: 9.,
                 paused: true,
                 speed: 0.3,
@@ -288,14 +287,7 @@ fn separately_decoded_replacement_rebinds_clip_and_pose_scoped_identities() {
     app.update();
     let playback = app.world().get::<Playback>(root).unwrap();
     assert_eq!(playback.clip, Some(new_clip));
-    assert_eq!(
-        [
-            playback.clip_time,
-            playback.timeline_time,
-            playback.shared_time
-        ],
-        [0.42, 7., 9.]
-    );
+    assert_eq!([playback.clip_time, playback.shared_time], [0.42, 9.]);
     assert!(playback.paused);
     assert_eq!(playback.speed, 0.3);
     assert_eq!(playback.controllers, ControllerSelection::Explicit(vec![]));

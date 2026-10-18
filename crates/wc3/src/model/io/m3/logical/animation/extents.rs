@@ -106,7 +106,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                     }),
                     mode,
                 )?,
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
             }),
         )?;
         builder.add_controller_channel(
@@ -120,7 +120,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                     }),
                     mode,
                 )?,
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
             }),
         )?;
         builder.add_controller_channel(
@@ -134,7 +134,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                     }),
                     mode,
                 )?,
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
             }),
         )?;
         builder.set_feature(feature, surface::Feature::Extent((binding).into()))?;

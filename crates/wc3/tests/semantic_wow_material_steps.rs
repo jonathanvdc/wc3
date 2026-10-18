@@ -220,7 +220,7 @@ fn named_crossfade_inputs_keep_native_animation_ordinals_when_frozen() {
     draft
         .add_global_channel(Channel::Scalar(Track {
             target,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             curve: Curve::linear(
                 [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
                 [0., 1.],
@@ -235,7 +235,7 @@ fn named_crossfade_inputs_keep_native_animation_ordinals_when_frozen() {
     .unwrap();
     let sample = model
         .animation_sample(AnimationSample {
-            timeline_time: Time::seconds(0.75).unwrap(),
+            clip_time: Time::seconds(0.75).unwrap(),
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();

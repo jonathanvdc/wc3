@@ -34,7 +34,6 @@ fn geometry_controllers_isolate_meshes_without_marking_constants_dynamic() {
         .animation_sample(AnimationSample {
             clip: Some(clip),
             clip_time: time(0.75),
-            timeline_time: time(0.75),
             ..Default::default()
         })
         .unwrap();
@@ -74,12 +73,12 @@ fn common_mesh_targets_override_feature_values_and_equal_constants_share_keys() 
         .edit(|builder| {
             builder.add_global_channel(Channel::Vector3(Track {
                 target: definition.color,
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
                 curve: Curve::linear([time(0.), time(1.)], [[0.2, 0.4, 0.6], [0.4, 0.6, 0.8]])?,
             }))?;
             builder.add_global_channel(Channel::Scalar(Track {
                 target: definition.opacity,
-                clock: TimeSource::Timeline,
+                clock: TimeSource::Animation,
                 curve: Curve::linear([time(0.), time(1.)], [0.5, 1.])?,
             }))
         })
@@ -89,7 +88,7 @@ fn common_mesh_targets_override_feature_values_and_equal_constants_share_keys() 
     assert!(value.is_animated());
     let sample = model
         .animation_sample(AnimationSample {
-            timeline_time: time(0.5),
+            clip_time: time(0.5),
             ..Default::default()
         })
         .unwrap();
@@ -131,7 +130,6 @@ fn geometry_alpha_hides_draw_and_materials_share_only_matching_mesh_states() {
         let mut playback = app.world_mut().get_mut::<Playback>(root).unwrap();
         playback.clip = Some(clip);
         playback.clip_time = 1.;
-        playback.timeline_time = 1.;
         playback.paused = true;
     }
     app.update();

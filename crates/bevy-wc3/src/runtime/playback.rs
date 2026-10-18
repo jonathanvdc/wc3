@@ -29,8 +29,6 @@ pub struct Playback {
     pub clip: Option<ClipId>,
     /// Elapsed local playback seconds, wrapped or clamped by clip policy.
     pub clip_time: f64,
-    /// Absolute authoring timeline seconds.
-    pub timeline_time: f64,
     /// Elapsed seconds for independent repeating clocks.
     pub shared_time: f64,
     /// Playback rate; negative values run backwards.
@@ -84,7 +82,6 @@ impl Playback {
         self.transition_request.duration = Some(0.);
         self.transition_clock = 0.;
         self.clip_time = 0.;
-        self.timeline_time = 0.;
         self.shared_time = 0.;
         self.event_traversal.revision = self.event_traversal.revision.wrapping_add(1);
         self.event_traversal.origin = EventClocks::default();
@@ -99,12 +96,10 @@ impl Playback {
         self.transition_request.duration = Some(0.);
         self.transition_clock = 0.;
         self.clip_time = seconds;
-        self.timeline_time = seconds;
         self.shared_time = seconds;
         self.event_traversal.revision = self.event_traversal.revision.wrapping_add(1);
         self.event_traversal.origin = EventClocks {
             clip: seconds,
-            timeline: seconds,
             shared: seconds,
         };
         self.event_traversal.include_origin = false;
@@ -130,7 +125,6 @@ impl Playback {
         Ok(AnimationSample {
             clip: self.clip,
             clip_time: ModelTime::seconds(self.clip_time)?,
-            timeline_time: ModelTime::seconds(self.timeline_time)?,
             shared_time: ModelTime::seconds(self.shared_time)?,
             controllers: match &self.controllers {
                 ControllerSelection::Authored => {
@@ -150,7 +144,6 @@ impl Default for Playback {
             transition_clock: 0.,
             clip: None,
             clip_time: 0.,
-            timeline_time: 0.,
             shared_time: 0.,
             speed: 1.,
             paused: false,
@@ -170,7 +163,6 @@ pub(crate) fn advance_animation(time: Res<Time>, mut query: Query<&mut Playback>
             }
             playback.transition_clock += delta.max(0.);
             playback.clip_time += delta;
-            playback.timeline_time += delta;
             playback.shared_time += delta;
         }
     }

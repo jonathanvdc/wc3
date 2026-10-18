@@ -54,8 +54,8 @@ fn additive_camera_keys_remain_exact_and_borrowed() {
     assert_eq!(camera.target, [30_000_000., 40., 50.]);
     let property = camera.eye_offset;
     let curve = graph
-        .global_channels()
-        .filter(|v| v.clock() == TimeSource::Timeline)
+        .channels()
+        .filter(|v| v.clock() == TimeSource::Animation)
         .find_map(|channel| match channel {
             Channel::Vector3(track) if track.target == property => Some(&track.curve),
             _ => None,
@@ -116,8 +116,8 @@ fn native_integer_effect_curves_keep_full_width() {
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     let curve = graph
-        .global_channels()
-        .filter(|v| v.clock() == TimeSource::Timeline)
+        .channels()
+        .filter(|v| v.clock() == TimeSource::Animation)
         .find_map(|channel| match channel {
             Channel::Unsigned(track) => Some(&track.curve),
             _ => None,
@@ -389,8 +389,8 @@ fn absolute_tracks_without_sequences_do_not_invent_playback_clips() {
     assert_eq!(model.clips().len(), 0);
     assert_eq!(
         model
-            .global_channels()
-            .filter(|v| v.clock() == TimeSource::Timeline)
+            .channels()
+            .filter(|v| v.clock() == TimeSource::Animation)
             .count(),
         1
     );
@@ -438,18 +438,27 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
     assert_eq!(graph.clips().len(), 2);
     assert_eq!(
         graph
-            .global_channels()
-            .filter(|v| v.clock() == TimeSource::Timeline)
+            .channels()
+            .filter(|v| v.clock() == TimeSource::Animation)
             .count(),
         1
     );
     assert!(graph
         .clips()
         .iter()
-        .all(|(_, clip)| clip.animations.is_empty()));
-    let Channel::Vector3(mut track) = graph
+        .all(|(_, clip)| clip.animations.len() == 1));
+    let selections: Vec<_> = graph
+        .clips()
+        .iter()
+        .map(|(_, clip)| clip.animations[0])
+        .collect();
+    assert_eq!(selections[0], selections[1]);
+    assert!(graph
         .global_channels()
-        .find(|v| v.clock() == TimeSource::Timeline)
+        .all(|channel| matches!(channel.clock(), TimeSource::Shared(_))));
+    let Channel::Vector3(mut track) = graph
+        .channels()
+        .find(|v| v.clock() == TimeSource::Animation)
         .unwrap()
         .clone()
     else {
@@ -460,7 +469,13 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
     imported
         .value
         .edit(|builder| {
-            let id = builder.model().global_animations()[0];
+            let id = builder
+                .model()
+                .animations()
+                .iter()
+                .find(|(_, animation)| !animation.channels.is_empty())
+                .unwrap()
+                .0;
             let mut animation = builder.model().animation(id).unwrap().clone();
             animation.channels[0] = Channel::Vector3(track);
             builder.set_animation(id, animation)
@@ -477,6 +492,18 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
     assert_eq!(
         track.linear_keys().unwrap().get(0).unwrap().value,
         [4., 5., 6.]
+    );
+    let second = imported.value.clips().iter().nth(1).unwrap().0;
+    assert!(
+        imported
+            .value
+            .edit(|builder| {
+                let mut clip = builder.model().clip(second).unwrap().clone();
+                clip.animations.clear();
+                builder.set_clip(second, clip)
+            })
+            .is_err(),
+        "native MDLX cannot gate the shared timeline to only one sequence"
     );
 }
 
@@ -500,12 +527,12 @@ fn global_tracks_without_sequences_stay_on_the_shared_clock() {
     let graph = &imported.value;
     assert_eq!(graph.clips().len(), 0);
     assert!(graph
-        .global_channels()
-        .find(|v| v.clock() == TimeSource::Timeline)
+        .channels()
+        .find(|v| v.clock() == TimeSource::Animation)
         .is_none());
     assert_eq!(
         graph
-            .global_channels()
+            .channels()
             .filter(|v| matches!(v.clock(), TimeSource::Shared(_)))
             .count(),
         1
@@ -546,8 +573,8 @@ fn tcb_curves_cannot_be_encoded_as_native_mdlx_tracks() {
     let mut imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     let Channel::Vector3(mut track) = graph
-        .global_channels()
-        .find(|v| v.clock() == TimeSource::Timeline)
+        .channels()
+        .find(|v| v.clock() == TimeSource::Animation)
         .unwrap()
         .clone()
     else {
@@ -562,7 +589,13 @@ fn tcb_curves_cannot_be_encoded_as_native_mdlx_tracks() {
     if imported
         .value
         .edit(|builder| {
-            let id = builder.model().global_animations()[0];
+            let id = builder
+                .model()
+                .animations()
+                .iter()
+                .find(|(_, animation)| !animation.channels.is_empty())
+                .unwrap()
+                .0;
             let mut animation = builder.model().animation(id).unwrap().clone();
             animation.channels[0] = Channel::Vector3(track);
             builder.set_animation(id, animation)
@@ -687,4 +720,40 @@ fn empty_material_declarations_require_explicit_semantic_loss() {
         .is_empty());
     // The native document still owns its declaration after semantic conversion.
     assert_eq!(source.materials().next().unwrap().priority_plane, 7);
+}
+
+#[test]
+fn distinct_selected_animations_preserve_coincident_event_occurrences() {
+    use wc3::model::Animation;
+    let mut source = mdlx::Document::<mdlx::V800>::new();
+    source.set_sequences([mdlx::animation::Sequence::new("Events", [0, 1000]).unwrap()]);
+    source.set_event_objects([mdlx::scene::EventObject::new(
+        mdlx::scene::Node::new("Event", 0).unwrap(),
+        u32::MAX,
+        &[500],
+    )]);
+    let mut model = io::mdlx::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let clip = model.clips().iter().next().unwrap().0;
+    let event = model.clip_events(clip).next().unwrap().clone();
+    model
+        .edit(|builder| {
+            let animation = builder.add_animation(Animation::default());
+            builder.add_animation_event(animation, event)?;
+            let selection = builder
+                .model()
+                .clip(clip)
+                .unwrap()
+                .clone()
+                .with_animation(animation);
+            builder.set_clip(clip, selection)
+        })
+        .unwrap();
+    let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert_eq!(*output.event_objects().next().unwrap().frames(), [500, 500]);
 }

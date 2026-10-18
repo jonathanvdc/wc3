@@ -697,8 +697,9 @@ resource identities belong to the selected game vocabulary.
 
 Animation programs are reusable model-owned definitions. Clips and native
 controllers select them by identity; model-level selections remain active without
-a clip. MDLX non-global channels use one absolute authoring timeline, and clips
-map local playback into bounded intervals on it. Global sequences use shared clocks.
+a clip. MDLX ordinary channels share one animation, and each clip selects its
+authored interval in that animation. M2 clips select separate animations with
+source intervals starting at zero. Global sequences use independent shared clocks.
 
 D3 quaternion curves use explicit normalized linear interpolation (`Nlerp`),
 which remains distinct from spherical interpolation (`Slerp`). Both are restricted
@@ -730,13 +731,18 @@ clips retain their own duration and loop/clamp policy. `add_global_channel`,
 animation, creating one when the selection is empty. Editing that animation affects
 every selection of it. Use `add_animation_channel` for explicit ownership.
 
-`TimeSource` selects a track's time coordinate: `Clip` uses wrapped or clamped local time in seconds,
-`Timeline` uses absolute authoring time, and `Shared(ClockId)` wraps the supplied
-shared time by that clock's period. It is a selector, not mutable playback state.
-`Clip::timeline_origin` maps wrapped or clamped local time in seconds into an absolute interval whose
-length is the clip duration. Keys outside that interval cannot influence
-interpolation. Without a mapped clip, timeline tracks use the caller's explicit
-`timeline_time`.
+`TimeSource::Animation` evaluates ordinary tracks at the selected clip's
+`source_start` plus wrapped or clamped local playback time. Every clip selects an
+inclusive source interval whose length is its duration; `source_start` defaults to
+zero. Only keys inside that interval influence sampling. Animations keep their
+authored timestamps, so overlapping clips can select the same curves without
+copying or shifting keys. The MDLX vocabulary requires all clips to select the
+same ordered ordinary animations, with shared-clock animations selected at model
+level, matching its native timeline. Without a clip, ordinary model-level and controller
+tracks use `AnimationSample::clip_time` directly without interval bounds.
+`TimeSource::Shared(ClockId)` instead wraps independent shared time by that clock's
+period. This distinction expresses independent playback, not a choice between
+local and absolute coordinates for ordinary tracks.
 
 `AnimationSample` supplies the selected clip, elapsed clip time, shared time, and
 explicit controller selection. Direct model sampling and compiled
@@ -767,7 +773,7 @@ let translation = node.transform.translation;
 builder.add_node(node)?;
 builder.add_global_channel(Channel::Vector3(Track {
     target: translation,
-    clock: TimeSource::Timeline,
+    clock: TimeSource::Animation,
     curve: Curve::linear(
         [Time::seconds(0.)?, Time::seconds(1.)?],
         [[0., 0., 0.], [1., 0., 0.]],

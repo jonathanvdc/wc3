@@ -8,12 +8,12 @@ fn controller_activation_and_reordering_do_not_replay_existing_programmes() {
     let mut builder = ModelBuilder::new("controller transition");
     let a = builder.add_controller(Controller::default()).unwrap();
     let b = builder.add_controller(Controller::default()).unwrap();
-    let mut controller = definition(TimeSource::Timeline, 0.5);
+    let mut controller = definition(TimeSource::Animation, 0.5);
     controller.program = EventProgram::Controller(a);
     let events = RuntimeEvents {
         definitions: vec![
-            definition(TimeSource::Timeline, 0.5),
-            definition(TimeSource::Timeline, 0.9),
+            definition(TimeSource::Animation, 0.5),
+            definition(TimeSource::Animation, 0.9),
             controller,
         ],
         ..SlotConstruct::construct(&mut slot_values)
@@ -136,7 +136,7 @@ fn compilation_resolves_event_node_index_once() {
     builder
         .add_global_event(Event {
             feature: None,
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
             time: Time::seconds(0.5).unwrap(),
             name: "key".into(),
             node: Some(node),
@@ -155,7 +155,6 @@ fn compilation_resolves_event_node_index_once() {
 fn clocks(value: f64) -> EventClocks {
     EventClocks {
         clip: value,
-        timeline: value,
         shared: value,
     }
 }
@@ -174,9 +173,9 @@ fn forward_intervals_keep_duplicate_keys_and_seek_skips_destination() {
     let mut slot_values = SlotValues::default();
     let events = RuntimeEvents {
         definitions: vec![
-            definition(TimeSource::Timeline, 0.),
-            definition(TimeSource::Timeline, 0.5),
-            definition(TimeSource::Timeline, 0.5),
+            definition(TimeSource::Animation, 0.),
+            definition(TimeSource::Animation, 0.5),
+            definition(TimeSource::Animation, 0.5),
         ],
         ..SlotConstruct::construct(&mut slot_values)
     }
@@ -213,8 +212,8 @@ fn paused_start_keys_wait_and_reverse_traversal_does_not_dispatch() {
     let mut slot_values = SlotValues::default();
     let events = RuntimeEvents {
         definitions: vec![
-            definition(TimeSource::Timeline, 0.),
-            definition(TimeSource::Timeline, 0.5),
+            definition(TimeSource::Animation, 0.),
+            definition(TimeSource::Animation, 0.5),
         ],
         ..SlotConstruct::construct(&mut slot_values)
     }
@@ -279,16 +278,16 @@ fn timeline_keys_follow_selected_clip_interval_and_alias_identity() {
     let id = builder
         .add_clip(Clip::named("clip").with_duration(Time::seconds(1.).unwrap()))
         .unwrap();
-    let mut source = definition(TimeSource::Timeline, 10.5);
+    let mut source = definition(TimeSource::Animation, 10.5);
     source.program = EventProgram::Clip(id);
     let events = RuntimeEvents {
-        definitions: vec![source, definition(TimeSource::Timeline, 9.5)],
+        definitions: vec![source, definition(TimeSource::Animation, 9.5)],
         clips: HashMap::from([(
             id,
             ClipPolicy {
                 duration: 1.,
                 looping: true,
-                origin: Some(10.),
+                origin: 10.,
             },
         )]),
         ..SlotConstruct::construct(&mut slot_values)
@@ -315,8 +314,8 @@ fn timeline_keys_follow_selected_clip_interval_and_alias_identity() {
             .collect::<Vec<_>>(),
         [0.5, 1.5, 2.5]
     );
-    let times = EventState::sample_times(&events, selection, &state.occurrences[1]);
-    assert_eq!(times, (1.5, 10.5, 1.5));
+    let times = EventState::sample_times(&state.occurrences[1]);
+    assert_eq!(times, (1.5, 1.5));
 }
 
 #[test]
@@ -324,9 +323,9 @@ fn seek_origin_preserves_forward_keys_crossed_before_first_dispatch() {
     let mut slot_values = SlotValues::default();
     let events = RuntimeEvents {
         definitions: vec![
-            definition(TimeSource::Timeline, 0.5),
-            definition(TimeSource::Timeline, 0.55),
-            definition(TimeSource::Timeline, 0.6),
+            definition(TimeSource::Animation, 0.5),
+            definition(TimeSource::Animation, 0.55),
+            definition(TimeSource::Animation, 0.6),
         ],
         ..SlotConstruct::construct(&mut slot_values)
     }
@@ -334,7 +333,6 @@ fn seek_origin_preserves_forward_keys_crossed_before_first_dispatch() {
     let mut state = EventState::default();
     let mut playback = super::super::runtime::Playback::default();
     playback.seek(0.5).unwrap();
-    playback.timeline_time = 0.6;
     state.collect(
         &events,
         AnimationSample::default(),
@@ -360,7 +358,7 @@ fn inactive_programs_and_unchanged_or_paused_updates_do_not_scan_event_definitio
     let mut events = RuntimeEvents::default();
     events
         .definitions
-        .push(definition(TimeSource::Timeline, 0.25));
+        .push(definition(TimeSource::Animation, 0.25));
     let mut selected = None;
     for index in 0..4096 {
         let id = builder
@@ -371,10 +369,10 @@ fn inactive_programs_and_unchanged_or_paused_updates_do_not_scan_event_definitio
             ClipPolicy {
                 duration: 1.,
                 looping: true,
-                origin: None,
+                origin: 0.,
             },
         );
-        let mut event = definition(TimeSource::Clip, 0.5);
+        let mut event = definition(TimeSource::Animation, 0.5);
         event.program = EventProgram::Clip(id);
         events.definitions.push(event);
         selected = Some(id);
@@ -425,14 +423,14 @@ fn interval_clip_index_limits_global_timeline_scans_to_its_authored_window() {
     let id = builder.add_clip(Clip::named("interval")).unwrap();
     let events = RuntimeEvents {
         definitions: (0..10000)
-            .map(|index| definition(TimeSource::Timeline, f64::from(index) + 0.5))
+            .map(|index| definition(TimeSource::Animation, f64::from(index) + 0.5))
             .collect(),
         clips: HashMap::from([(
             id,
             ClipPolicy {
                 duration: 1.,
                 looping: true,
-                origin: Some(5000.),
+                origin: 5000.,
             },
         )]),
         ..SlotConstruct::construct(&mut slot_values)

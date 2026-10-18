@@ -115,7 +115,7 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
         || !value.skins().is_empty()
         || value
             .global_channels()
-            .find(|v| v.clock() == TimeSource::Timeline)
+            .find(|v| v.clock() == TimeSource::Animation)
             .is_some()
         || value
             .global_channels()
@@ -123,7 +123,7 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
             .is_some()
         || value
             .global_events()
-            .find(|v| v.clock == TimeSource::Timeline)
+            .find(|v| v.clock == TimeSource::Animation)
             .is_some()
         || value
             .global_events()

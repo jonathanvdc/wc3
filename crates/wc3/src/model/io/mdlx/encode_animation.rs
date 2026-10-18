@@ -7,15 +7,12 @@ use crate::model::formats::mdlx::{
 };
 use crate::model::profiles::Mdlx;
 use crate::model::PropertyValue;
-use crate::model::{
-    ClipId, ClockId, CurveDomain, Interpolation, Model, Property, TimeSource, ValueSlot,
-};
+use crate::model::{ClockId, CurveDomain, Interpolation, Model, Property, TimeSource, ValueSlot};
 use std::collections::{BTreeMap, HashSet};
 
 type NativeKey<T> = (T, Option<T>, Option<T>);
 pub(super) struct Encoder<'a, 'b, 'c> {
     pub model: &'b Model<'a, Mdlx>,
-    pub starts: BTreeMap<ClipId, f64>,
     pub globals: BTreeMap<ClockId, u32>,
     pub context: &'c mut Context,
     pub used: HashSet<(ValueSlot, &'static str)>,
@@ -111,17 +108,15 @@ impl Encoder<'_, '_, '_> {
         self.used.insert((*property, U::kind()));
         let mut keys = BTreeMap::<i32, Vec<NativeKey<T>>>::new();
         let mut behavior = None;
-        let channels = self
-            .model
-            .clips()
-            .iter()
-            .flat_map(|(id, _)| {
-                self.model
-                    .clip_channels(id)
-                    .map(move |channel| (Some(id), channel))
-            })
-            .chain(self.model.global_channels().map(|channel| (None, channel)));
-        for (clip_id, channel) in channels {
+        let mut selections = self.model.global_animations().to_vec();
+        if let Some((_, clip)) = self.model.clips().iter().next() {
+            selections.extend_from_slice(&clip.animations);
+        } else {
+            selections.extend(self.model.animations().iter().map(|(id, _)| id));
+        }
+        let mut seen = HashSet::new();
+        selections.retain(|id| seen.insert(*id));
+        for channel in self.model.animation_channels(&selections) {
             let Some(track) = U::track(channel) else {
                 continue;
             };
@@ -137,7 +132,7 @@ impl Encoder<'_, '_, '_> {
                 continue;
             }
             let global = match track.clock {
-                TimeSource::Clip | TimeSource::Timeline => None,
+                TimeSource::Animation => None,
                 TimeSource::Shared(id) => Some(
                     *self
                         .globals
@@ -150,11 +145,7 @@ impl Encoder<'_, '_, '_> {
                 continue;
             }
             behavior = Some((mode, global));
-            let offset = if global.is_some() || matches!(track.clock, TimeSource::Timeline) {
-                0.
-            } else {
-                self.starts[&clip_id.expect("clip channel has a clip")]
-            };
+            let offset = 0.;
             let mut track_keys = BTreeMap::<i32, Vec<NativeKey<T>>>::new();
             for index in 0..track.curve.times().len() {
                 let time = track

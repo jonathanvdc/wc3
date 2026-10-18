@@ -124,11 +124,7 @@ impl ModelRig {
             overrides: &overrides.0,
             camera: None,
         };
-        let retimed = sample.at_times(
-            selection.clip_time,
-            selection.timeline_time,
-            selection.shared_time,
-        );
+        let retimed = sample.at_times(selection.clip_time, selection.shared_time);
         let node = context.sample_node(index, &retimed, scratch).0;
         Ok(self
             .model

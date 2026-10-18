@@ -171,14 +171,16 @@ fn sampling_a_material_freezes_its_owned_coordinate_animation() {
     let mut slot_values = SlotValues::default();
     use wc3::model::materials::mdlx::LayeredSurface;
     use wc3::model::{AnimationSample, Time};
-    let source = source();
+    let mut source = source();
+    source.set_sequences([mdlx::animation::Sequence::new("Sample", [0, 1000]).unwrap()]);
     let model = io::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value
         .widen::<Universal>();
     let sample = model
         .animation_sample(AnimationSample {
-            timeline_time: Time::seconds(0.).unwrap(),
+            clip: Some(model.clips().iter().next().unwrap().0),
+            clip_time: Time::seconds(0.).unwrap(),
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();

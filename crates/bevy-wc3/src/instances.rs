@@ -219,7 +219,6 @@ fn rebind_state(
         playback.event_traversal.revision = playback.event_traversal.revision.wrapping_add(1);
         playback.event_traversal.origin = EventClocks {
             clip: playback.clip_time,
-            timeline: playback.timeline_time,
             shared: playback.shared_time,
         };
         playback.event_traversal.include_origin = false;

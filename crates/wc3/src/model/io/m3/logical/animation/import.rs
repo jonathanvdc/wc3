@@ -355,7 +355,7 @@ pub(in crate::model::io::m3::logical) fn read<'a, E: Envelope + Send + Sync>(
                         )?);
                     }
                 }
-                clip.timeline_origin = Some(Time::seconds(f64::from(row.start_frame) / 1000.)?);
+                clip.source_start = Time::seconds(f64::from(row.start_frame) / 1000.)?;
                 clip.controls = surface::SequenceControls {
                     source_id: row.id,
                     sequence_number: row.index,

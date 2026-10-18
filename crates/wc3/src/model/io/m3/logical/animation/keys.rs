@@ -117,7 +117,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                 Some(Channel::$channel(Track {
                     target: *$property,
                     curve,
-                    clock: TimeSource::Timeline,
+                    clock: TimeSource::Animation,
                 }))
             } else {
                 context.unsupported("m3.animation.type", "key family and property type differ")?;

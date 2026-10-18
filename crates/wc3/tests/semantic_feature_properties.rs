@@ -22,7 +22,7 @@ fn vertical_fov_animation_cannot_narrow_to_a_static_native_field() {
             target: fov,
             curve: Curve::linear([Time::default(), Time::seconds(1.).unwrap()], [0.5f32, 1.])
                 .unwrap(),
-            clock: TimeSource::Timeline,
+            clock: TimeSource::Animation,
         }))
         .unwrap();
     assert!(draft.finish().unwrap().try_narrow::<Mdlx>().is_err());
@@ -48,7 +48,7 @@ fn a_fov_slot_keeps_its_diagonal_camera_convention() {
             Channel::Scalar(Track {
                 target: fov,
                 curve: Curve::step([Time::default()], [0.75f32]).unwrap(),
-                clock: TimeSource::Clip,
+                clock: TimeSource::Animation,
             }),
         )
         .unwrap();

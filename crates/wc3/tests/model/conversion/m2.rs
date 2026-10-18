@@ -373,7 +373,7 @@ fn quantization_requires_an_explicit_tolerance() {
             sm::Channel::Vector3(sm::Track {
                 target: builder.model().node(node).unwrap().transform.translation,
                 curve,
-                clock: sm::TimeSource::Clip,
+                clock: sm::TimeSource::Animation,
             }),
         )
         .unwrap();
@@ -1685,4 +1685,67 @@ fn export_interns_equivalent_images_with_independent_resource_declarations() {
         .unwrap()
         .value;
     assert_eq!(output.model.core().textures.len(), 1);
+}
+
+#[test]
+fn offset_animation_interval_exports_as_native_local_keys() {
+    let mut builder = sm::Model::<sm::profiles::M2>::builder("offset source");
+    let definition = builder.new_node("bone").with_controls(mp::BoneControls {
+        key_bone: -1,
+        flags: mp::values::BoneBehaviorFlags::default(),
+        submesh: 0,
+        name_crc: 0,
+    });
+    let property = definition.transform.translation;
+    builder.add_node(definition).unwrap();
+    let time = |seconds| sm::Time::seconds(seconds).unwrap();
+    let clip = builder
+        .add_clip(
+            sm::Clip::named("offset")
+                .with_source_start(time(10.))
+                .with_duration(time(1.)),
+        )
+        .unwrap();
+    builder
+        .add_channel(
+            clip,
+            sm::Channel::Vector3(sm::Track {
+                target: property,
+                clock: TimeSource::Animation,
+                curve: sm::Curve::linear(
+                    [time(9.), time(10.), time(11.), time(12.)],
+                    [[900.; 3], [2.; 3], [4.; 3], [1200.; 3]],
+                )
+                .unwrap(),
+            }),
+        )
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let output = io::m2::plan::<m2::Flat<m2::V264>>(&model, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let imported = io::m2::import(&output, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (clip, selection) = imported.clips().iter().next().unwrap();
+    assert_eq!(selection.source_start, time(0.));
+    let node = imported.nodes().iter().next().unwrap().1;
+    let sample = imported
+        .animation_sample(sm::AnimationSample {
+            clip: Some(clip),
+            clip_time: time(0.5),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(sample.animated(&node.transform.translation), [3.; 3]);
+    let sm::Channel::Vector3(track) = imported
+        .clip_channels(clip)
+        .find(|channel| channel.target() == node.transform.translation.slot())
+        .unwrap()
+    else {
+        panic!("missing translation")
+    };
+    assert_eq!(track.curve.times().to_vec(), [time(0.), time(1.)]);
 }

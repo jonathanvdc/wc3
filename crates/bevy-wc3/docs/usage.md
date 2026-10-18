@@ -90,8 +90,9 @@ transition duration; `play_immediately` switches directly, and `play_with_blend`
 accepts an explicit `Duration`. A default standalone root samples authored rest
 state and shared programmes until a clip is selected.
 
-Set `paused` or `speed` to control advancement. `clip_time`, `timeline_time`, and
-`shared_time` can be independent. `seek(seconds)` skips events over the seek
+Set `paused` or `speed` to control advancement. `clip_time` drives ordinary
+animation through the selected clip source interval; `shared_time` independently
+drives shared clocks. `seek(seconds)` skips events over the seek
 interval, while direct clock edits retain normal forward event traversal. `restart`
 resets clocks and includes start events again. Invalid typed selections produce
 `PlaybackError` on evaluation. See [animation
@@ -182,7 +183,7 @@ bind palettes are shared across rigid occurrences. `PreparedModel::mounts()` and
 `ModelRig::mounts()` expose matching ordered definitions and live child roots.
 Explicit clip mappings synchronize a child's clip to host seconds; independent
 rigid clips retain their own clocks while following host pause and playback rate.
-Controller-driven skinned parts require matching authored timeline origins.
+Skinned clip mappings require matching clip source starts.
 
 For resource-driven setup, `assembly::Assembly` contains root and component
 sources, typed draw selections, image dependency and per-input replacements and explicit bindings.

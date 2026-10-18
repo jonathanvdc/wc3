@@ -38,7 +38,10 @@ start keys once. `seek(seconds)` skips its interval and destination keys; subseq
 advancement still dispatches normally. Direct clock edits retain ordinary traversal.
 Paused or reversed intervals emit no forward occurrences.
 
-Clip, authoring-timeline, and shared clocks retain their distinct semantics.
+Ordinary events use animation time within the selected clip source interval,
+including intervals beginning at zero. Traversal subtracts the source start to
+locate each occurrence in playback time; independent shared events follow their
+own clock periods.
 Controller selection changes begin newly enabled programmes at current traversal
 state rather than replaying unrelated global history. Shared clocks can continue
 while a non-looping clip is clamped at its end.

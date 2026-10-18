@@ -146,7 +146,7 @@ impl Profile for D3 {
         }
         if model
             .global_channels()
-            .find(|v| v.clock() == TimeSource::Timeline)
+            .find(|v| v.clock() == TimeSource::Animation)
             .is_some()
             || model
                 .global_channels()

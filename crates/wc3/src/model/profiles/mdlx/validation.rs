@@ -1,7 +1,6 @@
 //! Authoring limits inherent to Warcraft III rather than a particular native dialect.
 use super::Mdlx;
-use crate::model::TimeSource;
-use crate::model::{Billboard, Channel, Error, Interpolation, Model, Transform};
+use crate::model::{Billboard, Channel, Error, Interpolation, Model, TimeSource, Transform};
 pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
     value.validate_animation_consumers()?;
     if value.bounds().is_none()
@@ -29,21 +28,50 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
             "Warcraft III has one authored timeline per property, without layered controllers",
         ));
     }
-    if value.clips().iter().any(|(id, _)| {
-        value.clip_channels(id).next().is_some() || value.clip_events(id).next().is_some()
-    }) {
-        return Err(Error::new(
-            "clips.program",
-            "Warcraft III clips select intervals of model-level animation",
-        ));
-    }
-    for channel in value.channels() {
-        if channel.clock() == TimeSource::Clip {
+    let mut ordinary_selection = None;
+    for (_, clip) in value.clips() {
+        if clip.animations.iter().any(|id| {
+            let animation = value.animation(*id).expect("validated selection");
+            animation
+                .channels
+                .iter()
+                .any(|channel| matches!(channel.clock(), TimeSource::Shared(_)))
+                || animation
+                    .events
+                    .values()
+                    .any(|event| matches!(event.clock, TimeSource::Shared(_)))
+        }) {
             return Err(Error::new(
-                "animation.clock",
-                "Warcraft III curves require authoring timeline or shared time",
+                "clips.animations",
+                "Warcraft III shared-clock animations must be selected at model level",
             ));
         }
+
+        let selection: Vec<_> = clip
+            .animations
+            .iter()
+            .copied()
+            .filter(|id| {
+                let animation = value.animation(*id).expect("validated selection");
+                animation
+                    .channels
+                    .iter()
+                    .any(|channel| channel.clock() == TimeSource::Animation)
+                    || animation
+                        .events
+                        .values()
+                        .any(|event| event.clock == TimeSource::Animation)
+            })
+            .collect();
+        if ordinary_selection
+            .as_ref()
+            .is_some_and(|first| *first != selection)
+        {
+            return Err(Error::new("clips.animations", "Warcraft III clips must select the same ordered ordinary animations on their shared authoring timeline"));
+        }
+        ordinary_selection = Some(selection);
+    }
+    for channel in value.channels() {
         validate_channel(channel)?;
     }
     for (_, instance) in value.instances() {

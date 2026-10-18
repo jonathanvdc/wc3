@@ -22,8 +22,9 @@ root. `ModelDraw` preserves typed instance, mesh, material, draw-source, pass,
 and LOD identities.
 
 `Playback` selects typed clips and controller programmes in seconds. Their curves
-and events live in reusable semantic `Animation` definitions, and clip timeline
-mappings are resolved by the shared sampler. Shared
+and events live in reusable semantic `Animation` definitions. The shared sampler
+adds each clip's source start to local playback time and selects keys within its
+inclusive source interval. Shared
 clocks remain independently sampleable. Local-pose transitions retain signed scale
 and shortest-path quaternion rotation; surface and visibility properties sample the
 destination directly. The shared `wc3` pose evaluator handles hierarchy, pivots, native billboard
