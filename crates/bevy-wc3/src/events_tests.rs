@@ -1,72 +1,7 @@
 use super::*;
 use wc3::model::ModelMetadata;
-use wc3::model::{Clip, Controller, ModelBuilder, Time};
+use wc3::model::{Clip, ModelBuilder, Time};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-
-#[test]
-fn controller_activation_and_reordering_do_not_replay_existing_programmes() {
-    let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
-    let a = builder.add_controller(Controller::default()).unwrap();
-    let b = builder.add_controller(Controller::default()).unwrap();
-    let mut controller = definition(TimeSource::Animation, 0.5);
-    controller.program = EventProgram::Controller(a);
-    let events = RuntimeEvents {
-        definitions: vec![
-            definition(TimeSource::Animation, 0.5),
-            definition(TimeSource::Animation, 0.9),
-            controller,
-        ],
-        ..SlotConstruct::construct(&mut slot_values)
-    }
-    .indexed();
-    let mut state = EventState::default();
-    collect(&mut state, &events, 0.75, 32);
-    assert_eq!(
-        state
-            .occurrences
-            .iter()
-            .map(|value| value.definition)
-            .collect::<Vec<_>>(),
-        [0]
-    );
-    let controllers = [a, b];
-    state.collect(
-        &events,
-        AnimationSample {
-            controllers: &controllers,
-            ..SlotConstruct::construct(&mut slot_values)
-        },
-        clocks(1.),
-        EventTraversal::default(),
-        false,
-        32,
-    );
-    assert_eq!(
-        state
-            .occurrences
-            .iter()
-            .map(|value| value.definition)
-            .collect::<Vec<_>>(),
-        [1]
-    );
-    let reversed = [b, a];
-    state.collect(
-        &events,
-        AnimationSample {
-            controllers: &reversed,
-            ..SlotConstruct::construct(&mut slot_values)
-        },
-        clocks(1.2),
-        EventTraversal::default(),
-        false,
-        32,
-    );
-    assert!(state.occurrences.is_empty());
-    // Removing controllers similarly leaves global traversal where it was.
-    collect(&mut state, &events, 1.3, 32);
-    assert!(state.occurrences.is_empty());
-}
 
 fn definition(clock: TimeSource, time: f64) -> EventDefinition {
     EventDefinition {

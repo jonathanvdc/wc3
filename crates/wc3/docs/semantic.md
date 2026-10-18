@@ -598,9 +598,8 @@ alternatives, complete each look before publication. `set_look` replaces an
 assignment while preserving its identity and selection. Removing a draw likewise
 requires removing its assignments from every look in the same checked edit.
 
-Animation programs are reusable model-owned definitions. Clips and native
-controllers select them by identity; model-level selections remain active without
-a clip. MDLX ordinary tracks share one animation, and each clip selects its
+Animation programs are reusable model-owned definitions. Clips select them by
+identity; model-level selections remain active without a clip. MDLX ordinary tracks share one animation, and each clip selects its
 authored interval in that animation. M2 clips select separate animations with
 source intervals starting at zero. Global sequences use independent shared clocks.
 
@@ -624,11 +623,10 @@ and ownership domain, so bindings need no separate owner or field selector.
 
 `Animation` owns ordered tracks in `Animation::tracks` and identified event
 occurrences. Add it with `ModelBuilder::add_animation`, then reference its
-`AnimationId` from `Clip::animations`, `Controller::animations`, or the model's ordered
-`global_animations` selection. Reusing an identity shares its curves and events;
-clips retain their own duration and loop/clamp policy. `add_global_track`,
-`add_track`, and `add_controller_track` append to the selection's first
-animation, creating one when the selection is empty. Editing that animation affects
+`AnimationId` from `Clip::animations` or the model's ordered `global_animations`
+selection. Reusing an identity shares its curves and events;
+clips retain their own duration and loop/clamp policy. `add_global_track` and
+`add_track` append to the selection's first animation, creating one when the selection is empty. Editing that animation affects
 every selection of it. Use `add_animation_track` for explicit ownership.
 
 `TimeSource::Animation` evaluates ordinary tracks at the selected clip's
@@ -638,22 +636,20 @@ zero. Only keys inside that interval influence sampling. Animations keep their
 authored timestamps, so overlapping clips can select the same curves without
 copying or shifting keys. The MDLX vocabulary requires all clips to select the
 same ordered ordinary animations, with shared-clock animations selected at model
-level, matching its native timeline. Without a clip, ordinary model-level and controller
+level, matching its native timeline. Without a clip, ordinary model-level
 tracks use `AnimationSample::clip_time` directly without interval bounds.
 `TimeSource::Shared(ClockId)` instead wraps independent shared time by that clock's
 period. This distinction expresses independent playback, not a choice between
 local and absolute coordinates for ordinary tracks.
 
-`AnimationSample` supplies the selected clip, elapsed clip time, shared time, and
-explicit controller selection. Direct model sampling and compiled
-`AnimationProgram` sampling use the same curve evaluator and clip-time mapping.
-Model-level animations run first, followed by the clip's animations, followed by
-controllers in ascending priority; equal priorities preserve caller order. Within
-each selection, animation and track order are authoritative. Later applicable
-tracks override earlier ones; empty curves fall through to earlier tracks and
-ultimately authored defaults. Controllers are application-authored animation layers; their concurrency remains
-application playback policy. Value sampling does not advance clocks or dispatch events;
-event traversal separately examines the interval crossed between playback states.
+`AnimationSample` supplies the selected clip, elapsed clip time, and shared time.
+Direct model sampling and compiled `AnimationProgram` sampling use the same curve
+evaluator and clip-time mapping. Model-level animations run first, followed by the
+clip's animations. Within each selection, animation and track order are
+authoritative. Later applicable tracks override earlier ones; empty curves fall
+through to earlier tracks and ultimately authored defaults. Value sampling does
+not advance clocks or dispatch events; event traversal separately examines the
+interval crossed between playback states.
 
 Allocate constants with `PropertyValues::add` or `ModelBuilder::add_value`. Construct
 slot-bearing payloads with `Construct::construct(&mut values)` or

@@ -5,8 +5,8 @@ use std::collections::{BinaryHeap, HashMap};
 use std::iter::once;
 use std::sync::Arc;
 use wc3::model::{
-    AnimationSample, ClipId, ClockId, ControllerId, Event, EventSource as SemanticEventSource,
-    FeatureId, Model, NodeFeature, NodeId, TimeSource,
+    AnimationSample, ClipId, ClockId, Event, EventSource as SemanticEventSource, FeatureId, Model,
+    NodeFeature, NodeId, TimeSource,
 };
 
 /// Authored event semantics; applications interpret identities and commands.
@@ -29,8 +29,6 @@ pub enum EventProgram {
     Global,
     /// Selected clip activating a reusable animation.
     Clip(ClipId),
-    /// Explicitly enabled controller programme.
-    Controller(ControllerId),
 }
 /// One crossed semantic event with an occurrence-time world pose.
 #[derive(Message, Clone, Debug)]
@@ -237,11 +235,6 @@ impl RuntimeEvents {
                 add(event, EventProgram::Clip(id));
             }
         }
-        for (id, controller) in model.controllers() {
-            for event in model.animation_events(&controller.animations) {
-                add(event, EventProgram::Controller(id));
-            }
-        }
         result.indexed()
     }
     pub fn is_empty(&self) -> bool {
@@ -354,7 +347,6 @@ pub(super) struct EventState {
     previous: Option<EventClocks>,
     revision: u64,
     clip: Option<ClipId>,
-    controllers: Vec<ControllerId>,
     include_origin: bool,
     pub occurrences: Vec<EventOccurrence>,
     heap: BinaryHeap<Reverse<EventStream>>,
@@ -377,7 +369,7 @@ impl EventState {
     pub fn collect(
         &mut self,
         events: &RuntimeEvents,
-        selection: AnimationSample<'_>,
+        selection: AnimationSample,
         current: EventClocks,
         traversal: EventTraversal,
         paused: bool,
@@ -397,8 +389,6 @@ impl EventState {
         {
             return;
         }
-        // Controller transitions do not restart existing clock traversals.
-        // Newly enabled controllers begin at this update's observed position.
         if self.previous.is_none()
             || self.revision != traversal.revision
             || self.clip != selection.clip
@@ -407,8 +397,6 @@ impl EventState {
             self.revision = traversal.revision;
             self.include_origin = traversal.include_origin;
             self.clip = selection.clip;
-            self.controllers.clear();
-            self.controllers.extend_from_slice(selection.controllers);
         }
         let previous = self.previous.unwrap();
         if paused {
@@ -416,30 +404,16 @@ impl EventState {
                 self.include_origin = false;
             }
             self.previous = Some(current);
-            self.controllers.clear();
-            self.controllers.extend_from_slice(selection.controllers);
             return;
         }
         if !self.include_origin && previous == current {
-            self.controllers.clear();
-            self.controllers.extend_from_slice(selection.controllers);
             return;
         }
         let include = self.include_origin;
         self.include_origin = false;
         self.previous = Some(current);
         let policy = selection.clip.and_then(|id| events.clips.get(&id));
-        let old_controllers = &self.controllers;
-        let programs = once(EventProgram::Global)
-            .chain(selection.clip.map(EventProgram::Clip))
-            .chain(
-                selection
-                    .controllers
-                    .iter()
-                    .copied()
-                    .filter(|id| old_controllers.contains(id))
-                    .map(EventProgram::Controller),
-            );
+        let programs = once(EventProgram::Global).chain(selection.clip.map(EventProgram::Clip));
         for program in programs.filter_map(|program| events.programs.get(&program)) {
             for (clock, indices) in program.groups() {
                 let (from, to, minimum, maximum) = match clock {
@@ -578,8 +552,6 @@ impl EventState {
         }
         self.heap.clear();
         self.dropped = self.dropped.saturating_sub(self.occurrences.len() as u64);
-        self.controllers.clear();
-        self.controllers.extend_from_slice(selection.controllers);
     }
     /// Converts raw occurrence clocks to sample times. The event's own clock is
     /// overridden separately with RetimedAnimation::at_occurrence.

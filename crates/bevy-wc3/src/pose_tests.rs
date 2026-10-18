@@ -395,10 +395,10 @@ fn m2_spherical_billboards_preserve_authored_rotation_pivot_and_basis_lengths() 
 }
 
 #[test]
-fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
+fn channel_presence_keeps_late_clip_shared_animation_and_static_node_poses() {
     let mut slot_values = SlotValues::default();
     use wc3::model::NodeChannels;
-    use wc3::model::{Clip, Controller, SharedClock};
+    use wc3::model::{Clip, SharedClock};
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let parent = builder.add_named_node("animated parent").unwrap();
     let child = builder
@@ -458,10 +458,9 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
             }),
         )
         .unwrap();
-    let controller = builder.add_controller(Controller::default()).unwrap();
     builder
-        .add_controller_track(
-            controller,
+        .add_track(
+            clip,
             DynamicTrack::Boolean(Track {
                 target: builder.model().node(parent).unwrap().visible,
                 clock: TimeSource::Animation,
@@ -499,12 +498,10 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
         NodeChannels::default()
     );
     let time = Time::seconds(0.5).unwrap();
-    let controllers = [controller];
     let sample = compiled
         .animation
         .sample(AnimationSample {
             clip: Some(clip),
-            controllers: &controllers,
             clip_time: time,
             shared_time: time,
         })
@@ -530,6 +527,6 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
     let (_, visible) = context.sample_node(child_index, &retimed, &mut scratch);
     assert!(
         !visible,
-        "controller visibility still propagates through static children"
+        "animation visibility still propagates through static children"
     );
 }

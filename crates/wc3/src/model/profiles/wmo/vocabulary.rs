@@ -31,7 +31,7 @@ impl Profile for Wmo {
     type Mesh<'a> = NoControls;
     type Instance<'a> = wmo::RegionControls<'a>;
     type Clip<'a> = NoControls;
-    type Controller<'a> = NoControls;
+
     fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
         super::validation::resources(model)
     }
@@ -123,10 +123,6 @@ impl Extends<Wmo> for Universal {
     fn clip<'a>(value: <Wmo as Profile>::Clip<'a>) -> Self::Clip<'a> {
         let _ = value;
         None
-    }
-    fn controller<'a>(value: <Wmo as Profile>::Controller<'a>) -> Self::Controller<'a> {
-        let _ = value;
-        NoControls
     }
 }
 

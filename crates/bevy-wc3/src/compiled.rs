@@ -18,8 +18,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use wc3::model::systems::model_physics::Joint;
 use wc3::model::{
-    AnimationProgram, ClipId, ControllerId, DrawId, FeatureId, FeatureKind, InstanceId, MaterialId,
-    MeshId, NodeId,
+    AnimationProgram, ClipId, DrawId, FeatureId, FeatureKind, InstanceId, MaterialId, MeshId,
+    NodeId,
 };
 /// An observable limitation attached to its semantic source identity.
 #[derive(Clone, Debug)]
@@ -81,8 +81,6 @@ pub(crate) struct RuntimeLiquid<M> {
 
 #[derive(Clone)]
 pub(crate) struct ClipTiming {
-    pub(crate) origin: f64,
-    pub(crate) controllers: Arc<[ControllerId]>,
     pub(crate) blend_duration: Option<f64>,
 }
 

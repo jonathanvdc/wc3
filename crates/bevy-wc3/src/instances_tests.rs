@@ -1,10 +1,9 @@
 use super::super::{compile_model, PoseOverrides};
 use super::*;
-use wc3::model::profiles::Universal;
 use wc3::model::ModelBuilder;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-use wc3::model::{Model, NodeId, Transform as ModelTransform};
+use wc3::model::{NodeId, Transform as ModelTransform};
 
 fn fixture() -> (ModelAsset, NodeId) {
     let slot_values = SlotValues::default();
@@ -202,7 +201,6 @@ fn separately_decoded_replacement_rebinds_clip_and_pose_scoped_identities() {
     let mut slot_values = SlotValues::default();
     use wc3::model::conversion::ImportOptions;
     use wc3::model::io::mdlx;
-    use wc3::model::Controller;
     let text = r#"
         Version { FormatVersion 800, } Model "rebind" {}
         Sequences 2 {
@@ -276,13 +274,6 @@ fn separately_decoded_replacement_rebinds_clip_and_pose_scoped_identities() {
         .id();
     let app_child = app.world_mut().spawn(ChildOf(root)).id();
     app.update();
-    let foreign_controller = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()))
-        .add_controller(Controller::default())
-        .unwrap();
-    app.world_mut()
-        .get_mut::<Playback>(root)
-        .unwrap()
-        .controllers = ControllerSelection::Explicit(vec![foreign_controller]);
     app.world_mut()
         .entity_mut(root)
         .insert(ModelInstance(new_handle));
@@ -292,19 +283,17 @@ fn separately_decoded_replacement_rebinds_clip_and_pose_scoped_identities() {
     assert_eq!([playback.clip_time, playback.shared_time], [0.42, 9.]);
     assert!(playback.paused);
     assert_eq!(playback.speed, 0.3);
-    assert_eq!(playback.controllers, ControllerSelection::Explicit(vec![]));
     let overrides = &app.world().get::<PoseOverrides>(root).unwrap().0;
     assert_eq!(overrides, &HashMap::from([(new_node, pose)]));
     let report = app.world().get::<ModelRebind>(root).unwrap();
     assert!(report.clip_rebound);
     assert!(!report.clip_reset);
     assert_eq!(report.poses_rebound, 1);
-    assert_eq!(report.controllers_reset, 1);
     assert!(app.world().get_entity(app_child).is_ok());
     let model = app.world().get::<ModelRig>(root).unwrap().model();
     assert!(model
         .animation
-        .sample(playback.selection(model).unwrap())
+        .sample(playback.selection().unwrap())
         .is_ok());
     assert!(!playback.event_traversal.include_origin);
     assert_eq!(playback.event_traversal.origin.shared, 9.);

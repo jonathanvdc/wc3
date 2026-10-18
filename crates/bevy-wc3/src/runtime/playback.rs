@@ -1,26 +1,11 @@
 use super::super::events::{EventClocks, EventTraversal};
 use super::super::transition::TransitionRequest;
 use super::super::PreparedModel;
-use crate::compiled::ClipTiming;
 use bevy::prelude::*;
-use std::collections::HashMap;
 use std::time::Duration;
-use wc3::model::{
-    AnimationSample, ClipId, ControllerId, Error as AnimationError, Time as ModelTime,
-};
+use wc3::model::{AnimationSample, ClipId, Error as AnimationError, Time as ModelTime};
 
-/// Controller programmes selected independently of playback clocks.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub enum ControllerSelection {
-    /// Use the controller programs selected by the clip.
-    #[default]
-    Authored,
-
-    /// Override authored programmes; an empty list explicitly disables all controllers.
-    Explicit(Vec<ControllerId>),
-}
-
-/// Playback clocks and application-selected controller programmes, in seconds.
+/// Playback clocks and clip selection, in seconds.
 #[derive(Component, Clone, Debug)]
 pub struct Playback {
     pub(crate) event_traversal: EventTraversal,
@@ -36,8 +21,6 @@ pub struct Playback {
     pub speed: f64,
     /// Whether automatic clock advancement is paused.
     pub paused: bool,
-    /// Authored programmes or an explicit ordered override.
-    pub controllers: ControllerSelection,
     /// Camera supplying billboard and camera-anchor poses.
     pub driving_camera: Option<Entity>,
     /// Selected authored LOD. Common geometry is always included.
@@ -112,27 +95,11 @@ impl Playback {
             .and_then(|timing| timing.blend_duration)
             .unwrap_or(model.blend_time)
     }
-    pub(crate) fn selection<'a>(
-        &'a self,
-        model: &'a PreparedModel,
-    ) -> Result<AnimationSample<'a>, AnimationError> {
-        self.selection_from_timing(&model.timing)
-    }
-    pub(crate) fn selection_from_timing<'a>(
-        &'a self,
-        timings: &'a HashMap<ClipId, ClipTiming>,
-    ) -> Result<AnimationSample<'a>, AnimationError> {
-        let timing = self.clip.and_then(|id| timings.get(&id));
+    pub(crate) fn selection(&self) -> Result<AnimationSample, AnimationError> {
         Ok(AnimationSample {
             clip: self.clip,
             clip_time: ModelTime::seconds(self.clip_time)?,
             shared_time: ModelTime::seconds(self.shared_time)?,
-            controllers: match &self.controllers {
-                ControllerSelection::Authored => {
-                    timing.map_or(&[], |timing| timing.controllers.as_ref())
-                }
-                ControllerSelection::Explicit(controllers) => controllers,
-            },
         })
     }
 }
@@ -148,7 +115,6 @@ impl Default for Playback {
             shared_time: 0.,
             speed: 1.,
             paused: false,
-            controllers: ControllerSelection::Authored,
             driving_camera: None,
             lod: 0,
         }

@@ -20,7 +20,7 @@ Models convert their native coordinate conventions into Bevy's frame beneath
 the application root. `ModelDraw` preserves typed instance, mesh, material, draw-source, pass,
 and LOD identities.
 
-`Playback` selects typed clips and controller programmes in seconds. Their curves
+`Playback` selects typed clips in seconds. Their curves
 and events live in reusable semantic `Animation` definitions. The shared sampler
 adds each clip's source start to local playback time and selects keys within its
 inclusive source interval. Shared

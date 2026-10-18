@@ -68,31 +68,6 @@ pub struct Animation<'a> {
     /// Identified event occurrences, traversed separately from value sampling.
     pub events: BTreeMap<EventId, Event<'a>>,
 }
-/// Layer identity and ordering for a set of tracks.
-#[derive(Clone, Debug)]
-pub struct Controller<'a, P: Profile = Universal> {
-    /// Vocabulary-specific controller behavior.
-    pub controls: P::Controller<'a>,
-    /// Controller display name.
-    pub name: Cow<'a, str>,
-    /// Reusable animations selected by this controller, in evaluation order.
-    pub animations: Vec<AnimationId>,
-    /// Evaluation priority.
-    pub priority: i32,
-    /// Whether this controller runs concurrently.
-    pub concurrent: bool,
-}
-impl<P: Profile> Default for Controller<'_, P> {
-    fn default() -> Self {
-        Self {
-            name: Cow::Borrowed(""),
-            priority: 0,
-            concurrent: false,
-            animations: Vec::new(),
-            controls: Default::default(),
-        }
-    }
-}
 /// One typed animation track.
 #[derive(Clone, Debug)]
 pub struct Track<'a, T: CurveValue + PropertyValue> {

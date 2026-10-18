@@ -108,8 +108,6 @@ pub trait Profile: Clone + Debug + 'static {
     type Draw: ControlsPayload + Default;
     /// Additional playback selection and transition behavior.
     type Clip<'a>: ControlsPayload + Default;
-    /// Additional layered-controller behavior.
-    type Controller<'a>: ControlsPayload + Default;
 
     /// Returns the binding owned by shared geometry, when the vocabulary supports one.
     fn mesh_skin(controls: &Self::Mesh<'_>) -> Option<SkinId> {
@@ -184,7 +182,6 @@ impl Profile for Universal {
     type Mesh<'a> = Option<MeshControls>;
     type Instance<'a> = Option<InstanceControls<'a>>;
     type Clip<'a> = Option<ClipControls>;
-    type Controller<'a> = NoControls;
 }
 /// Proof that a target vocabulary can accept every source payload unchanged.
 ///
@@ -228,8 +225,6 @@ pub trait Extends<Source: Profile>: Profile {
     fn draw(value: Source::Draw) -> Self::Draw;
     /// Embeds clip controls without changing meaning.
     fn clip<'a>(value: Source::Clip<'a>) -> Self::Clip<'a>;
-    /// Embeds controller controls without changing meaning.
-    fn controller<'a>(value: Source::Controller<'a>) -> Self::Controller<'a>;
 }
 impl<P: Profile> Extends<P> for P {
     fn image_resource<'a>(value: P::ImageResource<'a>) -> Self::ImageResource<'a> {
@@ -284,9 +279,6 @@ impl<P: Profile> Extends<P> for P {
         value
     }
     fn clip<'a>(value: <P as Profile>::Clip<'a>) -> Self::Clip<'a> {
-        value
-    }
-    fn controller<'a>(value: <P as Profile>::Controller<'a>) -> Self::Controller<'a> {
         value
     }
 }

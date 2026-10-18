@@ -111,9 +111,4 @@ impl Narrows<Universal> for M2 {
             _ => Err(incompatible("clip")),
         }
     }
-    fn controller<'a>(
-        value: <Universal as Profile>::Controller<'a>,
-    ) -> Result<Self::Controller<'a>, Error> {
-        Ok(value)
-    }
 }

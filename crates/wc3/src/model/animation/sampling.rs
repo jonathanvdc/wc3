@@ -2,8 +2,8 @@
 use super::curves::{CurveValue, SampleValue};
 use crate::model::profiles::Profile;
 use crate::model::{
-    AnimationId, ClipId, ClockId, ControllerId, DynamicTrack, Error, Model, Property,
-    PropertyValue, PropertyValues, Quaternion, Texture, Time, TimeSource, Track, ValueSlot,
+    AnimationId, ClipId, ClockId, DynamicTrack, Error, Model, Property, PropertyValue,
+    PropertyValues, Quaternion, Texture, Time, TimeSource, Track, ValueSlot,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -11,28 +11,24 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 /// TimeSource values and explicitly selected programmes for one evaluation.
 ///
 /// The selected clip maps local time into its authored source interval. Without
-/// a clip, ordinary tracks use `clip_time` directly without interval bounds. The
-/// caller chooses controllers according to its gameplay policy. Shared clocks wrap
-/// `shared_time` by their authored periods; frozen clocks retain time zero.
+/// a clip, ordinary tracks use `clip_time` directly without interval bounds.
+/// Independent shared clocks wrap `shared_time` by their authored periods; frozen
+/// clocks retain time zero.
 /// This operation does not dispatch events.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct AnimationSample<'a> {
+pub struct AnimationSample {
     /// Selected playback clip.
     pub clip: Option<ClipId>,
     /// Seconds from the beginning of the selected clip; wrapped or clamped.
     pub clip_time: Time,
     /// Time driving all independent repeating clocks.
     pub shared_time: Time,
-    /// Explicitly enabled controllers, in tie-breaking order.
-    pub controllers: &'a [ControllerId],
 }
 
 /// A validated playback selection that can evaluate many typed properties.
 ///
-/// Model-level animations precede selected clip animations, then selected
-/// controllers in ascending priority order. Selection order is authoritative. Later
-/// matching tracks override earlier tracks. Equal-priority controllers keep
-/// caller order. Controller concurrency is playback policy, not implicit selection.
+/// Model-level animations precede selected clip animations. Later matching tracks
+/// override earlier tracks.
 pub struct SampledAnimation<'view, 'data> {
     values: &'view PropertyValues,
     clocks: Cow<'view, BTreeMap<ClockId, Time>>,
@@ -47,24 +43,16 @@ enum TrackSelection<'view, 'data> {
     Flat(Vec<&'view DynamicTrack<'data>>),
     Indexed(IndexedSelection<'view>),
 }
-// Ordinary clips need only inline borrowed programme references. Controller
-// storage allocates only when the caller explicitly selects controllers.
 struct IndexedSelection<'view> {
     animations: &'view BTreeMap<AnimationId, IndexedTracks>,
     global: &'view [AnimationId],
     clip: &'view [AnimationId],
-    controllers: Vec<&'view ControllerProgram>,
 }
 impl<'view> IndexedSelection<'view> {
     fn iter(&self) -> impl DoubleEndedIterator<Item = &'view IndexedTracks> + '_ {
         self.global
             .iter()
             .chain(self.clip)
-            .chain(
-                self.controllers
-                    .iter()
-                    .flat_map(|controller| &controller.animations),
-            )
             .map(|id| &self.animations[id])
     }
 }
@@ -114,7 +102,7 @@ impl<'data, P: Profile> Model<'data, P> {
     /// Resolves playback identities once before evaluating animated properties.
     pub fn animation_sample<'view>(
         &'view self,
-        sample: AnimationSample<'_>,
+        sample: AnimationSample,
     ) -> Result<SampledAnimation<'view, 'data>, Error> {
         let mut tracks: Vec<_> = self.global_tracks().collect();
         let (clip_policy, animation_time, source_interval) = if let Some(id) = sample.clip {
@@ -131,25 +119,6 @@ impl<'data, P: Profile> Model<'data, P> {
         } else {
             (None, sample.clip_time, None)
         };
-        let mut controllers = Vec::with_capacity(sample.controllers.len());
-        for (index, id) in sample.controllers.iter().enumerate() {
-            if sample.controllers[..index].contains(id) {
-                return Err(Error::new(
-                    "animation.sample.controllers",
-                    "controller selected more than once",
-                ));
-            }
-            controllers.push(self.controller(*id).ok_or_else(|| {
-                Error::new(
-                    "animation.sample.controllers",
-                    "unknown controller identity",
-                )
-            })?);
-        }
-        controllers.sort_by_key(|controller| controller.priority);
-        for controller in controllers {
-            tracks.extend(self.animation_tracks(&controller.animations));
-        }
         Ok(SampledAnimation {
             values: self.values(),
             clocks: Cow::Owned(
@@ -463,15 +432,10 @@ struct ClipProgram {
     source_start: Time,
     animations: Vec<AnimationId>,
 }
-#[derive(Clone, Debug)]
-struct ControllerProgram {
-    priority: i32,
-    animations: Vec<AnimationId>,
-}
 /// Owned semantic animation data, independent of geometry and source asset lifetime.
 ///
 /// Compilation retains property identities and interpolation controls; it does not
-/// bake frames, select gameplay controllers, or retain the source model graph.
+/// bake frames or retain the source model graph.
 #[derive(Clone, Debug)]
 pub struct AnimationProgram {
     values: PropertyValues,
@@ -479,7 +443,6 @@ pub struct AnimationProgram {
     animations: BTreeMap<AnimationId, IndexedTracks>,
     global: Vec<AnimationId>,
     clips: BTreeMap<ClipId, ClipProgram>,
-    controllers: BTreeMap<ControllerId, ControllerProgram>,
 }
 impl AnimationProgram {
     /// Authored constants retained by this compiled program.
@@ -521,19 +484,6 @@ impl AnimationProgram {
                             looping: clip.is_looping(),
                             source_start: clip.source_start,
                             animations: clip.animations.clone(),
-                        },
-                    )
-                })
-                .collect(),
-            controllers: model
-                .controllers()
-                .iter()
-                .map(|(id, controller)| {
-                    (
-                        id,
-                        ControllerProgram {
-                            priority: controller.priority,
-                            animations: controller.animations.clone(),
                         },
                     )
                 })
@@ -626,21 +576,10 @@ impl AnimationProgram {
                 .animations
                 .extend(&source.clips[&source_clip].animations);
         }
-        for (&id, controller) in &source.controllers {
-            if result.controllers.insert(id, controller.clone()).is_some() {
-                return Err(Error::new(
-                    "animation.compose.controllers",
-                    "controller identities overlap",
-                ));
-            }
-        }
         Ok(result)
     }
     /// Selects clocks and programmes using the same precedence as `Model::animation_sample`.
-    pub fn sample(
-        &self,
-        sample: AnimationSample<'_>,
-    ) -> Result<SampledAnimation<'_, 'static>, Error> {
+    pub fn sample(&self, sample: AnimationSample) -> Result<SampledAnimation<'_, 'static>, Error> {
         let mut selected_clip: &[AnimationId] = &[];
         let (clip_policy, animation_time, source_interval) = if let Some(id) = sample.clip {
             let clip = self
@@ -652,22 +591,6 @@ impl AnimationProgram {
         } else {
             (None, sample.clip_time, None)
         };
-        let mut controllers = Vec::with_capacity(sample.controllers.len());
-        for (index, id) in sample.controllers.iter().enumerate() {
-            if sample.controllers[..index].contains(id) {
-                return Err(Error::new(
-                    "animation.sample.controllers",
-                    "controller selected more than once",
-                ));
-            }
-            controllers.push(self.controllers.get(id).ok_or_else(|| {
-                Error::new(
-                    "animation.sample.controllers",
-                    "unknown controller identity",
-                )
-            })?);
-        }
-        controllers.sort_by_key(|controller| controller.priority);
         Ok(SampledAnimation {
             values: &self.values,
             clocks: Cow::Borrowed(&self.clocks),
@@ -679,7 +602,6 @@ impl AnimationProgram {
                 animations: &self.animations,
                 global: &self.global,
                 clip: selected_clip,
-                controllers,
             }),
         })
     }
@@ -687,7 +609,7 @@ impl AnimationProgram {
 
 type ResolvedTimes = (Option<(Time, bool)>, Time, Option<(Time, Time)>);
 fn resolve_times(
-    sample: AnimationSample<'_>,
+    sample: AnimationSample,
     duration: Time,
     looping: bool,
     origin: Time,

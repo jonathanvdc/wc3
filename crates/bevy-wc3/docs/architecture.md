@@ -43,7 +43,7 @@ into asset stores and returns `PreparedModel`. Source bytes and the graph
 may be released before preparation. Mesh, bind, animation, and definition buffers
 remain shared. Constant materials share handles; animated materials remain private
 per instance and mark assets modified only when sampled values change. Compilation
-indexes channel destinations across ordinary and shared-clock tracks in model, clip and controller
+indexes channel destinations across ordinary and shared-clock tracks in model-level and clip
 programmes. Bindings without channels, and scalar tracks proven to equal their
 authored default in every programme, do not require private material assets.
 Multi-key spline curves remain animated. Per-node channel flags also avoid querying

@@ -5,7 +5,7 @@ use crate::material::native_fixtures::m2;
 use wc3::model::profiles::{mdlx, Universal};
 use wc3::model::ModelMetadata;
 use wc3::model::{
-    AnimationSample, Clip, Controller, Curve, DynamicTrack, Material, MaterialId, MaterialSurface,
+    Animation, AnimationSample, Clip, Curve, DynamicTrack, Material, MaterialId, MaterialSurface,
     Model, ModelBuilder, SharedClock, Time as ModelTime, TimeSource, Track,
 };
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
@@ -59,7 +59,7 @@ fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
 }
 
 #[test]
-fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_controller() {
+fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_animation() {
     let mut slot_values = SlotValues::default();
     let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let nodes: Vec<_> = (0..5)
@@ -102,9 +102,9 @@ fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_controller()
     builder
         .add_track(clip, track(translations[2], TimeSource::Animation))
         .unwrap();
-    let controller = builder.add_controller(Controller::default()).unwrap();
+    let animation = builder.add_animation(Animation::default());
     builder
-        .add_controller_track(controller, track(translations[3], TimeSource::Animation))
+        .add_animation_track(animation, track(translations[3], TimeSource::Animation))
         .unwrap();
     let model = {
         builder.import_values(&slot_values).unwrap();
@@ -246,9 +246,9 @@ fn constant_scalar_tracks_matching_default_do_not_require_private_materials() {
 }
 
 #[test]
-fn conflicting_clip_constants_and_controller_overrides_keep_materials_live() {
+fn conflicting_clip_constants_and_animation_overrides_keep_materials_live() {
     let slot_values = SlotValues::default();
-    for controller_override in [false, true] {
+    for animation_override in [false, true] {
         let (mut builder, material) = scalar_material();
         let time = ModelTime::seconds(0.).unwrap();
         let target = opacity(&builder, material);
@@ -265,10 +265,10 @@ fn conflicting_clip_constants_and_controller_overrides_keep_materials_live() {
         builder
             .add_track(clip, track(1., TimeSource::Animation))
             .unwrap();
-        if controller_override {
-            let controller = builder.add_controller(Controller::default()).unwrap();
+        if animation_override {
+            let animation = builder.add_animation(Animation::default());
             builder
-                .add_controller_track(controller, track(0.25, TimeSource::Animation))
+                .add_animation_track(animation, track(0.25, TimeSource::Animation))
                 .unwrap();
         } else {
             let other = builder

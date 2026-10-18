@@ -89,10 +89,6 @@ pub enum ClockObject {}
 pub enum EventObject {}
 /// Programme event-occurrence handle.
 pub type EventId = Id<EventObject>;
-/// Animation controller identity marker.
-pub enum ControllerObject {}
-/// Animation controller handle.
-pub type ControllerId = Id<ControllerObject>;
 /// Node handle.
 pub type NodeId = Id<NodeObject>;
 /// Geometry handle.

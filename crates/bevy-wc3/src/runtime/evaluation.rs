@@ -5,9 +5,7 @@ use super::super::pose::{
 };
 use super::super::{ModelMaterial, WorldLiquidSurface};
 use super::mounts::MountedModel;
-use super::{
-    ControllerSelection, ModelDraw, ModelNode, ModelRig, Playback, PlaybackError, PoseOverrides,
-};
+use super::{ModelDraw, ModelNode, ModelRig, Playback, PlaybackError, PoseOverrides};
 use crate::physics::PhysicsSimulation;
 use bevy::ecs::query::QueryItem;
 use bevy::math::Affine3A;
@@ -19,7 +17,6 @@ use wc3::model::{ClipId, Transform as ModelTransform};
 pub(super) struct EvaluationState {
     pub(super) initialized: bool,
     pub(super) clip: Option<ClipId>,
-    pub(super) controllers: ControllerSelection,
     pub(super) clocks: [f64; 2],
     pub(super) lod: u32,
     pub(super) driving_camera: Option<Entity>,
@@ -33,7 +30,6 @@ impl EvaluationState {
     pub(super) fn animation_changed(&self, playback: &Playback, animated: bool) -> bool {
         !self.initialized
             || self.clip != playback.clip
-            || self.controllers != playback.controllers
             || (animated && self.clocks != [playback.clip_time, playback.shared_time])
     }
     pub(super) fn remember(
@@ -44,7 +40,6 @@ impl EvaluationState {
     ) {
         self.initialized = true;
         self.clip = playback.clip;
-        self.controllers.clone_from(&playback.controllers);
         self.clocks = [playback.clip_time, playback.shared_time];
         self.lod = playback.lod;
         self.driving_camera = playback.driving_camera;
@@ -247,8 +242,7 @@ pub(crate) fn animate_instances(
             instance.evaluation.lod = playback.lod;
             return;
         }
-        let timing = instance.model.timing.clone();
-        let selection = playback.selection_from_timing(&timing);
+        let selection = playback.selection();
         let animation = instance.model.animation.clone();
         let sample = match selection.and_then(|selection| animation.sample(selection)) {
             Ok(sample) => {

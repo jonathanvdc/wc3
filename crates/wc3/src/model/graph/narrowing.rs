@@ -2,8 +2,8 @@
 use crate::model::profiles::{Narrows, Profile};
 use crate::model::GeometrySchema as _;
 use crate::model::{
-    AttachedFeature, Clip, Controller, Dependencies, Draw, Error, Material, Mesh, MeshInstance,
-    Model, Node, Skin,
+    AttachedFeature, Clip, Dependencies, Draw, Error, Material, Mesh, MeshInstance, Model, Node,
+    Skin,
 };
 impl<'a, P: Profile> Model<'a, P> {
     fn try_map_payloads<Q: Narrows<P>>(self) -> Result<Model<'a, Q>, Error> {
@@ -19,7 +19,6 @@ impl<'a, P: Profile> Model<'a, P> {
         let instance = Q::instance;
         let draw = Q::draw;
         let clip = Q::clip;
-        let controller = Q::controller;
         Ok(Model {
             dependencies: Dependencies {
                 images: self
@@ -227,29 +226,6 @@ impl<'a, P: Profile> Model<'a, P> {
                             lod,
                             selection_group,
                             controls: instance(controls)?,
-                        },
-                    ))
-                })
-                .collect::<Result<_, Error>>()?,
-            controllers: self
-                .controllers
-                .into_iter()
-                .map(|(id, value)| {
-                    let Controller {
-                        name,
-                        priority,
-                        concurrent,
-                        animations,
-                        controls,
-                    } = value;
-                    Ok((
-                        id,
-                        Controller {
-                            name,
-                            priority,
-                            concurrent,
-                            animations,
-                            controls: controller(controls)?,
                         },
                     ))
                 })

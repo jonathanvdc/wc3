@@ -102,7 +102,6 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
     use crate::model::{Billboard, Inheritance, Transform};
     if !value.clips().is_empty()
         || !value.clocks().is_empty()
-        || !value.controllers().is_empty()
         || !value.skins().is_empty()
         || value
             .global_tracks()
@@ -123,7 +122,7 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
     {
         return Err(Error::new(
             "world.animation",
-            "static world models have no skeleton, timeline, event program, or layered controller",
+            "static world models have no skeleton, timeline, or event program",
         ));
     }
     if value.systems().len() != 1 {

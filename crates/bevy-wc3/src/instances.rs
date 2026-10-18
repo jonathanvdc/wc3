@@ -4,10 +4,7 @@ use super::child_coordinates::ChildCoordinates;
 use super::effects::model_particles::ModelParticleChild;
 use super::events::EventClocks;
 use super::runtime::populate_model;
-use super::{
-    ControllerSelection, ModelAsset, ModelMaterial, ModelRig, Playback, PoseOverrides,
-    PreparedModel,
-};
+use super::{ModelAsset, ModelMaterial, ModelRig, Playback, PoseOverrides, PreparedModel};
 use bevy::asset::{
     AssetEvent, AssetId, AssetLoadError, DependencyLoadState, LoadState,
     RecursiveDependencyLoadState,
@@ -17,7 +14,6 @@ use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use wc3::model::AnimationSample;
 
 /// Load and populate a Universal model at an existing application entity.
 ///
@@ -105,8 +101,6 @@ pub struct ModelRebind {
     pub clip_rebound: bool,
     /// Missing or ambiguous animation fell back to the first available clip.
     pub clip_reset: bool,
-    /// Controller selections removed because their scoped identities are absent.
-    pub controllers_reset: usize,
     /// Pose overrides migrated to uniquely named replacement nodes.
     pub poses_rebound: usize,
     /// Pose overrides removed because no unambiguous target remained.
@@ -114,11 +108,7 @@ pub struct ModelRebind {
 }
 impl ModelRebind {
     fn changed(self) -> bool {
-        self.clip_rebound
-            || self.clip_reset
-            || self.controllers_reset > 0
-            || self.poses_rebound > 0
-            || self.poses_reset > 0
+        self.clip_rebound || self.clip_reset || self.poses_rebound > 0 || self.poses_reset > 0
     }
 }
 fn unique_names<'a, T: Copy>(
@@ -159,21 +149,6 @@ fn rebind_state(
         report.clip_rebound = replacement.is_some();
         report.clip_reset = replacement.is_none();
         playback.clip = replacement.or_else(|| next.clips.first().map(|(id, _)| *id));
-    }
-    let mut seen = HashSet::new();
-    if let ControllerSelection::Explicit(controllers) = &mut playback.controllers {
-        controllers.retain(|id| {
-            let valid = seen.insert(*id)
-                && next
-                    .animation
-                    .sample(AnimationSample {
-                        controllers: &[*id],
-                        ..Default::default()
-                    })
-                    .is_ok();
-            report.controllers_reset += usize::from(!valid);
-            valid
-        });
     }
     let overrides = overrides.map(|overrides| {
         let existing: HashSet<_> = next.nodes.iter().map(|node| node.id).collect();

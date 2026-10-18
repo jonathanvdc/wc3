@@ -1,4 +1,4 @@
-//! Authoring controls belong to their logical playback and controller owners.
+//! Authoring controls belong to their logical playback owners.
 use crate::model::controls::{layered, model};
 use crate::model::{Link, ValidateLinks};
 /// Native authoring behavior supplementing one logical clip.

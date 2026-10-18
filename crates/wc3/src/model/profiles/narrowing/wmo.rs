@@ -106,9 +106,4 @@ impl Narrows<Universal> for Wmo {
             _ => Err(incompatible("clip")),
         }
     }
-    fn controller<'a>(
-        value: <Universal as Profile>::Controller<'a>,
-    ) -> Result<Self::Controller<'a>, Error> {
-        Ok(value)
-    }
 }

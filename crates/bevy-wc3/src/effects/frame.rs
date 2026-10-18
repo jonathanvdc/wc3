@@ -11,7 +11,7 @@ pub(crate) struct EffectFrame<'a, 'view, 'data> {
     pub traversal: EventTraversal,
     pub change: EffectChange,
     pub time: f64,
-    pub selection: AnimationSample<'a>,
+    pub selection: AnimationSample,
     pub sample: &'a SampledAnimation<'view, 'data>,
     /// Current model-space hierarchy matrices, in compiler node order.
     pub node_poses: &'a [Mat4],

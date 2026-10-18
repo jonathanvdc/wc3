@@ -82,7 +82,7 @@ guide](rendering/universal.md) explains native adapter limits.
 
 ## Control animation
 
-`Playback` uses seconds and typed `ClipId`/`ControllerId` selections.
+`Playback` uses seconds and typed `ClipId` selections.
 Obtain available clips from `ModelRig::model().clips()` and call `play`
 when the desired clip changes. `play` restarts the destination and uses the model's
 transition duration; `play_immediately` switches directly, and `play_with_blend`

@@ -51,7 +51,7 @@ pub enum BakeSpace {
 /// Explicit clocks and application pose inputs for an offline snapshot.
 #[derive(Clone, Copy, Default)]
 pub struct PoseOptions<'a> {
-    /// Playback clocks and selected clip/controllers; absent samples rest clocks.
+    /// Playback clocks and selected clip; absent samples rest clocks.
     pub playback: Option<&'a Playback>,
     /// Explicit clocks for independently mounted parts, keyed by their zero-based
     /// ordinal path through `PreparedModel::mounts`. Without an entry, synchronized
@@ -137,7 +137,7 @@ impl PoseBaker {
         let default_playback = Playback::default();
         let playback = options.playback.unwrap_or(&default_playback);
         let selection = playback
-            .selection(prepared)
+            .selection()
             .map_err(|error| ModelError(error.to_string()))?;
         let sample = prepared
             .animation
@@ -298,7 +298,6 @@ impl PoseBaker {
             child_path.push(ordinal);
             let frame = self.poses[mount.parent].matrix * mount.transform.to_matrix();
             let mut child_playback = playback.clone();
-            child_playback.controllers = Default::default();
             child_playback.clip = playback
                 .clip
                 .and_then(|clip| mount.clips.get(&clip).copied())

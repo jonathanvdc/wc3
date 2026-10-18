@@ -2,7 +2,7 @@ use crate::model::ModelMetadata;
 use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 use super::*;
-use crate::model::{Clip, Controller, Curve, ModelBuilder, SharedClock};
+use crate::model::{Clip, Curve, ModelBuilder, SharedClock};
 use std::ptr::eq;
 fn time(seconds: f64) -> Time {
     Time::seconds(seconds).unwrap()
@@ -216,12 +216,11 @@ fn alias_local_clock_and_owned_program_survive_source_drop() {
     let TrackSelection::Indexed(selection) = &sampled.tracks else {
         panic!("owned programs must use indexed selection")
     };
-    assert_eq!(selection.controllers.capacity(), 0);
     assert_eq!(selection.iter().count(), 1);
     assert_eq!(sampled.override_value(&property), Some([2.; 3]));
 }
 #[test]
-fn independent_clocks_and_controller_priority_are_explicit() {
+fn independent_clocks_are_explicit() {
     let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("bone").unwrap();
@@ -238,28 +237,6 @@ fn independent_clocks_and_controller_priority_are_explicit() {
     builder
         .add_global_track(dynamic_track(scale, TimeSource::Shared(clock), 8.))
         .unwrap();
-    let animation_0 = builder.add_animation(crate::model::Animation {
-        tracks: vec![dynamic_track(translation, TimeSource::Animation, 10.)],
-        ..Default::default()
-    });
-    let low = builder
-        .add_controller(Controller {
-            priority: -1,
-            animations: vec![animation_0],
-            ..SlotConstruct::construct(&mut slot_values)
-        })
-        .unwrap();
-    let animation_1 = builder.add_animation(crate::model::Animation {
-        tracks: vec![dynamic_track(translation, TimeSource::Animation, 20.)],
-        ..Default::default()
-    });
-    let high = builder
-        .add_controller(Controller {
-            priority: 2,
-            animations: vec![animation_1],
-            ..SlotConstruct::construct(&mut slot_values)
-        })
-        .unwrap();
     let fallback = builder.add_value(7f32);
     let model = {
         builder.import_values(&slot_values).unwrap();
@@ -269,19 +246,12 @@ fn independent_clocks_and_controller_priority_are_explicit() {
     let sample = AnimationSample {
         clip_time: time(1.),
         shared_time: time(2.5),
-        controllers: &[high, low],
         ..SlotConstruct::construct(&mut slot_values)
     };
     let selected = model.animation_sample(sample).unwrap();
-    assert_eq!(selected.override_value(&translation), Some([10.; 3]));
+    assert_eq!(selected.override_value(&translation), Some([2.; 3]));
     assert_eq!(selected.override_value(&scale), Some([2.; 3]));
     assert_eq!(selected.animated(&fallback), 7.);
-    assert!(model
-        .animation_sample(AnimationSample {
-            controllers: &[low, low],
-            ..sample
-        })
-        .is_err());
     let program = AnimationProgram::compile(&model);
     assert_eq!(
         program.sample(sample).unwrap().override_value(&translation),
@@ -315,18 +285,13 @@ fn indexed_empty_override_falls_back_and_timeline_keys_are_bounded() {
         })],
         ..Default::default()
     });
-    let controller = builder
-        .add_controller(Controller {
-            animations: vec![animation_2],
-            ..SlotConstruct::construct(&mut slot_values)
-        })
-        .unwrap();
     let clip = builder
         .add_clip(
             Clip::named("bounded")
                 .with_duration(time(2.))
                 .once()
-                .with_source_start(time(0.)),
+                .with_source_start(time(0.))
+                .with_animation(animation_2),
         )
         .unwrap();
     let model = {
@@ -338,7 +303,6 @@ fn indexed_empty_override_falls_back_and_timeline_keys_are_bounded() {
     let sample = AnimationSample {
         clip: Some(clip),
         clip_time: time(2.),
-        controllers: &[controller],
         ..SlotConstruct::construct(&mut slot_values)
     };
     assert_eq!(
@@ -431,17 +395,12 @@ fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
         })],
         ..Default::default()
     });
-    let empty = builder
-        .add_controller(Controller {
-            animations: vec![animation_3],
-            ..SlotConstruct::construct(&mut slot_values)
-        })
-        .unwrap();
     let clip = builder
         .add_clip(
             Clip::named("interval")
                 .with_duration(time(2.))
-                .with_source_start(time(10.)),
+                .with_source_start(time(10.))
+                .with_animation(animation_3),
         )
         .unwrap();
     let model = {
@@ -453,7 +412,6 @@ fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
         .animation_sample(AnimationSample {
             clip: Some(clip),
             clip_time: time(0.5),
-            controllers: &[empty],
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();

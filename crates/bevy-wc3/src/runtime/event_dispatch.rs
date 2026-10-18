@@ -19,8 +19,7 @@ pub(crate) fn dispatch_events(
         if instance.model.events.is_empty() {
             continue;
         }
-        let timing = instance.model.timing.clone();
-        let Ok(selection) = playback.selection_from_timing(&timing) else {
+        let Ok(selection) = playback.selection() else {
             continue;
         };
         let events = instance.model.events.clone();

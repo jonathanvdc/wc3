@@ -13,12 +13,6 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
             "Warcraft III model name, animation filename, and blend time require a model-info declaration with bounds",
         ));
     }
-    if !value.controllers().is_empty() {
-        return Err(Error::new(
-            "controllers",
-            "Warcraft III has one authored timeline per property, without layered controllers",
-        ));
-    }
     let mut ordinary_selection = None;
     for (_, clip) in value.clips() {
         if clip.animations.iter().any(|id| {

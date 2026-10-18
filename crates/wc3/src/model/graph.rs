@@ -4,16 +4,15 @@ use crate::model::profiles::{Profile, Universal};
 use crate::model::DrawId;
 use crate::model::{
     Animation, AnimationId, AnimationObject, AppearanceSchema as _, AttachedFeature, Clip, ClipId,
-    ClockId, Controller, ControllerId, DynamicTrack, Error, Event, EventId, FeatureId, InstanceId,
-    Look, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Node, NodeId, Skin, SkinId,
-    SystemId, Time,
+    ClockId, DynamicTrack, Error, Event, EventId, FeatureId, InstanceId, Look, LookId, Material,
+    MaterialId, Mesh, MeshId, MeshInstance, Node, NodeId, Skin, SkinId, SystemId, Time,
 };
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
 };
 use crate::model::{
-    ClipObject, ClockObject, ControllerObject, FeatureObject, InstanceObject, MaterialObject,
-    MeshObject, NodeObject, SkinObject, SystemObject,
+    ClipObject, ClockObject, FeatureObject, InstanceObject, MaterialObject, MeshObject, NodeObject,
+    SkinObject, SystemObject,
 };
 use crate::model::{Dependencies, Link, Table, Texture, ValidateLinks as _};
 use crate::model::{Property, PropertyValue, PropertyValues, ValueSlot};
@@ -57,7 +56,6 @@ pub struct Model<'a, P: Profile = Universal> {
     skins: Table<SkinObject, Skin<'a, P>>,
     instances: Table<InstanceObject, MeshInstance<'a, P>>,
     clocks: Table<ClockObject, SharedClock>,
-    controllers: Table<ControllerObject, Controller<'a, P>>,
 }
 impl<'a, P: Profile> Model<'a, P> {
     /// Authored constants for every typed animation slot.
@@ -202,9 +200,6 @@ impl<'a, P: Profile> Model<'a, P> {
         for clip in self.clips.values() {
             clip.controls.visit_links(&mut visit);
         }
-        for controller in self.controllers.values() {
-            controller.controls.visit_links(&mut visit);
-        }
         images
     }
     /// Edits a draft and publishes it only after the complete model validates.
@@ -244,21 +239,9 @@ impl<'a, P: Profile> Model<'a, P> {
     pub fn system(&self, id: SystemId) -> Option<&P::System<'a>> {
         self.systems.get(id)
     }
-    /// Animation controller definitions in stable identity order.
-    pub fn controllers(&self) -> &Table<ControllerObject, Controller<'a, P>> {
-        &self.controllers
-    }
-    /// Resolves a animation controller; returns `None` when the identity is absent from this graph.
-    pub fn controller(&self, id: ControllerId) -> Option<&Controller<'a, P>> {
-        self.controllers.get(id)
-    }
     /// Owner-local playback behavior of a clip belonging to this graph.
     pub fn clip_controls(&self, id: ClipId) -> Option<&P::Clip<'a>> {
         Some(&self.clip(id)?.controls)
-    }
-    /// Owner-local behavior of a controller belonging to this graph.
-    pub fn controller_controls(&self, id: ControllerId) -> Option<&P::Controller<'a>> {
-        Some(&self.controller(id)?.controls)
     }
     /// Attached behavior definitions in stable identity order.
     pub fn features(&self) -> &Table<FeatureObject, AttachedFeature<'a, P>> {

@@ -65,11 +65,7 @@ slots. Each playback instance samples against its own clocks and selected progra
 repeating shared clocks wrap by their authored periods; frozen shared clocks
 retain time zero without event traversal. The common clip source start (zero by default) and duration
 select an inclusive animation interval, preventing interpolation
-through unrelated sequence keys. Application-authored controllers can layer
-additional animation over imported clips. Playback uses the selected clip’s
-controller list by default. Applications
-can replace it with an explicit list, including an empty list; priority orders
-contributions, with list order breaking ties.
+through unrelated sequence keys.
 
 `PoseOverrides` applies application-supplied local poses after authored
 animation. Removing an override resumes normal sampling. Physics, gameplay

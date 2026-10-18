@@ -142,7 +142,6 @@ impl<P: Profile> Model<'_, P> {
                 Link::Skin(id) => !self.skins.contains_key(id),
                 Link::Clock(id) => !self.clocks.contains_key(id),
                 Link::Animation(id) => !self.animations.contains_key(id),
-                Link::Controller(id) => !self.controllers.contains_key(id),
                 Link::System(id) => !self.systems.contains_key(id),
             };
         };
@@ -174,10 +173,6 @@ impl<P: Profile> Model<'_, P> {
             clip.controls.visit_links(&mut visit);
         }
         self.global_animations.visit_links(&mut visit);
-        for controller in self.controllers.values() {
-            controller.controls.visit_links(&mut visit);
-            controller.animations.visit_links(&mut visit);
-        }
         for animation in self.animations.values() {
             for track in &animation.tracks {
                 track.visit_links(&mut visit);
@@ -233,11 +228,6 @@ impl<P: Profile> Model<'_, P> {
             .clips
             .values()
             .map(|clip| &clip.animations)
-            .chain(
-                self.controllers
-                    .values()
-                    .map(|controller| &controller.animations),
-            )
             .chain(once(&self.global_animations))
         {
             let mut seen = HashSet::new();

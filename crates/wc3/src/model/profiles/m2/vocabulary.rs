@@ -33,7 +33,7 @@ impl Profile for M2 {
     type Mesh<'a> = Option<m2::GeometryControls>;
     type Instance<'a> = NoControls;
     type Clip<'a> = m2::SequenceControls;
-    type Controller<'a> = NoControls;
+
     fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
         super::texture::resources(model)
     }
@@ -58,12 +58,6 @@ impl Profile for M2 {
         }
 
         let declared = |id| model.node(id).is_some_and(|node| node.controls.is_some());
-        if !model.controllers().is_empty() {
-            return Err(Error::new(
-                "m2.controllers",
-                "M2 animation has no layer-controller objects",
-            ));
-        }
         if model
             .metadata()
             .key_bone_lookup
@@ -166,10 +160,6 @@ impl Extends<M2> for Universal {
     fn clip<'a>(value: <M2 as Profile>::Clip<'a>) -> Self::Clip<'a> {
         Some(ClipControls::M2(value))
     }
-    fn controller<'a>(value: <M2 as Profile>::Controller<'a>) -> Self::Controller<'a> {
-        let _ = value;
-        NoControls
-    }
 }
 
 impl<'a> FeatureVocabulary<'a> for M2 {
@@ -203,7 +193,7 @@ impl<'a> FeatureVocabulary<'a> for M2 {
 mod tests {
 
     use super::*;
-    use crate::model::{Controller, Skin};
+    use crate::model::Skin;
     use m2::{BoneControls, ModelMetadata};
 
     #[test]
@@ -229,9 +219,6 @@ mod tests {
             key_bone_lookup: vec![Some(helper)],
             ..ModelMetadata::default()
         });
-        assert!(invalid.finish().is_err());
-        let mut invalid = Model::<M2>::builder("layer");
-        invalid.add_controller(Controller::default()).unwrap();
         assert!(invalid.finish().is_err());
     }
 }

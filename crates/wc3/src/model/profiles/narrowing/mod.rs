@@ -60,8 +60,6 @@ pub trait Narrows<Source: Profile>: Profile {
     fn draw(value: Source::Draw) -> Result<Self::Draw, Error>;
     /// Projects clip controls without changing meaning.
     fn clip<'a>(value: Source::Clip<'a>) -> Result<Self::Clip<'a>, Error>;
-    /// Projects controller controls without changing meaning.
-    fn controller<'a>(value: Source::Controller<'a>) -> Result<Self::Controller<'a>, Error>;
 }
 impl<P: Profile> Narrows<P> for P {
     fn image_resource<'a>(value: P::ImageResource<'a>) -> Result<Self::ImageResource<'a>, Error> {
@@ -123,9 +121,6 @@ impl<P: Profile> Narrows<P> for P {
         Ok(value)
     }
     fn clip<'a>(value: P::Clip<'a>) -> Result<Self::Clip<'a>, Error> {
-        Ok(value)
-    }
-    fn controller<'a>(value: P::Controller<'a>) -> Result<Self::Controller<'a>, Error> {
         Ok(value)
     }
 }

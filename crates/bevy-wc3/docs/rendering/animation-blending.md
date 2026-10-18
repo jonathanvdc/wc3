@@ -1,20 +1,19 @@
 # Animation and pose transitions
 
-`Playback` selects typed clips and controller programmes with independent
+`Playback` selects typed clips with independent
 playback and shared clocks in seconds. Native adapters preserve
 loop/clamp policy, shared animation identities, and sequence intervals; the runtime samples properties
 through the semantic `AnimationProgram`.
 
 Curves and event occurrences belong to reusable semantic `Animation` definitions.
-Clips and controllers select those definitions rather than owning duplicate tracks.
+Clips and model-level selections reference those definitions rather than owning duplicate tracks.
 Every clip maps local playback into a source interval beginning at `source_start`,
 which defaults to zero. `AnimationProgram` derives ordinary animation time and
 inclusive key bounds from that interval. MDLX clips select the same ordinary
 animation at their authored sequence intervals; M2 clips select separate animations
-at zero. Without a clip, ordinary model-level and controller tracks use `clip_time`
+at zero. Without a clip, ordinary model-level tracks use `clip_time`
 directly without interval bounds.
-Model-level animations run in selection order before clip animations and selected
-controllers; later applicable tracks override earlier ones.
+Model-level animations run in selection order before clip animations; later applicable tracks override earlier ones.
 
 ## Playback controls
 
@@ -24,17 +23,6 @@ it using the model's default blend duration.
 Repeated play calls restart the clock, so
 issue them when the desired animation changes. Invalid selections become
 `PlaybackError` during evaluation.
-
-Controllers provide application-authored animation layers. Native MDLX, M2, and
-WMO imports do not create them. `controllers` defaults to
-`ControllerSelection::Authored`: selecting a
-clip evaluates its authored controller selection in ascending priority, with
-source order breaking ties. Use
-`ControllerSelection::Explicit(programmes)` to replace that list;
-`Explicit(Vec::new())` deliberately selects no controllers. These choices apply to
-node poses, materials, cameras, effect births, events, and offline pose baking.
-After model replacement, authored selections come from the replacement clip;
-explicit scoped controller identities are validated and invalid entries are removed.
 
 M2 incoming/outgoing duration pairs are retained by the semantic clips, but native
 arbitration between source and destination timing is not interpreted. Nonzero

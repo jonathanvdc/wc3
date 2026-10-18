@@ -4,15 +4,14 @@ use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
 };
 use crate::model::{
-    ControllerId, CurveValue, EventId, FeatureId, FeatureKind, GeometryKind, InstanceId, SystemId,
-    SystemMember,
+    CurveValue, EventId, FeatureId, FeatureKind, GeometryKind, InstanceId, SystemId, SystemMember,
 };
 use crate::model::{PropertyValue, ValueSlot};
 use std::borrow::Cow;
 /// A relationship to another object in the semantic graph.
 #[derive(Clone, Debug)]
 pub enum Link {
-    /// Reusable animation selected by a clip, controller, or model.
+    /// Reusable animation selected by a clip or model.
     Animation(AnimationId),
     /// Typed animation value slot.
     Value(ValueSlot),
@@ -79,8 +78,6 @@ pub enum Link {
     Skin(SkinId),
     /// Shared clock relationship.
     Clock(ClockId),
-    /// Animation controller relationship.
-    Controller(ControllerId),
 }
 /// Visits logical object references without any file or encoding context.
 pub trait ValidateLinks {
@@ -184,11 +181,6 @@ impl ValidateLinks for FeatureId {
 impl ValidateLinks for InstanceId {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         v(Link::Instance(*self));
-    }
-}
-impl ValidateLinks for ControllerId {
-    fn visit_links(&self, v: &mut dyn FnMut(Link)) {
-        v(Link::Controller(*self));
     }
 }
 

@@ -87,8 +87,7 @@ pub use material::{ModelMaterial, ModelMaterialExtension};
 pub use physics::{PhysicsBodyInfo, PhysicsFrame, PhysicsSimulation};
 pub use plugin::Wc3BevyPlugin;
 pub use runtime::{
-    spawn_model, ControllerSelection, ModelDraw, ModelNode, ModelRig, Playback, PlaybackError,
-    PoseOverrides,
+    spawn_model, ModelDraw, ModelNode, ModelRig, Playback, PlaybackError, PoseOverrides,
 };
 pub use schedule::Wc3Systems;
 pub use textures::{

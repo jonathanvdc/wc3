@@ -50,7 +50,7 @@ impl Profile for Mdlx {
     type Mesh<'a> = mdlx::Geometry;
     type Instance<'a> = NoControls;
     type Clip<'a> = mdlx::Sequence;
-    type Controller<'a> = NoControls;
+
     fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
         super::validation::resources(model)
     }
@@ -129,10 +129,6 @@ impl Extends<Mdlx> for Universal {
     }
     fn clip<'a>(value: <Mdlx as Profile>::Clip<'a>) -> Self::Clip<'a> {
         Some(ClipControls::Mdlx(value))
-    }
-    fn controller<'a>(value: <Mdlx as Profile>::Controller<'a>) -> Self::Controller<'a> {
-        let _ = value;
-        NoControls
     }
 }
 

@@ -13,8 +13,7 @@ pub(crate) fn simulate_particles(
             continue;
         }
         let animation = instance.model.animation.clone();
-        let timing = instance.model.timing.clone();
-        let Ok(selection) = playback.selection_from_timing(&timing) else {
+        let Ok(selection) = playback.selection() else {
             continue;
         };
         let Ok(sample) = animation.sample(selection) else {

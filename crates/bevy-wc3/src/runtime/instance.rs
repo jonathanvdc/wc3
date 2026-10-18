@@ -96,7 +96,7 @@ impl ModelRig {
         overrides: &PoseOverrides,
         scratch: &mut Vec<usize>,
     ) -> Result<Option<SampledCamera>, AnimationError> {
-        let selection = playback.selection(&self.model)?;
+        let selection = playback.selection()?;
         let sample = self.model.animation.sample(selection)?;
         let Some(camera) = self
             .model
@@ -169,10 +169,7 @@ impl ModelRig {
         playback: &Playback,
         aspect: f32,
     ) -> Result<Option<SampledCamera>, AnimationError> {
-        let sample = self
-            .model
-            .animation
-            .sample(playback.selection(&self.model)?)?;
+        let sample = self.model.animation.sample(playback.selection()?)?;
         let Some(camera) = self
             .model
             .features

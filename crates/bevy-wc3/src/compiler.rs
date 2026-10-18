@@ -555,13 +555,10 @@ pub fn compile_model_with_options(
             model
                 .clips()
                 .iter()
-                .map(|(id, clip)| {
-                    let origin = clip.source_start.as_seconds();
+                .map(|(id, _)| {
                     (
                         id,
                         ClipTiming {
-                            origin,
-                            controllers: Arc::from([]),
                             blend_duration: None,
                         },
                     )

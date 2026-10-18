@@ -2,10 +2,10 @@
 use crate::model::ids::Scope;
 use crate::model::profiles::{Profile, Universal};
 use crate::model::{
-    Animation, AnimationId, AttachedFeature, Clip, ClipId, ClockId, Controller, ControllerId,
-    DrawAppearanceSchema, DrawSubsetId, DynamicTrack, Error, Event, EventId, FeatureId, InstanceId,
-    Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Model,
-    ModelMetadata, Node, NodeId, SharedClock, Skin, SkinId, SystemId, Texture,
+    Animation, AnimationId, AttachedFeature, Clip, ClipId, ClockId, DrawAppearanceSchema,
+    DrawSubsetId, DynamicTrack, Error, Event, EventId, FeatureId, InstanceId, Look, LookBinding,
+    LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Model, ModelMetadata, Node, NodeId,
+    SharedClock, Skin, SkinId, SystemId, Texture,
 };
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
@@ -20,7 +20,6 @@ pub struct ModelBuilder<'a, P: Profile = Universal> {
     pub(super) pending_nodes: BTreeSet<NodeId>,
     pub(super) pending_features: BTreeMap<FeatureId, NodeId>,
     pub(super) pending_materials: BTreeSet<MaterialId>,
-    pub(super) pending_controllers: BTreeSet<ControllerId>,
 }
 impl<'a, P: Profile> ModelBuilder<'a, P> {
     pub(crate) fn from_model(model: Model<'a, P>) -> Self {
@@ -29,7 +28,6 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
             pending_nodes: BTreeSet::new(),
             pending_features: BTreeMap::new(),
             pending_materials: BTreeSet::new(),
-            pending_controllers: BTreeSet::new(),
         }
     }
     /// Reuses an equal image declaration when importing native indirection tables.
@@ -234,12 +232,10 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
                 skins: Table::default(),
                 instances: Table::default(),
                 clocks: Table::default(),
-                controllers: Table::default(),
             },
             pending_nodes: BTreeSet::new(),
             pending_features: BTreeMap::new(),
             pending_materials: BTreeSet::new(),
-            pending_controllers: BTreeSet::new(),
         }
     }
     /// Reserves a hierarchy node identity for forward references; publication requires its definition.
@@ -247,30 +243,6 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         let id = self.model.scope.allocate();
         self.pending_nodes.insert(id);
         id
-    }
-    /// Reserves a animation controller identity for forward references; publication requires its definition.
-    pub fn reserve_controller(&mut self) -> ControllerId {
-        let id = self.model.scope.allocate();
-        self.pending_controllers.insert(id);
-        id
-    }
-    /// Adds a animation controller to the draft; publication validates its values and relationships.
-    pub fn add_controller(&mut self, value: Controller<'a, P>) -> Result<ControllerId, Error> {
-        Ok(self.model.controllers.add(&self.model.scope, value))
-    }
-    /// Defines or replaces a animation controller belonging to this draft.
-    pub fn set_controller(
-        &mut self,
-        id: ControllerId,
-        value: Controller<'a, P>,
-    ) -> Result<(), Error> {
-        if !self.model.scope.contains(id)
-            || (!self.pending_controllers.remove(&id) && !self.model.controllers.contains_key(id))
-        {
-            return Err(Error::new("controller", "unknown identity"));
-        }
-        self.model.controllers.insert(id, value);
-        Ok(())
     }
     /// Adds a reusable animation definition.
     pub fn add_animation(&mut self, value: Animation<'a>) -> AnimationId {
@@ -325,42 +297,6 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         animation.events.insert(event_id, event);
         Ok(event_id)
     }
-    fn controller_animation(&mut self, id: ControllerId) -> Result<AnimationId, Error> {
-        let controller = self
-            .model
-            .controllers
-            .get(id)
-            .ok_or_else(|| Error::new("controller", "unknown identity"))?;
-        if let Some(&animation) = controller.animations.first() {
-            return Ok(animation);
-        }
-        let animation = self.add_animation(Animation::default());
-        self.model
-            .controllers
-            .get_mut(&id)
-            .unwrap()
-            .animations
-            .push(animation);
-        Ok(animation)
-    }
-    /// Appends a curve to the controller's first animation, creating one if empty.
-    pub fn add_controller_track(
-        &mut self,
-        id: ControllerId,
-        track: DynamicTrack<'a>,
-    ) -> Result<(), Error> {
-        let animation = self.controller_animation(id)?;
-        self.add_animation_track(animation, track)
-    }
-    /// Appends an occurrence to the controller's first animation, creating one if empty.
-    pub fn add_controller_event(
-        &mut self,
-        id: ControllerId,
-        event: Event<'a>,
-    ) -> Result<EventId, Error> {
-        let animation = self.controller_animation(id)?;
-        self.add_animation_event(animation, event)
-    }
     /// Replaces playback behavior directly on an existing clip.
     pub fn set_clip_controls(
         &mut self,
@@ -372,22 +308,6 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         }
         self.model
             .clips
-            .get_mut(&id)
-            .expect("checked owner")
-            .controls = value.into();
-        Ok(())
-    }
-    /// Replaces controller behavior directly on an existing controller.
-    pub fn set_controller_controls(
-        &mut self,
-        id: ControllerId,
-        value: impl Into<P::Controller<'a>>,
-    ) -> Result<(), Error> {
-        if !self.model.controllers.contains_key(id) {
-            return Err(Error::new("controller.controls", "unknown owner"));
-        }
-        self.model
-            .controllers
             .get_mut(&id)
             .expect("checked owner")
             .controls = value.into();
@@ -704,12 +624,6 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
     /// Publishes an immutable graph after validating all values, identities, and relationships.
     pub fn finish(self) -> Result<Model<'a, P>, Error> {
-        if !self.pending_controllers.is_empty() {
-            return Err(Error::new(
-                "controllers",
-                "reserved controllers have no definition",
-            ));
-        }
         if !self.pending_materials.is_empty() {
             return Err(Error::new(
                 "materials",
@@ -771,11 +685,6 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     /// Removes this clock from the draft; publication rejects references left pointing to it.
     pub fn remove_clock(&mut self, id: ClockId) -> Option<SharedClock> {
         self.model.clocks.remove(&id)
-    }
-    /// Removes this controller from the draft; publication rejects references left pointing to it.
-    pub fn remove_controller(&mut self, id: ControllerId) -> Option<Controller<'a, P>> {
-        self.pending_controllers.remove(&id);
-        self.model.controllers.remove(&id)
     }
     /// Removes this system from the draft; publication rejects references left pointing to it.
     pub fn remove_system(&mut self, id: SystemId) -> Option<P::System<'a>> {

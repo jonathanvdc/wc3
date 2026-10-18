@@ -705,7 +705,7 @@ pub(crate) fn restart_attachments(
         if model.features.attachments.is_empty() {
             continue;
         }
-        let Ok(selection) = playback.selection(model) else {
+        let Ok(selection) = playback.selection() else {
             continue;
         };
         let Ok(sample) = model.animation.sample(selection) else {

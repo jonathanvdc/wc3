@@ -2,8 +2,7 @@
 use crate::model::profiles::{Extends, Profile};
 use crate::model::PropertyValues;
 use crate::model::{
-    AttachedFeature, Clip, Controller, Dependencies, Draw, Material, Mesh, MeshInstance, Model,
-    Node, Skin,
+    AttachedFeature, Clip, Dependencies, Draw, Material, Mesh, MeshInstance, Model, Node, Skin,
 };
 struct PayloadMap<'a, P: Profile, Q: Profile> {
     appearance: fn(P::Appearance<'a>) -> Q::Appearance<'a>,
@@ -18,7 +17,6 @@ struct PayloadMap<'a, P: Profile, Q: Profile> {
     instance: fn(P::Instance<'a>) -> Q::Instance<'a>,
     draw: fn(P::Draw) -> Q::Draw,
     clip: fn(P::Clip<'a>) -> Q::Clip<'a>,
-    controller: fn(P::Controller<'a>) -> Q::Controller<'a>,
 }
 impl<'a, P: Profile> Model<'a, P> {
     /// Embeds the complete graph into a containing vocabulary without copying array storage.
@@ -36,7 +34,6 @@ impl<'a, P: Profile> Model<'a, P> {
             instance: Q::instance,
             draw: Q::draw,
             clip: Q::clip,
-            controller: Q::controller,
         })
     }
     fn map_payloads<Q: Extends<P>>(mut self, maps: PayloadMap<'a, P, Q>) -> Model<'a, Q> {
@@ -244,29 +241,6 @@ impl<'a, P: Profile> Model<'a, P> {
                             lod,
                             selection_group,
                             controls: (maps.instance)(controls),
-                        },
-                    )
-                })
-                .collect(),
-            controllers: self
-                .controllers
-                .into_iter()
-                .map(|(id, value)| {
-                    let Controller {
-                        name,
-                        priority,
-                        concurrent,
-                        animations,
-                        controls,
-                    } = value;
-                    (
-                        id,
-                        Controller {
-                            name,
-                            priority,
-                            concurrent,
-                            animations,
-                            controls: (maps.controller)(controls),
                         },
                     )
                 })

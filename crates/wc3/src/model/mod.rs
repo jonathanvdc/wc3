@@ -12,7 +12,7 @@
 //!
 //! The [`profiles::Profile`](crate::model::profiles::Profile) parameter selects the payload types allowed on these
 //! objects. `Profile::ModelMetadata` supplies model-wide declarations. Owner-local `controls` belong to their node, material input, mesh, draw,
-//! clip, or controller. Complete material surfaces and attached features use the
+//! or clip. Complete material surfaces and attached features use the
 //! profile's surface and feature vocabulary. Built-in profiles describe game
 //! semantics; native codec dialects separately select file layouts and revisions.
 //!
@@ -55,10 +55,9 @@ mod rotation;
 pub use rotation::*;
 pub mod animation;
 pub use animation::{
-    curves::*, Animation, AnimationProgram, AnimationSample, Clip, Construct, Controller,
-    DynamicTrack, Event, Interpolation, Property, PropertyValue, PropertyValues, RetimedAnimation,
-    SampledAnimation, SampledTrack, Time, TimeSource, Track, TrackValue, ValueObject, ValueSample,
-    ValueSlot,
+    curves::*, Animation, AnimationProgram, AnimationSample, Clip, Construct, DynamicTrack, Event,
+    Interpolation, Property, PropertyValue, PropertyValues, RetimedAnimation, SampledAnimation,
+    SampledTrack, Time, TimeSource, Track, TrackValue, ValueObject, ValueSample, ValueSlot,
 };
 mod playback_controls;
 pub use playback_controls::*;

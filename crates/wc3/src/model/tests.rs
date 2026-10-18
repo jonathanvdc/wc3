@@ -242,7 +242,6 @@ fn application_vocabularies_participate_in_graph_validation() {
         type Instance<'a> = profiles::NoControls;
         type Draw = profiles::NoControls;
         type Clip<'a> = profiles::NoControls;
-        type Controller<'a> = profiles::NoControls;
     }
     let mut first = ModelBuilder::<Application>::with_profile(profiles::NoControls);
     let texture = first.add_file_texture("custom.dds").unwrap();

@@ -478,34 +478,6 @@ impl CompiledModel {
                         .collect(),
                 });
             }
-            let mut timing = output.timing.as_ref().clone();
-            for (&host, &part_clip) in &part.clips {
-                if let Some(source_timing) = source
-                    .timing
-                    .get(&part_clip)
-                    .filter(|timing| !timing.controllers.is_empty())
-                {
-                    let host_timing = timing.get_mut(&host).ok_or_else(|| {
-                        ModelError(
-                            "controller-driven component needs an authored host timeline".into(),
-                        )
-                    })?;
-                    if host_timing.origin != source_timing.origin {
-                        return Err(ModelError(
-                            "controller-driven components need matching authored timeline origins"
-                                .into(),
-                        ));
-                    }
-                    let mut controllers = host_timing.controllers.to_vec();
-                    for &controller in source_timing.controllers.iter() {
-                        if !controllers.contains(&controller) {
-                            controllers.push(controller);
-                        }
-                    }
-                    host_timing.controllers = controllers.into();
-                }
-            }
-            output.timing = Arc::new(timing);
             let skin_offset = output.skins.len();
             for skin in &source.skins {
                 let mut binds = skin.binds.to_vec();
