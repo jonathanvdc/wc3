@@ -1,55 +1,8 @@
 //! Native animation wire codes and flags.
 use bitfield::bitfield;
 
-/// External WoW animation-data category shared by a sequence's variations.
-///
-/// This is independent of a model's clip indices. All `u16` values are preserved,
-/// including categories introduced by newer clients or custom data. The named
-/// constants cover common categories rather than an exhaustive client database.
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct AnimationId(u16);
-
-impl AnimationId {
-    /// Standing idle animation.
-    pub const STAND: Self = Self(0);
-    /// Death animation.
-    pub const DEATH: Self = Self(1);
-    /// Spell animation.
-    pub const SPELL: Self = Self(2);
-    /// Stop animation.
-    pub const STOP: Self = Self(3);
-    /// Walking animation.
-    pub const WALK: Self = Self(4);
-    /// Running animation.
-    pub const RUN: Self = Self(5);
-    /// Dead pose animation.
-    pub const DEAD: Self = Self(6);
-    /// Rising animation.
-    pub const RISE: Self = Self(7);
-
-    /// Creates a category without restricting it to known named values.
-    pub const fn new(value: u16) -> Self {
-        Self(value)
-    }
-
-    /// Returns the external animation-data category number.
-    pub const fn get(self) -> u16 {
-        self.0
-    }
-}
-
-impl From<u16> for AnimationId {
-    fn from(value: u16) -> Self {
-        Self::new(value)
-    }
-}
-
-impl From<AnimationId> for u16 {
-    fn from(value: AnimationId) -> Self {
-        value.get()
-    }
-}
+mod ids;
+pub use ids::AnimationId;
 
 /// Native interpolation operation; unknown values retain their exact wire representation.
 ///
