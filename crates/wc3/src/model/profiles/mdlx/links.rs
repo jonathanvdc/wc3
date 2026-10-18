@@ -73,21 +73,6 @@ impl Node<'_> {
 
             Node::FaceActor(unavailable)
             | Node::LightProgram(unavailable)
-            | Node::Extent(unavailable)
-            | Node::ParticleCopy(unavailable)
-            | Node::Projector(unavailable)
-            | Node::Force(unavailable)
-            | Node::Warp(unavailable)
-            | Node::HitTest(unavailable)
-            | Node::AttachmentVolume(unavailable)
-            | Node::Billboard(unavailable)
-            | Node::Turret(unavailable)
-            | Node::IkJoint(unavailable)
-            | Node::IkTwoJoint(unavailable)
-            | Node::IkCcd(unavailable)
-            | Node::OneBoneSolver(unavailable)
-            | Node::ShadowBox(unavailable)
-            | Node::ViewVolume(unavailable)
             | Node::PointLight(unavailable) => match *unavailable {},
         }
     }

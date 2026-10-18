@@ -180,17 +180,11 @@ impl Profile for Universal {
     type System<'a> = System<'a>;
     type Surface<'a> = MaterialSurface<'a>;
     type Feature<'a> = NodeFeature<'a>;
-    type Node<'a> = Option<NodeControls<'a>>;
+    type Node<'a> = Option<NodeControls>;
     type Mesh<'a> = Option<MeshControls>;
     type Instance<'a> = Option<InstanceControls<'a>>;
-    type Clip<'a> = Option<ClipControls<'a>>;
-    type Controller<'a> = Option<m3::ControllerControls<'a>>;
-    fn mesh_skin(controls: &Self::Mesh<'_>) -> Option<SkinId> {
-        match controls {
-            Some(MeshControls::M3(value)) => value.skin,
-            _ => None,
-        }
-    }
+    type Clip<'a> = Option<ClipControls>;
+    type Controller<'a> = NoControls;
 }
 /// Proof that a target vocabulary can accept every source payload unchanged.
 ///
@@ -299,54 +293,33 @@ impl<P: Profile> Extends<P> for P {
 impl NodeFeature<'_> {}
 
 pub use m2::M2;
-pub use m3::M3;
+
 pub use mdlx::Mdlx;
 pub use wmo::Wmo;
 
 // Logical authoring features specific to each model family.
 
 pub mod m2;
-pub mod m3;
+
 pub mod mdlx;
 pub mod wmo;
 
 mod narrowing;
 pub use narrowing::Narrows;
 
-/// Diablo game authoring vocabularies independent of native document layouts.
-pub mod diablo;
-
-pub use diablo::d3::D3;
-
-pub use diablo::d4::D4;
-
 impl<'a> FeatureVocabulary<'a> for Universal {
     type Light = Light;
-    type Camera = Camera<'a>;
+    type Camera = Camera;
     type Attachment = Attachment<'a>;
     type Particle = ParticleEmitter<'a>;
-    type Ribbon = RibbonEmitter<'a>;
+    type Ribbon = RibbonEmitter;
     type Event = EventSource<'a>;
     type GeometryAnimation = mdlx::GeometryAnimation;
     type CollisionShape = mdlx::Collision;
     type ParticleProgram = Box<mdlx::Popcorn<'a>>;
     type FaceActor = EffectResourceId;
     type LightProgram = wmo::PointProgram;
-    type Extent = Box<m3::ExtentBinding>;
-    type ParticleCopy = Box<m3::ParticleCopy>;
-    type Projector = Box<m3::Projector>;
-    type Force = Box<m3::Force>;
-    type Warp = Box<m3::Warp>;
-    type HitTest = Box<m3::HitTestShape>;
-    type AttachmentVolume = Box<m3::AttachmentVolume>;
-    type Billboard = Box<m3::BillboardBehavior>;
-    type Turret = Box<m3::TurretBehavior>;
-    type IkJoint = Box<m3::IkJoint>;
-    type IkTwoJoint = Box<m3::IkTwoJoint>;
-    type IkCcd = Box<m3::IkCcd>;
-    type OneBoneSolver = Box<m3::OneBoneSolver>;
-    type ShadowBox = Box<m3::ShadowBox>;
-    type ViewVolume = Box<m3::ViewVolume>;
+
     type AtlasParticles = Unavailable;
     type PointLight = Unavailable;
     fn visit_links(value: &FeatureSet<'a, Self>, visitor: &mut dyn FnMut(Link)) {

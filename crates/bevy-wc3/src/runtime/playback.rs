@@ -12,9 +12,10 @@ use wc3::model::{
 /// Controller programmes selected independently of playback clocks.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum ControllerSelection {
-    /// Use the selected clip's authored programme list (including native M3 STG selections).
+    /// Use the controller programs selected by the clip.
     #[default]
     Authored,
+
     /// Override authored programmes; an empty list explicitly disables all controllers.
     Explicit(Vec<ControllerId>),
 }

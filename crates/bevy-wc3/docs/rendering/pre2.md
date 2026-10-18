@@ -7,8 +7,7 @@ clocks; they have different geometry and material capabilities.
 
 ## Births and motion
 
-Continuous emission uses bounded 60 Hz midpoint integration. Supported staged and
-M3 keyed bursts follow crossed keys and cycles instead of observing only the
+Continuous emission uses bounded 60 Hz midpoint integration. Supported staged bursts follow crossed keys and cycles instead of observing only the
 update endpoint. Birth
 parameters and hierarchy transforms sample occurrence times, including transitions
 and nonlinear parent motion. Application root movement interpolates observed frame
@@ -107,37 +106,3 @@ state. Hierarchy visibility gates rendering; effect activation controls births.
 
 Game-specific ordering across effect and mesh families is not reproduced by the
 shared transport. The staged GPU sprite path does not reproduce native effect fog.
-M3 programmed particles use the bounded CPU transport with ordinary Bevy material
-fog and the authored unfogged control, as described below.
-
-## M3 standard billboard subset
-
-Standard billboards support point, plane, box, sphere, cylinder, and disc
-distributions with constant, Z-axis, radial, or random velocity selection.
-Cylinders use the authored radius and Z height; discs use the same circular
-cross section at zero height. Radial sampling is uniform over area or volume.
-Positive native gravity accelerates down model Z; negative gravity accelerates
-upward, independently of the emitter bone orientation. Continuous emission and
-independent squirt-count keys sample authored occurrence poses. Squirt keys follow
-animation time within the selected clip source interval or their independent shared clock, including repeating clock crossings;
-seek jumps skip crossed births. A nonanimated count emits at the clock origin.
-Occurrence scratch is reused and bounded to 4,096 keys per update, and squirt births
-share the continuous emitter's population and birth budgets. Optional speed/lifespan
-ranges randomize at birth; color,
-alpha, size, and rotation freeze their start/middle/end controls at birth, with
-independent normalized midpoints. Linear and smooth interpolation and two-phase
-flipbooks are implemented. Every compiled PBR material pass animates independently
-on the model clocks and retains its blend/depth and opacity controls. Passes share
-one population, appearance records, sorting work, and generated mesh; adding a
-material pass does not multiply emission or the population budget. Lifetime RGB
-tints the diffuse input, and lifetime alpha multiplies material opacity,
-independently of material mesh-vertex color flags. Native tinting of post-lighting
-emission layers remains unverified.
-
-Authored maximum population tightens the shared 8,192 cap. Unsupported geometry,
-shape cutouts, encoded XY gravity, and Bezier/hold or unknown interpolation
-selectors reject that particle interpretation with diagnostics. Forces, noise,
-collision, secondary effects, specialized time controls, and kill-radius
-rules remain incomplete and are diagnosed. Endpoint-anchored programmed beams use
-a separate partial [ribbon interpreter](ribbons.md#m3-endpoint-beams). This subset's
-exact native motion and lighting fidelity is unverified.

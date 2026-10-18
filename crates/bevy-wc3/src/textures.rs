@@ -2,11 +2,11 @@
 use bevy::prelude::{Handle, Image};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use wc3::model::materials::mdlx;
 use wc3::model::materials::program::MaterialStep;
-use wc3::model::materials::{m3, mdlx};
 use wc3::model::{
-    AddressMode, ColorSpace, FeatureId, ImageResource, ImageResourceId, MaterialId, Model,
-    NodeFeature, ParticleDetails, ParticleEmitter, Sampler, Texture, TextureControls,
+    ColorSpace, FeatureId, ImageResource, ImageResourceId, MaterialId, Model, NodeFeature,
+    ParticleDetails, ParticleEmitter, Sampler, Texture, TextureControls,
 };
 
 /// Purpose of one sampled image, independent of its resource identity.
@@ -47,9 +47,6 @@ impl TextureColorSpace {
 
 /// Structural address of an image input in its source model.
 /// Material slots follow the native input order (MDLX uses shader slot numbers).
-/// M3 Standard uses diffuse, decal, specular, gloss, primary/secondary emission,
-/// primary/secondary opacity, base normal, primary normal/mask, secondary
-/// normal/mask, light map, ambient occlusion, height, environment and environment mask.
 /// Particle slots follow the emitter's image order; atlas emitters use slot zero.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TextureInput {
@@ -140,8 +137,6 @@ impl TextureRequest<'_, '_> {
 
 /// Collect image uses needed by supported surface roles and default color selection.
 /// A texture used as both color and data receives independent requests.
-/// M3 roles share GPU samplers for equal authored sampler values. Resolvers must
-/// therefore use equal filtering, mipmap and anisotropy settings for those requests.
 pub fn texture_requests<'view, 'data>(
     model: &'view Model<'data>,
 ) -> Vec<TextureRequest<'view, 'data>> {
@@ -225,25 +220,6 @@ pub fn texture_requests<'view, 'data>(
                         }
                     }
                 }
-                MaterialStep::M3(m3::MaterialStep::Standard(surface)) => {
-                    for (slot, layer) in m3_layers(surface).into_iter().enumerate() {
-                        let Some(layer) = layer else { continue };
-                        if let Some(image) = layer.binding.image {
-                            let role = match slot {
-                                0 | 1 | 2 | 4 | 5 | 13 | 16 => TextureRole::Color,
-                                8 | 9 | 11 => TextureRole::Normal,
-                                _ => TextureRole::Data,
-                            };
-                            add(
-                                address(slot as u32),
-                                Texture::new(image),
-                                role,
-                                Some(m3_sampler(layer)),
-                            );
-                        }
-                    }
-                }
-                _ => {}
             }
         }
     }
@@ -285,47 +261,6 @@ pub fn texture_requests<'view, 'data>(
         }
     }
     requests
-}
-
-/// Stable input ordering shared by requests and the Standard material interpreter.
-pub(crate) fn m3_layers(surface: &m3::StandardMaterialStep) -> [Option<&m3::TextureLayer>; 18] {
-    [
-        surface.diffuse.as_ref(),
-        surface.decal_layer.as_ref(),
-        surface.specular.input.color.as_ref(),
-        surface.specular.input.gloss.as_ref(),
-        surface.emissive.input.primary.input.as_ref(),
-        surface.emissive.input.secondary.input.as_ref(),
-        surface.opacity.primary.as_ref(),
-        surface.opacity.secondary.as_ref(),
-        surface.normals.base.as_ref(),
-        surface.normals.primary.input.as_ref(),
-        surface.normals.primary.mask.as_ref(),
-        surface.normals.secondary.input.as_ref(),
-        surface.normals.secondary.mask.as_ref(),
-        surface.light_map_layer.as_ref(),
-        surface.ambient_occlusion_layer.as_ref(),
-        surface.height_layer.as_ref(),
-        surface.environment_layer.as_ref(),
-        surface.environment_mask_layer.as_ref(),
-    ]
-}
-
-/// M3's typed sampling programme owns its address selectors.
-pub(crate) fn m3_sampler(layer: &m3::TextureLayer) -> Sampler {
-    let flags = layer.binding.sampling.flags;
-    Sampler {
-        u: if flags.uv_wrap_x() {
-            AddressMode::Repeat
-        } else {
-            AddressMode::Clamp
-        },
-        v: if flags.uv_wrap_y() {
-            AddressMode::Repeat
-        } else {
-            AddressMode::Clamp
-        },
-    }
 }
 
 /// Shared resolved images; source IDs, transfer functions, and samplers stay distinct.
@@ -467,7 +402,3 @@ impl TextureImages {
         })
     }
 }
-
-#[cfg(test)]
-#[path = "textures_tests.rs"]
-mod tests;

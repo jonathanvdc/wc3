@@ -6,8 +6,8 @@
 //! and codecs. [`ZeroVec`] serves unaligned scalar arrays directly.
 //!
 //! Native modules retain their own read/write traits, diagnostics, references,
-//! layout selection, and validation. Sharing storage does not make an M2 offset
-//! interchangeable with an M3 section reference or a Diablo payload descriptor.
+//! layout selection, and validation. Sharing storage preserves each native
+//! format's addressing and layout rules.
 use std::array::from_fn;
 
 mod ownership;

@@ -1,13 +1,10 @@
 //! Appearance vocabularies preserve the assignments supported by their model family.
-/// Diablo III named appearance variants.
-pub mod diablo3;
-/// Diablo IV indexed appearance variants.
-pub mod diablo4;
+
 mod resolution;
 pub use resolution::MaterialSelection;
 
 use crate::model::profiles::Either;
-use crate::model::{Error, Link, Look, LookId, MaterialSlotId, Scope, ValidateLinks};
+use crate::model::{Error, Link, Look, LookId, Scope, ValidateLinks};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::iter::once;
@@ -20,10 +17,6 @@ pub trait AppearanceSchema<'data>: Clone + Debug + Default + Send + Sync + Valid
     fn look(&self, id: LookId) -> Option<&Look<'data>>;
     /// Default draw-based appearance, when one is authored.
     fn default_look(&self) -> Option<LookId>;
-    /// Whether this vocabulary owns a named material slot.
-    fn contains_slot(&self, _id: MaterialSlotId) -> bool {
-        false
-    }
     /// Checks local authoring invariants before publication.
     fn validate(&self) -> Result<(), Error>;
 }
@@ -39,7 +32,7 @@ pub trait DrawAppearanceSchema<'data>: AppearanceSchema<'data> {
     fn remove_look(&mut self, id: LookId) -> Option<Look<'data>>;
 }
 
-/// Exactly one authored material assignment, as supported by MDLX, M3, and WMO.
+/// Exactly one authored material assignment, as supported by MDLX and WMO.
 /// The look always exists; an empty binding vector represents an empty assignment.
 #[derive(Clone, Debug)]
 pub struct SingleLook<'data> {
@@ -151,10 +144,6 @@ impl<'data> DrawAppearanceSchema<'data> for DrawLooks<'data> {
 /// Appearance capabilities shared by the built-in profiles.
 #[derive(Clone, Debug)]
 pub enum UniversalAppearance<'data> {
-    /// Diablo III material look alternatives.
-    D3(diablo3::Appearance<'data>),
-    /// Diablo IV hashed material look alternatives.
-    D4(diablo4::Appearance),
     /// Draw-based material alternatives.
     Draw(DrawLooks<'data>),
     /// A single material assignment.
@@ -170,8 +159,6 @@ macro_rules! with_appearance {
         match $self {
             UniversalAppearance::Draw($value) => $body,
             UniversalAppearance::Single($value) => $body,
-            UniversalAppearance::D4($value) => $body,
-            UniversalAppearance::D3($value) => $body,
         }
     };
 }
@@ -190,9 +177,6 @@ impl<'data> AppearanceSchema<'data> for UniversalAppearance<'data> {
     fn default_look(&self) -> Option<LookId> {
         with_appearance!(self, value => value.default_look())
     }
-    fn contains_slot(&self, id: MaterialSlotId) -> bool {
-        with_appearance!(self, value => value.contains_slot(id))
-    }
     fn validate(&self) -> Result<(), Error> {
         with_appearance!(self, value => value.validate())
     }
@@ -202,34 +186,24 @@ impl<'data> DrawAppearanceSchema<'data> for UniversalAppearance<'data> {
         match self {
             Self::Draw(value) => value.look_mut(id),
             Self::Single(value) => value.look_mut(id),
-            Self::D4(_) | Self::D3(_) => None,
         }
     }
     fn add_look(&mut self, id: LookId, look: Look<'data>) -> Result<(), Error> {
         match self {
             Self::Draw(value) => value.add_look(id, look),
             Self::Single(value) => value.add_look(id, look),
-            Self::D4(_) | Self::D3(_) => Err(Error::new(
-                "appearance.draw",
-                "Diablo appearances assign material slots",
-            )),
         }
     }
     fn set_default_look(&mut self, id: Option<LookId>) -> Result<(), Error> {
         match self {
             Self::Draw(value) => value.set_default_look(id),
             Self::Single(value) => value.set_default_look(id),
-            Self::D4(_) | Self::D3(_) => Err(Error::new(
-                "appearance.draw",
-                "Diablo appearances select slot alternatives",
-            )),
         }
     }
     fn remove_look(&mut self, id: LookId) -> Option<Look<'data>> {
         match self {
             Self::Draw(value) => value.remove_look(id),
             Self::Single(value) => value.remove_look(id),
-            Self::D4(_) | Self::D3(_) => None,
         }
     }
 }
@@ -257,12 +231,6 @@ impl<'data, A: AppearanceSchema<'data>, B: AppearanceSchema<'data>> AppearanceSc
         match self {
             Self::Left(value) => value.default_look(),
             Self::Right(value) => value.default_look(),
-        }
-    }
-    fn contains_slot(&self, id: MaterialSlotId) -> bool {
-        match self {
-            Self::Left(value) => value.contains_slot(id),
-            Self::Right(value) => value.contains_slot(id),
         }
     }
     fn validate(&self) -> Result<(), Error> {

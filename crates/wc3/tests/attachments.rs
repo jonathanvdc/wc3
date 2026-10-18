@@ -1,31 +1,11 @@
 use std::borrow::Cow;
-use wc3::model::profiles::{m3, mdlx, Universal};
+use wc3::model::profiles::{mdlx, Universal};
 use wc3::model::ModelMetadata;
 use wc3::model::PropertyValues as SlotValues;
 use wc3::model::{
     AnimationProgram, AnimationSample, Attachment, ChildModel, Model, MountTarget, NodeFeature,
     PlacementAppearance, ResourceLocator, Socket, SocketDefinition, SocketIdentity,
 };
-use wc3::model::{FromFeature as SlotFromFeature, TryFromFeature as SlotTryFromFeature};
-
-#[test]
-fn owned_attachment_preserves_native_identity_controls_and_activation() {
-    let mut slot_values = SlotValues::default();
-    let native = m3::Attachment {
-        identity: Cow::Borrowed("weapon"),
-        visibility: (),
-        control: 47,
-    };
-    let attachment =
-        Attachment::Socket(Socket::from_feature(native, &mut slot_values)).into_owned();
-    let point = attachment.socket().unwrap();
-    assert!(matches!(&point.identity, SocketIdentity::Named(Cow::Owned(name)) if name == "weapon"));
-    assert_eq!(point.control, Some(47));
-    assert_eq!(slot_values[point.visibility], 1.);
-    let restored = m3::Attachment::try_from_feature(point.clone(), &slot_values).unwrap();
-    assert_eq!(restored.control, 47);
-    assert_eq!(restored.identity, "weapon");
-}
 
 #[test]
 fn native_child_mounts_retain_fractional_visibility_without_inventing_points() {

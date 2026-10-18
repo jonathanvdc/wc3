@@ -77,8 +77,7 @@ diagnostics; permissive policy does not repair malformed references or resolve
 missing required companion files.
 
 Native M2 skins and external animation data, WMO groups, and external model
-references use the same resolver boundary. WMO dialect/layout provenance and Diablo
-IV layout/payload identities require provider knowledge. The [semantic rendering
+references use the same resolver boundary. WMO dialect/layout provenance requires provider knowledge. The [semantic rendering
 guide](rendering/universal.md) explains native adapter limits.
 
 ## Control animation
@@ -147,7 +146,7 @@ model particles maintain explicit owner cleanup despite their detached motion; s
 
 ## Prepare custom model sources
 
-Import through `wc3::model::io::{mdlx,m2,wmo,m3,diablo}` as appropriate, widen to
+Import through `wc3::model::io::{mdlx,m2,wmo}` as appropriate, widen to
 `Universal`, or author a Universal graph directly. `compile_model` borrows
 the model and resolves image requests into owned runtime definitions. It does not
 export through a native model version.

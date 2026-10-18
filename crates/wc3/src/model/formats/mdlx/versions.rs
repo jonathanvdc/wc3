@@ -110,5 +110,4 @@ version_capabilities! {
     /// Light::<V1400>::new(Node::new("Lamp", 1).unwrap(), LightType::Omnidirectional).set_falloff(LightFalloff::default());
     /// ```
     pub trait SupportsLightFalloff for V1600, V1800;
-
 }

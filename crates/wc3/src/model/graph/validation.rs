@@ -114,7 +114,6 @@ impl<P: Profile> Model<'_, P> {
                     !self.dependencies.bone_overrides.contains_key(id)
                 }
 
-                Link::AppearanceSlot(id) => !self.appearance.contains_slot(id),
                 Link::SystemMember { system, member } => !self
                     .systems
                     .get(system)

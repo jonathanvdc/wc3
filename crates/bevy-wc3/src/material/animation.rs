@@ -176,10 +176,6 @@ impl SurfaceAnimation {
         self.animated
             || self.uses_shared_time()
             || self.mesh.as_ref().is_some_and(MeshAnimation::is_animated)
-            || self
-                .m3
-                .as_ref()
-                .is_some_and(|animation| animation.is_animated())
     }
     pub(crate) fn apply_to_assets(
         &self,
@@ -244,9 +240,7 @@ impl SurfaceAnimation {
                 );
             }
         }
-        if let Some(m3) = &self.m3 {
-            changed |= m3.apply(sample, &mut material.extension.m3);
-        }
+
         if let Some(hd) = &self.hd {
             changed |= hd.apply(sample, material);
         }

@@ -48,8 +48,6 @@ pub(crate) struct RuntimeSkin<B> {
 pub enum DrawSource {
     /// An explicitly authored instance draw.
     Draw(DrawId),
-    /// The complete primary geometry of a slot-bound Diablo instance.
-    WholeInstance,
 }
 
 #[derive(Clone)]

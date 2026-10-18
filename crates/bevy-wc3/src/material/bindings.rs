@@ -1,5 +1,5 @@
 //! GPU binding layout independent of semantic image/sampler ownership.
-use super::m3::layers::M3Uniform;
+
 use super::{
     CombinerUniform, HdUniform, ModelMaterialExtension, ModelMaterialKey, ParticleUniform,
     WorldUniform,
@@ -9,13 +9,11 @@ use bevy::prelude::{Handle, Image};
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::render_resource::{
     AsBindGroup, AsBindGroupError, BindGroupLayout, BindGroupLayoutEntry, BindingType,
-    OwnedBindingResource, SamplerBindingType, ShaderStages, UnpreparedBindGroup,
+    ShaderStages, UnpreparedBindGroup,
 };
 use bevy::render::renderer::RenderDevice;
 use bevy::render::storage::GpuShaderBuffer;
 use bevy::render::texture::{FallbackImage, GpuImage};
-
-const SAMPLER_BINDINGS: [u32; 6] = [102, 105, 107, 109, 112, 115];
 
 #[derive(AsBindGroup)]
 struct BindingSnapshot {
@@ -45,16 +43,6 @@ struct BindingSnapshot {
     world: WorldUniform,
     #[uniform(113)]
     particle: ParticleUniform,
-    #[uniform(116)]
-    m3: M3Uniform,
-    #[texture(117)]
-    normal_secondary: Option<Handle<Image>>,
-    #[texture(119)]
-    normal_secondary_mask: Option<Handle<Image>>,
-    #[texture(121)]
-    light_map: Option<Handle<Image>>,
-    #[texture(123)]
-    ambient_occlusion: Option<Handle<Image>>,
 }
 impl From<&ModelMaterialExtension> for BindingSnapshot {
     fn from(material: &ModelMaterialExtension) -> Self {
@@ -69,11 +57,6 @@ impl From<&ModelMaterialExtension> for BindingSnapshot {
             fourth: material.fourth.clone(),
             world: material.world,
             particle: material.particle,
-            m3: material.m3.clone(),
-            normal_secondary: material.normal_secondary.clone(),
-            normal_secondary_mask: material.normal_secondary_mask.clone(),
-            light_map: material.light_map.clone(),
-            ambient_occlusion: material.ambient_occlusion.clone(),
         }
     }
 }
@@ -97,33 +80,13 @@ impl AsBindGroup for ModelMaterialExtension {
         param: &mut SystemParamItem<'_, '_, Self::Param>,
         force_no_bindless: bool,
     ) -> Result<UnpreparedBindGroup, AsBindGroupError> {
-        let mut group = BindingSnapshot::from(self).unprepared_bind_group(
+        let group = BindingSnapshot::from(self).unprepared_bind_group(
             layout,
             device,
             param,
             force_no_bindless,
         )?;
-        if self.m3.settings.x != 0 {
-            for (slot, binding) in SAMPLER_BINDINGS.into_iter().enumerate() {
-                let Some(image) = self.m3_samplers[slot].as_ref() else {
-                    continue;
-                };
-                let image = param
-                    .0
-                    .get(image)
-                    .ok_or(AsBindGroupError::RetryNextUpdate)?;
-                if let Some((_, resource)) = group
-                    .bindings
-                    .iter_mut()
-                    .find(|(index, _)| *index == binding)
-                {
-                    *resource = OwnedBindingResource::Sampler(
-                        SamplerBindingType::Filtering,
-                        image.sampler.clone(),
-                    );
-                }
-            }
-        }
+
         Ok(group)
     }
     fn bind_group_layout_entries(
@@ -152,27 +115,4 @@ impl AsBindGroup for ModelMaterialExtension {
     }
 }
 #[cfg(test)]
-mod tests {
-
-    use super::*;
-    use bevy::prelude::Assets;
-    #[test]
-    fn snapshots_preserve_ordinary_image_sampler_pairs_and_keep_pool_ownership_separate() {
-        let mut images = Assets::<Image>::default();
-        let ordinary = images.add(Image::default());
-        let pooled = images.add(Image::default());
-        let mut material = ModelMaterialExtension {
-            secondary: Some(ordinary.clone()),
-            ..Default::default()
-        };
-        material.m3_samplers[0] = Some(pooled.clone());
-        assert_eq!(
-            BindingSnapshot::from(&material).secondary,
-            Some(ordinary.clone())
-        );
-        material.m3.settings.x = 1;
-        assert_eq!(BindingSnapshot::from(&material).secondary, Some(ordinary));
-        assert_eq!(material.m3_samplers[0], Some(pooled));
-        assert_eq!(SAMPLER_BINDINGS.len(), 6);
-    }
-}
+mod tests {}

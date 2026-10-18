@@ -1,6 +1,6 @@
 //! Profile-owned model declarations and universal coordinate interpretation.
-use super::controls::{layered, model, programmed};
-use super::profiles::{Mdlx, Universal, Wmo, D3, D4, M2, M3};
+use super::controls::{layered, model};
+use super::profiles::{Mdlx, Universal, Wmo, M2};
 use super::{Basis, Bounds, LengthUnit, Model, ModelMetadata};
 use std::borrow::Cow;
 
@@ -28,7 +28,6 @@ macro_rules! named_metadata {
 }
 named_metadata!(layered);
 named_metadata!(model);
-named_metadata!(programmed);
 
 // Accessors are implemented only for the built-in spatial profiles, rather than
 // imposing metadata capabilities on application-defined profiles.
@@ -40,21 +39,21 @@ macro_rules! native_space {
         pub fn units(&self) -> LengthUnit { LengthUnit::Unspecified }
     })* }
 }
-native_space!(Mdlx, M2, M3, Wmo, D3, D4);
+native_space!(Mdlx, M2, Wmo);
 macro_rules! named_model {
     ($($profile:ty),*) => { $(impl Model<'_, $profile> {
         /// Authored model name.
         pub fn name(&self) -> &str { &self.metadata().name }
     })* }
 }
-named_model!(Mdlx, M2, M3);
+named_model!(Mdlx, M2);
 macro_rules! required_bounds {
     ($($profile:ty),*) => { $(impl Model<'_, $profile> {
         /// Authored model bounding volume.
         pub fn bounds(&self) -> Bounds { self.metadata().bounds }
     })* }
 }
-required_bounds!(M2, M3, D3, D4);
+required_bounds!(M2);
 macro_rules! optional_bounds {
     ($($profile:ty),*) => { $(impl Model<'_, $profile> {
         /// Authored model bounds, when the corresponding native declaration exists.
@@ -68,7 +67,7 @@ impl Model<'_, Universal> {
         match self.metadata() {
             ModelMetadata::Mdlx(value) => &value.name,
             ModelMetadata::M2(value) => &value.name,
-            ModelMetadata::M3(value) => &value.name,
+
             _ => "",
         }
     }
@@ -86,9 +85,6 @@ impl Model<'_, Universal> {
             ModelMetadata::Mdlx(value) => value.bounds,
             ModelMetadata::Wmo(value) => value.bounds,
             ModelMetadata::M2(value) => Some(value.bounds),
-            ModelMetadata::M3(value) => Some(value.bounds),
-            ModelMetadata::D3(value) => Some(value.bounds),
-            ModelMetadata::D4(value) => Some(value.bounds),
         }
     }
 }
@@ -96,24 +92,10 @@ impl Model<'_, Universal> {
 impl ModelMetadata<'_> {
     /// Fixed coordinate convention of the selected native declaration family.
     pub fn basis(&self) -> Basis {
-        match self {
-            Self::Mdlx(_)
-            | Self::M2(_)
-            | Self::M3(_)
-            | Self::Wmo(_)
-            | Self::D3(_)
-            | Self::D4(_) => Basis::default(),
-        }
+        Basis::default()
     }
     /// Native declaration families do not author a physical length scale.
     pub fn units(&self) -> LengthUnit {
-        match self {
-            Self::Mdlx(_)
-            | Self::M2(_)
-            | Self::M3(_)
-            | Self::Wmo(_)
-            | Self::D3(_)
-            | Self::D4(_) => LengthUnit::Unspecified,
-        }
+        LengthUnit::Unspecified
     }
 }

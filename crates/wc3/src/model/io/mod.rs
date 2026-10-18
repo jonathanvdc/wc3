@@ -2,14 +2,12 @@
 use super::conversion::*;
 /// ANIMATION import and export support.
 pub mod animation;
-/// DIABLO import and export support.
-pub mod diablo;
+
 /// GEOMETRY import and export support.
 pub mod geometry;
 /// M2 import and export support.
 pub mod m2;
-/// M3 import and export support.
-pub mod m3;
+
 /// MDLX import and export support.
 pub mod mdlx;
 /// WMO import and export support.

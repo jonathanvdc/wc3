@@ -4,7 +4,7 @@ use crate::model::ModelResourceId;
 use crate::model::{Construct, PropertyValue, PropertyValues};
 use std::borrow::Cow;
 
-use crate::model::profiles::{m2, m3, wmo};
+use crate::model::profiles::{m2, wmo};
 use crate::model::{
     scene, FeatureId, FeatureKind, Link, ModelMount, MountTarget, NodeId, Property,
     SampledAnimation, ValidateLinks,
@@ -186,32 +186,7 @@ impl<'a> TryFromFeature<Socket<'a>> for m2::Attachment {
         Err(Box::new(value))
     }
 }
-impl<'a> FromFeature<m3::Attachment<'a>> for Socket<'a> {
-    fn from_feature(value: m3::Attachment<'a>, values: &mut PropertyValues) -> Self {
-        Self {
-            identity: SocketIdentity::Named(value.identity),
-            visibility: values.add(1.),
-            control: Some(value.control),
-        }
-    }
-}
-impl<'a> TryFromFeature<Socket<'a>> for m3::Attachment<'a> {
-    type Error = Box<Socket<'a>>;
-    fn try_from_feature(value: Socket<'a>, values: &PropertyValues) -> Result<Self, Self::Error> {
-        match value {
-            Socket {
-                identity: SocketIdentity::Named(name),
-                visibility,
-                control: Some(control),
-            } if values.get(visibility) == Some(&1.) => Ok(Self {
-                identity: name,
-                visibility: (),
-                control,
-            }),
-            value => Err(Box::new(value)),
-        }
-    }
-}
+
 impl<'a> From<scene::Attachment> for ChildModel<'a> {
     fn from(value: scene::Attachment) -> Self {
         Self {

@@ -16,7 +16,7 @@ MIT OR Apache-2.0. Keep this pinned attribution when changing local shaders.
 The model material extension preserves Bevy's PBR/light/post-processing
 stages. `material.wgsl` evaluates supported native combiners and WMO
 baked-light interpretation; `hd.wgsl` supplies DefaultUnit role sampling,
-RG and M3 AG normal reconstruction, team masking, Fresnel, and environment approximation.
+RG normal reconstruction, team masking, Fresnel, and environment approximation.
 The prepass fragment retains matching alpha/UV/normal interpretation.
 
 The vertex entry points retain their filenames while serving Universal geometry.

@@ -1,18 +1,16 @@
 //! Shared aimed cameras keep projection conventions explicit.
 use crate::model::features::{FromFeature, TryFromFeature};
-use crate::model::profiles::{m2, m3, mdlx};
+use crate::model::profiles::{m2, mdlx};
 use crate::model::{scene, Link, Property, ValidateLinks};
 use crate::model::{Construct, PropertyValues};
 use m2::values::CameraKind;
 /// Complete authored camera models.
 #[derive(Clone, Debug)]
-pub enum Camera<'a> {
+pub enum Camera {
     /// Portable photographic camera.
     Portable(Box<scene::Camera>),
     /// Camera with independently animated eye, target offset, and roll.
     Aimed(Box<AimedCamera>),
-    /// Camera with versioned optical programs and property metadata.
-    Optical(Box<m3::Camera<'a>>),
 }
 /// Shared model-space aim and displacement components.
 #[derive(Clone, Debug, Construct, PartialEq)]

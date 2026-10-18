@@ -1,7 +1,6 @@
 use super::{CameraView, FeatureSchema, FeatureView, LightView, ParticlesView};
 use crate::model::profiles::{m2, mdlx, Either};
 use crate::model::LightEmission;
-use crate::model::ModelMetadata;
 use crate::model::{scene, Axis, NodeFeature};
 use crate::model::{AngleTrailControls, SurfaceTrailRendering, TrailAppearance, TrailGeometry};
 use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
@@ -227,38 +226,6 @@ fn light_discovery_retains_native_illumination_semantics() {
 }
 
 #[test]
-fn particle_copy_exposes_only_overrides_and_keeps_program_reset_metadata() {
-    let mut slot_values = SlotValues::default();
-    use crate::model::profiles::{m3, Universal};
-    use crate::model::Model;
-    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
-    let node = builder.add_named_node("source").unwrap();
-    let source = builder.reserve_feature(node);
-    let copy = m3::ParticleCopy {
-        source,
-        emission_rate: m3::PropertyBinding {
-            value: slot_values.add(12.5),
-            reset: 3.5,
-            ..SlotConstruct::construct(&mut slot_values)
-        },
-        squirt_amount: m3::PropertyBinding {
-            value: slot_values.add(19),
-            reset: 2,
-            ..SlotConstruct::construct(&mut slot_values)
-        },
-    };
-    let view = ParticlesView::Copy(&copy);
-    let super::EmissionRef::Programmed { rate, burst_count } = view.emission().unwrap() else {
-        unreachable!();
-    };
-    assert!(ptr::eq(rate, &copy.emission_rate));
-    assert!(ptr::eq(burst_count, &copy.squirt_amount));
-    assert_eq!((slot_values[rate.value], rate.reset), (12.5, 3.5));
-    assert_eq!((slot_values[burst_count.value], burst_count.reset), (19, 2));
-    assert!(view.lifetime().is_none());
-}
-
-#[test]
 fn application_behaviors_can_keep_their_own_complete_vocabulary() {
     fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync::<FeatureView<'static, 'static>>();
@@ -300,9 +267,7 @@ fn owned_emitters_expose_the_same_borrowed_emission_and_trail_components() {
     else {
         panic!("owned squirt emitter must expose keyed counts");
     };
-    let ParticleScalar::Property(authored) = &definition.emission.rate else {
-        unreachable!()
-    };
+    let ParticleScalar::Property(authored) = &definition.emission.rate;
     assert!(ptr::eq(value, authored));
     let trail = TrailEmitter::from(mdlx::Ribbon {
         emission_rate: u32::MAX,

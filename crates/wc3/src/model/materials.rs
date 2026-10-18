@@ -1,12 +1,8 @@
 //! Resource identities, sampling, and composable complete material surfaces.
-/// Diablo III shader and resource vocabulary.
-pub mod diablo3;
-/// Diablo IV external shader parameter vocabulary.
-pub mod diablo4;
+
 /// Model shader steps and texture inputs.
 pub mod m2;
-/// M3 shader and composition steps with animated inputs.
-pub mod m3;
+
 /// Ordered animated material steps.
 pub mod mdlx;
 /// Material programs and the universal shader-dialect step vocabulary.
@@ -16,10 +12,6 @@ pub mod wmo;
 
 /// Texture identity, coordinate, sampling, and contribution compositions.
 pub mod bindings;
-/// Surface response contributions.
-pub mod contributions;
-/// Ordered shader parameter entries and their typed domains.
-pub mod parameters;
 /// Composable draw state and rasterization controls.
 pub mod state;
 

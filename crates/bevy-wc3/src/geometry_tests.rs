@@ -388,7 +388,7 @@ fn second_color_projects_corner_values_independently_of_primary_illumination() {
             })
             .unwrap();
     }
-    let parts = compile_geometry(&source, &whole_geometry(&source).unwrap(), 0).unwrap();
+    let parts = compile_geometry(&source, &source.whole_geometry().unwrap(), 0).unwrap();
     assert_eq!(
         parts[0].mesh.attribute(Mesh::ATTRIBUTE_COLOR),
         Some(&VertexAttributeValues::Float32x4(vec![

@@ -238,21 +238,6 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
             | super::Node::CollisionShape(unavailable)
             | super::Node::ParticleProgram(unavailable)
             | super::Node::FaceActor(unavailable)
-            | super::Node::Extent(unavailable)
-            | super::Node::ParticleCopy(unavailable)
-            | super::Node::Projector(unavailable)
-            | super::Node::Force(unavailable)
-            | super::Node::Warp(unavailable)
-            | super::Node::HitTest(unavailable)
-            | super::Node::AttachmentVolume(unavailable)
-            | super::Node::Billboard(unavailable)
-            | super::Node::Turret(unavailable)
-            | super::Node::IkJoint(unavailable)
-            | super::Node::IkTwoJoint(unavailable)
-            | super::Node::IkCcd(unavailable)
-            | super::Node::OneBoneSolver(unavailable)
-            | super::Node::ShadowBox(unavailable)
-            | super::Node::ViewVolume(unavailable)
             | super::Node::AtlasParticles(unavailable) => match *unavailable {},
         }
     }

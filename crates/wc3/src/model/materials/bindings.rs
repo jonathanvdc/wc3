@@ -22,7 +22,7 @@ pub struct TextureBinding<I, C = (), S = (), V = ()> {
 pub struct Coordinates<S, T = ()> {
     /// Mesh coordinate set or a typed generated-coordinate selector.
     pub source: S,
-    /// Inline, referenced, or programmed coordinate transform.
+    /// Selected coordinate transform.
     pub transform: T,
 }
 

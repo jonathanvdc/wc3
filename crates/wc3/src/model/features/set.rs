@@ -26,36 +26,7 @@ pub trait FeatureVocabulary<'a>: Clone + Debug + Send + Sync {
     type FaceActor: Clone + Debug + Send + Sync;
     /// Owning form admitted for this behavior family.
     type LightProgram: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type Extent: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type ParticleCopy: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type Projector: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type Force: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type Warp: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type HitTest: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type AttachmentVolume: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type Billboard: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type Turret: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type IkJoint: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type IkTwoJoint: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type IkCcd: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type OneBoneSolver: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type ShadowBox: Clone + Debug + Send + Sync;
-    /// Owning form admitted for this behavior family.
-    type ViewVolume: Clone + Debug + Send + Sync;
+
     /// Owning form admitted for this behavior family.
     type AtlasParticles: Clone + Debug + Send + Sync;
     /// Owning form admitted for this behavior family.
@@ -100,36 +71,7 @@ pub enum FeatureSet<'a, V: FeatureVocabulary<'a>> {
     FaceActor(<V as FeatureVocabulary<'a>>::FaceActor),
     /// Complete owning definition of this behavior.
     LightProgram(<V as FeatureVocabulary<'a>>::LightProgram),
-    /// Complete owning definition of this behavior.
-    Extent(<V as FeatureVocabulary<'a>>::Extent),
-    /// Complete owning definition of this behavior.
-    ParticleCopy(<V as FeatureVocabulary<'a>>::ParticleCopy),
-    /// Complete owning definition of this behavior.
-    Projector(<V as FeatureVocabulary<'a>>::Projector),
-    /// Complete owning definition of this behavior.
-    Force(<V as FeatureVocabulary<'a>>::Force),
-    /// Complete owning definition of this behavior.
-    Warp(<V as FeatureVocabulary<'a>>::Warp),
-    /// Complete owning definition of this behavior.
-    HitTest(<V as FeatureVocabulary<'a>>::HitTest),
-    /// Complete owning definition of this behavior.
-    AttachmentVolume(<V as FeatureVocabulary<'a>>::AttachmentVolume),
-    /// Complete owning definition of this behavior.
-    Billboard(<V as FeatureVocabulary<'a>>::Billboard),
-    /// Complete owning definition of this behavior.
-    Turret(<V as FeatureVocabulary<'a>>::Turret),
-    /// Complete owning definition of this behavior.
-    IkJoint(<V as FeatureVocabulary<'a>>::IkJoint),
-    /// Complete owning definition of this behavior.
-    IkTwoJoint(<V as FeatureVocabulary<'a>>::IkTwoJoint),
-    /// Complete owning definition of this behavior.
-    IkCcd(<V as FeatureVocabulary<'a>>::IkCcd),
-    /// Complete owning definition of this behavior.
-    OneBoneSolver(<V as FeatureVocabulary<'a>>::OneBoneSolver),
-    /// Complete owning definition of this behavior.
-    ShadowBox(<V as FeatureVocabulary<'a>>::ShadowBox),
-    /// Complete owning definition of this behavior.
-    ViewVolume(<V as FeatureVocabulary<'a>>::ViewVolume),
+
     /// Complete owning definition of this behavior.
     AtlasParticles(<V as FeatureVocabulary<'a>>::AtlasParticles),
     /// Complete owning definition of this behavior.
@@ -169,21 +111,7 @@ where
     V::ParticleProgram: PartialEq,
     V::FaceActor: PartialEq,
     V::LightProgram: PartialEq,
-    V::Extent: PartialEq,
-    V::ParticleCopy: PartialEq,
-    V::Projector: PartialEq,
-    V::Force: PartialEq,
-    V::Warp: PartialEq,
-    V::HitTest: PartialEq,
-    V::AttachmentVolume: PartialEq,
-    V::Billboard: PartialEq,
-    V::Turret: PartialEq,
-    V::IkJoint: PartialEq,
-    V::IkTwoJoint: PartialEq,
-    V::IkCcd: PartialEq,
-    V::OneBoneSolver: PartialEq,
-    V::ShadowBox: PartialEq,
-    V::ViewVolume: PartialEq,
+
     V::AtlasParticles: PartialEq,
     V::PointLight: PartialEq,
 {
@@ -200,21 +128,7 @@ where
             (Self::ParticleProgram(left), Self::ParticleProgram(right)) => left == right,
             (Self::FaceActor(left), Self::FaceActor(right)) => left == right,
             (Self::LightProgram(left), Self::LightProgram(right)) => left == right,
-            (Self::Extent(left), Self::Extent(right)) => left == right,
-            (Self::ParticleCopy(left), Self::ParticleCopy(right)) => left == right,
-            (Self::Projector(left), Self::Projector(right)) => left == right,
-            (Self::Force(left), Self::Force(right)) => left == right,
-            (Self::Warp(left), Self::Warp(right)) => left == right,
-            (Self::HitTest(left), Self::HitTest(right)) => left == right,
-            (Self::AttachmentVolume(left), Self::AttachmentVolume(right)) => left == right,
-            (Self::Billboard(left), Self::Billboard(right)) => left == right,
-            (Self::Turret(left), Self::Turret(right)) => left == right,
-            (Self::IkJoint(left), Self::IkJoint(right)) => left == right,
-            (Self::IkTwoJoint(left), Self::IkTwoJoint(right)) => left == right,
-            (Self::IkCcd(left), Self::IkCcd(right)) => left == right,
-            (Self::OneBoneSolver(left), Self::OneBoneSolver(right)) => left == right,
-            (Self::ShadowBox(left), Self::ShadowBox(right)) => left == right,
-            (Self::ViewVolume(left), Self::ViewVolume(right)) => left == right,
+
             (Self::AtlasParticles(left), Self::AtlasParticles(right)) => left == right,
             (Self::PointLight(left), Self::PointLight(right)) => left == right,
             _ => false,

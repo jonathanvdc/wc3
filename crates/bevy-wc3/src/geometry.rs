@@ -14,12 +14,6 @@ pub(super) struct GeometryPart {
     pub vertices: Vec<usize>,
 }
 
-/// Select the full primary topology without inventing a draw or subset identity.
-pub(super) fn whole_geometry(mesh: &ModelMesh<'_>) -> Result<DrawSubset, ModelError> {
-    mesh.whole_geometry()
-        .map_err(|error| ModelError(error.to_string()))
-}
-
 /// Split mixed topology into Bevy-compatible draws while preserving authored order.
 #[cfg(test)]
 pub(super) fn compile_geometry(

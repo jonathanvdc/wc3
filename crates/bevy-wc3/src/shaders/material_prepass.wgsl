@@ -1,11 +1,5 @@
 #import "embedded://bevy_wc3/shaders/model_io.wgsl"::{VertexOutput,to_bevy,from_bevy}
 #import "embedded://bevy_wc3/shaders/particle_composition.wgsl"::{particle,compose_particle}
-#ifdef M3_MATERIAL
-#import "embedded://bevy_wc3/shaders/m3.wgsl"::{m3,m3_alpha,m3_normal}
-const M3_SURFACE:bool=true;
-#else
-const M3_SURFACE:bool=false;
-#endif
 // Adapted from Bevy v0.19.1 pbr_prepass.wgsl (MIT OR Apache-2.0).
 #import bevy_pbr::{
     pbr_prepass_functions,
@@ -37,9 +31,6 @@ struct HdUniform { fresnel_color: vec4<f32>, fresnel: vec4<f32>, maps: vec4<u32>
 
 // Share composition with the color pass, including masks that are not opacity.
 fn composed_alpha(in:VertexOutput)->f32 {
-#ifdef M3_MATERIAL
-    return m3_alpha(in);
-#else
     if world.composition.x!=0u {
         var layer_alpha=1.0;
 #ifdef WORLD_LAYER_ALPHA
@@ -108,7 +99,6 @@ fn composed_alpha(in:VertexOutput)->f32 {
     alpha*=in.edge_opacity;
 #endif
     return alpha;
-#endif
 }
 
 #ifdef PREPASS_FRAGMENT
@@ -150,7 +140,7 @@ fn fragment(
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK
             && pbr_bindings::material.base_color.a < pbr_bindings::material.alpha_cutoff { discard; }
-    } else if combiner.mode.x == 0u && particle.mode.x == 0u && world.composition.x == 0u && !M3_SURFACE {
+    } else if combiner.mode.x == 0u && particle.mode.x == 0u && world.composition.x == 0u {
         pbr_prepass_functions::prepass_alpha_discard(to_bevy(in));
     } else {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
@@ -160,11 +150,6 @@ fn fragment(
         }
     }
 #endif  // MESHLET_MESH_MATERIAL_PASS
-#ifdef M3_MATERIAL
-    if combiner.clip.x>0.0 {
-        if m3_alpha(in)<combiner.clip.x {discard;}
-    }
-#endif
 
     var out: prepass_io::FragmentOutput;
 
@@ -184,7 +169,6 @@ fn fragment(
         );
 
         var normal = world_normal;
-#ifndef M3_MATERIAL
 #ifdef VERTEX_UVS
 #ifdef VERTEX_TANGENTS
 #ifdef STANDARD_MATERIAL_NORMAL_MAP
@@ -245,9 +229,6 @@ fn fragment(
 #endif  // STANDARD_MATERIAL_NORMAL_MAP
 #endif  // VERTEX_TANGENTS
 #endif  // VERTEX_UVS
-#else
-        normal=m3_normal(in,world_normal,is_front);
-#endif
         out.normal = vec4(normal * 0.5 + vec3(0.5), 1.0);
     } else {
         out.normal = vec4(in.world_normal * 0.5 + vec3(0.5), 1.0);
@@ -273,15 +254,10 @@ fn fragment(vertex_output: VertexOutput) {
 #endif
     let flags = pbr_bindings::material.flags;
     let uv_transform = pbr_bindings::material.uv_transform;
-#ifdef M3_MATERIAL
-    if combiner.clip.x>0.0 {
-        if m3_alpha(in)<combiner.clip.x {discard;}
-    }
-#endif
     if world.flags.x != 0u && world.flags.y != 0u {
         let alpha_mode=flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode==pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK && pbr_bindings::material.base_color.a < pbr_bindings::material.alpha_cutoff {discard;}
-    } else if combiner.mode.x == 0u && particle.mode.x == 0u && world.composition.x == 0u && !M3_SURFACE {
+    } else if combiner.mode.x == 0u && particle.mode.x == 0u && world.composition.x == 0u {
         pbr_prepass_functions::prepass_alpha_discard(to_bevy(in));
     } else {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;

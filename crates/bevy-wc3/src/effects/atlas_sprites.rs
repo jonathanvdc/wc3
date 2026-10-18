@@ -117,12 +117,9 @@ pub(crate) struct AtlasParticleInstances {
     states: Vec<State>,
     previous_time: Option<f64>,
 }
-fn scalar(value: &ParticleScalar) -> Option<Property<f32>> {
-    if let ParticleScalar::Property(value) = value {
-        Some(*value)
-    } else {
-        None
-    }
+fn scalar(value: &ParticleScalar) -> Property<f32> {
+    let ParticleScalar::Property(value) = value;
+    *value
 }
 impl RuntimeAtlasParticles {
     pub(super) fn append_remapped(
@@ -182,15 +179,12 @@ impl RuntimeAtlasParticles {
                 diagnostic("Staged sprite emitter requires its authored three-stage appearance");
                 continue;
             };
-            let (Some(rate), Some(speed), Some(variation), Some(lifetime)) = (
+            let (rate, speed, variation, lifetime) = (
                 scalar(&definition.emission.rate),
                 scalar(&definition.motion.speed),
                 scalar(&definition.motion.variation),
                 scalar(&definition.lifetime.duration),
-            ) else {
-                diagnostic("Programmed scalar controls cannot drive a staged sprite emitter");
-                continue;
-            };
+            );
             let ParticleGravity::Directional(gravity) = &definition.motion.gravity else {
                 diagnostic("Staged sprite emitter requires directional gravity");
                 continue;
@@ -375,7 +369,6 @@ impl RuntimeAtlasParticles {
             let enabled = match &emitter.activation {
                 ParticleActivation::Fractional(v) => frame.sample.animated(v) > 0.,
                 ParticleActivation::Boolean(v) => frame.sample.animated(v),
-                ParticleActivation::Programmed => false,
             } && frame
                 .node_visible
                 .get(emitter.anchor)
@@ -410,7 +403,6 @@ impl RuntimeAtlasParticles {
                         let active = match &emitter.activation {
                             ParticleActivation::Fractional(value) => sample.animated(value) > 0.,
                             ParticleActivation::Boolean(value) => sample.animated(value),
-                            ParticleActivation::Programmed => false,
                         };
                         let rate = if active {
                             f64::from(sample.animated(&emitter.rate).max(0.))
@@ -485,7 +477,6 @@ impl RuntimeAtlasParticles {
         let enabled = match &emitter.activation {
             ParticleActivation::Fractional(value) => sample.animated(value) > 0.,
             ParticleActivation::Boolean(value) => sample.animated(value),
-            ParticleActivation::Programmed => false,
         };
         let ended = frame
             .selection

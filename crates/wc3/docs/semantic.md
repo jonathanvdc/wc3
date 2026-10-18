@@ -4,7 +4,7 @@
 Use it to inspect relationships, author changes, or prepare a native export.
 The [evaluation guide](evaluation.md) describes pose sampling, editable draw
 projection, and surface evaluation for offline tools and renderer integrations.
-The MDLX, M2, M3, WMO, and Diablo codecs remain the APIs for their encoded records
+The MDLX, M2, and WMO codecs remain the APIs for their encoded records
 and supporting documents. A semantic graph contains actual authoring values;
 it does not retain a native model as its backing representation.
 
@@ -49,7 +49,7 @@ effect input refers to an `ImageResourceId` and owns its sampling behavior.
 Inputs can share an image declaration while choosing independent addressing,
 coordinate transforms, and color interpretation. `Texture` is an inline sampled-image
 value used by MDLX and M2 inputs, including complete animated image selection;
-it has no graph identity. M3, WMO, and Diablo IV shader inputs reference image
+it has no graph identity. WMO shader inputs reference image
 resources directly and compose their own sampling vocabulary. Child placements and
 skyboxes use `ModelResourceId`, while external effect instances use
 `EffectResourceId`. Each handle resolves only in its owning model: for example,
@@ -100,11 +100,11 @@ through `Model::metadata`, edit individual fields through
 `ModelBuilder::set_metadata`. Construction accepts this metadata too; formats with
 authored names also accept a name string as shorthand. MDLX metadata includes the
 external animation filename, sequence blend time, and face-effect resources.
-M2, M3, and Diablo metadata require a bounding volume, while MDLX can omit its
+M2 metadata requires a bounding volume, while MDLX can omit its
 model-info declaration and WMO can omit root bounds for legacy output. A named
 MDLX model or one with animation-file or blend-time controls requires its
 model-info declaration. WMO bounds use an authored axis-aligned box with a sphere
-radius derived from its half-diagonal. WMO and Diablo have no model-name field.
+radius derived from its half-diagonal. WMO has no model-name field.
 
 `Universal` selects `ModelMetadata` directly. Its variants retain the complete
 native model declarations, including their names and bounds where supported.
@@ -119,7 +119,7 @@ remains the application's responsibility.
 ## Choosing an authoring vocabulary
 
 `Model<'data, P>` uses `P` to select the permitted authoring vocabulary. Built-in
-profiles in `model::profiles` include `Mdlx`, `M2`, `M3`, `Wmo`, `D3`, and `D4`.
+profiles in `model::profiles` include `Mdlx`, `M2`, and `Wmo`.
 The default profile, `Universal`, accepts all built-in families. A profile selects
 complete geometry and joint-binding schemas, material surfaces, attached
 features, systems, dependency declarations, appearance assignments, animation programs, and the controls
@@ -149,10 +149,7 @@ A profile chooses a required controls payload where absence has no meaning,
 `NoControls` value where that owner has no additional controls. `Unavailable`
 prevents constructing an unsupported payload family. These distinctions apply
 to the actual types rather than a uniform outer option on every owner. M2 uses
-`Option<m2::ShadowControls>` for draw controls. Universal controller controls use
-`Option<m3::ControllerControls>` because M3 is the built-in controller vocabulary.
-Unresolved Diablo shader codes use distinct numeric newtypes, preserving their
-producer values without an artificial `Unknown` branch. Embedded image resources carry
+`Option<m2::ShadowControls>` for draw controls. Embedded image resources carry
 bytes whose encoding interpretation remains unspecified.
 
 A semantic profile and a native dialect answer different questions. `Mdlx`
@@ -186,7 +183,7 @@ controls and foreign behavior return an error. Publication checks the complete
 model against the target profile's relationship and authoring rules.
 
 Universal enum variants distinguish data, interpretation, or supported operations,
-rather than recording the source format. MDLX, M3, and WMO appearances share
+rather than recording the source format. MDLX and WMO appearances share
 `UniversalAppearance::Single`, while M2 and general draw alternatives share
 `UniversalAppearance::Draw`. Narrowing accepts these shared payloads wherever the
 target supports them; the other owners still need their own compatible payloads.
@@ -225,24 +222,11 @@ material composition. Universal's `MaterialSurface` is a
 can reuse `MaterialProgram<S>` as storage within their own surface schema, with
 their own step vocabulary and validation.
 
-`MaterialStep` selects the dialect of one operation: `Mdlx`, `M2`, `Wmo`, `M3`,
-`Diablo3`, or `Diablo4`. Each dialect lives under the matching
-`model::materials` namespace and defines its own `MaterialStep`. For example,
-`MaterialStep::M3(m3::MaterialStep::Standard(...))` retains M3 Standard shader semantics;
-it does not describe a portable standard shader. A single program can combine
+`MaterialStep` selects the dialect of one operation: `Mdlx`, `M2`, or `Wmo`.
+Each dialect lives under the matching `model::materials` namespace and defines
+its own typed shader inputs and rendering settings. A single program can combine
 steps from different dialects. Shared texture bindings, blend operations, depth
 state, and rasterization components are reused where their meanings agree.
-Shader-specific inputs and rendering settings remain together in their concrete
-step definitions.
-
-A step can expand into several rendering passes. `m3::MaterialStep::Composite` references
-complete materials with independently animated weights and a composition priority.
-References remain graph links; compilation expands them recursively without
-replacing the authored references or copying their definitions. A Diablo III step
-retains shared shader inputs and separate ordered opaque and translucent phase
-declarations. A Diablo IV step carries resolved shader inputs and parameters.
-An unresolved Diablo IV selection retains its external references on its
-appearance variant and uses an empty material program.
 
 `mdlx::MaterialStep` distinguishes `Classic(ClassicMaterialStep)`,
 `ReforgedDefault(ReforgedDefaultMaterialStep)`, and
@@ -270,13 +254,10 @@ program carries no shader declarations. Nondefault headers on empty native
 materials remain editable through the native codecs; semantic import rejects
 them unless an explicit loss policy accepts dropping them.
 
-Diablo appearance variants own external resource selections independently of the
-shader material they execute, as described under [appearance and playback](#appearance-and-playback).
 Native-profile surfaces convert into the universal program without retaining
 another copy. MDLX conversion uses checked `TryFrom` because empty declarations
 may be unrepresentable. Checked projections reject unsupported steps or extra
-operations rather than dropping them. A native M3 surface requires one matching
-shader or composite step; Diablo IV accepts zero or one resolved shader step.
+operations rather than dropping them.
 
 M2 and WMO use shader-specific `MaterialStep` enums in both their native profiles
 and Universal. There is no general material input struct between those profiles.
@@ -305,22 +286,15 @@ numbers from draw and step order within each section. The auxiliary section word
 M2-specific draw controls and is not a geometry reference. Material steps retain
 shader inputs and composition state without pointing back to their geometry.
 
-The word layer describes different operations in these dialects. A Warcraft III
-draw layer becomes an MDLX step. An M3 texture layer supplies sampling,
-coordinates, color processing, and a contribution to one shader input; it does
-not add a step. An M3 composite section instead references another complete
-material and can expand into several rendering passes. Native profiles retain
-these exact authoring schemas. Native MDLX surfaces use `LayeredSurface` and its
-`SurfaceLayer` vocabulary; M2 inputs implement `ShaderInput` for local validation
-and graph traversal.
+A Warcraft III draw layer becomes an MDLX step. Native MDLX surfaces use
+`LayeredSurface` and its `SurfaceLayer` vocabulary; M2 inputs implement
+`ShaderInput` for local validation and graph traversal.
 
 Texture inputs compose through `TextureBinding<Image, Coordinates, Sampling,
 Contribution>`. The selected image representation can retain animated texture
 choices, runtime replacement categories, external resource identities, or explicit
 absent-image codes. `Coordinates<Source, Transform>` separates mesh UV or generated
-coordinate selection from its input-owned transform. Animated TRS values,
-Diablo matrices and parametric animation, and M3 UV programs retain distinct
-types because their behavior differs. Native transform conventions and units
+coordinate selection from its input-owned transform. Animated TRS values retain their typed properties. Native transform conventions and units
 are preserved. MDLX transform slots belong to each material input,
 so editing one imported use does not affect another use of the same native record.
 
@@ -333,12 +307,9 @@ collects distinct sampled-image values from materials, effects, allocated value
 slots, and animation tracks. This does not introduce shared editable texture
 objects.
 
-Sampling belongs to the input that uses it. M3 bindings retain sampling programs for flipbook, video, and noise,
-together with independent channel-selection contributions. Simpler bindings
-select smaller components. WMO steps retain two independently authored scrolling
-slots even when their image bindings are absent. Diablo matrix rows and unresolved
-animation controls retain their authored order. These distinctions do not require
-optional fields on every texture binding.
+Sampling belongs to the input that uses it. WMO steps retain two independently
+authored scrolling slots even when their image bindings are absent. These
+distinctions do not require optional fields on every texture binding.
 
 The following M2 step names its modulation input while reusing the shared texture
 binding vocabulary:
@@ -361,8 +332,7 @@ assert_eq!(values[value.modulation.contribution], 0.75);
 ```
 
 A binding supplies a shader input; a step describes an authored operation.
-MDLX layers therefore retain their ordered execution behavior, while M3 texture
-layers remain inputs to a shader. `PassState<Blend, Rasterization,
+MDLX layers therefore retain their ordered execution behavior. `PassState<Blend, Rasterization,
 Ordering>` owns draw state. `Rasterization<Depth, Faces, Lighting, Controls>`
 selects independent domains, with `DepthState` separating comparison, writes,
 and bias. Common operations have shared names, while each composition limits
@@ -371,34 +341,15 @@ operation, enablement, and constant color. Unresolved codes and additional
 operations remain in their selected domains. M2 rasterization helpers separate
 known lighting, fog, face, and depth controls while retaining the remaining flag bits.
 
-`SurfaceContribution<Input, Parameters>` couples an input with its response
-parameters. M3 Standard surfaces group diffuse, specular, emissive,
-opacity, and normal contributions without replacing their shader model with PBR.
-Sparse primary and secondary inputs retain their exact slots. A specular response
-keeps its color and gloss roles; normal contributions retain independent masks and
-the full authored weight vector.
-
-Shader parameters use `ParameterEntry<Key, Value, Controls>`. Their ordered
-collections retain duplicate keys. Diablo tags, Diablo value selectors, and
-M3 hashed names remain different identity domains. Opaque words and byte
-payloads remain distinct from interpreted scalar or vector values; a bit pattern
-that resembles a nonfinite float is valid opaque data. Graph-absence sentinels,
-light groups, unresolved parameter types, and independently stored hashes are
-preserved. Composition traverses every selected component during graph validation,
-including application-defined resource, coordinate, contribution, and parameter types.
-
 ## Attached behavior and shared feature inspection
 
 Universal's `NodeFeature` selects behavior directly: lights, cameras, attachments,
 particle and ribbon emitters, events, collision shapes, and geometry animation.
-It also admits light and external particle programs, particle copies, projectors,
-force and deformation fields, attachment and hit-test volumes, billboard and
-turret behaviors, inverse-kinematics solvers, and animated bounds. These are
-independently identified features anchored to ordinary hierarchy nodes. There is
-no outer source-format variant to unwrap before discovering a feature's purpose.
+Features are independently identified and anchored to ordinary hierarchy nodes,
+with no outer source-format variant to unwrap before discovering their purpose.
 
 `NodeFeature` is an alias for `FeatureSet<Universal>`. Native feature aliases
-select the same enum with `Mdlx`, `M2`, `M3`, or `Wmo` as its vocabulary.
+select the same enum with `Mdlx`, `M2`, or `Wmo` as its vocabulary.
 `FeatureVocabulary` chooses each family's payload and supplies its inspection
 and relationship rules. Unsupported families select `Unavailable`.
 For example, an MDLX particle carries a constrained `ParticleComposition`,
@@ -410,9 +361,8 @@ Shared structures retain common authored fields while explicit alternatives
 preserve different interpretations. `AmbientDiffuseLight` owns independently
 animated diffuse and ambient emission and distance attenuation. Its
 `LightActivation` distinguishes fractional visibility with optional shadow and
-falloff controls from boolean enablement. Specular, world, region-point, and
-portable lighting retain their complete definitions as separate illumination
-models. Unresolved light-kind selectors retain their original vocabulary, so
+falloff controls from boolean enablement. World, region-point, and portable lighting retain their complete definitions as
+separate illumination models. Unresolved light-kind selectors retain their original vocabulary, so
 changing activation cannot reinterpret an unknown code in another format.
 Unresolved controls remain authored values.
 
@@ -421,8 +371,6 @@ roll, and field of view. `CameraConvention` distinguishes vertical projection
 with visibility and photographic controls from diagonal projection with an
 application camera role. Widening a static vertical field of view represents it
 as a slot containing a constant; animating that slot prevents exact MDLX export.
-Optical camera programs retain their initial/reset values and animation-reference
-metadata rather than collapsing them into a simpler rest value.
 
 Attachments compose identity, visibility, and placement independently.
 `Socket` exposes a named identity, an application role, or an MDLX point
@@ -454,19 +402,15 @@ shared emission, motion, lifetime, and particle-age appearance components.
 Native profiles select the same composition with narrower component types.
 All simulated particles expose their rate, initial speed, speed variation,
 gravity, duration, and lifetime variation through those same fields.
-`ParticleScalar` distinguishes rest-value animation from programmed values with
-independent initial/reset values and animation-reference metadata. The emission
-trigger distinguishes continuous rates, keyed burst counts, and programmed
-burst controls. Fractional visibility and boolean activation remain separate.
-Directional gravity, animated vector acceleration, and programmed gravity words
-retain their distinct interpretations.
+`ParticleScalar` carries typed animated values. The emission trigger distinguishes
+continuous rates and keyed burst counts. Fractional visibility and boolean
+activation remain separate, as do scalar and directional gravity.
 
 `ParticleAppearance` distinguishes resource-defined appearance, staged color,
-opacity and scale, arbitrary age curves, and programmed age controls. It is
+opacity and scale, and arbitrary age curves. It is
 owned independently of emitter timing and simulation details. The remaining
 `ParticleDetails` select the simulation, rendering, and source geometry rules:
-resource particles, atlas sprites and tails, age-driven particles, or programmed
-effects. Atlas and age-driven definitions group rendering and emission shape. Model-clock animation changes emitter parameters, while particle-age
+resource particles, atlas sprites and tails, or age-driven particles. Atlas and age-driven definitions group rendering and emission shape. Model-clock animation changes emitter parameters, while particle-age
 programs control the appearance of each living particle. Widening does not
 convert degrees to radians, reinterpret unknown controls, or bake an appearance
 program into a different simulation.
@@ -483,12 +427,7 @@ and typed slot identity. Gravity and emission angle retain separate
 meanings; layered materials and ordered texture/surface bindings remain explicit
 rendering programs.
 
-Programmed particles and ribbons also share `ParticleMotion`, `ParticleLifetime`,
-`ProgrammedDirection`, particle-age appearance, force response, and noise
-components. Their remaining geometry and simulation controls stay on their own
-definitions. Particle copies retain a checked reference to a compatible independent
-programmed emitter. Events distinguish named sources, four-character gameplay
-identifiers, and structured engine commands.
+Events distinguish named sources and four-character gameplay identifiers.
 
 `FeatureSchema::feature` borrows a `FeatureView` from any profile's feature
 payload, including custom enums. Application-specific behaviors can return
@@ -496,9 +435,7 @@ payload, including custom enums. Application-specific behaviors can return
 Consumers can discover behavior before widening an entire model. `LightView::ambient_diffuse` and `CameraView::aimed` expose common
 borrowed fields across the constrained and universal representations. The views
 also retain access to complete definitions for specialized controls.
-Particle emission views distinguish continuous rates, keyed bursts, external
-program inputs, and programmed rates with independent burst controls. Lifetime
-views preserve static seconds, animated seconds, and programmed values. Ribbon
+Particle emission views distinguish continuous rates and keyed bursts. Lifetime views preserve static and animated seconds. Ribbon
 edge-strip views share color, opacity, heights, and section lifetime while
 retaining exact generation rates and the atlas selector's original animation
 value domain. Inspection neither clones payloads nor materializes their borrowed
@@ -528,25 +465,19 @@ unrepresentable additions return errors instead of being discarded.
 
 ## Geometry representations and profile constraints
 
-`MdlxGeometry`, `M2Geometry`, and `M3DisplayGeometry` retain distinct constrained
-APIs built on the same packed vertex-stream types. M2 construction requires a two-element
-UV array and four weighted influence slots per vertex, and exposes no tangent or
-color constructor. MDLX supports optional normals and tangents, ordered triangle
-groups, and `JointInfluences` with either equal-weight matrix groups or four
-weighted slots. M3 display geometry requires normals and weighted slots, and
-permits tangents, colors, and up to five UV slots with meaningful gaps. Checked
-constructors establish stream cardinalities and finite values; the profile types
-keep unsupported representations out of subsequent authoring operations.
-M3 mesh controls can additionally carry an optional `UvEncoding` preference for
-region UV packing. Universal controls retain it unchanged; export checks it
-against current UV values as described in the [conversion guide](conversion.md).
+`MdlxGeometry` and `M2Geometry` retain distinct constrained APIs built on the
+same packed vertex-stream types. M2 construction requires a two-element UV array
+and four weighted influence slots per vertex, and exposes no tangent or color
+constructor. MDLX supports optional normals and tangents, ordered triangle groups,
+and `JointInfluences` with either equal-weight matrix groups or four weighted
+slots. Checked constructors establish stream cardinalities and finite values; the
+profile types keep unsupported representations out of subsequent authoring operations.
 
 Widening these display types produces `GeometryData` directly, without a
 source-profile tag or an additional geometry wrapper. The arrays move unchanged,
 including borrowed encoded arrays and owned encoded buffers. Narrowing
 checks the actual streams before constructing the destination's constrained
-type. M2 geometry can therefore narrow to M3 display geometry, while M3 geometry
-with colors cannot narrow to MDLX or M2. Missing normals, absent weighted rows,
+type. Geometry with unsupported colors cannot narrow to MDLX or M2. Missing normals, absent weighted rows,
 unsupported UV gaps, and ordered primitive groups are rejected wherever the
 target cannot retain them. Neither zero-weight influence slots nor matrix-group
 ordering are discarded, and equal-weight groups are not converted into weighted
@@ -574,23 +505,20 @@ of vertex count. Native projection selects the most specific authored domain
 when a semantic occurs in several domains: corner, face, vertex, then mesh.
 
 The influence variants retain absent influences,
-variable-length weighted rows, three or four fixed weighted slots, and ordered
+variable-length weighted rows, four fixed weighted slots, and ordered
 equal-weight matrix groups. Custom attributes can coexist with each influence
 representation. Narrowing to a constrained display type rejects custom attributes
 and influence representations that the destination cannot retain; even a
 variable-length row containing four entries remains distinct from four authored
 slots.
 
-Collision geometry also widens to `GeometryData`, retaining `GeometryKind::Collision`
-as its authored purpose. Face normals use face-domain `Normal` attributes, and
-per-triangle scalar controls use `CollisionTriangleControl`. Checked M3 narrowing
-requires collision purpose, supported connectivity, and correctly typed optional
-triangle attributes. It rejects shading and skinning streams; display geometry
-types reject collision purpose even when the mesh carries only positions and
-connectivity. Widening, common edits, and native projection retain this purpose.
+Collision geometry also widens to `GeometryData`, retaining
+`GeometryKind::Collision` as its authored purpose. Face normals use face-domain
+`Normal` attributes, and per-triangle scalar controls use
+`CollisionTriangleControl`. Widening and common edits retain this purpose.
 
 `VertexData` shares the typed vertex layout used by display geometry, WMO,
-Diablo III, and collision. Its stream types select fixed UV arrays, optional
+and collision. Its stream types select fixed UV arrays, optional
 streams, multiple color sets, or `()` for unavailable shading data. An explicit
 extras type owns additional vertex streams. Common remapping carries those
 streams through the same vertex correspondence, while connectivity and joint
@@ -613,25 +541,6 @@ unskinned display triangles, contiguous color slots, and supported typed vertex 
 and pools without copying. Other constrained geometry types reject these additional
 domains. Generic draw projection requires an explicit domain translation before
 handling surface controls, supplemental declarations, or indexed pools.
-
-Diablo III also widens to `GeometryData`. Its independent three-vector tangents and
-binormals use the typed vertex attributes `TangentVector` and `Binormal`, auxiliary
-colors use `Color(1)`, and cloth mappings use `ClothVertex`. Widening preserves
-these streams independently, without deriving a tangent frame or handedness.
-Optional auxiliary direction bytes use the named vertex attribute
-`d3::DIRECTION_AUXILIARY_ATTRIBUTE` with `AttributeValues::Byte3`, ordered normal,
-tangent, then binormal. These values retain their unresolved meanings and follow
-vertex remaps alongside the other streams. Its influence rows retain the array type `[Influence; 3]`. Checked narrowing
-requires these complete vertex attributes with their exact value types, exactly
-two UV streams, and triangle connectivity. Unsupported or duplicate attributes,
-tangent frames, and other influence representations are rejected.
-
-Diablo IV uses `GeometryData` and widens without a geometry wrapper.
-Narrowing checks triangle connectivity and vertex-domain attributes before
-constructing `d4::Geometry`. Weighted rows retain their variable or fixed width
-without copying their arrays. Equal-weight matrix groups require an explicit
-transformation before entering this weighted geometry vocabulary. Native adapters
-also check whether the selected vertex layout can encode the authored streams.
 
 ## Draw subsets and instance bindings
 
@@ -669,29 +578,15 @@ expanding strips into triangles.
 
 ## Appearance and playback
 
-Appearance schemas retain the family's actual assignment domain. A native
-family may use one material assignment, draw alternatives, or named material
-slots. Diablo IV owns hashed material slots, slot-local variants, and hashed looks that
-select actual variants. These identities remain stable when native tables are
-rebuilt. Its geometry selects an actual material slot; it does not duplicate those
-assignments in common draw looks. D3 uses the same ownership pattern with named slots and named alternatives.
-Both profiles retain unused variants independently of the looks that select them;
-neither infers slot identity from mutable material display names.
-
-Each variant's typed `selection` retains its base-material, cloth, effect, and
-appearance qualifiers, including when no Diablo IV shader has been resolved.
-Use `add_variant_with_selection` to author these assignments and
-`slot.variant_definition_mut(id)` to edit a complete variant. `variants()` exposes
-variant/material pairs for assignment traversal. Changing the shader material
-with `set_variant` preserves the variant's selections, so two variants can share
-one shader definition while selecting different external resources.
+Appearance schemas retain the family's actual assignment domain. MDLX and WMO
+use one material assignment, while M2 supports draw alternatives.
 
 Draw-based looks are complete assignments, with exactly one material for every
 instance draw. Draws and geometry attributes carry no fallback material. Selecting
 an explicit look uses only that look; otherwise `material_for_draw` uses the
 default. Missing selections or assignments produce errors. Publication rejects
 incomplete looks, duplicate assignments, and references to absent draws or materials.
-MDLX, M3, and WMO use `SingleLook`, which always contains exactly one look,
+MDLX and WMO use `SingleLook`, which always contains exactly one look,
 initially with empty bindings. That look is always the default; edit it through
 `set_look` rather than adding or removing an alternative. MDLX import places each
 geoset in one mesh instance with one draw and stores its material in that complete
@@ -703,20 +598,11 @@ alternatives, complete each look before publication. `set_look` replaces an
 assignment while preserving its identity and selection. Removing a draw likewise
 requires removing its assignments from every look in the same checked edit.
 
-Diablo resource identities include a game namespace: a D3 group/ID pair does not
-identify the D4 resource with the same numbers. Profile publication checks that
-resource identities belong to the selected game vocabulary.
-
 Animation programs are reusable model-owned definitions. Clips and native
 controllers select them by identity; model-level selections remain active without
 a clip. MDLX ordinary tracks share one animation, and each clip selects its
 authored interval in that animation. M2 clips select separate animations with
 source intervals starting at zero. Global sequences use independent shared clocks.
-
-D3 quaternion curves use explicit normalized linear interpolation (`Nlerp`),
-which remains distinct from spherical interpolation (`Slerp`). Both are restricted
-to quaternion-valued curves. Native exports reject an interpolation mode they
-cannot represent rather than substituting another rotation path.
 
 ## Typed animation curves
 
@@ -765,8 +651,8 @@ Model-level animations run first, followed by the clip's animations, followed by
 controllers in ascending priority; equal priorities preserve caller order. Within
 each selection, animation and track order are authoritative. Later applicable
 tracks override earlier ones; empty curves fall through to earlier tracks and
-ultimately authored defaults. Native controller concurrency remains application
-playback policy. Value sampling does not advance clocks or dispatch events;
+ultimately authored defaults. Controllers are application-authored animation layers; their concurrency remains
+application playback policy. Value sampling does not advance clocks or dispatch events;
 event traversal separately examines the interval crossed between playback states.
 
 Allocate constants with `PropertyValues::add` or `ModelBuilder::add_value`. Construct
@@ -912,9 +798,7 @@ streams are materialized as owned encoded arrays.
 
 `edit_capabilities` describes supported common streams, required normals or colors,
 UV-set limits, and whether the current geometry permits vertex remapping. M2, for
-example, requires normals and exactly two UV streams. Diablo III tangent and
-binormal vectors remain distinct profile streams, so its common tangent-frame
-operation is unavailable. Capabilities guide tools before they submit an edit;
+example, requires normals and exactly two UV streams. Capabilities guide tools before they submit an edit;
 validation still checks cardinalities, finite values, and the profile's complete
 invariants. Universal `GeometryData` exposes the shared representation's broader
 editing capabilities: an
@@ -928,7 +812,7 @@ reorder them, and unused vertices can be deleted. Each new corner must select th
 same old vertex as its corresponding old corner. Primitive kinds, mixed groups,
 polygon boundaries, face order, and corner order remain unchanged. Adapters carry
 all vertex streams through this correspondence, including skin influences,
-additional vertex attributes, Diablo auxiliary colors and cloth mappings, and WMO
+additional vertex attributes and WMO
 lighting colors and baked-light coordinates. Face and corner attributes and their
 scoped identities remain intact. Stream replacements apply after remapping, which
 allows a tool to duplicate vertices and move the copies in one checked operation.

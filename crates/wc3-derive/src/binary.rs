@@ -24,7 +24,6 @@ pub(crate) fn fresh_ident(input: &DeriveInput, base: &str) -> Ident {
 pub(crate) enum Format {
     M2,
     Wmo,
-    M3,
 }
 
 pub(crate) enum Operation {
@@ -50,14 +49,10 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
         return crate::binary_value::binary(&input, operation, format);
     }
     let m2 = matches!(format, Format::M2);
-    let m3 = matches!(format, Format::M3);
     let codec = match format {
         Format::M2 => quote!(::wc3::model::formats::m2),
         Format::Wmo => quote!(::wc3::model::formats::wmo),
-        Format::M3 => quote!(::wc3::model::formats::m3),
     };
-    let envelope = fresh_ident(&input, "__M3Envelope");
-    let envelope_args = if m3 { quote!(<#envelope>) } else { quote!() };
     let name = &input.ident;
     let decoder = fresh_ident(&input, "__m2_decoder");
     let encoder = fresh_ident(&input, "__m2_encoder");
@@ -94,26 +89,9 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
     if matches!(operation, Operation::Read) && generics.lifetimes().next().is_none() {
         generics.params.insert(0, parse_quote!(#lifetime));
     }
-    if m3 {
-        generics
-            .params
-            .push(parse_quote!(#envelope:#codec::Envelope));
-    }
-    let read_args = if m3 {
-        quote!(#lifetime,#envelope)
-    } else {
-        quote!(#lifetime)
-    };
-    let decoder_type = if m3 {
-        quote!(#codec::codec::Decoder<#lifetime,#envelope>)
-    } else {
-        quote!(#codec::codec::Decoder<#lifetime>)
-    };
-    let encoder_type = if m3 {
-        quote!(#codec::codec::Encoder<#envelope>)
-    } else {
-        quote!(#codec::codec::Encoder)
-    };
+    let read_args = quote!(#lifetime);
+    let decoder_type = quote!(#codec::codec::Decoder<#lifetime>);
+    let encoder_type = quote!(#codec::codec::Encoder);
     let mut members = Vec::new();
     let mut reads = Vec::new();
     let mut writes = Vec::new();
@@ -131,14 +109,14 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
             });
         let predicate = match operation {
             Operation::Read => parse_quote!(#ty: #codec::Read<#read_args>),
-            Operation::Write => parse_quote!(#ty: #codec::Write #envelope_args),
-            Operation::Layout => parse_quote!(#ty: #codec::RecordLayout #envelope_args),
+            Operation::Write => parse_quote!(#ty: #codec::Write),
+            Operation::Layout => parse_quote!(#ty: #codec::RecordLayout),
         };
         generics.make_where_clause().predicates.push(predicate);
         members.push(member.clone());
         reads.push(quote!(<#ty as #codec::Read<#read_args>>::read(#decoder)?));
-        writes.push(quote!(<#ty as #codec::Write #envelope_args>::write(&self.#member,#encoder)?;));
-        sizes.push(quote!(<#ty as #codec::RecordLayout #envelope_args>::#size_method(#arguments)));
+        writes.push(quote!(<#ty as #codec::Write>::write(&self.#member,#encoder)?;));
+        sizes.push(quote!(<#ty as #codec::RecordLayout>::#size_method(#arguments)));
     }
     if matches!(operation, Operation::Write) && m2 {
         generics
@@ -162,7 +140,7 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
             }
         },
         Operation::Write => quote! {
-            impl #impl_generics #codec::Write #envelope_args for #name #type_generics #where_clause {
+            impl #impl_generics #codec::Write for #name #type_generics #where_clause {
                 fn write(&self, #encoder: &mut #encoder_type) -> ::core::result::Result<(), #codec::WriteError> {
                     #reserve
                     #(#writes)*
@@ -171,7 +149,7 @@ fn expand_checked(input: DeriveInput, operation: Operation, format: Format) -> R
             }
         },
         Operation::Layout => quote! {
-            impl #impl_generics #codec::RecordLayout #envelope_args for #name #type_generics #where_clause {
+            impl #impl_generics #codec::RecordLayout for #name #type_generics #where_clause {
                 fn #size_method(#parameters) -> usize { #width }
             }
         },

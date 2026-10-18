@@ -3,7 +3,7 @@
 `ModelEvent` messages expose authored animation occurrences for gameplay.
 The renderer does not execute commands, resolve sound tables, or spawn gameplay
 effects. `EventSource` retains named actions, four-byte identifiers with
-data IDs, and typed engine commands as distinct payloads.
+data IDs as distinct payloads.
 
 ## Consume occurrences
 
@@ -56,4 +56,4 @@ without enumerating every key in a long jump.
 The shared pose evaluator samples hierarchy, pivots, inheritance, billboards,
 anchors, overrides, and transition progress at the occurrence. Application root and
 camera transforms use current update values; their historical motion is not
-reconstructed. Commands without a hierarchy anchor retain no node identity.
+reconstructed. Occurrences without a hierarchy anchor retain no node identity.

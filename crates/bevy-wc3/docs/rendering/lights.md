@@ -7,11 +7,9 @@ node hierarchy controls placement and cleanup.
 
 ## Mapping and controls
 
-Portable and MDLX ambient/diffuse lights, WMO world lights, M3 specular/diffuse
-lights, and region point lights map supported color, intensity, range, activation,
+Portable and MDLX ambient/diffuse lights, WMO world lights, and region point lights map supported color, intensity, range, activation,
 and shadow flags to Bevy point, directional, or spot components. Unknown kinds
-remain inspectable without an arbitrary substitute. M3 spot hot-spot/falloff
-controls map to bounded Bevy cone angles; exact native calibration is unverified.
+remain inspectable without an arbitrary substitute.
 
 `ModelLightSettings` on a model root configures power/range conversion and
 suppression. Defaults are 1,000 lumens per point intensity unit, 10,000 lux per
@@ -34,8 +32,7 @@ tonemapping remain authoritative. Attenuation start is not interpreted as source
 radius, and custom falloff/shadow-range controls are not reproduced.
 
 WMO Euler/cone calibration, cookies, flicker, and regional light-set activation
-remain uninterpreted. M3 separate specular response, decay law, and light LOD gates
-are not reproduced. WMO placement appearance retains interior illumination and
+remain uninterpreted. WMO placement appearance retains interior illumination and
 linked-light information in the external definition on `ModelAttachment`; it is not multiplied
 into child albedo. Applications need region ambient/interior direction policy to
 interpret those controls without double-counting Bevy scene lights.

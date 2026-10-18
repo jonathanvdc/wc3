@@ -6,8 +6,7 @@ the available examples. This guide covers common commands and the guarantees
 that matter when writing modified assets. Run commands from the repository root;
 all examples support `--help`, including individual `mpq` subcommands. The model
 tools operate on Warcraft III MDX and MDL; M2 documents and supporting files use
-the [separate library APIs](m2.md). Diablo resources use `diablo_info` and
-`tex_to_png`, described below.
+the [separate library APIs](m2.md).
 
 ## Inspect model data and dependencies
 
@@ -80,24 +79,6 @@ Library callers can separately change or clear IDs and receive lossless before
 and after field values. Rewrite errors retain the original callback error as their
 source and attach the exact field location.
 
-## Inspect Diablo resources
-
-The `diablo_info` example reads supported native SNO resources. Select the game
-explicitly because the shared SNO signature does not identify its namespace.
-D3 also requires the document family; D4 selects its concrete root from the
-format hash. A D4 resource with external arrays requires the matching payload
-body, with any storage envelope removed:
-
-```sh
-cargo run -p wc3 --example diablo_info -- model.app --game d3 --kind appearance
-cargo run -p wc3 --example diablo_info -- animation.ani --game d3 --kind animation
-cargo run -p wc3 --example diablo_info -- model.app --game d4 --payload model.payload
-```
-
-The tool prints native counts and direct resource identities. It does not open
-referenced appearances, materials, animation sets, or textures. The
-[Diablo guide](diablo.md) describes native layout support and dependency assembly.
-
 ## Export textures and work with archives
 
 The `blp_to_png` example inspects texture metadata and exports a selected mip
@@ -111,18 +92,6 @@ For BLP0, the tool reads the selected level from the sibling file with the
 same stem and a `.bNN` extension: `--mip 0` requires `texture.b00`, while
 `--mip 1` requires `texture.b01`. Only that payload is read; a missing file fails
 the export. BLP1 and BLP2 mipmaps come from the input `.blp` itself.
-
-For Diablo textures, `tex_to_png` enables supported pixel conversion through
-`tex-decode`. D3 accepts a mip level and cubemap face. D4 requires the correct
-header-stripped pixel payload, native serialized range index, and original mip
-level; it does not guess which streaming tier contains that range:
-
-```sh
-cargo run -p wc3 --features tex-decode --example tex_to_png -- texture.tex texture.png --game d3 --mip 0
-cargo run -p wc3 --features tex-decode --example tex_to_png -- texture.tex texture.png --game d4 --payload texture.payload --range 0 --mip 0
-```
-
-See the [TEX guide](tex.md) for supported pixel formats and external range handling.
 
 For archive listing, extraction, creation, and editing, use the
 [`mpq` example](../examples/mpq.rs). Its subcommand help describes arguments

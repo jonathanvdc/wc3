@@ -316,21 +316,6 @@ fn native_identity_bindings_widen_without_allocating_matrices() {
 }
 
 #[test]
-fn explicit_joint_bindings_check_palette_cardinality() {
-    let slot_values = SlotValues::default();
-    use profiles::M3;
-    let mut builder = Model::<M3>::builder("rig");
-    let joint = builder.add_named_node("joint").unwrap();
-    let binding = ExplicitBinding::new(Vec::<BindMatrix>::new()).unwrap();
-    builder.add_skin(Skin::new(vec![joint], binding)).unwrap();
-    assert!({
-        builder.import_values(&slot_values).unwrap();
-        builder.finish()
-    }
-    .is_err());
-}
-
-#[test]
 fn absolute_timeline_does_not_require_a_playback_clip() {
     let slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));

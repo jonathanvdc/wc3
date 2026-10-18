@@ -31,35 +31,26 @@ impl<'a> TryFromFeature<ParticleDefinition<'a>> for mdlx::Particle {
         v: ParticleDefinition<'a>,
         values: &PropertyValues,
     ) -> Result<Self, Self::Error> {
-        if !(matches!(&v.emission.rate, ParticleScalar::Property(_))
-            && matches!(&v.emission.activation, ParticleActivation::Fractional(_))
-            && matches!(&v.motion.speed, ParticleScalar::Property(_))
+        if !(matches!(&v.emission.activation, ParticleActivation::Fractional(_))
             && matches!(&v.motion.gravity, ParticleGravity::Directional(_))
-            && matches!(&v.lifetime.duration, ParticleScalar::Property(_))
             && v.emission.variation == 0.0
             && matches!(&v.motion.variation, ParticleScalar::Property(a) if values.get(*a) == Some(&0.))
             && matches!(&v.lifetime.variation, ParticleScalar::Property(a) if values.get(*a) == Some(&0.))
-            && matches!(v.emission.trigger, ParticleTrigger::Continuous))
-            || !matches!(&v.details, ParticleDetails::Model(_))
-            || !matches!(&v.appearance, ParticleAppearance::Resource)
+            && matches!(v.emission.trigger, ParticleTrigger::Continuous)
+            && matches!(&v.details, ParticleDetails::Model(_))
+            && matches!(&v.appearance, ParticleAppearance::Resource))
         {
             return Err(Box::new(v));
         }
-        let ParticleScalar::Property(emission_rate) = v.emission.rate else {
-            unreachable!()
-        };
+        let ParticleScalar::Property(emission_rate) = v.emission.rate;
         let ParticleActivation::Fractional(visibility) = v.emission.activation else {
             unreachable!()
         };
-        let ParticleScalar::Property(initial_velocity) = v.motion.speed else {
-            unreachable!()
-        };
+        let ParticleScalar::Property(initial_velocity) = v.motion.speed;
         let ParticleGravity::Directional(gravity) = v.motion.gravity else {
             unreachable!()
         };
-        let ParticleScalar::Property(life_span) = v.lifetime.duration else {
-            unreachable!()
-        };
+        let ParticleScalar::Property(life_span) = v.lifetime.duration;
         let ParticleDetails::Model(d) = v.details else {
             unreachable!()
         };
@@ -117,10 +108,7 @@ impl<'a> TryFromFeature<ParticleDefinition<'a>> for mdlx::Particle2 {
         v: ParticleDefinition<'a>,
         values: &PropertyValues,
     ) -> Result<Self, Self::Error> {
-        if !(matches!(&v.emission.rate, ParticleScalar::Property(_))
-            && matches!(&v.emission.activation, ParticleActivation::Fractional(_))
-            && matches!(&v.motion.speed, ParticleScalar::Property(_))
-            && matches!(&v.motion.variation, ParticleScalar::Property(_))
+        if !(matches!(&v.emission.activation, ParticleActivation::Fractional(_))
             && matches!(&v.motion.gravity, ParticleGravity::Directional(_))
             && matches!(&v.lifetime.duration, ParticleScalar::Property(a) if values.get(*a).is_some())
             && matches!(
@@ -128,30 +116,22 @@ impl<'a> TryFromFeature<ParticleDefinition<'a>> for mdlx::Particle2 {
                 ParticleTrigger::Continuous | ParticleTrigger::KeyedBurst
             )
             && v.emission.variation == 0.0
-            && matches!(&v.lifetime.variation, ParticleScalar::Property(a) if values.get(*a) == Some(&0.)))
-            || !matches!(&v.details, ParticleDetails::Atlas(_))
-            || !matches!(&v.appearance, ParticleAppearance::Staged(_))
+            && matches!(&v.lifetime.variation, ParticleScalar::Property(a) if values.get(*a) == Some(&0.))
+            && matches!(&v.details, ParticleDetails::Atlas(_))
+            && matches!(&v.appearance, ParticleAppearance::Staged(_)))
         {
             return Err(Box::new(v));
         }
-        let ParticleScalar::Property(emission_rate) = v.emission.rate else {
-            unreachable!()
-        };
+        let ParticleScalar::Property(emission_rate) = v.emission.rate;
         let ParticleActivation::Fractional(visibility) = v.emission.activation else {
             unreachable!()
         };
-        let ParticleScalar::Property(speed) = v.motion.speed else {
-            unreachable!()
-        };
-        let ParticleScalar::Property(variation) = v.motion.variation else {
-            unreachable!()
-        };
+        let ParticleScalar::Property(speed) = v.motion.speed;
+        let ParticleScalar::Property(variation) = v.motion.variation;
         let ParticleGravity::Directional(gravity) = v.motion.gravity else {
             unreachable!()
         };
-        let ParticleScalar::Property(life_span) = v.lifetime.duration else {
-            unreachable!()
-        };
+        let ParticleScalar::Property(life_span) = v.lifetime.duration;
         let life_span = *values.get(life_span).expect("validated source slot");
         let squirt = matches!(v.emission.trigger, ParticleTrigger::KeyedBurst);
         let ParticleAppearance::Staged(appearance) = v.appearance else {
@@ -210,40 +190,26 @@ impl<'a> TryFromFeature<ParticleDefinition<'a>> for m2::Particle<'a> {
         v: ParticleDefinition<'a>,
         values: &PropertyValues,
     ) -> Result<Self, Self::Error> {
-        if !(matches!(&v.emission.rate, ParticleScalar::Property(_))
-            && matches!(&v.emission.activation, ParticleActivation::Boolean(_))
-            && matches!(&v.motion.speed, ParticleScalar::Property(_))
-            && matches!(&v.motion.variation, ParticleScalar::Property(_))
+        if !(matches!(&v.emission.activation, ParticleActivation::Boolean(_))
             && matches!(&v.motion.gravity, ParticleGravity::Vector(_))
-            && matches!(&v.lifetime.duration, ParticleScalar::Property(_))
             && matches!(&v.lifetime.variation, ParticleScalar::Property(a) if values.get(*a).is_some())
-            && matches!(v.emission.trigger, ParticleTrigger::Continuous))
-            || !matches!(&v.details, ParticleDetails::AgeDriven(_))
-            || !matches!(&v.appearance, ParticleAppearance::Curves(_))
+            && matches!(v.emission.trigger, ParticleTrigger::Continuous)
+            && matches!(&v.details, ParticleDetails::AgeDriven(_))
+            && matches!(&v.appearance, ParticleAppearance::Curves(_)))
         {
             return Err(Box::new(v));
         }
-        let ParticleScalar::Property(rate) = v.emission.rate else {
-            unreachable!()
-        };
+        let ParticleScalar::Property(rate) = v.emission.rate;
         let ParticleActivation::Boolean(enabled) = v.emission.activation else {
             unreachable!()
         };
-        let ParticleScalar::Property(speed) = v.motion.speed else {
-            unreachable!()
-        };
-        let ParticleScalar::Property(speed_variation) = v.motion.variation else {
-            unreachable!()
-        };
+        let ParticleScalar::Property(speed) = v.motion.speed;
+        let ParticleScalar::Property(speed_variation) = v.motion.variation;
         let ParticleGravity::Vector(gravity) = v.motion.gravity else {
             unreachable!()
         };
-        let ParticleScalar::Property(lifespan) = v.lifetime.duration else {
-            unreachable!()
-        };
-        let ParticleScalar::Property(lifespan_variation) = v.lifetime.variation else {
-            unreachable!()
-        };
+        let ParticleScalar::Property(lifespan) = v.lifetime.duration;
+        let ParticleScalar::Property(lifespan_variation) = v.lifetime.variation;
         let lifespan_variation = *values
             .get(lifespan_variation)
             .expect("validated source slot");
@@ -271,107 +237,6 @@ impl<'a> TryFromFeature<ParticleDefinition<'a>> for m2::Particle<'a> {
                 trigger: (),
             },
             appearance: *appearance,
-        })
-    }
-}
-impl<'a> From<m3::Particle<'a>> for ParticleDefinition<'a> {
-    fn from(v: m3::Particle<'a>) -> Self {
-        Self {
-            emission: ParticleEmission {
-                rate: ParticleScalar::Programmed(v.emission.rate),
-                variation: 0.0,
-                trigger: ParticleTrigger::Programmed(v.emission.trigger),
-                activation: ParticleActivation::Programmed,
-            },
-            motion: ParticleMotion {
-                speed: ParticleScalar::Programmed(v.motion.speed),
-                variation: ParticleScalar::Programmed(v.motion.variation),
-                gravity: ParticleGravity::Programmed {
-                    x: v.motion.gravity.x,
-                    y: v.motion.gravity.y,
-                    magnitude: v.motion.gravity.magnitude,
-                },
-            },
-            lifetime: ParticleLifetime {
-                duration: ParticleScalar::Programmed(v.lifetime.duration),
-                variation: ParticleScalar::Programmed(v.lifetime.variation),
-            },
-            appearance: ParticleAppearance::Programmed(Box::new(v.appearance)),
-            details: ParticleDetails::Programmed(Box::new(v.details)),
-        }
-    }
-}
-impl<'a> TryFrom<ParticleDefinition<'a>> for m3::Particle<'a> {
-    type Error = Box<ParticleDefinition<'a>>;
-    fn try_from(v: ParticleDefinition<'a>) -> Result<Self, Self::Error> {
-        if !(matches!(&v.emission.activation, ParticleActivation::Programmed)
-            && matches!(&v.emission.rate, ParticleScalar::Programmed(_))
-            && matches!(&v.emission.trigger, ParticleTrigger::Programmed(_))
-            && matches!(&v.motion.speed, ParticleScalar::Programmed(_))
-            && matches!(&v.motion.variation, ParticleScalar::Programmed(_))
-            && matches!(&v.lifetime.duration, ParticleScalar::Programmed(_))
-            && matches!(&v.lifetime.variation, ParticleScalar::Programmed(_))
-            && matches!(&v.motion.gravity, ParticleGravity::Programmed { .. })
-            && v.emission.variation == 0.0)
-            || !matches!(&v.details, ParticleDetails::Programmed(_))
-            || !matches!(&v.appearance, ParticleAppearance::Programmed(_))
-        {
-            return Err(Box::new(v));
-        }
-        let ParticleScalar::Programmed(emission_rate) = v.emission.rate else {
-            unreachable!()
-        };
-        let ParticleTrigger::Programmed(squirt_amount) = v.emission.trigger else {
-            unreachable!()
-        };
-        let ParticleScalar::Programmed(initial_speed) = v.motion.speed else {
-            unreachable!()
-        };
-        let ParticleScalar::Programmed(initial_speed_random) = v.motion.variation else {
-            unreachable!()
-        };
-        let ParticleScalar::Programmed(lifetime) = v.lifetime.duration else {
-            unreachable!()
-        };
-        let ParticleScalar::Programmed(lifetime_random) = v.lifetime.variation else {
-            unreachable!()
-        };
-        let ParticleGravity::Programmed {
-            x: gravity_x,
-            y: gravity_y,
-            magnitude: gravity,
-        } = v.motion.gravity
-        else {
-            unreachable!()
-        };
-        let ParticleAppearance::Programmed(appearance) = v.appearance else {
-            unreachable!()
-        };
-        let ParticleDetails::Programmed(d) = v.details else {
-            unreachable!()
-        };
-        Ok(Self {
-            details: *d,
-            motion: ParticleMotion {
-                speed: initial_speed,
-                variation: initial_speed_random,
-                gravity: ProgrammedParticleGravity {
-                    x: gravity_x,
-                    y: gravity_y,
-                    magnitude: gravity,
-                },
-            },
-            lifetime: ParticleLifetime {
-                duration: lifetime,
-                variation: lifetime_random,
-            },
-            appearance: *appearance,
-            emission: ParticleEmission {
-                rate: emission_rate,
-                trigger: squirt_amount,
-                variation: (),
-                activation: (),
-            },
         })
     }
 }

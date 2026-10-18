@@ -1,8 +1,7 @@
 # Renderer overview
 
 bevy-wc3 renders Universal semantic models through Bevy's PBR, lighting, GPU
-skinning, shadows, and render phases. Native adapters provide MDLX, M2, WMO, M3, and
-Diablo input; a valid imported model can still contain shaders or effect programmes
+skinning, shadows, and render phases. Native adapters provide MDLX, M2, and WMO input; a valid imported model can still contain shaders or effect programmes
 without a complete interpreter. Source-associated diagnostics make those boundaries
 inspectable.
 
@@ -42,7 +41,7 @@ guide](../usage.md#bake-a-static-pose).
 Authored material programs contain dialect-specific steps, which the compiler
 interprets into rendering passes. `ModelMaterial` extends Bevy `StandardMaterial` with authored blend/depth states
 and supported native combiners. Classic layered surfaces, [M2 texture combinations](m2-materials.md),
-[WMO surfaces](wmo-materials.md), [M3 common layers](m3-materials.md), and known Diablo roles map into that pipeline.
+and [WMO surfaces](wmo-materials.md) map into that pipeline.
 M2 and WMO steps name their shader-specific inputs; native selector decoding belongs
 to the model adapters. M2 native layers become ordered material steps with
 independent animation targets. Unsupported combinations remain diagnostic fallbacks. Unlit and unfogged controls use
@@ -107,9 +106,9 @@ coverage; focused guides state the implemented behavior and remaining limits.
 | Area | Current boundary |
 | --- | --- |
 | Geometry | More than eight skin influences fails; skinned bounds update conservatively from contributing joints. No generated simplification or per-view skeletal pose. |
-| Surfaces | M2 illumination/constant programmes and the modern six-binding guild layout, specialized WMO terrain/window/LOD and extended combinations, specialized M3 families and advanced Standard layer controls, and external Diablo shaders need additional interpretation. |
+| Surfaces | M2 illumination/constant programmes and the modern six-binding guild layout, specialized WMO terrain/window/LOD and extended combinations need additional interpretation. |
 | Scene features | Bevy lighting differs from native falloff and regional illumination. Unsupported feature hooks expose IDs/kinds, not complete owned definitions. |
-| Effects | Spline/bone generators, advanced M2 texture programmes and modulation-gain controls, and several programmed simulations remain unsupported; external effects need providers. |
+| Effects | Spline/bone generators, advanced M2 texture programmes and modulation-gain controls remain unsupported; external effects need providers. |
 | Fidelity | Implemented motion, material, billboard, and native shader behavior is not a promise of exact game rendering. |
 
 The shared [viewer and capture tool](../tools.md) uses this same renderer and

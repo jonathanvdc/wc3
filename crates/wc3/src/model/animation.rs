@@ -1,7 +1,5 @@
 //! Typed curves and property destinations, independent of file clocks and track numbers.
 
-/// Resettable values with authored sampling controls.
-pub mod programmed;
 use crate::model::profiles::{Profile, Universal};
 use crate::model::{AnimationId, ClockId, Error, EventId, FeatureId, NodeId, Quaternion, Texture};
 use std::borrow::Cow;

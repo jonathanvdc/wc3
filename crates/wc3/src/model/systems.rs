@@ -3,40 +3,27 @@
 pub mod model;
 /// Model-family bodies, constraints, and environmental response.
 pub mod model_physics;
-/// Programmed-model independent system ownership and relationships.
-pub mod programmed;
-/// Programmed-model collision, rigid-body, and cloth definitions.
-pub mod programmed_physics;
 
-use crate::model::controls::{
-    diablo3, diablo4, layered, model as model_controls, programmed as programmed_controls, world,
-};
+use crate::model::controls::{layered, model as model_controls, world};
 use crate::model::profiles::{ControlsPayload, Either, Unavailable};
 use crate::model::{scene, Link, ValidateLinks};
 /// Model-wide metadata chosen by the universal vocabulary.
 #[derive(Clone, Debug)]
 pub enum ModelMetadata<'a> {
-    /// Diablo III appearance-wide declarations.
-    D3(diablo3::ModelMetadata),
-    /// Diablo IV appearance and structure declarations.
-    D4(diablo4::ModelMetadata),
     /// Warcraft III animation resources and transition policy.
     Mdlx(layered::ModelMetadata<'a>),
     /// World of Warcraft model behavior and gameplay lookup programs.
     M2(model_controls::ModelMetadata<'a>),
-    /// StarCraft II model behavior.
-    M3(programmed_controls::ModelMetadata<'a>),
+
     /// World-model rendering and environment settings.
     Wmo(world::ModelMetadata),
 }
 impl ValidateLinks for ModelMetadata<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
-            Self::D4(value) => value.visit_links(visitor),
-            Self::D3(value) => value.visit_links(visitor),
             Self::Mdlx(value) => value.visit_links(visitor),
             Self::M2(value) => value.visit_links(visitor),
-            Self::M3(value) => value.visit_links(visitor),
+
             Self::Wmo(value) => value.visit_links(visitor),
         }
     }
@@ -48,8 +35,7 @@ pub enum System<'a> {
     Physics(scene::PhysicsSystem<'a>),
     /// World of Warcraft collision, deformation, texture animation, or physics system.
     M2(model::System<'a>),
-    /// StarCraft II collision, rigid physics, or cloth system.
-    M3(programmed::System<'a>),
+
     /// Static-world groups, portals, and environment volumes.
     Wmo(world::WorldSystem<'a>),
 }
@@ -63,7 +49,7 @@ impl ValidateLinks for System<'_> {
                 }
             }
             Self::M2(value) => value.visit_links(visitor),
-            Self::M3(value) => value.visit_links(visitor),
+
             Self::Wmo(value) => value.visit_links(visitor),
         }
     }
@@ -91,7 +77,7 @@ pub trait SystemPayload: ControlsPayload {
     }
 }
 impl SystemPayload for model::System<'_> {}
-impl SystemPayload for programmed::System<'_> {}
+
 impl SystemPayload for Unavailable {}
 impl SystemPayload for world::WorldSystem<'_> {
     fn contains(&self, member: SystemMember) -> bool {

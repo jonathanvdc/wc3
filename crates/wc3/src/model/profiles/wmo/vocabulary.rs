@@ -55,21 +55,6 @@ impl wmo::Node<'_> {
             | Self::CollisionShape(unavailable)
             | Self::ParticleProgram(unavailable)
             | Self::FaceActor(unavailable)
-            | Self::Extent(unavailable)
-            | Self::ParticleCopy(unavailable)
-            | Self::Projector(unavailable)
-            | Self::Force(unavailable)
-            | Self::Warp(unavailable)
-            | Self::HitTest(unavailable)
-            | Self::AttachmentVolume(unavailable)
-            | Self::Billboard(unavailable)
-            | Self::Turret(unavailable)
-            | Self::IkJoint(unavailable)
-            | Self::IkTwoJoint(unavailable)
-            | Self::IkCcd(unavailable)
-            | Self::OneBoneSolver(unavailable)
-            | Self::ShadowBox(unavailable)
-            | Self::ViewVolume(unavailable)
             | Self::AtlasParticles(unavailable) => match *unavailable {},
         }
     }
@@ -141,7 +126,7 @@ impl Extends<Wmo> for Universal {
     }
     fn controller<'a>(value: <Wmo as Profile>::Controller<'a>) -> Self::Controller<'a> {
         let _ = value;
-        None
+        NoControls
     }
 }
 
@@ -157,21 +142,7 @@ impl<'a> FeatureVocabulary<'a> for Wmo {
     type ParticleProgram = Unavailable;
     type FaceActor = Unavailable;
     type LightProgram = wmo::PointProgram;
-    type Extent = Unavailable;
-    type ParticleCopy = Unavailable;
-    type Projector = Unavailable;
-    type Force = Unavailable;
-    type Warp = Unavailable;
-    type HitTest = Unavailable;
-    type AttachmentVolume = Unavailable;
-    type Billboard = Unavailable;
-    type Turret = Unavailable;
-    type IkJoint = Unavailable;
-    type IkTwoJoint = Unavailable;
-    type IkCcd = Unavailable;
-    type OneBoneSolver = Unavailable;
-    type ShadowBox = Unavailable;
-    type ViewVolume = Unavailable;
+
     type AtlasParticles = Unavailable;
     type PointLight = wmo::PointLight;
     fn visit_links(value: &FeatureSet<'a, Self>, visitor: &mut dyn FnMut(Link)) {

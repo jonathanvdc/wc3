@@ -16,19 +16,13 @@ use std::os::unix::ffi::OsStringExt as _;
 use std::path::{Component, Path, PathBuf};
 use std::str::from_utf8;
 use std::sync::{Arc, Mutex};
-use wc3::model::common::{FileKey, IntoOwned as _};
+use wc3::model::common::FileKey;
 use wc3::model::conversion::{ImportOptions, IssueKind, Report};
 use wc3::model::formats::mdlx::mdl::Read as _;
 use wc3::model::formats::mdlx::{DynamicDocument, NoExtensions};
-use wc3::model::formats::{
-    diablo::{d3, d4},
-    m2, m3, wmo,
-};
+use wc3::model::formats::{m2, wmo};
 use wc3::model::io::mdlx as semantic_mdlx;
-use wc3::model::io::{
-    diablo::{d3 as semantic_d3, d4 as semantic_d4},
-    m2 as semantic_m2, m3 as semantic_m3, wmo as semantic_wmo,
-};
+use wc3::model::io::{m2 as semantic_m2, wmo as semantic_wmo};
 use wc3::model::{
     AddressMode, Attachment, FeatureId, Model, NodeFeature, ParticleDetails, ParticleEmitter,
     ResourceLocator as ModelResource,
@@ -262,18 +256,6 @@ pub trait ResourceResolver: Send + Sync + 'static {
     /// WMO layout provenance; version 17 alone does not identify a dialect.
     fn wmo_profile(&self, _owner: &AssetPath<'_>) -> Option<wmo::Profile> {
         None
-    }
-    /// Explicit vertex interpretations for Diablo IV source buffers.
-    fn diablo4_layouts(&self, _owner: &AssetPath<'_>) -> Vec<semantic_d4::BufferLayout> {
-        Vec::new()
-    }
-    /// External Diablo IV payload identity, if the appearance uses separate storage.
-    fn diablo4_payload(&self, _owner: &AssetPath<'_>) -> Option<ModelResource<'static>> {
-        None
-    }
-    /// Independently selected Diablo III animations to bind by bone name.
-    fn diablo3_animations(&self, _owner: &AssetPath<'_>) -> Vec<ModelResource<'static>> {
-        Vec::new()
     }
 }
 
@@ -728,56 +710,6 @@ async fn load_wmo<D: wmo::Dialect>(
     )
     .await
 }
-async fn load_m3<E: m3::Envelope + Send + Sync>(
-    document: m3::Document<'_, E>,
-    context: &mut LoadContext<'_>,
-    resolver: &dyn ResourceResolver,
-    owner: &AssetPath<'_>,
-    children: &ChildModelContext<'_>,
-) -> Result<ModelAsset, ModelError> {
-    let mut bundle = m3::Bundle::from_model(document);
-    loop {
-        let pending: Vec<_> = bundle
-            .dependencies()
-            .map_err(|error| ModelError(error.to_string()))?
-            .into_iter()
-            .filter(|hash| bundle.animation(*hash).is_none())
-            .collect();
-        if pending.is_empty() {
-            break;
-        }
-        for hash in pending {
-            let resource = ModelResource::Named {
-                namespace: Cow::Borrowed("m3-animation-hash"),
-                name: Cow::Owned(format!("{hash:08x}")),
-            };
-            let data = read_resource(context, resolver, owner, &resource, true)
-                .await?
-                .unwrap();
-            let animation = m3::DynamicDocument::read(&data)
-                .map_err(|error| ModelError(error.to_string()))?
-                .into_owned();
-            bundle
-                .insert_animation(hash, animation)
-                .map_err(|error| ModelError(error.to_string()))?;
-        }
-    }
-    bundle
-        .validate_complete()
-        .map_err(|error| ModelError(error.to_string()))?;
-    let conversion = semantic_m3::import(&bundle, &resolver.import_options(owner))
-        .map_err(|error| ModelError(error.to_string()))?;
-    let model = conversion.value.widen();
-    compile_loaded(
-        &model,
-        &conversion.report,
-        context,
-        resolver,
-        owner,
-        children,
-    )
-    .await
-}
 
 impl ModelLoader {
     async fn load_native(
@@ -911,80 +843,7 @@ impl ModelLoader {
                 _ => Err(ModelError("legacy WMO asset loading is not implemented; import its native bundle and compile the Universal model directly".into())),
             };
         }
-        if extension == "m3" {
-            return match m3::DynamicDocument::read(&bytes)
-                .map_err(|error| ModelError(error.to_string()))?
-            {
-                m3::DynamicDocument::Md33(document) => {
-                    load_m3(document, context, self.resolver.as_ref(), &owner, &children).await
-                }
-                m3::DynamicDocument::Md34(document) => {
-                    load_m3(document, context, self.resolver.as_ref(), &owner, &children).await
-                }
-            };
-        }
-        if extension == "app" || extension == "d3app" || extension == "d4app" {
-            if extension != "d4app" {
-                if let Ok(appearance) = d3::Appearance::<d3::V260>::read(&bytes) {
-                    let appearance = appearance.into_owned();
-                    let mut animations = Vec::new();
-                    for resource in self.resolver.diablo3_animations(&owner) {
-                        let data =
-                            read_resource(context, self.resolver.as_ref(), &owner, &resource, true)
-                                .await?
-                                .unwrap();
-                        animations.push(
-                            d3::Animation::<d3::V118>::read(&data)
-                                .map_err(|error| ModelError(error.to_string()))?
-                                .into_owned(),
-                        );
-                    }
-                    let bundle = semantic_d3::Bundle {
-                        appearance: &appearance,
-                        animations: animations.iter().collect(),
-                    };
-                    let conversion =
-                        semantic_d3::import(&bundle, &self.resolver.import_options(&owner))
-                            .map_err(|error| ModelError(error.to_string()))?;
-                    let model = conversion.value.widen();
-                    return compile_loaded(
-                        &model,
-                        &conversion.report,
-                        context,
-                        self.resolver.as_ref(),
-                        &owner,
-                        &children,
-                    )
-                    .await;
-                }
-            }
-            let payload = if let Some(resource) = self.resolver.diablo4_payload(&owner) {
-                read_resource(context, self.resolver.as_ref(), &owner, &resource, true).await?
-            } else {
-                None
-            };
-            let appearance = match payload.as_deref() {
-                Some(payload) => d4::Appearance::read_with_payload(&bytes, payload),
-                None => d4::Appearance::read(&bytes),
-            }
-            .map_err(|error| ModelError(error.to_string()))?;
-            let conversion = semantic_d4::import_with_layouts(
-                &appearance,
-                &self.resolver.diablo4_layouts(&owner),
-                &self.resolver.import_options(&owner),
-            )
-            .map_err(|error| ModelError(error.to_string()))?;
-            let model = conversion.value.widen();
-            return compile_loaded(
-                &model,
-                &conversion.report,
-                context,
-                self.resolver.as_ref(),
-                &owner,
-                &children,
-            )
-            .await;
-        }
+
         Err(ModelError(format!(
             "native Universal loading is not implemented for .{extension}"
         )))
@@ -1011,7 +870,7 @@ impl AssetLoader for ModelLoader {
         result
     }
     fn extensions(&self) -> &[&str] {
-        &["mdl", "mdx", "m2", "wmo", "m3", "app", "d3app", "d4app"]
+        &["mdl", "mdx", "m2", "wmo"]
     }
 }
 

@@ -3,8 +3,7 @@
 pub mod keyframed;
 /// Runtime model scene definitions.
 pub mod model;
-/// Scene projection, force, targeting, and optical programs.
-pub mod programmed;
+
 /// Region-local illumination and cookie programs.
 pub mod region_lights;
 /// World regions, placements, environment, and illumination.

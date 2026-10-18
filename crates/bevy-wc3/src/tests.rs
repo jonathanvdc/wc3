@@ -720,6 +720,33 @@ fn public_rest_bounds_use_joint_rest_pose_instead_of_mesh_placement() {
 }
 
 #[test]
+fn m2_nonzero_transition_pairs_require_explicit_application_duration() {
+    let mut slot_values = SlotValues::default();
+    use wc3::model::controls::model::SequenceControls;
+    use wc3::model::{Clip, ClipControls};
+    let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
+    source
+        .edit(|builder| {
+            let edit_result = {
+                let mut clip = Clip::named("M2 authored transition");
+                clip.controls = Some(ClipControls::M2(SequenceControls {
+                    blend_time: [150, 300],
+                    ..SlotConstruct::construct(&mut slot_values)
+                }));
+                builder.add_clip(clip)
+            };
+            builder.import_values(&slot_values)?;
+            edit_result
+        })
+        .unwrap();
+    let compiled = compile_model(&source, |_| None).unwrap();
+    assert!(compiled.diagnostics().iter().any(|diagnostic| {
+        diagnostic.message.contains("[150, 300] milliseconds")
+            && diagnostic.message.contains("play_with_blend")
+    }));
+}
+
+#[test]
 fn driving_camera_and_root_local_changes_update_billboards_before_propagation() {
     let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
     let mount = source.instances().iter().next().unwrap().1.node;
@@ -791,191 +818,3 @@ fn driving_camera_and_root_local_changes_update_billboards_before_propagation() 
         count
     );
 }
-
-#[test]
-fn m3_authored_controller_selection_drives_live_and_baked_pose_with_explicit_empty_override() {
-    let mut slot_values = SlotValues::default();
-    use wc3::model::controls::playback::{
-        ControllerSelection as SemanticControllerSelection, SequenceControls,
-    };
-    use wc3::model::Time as ModelTime;
-    use wc3::model::{Clip, ClipControls, Controller, Curve, DynamicTrack, TimeSource, Track};
-
-    let (mut source, joint) = fixture(UniversalBinding::Identity(IdentityBinding));
-    let clip = source
-        .edit(|builder| {
-            let edit_result = (|| {
-                let controller = builder.add_controller(Controller::default())?;
-                builder.add_controller_track(
-                    controller,
-                    DynamicTrack::Vector3(Track {
-                        target: builder.model().node(joint).unwrap().transform.translation,
-                        curve: Curve::linear(
-                            [ModelTime::seconds(1.)?, ModelTime::seconds(2.)?],
-                            [[4., 0., 0.], [6., 0., 0.]],
-                        )?,
-                        clock: TimeSource::Animation,
-                    }),
-                )?;
-                let mut clip =
-                    Clip::named("M3 selected programme").with_duration(ModelTime::seconds(1.)?);
-                clip.source_start = ModelTime::seconds(1.)?;
-                clip.controls = Some(ClipControls::M3(SequenceControls {
-                    blend_duration: ModelTime::seconds(0.3)?,
-                    selection: Some(SemanticControllerSelection {
-                        name: "authored STG".into(),
-                        controllers: vec![controller],
-                    }),
-                    ..SlotConstruct::construct(&mut slot_values)
-                }));
-                builder.add_clip(clip)
-            })();
-            builder.import_values(&slot_values)?;
-            edit_result
-        })
-        .unwrap();
-    let compiled = compile_model(&source, |_| None).unwrap();
-    let mut meshes = Assets::default();
-    let mut binds = Assets::default();
-    let prepared = compiled.prepare(&mut meshes, &mut binds);
-    let mut playback = Playback::for_clip(clip);
-    playback.clip_time = 0.5;
-    assert_eq!(playback.blend_duration(&prepared), 0.3);
-    let baked = PoseBaker::default()
-        .bake(
-            &prepared,
-            &meshes,
-            &binds,
-            PoseOptions {
-                playback: Some(&playback),
-                space: BakeSpace::Authored,
-                ..SlotConstruct::construct(&mut slot_values)
-            },
-        )
-        .unwrap();
-    let VertexAttributeValues::Float32x3(positions) = baked.parts[0]
-        .mesh
-        .attribute(Mesh::ATTRIBUTE_POSITION)
-        .unwrap()
-    else {
-        panic!("positions")
-    };
-    assert_eq!(positions[0], [5., 0., 0.]);
-    let (mut app, root, _, _) = spawn_pair(&source);
-    app.world_mut().entity_mut(root).insert(playback.clone());
-    app.update();
-    let entity = app
-        .world()
-        .get::<ModelRig>(root)
-        .unwrap()
-        .node(joint)
-        .unwrap();
-    assert_eq!(
-        app.world().get::<Transform>(entity).unwrap().translation.x,
-        5.
-    );
-    let expected = prepared.basis.transform_point(Vec3::new(5., 0., 0.));
-    assert!(app
-        .world()
-        .get::<GlobalTransform>(entity)
-        .unwrap()
-        .translation()
-        .abs_diff_eq(expected, 1e-5));
-    playback.controllers = ControllerSelection::Explicit(vec![]);
-    app.world_mut().entity_mut(root).insert(playback.clone());
-    app.update();
-    assert_eq!(
-        app.world().get::<Transform>(entity).unwrap().translation.x,
-        3.
-    );
-    let baked = PoseBaker::default()
-        .bake(
-            &prepared,
-            &meshes,
-            &binds,
-            PoseOptions {
-                playback: Some(&playback),
-                space: BakeSpace::Authored,
-                ..SlotConstruct::construct(&mut slot_values)
-            },
-        )
-        .unwrap();
-    let VertexAttributeValues::Float32x3(positions) = baked.parts[0]
-        .mesh
-        .attribute(Mesh::ATTRIBUTE_POSITION)
-        .unwrap()
-    else {
-        panic!("positions")
-    };
-    assert_eq!(positions[0], [3., 0., 0.]);
-}
-
-#[test]
-fn m2_nonzero_transition_pairs_require_explicit_application_duration() {
-    let mut slot_values = SlotValues::default();
-    use wc3::model::controls::model::SequenceControls;
-    use wc3::model::{Clip, ClipControls};
-    let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
-    source
-        .edit(|builder| {
-            let edit_result = {
-                let mut clip = Clip::named("M2 authored transition");
-                clip.controls = Some(ClipControls::M2(SequenceControls {
-                    blend_time: [150, 300],
-                    ..SlotConstruct::construct(&mut slot_values)
-                }));
-                builder.add_clip(clip)
-            };
-            builder.import_values(&slot_values)?;
-            edit_result
-        })
-        .unwrap();
-    let compiled = compile_model(&source, |_| None).unwrap();
-    assert!(compiled.diagnostics().iter().any(|diagnostic| {
-        diagnostic.message.contains("[150, 300] milliseconds")
-            && diagnostic.message.contains("play_with_blend")
-    }));
-}
-
-#[test]
-fn programmed_shadow_cast_and_receive_flags_are_independent() {
-    let mut slot_values = SlotValues::default();
-    use bevy::light::{NotShadowCaster, NotShadowReceiver};
-    use wc3::model::materials::m3;
-    for cast in [false, true] {
-        for receive in [false, true] {
-            let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
-            let id = source.materials().iter().next().unwrap().0;
-            let mut standard = m3::StandardMaterialStep::construct(&mut slot_values);
-            standard
-                .state
-                .rasterization
-                .flags
-                .set_no_shadows_cast(!cast);
-            standard
-                .state
-                .rasterization
-                .flags
-                .set_no_shadows_receive(!receive);
-            source
-                .edit(|builder| {
-                    builder.import_values(&slot_values)?;
-                    builder.set_material_surface(
-                        id,
-                        MaterialSurface::from(m3::MaterialStep::Standard(Box::new(standard))),
-                    )
-                })
-                .unwrap();
-            let (mut app, _, _, _) = spawn_pair(&source);
-            let mut draws = app.world_mut().query_filtered::<(Option<&NotShadowCaster>, Option<&NotShadowReceiver>), With<ModelDraw>>();
-            assert_eq!(draws.iter(app.world()).count(), 2);
-            for (no_cast, no_receive) in draws.iter(app.world()) {
-                assert_eq!(no_cast.is_none(), cast);
-                assert_eq!(no_receive.is_none(), receive);
-            }
-        }
-    }
-}
-
-#[path = "m3_hierarchy_tests.rs"]
-mod m3_hierarchy;

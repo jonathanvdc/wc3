@@ -1,17 +1,7 @@
 //! Model-owned external dependency declarations and profile-specific addressing.
 use crate::model::{Error, Link, ValidateLinks};
 use std::borrow::Cow;
-/// Game namespace of an external Diablo resource identity.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum SnoNamespace {
-    /// The producer supplied numeric keys without a game namespace.
-    #[default]
-    Unspecified,
-    /// Diablo III resource groups and identifiers.
-    Diablo3,
-    /// Diablo IV resource groups and identifiers.
-    Diablo4,
-}
+
 /// An image source addressed externally, supplied by the application, or embedded.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ImageResource<'a> {
@@ -28,15 +18,7 @@ pub enum ImageResource<'a> {
     Path(Cow<'a, [u8]>),
     /// World of Warcraft resource identity.
     FileDataId(u32),
-    /// Diablo resource identity and resource group.
-    Sno {
-        /// Game whose resource group and identifier are addressed.
-        namespace: SnoNamespace,
-        /// Resource group.
-        group: i32,
-        /// Resource identity.
-        id: u32,
-    },
+
     /// Application-provided replacement texture category.
     Replaceable(u32),
     /// Image bytes supplied with the authoring data, with no established encoding interpretation.
@@ -63,15 +45,7 @@ impl ImageResource<'_> {
             },
             Self::Path(value) => ImageResource::Path(Cow::Owned(value.into_owned())),
             Self::FileDataId(value) => ImageResource::FileDataId(value),
-            Self::Sno {
-                namespace,
-                group,
-                id,
-            } => ImageResource::Sno {
-                namespace,
-                group,
-                id,
-            },
+
             Self::Replaceable(value) => ImageResource::Replaceable(value),
             Self::EmbeddedImage { bytes } => ImageResource::EmbeddedImage {
                 bytes: Cow::Owned(bytes.into_owned()),
@@ -259,57 +233,7 @@ impl<'a> TryFrom<ImageResource<'a>> for WorldModelResource<'a> {
 impl ValidateLinks for WorldModelResource<'_> {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
-/// A game-qualified Diablo resource group and identifier.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum SnoResource {
-    /// Game namespace, native group, and identity.
-    Sno {
-        /// Game namespace.
-        namespace: SnoNamespace,
-        /// Native resource group.
-        group: i32,
-        /// Native resource identifier.
-        id: u32,
-    },
-}
-impl<'a> From<SnoResource> for ImageResource<'a> {
-    fn from(value: SnoResource) -> Self {
-        match value {
-            SnoResource::Sno {
-                namespace,
-                group,
-                id,
-            } => ImageResource::Sno {
-                namespace,
-                group,
-                id,
-            },
-        }
-    }
-}
-impl<'a> TryFrom<ImageResource<'a>> for SnoResource {
-    type Error = Error;
-    fn try_from(value: ImageResource<'a>) -> Result<Self, Error> {
-        match value {
-            ImageResource::Sno {
-                namespace,
-                group,
-                id,
-            } => Ok(Self::Sno {
-                namespace,
-                group,
-                id,
-            }),
-            _ => Err(Error::new(
-                "resources",
-                "address is not admitted by the destination resource vocabulary",
-            )),
-        }
-    }
-}
-impl ValidateLinks for SnoResource {
-    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
-}
+
 /// Resource identity interpreted by an application resolver, not by a file layout.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ResourceLocator<'a> {
@@ -326,15 +250,7 @@ pub enum ResourceLocator<'a> {
     Path(Cow<'a, [u8]>),
     /// World of Warcraft resource identity.
     FileDataId(u32),
-    /// Diablo resource identity and resource group.
-    Sno {
-        /// Game whose resource group and identifier are addressed.
-        namespace: SnoNamespace,
-        /// Resource group.
-        group: i32,
-        /// Resource identity.
-        id: u32,
-    },
+
     /// A logical resource with an explicit namespace.
     Named {
         /// Provider namespace.
@@ -354,15 +270,7 @@ impl ResourceLocator<'_> {
             },
             Self::Path(value) => ResourceLocator::Path(Cow::Owned(value.into_owned())),
             Self::FileDataId(value) => ResourceLocator::FileDataId(value),
-            Self::Sno {
-                namespace,
-                group,
-                id,
-            } => ResourceLocator::Sno {
-                namespace,
-                group,
-                id,
-            },
+
             Self::Named { namespace, name } => ResourceLocator::Named {
                 namespace: Cow::Owned(namespace.into_owned()),
                 name: Cow::Owned(name.into_owned()),
@@ -381,15 +289,7 @@ impl<'a> From<ResourceLocator<'a>> for ImageResource<'a> {
             ResourceLocator::Relative { owner, suffix } => Self::Relative { owner, suffix },
             ResourceLocator::Path(value) => Self::Path(value),
             ResourceLocator::FileDataId(value) => Self::FileDataId(value),
-            ResourceLocator::Sno {
-                namespace,
-                group,
-                id,
-            } => Self::Sno {
-                namespace,
-                group,
-                id,
-            },
+
             ResourceLocator::Named { namespace, name } => Self::Named { namespace, name },
         }
     }
@@ -402,15 +302,7 @@ impl<'a> TryFrom<ImageResource<'a>> for ResourceLocator<'a> {
             ImageResource::Relative { owner, suffix } => Ok(Self::Relative { owner, suffix }),
             ImageResource::Path(value) => Ok(Self::Path(value)),
             ImageResource::FileDataId(value) => Ok(Self::FileDataId(value)),
-            ImageResource::Sno {
-                namespace,
-                group,
-                id,
-            } => Ok(Self::Sno {
-                namespace,
-                group,
-                id,
-            }),
+
             ImageResource::Named { namespace, name } => Ok(Self::Named { namespace, name }),
             _ => Err(Error::new(
                 "resources",
@@ -445,26 +337,7 @@ impl<'a> TryFrom<ResourceLocator<'a>> for WorldModelResource<'a> {
         ImageResource::from(value).try_into()
     }
 }
-impl<'a> From<SnoResource> for ResourceLocator<'a> {
-    fn from(value: SnoResource) -> Self {
-        let SnoResource::Sno {
-            namespace,
-            group,
-            id,
-        } = value;
-        Self::Sno {
-            namespace,
-            group,
-            id,
-        }
-    }
-}
-impl<'a> TryFrom<ResourceLocator<'a>> for SnoResource {
-    type Error = Error;
-    fn try_from(value: ResourceLocator<'a>) -> Result<Self, Error> {
-        ImageResource::from(value).try_into()
-    }
-}
+
 impl<'a> From<PathResource<'a>> for MdlxImageResource<'a> {
     fn from(value: PathResource<'a>) -> Self {
         let PathResource::Path(path) = value;
@@ -485,67 +358,7 @@ impl<'a> From<PathResource<'a>> for WorldImageResource<'a> {
 }
 
 #[cfg(test)]
-mod resource_tests {
-    use super::*;
-
-    #[test]
-    fn detached_resource_keeps_nested_raw_paths_and_namespaces() {
-        let owned = {
-            let raw = vec![b'u', b'/', 0xff, b'.', b'm', b'2'];
-            let suffix = String::from("00.skin");
-            ResourceLocator::Relative {
-                owner: Box::new(ResourceLocator::Relative {
-                    owner: Box::new(ResourceLocator::Path(Cow::Borrowed(&raw))),
-                    suffix: Cow::Borrowed(".variant"),
-                }),
-                suffix: Cow::Borrowed(&suffix),
-            }
-            .into_owned()
-        };
-        let ResourceLocator::Relative { owner, suffix } = owned else {
-            panic!("relative identity lost")
-        };
-        assert_eq!(suffix, "00.skin");
-        let ResourceLocator::Relative { owner, suffix } = *owner else {
-            panic!("nested owner lost")
-        };
-        assert_eq!(suffix, ".variant");
-        assert_eq!(
-            *owner,
-            ResourceLocator::Path(Cow::Owned(vec![b'u', b'/', 0xff, b'.', b'm', b'2']))
-        );
-        let named = {
-            let namespace = String::from("archive");
-            let name = String::from("texture/body");
-            ResourceLocator::Named {
-                namespace: Cow::Borrowed(&namespace),
-                name: Cow::Borrowed(&name),
-            }
-            .into_owned()
-        };
-        assert_eq!(
-            named,
-            ResourceLocator::Named {
-                namespace: Cow::Borrowed("archive"),
-                name: Cow::Borrowed("texture/body")
-            }
-        );
-        let sno = ResourceLocator::Sno {
-            namespace: SnoNamespace::Diablo4,
-            group: 18,
-            id: 72,
-        }
-        .into_owned();
-        assert_eq!(
-            sno,
-            ResourceLocator::Sno {
-                namespace: SnoNamespace::Diablo4,
-                group: 18,
-                id: 72
-            }
-        );
-    }
-}
+mod resource_tests {}
 
 /// Companion addresses supported by the WoW model vocabulary.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

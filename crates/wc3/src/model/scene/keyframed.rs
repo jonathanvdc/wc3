@@ -6,8 +6,9 @@ use crate::model::EffectResourceId;
 use crate::model::GravityTrail;
 use crate::model::IndexedChildModel;
 use crate::model::ModelResourceId;
+use crate::model::PhotographicControls;
 use crate::model::ResourceParticle;
-use crate::model::{AimedCamera, AmbientDiffuseLight, PhotographicControls, VisibleLight};
+use crate::model::{AimedCamera, AmbientDiffuseLight, VisibleLight};
 use crate::model::{MeshId, Property};
 use std::borrow::Cow;
 

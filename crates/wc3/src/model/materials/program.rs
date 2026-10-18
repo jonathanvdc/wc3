@@ -2,7 +2,6 @@
 use super::m2::MaterialStep as M2MaterialStep;
 use super::mdlx::{LayeredSurface, MaterialDeclaration, MaterialStep as MdlxMaterialStep};
 use super::wmo::MaterialStep as WmoMaterialStep;
-use super::{diablo3, diablo4, m3};
 use crate::model::profiles::SurfacePayload;
 use crate::model::{Error, Link, ValidateLinks};
 
@@ -29,12 +28,6 @@ pub enum MaterialStep<'a> {
     M2(Box<M2MaterialStep<'a>>),
     /// World of Warcraft world shader inputs and rendering settings.
     Wmo(Box<WmoMaterialStep<'a>>),
-    /// M3 shader or material-composition operation.
-    M3(m3::MaterialStep<'a>),
-    /// Diablo III shader inputs and ordered phase declarations.
-    Diablo3(Box<diablo3::MaterialStep<'a>>),
-    /// Diablo IV external shader inputs and parameters.
-    Diablo4(Box<diablo4::MaterialStep>),
 }
 /// The universal profile's complete material program.
 pub type MaterialSurface<'a> = MaterialProgram<MaterialStep<'a>>;
@@ -49,9 +42,6 @@ impl ValidateLinks for MaterialStep<'_> {
             Self::Mdlx(v) => v.visit_links(visitor),
             Self::M2(v) => v.visit_links(visitor),
             Self::Wmo(v) => v.visit_links(visitor),
-            Self::M3(v) => v.visit_links(visitor),
-            Self::Diablo3(v) => v.visit_links(visitor),
-            Self::Diablo4(v) => v.visit_links(visitor),
         }
     }
 }
@@ -62,9 +52,6 @@ impl MaterialStep<'_> {
             Self::Mdlx(_) => Ok(()),
             Self::M2(v) => v.validate(),
             Self::Wmo(v) => v.validate(),
-            Self::M3(v) => v.validate(),
-            Self::Diablo3(v) => v.validate(),
-            Self::Diablo4(v) => v.validate(),
         }
     }
 }
@@ -232,80 +219,6 @@ fn single_step(value: MaterialSurface<'_>) -> Result<MaterialStep<'_>, Error> {
         return Err(incompatible("surface requires exactly one step"));
     }
     Ok(stack.steps.pop().expect("one step"))
-}
-
-impl<'a> From<m3::MaterialStep<'a>> for MaterialStep<'a> {
-    fn from(value: m3::MaterialStep<'a>) -> Self {
-        Self::M3(value)
-    }
-}
-impl<'a> TryFrom<MaterialStep<'a>> for m3::MaterialStep<'a> {
-    type Error = Error;
-    fn try_from(value: MaterialStep<'a>) -> Result<Self, Error> {
-        let MaterialStep::M3(step) = value else {
-            return Err(incompatible("step is not in the M3 shader dialect"));
-        };
-        Ok(step)
-    }
-}
-impl<'a> From<m3::MaterialStep<'a>> for MaterialSurface<'a> {
-    fn from(value: m3::MaterialStep<'a>) -> Self {
-        Self {
-            steps: vec![value.into()],
-        }
-    }
-}
-impl<'a> TryFrom<MaterialSurface<'a>> for m3::MaterialStep<'a> {
-    type Error = Error;
-    fn try_from(value: MaterialSurface<'a>) -> Result<Self, Error> {
-        single_step(value)?.try_into()
-    }
-}
-impl<'a> From<diablo3::MaterialStep<'a>> for MaterialSurface<'a> {
-    fn from(value: diablo3::MaterialStep<'a>) -> Self {
-        Self {
-            steps: vec![MaterialStep::Diablo3(Box::new(value))],
-        }
-    }
-}
-impl<'a> TryFrom<MaterialSurface<'a>> for diablo3::MaterialStep<'a> {
-    type Error = Error;
-    fn try_from(value: MaterialSurface<'a>) -> Result<Self, Error> {
-        let MaterialStep::Diablo3(shader) = single_step(value)? else {
-            return Err(incompatible("not a Diablo III shader programme"));
-        };
-        Ok(*shader)
-    }
-}
-impl<'a> From<MaterialProgram<diablo4::MaterialStep>> for MaterialSurface<'a> {
-    fn from(value: MaterialProgram<diablo4::MaterialStep>) -> Self {
-        Self {
-            steps: value
-                .steps
-                .into_iter()
-                .map(|shader| MaterialStep::Diablo4(Box::new(shader)))
-                .collect(),
-        }
-    }
-}
-impl TryFrom<MaterialSurface<'_>> for MaterialProgram<diablo4::MaterialStep> {
-    type Error = Error;
-    fn try_from(value: MaterialSurface<'_>) -> Result<Self, Error> {
-        if value.steps.len() > 1 {
-            return Err(incompatible(
-                "Diablo IV surface admits at most one shader programme",
-            ));
-        }
-        let steps = value
-            .steps
-            .into_iter()
-            .map(|pass| match pass {
-                MaterialStep::Diablo4(shader) => Ok(*shader),
-                _ => Err(incompatible("not a Diablo IV shader programme")),
-            })
-            .collect::<Result<_, _>>()?;
-        Ok(Self { steps })
-    }
 }
 
 impl SurfacePayload for MaterialProgram<M2MaterialStep<'_>> {

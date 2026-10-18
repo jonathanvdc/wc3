@@ -3,8 +3,7 @@ use wc3::model::profiles::mdlx;
 use wc3::model::{
     AgeDrivenParticle, AgeDrivenParticleRendering, AgeDrivenParticleShape, AtlasParticle,
     AtlasParticleRendering, ModelParticle, ParticleEmission, ParticleLifetime, ParticleMotion,
-    ProgrammedAge, ProgrammedDirection, ProgrammedForces, ProgrammedNoise, ProgrammedParticle,
-    ProgrammedParticleGravity, StagedParticleAppearance,
+    StagedParticleAppearance,
 };
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{FromFeature as SlotFromFeature, TryFromFeature as SlotTryFromFeature};
@@ -117,13 +116,11 @@ fn narrowing_retains_unsupported_authored_variation() {
     );
     definition.motion.variation = ParticleScalar::Property(slot_values.add(0.75));
     let original = mdlx::Particle::try_from_feature(definition, &slot_values).unwrap_err();
-    let ParticleScalar::Property(value) = &original.motion.variation else {
-        panic!()
-    };
+    let ParticleScalar::Property(value) = &original.motion.variation;
     assert_eq!(slot_values[value], 0.75);
 }
 
-use wc3::model::profiles::{m2, m3};
+use wc3::model::profiles::m2;
 
 #[test]
 fn age_driven_roundtrip_preserves_borrowed_spline_and_common_randomness() {
@@ -201,214 +198,6 @@ fn age_driven_roundtrip_preserves_borrowed_spline_and_common_randomness() {
         spline.as_bytes().as_ptr()
     );
     assert_eq!(format!("{restored:?}"), before);
-}
-#[test]
-fn programmed_roundtrip_preserves_reset_controls_and_every_detail() {
-    let mut slot_values = SlotValues::default();
-    let spline = [m3::PropertyBinding {
-        value: slot_values.add([1.0, 2.0, 3.0]),
-        reset: [9.0; 3],
-        ..SlotConstruct::construct(&mut slot_values)
-    }];
-    let source = m3::Particle {
-        details: ProgrammedParticle {
-            material: SlotConstruct::construct(&mut slot_values),
-            additional_flags: SlotConstruct::construct(&mut slot_values),
-            direction: ProgrammedDirection {
-                initial_yaw: SlotConstruct::construct(&mut slot_values),
-                initial_pitch: SlotConstruct::construct(&mut slot_values),
-                initial_horizontal: SlotConstruct::construct(&mut slot_values),
-                initial_vertical: SlotConstruct::construct(&mut slot_values),
-                drag: SlotConstruct::construct(&mut slot_values),
-            },
-            kill_radius: 4.0,
-            forces: ProgrammedForces {
-                mass: SlotConstruct::construct(&mut slot_values),
-                mass_random: SlotConstruct::construct(&mut slot_values),
-                mass_size_multiplier: SlotConstruct::construct(&mut slot_values),
-                local_forces: SlotConstruct::construct(&mut slot_values),
-                world_forces: SlotConstruct::construct(&mut slot_values),
-                local_forces_fallback: SlotConstruct::construct(&mut slot_values),
-                world_forces_fallback: SlotConstruct::construct(&mut slot_values),
-                world_forces_mass_multiplier: SlotConstruct::construct(&mut slot_values),
-            },
-            noise: ProgrammedNoise {
-                noise_amplitude: 3.25,
-                noise_frequency: SlotConstruct::construct(&mut slot_values),
-                noise_coherence: SlotConstruct::construct(&mut slot_values),
-                noise_edge: SlotConstruct::construct(&mut slot_values),
-            },
-            index_plus_length: SlotConstruct::construct(&mut slot_values),
-            max_particles: SlotConstruct::construct(&mut slot_values),
-            emitter_shape: SlotConstruct::construct(&mut slot_values),
-            shape_outer: SlotConstruct::construct(&mut slot_values),
-            shape_inner: SlotConstruct::construct(&mut slot_values),
-            outer_radius: SlotConstruct::construct(&mut slot_values),
-            inner_radius: SlotConstruct::construct(&mut slot_values),
-            shape_sections: SlotConstruct::construct(&mut slot_values),
-            velocity_type: SlotConstruct::construct(&mut slot_values),
-            size_random_enable: SlotConstruct::construct(&mut slot_values),
-            size_random_animation: SlotConstruct::construct(&mut slot_values),
-            rotation_random_enable: SlotConstruct::construct(&mut slot_values),
-            rotation_random_animation: SlotConstruct::construct(&mut slot_values),
-            color_random_enable: SlotConstruct::construct(&mut slot_values),
-            color_start_random: SlotConstruct::construct(&mut slot_values),
-            color_mid_random: SlotConstruct::construct(&mut slot_values),
-            color_end_random: SlotConstruct::construct(&mut slot_values),
-            alpha_random_enable: SlotConstruct::construct(&mut slot_values),
-            flipbook_start_init_index: SlotConstruct::construct(&mut slot_values),
-            flipbook_start_stop_index: SlotConstruct::construct(&mut slot_values),
-            flipbook_end_init_index: SlotConstruct::construct(&mut slot_values),
-            flipbook_end_stop_index: SlotConstruct::construct(&mut slot_values),
-            flipbook_mid_time: SlotConstruct::construct(&mut slot_values),
-            flipbook_columns: SlotConstruct::construct(&mut slot_values),
-            flipbook_rows: SlotConstruct::construct(&mut slot_values),
-            flipbook_column_fraction: SlotConstruct::construct(&mut slot_values),
-            flipbook_row_fraction: SlotConstruct::construct(&mut slot_values),
-            bounce: SlotConstruct::construct(&mut slot_values),
-            friction: SlotConstruct::construct(&mut slot_values),
-            collision_spawn: SlotConstruct::construct(&mut slot_values),
-            collision_spawn_min: SlotConstruct::construct(&mut slot_values),
-            collision_spawn_max: SlotConstruct::construct(&mut slot_values),
-            collision_spawn_chance: SlotConstruct::construct(&mut slot_values),
-            collision_spawn_energy: SlotConstruct::construct(&mut slot_values),
-            collision_die_bounce: SlotConstruct::construct(&mut slot_values),
-            instance_type: SlotConstruct::construct(&mut slot_values),
-            tail_length: SlotConstruct::construct(&mut slot_values),
-            instance_angle: SlotConstruct::construct(&mut slot_values),
-            instance_distance: SlotConstruct::construct(&mut slot_values),
-            pitch: m3::VariationControl {
-                kind: SlotConstruct::construct(&mut slot_values),
-                amplitude: SlotConstruct::construct(&mut slot_values),
-                frequency: SlotConstruct::construct(&mut slot_values),
-            },
-            yaw: m3::VariationControl {
-                kind: SlotConstruct::construct(&mut slot_values),
-                amplitude: SlotConstruct::construct(&mut slot_values),
-                frequency: SlotConstruct::construct(&mut slot_values),
-            },
-            speed: m3::VariationControl {
-                kind: SlotConstruct::construct(&mut slot_values),
-                amplitude: SlotConstruct::construct(&mut slot_values),
-                frequency: SlotConstruct::construct(&mut slot_values),
-            },
-            size: m3::VariationControl {
-                kind: SlotConstruct::construct(&mut slot_values),
-                amplitude: SlotConstruct::construct(&mut slot_values),
-                frequency: SlotConstruct::construct(&mut slot_values),
-            },
-            alpha: m3::VariationControl {
-                kind: SlotConstruct::construct(&mut slot_values),
-                amplitude: SlotConstruct::construct(&mut slot_values),
-                frequency: SlotConstruct::construct(&mut slot_values),
-            },
-            color: m3::VariationControl {
-                kind: SlotConstruct::construct(&mut slot_values),
-                amplitude: SlotConstruct::construct(&mut slot_values),
-                frequency: SlotConstruct::construct(&mut slot_values),
-            },
-            rotation: m3::VariationControl {
-                kind: SlotConstruct::construct(&mut slot_values),
-                amplitude: SlotConstruct::construct(&mut slot_values),
-                frequency: SlotConstruct::construct(&mut slot_values),
-            },
-            horizontal: m3::VariationControl {
-                kind: SlotConstruct::construct(&mut slot_values),
-                amplitude: SlotConstruct::construct(&mut slot_values),
-                frequency: SlotConstruct::construct(&mut slot_values),
-            },
-            vertical: m3::VariationControl {
-                kind: SlotConstruct::construct(&mut slot_values),
-                amplitude: SlotConstruct::construct(&mut slot_values),
-                frequency: SlotConstruct::construct(&mut slot_values),
-            },
-            particle_velocity: SlotConstruct::construct(&mut slot_values),
-            phase_shift: SlotConstruct::construct(&mut slot_values),
-            flags: SlotConstruct::construct(&mut slot_values),
-            rotation_flags: SlotConstruct::construct(&mut slot_values),
-            color_smoothing: SlotConstruct::construct(&mut slot_values),
-            size_smoothing: SlotConstruct::construct(&mut slot_values),
-            rotation_smoothing: SlotConstruct::construct(&mut slot_values),
-            alpha_threshold: SlotConstruct::construct(&mut slot_values),
-            uv_offset: SlotConstruct::construct(&mut slot_values),
-            uv_angle: SlotConstruct::construct(&mut slot_values),
-            uv_tiling: SlotConstruct::construct(&mut slot_values),
-            spline_points: Cow::Borrowed(&spline),
-            wind_multiplier: SlotConstruct::construct(&mut slot_values),
-            lod_reduce: SlotConstruct::construct(&mut slot_values),
-            lod_cut: SlotConstruct::construct(&mut slot_values),
-            lower_bound: SlotConstruct::construct(&mut slot_values),
-            upper_bound: SlotConstruct::construct(&mut slot_values),
-            trail: SlotConstruct::construct(&mut slot_values),
-            trail_chance: SlotConstruct::construct(&mut slot_values),
-            trail_emission_rate: SlotConstruct::construct(&mut slot_values),
-            projection: SlotConstruct::construct(&mut slot_values),
-            splat_chance: SlotConstruct::construct(&mut slot_values),
-            models: vec![m3::ExternalModel {
-                path: Cow::Borrowed("spark.m3"),
-                hash: Some(12),
-            }],
-            spawn_ribbon_on_bounce_chance: SlotConstruct::construct(&mut slot_values),
-            ribbon: SlotConstruct::construct(&mut slot_values),
-            noise_smoothness: SlotConstruct::construct(&mut slot_values),
-        },
-        motion: ParticleMotion {
-            speed: m3::PropertyBinding {
-                value: slot_values.add(7.0),
-                reset: 11.0,
-                ..SlotConstruct::construct(&mut slot_values)
-            },
-            variation: SlotConstruct::construct(&mut slot_values),
-            gravity: ProgrammedParticleGravity {
-                x: 0xdeadbeef,
-                y: 0x12345678,
-                magnitude: SlotConstruct::construct(&mut slot_values),
-            },
-        },
-        lifetime: ParticleLifetime {
-            duration: SlotConstruct::construct(&mut slot_values),
-            variation: SlotConstruct::construct(&mut slot_values),
-        },
-        appearance: ProgrammedAge {
-            size_mid_time: 0.375,
-            color_mid_time: SlotConstruct::construct(&mut slot_values),
-            alpha_mid_time: SlotConstruct::construct(&mut slot_values),
-            rotation_mid_time: SlotConstruct::construct(&mut slot_values),
-            size_mid_hold_time: SlotConstruct::construct(&mut slot_values),
-            color_mid_hold_time: SlotConstruct::construct(&mut slot_values),
-            alpha_mid_hold_time: SlotConstruct::construct(&mut slot_values),
-            rotation_mid_hold_time: SlotConstruct::construct(&mut slot_values),
-            size_animation: SlotConstruct::construct(&mut slot_values),
-            rotation_animation: SlotConstruct::construct(&mut slot_values),
-            color_start: SlotConstruct::construct(&mut slot_values),
-            color_mid: SlotConstruct::construct(&mut slot_values),
-            color_end: SlotConstruct::construct(&mut slot_values),
-        },
-        emission: ParticleEmission {
-            rate: SlotConstruct::construct(&mut slot_values),
-            trigger: SlotConstruct::construct(&mut slot_values),
-            variation: (),
-            activation: (),
-        },
-    };
-    let definition = ParticleDefinition::from_feature(source.clone(), &mut slot_values);
-    let ParticleScalar::Programmed(speed) = &definition.motion.speed else {
-        panic!()
-    };
-    assert_eq!(slot_values[speed.value], 7.0);
-    assert_eq!(speed.reset, 11.0);
-    let ParticleDetails::Programmed(details) = &definition.details else {
-        panic!()
-    };
-    assert!(matches!(&details.spline_points, Cow::Borrowed(_)));
-    assert_eq!(details.noise.noise_amplitude, 3.25);
-    let ParticleAppearance::Programmed(appearance) = &definition.appearance else {
-        panic!()
-    };
-    assert_eq!(appearance.size_mid_time, 0.375);
-    let restored = m3::Particle::try_from(definition).unwrap();
-    assert_eq!(restored, source);
-    assert_eq!(restored.details.spline_points.as_ptr(), spline.as_ptr());
 }
 
 #[test]

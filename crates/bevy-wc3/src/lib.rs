@@ -2,7 +2,7 @@
 //!
 //! Add [`Wc3BevyPlugin`] beside Bevy's default plugins, then spawn
 //! [`ModelInstance`] with a model asset handle. Native asset loading
-//! imports MDX/MDL, M2, WMO, M3 and Diablo sources into the same semantic renderer.
+//! imports MDX/MDL, M2 and WMO sources into the same semantic renderer.
 //! Applications provide archive identities, external companions and image choices
 //! through [`ResourceResolver`].
 //!
@@ -83,7 +83,7 @@ pub use features::{
 };
 pub use instances::{ModelInstance, ModelInstanceError, ModelRebind, ModelSource};
 pub use lod::{Lod, LodOverride, LodSettings, LodState};
-pub use material::{ModelMaterial, ModelMaterialExtension, TeamColors};
+pub use material::{ModelMaterial, ModelMaterialExtension};
 pub use physics::{PhysicsBodyInfo, PhysicsFrame, PhysicsSimulation};
 pub use plugin::Wc3BevyPlugin;
 pub use runtime::{

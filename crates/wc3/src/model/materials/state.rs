@@ -128,13 +128,6 @@ impl<E: ValidateLinks, O: ValidateLinks, F: ValidateLinks, C: ValidateLinks> Val
 /// use wc3::model::materials::{state::BlendOperations, wmo};
 /// let _: wmo::Blend = BlendOperations::AdditiveAlpha(());
 /// ```
-///
-/// Programmed blending cannot author a cutout operation:
-///
-/// ```compile_fail
-/// use wc3::model::{materials::state::BlendOperations, values::programmed};
-/// let _: programmed::BlendMode = BlendOperations::AlphaKey(());
-/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum BlendOperations<E, Cutout = (), AlphaAdd = (), Unknown = u32> {
     /// Replace destination color.

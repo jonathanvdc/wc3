@@ -96,7 +96,7 @@ macro_rules! tables {
         pub struct PropertyValues { scope: Scope, boolean_reads: HashMap<Property<f32>, Property<bool>>, $($field: Table<ValueObject<$ty>, $ty>,)* }
         /// A heterogeneous slot identity used by validation and channel indexing.
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-        pub enum ValueSlot { $(#[doc = stringify!($ty)] $variant(Property<$ty>),)* }
+        pub enum ValueSlot { $(#[doc = concat!("`", stringify!($ty), "`")] $variant(Property<$ty>),)* }
         $(impl private::Sealed for $ty {}
         impl PropertyValue for $ty {
             fn table(values: &PropertyValues) -> &Table<ValueObject<Self>, Self> { &values.$field }

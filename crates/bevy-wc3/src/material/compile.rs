@@ -1,7 +1,7 @@
 //! Native-family surface interpretation into PBR passes and explicit states.
 use super::super::textures::{TextureImages, TextureRole};
 use super::m2::compile_m2;
-use super::m3::compile_m3_with_targets;
+
 use super::wmo::compile_wmo;
 use super::{layered_uv, Blend, HdAnimation, ModelMaterial, SurfacePass};
 use crate::animation_targets::AnimationTargets;
@@ -11,11 +11,10 @@ use bevy::math::Affine2;
 use bevy::prelude::*;
 use bevy::render::render_resource::Face;
 use std::{array::from_fn, collections::HashMap, fmt::Debug, sync::Arc};
-use wc3::model::appearance::UniversalAppearance;
-use wc3::model::materials::m3;
+
+use wc3::model::materials::mdlx;
 use wc3::model::materials::program::MaterialStep;
 use wc3::model::materials::state::{BlendOperations, Lighting, Operation};
-use wc3::model::materials::{diablo3, mdlx};
 use wc3::model::profiles::Universal;
 use wc3::model::PropertyValues;
 use wc3::model::{MaterialId, Model, Sampler, Texture, TextureTransform};
@@ -26,13 +25,7 @@ pub(crate) fn compile_material_with_images(
     id: MaterialId,
     images: Arc<TextureImages>,
 ) -> Result<Vec<SurfacePass>, ModelError> {
-    compile_material(
-        model,
-        id,
-        &images,
-        &AnimationTargets::new(model),
-        &mut Vec::new(),
-    )
+    compile_material(model, id, &images, &AnimationTargets::new(model))
 }
 
 /// Compile a model's selected material set with one shared channel lookup.
@@ -43,10 +36,7 @@ pub(crate) fn compile_materials_with_images(
     targets: &AnimationTargets,
 ) -> Result<HashMap<MaterialId, Vec<SurfacePass>>, ModelError> {
     ids.into_iter()
-        .map(|id| {
-            compile_material(model, id, &images, targets, &mut Vec::new())
-                .map(|passes| (id, passes))
-        })
+        .map(|id| compile_material(model, id, &images, targets).map(|passes| (id, passes)))
         .collect()
 }
 
@@ -55,14 +45,7 @@ fn compile_material(
     id: MaterialId,
     images: &Arc<TextureImages>,
     targets: &AnimationTargets,
-    path: &mut Vec<MaterialId>,
 ) -> Result<Vec<SurfacePass>, ModelError> {
-    if path.contains(&id) {
-        return Err(ModelError(format!(
-            "cyclic composite material reference: {path:?} -> {id:?}"
-        )));
-    }
-    path.push(id);
     let material = model
         .material(id)
         .ok_or_else(|| ModelError(format!("missing semantic material {id:?}")))?;
@@ -78,79 +61,12 @@ fn compile_material(
                 vec![compile_m2(model, surface, resolved_images)?]
             }
             MaterialStep::Wmo(surface) => vec![compile_wmo(model, surface, resolved_images)?],
-            MaterialStep::M3(m3::MaterialStep::Composite(composite)) => {
-                let mut passes = Vec::new();
-                for section in &composite.sections {
-                    let mut section_passes =
-                        compile_material(model, section.material, images, targets, path)?;
-                    for pass in &mut section_passes {
-                        let alpha = pass.material.base_color.alpha();
-                        pass.animation.unweighted_opacity.get_or_insert(alpha);
-                        pass.animation
-                            .pass_weights
-                            .push(section.map_multiplier.value);
-                        pass.material
-                            .base_color
-                            .set_alpha(alpha * model.values()[section.map_multiplier.value]);
-                        pass.material.depth_bias = composite.priority as f32;
-                        if model.values()[section.map_multiplier.value] != 1.
-                            || targets.scalar_changes(
-                                model.values()[section.map_multiplier.value],
-                                &section.map_multiplier.value,
-                            )
-                        {
-                            if let AlphaMode::Mask(cutoff) = pass.material.alpha_mode {
-                                pass.state.combiner.clip.x = cutoff;
-                            }
-                            if matches!(
-                                pass.material.alpha_mode,
-                                AlphaMode::Opaque | AlphaMode::Mask(_)
-                            ) {
-                                pass.material.alpha_mode = AlphaMode::Blend;
-                                pass.state.blend = Some(Blend::Alpha);
-                            }
-                        }
-                    }
-                    passes.extend(section_passes);
-                }
-                if passes.len() > 1 {
-                    for pass in &mut passes {
-                        pass.diagnostics.push("M3 composite section order is retained in pass records, but Bevy render phases may reorder material passes; native within-composite ordering is not guaranteed".into());
-                    }
-                }
-                passes
-            }
-            MaterialStep::Diablo3(surface) => vec![compile_diablo3(surface)],
-            MaterialStep::Diablo4(shader) => {
-                let mut pass = SurfacePass::default();
-                pass.diagnostics.push(format!(
-                    "Diablo IV shader map {} needs an application shader interpreter; texture semantic codes are unresolved", shader.shader_map
-                ));
-                vec![pass]
-            }
-            MaterialStep::M3(surface) => vec![compile_m3_with_targets(
-                model,
-                surface,
-                resolved_images,
-                targets,
-            )?],
         };
-        if !matches!(step, MaterialStep::M3(m3::MaterialStep::Composite(_))) {
-            for pass in &mut compiled {
-                pass.animation.images = images.color_images();
-            }
+
+        for pass in &mut compiled {
+            pass.animation.images = images.color_images();
         }
         passes.extend(compiled);
-    }
-    // Preserve the diagnostic placeholder for an unresolved external selection;
-    // this is renderer fallback output, not an invented semantic shader pass.
-    if stack.steps.is_empty()
-        && matches!(model.appearance(), UniversalAppearance::D4(appearance) if appearance.slots().any(|(_, slot)| slot.variants().any(|(_, material)| material == id)))
-    {
-        let mut pass = SurfacePass::default();
-        pass.diagnostics
-            .push("Diablo IV external material shader is unresolved".into());
-        passes.push(pass);
     }
     for pass in &mut passes {
         pass.animation.prune_static_bindings(targets);
@@ -158,7 +74,6 @@ fn compile_material(
             *diagnostic = format!("material {id:?} ({}): {diagnostic}", material.name);
         }
     }
-    path.pop();
     Ok(passes)
 }
 
@@ -421,19 +336,4 @@ fn compile_mdlx(
         pass.material.emissive_texture = pass.material.base_color_texture.clone();
     }
     Ok(pass)
-}
-
-fn compile_diablo3(surface: &diablo3::MaterialStep<'_>) -> SurfacePass {
-    let mut pass = SurfacePass::default();
-    let color = &surface.uber.colors;
-    pass.material.base_color = Color::linear_rgba(
-        color.diffuse[0],
-        color.diffuse[1],
-        color.diffuse[2],
-        color.diffuse[3],
-    );
-    pass.material.emissive =
-        LinearRgba::rgb(color.emissive[0], color.emissive[1], color.emissive[2]);
-    pass.diagnostics.push(format!("Diablo III shader map {} requires an application shader interpreter; authored constant diffuse/emission are displayed, texture-role codes and render passes remain unresolved", surface.uber.shader_map.id));
-    pass
 }

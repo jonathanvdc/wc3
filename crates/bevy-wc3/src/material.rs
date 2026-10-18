@@ -5,9 +5,7 @@ mod compile;
 mod m2;
 mod particle;
 pub(crate) use particle::{particle_material_layers, ParticleComposition};
-mod m3;
-use m3::layers::{M3Animation, M3Uniform};
-pub use m3::TeamColors;
+
 #[path = "ribbon_material.rs"]
 mod ribbon_material;
 mod wmo;
@@ -35,7 +33,6 @@ use compile::{blend, depth};
 #[cfg(test)]
 use native_fixtures::wmo as wmo_shader;
 pub(crate) use ribbon_material::effect_state;
-use std::array::from_fn;
 use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::materials::{m2::GuildPalette, mdlx, state::Lighting};
@@ -91,12 +88,7 @@ pub struct ModelMaterialExtension {
     fourth: Option<Handle<Image>>,
     world: WorldUniform,
     particle: ParticleUniform,
-    m3: M3Uniform,
-    m3_samplers: [Option<Handle<Image>>; 6],
-    normal_secondary: Option<Handle<Image>>,
-    normal_secondary_mask: Option<Handle<Image>>,
-    light_map: Option<Handle<Image>>,
-    ambient_occlusion: Option<Handle<Image>>,
+
     blend: Option<Blend>,
     depth_test: bool,
     depth_write: Option<bool>,
@@ -106,50 +98,6 @@ pub struct ModelMaterialExtension {
 }
 
 impl ModelMaterialExtension {
-    pub(crate) fn enable_effect_color(&mut self) {
-        if self.m3.settings.x != 0 {
-            self.m3.settings.y = 1;
-            self.m3.settings.z = 1;
-        }
-    }
-
-    /// Application colours used by an M3 standard material's team operations.
-    pub fn team_colors(&self) -> Option<TeamColors> {
-        (self.m3.settings.x != 0).then(|| TeamColors {
-            diffuse: self.m3.diffuse_team.truncate(),
-            emissive: self.m3.emissive_team.truncate(),
-            diffuse_exponent: self.m3.diffuse_team.w,
-            emissive_exponent: self.m3.emissive_team.w,
-        })
-    }
-
-    /// Updates team colours without changing shader pipelines or model resources.
-    ///
-    /// Returns `true` when a standard material's colours change; returns `false`
-    /// when the colours are unchanged or this surface has no team-colour program.
-    pub fn set_team_colors(&mut self, colors: TeamColors) -> Result<bool, ModelError> {
-        if !colors.diffuse.is_finite()
-            || !colors.emissive.is_finite()
-            || !colors.diffuse_exponent.is_finite()
-            || colors.diffuse_exponent < 0.
-            || !colors.emissive_exponent.is_finite()
-            || colors.emissive_exponent < 0.
-        {
-            return Err(ModelError::new(
-                "team colours must be finite and both mask exponents nonnegative",
-            ));
-        }
-        if self.m3.settings.x == 0 {
-            return Ok(false);
-        }
-        if self.team_colors() == Some(colors) {
-            return Ok(false);
-        }
-        self.m3.diffuse_team = colors.diffuse.extend(colors.diffuse_exponent);
-        self.m3.emissive_team = colors.emissive.extend(colors.emissive_exponent);
-        Ok(true)
-    }
-
     /// Whether the authored surface casts ordinary Bevy shadows.
     pub fn casts_shadows(&self) -> bool {
         self.cast_shadows
@@ -337,12 +285,7 @@ impl Default for ModelMaterialExtension {
             environment: None,
             world: WorldUniform::default(),
             particle: ParticleUniform::default(),
-            m3: M3Uniform::default(),
-            m3_samplers: from_fn(|_| None),
-            normal_secondary: None,
-            normal_secondary_mask: None,
-            light_map: None,
-            ambient_occlusion: None,
+
             blend: None,
             depth_test: true,
             depth_write: None,
@@ -364,13 +307,11 @@ pub struct ModelMaterialKey {
     fourth_uv: bool,
     world_layer_alpha: bool,
     edge_fade: bool,
-    m3: bool,
 }
 
 impl From<&ModelMaterialExtension> for ModelMaterialKey {
     fn from(state: &ModelMaterialExtension) -> Self {
         Self {
-            m3: state.m3.settings.x != 0,
             fourth_uv: state.fourth_uv,
             world_layer_alpha: matches!(
                 state.world.composition.x,
@@ -380,12 +321,7 @@ impl From<&ModelMaterialExtension> for ModelMaterialKey {
             third_uv: state.particle.mode.x != 0
                 || (matches!(state.combiner.coordinates.w, 1 | 3)
                     || state.combiner.additional_coordinates.x == 3
-                    || state.world.composition.y > 2
-                    || state
-                        .m3
-                        .layers
-                        .iter()
-                        .any(|layer| layer.flags.y != 0 && layer.route.x == 2)),
+                    || state.world.composition.y > 2),
             generated_coordinates: state.combiner.coordinates.x != 0
                 || state.combiner.coordinates.y != 0
                 || state.combiner.coordinates.w == 1,
@@ -468,11 +404,7 @@ impl MaterialExtension for ModelMaterialExtension {
             key.bind_group_data.world_layer_alpha,
             key.bind_group_data.fourth_uv,
         )?;
-        if key.bind_group_data.m3 {
-            if let Some(fragment) = &mut descriptor.fragment {
-                fragment.shader_defs.push("M3_MATERIAL".into());
-            }
-        }
+
         if key.bind_group_data.edge_fade {
             descriptor.vertex.shader_defs.push("MODEL_EDGE_FADE".into());
             if let Some(fragment) = &mut descriptor.fragment {
@@ -527,7 +459,6 @@ pub(crate) struct SurfaceAnimation {
     images: Arc<HashMap<Texture, Handle<Image>>>,
     centered_transform: bool,
     hd: Option<HdAnimation>,
-    m3: Option<M3Animation>,
 }
 
 #[derive(Clone)]

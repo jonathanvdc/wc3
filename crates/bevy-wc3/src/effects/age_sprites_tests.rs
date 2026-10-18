@@ -1,5 +1,4 @@
 use super::*;
-use bevy::ecs::world::CommandQueue;
 use std::f32::consts::TAU;
 use wc3::model::profiles::Universal;
 use wc3::model::ModelMetadata;
@@ -43,7 +42,7 @@ fn emitter(slot_values: &mut SlotValues) -> Emitter {
         head_tail: ParticleHeadTail::Head,
         tail_length: 0.,
         seed: 7,
-        programmed: None,
+
         passes: vec![MaterialPass {
             material: particle_material(ParticleBlend::Alpha, None, false),
             animation: None,
@@ -123,8 +122,6 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         mesh: Handle::default(),
         passes: vec![],
         births: vec![birth],
-        squirts: SquirtSchedule::default(),
-        appearances: Vec::new(),
         order: Vec::new(),
         age_appearances: Vec::new(),
         fraction: 0.,
@@ -256,92 +253,6 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
 }
 
 #[test]
-fn programmed_appearance_storage_preserves_compact_m2_stride_and_retires_in_lockstep() {
-    let mut slot_values = SlotValues::default();
-    let birth_size = std::mem::size_of::<Birth>();
-    let appearance_size = std::mem::size_of::<ProgrammedAppearance>();
-    let inline_size = std::mem::size_of::<(Birth, Option<ProgrammedAppearance>)>();
-    println!(
-        "Birth={birth_size}, ProgrammedAppearance={appearance_size}, previous inline stride={inline_size}"
-    );
-    assert!(birth_size <= 96, "M2 birth records must remain compact");
-    assert!(inline_size > birth_size * 2);
-    let emitter = emitter(&mut slot_values);
-    let birth = emitter
-        .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
-        .unwrap();
-    let mut state = EmitterInstance {
-        mesh: Handle::default(),
-        passes: vec![],
-        squirts: SquirtSchedule::default(),
-        births: (0..3)
-            .map(|index| {
-                let mut birth = birth.clone();
-                birth.lifetime = if index == 0 { 1. } else { 10. };
-                birth.appearance_index = index;
-                birth
-            })
-            .collect(),
-        appearances: vec![
-            ProgrammedAppearance::constant(1.),
-            ProgrammedAppearance::constant(2.),
-            ProgrammedAppearance::constant(3.),
-        ],
-        order: Vec::new(),
-        age_appearances: Vec::new(),
-        fraction: 0.,
-        ordinal: 0,
-        previous_node: Mat4::IDENTITY,
-        pose_scratch: Vec::new(),
-        dropped: 0,
-        skipped_seconds: 0.,
-    };
-    let pointer = state.appearances.as_ptr();
-    state.retire(2.);
-    assert_eq!(state.births.len(), 2);
-    assert_eq!(state.appearances.len(), 2);
-    assert_eq!(
-        state
-            .births
-            .iter()
-            .map(|birth| birth.appearance_index)
-            .collect::<Vec<_>>(),
-        [0, 1]
-    );
-    assert_eq!(state.appearances[0].sample(0.).size, [2.; 2]);
-    assert_eq!(state.appearances[1].sample(0.).size, [3.; 2]);
-    assert_eq!(pointer, state.appearances.as_ptr());
-    state.retire(20.);
-    assert!(state.births.is_empty());
-    assert!(state.appearances.is_empty());
-    assert_eq!(pointer, state.appearances.as_ptr());
-    state.births = (0..3)
-        .map(|index| {
-            let mut value = birth.clone();
-            value.appearance_index = index;
-            value.lifetime = if index == 0 { 1. } else { 10. };
-            value
-        })
-        .collect();
-    state.age_appearances = vec![AgeParticleAppearance::default(); 3];
-    let pointer = state.age_appearances.as_ptr();
-    state.retire(2.);
-    assert_eq!(state.age_appearances.len(), 2);
-    assert_eq!(
-        state
-            .births
-            .iter()
-            .map(|b| b.appearance_index)
-            .collect::<Vec<_>>(),
-        [0, 1]
-    );
-    assert_eq!(state.age_appearances.as_ptr(), pointer);
-    state.retire(20.);
-    assert!(state.age_appearances.is_empty());
-    assert_eq!(state.age_appearances.as_ptr(), pointer);
-}
-
-#[test]
 fn emitter_follow_interpolates_speed_knots_and_preserves_local_motion() {
     let mut slot_values = SlotValues::default();
     let mut emitter = emitter(&mut slot_values);
@@ -405,8 +316,6 @@ fn world_particles_follow_only_translation_after_their_birth() {
         mesh,
         passes: vec![],
         births: vec![prior_birth],
-        squirts: SquirtSchedule::default(),
-        appearances: Vec::new(),
         order: Vec::new(),
         age_appearances: Vec::new(),
         fraction: 0.,
@@ -457,110 +366,6 @@ fn world_particles_follow_only_translation_after_their_birth() {
     // emitter displacement. The endpoint birth has no follow interval yet.
     assert!((births[1].origin.x - 3.).abs() < 1e-5);
     assert!((births[2].origin.x - 4.).abs() < 1e-5);
-}
-
-#[test]
-fn programmed_passes_share_population_capacity_pause_and_seek() {
-    let mut slot_values = SlotValues::default();
-    let mut programme = ProgrammedSprite::fixture(&mut slot_values);
-    programme.rate = slot_values.add(0.);
-    programme.squirt = slot_values.add(7);
-    programme.max_particles = 3;
-    let mut source = emitter(&mut slot_values);
-    let mut second = source.passes[0].clone();
-    second.material = super::super::programmed::no_shadow_material();
-    second.material.base.base_color = Color::BLACK;
-    second.material.base.depth_bias = 3.;
-    source.passes.push(second);
-    let emitter = Emitter::programmed(source.feature, source.node, 0, programme, source.passes);
-    let runtime = RuntimeAgeSprites {
-        emitters: vec![emitter],
-        ..SlotConstruct::construct(&mut slot_values)
-    };
-    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
-    builder.import_values(&slot_values).unwrap();
-    let model = builder.finish().unwrap();
-    let program = AnimationProgram::compile(&model);
-    let sample = program.sample(AnimationSample::default()).unwrap();
-    let mut meshes = Assets::<Mesh>::default();
-    let mut materials = Assets::<ModelMaterial>::default();
-    let mut world = World::new();
-    let root = world.spawn_empty().id();
-    let mut queue = CommandQueue::default();
-    let mut instances = runtime.spawn(
-        &mut Commands::new(&mut queue, &world),
-        &mut meshes,
-        &mut materials,
-        root,
-    );
-    queue.apply(&mut world);
-    assert_eq!(instances.emitters.len(), 1);
-    assert_eq!(meshes.len(), 1);
-    assert_eq!(materials.len(), 2);
-    let state = &instances.emitters[0];
-    assert_eq!(state.passes.len(), 2);
-    assert_eq!(world.query::<&SpriteEmitter>().iter(&world).count(), 1);
-    for pass in &state.passes {
-        assert_eq!(world.get::<Mesh3d>(pass.entity).unwrap().0, state.mesh);
-    }
-    assert_ne!(state.passes[0].material, state.passes[1].material);
-    assert!(!world
-        .entity(state.passes[0].entity)
-        .contains::<NotShadowCaster>());
-    assert!(!world
-        .entity(state.passes[0].entity)
-        .contains::<NotShadowReceiver>());
-    assert!(world
-        .entity(state.passes[1].entity)
-        .contains::<NotShadowCaster>());
-    assert!(world
-        .entity(state.passes[1].entity)
-        .contains::<NotShadowReceiver>());
-    let second = materials.get(&state.passes[1].material).unwrap();
-    assert_eq!(second.base.base_color, Color::BLACK);
-    assert_eq!(second.base.depth_bias, 3.);
-    let mut query = world.query::<&mut SpriteEmitter>();
-    for (time, change) in [
-        (0., EffectChange::Continuous),
-        (0., EffectChange::Continuous),
-        (10., EffectChange::Seek),
-    ] {
-        let selection = AnimationSample {
-            clip_time: ModelTime::seconds(time).unwrap(),
-            ..SlotConstruct::construct(&mut slot_values)
-        };
-        runtime.update(
-            &mut instances,
-            EffectFrame {
-                traversal: SlotConstruct::construct(&mut slot_values),
-                change,
-                root_visible: true,
-                pose: None,
-                selection,
-                time,
-                sample: &sample,
-                node_poses: &[Mat4::IDENTITY],
-                node_visible: &[true],
-                basis_world: Mat4::IDENTITY,
-                camera_world: Some(Mat4::IDENTITY),
-            },
-            &mut meshes,
-            &mut query.query_mut(&mut world),
-            &mut materials,
-        );
-        assert_eq!(instances.emitters[0].dropped, 4);
-        if let Some(pass) = instances.emitters[0].passes.first() {
-            let statistics = world.get::<SpriteEmitter>(pass.entity).unwrap();
-            assert_eq!(statistics.alive, instances.emitters[0].births.len());
-            assert_eq!(statistics.dropped, 4);
-        }
-        if time == 0. {
-            assert_eq!(instances.emitters[0].births.len(), 3);
-            assert_eq!(instances.emitters[0].appearances.len(), 3);
-        } else {
-            assert!(instances.emitters[0].births.is_empty());
-        }
-    }
 }
 
 #[test]

@@ -1,44 +1,5 @@
+use wc3::model::materials::mdlx;
 use wc3::model::materials::state::BlendOperations;
-use wc3::model::materials::{mdlx, wmo};
-use wc3::model::values::{model, programmed};
-
-#[test]
-fn model_and_programmed_blending_preserve_every_known_and_unknown_selector() {
-    for raw in (0..=8).chain([u16::MAX]) {
-        assert_eq!(model::BlendMode::from_raw(raw).raw(), raw);
-    }
-    for raw in (0..=7).chain([u32::MAX]) {
-        assert_eq!(programmed::BlendMode::from_raw(raw).raw(), raw);
-    }
-    assert_eq!(model::BlendMode::from_raw(3), BlendOperations::Additive);
-    assert_eq!(
-        model::BlendMode::from_raw(4),
-        BlendOperations::AdditiveAlpha(())
-    );
-    assert_eq!(
-        programmed::BlendMode::from_raw(2),
-        BlendOperations::Additive
-    );
-    assert_eq!(
-        programmed::BlendMode::from_raw(3),
-        BlendOperations::AdditiveAlpha(())
-    );
-    assert_eq!(
-        model::BlendMode::from_raw(7),
-        BlendOperations::Extension(model::ModelBlend::BlendAdd)
-    );
-}
-
-#[test]
-fn selected_material_blends_use_shared_operations_and_explicit_extra_domains() {
-    let cutout: mdlx::Blend = BlendOperations::AlphaKey(());
-    assert_eq!(cutout, mdlx::Blend::AlphaKey(()));
-    let world: wmo::Blend = BlendOperations::Extension(wmo::WorldBlend::ModulateAdd);
-    assert_eq!(world, wmo::Blend::Extension(wmo::WorldBlend::ModulateAdd));
-    assert_eq!(mdlx::Blend::default(), BlendOperations::Opaque);
-    assert_eq!(wmo::Blend::default(), BlendOperations::Opaque);
-    assert_eq!(programmed::BlendMode::default(), BlendOperations::Opaque);
-}
 
 use wc3::model::conversion::{ExportOptions, ImportOptions};
 use wc3::model::formats::mdlx::emitters::{Particle2FilterMode, ParticleEmitter2};

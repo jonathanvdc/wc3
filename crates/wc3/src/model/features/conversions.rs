@@ -3,8 +3,8 @@ use super::{
     Attachment, Camera, EventSource, Light, NodeFeature, ParticleDetails, ParticleEmitter,
     RibbonEmitter,
 };
-use super::{ChildModel, ParticleDefinition, ProgrammedRibbon, Socket, TrailEmitter};
-use crate::model::profiles::{m2, m3, mdlx, wmo};
+use super::{ChildModel, ParticleDefinition, Socket, TrailEmitter};
+use crate::model::profiles::{m2, mdlx, wmo};
 use crate::model::scene;
 use crate::model::PropertyValues;
 impl<'a> FromFeature<mdlx::Node<'a>> for NodeFeature<'a> {
@@ -161,92 +161,7 @@ impl<'a> TryFromFeature<NodeFeature<'a>> for m2::ActorKind<'a> {
         }
     }
 }
-impl<'a> FromFeature<m3::Feature<'a>> for NodeFeature<'a> {
-    fn from_feature(value: m3::Feature<'a>, values: &mut PropertyValues) -> Self {
-        match value {
-            m3::Feature::Extent(value) => Self::Extent(value),
-            m3::Feature::ParticleCopy(value) => Self::ParticleCopy(value),
-            m3::Feature::Projector(value) => Self::Projector(value),
-            m3::Feature::Force(value) => Self::Force(value),
-            m3::Feature::Warp(value) => Self::Warp(value),
-            m3::Feature::HitTest(value) => Self::HitTest(value),
-            m3::Feature::AttachmentVolume(value) => Self::AttachmentVolume(value),
-            m3::Feature::Billboard(value) => Self::Billboard(value),
-            m3::Feature::Turret(value) => Self::Turret(value),
-            m3::Feature::IkJoint(value) => Self::IkJoint(value),
-            m3::Feature::IkTwoJoint(value) => Self::IkTwoJoint(value),
-            m3::Feature::IkCcd(value) => Self::IkCcd(value),
-            m3::Feature::OneBoneSolver(value) => Self::OneBoneSolver(value),
-            m3::Feature::ShadowBox(value) => Self::ShadowBox(value),
-            m3::Feature::ViewVolume(value) => Self::ViewVolume(value),
-            m3::Feature::Event(value) => Self::Event(EventSource::Command(value)),
-            m3::Feature::Particle(value) => Self::Particle(ParticleEmitter::Simulated(Box::new(
-                FromFeature::from_feature(*value, values),
-            ))),
-            m3::Feature::Ribbon(value) => Self::Ribbon(RibbonEmitter::Programmed(Box::new(
-                FromFeature::from_feature(*value, values),
-            ))),
-            m3::Feature::Light(value) => Self::Light(Light::Specular(value)),
-            m3::Feature::Camera(value) => Self::Camera(Camera::Optical(value)),
-            m3::Feature::Attachment(value) => Self::Attachment(Attachment::Socket(
-                FromFeature::from_feature(*value, values),
-            )),
-        }
-    }
-}
-impl<'a> TryFromFeature<NodeFeature<'a>> for m3::Feature<'a> {
-    type Error = Box<NodeFeature<'a>>;
-    fn try_from_feature(
-        value: NodeFeature<'a>,
-        values: &PropertyValues,
-    ) -> Result<Self, Self::Error> {
-        match value {
-            NodeFeature::Extent(value) => Ok(Self::Extent(value)),
-            NodeFeature::ParticleCopy(value) => Ok(Self::ParticleCopy(value)),
-            NodeFeature::Projector(value) => Ok(Self::Projector(value)),
-            NodeFeature::Force(value) => Ok(Self::Force(value)),
-            NodeFeature::Warp(value) => Ok(Self::Warp(value)),
-            NodeFeature::HitTest(value) => Ok(Self::HitTest(value)),
-            NodeFeature::AttachmentVolume(value) => Ok(Self::AttachmentVolume(value)),
-            NodeFeature::Billboard(value) => Ok(Self::Billboard(value)),
-            NodeFeature::Turret(value) => Ok(Self::Turret(value)),
-            NodeFeature::IkJoint(value) => Ok(Self::IkJoint(value)),
-            NodeFeature::IkTwoJoint(value) => Ok(Self::IkTwoJoint(value)),
-            NodeFeature::IkCcd(value) => Ok(Self::IkCcd(value)),
-            NodeFeature::OneBoneSolver(value) => Ok(Self::OneBoneSolver(value)),
-            NodeFeature::ShadowBox(value) => Ok(Self::ShadowBox(value)),
-            NodeFeature::ViewVolume(value) => Ok(Self::ViewVolume(value)),
-            NodeFeature::Event(EventSource::Command(value)) => Ok(Self::Event(value)),
-            NodeFeature::Particle(ParticleEmitter::Simulated(value)) => {
-                match TryFromFeature::try_from_feature(*value, values) {
-                    Ok(value) => Ok(Self::Particle(Box::new(value))),
-                    Err(value) => Err(Box::new(NodeFeature::Particle(ParticleEmitter::Simulated(
-                        value,
-                    )))),
-                }
-            }
-            NodeFeature::Ribbon(RibbonEmitter::Programmed(value)) => {
-                match TryFromFeature::try_from_feature(*value, values) {
-                    Ok(value) => Ok(Self::Ribbon(Box::new(value))),
-                    Err(value) => Err(Box::new(NodeFeature::Ribbon(RibbonEmitter::Programmed(
-                        value,
-                    )))),
-                }
-            }
-            NodeFeature::Light(Light::Specular(value)) => Ok(Self::Light(value)),
-            NodeFeature::Camera(Camera::Optical(value)) => Ok(Self::Camera(value)),
-            NodeFeature::Attachment(Attachment::Socket(value)) => {
-                match TryFromFeature::try_from_feature(value, values) {
-                    Ok(value) => Ok(Self::Attachment(Box::new(value))),
-                    Err(value) => Err(Box::new(NodeFeature::Attachment(Attachment::Socket(
-                        *value,
-                    )))),
-                }
-            }
-            value => Err(Box::new(value)),
-        }
-    }
-}
+
 impl<'a> From<wmo::Node<'a>> for NodeFeature<'a> {
     fn from(value: wmo::Node<'a>) -> Self {
         match value {
@@ -312,11 +227,7 @@ impl<'a> From<TrailEmitter> for NodeFeature<'a> {
         Self::Ribbon(RibbonEmitter::Trail(Box::new(value)))
     }
 }
-impl<'a> From<ProgrammedRibbon<'a>> for NodeFeature<'a> {
-    fn from(value: ProgrammedRibbon<'a>) -> Self {
-        Self::Ribbon(RibbonEmitter::Programmed(Box::new(value)))
-    }
-}
+
 impl<'a> From<Socket<'a>> for NodeFeature<'a> {
     fn from(value: Socket<'a>) -> Self {
         Self::Attachment(Attachment::Socket(value))

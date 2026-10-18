@@ -13,14 +13,14 @@ pub(crate) struct Value {
 fn codec(format: Format) -> TokenStream {
     match format {
         Format::M2 => quote!(::wc3::model::formats::m2),
-        Format::M3 => quote!(::wc3::model::formats::m3),
+
         Format::Wmo => quote!(::wc3::model::formats::wmo),
     }
 }
 fn attribute(format: Format) -> &'static str {
     match format {
         Format::M2 => "m2",
-        Format::M3 => "m3",
+
         Format::Wmo => "wmo",
     }
 }
@@ -203,29 +203,9 @@ pub(crate) fn binary(
     if matches!(operation, Operation::Read) {
         generics.params.insert(0, parse_quote!(#lifetime));
     }
-    let envelope = fresh_ident(input, "__BinaryEnvelope");
-    let m3 = matches!(format, Format::M3);
-    if m3 {
-        generics
-            .params
-            .push(parse_quote!(#envelope:#codec::Envelope));
-    }
-    let envelope_args = if m3 { quote!(<#envelope>) } else { quote!() };
-    let read_args = if m3 {
-        quote!(#lifetime,#envelope)
-    } else {
-        quote!(#lifetime)
-    };
-    let decoder = if m3 {
-        quote!(#codec::codec::Decoder<#lifetime,#envelope>)
-    } else {
-        quote!(#codec::codec::Decoder<#lifetime>)
-    };
-    let encoder = if m3 {
-        quote!(#codec::codec::Encoder<#envelope>)
-    } else {
-        quote!(#codec::codec::Encoder)
-    };
+    let read_args = quote!(#lifetime);
+    let decoder = quote!(#codec::codec::Decoder<#lifetime>);
+    let encoder = quote!(#codec::codec::Encoder);
     let (generics, _, where_clause) = generics.split_for_impl();
     let m2 = matches!(format, Format::M2);
     let parameters = if m2 {
@@ -245,18 +225,18 @@ pub(crate) fn binary(
             })
         }
         Operation::Write => {
-            quote!(impl #generics #codec::Write #envelope_args for #name #types #where_clause {
+            quote!(impl #generics #codec::Write for #name #types #where_clause {
                 fn write(&self, encoder: &mut #encoder) -> ::core::result::Result<(), #codec::WriteError> {
                     let value: #wire = match self { #(#write,)* };
-                    <#wire as #codec::Write #envelope_args>::write(&value, encoder)
+                    <#wire as #codec::Write>::write(&value, encoder)
                 }
             })
         }
         Operation::Layout => {
             quote! {
-                impl #generics #codec::RecordLayout #envelope_args for #name #types #where_clause {
+                impl #generics #codec::RecordLayout for #name #types #where_clause {
                     fn #size(#parameters) -> usize {
-                        <#wire as #codec::RecordLayout #envelope_args>::#size(#arguments)
+                        <#wire as #codec::RecordLayout>::#size(#arguments)
                     }
                 }
             }

@@ -1,14 +1,10 @@
 use wc3::model::common::{IntoZeroVec, ZeroVec};
-use wc3::model::profiles::{
-    diablo::{d3, d4},
-    Either,
-};
 use wc3::model::ModelMetadata;
 use wc3::model::ValueGroups;
 use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, GeometryData, GeometryEdit,
-    GeometrySchema, Influence, JointInfluences, M2Geometry, M3CollisionGeometry, M3Geometry,
-    MdlxGeometry, StreamSupport, Topology, VertexRemap, WmoGeometry,
+    GeometrySchema, Influence, JointInfluences, M2Geometry, MdlxGeometry, StreamSupport, Topology,
+    VertexRemap, WmoGeometry,
 };
 
 fn positions() -> ZeroVec<'static, [f32; 3]> {
@@ -36,102 +32,7 @@ fn duplicate() -> GeometryEdit<'static> {
         ..Default::default()
     }
 }
-fn exercise<G: GeometrySchema<'static>>(geometry: G) {
-    let old = geometry.positions().to_vec();
-    let remapped = geometry.edited(duplicate()).unwrap();
-    assert_eq!(
-        remapped.positions().to_vec(),
-        vec![old[2], old[0], old[1], old[0]]
-    );
-    assert_eq!(geometry.positions().to_vec(), old);
-    remapped.validate().unwrap();
-    let failure = GeometryEdit {
-        positions: Some(vec![[f32::NAN, 0., 0.]; 3].into_zero_vec()),
-        ..Default::default()
-    };
-    assert!(geometry.edited(failure).is_err());
-    assert_eq!(geometry.positions().to_vec(), old);
-}
-#[test]
-fn common_tools_work_across_profiles_and_dispatchers() {
-    let data = GeometryData::triangles(positions(), triangles()).unwrap();
-    exercise(data.clone());
-    exercise(
-        MdlxGeometry::triangles(positions(), triangles())
-            .unwrap()
-            .with_influences(JointInfluences::MatrixGroups(ValueGroups::from_rows(vec![
-                vec![
-                    0, 1
-                ];
-                3
-            ])))
-            .unwrap(),
-    );
-    let m2 = M2Geometry::new(
-        positions(),
-        positions(),
-        [
-            vec![[0., 0.]; 3].into_zero_vec(),
-            vec![[1., 1.]; 3].into_zero_vec(),
-        ],
-        triangles(),
-        four(),
-    )
-    .unwrap();
-    exercise(m2.clone());
-    exercise(GeometryData::from(m2.clone()));
-    exercise(Either::<M2Geometry<'static>, GeometryData<'static>>::Left(
-        m2,
-    ));
-    exercise(Either::<M2Geometry<'static>, GeometryData<'static>>::Right(
-        data.clone(),
-    ));
-    exercise(M3Geometry::new(positions(), positions(), triangles(), four()).unwrap());
-    exercise(M3Geometry::Collision(
-        M3CollisionGeometry::new(positions(), triangles())
-            .unwrap()
-            .with_triangle_controls(vec![7.])
-            .unwrap(),
-    ));
-    exercise(WmoGeometry::triangles(positions(), triangles()).unwrap());
-    exercise(d4::Geometry::new(data).unwrap());
-    let streams = d3::VertexStreams {
-        positions: positions(),
-        normals: positions(),
-        colors: vec![[1.; 4]; 3].into_zero_vec(),
-        texture_coordinates: [
-            vec![[0.; 2]; 3].into_zero_vec(),
-            vec![[1.; 2]; 3].into_zero_vec(),
-        ],
-        tangents: positions(),
-        extras: d3::VertexExtras {
-            auxiliary_colors: vec![[0.5; 4]; 3].into_zero_vec(),
-            binormals: positions(),
-            direction_auxiliary: vec![[1, 2, 3], [4, 5, 6], [7, 8, 9]].into_zero_vec(),
-            cloth_vertices: vec![8, 9, 10].into_zero_vec(),
-        },
-    };
-    let d3 = d3::Geometry::new(streams, triangles(), ZeroVec::default()).unwrap();
-    let mapped = d3.edited(duplicate()).unwrap();
-    assert_eq!(
-        mapped.streams().extras.cloth_vertices.to_vec(),
-        vec![10, 8, 9, 8]
-    );
-    assert_eq!(
-        mapped.streams().extras.direction_auxiliary.to_vec(),
-        vec![[7, 8, 9], [1, 2, 3], [4, 5, 6], [1, 2, 3]]
-    );
-    let universal: GeometryData = d3.clone().into();
-    let restored = d3::Geometry::try_from(universal.edited(duplicate()).unwrap()).unwrap();
-    assert_eq!(
-        restored.streams().extras.direction_auxiliary.to_vec(),
-        mapped.streams().extras.direction_auxiliary.to_vec()
-    );
-    let mut malformed = d3.streams().clone();
-    malformed.extras.direction_auxiliary = vec![[0; 3]].into_zero_vec();
-    assert!(d3.clone().with_streams(malformed).is_err());
-    exercise(d3);
-}
+
 #[test]
 fn remapping_preserves_attribute_domains_and_profile_payloads() {
     let mut data = GeometryData::triangles(positions(), triangles()).unwrap();

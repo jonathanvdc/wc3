@@ -1,5 +1,5 @@
 //! Shared illumination components with explicit activation semantics.
-use crate::model::profiles::{m2, m3, mdlx, wmo};
+use crate::model::profiles::{m2, mdlx, wmo};
 use crate::model::Construct;
 use crate::model::{scene, Link, Property, ValidateLinks};
 use m2::values::LightKind as ActorLightKind;
@@ -10,8 +10,7 @@ pub enum Light {
     Portable(Box<scene::Light>),
     /// Independently animated ambient and direct illumination.
     AmbientDiffuse(Box<AmbientDiffuseLight>),
-    /// Independent diffuse and specular response with property metadata.
-    Specular(Box<m3::Light>),
+
     /// World lighting with RGBA color and cookie extensions.
     World(Box<wmo::Light>),
     /// Region-local point illumination.

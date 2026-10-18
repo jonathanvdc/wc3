@@ -23,8 +23,7 @@ native source and wants to reuse compatible encoded arrays.
 
 ## Selecting a vocabulary and layout
 
-MDLX import returns `model::Model<'data, Mdlx>` directly. The M2, M3, WMO, and
-Diablo adapters use their own concrete profiles as well. Native export requires the matching vocabulary:
+MDLX import returns `model::Model<'data, Mdlx>` directly. The M2 and WMO adapters use their own concrete profiles as well. Native export requires the matching vocabulary:
 for example, the MDLX planner accepts `Model<'data, Mdlx>`, rather than implicitly
 projecting a `Universal` graph into Warcraft III behavior. Widening a model
 preserves its meanings, identities, and encoded arrays; it does not translate
@@ -41,24 +40,9 @@ it.
 The destination type separately selects a native dialect or envelope. A profile
 can express behavior that an older output revision cannot encode. The export
 boundary checks that revision's capacities, field availability, and numeric
-representations. M2, M3, and WMO also construct their native supporting documents
+representations. M2 and WMO also construct their native supporting documents
 through bundles rather than leaving offsets or references for the caller to
 repair after writing.
-
-Diablo III appearance import produces `Model<D3>`. Caller-assembled bundles can
-include independently versioned animation documents, which bind to actual skeleton
-nodes by their authored bone names. Bundle output plans the appearance and
-animation resources together.
-
-Diablo IV appearance import produces `Model<D4>`. Native numeric vertex semantics
-and encodings require explicit caller-established `BufferLayout` declarations;
-matching the root hash alone does not establish every vertex interpretation.
-The output `VertexLayout` separately selects native packing. Packed arrays become
-logical encoded streams, while actual chunks, material slots, variants, and
-segment palettes retain checked identities. Compressed D4 animation payloads
-remain accessible through the native codec; semantic animation decoding is not
-implemented. The [Diablo guide](diablo.md) explains the supported projection and
-its strict loss boundaries.
 
 ## Editing and inspecting an output plan
 
@@ -92,7 +76,7 @@ fn prepare(source: &mdlx::Document<'_, mdlx::V800>) -> Result<(), conversion::Er
 
 Selected appearance resolves the family's actual assignment domain. Native
 single-look formats use their chosen assignment; a broader appearance vocabulary
-can retain complete alternative draw assignments or Diablo material slots. Native
+can retain complete alternative draw assignments. Native
 draw-based imports construct a complete default look, and export resolves each
 draw through the selected look without a base-material fallback. Export preserves
 known owner-local controls instead of synchronizing a common projection against
@@ -125,31 +109,12 @@ other native capacities. Successful conversion establishes representability
 under the selected policies; it does not establish matching appearance in a game
 renderer.
 
-Some native records have an established binary layout but an unresolved authored
-meaning. M3 import reports populated attachment and camera addon tables and the
-obsolete trailing-model effect through the loss policy. Cooked physics connectivity
-also has explicit representability limits. Strict conversion rejects these cases;
-retaining a known record layout does not establish its behavior.
-
 Unknown source data follows an import policy. `UnknownPolicy::Reject` is the
 default; `UnknownPolicy::Drop` discards it and reports the decision. The semantic
 model stores supported authoring values, so export needs no unknown-byte policy.
 Keep the native document separately when an application needs its original
 unknown records or bytes.
 
-Export chooses physical packing from current semantic values. M3 mesh controls
-can retain a preferred `UvEncoding`, with logical coordinates given by
-`packed * scale / 32768 + offset`. Export reuses it when all current UV channels
-are exactly representable. Otherwise it chooses canonical packing or derives an
-affine transform for a wider range. Any resulting coordinate change remains
-subject to the approximation policy; the preference never overrides edited UVs.
-This region-level preference is independent of animated texture transforms.
-
-D3 vertex extras retain the fourth bytes of packed normals, tangents, and
-binormals as an optional exact byte stream. Their unresolved meaning is not
-interpreted as padding or handedness. Universal widening preserves them in a
-named, typed vertex attribute, so vertex remaps keep them aligned with geometry.
-M3 vertex qualifier bits still require the unknown-data policy at import.
 Native codec APIs retain their own byte-preserving editing behavior.
 
 ## Where the implementation lives

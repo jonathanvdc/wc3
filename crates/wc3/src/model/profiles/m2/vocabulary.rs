@@ -168,7 +168,7 @@ impl Extends<M2> for Universal {
     }
     fn controller<'a>(value: <M2 as Profile>::Controller<'a>) -> Self::Controller<'a> {
         let _ = value;
-        None
+        NoControls
     }
 }
 
@@ -184,21 +184,7 @@ impl<'a> FeatureVocabulary<'a> for M2 {
     type ParticleProgram = Unavailable;
     type FaceActor = Unavailable;
     type LightProgram = Unavailable;
-    type Extent = Unavailable;
-    type ParticleCopy = Unavailable;
-    type Projector = Unavailable;
-    type Force = Unavailable;
-    type Warp = Unavailable;
-    type HitTest = Unavailable;
-    type AttachmentVolume = Unavailable;
-    type Billboard = Unavailable;
-    type Turret = Unavailable;
-    type IkJoint = Unavailable;
-    type IkTwoJoint = Unavailable;
-    type IkCcd = Unavailable;
-    type OneBoneSolver = Unavailable;
-    type ShadowBox = Unavailable;
-    type ViewVolume = Unavailable;
+
     type AtlasParticles = Unavailable;
     type PointLight = Unavailable;
     fn visit_links(value: &FeatureSet<'a, Self>, visitor: &mut dyn FnMut(Link)) {

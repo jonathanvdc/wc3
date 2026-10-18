@@ -5,7 +5,7 @@ use super::coordinates::{axis, basis};
 use super::effects::RuntimeParticles;
 use super::events::RuntimeEvents;
 use super::features::RuntimeFeatures;
-use super::geometry::{apply_skin, compile_geometry_with_color, whole_geometry};
+use super::geometry::{apply_skin, compile_geometry_with_color};
 use super::lod::LodDefinition;
 use super::material::compile_materials_with_images;
 use super::material::mesh_alpha_mode;
@@ -27,15 +27,14 @@ use crate::ModelError;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use wc3::model::profiles::m3::NodeRole as M3NodeRole;
+
 use wc3::model::profiles::Universal;
 use wc3::model::systems::ModelMetadata;
 use wc3::model::systems::System;
 use wc3::model::{
     AnimationProgram, Attachment, Billboard, Camera as ModelCamera, ClipControls, FeatureId,
-    Light as SemanticLight, Link, MaterialId, MaterialSelection, MeshControls, Model, NodeControls,
-    NodeFeature, ParticleDetails, ParticleEmitter, PoseLayout, RibbonEmitter, SkinId, Texture,
-    ValidateLinks, ValueSlot,
+    Light as SemanticLight, Link, MaterialId, MaterialSelection, Model, NodeFeature,
+    ParticleDetails, ParticleEmitter, PoseLayout, SkinId, Texture, ValidateLinks, ValueSlot,
 };
 
 fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
@@ -51,21 +50,7 @@ fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
         NodeFeature::ParticleProgram(_) => "External particle programme",
         NodeFeature::FaceActor(_) => "Face animation",
         NodeFeature::LightProgram(_) => "Light programme",
-        NodeFeature::Extent(_) => "Property extent",
-        NodeFeature::ParticleCopy(_) => "Particle copy",
-        NodeFeature::Projector(_) => "Projector",
-        NodeFeature::Force(_) => "Force",
-        NodeFeature::Warp(_) => "Warp",
-        NodeFeature::HitTest(_) => "Hit-test shape",
-        NodeFeature::AttachmentVolume(_) => "Attachment volume",
-        NodeFeature::Billboard(_) => "Billboard programme",
-        NodeFeature::Turret(_) => "Turret",
-        NodeFeature::IkJoint(_) => "IK joint",
-        NodeFeature::IkTwoJoint(_) => "Two-joint IK solver",
-        NodeFeature::IkCcd(_) => "CCD IK solver",
-        NodeFeature::OneBoneSolver(_) => "One-bone solver",
-        NodeFeature::ShadowBox(_) => "Shadow box",
-        NodeFeature::ViewVolume(_) => "View volume",
+
         NodeFeature::AtlasParticles(_) => "Atlas particles",
         NodeFeature::PointLight(_) => "Point light",
     }
@@ -127,13 +112,6 @@ pub fn compile_model_with_options(
     let mut skins = Vec::new();
     let mut skin_cache: HashMap<(SkinId, Vec<usize>), usize> = HashMap::new();
     let mut diagnostics = Vec::new();
-    for (id, node) in model.nodes() {
-        if let Some(NodeControls::M3(M3NodeRole::Bone(controls))) = &node.controls {
-            if controls.extra_flags.bits() & 7 != 0 {
-                diagnostics.push(RenderDiagnostic { feature: None, material: None, message: format!("M3 node {id:?} ({}) retains unresolved native inheritance flags; rendering uses ordinary parent transforms", node.name) });
-            }
-        }
-    }
     for node in &nodes {
         if node.billboard_convention == BillboardConvention::M2
             && matches!(node.billboard, Billboard::Locked { enabled: true, .. })
@@ -163,11 +141,6 @@ pub fn compile_model_with_options(
             for (id, instance) in model.instances() {
                 if options.draws.hidden_instances.contains(&id) {
                     continue;
-                }
-                if instance.draws.is_empty() {
-                    if let Ok(material) = model.resolve_instance_material(id, options.material) {
-                        selected.insert(material);
-                    }
                 }
                 for draw in instance
                     .draws
@@ -286,45 +259,27 @@ pub fn compile_model_with_options(
                 message: format!("world region {instance_id:?}: {message}"),
             });
         }
-        let implicit = instance.draws.is_empty()
-            && match source.controls.as_ref() {
-                Some(MeshControls::D3(value)) => value.material_slot.is_some(),
-                Some(MeshControls::D4(value)) => value.material_slot.is_some(),
-                _ => false,
-            };
-        let selections = if implicit {
-            vec![(
-                DrawSource::WholeInstance,
-                None,
-                model
-                    .resolve_instance_material(instance_id, options.material)
-                    .map_err(|error| ModelError(error.to_string()))?,
-                whole_geometry(source)?,
-                None,
-            )]
-        } else {
-            instance
-                .draws
-                .iter()
-                .filter(|draw| options.draws.includes(draw.id()))
-                .map(|draw| {
-                    let material = model
-                        .resolve_material(instance_id, draw.id(), options.material)
-                        .map_err(|error| ModelError(error.to_string()))?;
-                    let subset = source
-                        .subset(draw.subset)
-                        .ok_or_else(|| ModelError("draw subset is absent".into()))?
-                        .clone();
-                    Ok((
-                        DrawSource::Draw(draw.id()),
-                        Some(draw.subset),
-                        material,
-                        subset,
-                        draw.controls.as_ref(),
-                    ))
-                })
-                .collect::<Result<Vec<_>, ModelError>>()?
-        };
+        let selections = instance
+            .draws
+            .iter()
+            .filter(|draw| options.draws.includes(draw.id()))
+            .map(|draw| {
+                let material = model
+                    .resolve_material(instance_id, draw.id(), options.material)
+                    .map_err(|error| ModelError(error.to_string()))?;
+                let subset = source
+                    .subset(draw.subset)
+                    .ok_or_else(|| ModelError("draw subset is absent".into()))?
+                    .clone();
+                Ok((
+                    DrawSource::Draw(draw.id()),
+                    Some(draw.subset),
+                    material,
+                    subset,
+                    draw.controls.as_ref(),
+                ))
+            })
+            .collect::<Result<Vec<_>, ModelError>>()?;
         for (draw_source, subset_id, material_id, subset, draw_controls) in selections {
             for (pass, surface) in materials[&material_id].iter().enumerate() {
                 let key = (
@@ -480,13 +435,13 @@ pub fn compile_model_with_options(
     );
     for (id, feature) in model.features() {
         let message = match &feature.payload {
-            NodeFeature::Particle(ParticleEmitter::Simulated(definition)) if matches!(definition.details,ParticleDetails::AgeDriven(_)|ParticleDetails::Atlas(_)|ParticleDetails::Model(_)|ParticleDetails::Programmed(_)) => continue,
-            NodeFeature::Ribbon(RibbonEmitter::Trail(_) | RibbonEmitter::Programmed(_)) | NodeFeature::Event(_) => continue,
+            NodeFeature::Particle(ParticleEmitter::Simulated(definition)) if matches!(definition.details,ParticleDetails::AgeDriven(_)|ParticleDetails::Atlas(_)|ParticleDetails::Model(_)) => continue,
+
             NodeFeature::GeometryAnimation(value) if value.mesh.is_some() && !value.drop_shadow && value.unclassified.bits() == 0 => continue,
             NodeFeature::GeometryAnimation(_) => "geometry tint and opacity are rendered; orphan controllers, authored drop shadows, and unclassified geometry flags need application interpretation".to_string(),
             NodeFeature::Camera(ModelCamera::Portable(_) | ModelCamera::Aimed(_))
             | NodeFeature::Attachment(Attachment::Socket(_)) => continue,
-            NodeFeature::Light(SemanticLight::World(_) | SemanticLight::Specular(_) | SemanticLight::Point(_)) | NodeFeature::PointLight(_) => continue,
+
             NodeFeature::Light(SemanticLight::Portable(_) | SemanticLight::AmbientDiffuse(_)) =>
                 "direct illumination uses Bevy scene lights; ambient terms remain available through ModelLight metadata".to_string(),
             NodeFeature::Attachment(Attachment::Child(_)) if options.child_models.contains_key(&id) => continue,
@@ -606,21 +561,8 @@ pub fn compile_model_with_options(
                         id,
                         ClipTiming {
                             origin,
-                            controllers: match &clip.controls {
-                                Some(ClipControls::M3(controls)) => controls
-                                    .selection
-                                    .as_ref()
-                                    .map(|selection| selection.controllers.clone())
-                                    .unwrap_or_default()
-                                    .into(),
-                                _ => Arc::from([]),
-                            },
-                            blend_duration: match &clip.controls {
-                                Some(ClipControls::M3(controls)) => {
-                                    Some(controls.blend_duration.as_seconds())
-                                }
-                                _ => None,
-                            },
+                            controllers: Arc::from([]),
+                            blend_duration: None,
                         },
                     )
                 })
@@ -635,7 +577,3 @@ pub fn compile_model_with_options(
     compiled.rest_bounds = rest_bounds(&compiled, model.bounds());
     Ok(compiled)
 }
-
-#[cfg(test)]
-#[path = "compiler_tests.rs"]
-mod tests;

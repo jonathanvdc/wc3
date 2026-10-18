@@ -16,11 +16,11 @@
 //! profile's surface and feature vocabulary. Built-in profiles describe game
 //! semantics; native codec dialects separately select file layouts and revisions.
 //!
-//! [`Property`] is a typed slot identity into the model's [`PropertyValues`] table.
-//! The sealed [`PropertyValue`] trait selects storage for each supported value type.
+//! [`Property`](crate::model::Property) is a typed slot identity into the model's [`PropertyValues`](crate::model::PropertyValues) table.
+//! The sealed [`PropertyValue`](crate::model::PropertyValue) trait selects storage for each supported value type.
 //! Nodes, materials, and effects retain slot references; constants and evaluated
 //! instance values live in separate tables with the same identities.
-//! [`Track`] connects a slot to a checked [`Curve`] and explicit [`TimeSource`].
+//! [`Track`](crate::model::Track) connects a slot to a checked [`Curve`](crate::model::Curve) and explicit [`TimeSource`](crate::model::TimeSource).
 //! Slots and tracks are profile-independent, and native exporters resolve
 //! consuming fields when translating them into native tracks.
 //! Curve constructors select interpolation together with its required key shape:
@@ -70,7 +70,7 @@ pub use appearance::{
 mod binding;
 pub use binding::*;
 pub use profiles::m2::M2Geometry;
-pub use profiles::m3::{M3CollisionGeometry, M3DisplayGeometry, M3Geometry};
+
 pub use profiles::mdlx::MdlxGeometry;
 mod vertex_geometry;
 pub use vertex_geometry::{JointInfluences, VertexData};

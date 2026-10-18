@@ -108,9 +108,6 @@ impl Narrows<Universal> for Mdlx {
     fn controller<'a>(
         value: <Universal as Profile>::Controller<'a>,
     ) -> Result<Self::Controller<'a>, Error> {
-        match value {
-            None => Ok(NoControls),
-            _ => Err(incompatible("controller")),
-        }
+        Ok(value)
     }
 }

@@ -1,7 +1,6 @@
 //! Tracks components for native animation conversion.
 use super::*;
 
-
 pub(in super::super) fn interpolation(
     value: NativeInterpolation,
 ) -> Result<sm::Interpolation, Error> {

@@ -1,7 +1,7 @@
 # Semantic compiler and native resources
 
 The renderer compiles `Model<'_, Universal>` directly into Bevy assets and an
-independently animated hierarchy. Native MDLX, M2, WMO, M3, and Diablo adapters
+independently animated hierarchy. Native MDLX, M2, and WMO adapters
 supply semantic models; none requires export to a Warcraft III runtime version.
 `ModelInstance` loads file-backed models onto an application entity.
 
@@ -25,8 +25,7 @@ samplers, and transfer functions agree, even when input metadata differs.
 An unspecified transfer function follows the material role: color samples use sRGB,
 while normal and numeric data maps use linear images. Explicit transfer-function
 declarations remain authoritative. WMO bindings own their sampler; native material
-clamp flags are expanded into those bindings during import. M3 layers retain their
-address selectors in their typed sampling programme, including empty image slots.
+clamp flags are expanded into those bindings during import.
 When draw selection limits the compiled materials, texture-valued slots keep both
 authored constants and curve-selected images available. This discovery is
 conservative: encountering such a slot retains all sampled images in the model.
@@ -66,7 +65,9 @@ slots. Each playback instance samples against its own clocks and selected progra
 repeating shared clocks wrap by their authored periods; frozen shared clocks
 retain time zero without event traversal. The common clip source start (zero by default) and duration
 select an inclusive animation interval, preventing interpolation
-through unrelated sequence keys. Playback uses the selected M3 clip’s authored controller list by default. Applications
+through unrelated sequence keys. Application-authored controllers can layer
+additional animation over imported clips. Playback uses the selected clip’s
+controller list by default. Applications
 can replace it with an explicit list, including an empty list; priority orders
 contributions, with list order breaking ties.
 
@@ -77,23 +78,12 @@ controllers, and solvers can use this boundary without replacing the renderer.
 ## Surfaces and scene integration
 
 The compiler traverses `MaterialSurface::steps` in authored order. `MaterialStep`
-selects the MDLX, M2, WMO, M3, Diablo III, or Diablo IV dialect for each operation.
-The selected dialect owns its typed shader inputs and rendering settings. M3
-composite steps recursively compile referenced material programs and apply their
-weights and priority to the resulting rendering passes. Cyclic references fail
-compilation. M3 texture layers remain inputs to their owning shader step and do not
-become separate draws.
+selects the MDLX, M2, or WMO dialect for each operation. The selected dialect owns
+its typed shader inputs and rendering settings.
 
 MDLX shader selection, culling, priority, and sorting belong to each step.
-WMO exterior-lighting selection is evaluated per step, so two WMO steps in
-one material can retain different lighting behavior. External Diablo shader
-execution remains unresolved: D3 displays its authored diffuse and emission
-constants, and D4 produces a diagnostic placeholder. An unresolved D4 material
-selection has no semantic shader steps. The compiler recognizes its appearance
-variant ownership and emits the same diagnostic fallback. External resource
-selections belong to the appearance variant rather than the shared shader material.
-Unsupported M3 shader families retain their existing diagnostic interpretation.
-The program structure does not add shader coverage. Compiled rendering-pass records
+WMO exterior-lighting selection is evaluated per step, so two WMO steps in one
+material can retain different lighting behavior. Compiled rendering-pass records
 retain order, but Bevy render phases can reorder draws; exact authored execution
 order across steps is not guaranteed.
 
@@ -111,19 +101,15 @@ including animated bindings and Fresnel controls. The [Reforged material
 guide](reforged-materials.md) describes the shared PBR interpretation and its
 reflection approximation.
 
-`CompileOptions` selects typed material appearances. Draw-based looks and
-Diablo slot alternatives retain their own identities. An ambiguous Diablo default
-requires an explicit selection; compilation does not choose the first material or
-variant.
+`CompileOptions` selects typed material appearances. Draw-based looks retain
+their own identities and complete material assignments.
 
-Portable, ambient/diffuse, WMO, and M3 lights expose ordinary Bevy scene lights and
+Portable, ambient/diffuse, and WMO lights expose ordinary Bevy scene lights and
 `ModelLight` metadata. Root `ModelLightSettings` controls conversion scales
 and suppression. Common diffuse color, intensity, range, and supported shadow flags
 animate with the instance. Ambient terms authored on individual light features
 remain metadata; the renderer does not overwrite scene ambient lighting. Native WMO cone and orientation conventions,
-cookies, flicker, and regional light-set activation remain uninterpreted. M3's
-separate specular response, decay law, and light LOD controls also remain available
-without an exact lighting equivalent.
+cookies, flicker, and regional light-set activation remain uninterpreted.
 
 `ModelAttachment` retains the complete semantic attachment definition, including
 socket identity namespaces, authored visibility, unresolved controls, the child
@@ -173,12 +159,6 @@ rotate or scale with the animated bone. Native coordinate conventions and applic
 Living-particle, per-update birth, and long-update budgets bound CPU work;
 `SpriteEmitter` exposes omitted work and current population.
 
-M3 standard billboards interpret common distributions, velocity selectors,
-normalized three-stage appearance, keyed squirt counts and flipbook timing through
-the CPU transport.
-The [sprite guide](pre2.md#m3-standard-billboard-subset) distinguishes this subset
-from unsupported programmed forces, collisions, secondary effects, and geometry.
-
 Ribbon sections use the shared GPU transport and independent authored material
 passes. Section appearance samples its birth clock; retired or omitted sections
 break connectivity instead of joining unrelated trail segments.
@@ -188,7 +168,7 @@ including nonlinear parent motion. Application root motion interpolates the two
 observed frame transforms. Continuous emission uses bounded 60 Hz midpoint
 integration; this is a numerical approximation of animated rates. Keyed bursts
 retain their discrete clock crossings. Spline/bone generators, advanced M2 texture programmes and unresolved modulation
-gain, and several programmed effect families remain unsupported and produce
+gain remain unsupported and produce
 diagnostics.
 
 ## Static worlds
@@ -247,8 +227,7 @@ Its default is strict preservation; accepting loss is an explicit provider choic
 and retained conversion diagnostics identify dropped or approximated records.
 A permissive policy does not invent required resources or repair malformed data.
 
-WMO layout provenance must be supplied explicitly because a file version does not always identify a dialect. Diablo IV layouts and external
-payload identities likewise require provider knowledge.
+WMO layout provenance must be supplied explicitly because a file version does not always identify a dialect.
 
 The shared [viewer and capture tool](../tools.md) uses the same Universal compiler
 and runtime as application loading.
@@ -257,13 +236,12 @@ and runtime as application loading.
 
 Native loading preserves native-family vocabulary rather than promising the same
 shader coverage for every family. MDLX common layers and effects, M2 common surfaces
-and age-driven sprites, WMO groups/layered surfaces/vertex lighting/liquid grids, M3 common
-Standard layers and composite passes, lights and selected programmes, and known Diablo roles each have separate
-interpretation limits. Native loading, generic geometry, and basic surface
-interpretation are separate capabilities from full game-specific rendering. M2 illumination/constant programmes and the modern six-binding guild layout, specialized WMO terrain/window/LOD and extended
-combiners, specialized M3 families and advanced layer controls, external
-Diablo shaders, and external effect programmes require additional interpreters.
-These gaps appear in model diagnostics.
+and age-driven sprites, and WMO groups, layered surfaces, vertex lighting, and liquid
+grids each have separate interpretation limits. Native loading, generic geometry,
+and basic surface interpretation are separate capabilities from full game-specific
+rendering. M2 illumination/constant programmes and the modern six-binding guild
+layout, specialized WMO terrain/window/LOD and extended combiners, and external
+effect programmes require additional interpreters. These gaps appear in model diagnostics.
 
 Skinned mesh bounds conservatively enclose positive-weight joint contributions,
 including eight influences. Changed contributing transforms and source assets

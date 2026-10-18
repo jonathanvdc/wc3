@@ -1,11 +1,9 @@
 //! Owned semantic event programmes and bounded forward-clock traversal.
 use bevy::prelude::*;
-use std::borrow::Cow;
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BinaryHeap, HashMap};
 use std::iter::once;
 use std::sync::Arc;
-use wc3::model::controls::playback::EventCommand;
 use wc3::model::{
     AnimationSample, ClipId, ClockId, ControllerId, Event, EventSource as SemanticEventSource,
     FeatureId, Model, NodeFeature, NodeId, TimeSource,
@@ -23,8 +21,6 @@ pub enum EventSource {
         /// External game-data identity.
         data: u32,
     },
-    /// Authored command and typed optional parameters.
-    Command(EventCommand<'static>),
 }
 /// Playback selection activating an animation event, separate from its time source.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -190,14 +186,6 @@ impl RuntimeEvents {
                         identifier: value.identifier,
                         data: value.data,
                     },
-                    SemanticEventSource::Command(value) => EventSource::Command(EventCommand {
-                        event_type: value.event_type,
-                        transform: value.transform,
-                        options: Cow::Owned(value.options.to_string()),
-                        render_target_channel: value.render_target_channel,
-                        parameter: value.parameter,
-                        control: value.control,
-                    }),
                 };
                 Some((id, (feature.node, Arc::new(source))))
             })

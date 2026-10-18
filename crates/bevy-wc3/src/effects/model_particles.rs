@@ -91,11 +91,9 @@ impl ModelParticleChild {
     }
 }
 
-fn scalar(value: &ParticleScalar) -> Option<Property<f32>> {
-    match value {
-        ParticleScalar::Property(value) => Some(*value),
-        _ => None,
-    }
+fn scalar(value: &ParticleScalar) -> Property<f32> {
+    let ParticleScalar::Property(value) = value;
+    *value
 }
 impl RuntimeModelParticles {
     pub(super) fn append_remapped(
@@ -164,23 +162,13 @@ impl RuntimeModelParticles {
                 diagnostic("Model-particle child resource is unresolved");
                 continue;
             };
-            let (Some(rate), Some(speed), Some(lifetime)) = (
+            let (rate, speed, lifetime) = (
                 scalar(&definition.emission.rate),
                 scalar(&definition.motion.speed),
                 scalar(&definition.lifetime.duration),
-            ) else {
-                diagnostic("Programmed model-particle scalar controls are unsupported");
-                continue;
-            };
+            );
             if !matches!(definition.emission.trigger, ParticleTrigger::Continuous) {
                 diagnostic("Model-particle burst triggers are not implemented");
-                continue;
-            }
-            if !matches!(
-                definition.motion.gravity,
-                ParticleGravity::Directional(_) | ParticleGravity::Vector(_)
-            ) {
-                diagnostic("Encoded model-particle gravity is unresolved");
                 continue;
             }
             diagnostic("Model-particle longitude is retained but unused; latitude uses the Warcraft III radian convention");
@@ -286,7 +274,6 @@ impl RuntimeModelParticles {
                 let active = match &emitter.activation {
                     ParticleActivation::Boolean(v) => sample.animated(v),
                     ParticleActivation::Fractional(v) => sample.animated(v) > 0.1,
-                    ParticleActivation::Programmed => false,
                 };
                 let rate = if active
                     && !ended
@@ -353,7 +340,6 @@ impl RuntimeModelParticles {
                         ParticleGravity::Vector(v) => frame
                             .basis_world
                             .transform_vector3(Vec3::from(sample.animated(v))),
-                        _ => Vec3::ZERO,
                     };
                     let age = frame.time - time;
                     let (_, source_rotation, _) = frame.basis_world.to_scale_rotation_translation();

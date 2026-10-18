@@ -121,11 +121,6 @@ pub enum SystemObject {}
 /// Graph-scoped scene system handle.
 pub type SystemId = Id<SystemObject>;
 
-/// Named material-slot identity marker.
-pub enum MaterialSlotObject {}
-/// Scoped identity of a slot in an appearance vocabulary.
-pub type MaterialSlotId = Id<MaterialSlotObject>;
-
 /// Draw binding identity marker.
 pub enum DrawObject {}
 /// Stable identity of a draw binding, resolved within its owning instance.

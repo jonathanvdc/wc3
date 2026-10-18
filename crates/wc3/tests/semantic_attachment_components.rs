@@ -1,48 +1,11 @@
 use std::borrow::Cow;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-use wc3::model::{FromFeature as SlotFromFeature, TryFromFeature as SlotTryFromFeature};
 
-use wc3::model::profiles::{m2, m3, mdlx, wmo};
+use wc3::model::profiles::{mdlx, wmo};
 use wc3::model::{
-    ChildModel, PlacementAppearance, ResourceLocator, Socket, SocketDefinition, SocketIdentity,
-    WorldPlacementAppearance,
+    ChildModel, PlacementAppearance, ResourceLocator, SocketDefinition, WorldPlacementAppearance,
 };
-
-#[test]
-fn attachment_points_share_activation_without_conflating_namespaces() {
-    let mut slot_values = SlotValues::default();
-    let point = Socket::from_feature(
-        m2::Attachment {
-            identity: 7,
-            visibility: slot_values.add(false),
-            control: (),
-        },
-        &mut slot_values,
-    );
-    assert!(matches!(point.identity, SocketIdentity::Role(7)));
-    assert_eq!(slot_values[point.visibility], 0.);
-    let point = *m3::Attachment::try_from_feature(point, &slot_values).unwrap_err();
-    let recovered = m2::Attachment::try_from_feature(point, &slot_values).unwrap();
-    assert_eq!(recovered.identity, 7);
-    assert!(!slot_values[recovered.visibility]);
-
-    let point = Socket::from_feature(
-        m3::Attachment {
-            identity: Cow::Borrowed("weapon"),
-            visibility: (),
-            control: 0x87654321,
-        },
-        &mut slot_values,
-    );
-    let point = *m2::Attachment::try_from_feature(point, &slot_values).unwrap_err();
-    assert!(matches!(
-        point.identity,
-        SocketIdentity::Named(Cow::Borrowed("weapon"))
-    ));
-    let recovered = m3::Attachment::try_from_feature(point, &slot_values).unwrap();
-    assert_eq!(recovered.control, 0x87654321);
-}
 
 #[test]
 fn external_attachment_keeps_resource_identity_and_visibility() {

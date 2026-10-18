@@ -7,25 +7,20 @@ the codec traits in `wc3`; the derives are re-exported through its format module
 ## Derives
 
 Import `wc3::model::formats::mdlx::{mdx, mdl}` to distinguish the binary and text derives.
-Import `wc3::model::{formats::m2, formats::wmo}` for the World of Warcraft formats and
-`wc3::model::formats::m3` for indexed StarCraft II models. Import
-`wc3::model::formats::diablo::d4` for native Diablo IV records. The format modules
+Import `wc3::model::{formats::m2, formats::wmo}` for the World of Warcraft formats. The format modules
 re-export the following macros alongside their codec traits:
 
 | Derive through `wc3` | Purpose |
 | --- | --- |
 | `mdx::Read`, `mdx::Write` | Read and write binary MDX records. |
 | `mdx::ReadOwned` | Decode MDX values into independently owned storage. |
-| `mdx::Value`, `formats::m2::Value`, `formats::m3::Value`, `formats::wmo::Value` | Generate scalar enum `raw()` and `from_raw()` conversions. |
+| `mdx::Value`, `formats::m2::Value`, `formats::wmo::Value` | Generate scalar enum `raw()` and `from_raw()` conversions. |
 | `mdl::Read`, `mdl::Write` | Read and write text MDL records. |
 | `formats::m2::Read`, `formats::m2::Write`, `formats::m2::RecordLayout` | Read and write offset-addressed M2 records and describe their inline metadata width. |
 | `formats::m2::Validate`, `formats::m2::VisitArrays` | Compose field validation and animation-leaf traversal. |
-| `formats::m3::Read`, `formats::m3::Write`, `formats::m3::RecordLayout` | Compose indexed M3 record codecs with envelope-selected reference widths. |
-| `formats::m3::Validate`, `formats::m3::VisitReferences` | Compose field validation and section-reference traversal. |
 | `formats::wmo::Read`, `formats::wmo::Write`, `formats::wmo::RecordLayout`, `formats::wmo::Validate` | Compose WMO record codecs, fixed inline widths, and field validation. |
-| `d4::Read`, `d4::Write`, `d4::RecordLayout` | Compose sequential Diablo IV records, computed widths, and relocated descriptors. |
 
-Scalar choice fields in M2, M3, and WMO use named enums with an explicit
+Scalar choice fields in M2 and WMO use named enums with an explicit
 integer wire width and an unknown-value variant. Each format re-exports a
 `Value` derive alongside its codec derives to provide exact code conversions.
 The format references below describe the attributes and examples. Flag words
@@ -114,10 +109,6 @@ guides when connecting those records to whole-model operations:
 - [M2 derive reference](src/m2.md): field-order records, array descriptors,
   inline metadata widths, and version-selected field types.
 - [WMO derive reference](src/wmo.md): fixed inline records and validation.
-- [M3 derive reference](src/m3.md): envelope-selected reference widths,
-  fixed records, section identity, and reference traversal.
-- [D4 derive reference](src/d4.md): wire-order fields, computed widths,
-  relocated descriptors, and external payloads.
 - [MDX codec documentation](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/mdx/): binary
   derives, numeric enums, and animation records.
 - [`wc3` model documentation](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/): built-in

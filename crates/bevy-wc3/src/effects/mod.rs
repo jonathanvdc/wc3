@@ -5,9 +5,7 @@ mod atlas_sprites;
 mod emission;
 mod frame;
 pub(super) mod model_particles;
-mod programmed;
-mod programmed_ribbons;
-use programmed_ribbons::{ProgrammedRibbonInstances, RuntimeProgrammedRibbons};
+
 mod ribbons;
 mod world;
 use super::child_coordinates::CoordinatePolicy;
@@ -36,7 +34,7 @@ pub(super) struct RuntimeParticles {
     atlas: RuntimeAtlasParticles,
     ribbons: RuntimeRibbons,
     models: RuntimeModelParticles,
-    beams: RuntimeProgrammedRibbons,
+
     diagnostics: Vec<(FeatureId, String)>,
 }
 #[derive(Default)]
@@ -46,7 +44,6 @@ pub(super) struct ParticleInstances {
     atlas: AtlasParticleInstances,
     ribbons: RibbonInstancesState,
     models: ModelParticleInstances,
-    beams: ProgrammedRibbonInstances,
 }
 impl ParticleInstances {
     pub(super) fn effect_time(
@@ -73,8 +70,6 @@ impl RuntimeParticles {
             .append_remapped(&source.ribbons, indices, nodes, clips);
         self.models
             .append_remapped(&source.models, indices, nodes, clips);
-        self.beams
-            .append_remapped(&source.beams, indices, nodes, clips);
         self.diagnostics.extend(source.diagnostics.iter().cloned());
     }
 
@@ -83,7 +78,6 @@ impl RuntimeParticles {
             && self.atlas.is_empty()
             && self.ribbons.is_empty()
             && self.models.is_empty()
-            && self.beams.is_empty()
     }
     pub fn compile(
         model: &Model<'_>,
@@ -97,14 +91,12 @@ impl RuntimeParticles {
         let atlas = RuntimeAtlasParticles::compile(model, nodes, images);
         let ribbons = RuntimeRibbons::compile(model, nodes, materials);
         let models = RuntimeModelParticles::compile(model, nodes, children, placements);
-        let beams = RuntimeProgrammedRibbons::compile(model, nodes, materials);
         let diagnostics = atlas
             .diagnostics()
             .iter()
             .chain(models.diagnostics())
             .chain(ribbons.diagnostics())
             .chain(age.diagnostics())
-            .chain(beams.diagnostics())
             .cloned()
             .collect();
         Self {
@@ -112,7 +104,6 @@ impl RuntimeParticles {
             atlas,
             ribbons,
             models,
-            beams,
             diagnostics,
         }
     }
@@ -133,7 +124,6 @@ impl RuntimeParticles {
             atlas: self.atlas.spawn(commands, meshes, basis),
             ribbons: self.ribbons.spawn(commands, meshes, basis),
             models: self.models.spawn(commands, basis),
-            beams: self.beams.spawn(commands, meshes, materials, basis),
             age,
         }
     }
@@ -171,13 +161,6 @@ impl RuntimeParticles {
             &mut instances.ribbons,
             &frame,
             &mut world.trails,
-            &mut world.ribbon_statistics,
-        );
-        self.beams.update(
-            &mut instances.beams,
-            &frame,
-            &mut world.meshes,
-            world.materials.bypass_change_detection(),
             &mut world.ribbon_statistics,
         );
         self.age.update(

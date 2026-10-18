@@ -19,14 +19,16 @@ controllers; later applicable tracks override earlier ones.
 ## Playback controls
 
 Choose a `ClipId` from `PreparedModel::clips()`. `play` starts or restarts
-it using the selected M3 sequence's authored blend duration or the model's default.
+it using the model's default blend duration.
 `play_with_blend` accepts a `Duration`, and `play_immediately` requests no fade.
 Repeated play calls restart the clock, so
 issue them when the desired animation changes. Invalid selections become
 `PlaybackError` during evaluation.
 
-`controllers` defaults to `ControllerSelection::Authored`: selecting an
-M3 clip evaluates its authored controller selection in ascending priority, with
+Controllers provide application-authored animation layers. Native MDLX, M2, and
+WMO imports do not create them. `controllers` defaults to
+`ControllerSelection::Authored`: selecting a
+clip evaluates its authored controller selection in ascending priority, with
 source order breaking ties. Use
 `ControllerSelection::Explicit(programmes)` to replace that list;
 `Explicit(Vec::new())` deliberately selects no controllers. These choices apply to

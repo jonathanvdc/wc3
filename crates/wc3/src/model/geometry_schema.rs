@@ -881,33 +881,4 @@ mod tests {
         )
         .is_err());
     }
-
-    #[test]
-    fn m3_retains_fifth_coordinate_stream_but_rejects_sixth() {
-        let geometry = M3Geometry::new(
-            vec![[0., 0., 0.]],
-            vec![[0., 0., 1.]],
-            Vec::<[u32; 3]>::new(),
-            vec![
-                [Influence {
-                    joint: 0,
-                    weight: 0.,
-                }; 4],
-            ],
-        )
-        .unwrap();
-        let coordinates = vec![ZeroVec::alloc_from_slice(&[[0., 0.]]); 5];
-        assert_eq!(
-            geometry
-                .clone()
-                .with_texture_coordinates(coordinates)
-                .unwrap()
-                .texture_coordinates()
-                .len(),
-            5
-        );
-        assert!(geometry
-            .with_texture_coordinates(vec![ZeroVec::alloc_from_slice(&[[0., 0.]]); 6])
-            .is_err());
-    }
 }

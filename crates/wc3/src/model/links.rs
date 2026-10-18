@@ -4,8 +4,8 @@ use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
 };
 use crate::model::{
-    ControllerId, CurveValue, EventId, FeatureId, FeatureKind, GeometryKind, InstanceId,
-    MaterialSlotId, SystemId, SystemMember,
+    ControllerId, CurveValue, EventId, FeatureId, FeatureKind, GeometryKind, InstanceId, SystemId,
+    SystemMember,
 };
 use crate::model::{PropertyValue, ValueSlot};
 use std::borrow::Cow;
@@ -29,8 +29,6 @@ pub enum Link {
 
     /// An identified occurrence in a programme.
     Event(EventId),
-    /// Named material slot owned by the model's appearance vocabulary.
-    AppearanceSlot(MaterialSlotId),
     /// Independently authored scene system.
     System(SystemId),
     /// Authored member of an independently scoped scene system.
@@ -197,12 +195,6 @@ impl ValidateLinks for ControllerId {
 impl ValidateLinks for SystemId {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         visitor(Link::System(*self));
-    }
-}
-
-impl ValidateLinks for MaterialSlotId {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        visitor(Link::AppearanceSlot(*self));
     }
 }
 

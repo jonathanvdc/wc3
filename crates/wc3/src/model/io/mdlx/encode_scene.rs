@@ -341,21 +341,6 @@ pub(super) fn write<'a, T: Dialect>(
 
             profile::Node::FaceActor(unavailable)
             | profile::Node::LightProgram(unavailable)
-            | profile::Node::Extent(unavailable)
-            | profile::Node::ParticleCopy(unavailable)
-            | profile::Node::Projector(unavailable)
-            | profile::Node::Force(unavailable)
-            | profile::Node::Warp(unavailable)
-            | profile::Node::HitTest(unavailable)
-            | profile::Node::AttachmentVolume(unavailable)
-            | profile::Node::Billboard(unavailable)
-            | profile::Node::Turret(unavailable)
-            | profile::Node::IkJoint(unavailable)
-            | profile::Node::IkTwoJoint(unavailable)
-            | profile::Node::IkCcd(unavailable)
-            | profile::Node::OneBoneSolver(unavailable)
-            | profile::Node::ShadowBox(unavailable)
-            | profile::Node::ViewVolume(unavailable)
             | profile::Node::PointLight(unavailable) => match *unavailable {},
         }
     }

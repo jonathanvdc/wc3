@@ -8,9 +8,7 @@ use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
 use wc3::model::scene::world::LightKind as WorldLightKind;
 use wc3::model::scene::{Camera as PortableCamera, LightKind};
-use wc3::model::values::programmed::LightKind as ProgrammedLightKind;
-#[cfg(test)]
-use wc3::model::ModelBuilder;
+
 #[cfg(test)]
 use wc3::model::ModelMetadata;
 use wc3::model::{
@@ -188,7 +186,7 @@ impl RuntimeFeatures {
     pub(super) fn light_diagnostics(&self) -> impl Iterator<Item = (FeatureId, &'static str)> + '_ {
         self.lights.iter().filter_map(|(feature,light)|match light {
             SemanticLight::World(_)=>Some((feature.id,"WMO common diffuse lights use Bevy intensity/range conversion; native cone calibration, Euler orientation, color blending, cookies, flicker, and per-region light-set activation remain uninterpreted")),
-            SemanticLight::Specular(_)=>Some((feature.id,"M3 diffuse light animation, range and shadow flags use Bevy lights; independent specular response, distance-decay law, LOD gates and native cone calibration remain uninterpreted")),
+
             SemanticLight::Point(_)=>Some((feature.id,"Region point-light color, intensity and range use Bevy lights; native attenuation-start and unresolved controls remain uninterpreted")),
             _=>None,
         }).chain(self.attachments.iter().filter_map(|definition| match definition.definition.child().map(|value| &value.appearance) {
@@ -354,12 +352,6 @@ impl RuntimeFeatures {
                     _ => LightKind::Ambient,
                 },
                 SemanticLight::Point(_) => LightKind::Point,
-                SemanticLight::Specular(light) => match light.light_type {
-                    ProgrammedLightKind::Point => LightKind::Point,
-                    ProgrammedLightKind::Directional => LightKind::Directional,
-                    ProgrammedLightKind::Spot => LightKind::Spot,
-                    _ => LightKind::Ambient,
-                },
             };
             match kind {
                 LightKind::Point => {
@@ -516,19 +508,6 @@ impl RuntimeFeatures {
                         0.,
                         [0.; 2],
                     ),
-                    SemanticLight::Specular(light) => (
-                        sample.animated(&light.diffuse_color.value),
-                        sample.animated(&light.intensity_multiplier.value),
-                        light.attenuation_end,
-                        1.,
-                        light.flags.shadows(),
-                        [0.; 3],
-                        0.,
-                        [
-                            sample.animated(&light.hot_spot.value),
-                            sample.animated(&light.falloff.value),
-                        ],
-                    ),
                 };
             let activation = if state.enabled && settings.enabled {
                 activation.clamp(0., 1.)
@@ -667,10 +646,10 @@ impl RuntimeFeatures {
 
 #[cfg(test)]
 mod tests {
-    use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
+    use wc3::model::PropertyValues as SlotValues;
 
     use super::*;
-    use wc3::model::{AnimationProgram, AnimationSample, PhotographicControls};
+
     #[test]
     fn compiled_attachments_own_their_resolved_child_declaration() {
         let slot_values = SlotValues::default();
@@ -703,149 +682,10 @@ mod tests {
             matches!(compiled.attachments[0].resource.as_ref(), Some(ResourceLocator::Path(std::borrow::Cow::Owned(path))) if path == b"child.mdx")
         );
     }
-    #[test]
-    fn aimed_camera_samples_offsets_and_roll_without_spawning_a_view() {
-        let mut slot_values = SlotValues::default();
-        let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
-        let node = builder.add_named_node("camera anchor").unwrap();
-        let feature = builder
-            .add_feature(
-                node,
-                NodeFeature::Camera(ModelCamera::Aimed(Box::new(AimedCamera {
-                    eye_offset: slot_values.add([1., 0., 0.]),
-                    target: [0., 10., 0.],
-                    target_offset: slot_values.add([0., 0., 2.]),
-                    field_of_view: slot_values.add(1.),
-                    clipping: [0.1, 100.],
-                    roll: slot_values.add(0.),
-                    convention: CameraConvention::Vertical(Box::new(PhotographicControls {
-                        visibility: slot_values.add(1.),
-                        ..SlotConstruct::construct(&mut slot_values)
-                    })),
-                }))),
-            )
-            .unwrap();
-        let model = {
-            builder.import_values(&slot_values).unwrap();
-            builder.finish()
-        }
-        .unwrap();
-        let features = RuntimeFeatures::compile(&model, &HashMap::new(), &HashMap::new());
-        let program = AnimationProgram::compile(&model);
-        let sample = program.sample(AnimationSample::default()).unwrap();
-        let camera = features
-            .sample_camera(
-                feature,
-                &sample,
-                Mat4::from_translation(Vec3::new(3., 0., 0.)),
-                Vec3::Z,
-                1.5,
-            )
-            .unwrap();
-        assert_eq!(camera.eye, Vec3::new(4., 0., 0.));
-        assert_eq!(camera.target, Vec3::new(0., 10., 2.));
-        assert_eq!(camera.vertical_field_of_view, 1.);
-        assert_eq!(camera.clipping, [0.1, 100.]);
-    }
 }
 
 #[cfg(test)]
-mod imported_light_tests {
-    use super::*;
-    use bevy::ecs::world::CommandQueue;
-    use wc3::model::animation::programmed::PropertyBinding;
-    use wc3::model::scene::{programmed, world};
-    use wc3::model::values::programmed::LightFlags;
-    use wc3::model::{AnimationProgram, AnimationSample};
-    use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-    #[test]
-    fn world_and_programmed_diffuse_lights_use_bevy_components_without_global_ambient() {
-        let mut slot_values = SlotValues::default();
-        let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
-        let node = builder.add_named_node("anchor").unwrap();
-        builder
-            .add_feature(
-                node,
-                NodeFeature::Light(SemanticLight::World(Box::new(world::Light {
-                    kind: WorldLightKind::Point,
-                    color: slot_values.add([0.2, 0.4, 0.8, 0.]),
-                    intensity: slot_values.add(2.),
-                    use_attenuation: true,
-                    attenuation: [1., 8.],
-                    ..SlotConstruct::construct(&mut slot_values)
-                }))),
-            )
-            .unwrap();
-        builder
-            .add_feature(
-                node,
-                NodeFeature::Light(SemanticLight::Specular(Box::new(programmed::Light {
-                    light_type: ProgrammedLightKind::Point,
-                    flags: LightFlags::from(1),
-                    lod_cut: 0,
-                    shadow_lod_cut: 0,
-                    diffuse_color: PropertyBinding {
-                        value: slot_values.add([0.3, 0.5, 0.7]),
-                        ..SlotConstruct::construct(&mut slot_values)
-                    },
-                    intensity_multiplier: PropertyBinding {
-                        value: slot_values.add(3.),
-                        ..SlotConstruct::construct(&mut slot_values)
-                    },
-                    specular_color: SlotConstruct::construct(&mut slot_values),
-                    specular_multiplier: SlotConstruct::construct(&mut slot_values),
-                    decay: SlotConstruct::construct(&mut slot_values),
-                    attenuation_end: 12.,
-                    attenuation_start: SlotConstruct::construct(&mut slot_values),
-                    hot_spot: SlotConstruct::construct(&mut slot_values),
-                    falloff: SlotConstruct::construct(&mut slot_values),
-                }))),
-            )
-            .unwrap();
-        let model = {
-            builder.import_values(&slot_values).unwrap();
-            builder.finish()
-        }
-        .unwrap();
-        let features = RuntimeFeatures::compile(&model, &HashMap::new(), &HashMap::new());
-        let animation = AnimationProgram::compile(&model);
-        let mut app = App::new();
-        let root = app
-            .world_mut()
-            .spawn((Transform::default(), Visibility::default()))
-            .id();
-        let mut queue = CommandQueue::default();
-        let instances = features.spawn(
-            &mut Commands::new(&mut queue, app.world()),
-            &HashMap::from([(node, root)]),
-            &HashMap::new(),
-        );
-        queue.apply(app.world_mut());
-        app.add_systems(
-            Update,
-            move |mut lights: LightQuery, mut attachments: AttachmentQuery| {
-                let sample = animation.sample(AnimationSample::default()).unwrap();
-                features.animate(
-                    &sample,
-                    &instances,
-                    &ModelLightSettings::default(),
-                    &mut lights,
-                    &mut attachments,
-                );
-            },
-        );
-        app.update();
-        let mut lights = app.world_mut().query::<(&ModelLight, &PointLight)>();
-        let values = lights.iter(app.world()).collect::<Vec<_>>();
-        assert_eq!(values.len(), 2);
-        assert!(values
-            .iter()
-            .any(|(_, light)| light.intensity == 2000. && light.range == 8.));
-        assert!(values.iter().any(|(_, light)| light.intensity == 3000.
-            && light.range == 12.
-            && light.shadow_maps_enabled));
-    }
-}
+mod imported_light_tests {}
 
 type AttachmentParentData = (&'static ModelRig, &'static Playback);
 type AttachmentChildData = (

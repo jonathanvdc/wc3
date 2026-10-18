@@ -1,7 +1,7 @@
 use super::super::DrawSource;
 use super::*;
-use wc3::model::appearance::{diablo3, diablo4, UniversalAppearance};
-use wc3::model::controls::{diablo3 as d3_controls, diablo4 as d4_controls};
+use wc3::model::appearance::{  UniversalAppearance};
+use wc3::model::controls::{ };
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
@@ -34,75 +34,7 @@ fn instance(builder: &mut ModelBuilder<'static>, controls: Option<MeshControls>)
         .unwrap();
     builder.add_instance(MeshInstance::new(node, mesh)).unwrap()
 }
-#[test]
-fn diablo3_empty_draw_instance_renders_whole_geometry_with_selected_appearance() {
-    let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
-    let a = material(&mut builder, "a");
-    let b = material(&mut builder, "b");
-    let mut appearance = diablo3::Appearance::default();
-    let slot = appearance.add_slot(diablo3::Slot::named("body"));
-    let va = appearance.add_variant(slot, a).unwrap();
-    let vb = appearance.add_variant(slot, b).unwrap();
-    appearance.add_look("a", vec![(slot, va)]).unwrap();
-    let selected = appearance.add_look("b", vec![(slot, vb)]).unwrap();
-    builder.set_appearance(UniversalAppearance::D3(appearance));
-    let id = instance(
-        &mut builder,
-        Some(MeshControls::D3(d3_controls::MeshControls {
-            material_slot: Some(slot),
-            ..SlotConstruct::construct(&mut slot_values)
-        })),
-    );
-    let model = {
-        builder.import_values(&slot_values).unwrap();
-        builder.finish()
-    }
-    .unwrap();
-    assert!(model.instance(id).unwrap().draws.is_empty());
-    assert!(compile_model(&model, |_| None).is_err());
-    let compiled = compile_model_with_options(
-        &model,
-        CompileOptions {
-            material: MaterialSelection::Diablo3(selected),
-            ..SlotConstruct::construct(&mut slot_values)
-        },
-        |_| None,
-    )
-    .unwrap();
-    assert_eq!(compiled.draws.len(), 1);
-    assert_eq!(compiled.draws[0].instance, id);
-    assert_eq!(compiled.draws[0].material_id, b);
-    assert_eq!(compiled.draws[0].source, DrawSource::WholeInstance);
-    assert_eq!(compiled.draws[0].mesh.count_vertices(), 3);
-}
-#[test]
-fn diablo4_unambiguous_slot_renders_whole_geometry_without_fabricated_draw() {
-    let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
-    let expected = material(&mut builder, "body");
-    let mut appearance = diablo4::Appearance::default();
-    let slot = appearance.add_slot(diablo4::Slot::new(42, -1, 0));
-    appearance.add_variant(slot, expected).unwrap();
-    builder.set_appearance(UniversalAppearance::D4(appearance));
-    let id = instance(
-        &mut builder,
-        Some(MeshControls::D4(d4_controls::MeshControls {
-            material_slot: Some(slot),
-            ..SlotConstruct::construct(&mut slot_values)
-        })),
-    );
-    let model = {
-        builder.import_values(&slot_values).unwrap();
-        builder.finish()
-    }
-    .unwrap();
-    let compiled = compile_model(&model, |_| None).unwrap();
-    assert_eq!(compiled.draws.len(), 1);
-    assert_eq!(compiled.draws[0].instance, id);
-    assert_eq!(compiled.draws[0].source, DrawSource::WholeInstance);
-    assert_eq!(compiled.draws[0].material_id, expected);
-}
+
 #[test]
 fn generic_empty_draw_instances_remain_without_render_passes() {
     let slot_values = SlotValues::default();

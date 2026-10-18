@@ -123,25 +123,7 @@ impl NodeFeature<'_> {
                 value.opacity.visit_links(visitor);
                 value.visibility.visit_links(visitor);
             }
-            Self::Light(Light::Specular(value)) => value.visit_links(visitor),
-            Self::Camera(Camera::Optical(value)) => value.visit_links(visitor),
-            Self::Ribbon(RibbonEmitter::Programmed(value)) => value.visit_links(visitor),
-            Self::Event(EventSource::Command(value)) => value.visit_links(visitor),
-            Self::Extent(value) => value.visit_links(visitor),
-            Self::ParticleCopy(value) => value.visit_links(visitor),
-            Self::Projector(value) => value.visit_links(visitor),
-            Self::Force(value) => value.visit_links(visitor),
-            Self::Warp(value) => value.visit_links(visitor),
-            Self::HitTest(value) => value.visit_links(visitor),
-            Self::AttachmentVolume(value) => value.visit_links(visitor),
-            Self::Billboard(value) => value.visit_links(visitor),
-            Self::Turret(value) => value.visit_links(visitor),
-            Self::IkJoint(value) => value.visit_links(visitor),
-            Self::IkTwoJoint(value) => value.visit_links(visitor),
-            Self::IkCcd(value) => value.visit_links(visitor),
-            Self::OneBoneSolver(value) => value.visit_links(visitor),
-            Self::ShadowBox(value) => value.visit_links(visitor),
-            Self::ViewVolume(value) => value.visit_links(visitor),
+
             Self::Particle(ParticleEmitter::Resource(value))
             | Self::Ribbon(RibbonEmitter::Resource(value))
             | Self::FaceActor(value) => value.visit_links(visitor),

@@ -4,7 +4,6 @@ use super::age_appearance::{AgeAppearance, AgeParticleAppearance};
 use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
 use super::frame::EffectFrame;
-use super::programmed::{ProgrammedAppearance, ProgrammedSprite, SquirtSchedule};
 use crate::material::{particle_material_layers, ParticleComposition};
 use crate::mesh_attributes::EXTRA_TEXCOORD;
 use crate::textures::{TextureImages, TextureRole};
@@ -83,7 +82,6 @@ struct Emitter {
     tail_length: f32,
     seed: u64,
     passes: Vec<MaterialPass>,
-    programmed: Option<ProgrammedSprite>,
 }
 #[derive(Clone)]
 struct MaterialPass {
@@ -98,7 +96,6 @@ pub(super) struct RuntimeAgeSprites {
 }
 
 enum BirthAppearance {
-    Programmed(ProgrammedAppearance),
     Age(AgeParticleAppearance),
 }
 #[derive(Clone)]
@@ -119,8 +116,7 @@ struct EmitterInstance {
     mesh: Handle<Mesh>,
     passes: Vec<MaterialPassInstance>,
     births: Vec<Birth>,
-    squirts: SquirtSchedule,
-    appearances: Vec<ProgrammedAppearance>,
+
     age_appearances: Vec<AgeParticleAppearance>,
     order: Vec<(usize, f32)>,
     fraction: f64,
@@ -137,7 +133,6 @@ struct MaterialPassInstance {
 impl EmitterInstance {
     fn retire(&mut self, now: f64) {
         let mut retained = 0;
-        let appearances = &mut self.appearances;
         let age_appearances = &mut self.age_appearances;
         self.births.retain_mut(|birth| {
             if now - birth.time >= f64::from(birth.lifetime) {
@@ -146,18 +141,13 @@ impl EmitterInstance {
             if birth.appearance_index != u32::MAX {
                 let index = birth.appearance_index as usize;
                 if index != retained {
-                    if !appearances.is_empty() {
-                        appearances.swap(index, retained);
-                    } else {
-                        age_appearances.swap(index, retained);
-                    }
+                    age_appearances.swap(index, retained);
                 }
                 birth.appearance_index = retained as u32;
                 retained += 1;
             }
             true
         });
-        appearances.truncate(retained);
         age_appearances.truncate(retained);
     }
 }
@@ -178,12 +168,9 @@ fn particle_image<'a>(
     images.get_with_sampler(id, texture.color_space, TextureRole::Color, texture.sampler)
 }
 
-fn scalar(value: &ParticleScalar) -> Option<Property<f32>> {
-    if let ParticleScalar::Property(value) = value {
-        Some(*value)
-    } else {
-        None
-    }
+fn scalar(value: &ParticleScalar) -> Property<f32> {
+    let ParticleScalar::Property(value) = value;
+    *value
 }
 fn owned_curve<T: CurveValue>(value: &Option<Curve<'_, T>>) -> Option<Curve<'static, T>> {
     value.clone().map(Curve::into_owned)
@@ -241,7 +228,7 @@ impl RuntimeAgeSprites {
         model: &Model<'_>,
         node_indices: &HashMap<NodeId, usize>,
         images: &TextureImages,
-        materials: &HashMap<MaterialId, Vec<SurfacePass>>,
+        _materials: &HashMap<MaterialId, Vec<SurfacePass>>,
     ) -> Self {
         let mut result = Self {
             clips: model
@@ -256,58 +243,7 @@ impl RuntimeAgeSprites {
             else {
                 continue;
             };
-            if let ParticleDetails::Programmed(details) = &definition.details {
-                let programme = match ProgrammedSprite::compile(definition, model) {
-                    Ok((programme, diagnostics)) => {
-                        result
-                            .diagnostics
-                            .extend(diagnostics.into_iter().map(|message| (feature, message)));
-                        programme
-                    }
-                    Err(message) => {
-                        result.diagnostics.push((feature, message));
-                        continue;
-                    }
-                };
-                let Some(passes) = details.material.and_then(|id| materials.get(&id)) else {
-                    result.diagnostics.push((
-                        feature,
-                        "Programmed billboard material does not resolve to a compiled PBR surface"
-                            .into(),
-                    ));
-                    continue;
-                };
-                if passes.is_empty() {
-                    continue;
-                }
-                let passes = passes
-                    .iter()
-                    .map(|pass| {
-                        let mut material = ModelMaterial {
-                            base: pass.material.clone(),
-                            extension: pass.state.clone(),
-                        };
-                        material.extension.enable_effect_color();
-                        material.base.cull_mode = None;
-                        material.base.unlit |= !programme.lit;
-                        MaterialPass {
-                            material,
-                            animation: pass
-                                .animation
-                                .is_animated()
-                                .then(|| Arc::new(pass.animation.clone())),
-                        }
-                    })
-                    .collect();
-                result.emitters.push(Emitter::programmed(
-                    feature,
-                    value.node,
-                    node_indices[&value.node],
-                    programme,
-                    passes,
-                ));
-                continue;
-            }
+
             let ParticleDetails::AgeDriven(details) = &definition.details else {
                 continue;
             };
@@ -332,35 +268,16 @@ impl RuntimeAgeSprites {
                 continue;
             }
             if !matches!(definition.emission.trigger, ParticleTrigger::Continuous) {
-                diagnostic("M2 keyed or programmed burst timing is not yet simulated");
+                diagnostic("M2 keyed burst timing is not yet simulated");
                 continue;
             }
-            let (
-                Some(rate),
-                Some(speed),
-                Some(speed_variation),
-                Some(lifespan),
-                Some(lifespan_variation),
-            ) = (
+            let (rate, speed, speed_variation, lifespan, lifespan_variation) = (
                 scalar(&definition.emission.rate),
                 scalar(&definition.motion.speed),
                 scalar(&definition.motion.variation),
                 scalar(&definition.lifetime.duration),
                 scalar(&definition.lifetime.variation),
-            )
-            else {
-                diagnostic(
-                    "Programmed controls cannot be evaluated as M2 animated scalar controls",
-                );
-                continue;
-            };
-            if !matches!(
-                definition.motion.gravity,
-                ParticleGravity::Directional(_) | ParticleGravity::Vector(_)
-            ) {
-                diagnostic("Unresolved encoded gravity controls are retained but not simulated");
-                continue;
-            }
+            );
             if details.rendering.model.is_some() || details.rendering.child_model.is_some() {
                 diagnostic(
                     "M2 model particles and child emitter resources are not instantiated by the sprite transport",
@@ -444,7 +361,7 @@ impl RuntimeAgeSprites {
 
             result.emitters.push(Emitter {
                 feature,
-                programmed: None,
+
                 node: value.node,
                 node_index: node_indices[&value.node],
                 rate,
@@ -594,8 +511,6 @@ impl RuntimeAgeSprites {
                     mesh,
                     passes,
                     births: Vec::new(),
-                    squirts: SquirtSchedule::default(),
-                    appearances: Vec::new(),
                     age_appearances: Vec::new(),
                     order: Vec::new(),
                     fraction: 0.,
@@ -640,11 +555,9 @@ impl RuntimeAgeSprites {
                 emitter.emitter_frame(frame.basis_world * frame.feature_matrix(emitter.node_index));
             if instances.previous_time.is_none() || backwards {
                 state.births.clear();
-                state.appearances.clear();
                 state.age_appearances.clear();
                 state.fraction = 0.;
                 state.ordinal = 0;
-                state.squirts.initialized = false;
                 state.previous_node = node;
                 state.dropped = 0;
                 state.skipped_seconds = 0.;
@@ -676,18 +589,7 @@ impl RuntimeAgeSprites {
                 inherited,
                 follow,
             };
-            if let Some(programme) = &emitter.programmed {
-                let include_origin =
-                    !state.squirts.initialized && frame.change != EffectChange::Seek;
-                state.squirts.collect(
-                    &programme.squirt,
-                    &frame,
-                    &self.clips,
-                    delta,
-                    include_origin,
-                );
-            }
-            let mut squirt_cursor = 0;
+
             let mut clock = EmissionClock::new(start, frame.time);
             for step in clock.by_ref() {
                 let at = step.start;
@@ -714,9 +616,7 @@ impl RuntimeAgeSprites {
                         .unwrap_or(true)
                 };
                 let active = if visible && !ended {
-                    if emitter.programmed.is_some() {
-                        1.
-                    } else {
+                    {
                         match &emitter
                             .controls
                             .as_ref()
@@ -733,7 +633,6 @@ impl RuntimeAgeSprites {
                             ParticleActivation::Fractional(value) => {
                                 sample.animated(value).clamp(0., 1.)
                             }
-                            ParticleActivation::Programmed => 0.,
                         }
                     }
                 } else {
@@ -756,24 +655,12 @@ impl RuntimeAgeSprites {
                     state.dropped = state.dropped.saturating_add(omitted as u64);
                     for index in 0..accepted {
                         let time = at + (index as f64 + 1. - prior) / rate;
-                        births.squirts_until(
-                            state,
-                            time,
-                            &mut squirt_cursor,
-                            &mut births_this_update,
-                        );
                         births.push(state, time, &mut births_this_update);
                     }
                     state.ordinal = state.ordinal.wrapping_add(omitted as u64);
                 }
             }
             state.skipped_seconds += clock.omitted_seconds();
-            births.squirts_until(
-                state,
-                frame.time,
-                &mut squirt_cursor,
-                &mut births_this_update,
-            );
 
             let node_changed = state.previous_node != node;
             state.previous_node = node;
@@ -820,30 +707,6 @@ struct BirthContext<'a, 'view, 'data> {
     follow: Vec3,
 }
 impl BirthContext<'_, '_, '_> {
-    fn squirts_until(
-        &self,
-        state: &mut EmitterInstance,
-        end: f64,
-        cursor: &mut usize,
-        births: &mut usize,
-    ) {
-        while let Some(&(time, count)) = state.squirts.occurrences.get(*cursor) {
-            if time > end {
-                break;
-            }
-            *cursor += 1;
-            let available = MAX_BIRTHS_PER_UPDATE
-                .saturating_sub(*births)
-                .min(self.emitter.capacity().saturating_sub(state.births.len()));
-            let accepted = usize::from(count).min(available);
-            let omitted = usize::from(count) - accepted;
-            state.dropped = state.dropped.saturating_add(omitted as u64);
-            for _ in 0..accepted {
-                self.push(state, time, births);
-            }
-            state.ordinal = state.ordinal.wrapping_add(omitted as u64);
-        }
-    }
     fn push(&self, state: &mut EmitterInstance, time: f64, births: &mut usize) {
         let frame = &self.frame;
         let emitter = self.emitter;
@@ -908,11 +771,6 @@ impl BirthContext<'_, '_, '_> {
                 birth.origin += self.follow * (1. - fraction.clamp(0., 1.));
                 if let Some(appearance) = appearance {
                     birth.appearance_index = match appearance {
-                        BirthAppearance::Programmed(value) => {
-                            let index = state.appearances.len();
-                            state.appearances.push(value);
-                            index as u32
-                        }
                         BirthAppearance::Age(value) => {
                             let index = state.age_appearances.len();
                             state.age_appearances.push(value);
@@ -933,20 +791,10 @@ fn interpolated_transform(a: Mat4, b: Mat4, t: f32) -> Mat4 {
 }
 impl Emitter {
     fn emitter_frame(&self, node: Mat4) -> Mat4 {
-        if self.programmed.is_none() {
-            // M2 emitter X/Y axes are rotated relative to the carrying bone.
-            node * Mat4::from_rotation_z(FRAC_PI_2)
-        } else {
-            node
-        }
+        // M2 emitter X/Y axes are rotated relative to the carrying bone.
+        node * Mat4::from_rotation_z(FRAC_PI_2)
     }
     fn particle_scale(&self, node: Mat4, basis: Mat4) -> [f32; 2] {
-        if self.programmed.is_some() {
-            return [
-                node.x_axis.truncate().length(),
-                node.y_axis.truncate().length(),
-            ];
-        }
         let inherited = if self.flags.inherit_bone_scale() {
             (basis.inverse() * node).x_axis.truncate().length()
         } else {
@@ -980,46 +828,9 @@ impl Emitter {
         displacement * scale
     }
     fn capacity(&self) -> usize {
-        self.programmed
-            .as_ref()
-            .map_or(MAX_PARTICLES, |programme| programme.max_particles)
+        MAX_PARTICLES
     }
-    fn programmed(
-        feature: FeatureId,
-        node: NodeId,
-        node_index: usize,
-        programme: ProgrammedSprite,
-        passes: Vec<MaterialPass>,
-    ) -> Self {
-        let mut flags = ParticleFlags::default();
-        flags.set_attached(programme.model_space);
-        Self {
-            feature,
-            node,
-            node_index,
-            rate: programme.rate,
-            rate_variation: 0.,
-            controls: None,
-            speed: programme.speed,
-            lifespan: programme.lifetime,
-            generator: ParticleGenerator::Plane,
-            flags,
-            drag: 0.,
-            wind: Vec3::ZERO,
-            inherit_velocity: 0.,
-            follow: [[0.; 2]; 2],
-            spin: [0.; 4],
-            appearance: ParticleAgeCurves::default(),
-            atlas: programme.atlas,
-            age_appearance: None,
-            multi_texture: false,
-            head_tail: ParticleHeadTail::Head,
-            tail_length: 0.,
-            seed: node_index as u64 + 1,
-            passes,
-            programmed: Some(programme),
-        }
-    }
+
     #[cfg(test)]
     fn birth(
         &self,
@@ -1045,34 +856,11 @@ impl Emitter {
             return None;
         }
         let mut seed = self.seed ^ ordinal.wrapping_mul(0xd6e8feb86659fd93);
-        if let Some(programme) = &self.programmed {
-            let random = from_fn(|_| random(&mut seed));
-            let birth = programme.birth(sample, node, basis, random)?;
-            return Some((
-                Birth {
-                    time,
-                    lifetime: birth.lifetime,
-                    origin: birth.origin,
-                    velocity: birth.velocity,
-                    acceleration: birth.acceleration,
-                    spin: 0.,
-                    spin_rate: 0.,
-                    scale_variation: [1.; 2],
-                    random_cell: 0,
-                    size_scale: [
-                        node.x_axis.truncate().length(),
-                        node.y_axis.truncate().length(),
-                    ],
-                    appearance_index: u32::MAX,
-                },
-                Some(BirthAppearance::Programmed(birth.appearance)),
-            ));
-        }
+
         let controls = self.controls.as_ref().expect("age-driven emitter controls");
         let enabled = match &controls.activation {
             ParticleActivation::Boolean(value) => sample.animated(value),
             ParticleActivation::Fractional(value) => sample.animated(value) > 0.,
-            ParticleActivation::Programmed => false,
         };
         if !enabled {
             return None;
@@ -1132,7 +920,6 @@ impl Emitter {
         let gravity = match &controls.gravity {
             ParticleGravity::Directional(v) => Vec3::NEG_Z * sample.animated(v),
             ParticleGravity::Vector(v) => Vec3::from(sample.animated(v)),
-            _ => Vec3::ZERO,
         };
         let local = self.flags.attached();
         let (origin, mut velocity, acceleration) = if local {
@@ -1241,10 +1028,6 @@ impl Emitter {
         for &(index, _) in &state.order {
             let birth = &state.births[index];
             let age = ((frame.time - birth.time) / f64::from(birth.lifetime)).clamp(0., 1.);
-            let style = state
-                .appearances
-                .get(birth.appearance_index as usize)
-                .map(|appearance| appearance.sample(age as f32));
             let native_style = self
                 .age_appearance
                 .as_ref()
@@ -1269,30 +1052,25 @@ impl Emitter {
                 )
             });
             let age = ModelTime::seconds(age).unwrap();
-            let rgb = style
-                .map(|style| [style.color[0], style.color[1], style.color[2]])
-                .unwrap_or_else(|| {
-                    self.appearance
-                        .color
-                        .as_ref()
-                        .and_then(|v| v.sample(age))
-                        .unwrap_or([1.; 3])
-                });
-            let alpha = style.map(|style| style.color[3]).unwrap_or_else(|| {
-                self.appearance
-                    .alpha
-                    .as_ref()
-                    .and_then(|v| v.sample(age))
-                    .unwrap_or(1.)
-                    .clamp(0., 1.)
-            });
-            let mut size = style.map(|style| style.size).unwrap_or_else(|| {
-                self.appearance
-                    .scale
-                    .as_ref()
-                    .and_then(|v| v.sample(age))
-                    .unwrap_or([1.; 2])
-            });
+            let rgb = self
+                .appearance
+                .color
+                .as_ref()
+                .and_then(|v| v.sample(age))
+                .unwrap_or([1.; 3]);
+            let alpha = self
+                .appearance
+                .alpha
+                .as_ref()
+                .and_then(|v| v.sample(age))
+                .unwrap_or(1.)
+                .clamp(0., 1.);
+            let mut size = self
+                .appearance
+                .scale
+                .as_ref()
+                .and_then(|v| v.sample(age))
+                .unwrap_or([1.; 2]);
             for (size, variation) in size.iter_mut().zip(birth.scale_variation) {
                 *size *= variation * native_style.scale;
             }
@@ -1301,10 +1079,7 @@ impl Emitter {
                 position = node.transform_point3(position);
                 velocity = node.transform_vector3(velocity);
             }
-            let spin = style.map_or_else(
-                || birth.spin + birth.spin_rate * (frame.time - birth.time) as f32,
-                |style| style.rotation,
-            );
+            let spin = birth.spin + birth.spin_rate * (frame.time - birth.time) as f32;
             let (sin, cos) = spin.sin_cos();
             let (r, u) = if self.flags.align_xy() {
                 let axes = if self.flags.attached() {
@@ -1331,14 +1106,13 @@ impl Emitter {
             let horizontal = (r * cos + u * sin) * size[0] * scale[0] * 0.5;
             let vertical = (u * cos - r * sin) * size[1] * scale[1] * 0.5;
             let (r, u) = (horizontal, vertical);
-            let head = style.map(|style| style.cell).unwrap_or_else(|| {
-                self.appearance
-                    .head_uv
-                    .as_ref()
-                    .and_then(|v| v.sample(age))
-                    .unwrap_or(0) as u32
-                    + birth.random_cell
-            });
+            let head = self
+                .appearance
+                .head_uv
+                .as_ref()
+                .and_then(|v| v.sample(age))
+                .unwrap_or(0) as u32
+                + birth.random_cell;
             let tail = self
                 .appearance
                 .tail_uv
