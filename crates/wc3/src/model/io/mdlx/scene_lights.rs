@@ -81,6 +81,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             decoder.builder.set_feature(feature, payload)?;
         }
     }
+    let mut camera_nodes = Vec::new();
     for source in source.cameras() {
         let node = decoder.builder.new_node(S::text(source.name.text()));
         decoder
@@ -88,6 +89,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             .values_mut()
             .set(node.transform.translation, source.position)?;
         let id = decoder.builder.add_node(node)?;
+        camera_nodes.push(id);
         let feature = decoder.builder.reserve_feature(id);
 
         let eye_offset = decoder.track(
@@ -144,11 +146,15 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             .nodes()
             .iter()
             .map(|node| ids[&node.object_id])
+            .chain(camera_nodes)
             .collect();
         for (index, pose) in poses.enumerate() {
             profile.bind_poses.push((
                 *ids.get(index).ok_or_else(|| {
-                    Error::new("bind_pose", "pose has no associated hierarchy node")
+                    Error::new(
+                        "bind_pose",
+                        "pose has no associated hierarchy node or camera",
+                    )
                 })?,
                 pose.0,
             ));

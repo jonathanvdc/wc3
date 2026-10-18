@@ -3,7 +3,7 @@ use super::billboard;
 use super::storage::Storage;
 use super::{curves, materials, state::ImportState};
 use crate::model::controls::BillboardFlags;
-use crate::model::conversion::{Context, Conversion, Error, ImportOptions};
+use crate::model::conversion::{Context, Conversion, Error, ImportOptions, IssueKind};
 use crate::model::formats::mdlx::{self as native, Chunk, Dialect, ModelChunk};
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
@@ -122,7 +122,16 @@ where
     }
     let transforms: Vec<_> = source.texture_animations().collect();
     let mut material_ids = Vec::new();
-    for material in source.materials() {
+    for (material_index, material) in source.materials().enumerate() {
+        for (layer_index, layer) in material.layers.iter().enumerate() {
+            if layer
+                .try_emissive_gain()
+                .is_ok_and(|gain| gain.value().is_some_and(|value| value.is_nan()))
+            {
+                context.issue(format!("materials[{material_index}].layers[{layer_index}].emissive_gain"), IssueKind::Normalized,
+                    "interpreted the native NaN emissive-gain header as the unity default; animation is retained");
+            }
+        }
         let mut surface =
             materials::read::<_, S>(material, &texture_ids, &transforms, builder.values_mut())?;
         if material.layers.is_empty()
@@ -216,8 +225,7 @@ where
                 rarity: sequence.rarity,
                 sync_point: sequence.sync_point,
                 unclassified: flags.bits().into(),
-                radius: sequence.extent.bounds_radius,
-                bounds: [sequence.extent.minimum, sequence.extent.maximum],
+                extent: super::extents::read(sequence.extent)?,
             },
         ));
     }
@@ -324,14 +332,19 @@ where
                 .iter()
                 .find(|(key, _)| *key == id)
                 .map(|(_, value)| value.clone()),
-            bind_pose: native_profile
-                .bind_poses
-                .iter()
-                .find(|(key, _)| *key == id)
-                .map(|(_, value)| *value),
+            bind_pose: None,
         };
         let mut node = builder.model().node(id).expect("imported node").clone();
         node.controls = controls;
+        builder.set_node(id, node)?;
+    }
+    for (id, bind_pose) in native_profile.bind_poses {
+        let mut node = builder
+            .model()
+            .node(id)
+            .expect("imported bind-pose node")
+            .clone();
+        node.controls.bind_pose = Some(bind_pose);
         builder.set_node(id, node)?;
     }
     // Native ordinary tracks share one authored timeline. Only independent clocks

@@ -93,25 +93,19 @@ pub(super) fn write<'a, 'data, T: Dialect>(
                 geoset.set_unselectable(metadata.unselectable);
                 let mut extents = Vec::new();
                 for (clip, _) in model.clips() {
-                    if let Some((_, bounds, radius)) = metadata
-                        .sequence_bounds
-                        .iter()
-                        .find(|(id, _, _)| *id == clip)
+                    if let Some((_, extent)) =
+                        metadata.sequence_bounds.iter().find(|(id, _)| *id == clip)
                     {
-                        extents.push(native::GeosetExtent {
-                            minimum: bounds[0],
-                            maximum: bounds[1],
-                            bounds_radius: *radius,
-                        });
+                        extents.push(super::extents::write(*extent));
                     }
                 }
-                extents.extend(metadata.unassigned_bounds.iter().map(|bounds| {
-                    native::GeosetExtent {
-                        minimum: bounds.minimum,
-                        maximum: bounds.maximum,
-                        bounds_radius: bounds.sphere_radius,
-                    }
-                }));
+                extents.extend(
+                    metadata
+                        .unassigned_bounds
+                        .iter()
+                        .copied()
+                        .map(super::extents::write),
+                );
                 geoset.sequence_extents = extents.iter().copied().collect();
             }
             let mut groups = Vec::<Vec<u32>>::new();

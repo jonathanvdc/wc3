@@ -104,15 +104,18 @@ pub(super) fn controls<T: Dialect>(
                 .enumerate()
                 .map(|(index, (id, _))| (index as u32, id))
                 .collect();
-            let identity = [1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0.];
+            let identity = [1., 0., 0., 0., 1., 0., 0., 0., 1., 0., 0., 0.];
             let poses = target
                 .nodes()
                 .iter()
-                .map(|node| {
+                .map(|node| node_ids.get(&node.object_id).copied())
+                .chain(model.features().iter().filter_map(|(_, feature)| {
+                    matches!(feature.payload, profile::Node::Camera(_))
+                        .then_some(Some(feature.node))
+                }))
+                .map(|id| {
                     native::BindPoseMatrix(
-                        node_ids
-                            .get(&node.object_id)
-                            .and_then(|id| model.node(*id))
+                        id.and_then(|id| model.node(id))
                             .and_then(|node| node.controls.bind_pose)
                             .unwrap_or(identity),
                     )

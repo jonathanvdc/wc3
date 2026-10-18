@@ -1,17 +1,16 @@
 //! Native Warcraft III export planning over independent logical models.
 use super::billboard;
-use super::encode_animation::{unsigned_frame, Encoder};
+use super::encode_animation::{Encoder, unsigned_frame};
+use crate::model::MdlxImageResource;
+use crate::model::Model;
+use crate::model::TransformSemantics;
 use crate::model::conversion::{Context, Error, ExportOptions, Plan};
 use crate::model::formats::mdlx::mdx::FixedText;
 use crate::model::formats::mdlx::scene::{Node as NativeNode, NodeFlags};
 use crate::model::formats::mdlx::{
-    Dialect, Document as NativeModel, GeosetExtent, ModelInfo, Sequence, SequenceFlags, Texture,
-    TextureFlags,
+    Dialect, Document as NativeModel, ModelInfo, Sequence, SequenceFlags, Texture, TextureFlags,
 };
 use crate::model::profiles::Mdlx;
-use crate::model::MdlxImageResource;
-use crate::model::Model;
-use crate::model::TransformSemantics;
 use crate::model::{AddressMode, Billboard, NodeId, Quaternion};
 use std::collections::BTreeMap;
 
@@ -59,11 +58,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
             sequence.move_speed = metadata.move_speed;
             sequence.rarity = metadata.rarity;
             sequence.sync_point = metadata.sync_point;
-            sequence.extent = GeosetExtent {
-                minimum: metadata.bounds[0],
-                maximum: metadata.bounds[1],
-                bounds_radius: metadata.radius,
-            };
+            sequence.extent = super::extents::write(metadata.extent);
         }
         sequences.push(sequence);
     }

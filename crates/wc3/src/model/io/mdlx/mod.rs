@@ -19,6 +19,7 @@ mod encode_lights;
 mod encode_materials;
 mod encode_scene;
 mod export;
+mod extents;
 mod geometry;
 mod import;
 mod materials;

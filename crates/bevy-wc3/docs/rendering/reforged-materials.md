@@ -58,6 +58,11 @@ Equal compiled coordinates share geometry, exact differences retain distinct mes
 and authored tangents retain their source basis. Missing requested coordinates
 produce compilation errors.
 
+The native emissive-gain header admits NaN as an unspecified unity default.
+Semantic import resolves that header to one and reports the representation
+normalization while retaining its complete animation. Other nonfinite values
+and invalid animation keys remain rejected.
+
 Fresnel contributes an authored fifth-power rim with color/team influence, opacity,
 and mesh tint, separate from Bevy's physical surface Fresnel. Unlit and unfogged
 controls follow their Bevy equivalents. Surface properties sample the destination

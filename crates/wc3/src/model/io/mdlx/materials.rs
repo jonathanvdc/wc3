@@ -102,7 +102,7 @@ pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
             emissive_gain: layer
                 .try_emissive_gain()
                 .ok()
-                .map(|value| values.add(value.value().copied().unwrap_or_default())),
+                .map(|value| values.add(emissive_default(value))),
         };
         let state = PassState {
             blend: match layer.filter_mode {
@@ -212,8 +212,12 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
         inputs.binding.image = decoder.bind(primary, "layer.texture", map)?;
         inputs.opacity = decoder.bind(&source.alpha, "layer.opacity", |value| value)?;
         if let Ok(source) = source.try_emissive_gain() {
-            inputs.emissive_gain =
-                Some(decoder.bind(source, "layer.emissive_gain", |value| value)?);
+            inputs.emissive_gain = Some(decoder.track(
+                source.track(),
+                emissive_default(source),
+                "layer.emissive_gain",
+                |value| value,
+            )?);
         }
         if let (Ok(source), Some(target)) = (source.try_fresnel(), layer.shader.fresnel_mut()) {
             *target = Fresnel {
@@ -340,5 +344,14 @@ mod tests {
         ] {
             assert_eq!(shader_family(None, name), family);
         }
+    }
+}
+
+/// Native emissive headers use NaN for an unspecified unity multiplier. This
+/// applies only to the stored header; authored animation keys stay unchanged.
+fn emissive_default(source: &Animatable<'_, f32>) -> f32 {
+    match source.value().copied() {
+        Some(value) if !value.is_nan() => value,
+        _ => 1.,
     }
 }

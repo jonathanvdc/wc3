@@ -79,18 +79,10 @@ impl Node<'_> {
 
 impl ValidateLinks for super::Sequence {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        if !self.move_speed.is_finite()
-            || !self.rarity.is_finite()
-            || !self.radius.is_finite()
-            || self.radius < 0.
-            || self.bounds.iter().flatten().any(|value| !value.is_finite())
-            || self.bounds[0]
-                .iter()
-                .zip(self.bounds[1])
-                .any(|(minimum, maximum)| *minimum > maximum)
-        {
+        if !self.move_speed.is_finite() || !self.rarity.is_finite() {
             visitor(Link::InvalidValue);
         }
+        self.extent.visit_links(visitor);
     }
 }
 impl ValidateLinks for super::NodeControls {
@@ -115,25 +107,12 @@ impl ValidateLinks for super::NodeControls {
 
 impl ValidateLinks for super::Geometry {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        for (clip, bounds, radius) in &self.sequence_bounds {
+        for (clip, extent) in &self.sequence_bounds {
             clip.visit_links(visitor);
-            if !radius.is_finite()
-                || *radius < 0.
-                || bounds.iter().flatten().any(|value| !value.is_finite())
-                || bounds[0]
-                    .iter()
-                    .zip(bounds[1])
-                    .any(|(minimum, maximum)| *minimum > maximum)
-            {
-                visitor(Link::InvalidValue);
-            }
+            extent.visit_links(visitor);
         }
-        if self
-            .unassigned_bounds
-            .iter()
-            .any(|bounds| bounds.validate().is_err())
-        {
-            visitor(Link::InvalidValue);
+        for extent in &self.unassigned_bounds {
+            extent.visit_links(visitor);
         }
     }
 }

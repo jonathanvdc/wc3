@@ -200,24 +200,14 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     .sequence_extents
                     .iter()
                     .zip(clips)
-                    .map(|(extent, (clip, _))| {
-                        (
-                            *clip,
-                            [extent.minimum, extent.maximum],
-                            extent.bounds_radius,
-                        )
-                    })
-                    .collect(),
+                    .map(|(extent, (clip, _))| Ok((*clip, super::extents::read(extent)?)))
+                    .collect::<Result<Vec<_>, Error>>()?,
                 unassigned_bounds: mesh
                     .sequence_extents
                     .iter()
                     .skip(clips.len())
-                    .map(|extent| Bounds {
-                        minimum: extent.minimum,
-                        maximum: extent.maximum,
-                        sphere_radius: extent.bounds_radius,
-                    })
-                    .collect(),
+                    .map(|extent| super::extents::read(extent))
+                    .collect::<Result<Vec<_>, _>>()?,
             },
         ));
     }

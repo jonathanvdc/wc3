@@ -5,7 +5,9 @@ use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::materials::mdlx::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
-use crate::model::{Axis, FeatureId, MaterialId, MeshId, Model, NodeId, Texture};
+use crate::model::{
+    Axis, Billboard, FeatureId, Inheritance, MaterialId, MeshId, Model, NodeId, Quaternion, Texture,
+};
 use crate::model::{MdlxImageResource, MdlxParticle1Resource, PathResource};
 use native::scene::Node;
 use std::collections::{BTreeMap, BTreeSet};
@@ -73,6 +75,9 @@ pub(super) fn write<'a, T: Dialect>(
                 &nodes,
                 encoder,
             )?);
+            if camera_anchor_only(model, feature.node) {
+                claimed.insert(feature.node);
+            }
             continue;
         }
         let mut node = nodes[&feature.node].clone();
@@ -473,4 +478,37 @@ fn particle_path<'a>(
             }
         }
     }
+}
+
+/// Camera positions live in the camera record. An otherwise unreferenced camera
+/// anchor needs no helper record; retaining one would create an extra hierarchy
+/// node on every semantic round trip. Preserve anchors with any other purpose.
+fn camera_anchor_only(model: &Model<'_, Mdlx>, id: NodeId) -> bool {
+    let node = model.node(id).expect("validated camera anchor");
+    let rest = node.transform.defaults(model.values());
+    node.parent.is_none()
+        && model.values()[node.visible]
+        && !model.is_animated(node.visible)
+        && node.inheritance == Inheritance::default()
+        && node.billboard == Billboard::None
+        && !node.camera_anchored
+        && node.controls.unmapped_flags.bits() == 0
+        && node.controls.bone.is_none()
+        && node.controls.billboard_flags == Default::default()
+        && rest.rotation == Quaternion::IDENTITY
+        && rest.scale == [1.; 3]
+        && rest.pivot == [0.; 3]
+        && !model.is_animated(node.transform.translation)
+        && !model.is_animated(node.transform.rotation)
+        && !model.is_animated(node.transform.scale)
+        && !model.nodes().values().any(|other| other.parent == Some(id))
+        && !model.skins().values().any(|skin| skin.joints.contains(&id))
+        && !model
+            .instances()
+            .values()
+            .any(|instance| instance.node == id)
+        && !model.event_sources().values().any(|event| event.node == id)
+        && model
+            .node_features(id)
+            .all(|(_, feature)| matches!(feature, profile::Node::Camera(_)))
 }

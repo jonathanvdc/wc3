@@ -4,6 +4,30 @@ use crate::model::values::layered::{NodeFlags, SequenceFlags};
 use crate::model::{Bounds, ClipId, FeatureId, Link, MeshId, ValidateLinks};
 use std::borrow::Cow;
 
+/// Authored Warcraft III extent, including an explicitly empty occupied volume.
+/// Empty extents do not define a bounding box or sphere for culling.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Extent {
+    /// No occupied volume for this authored state.
+    Empty,
+    /// Finite occupied bounds and their authored sphere radius.
+    Bounds(Bounds),
+}
+impl Default for Extent {
+    fn default() -> Self {
+        Self::Bounds(Bounds::default())
+    }
+}
+impl ValidateLinks for Extent {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if let Self::Bounds(bounds) = self {
+            if bounds.validate().is_err() {
+                visitor(Link::InvalidValue);
+            }
+        }
+    }
+}
+
 /// Authored sequence controls beyond common animation timing.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Sequence {
@@ -15,10 +39,8 @@ pub struct Sequence {
     pub sync_point: u32,
     /// Unresolved sequence behavior bits.
     pub unclassified: SequenceFlags,
-    /// Authored bounding sphere radius.
-    pub radius: f32,
-    /// Authored bounding box minimum and maximum.
-    pub bounds: [[f32; 3]; 2],
+    /// Authored occupied bounds, or an explicitly empty extent.
+    pub extent: Extent,
 }
 /// Mesh-level Warcraft III controls.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -28,9 +50,9 @@ pub struct Geometry {
     /// Disable picking for this mesh.
     pub unselectable: bool,
     /// Sequence-specific authored mesh bounds.
-    pub sequence_bounds: Vec<(ClipId, [[f32; 3]; 2], f32)>,
+    pub sequence_bounds: Vec<(ClipId, Extent)>,
     /// Additional authored bounding volumes with no declared sequence association.
-    pub unassigned_bounds: Vec<Bounds>,
+    pub unassigned_bounds: Vec<Extent>,
 }
 /// Additional Warcraft III bone controls.
 #[derive(Clone, Debug, Default, PartialEq)]
