@@ -1,44 +1,8 @@
-use wc3::model::formats::mdlx::animation::Track;
-
-use wc3::model::formats::mdlx::animation::ValueKeyframe;
 use wc3::model::formats::mdlx::mdx::Read as _;
 use wc3::model::formats::mdlx::mdx::Write as _;
 
 use wc3::model::formats::mdlx::scene::{Camera, CameraVariant};
 use wc3::model::formats::mdlx::Document;
-
-#[test]
-fn camera_fields_and_tracks_round_trip() {
-    let mut camera = Camera::<wc3::model::formats::mdlx::V1100>::new("Portrait").unwrap();
-    camera.position = [1.0, 2.0, 3.0];
-    camera.target_position = [4.0, 5.0, 6.0];
-    camera.field_of_view = 0.7;
-    camera.far_clip = 1000.0;
-    camera.near_clip = 10.0;
-    let track = Track::<f32>::linear(
-        [ValueKeyframe {
-            frame: 100,
-            value: 0.5,
-        }],
-        None,
-    )
-    .unwrap();
-    camera.rotation = Some(track.clone());
-    let mut model = Document::<wc3::model::formats::mdlx::V1100>::new();
-    model.set_cameras([camera]);
-    let decoded =
-        Document::<wc3::model::formats::mdlx::V1100>::decode_mdx(&model.encode_mdx().unwrap())
-            .unwrap()
-            .into_owned();
-    let camera = &decoded.cameras().next().unwrap();
-    assert_eq!(camera.name.text(), "Portrait");
-    assert_eq!(camera.position, [1.0, 2.0, 3.0]);
-    assert_eq!(camera.target_position, [4.0, 5.0, 6.0]);
-    assert_eq!(camera.field_of_view, 0.7);
-    assert_eq!(camera.far_clip, 1000.0);
-    assert_eq!(camera.near_clip, 10.0);
-    assert_eq!(camera.rotation.as_ref(), Some(&track));
-}
 
 #[test]
 fn camera_variants_round_trip() {

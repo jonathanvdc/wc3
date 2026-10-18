@@ -4,28 +4,6 @@ use wc3::model::formats::mdlx::scene::Node;
 use wc3::model::formats::mdlx::Vec3;
 
 #[test]
-fn node_transform_tracks_round_trip() {
-    let track = Track::<Vec3>::hermite(
-        [TangentKeyframe {
-            frame: 100,
-            value: [1.0, 2.0, 3.0],
-            in_tangent: [0.0; 3],
-            out_tangent: [4.0, 5.0, 6.0],
-        }],
-        None,
-    )
-    .unwrap();
-    let mut node = Node::new("Animated", 4).unwrap();
-    node.translation = Some(track);
-    assert_eq!(
-        Node::decode_mdx(&node.encode_mdx().unwrap())
-            .unwrap()
-            .into_owned(),
-        node
-    );
-}
-
-#[test]
 fn track_order_is_normalized_and_name_padding_is_preserved() {
     let mut node = Node::new("N", 2).unwrap();
     let track = Track::<Vec3>::linear(

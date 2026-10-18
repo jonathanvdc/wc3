@@ -6,12 +6,13 @@ use wc3::model::formats::mdlx::emitters::{
 };
 use wc3::model::formats::mdlx::geometry::BindPoseMatrix;
 use wc3::model::formats::mdlx::geometry::{CollisionShape, Geoset};
+use wc3::model::formats::mdlx::mdl::Read as _;
 use wc3::model::formats::mdlx::mdx::Read as _;
 use wc3::model::formats::mdlx::mdx::Write as _;
 
 use wc3::model::formats::mdlx::materials::{Layer, Material, Texture};
 use wc3::model::formats::mdlx::scene::{
-    Attachment, Bone, Camera, EventObject, FaceFx, Light, LightType, ModelInfo, Node,
+    Attachment, Bone, Camera, EventObject, FaceFx, Light, ModelInfo, Node,
 };
 use wc3::model::formats::mdlx::{
     Document, FormatVersion, V1000, V1100, V1200, V1300, V1400, V1600, V1800, V800, V900,
@@ -57,15 +58,15 @@ fn full_model<'data, V: FormatVersion>() -> Document<'data, V> {
     );
     model.set_texture_animations([animation]);
     model.set_geosets([Geoset::<V>::new([[0.0, 0.0, 0.0]], [[0.0, 0.0, 1.0]], [0, 0, 0]).unwrap()]);
-    model.set_geoset_animations([GeosetAnimation::new(0)]);
-    model.set_bones([Bone::new(Node::new("Root", 0).unwrap(), 0, 0)]);
-    model.set_helpers([Node::new("Helper", 1).unwrap()]);
-    model.set_attachments([Attachment::new(
-        Node::new("Hand", 2).unwrap(),
-        "Objects\\Attachment.mdx",
-        0,
+    model.set_geoset_animations([GeosetAnimation::decode_mdl(
+        "GeosetAnim { GeosetId 0, DropShadow, static Alpha 0.5, static Color { 0.1, 0.2, 0.3 }, }",
     )
     .unwrap()]);
+    model.set_bones([Bone::new(Node::new("Root", 0).unwrap(), 0, 0)]);
+    model.set_helpers([Node::new("Helper", 1).unwrap()]);
+    model.set_attachments([Attachment::decode_mdl(
+        r#"Attachment "Hand" { ObjectId 2, AttachmentID 2, Path "Objects\Attachment.mdx", Visibility 1 { Linear, 50: 0.5, } }"#
+    ).unwrap()]);
     model.set_pivot_points(&[[1.0, 2.0, 3.0], [-4.0, 5.5, 0.0]]);
     model.set_event_objects([EventObject::new(
         Node::new("Event", 3).unwrap(),
@@ -76,18 +77,23 @@ fn full_model<'data, V: FormatVersion>() -> Document<'data, V> {
         Node::new("Bounds", 4).unwrap(),
         [[-1.0; 3], [1.0; 3]],
     )]);
-    model.set_particle_emitters([ParticleEmitter::new(
-        Node::new("Emitter", 5).unwrap(),
-        "Textures\\Particle.blp",
-    )
-    .unwrap()]);
-    model.set_particle_emitters2([ParticleEmitter2::new(Node::new("Emitter2", 6).unwrap())]);
-    model.set_ribbon_emitters([RibbonEmitter::new(Node::new("Ribbon", 7).unwrap())]);
-    model.set_cameras([Camera::<V>::new("Camera").unwrap()]);
-    model.set_lights([Light::<V>::new(
-        Node::new("Light", 8).unwrap(),
-        LightType::Omnidirectional,
-    )]);
+    model.set_particle_emitters([ParticleEmitter::decode_mdl(
+        r#"ParticleEmitter "Emitter" { ObjectId 5, Path "smoke.mdl", static EmissionRate 10, static Gravity -9.8, static Longitude 0.2, static Latitude 0.4, static LifeSpan 2, static InitVelocity 5, Visibility 1 { Linear, 100: 0.5, } }"#
+    ).unwrap()]);
+    let mut sprites =
+        ParticleEmitter2::decode_mdl(include_str!("../../../fixtures/mdl/smoke.mdl")).unwrap();
+    sprites.node.object_id = 6;
+    model.set_particle_emitters2([sprites]);
+    model.set_ribbon_emitters([RibbonEmitter::decode_mdl(
+        r#"RibbonEmitter "Ribbon" { ObjectId 7, static HeightAbove 3, Color 1 { Linear, 42: { 1, 0.5, 0.25 }, } MaterialID 9, TextureSlot 1 { Linear, 100: 7, } }"#
+    ).unwrap()]);
+    model
+        .set_cameras([
+            Camera::<V>::decode_mdl(include_str!("../../../fixtures/mdl/portrait.mdl")).unwrap(),
+        ]);
+    model.set_lights([Light::<V>::decode_mdl(
+        r#"Light "Light" { ObjectId 8, Directional, static AttenuationStart 100, static AttenuationEnd 500, Color 1 { Linear, 250: { 1, 0.5, 0.25 }, } static Intensity 2, static AmbColor { 0.1, 0.2, 0.3 }, static AmbIntensity 0.5, }"#
+    ).unwrap()]);
     if version >= 900 {
         model
             .try_set_face_fx([FaceFx::new("Face", "Textures\\Face.blp").unwrap()])
@@ -95,14 +101,11 @@ fn full_model<'data, V: FormatVersion>() -> Document<'data, V> {
         model
             .try_set_bind_poses([BindPoseMatrix([2.0; 12])])
             .unwrap();
-        model
-            .try_set_popcorn_emitters([PopcornEmitter::new(
-                Node::new("Popcorn", 9).unwrap(),
-                "Objects\\Effect.pkfx",
-                "Stand",
-            )
-            .unwrap()])
-            .unwrap();
+        let mut popcorn =
+            PopcornEmitter::decode_mdl(include_str!("../../../fixtures/mdl/popcorn_fire.mdl"))
+                .unwrap();
+        popcorn.node.object_id = 9;
+        model.try_set_popcorn_emitters([popcorn]).unwrap();
     }
     model
 }
@@ -161,6 +164,10 @@ fn check_version<V: FormatVersion>() {
         assert_eq!(
             parsed.try_bind_poses().unwrap().collect::<Vec<_>>(),
             model.try_bind_poses().unwrap().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            parsed.try_popcorn_emitters().unwrap().collect::<Vec<_>>(),
+            model.try_popcorn_emitters().unwrap().collect::<Vec<_>>()
         );
         assert_eq!(
             parsed.try_face_fx().unwrap().collect::<Vec<_>>(),

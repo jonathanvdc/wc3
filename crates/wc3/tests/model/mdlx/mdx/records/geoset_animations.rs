@@ -1,32 +1,9 @@
 use wc3::model::formats::mdlx::animation::{Animatable, Track};
 
-use wc3::model::formats::mdlx::animation::{GeosetAnimation, GeosetAnimationFlags, ValueKeyframe};
+use wc3::model::formats::mdlx::animation::{GeosetAnimation, ValueKeyframe};
 use wc3::model::formats::mdlx::mdl::Read as _;
 use wc3::model::formats::mdlx::mdx::Read as _;
 use wc3::model::formats::mdlx::mdx::Write as _;
-
-use wc3::model::formats::mdlx::Document;
-
-#[test]
-fn geoset_animation_fields_round_trip() {
-    let mut animation = GeosetAnimation::new(2);
-    animation.alpha = Animatable::Static(0.5);
-    animation.flags = GeosetAnimationFlags(7);
-    animation.color = Animatable::Static([0.1, 0.2, 0.3]);
-    let mut model = Document::<wc3::model::formats::mdlx::V1800>::new();
-    model.set_geoset_animations([animation]);
-    let parsed =
-        Document::<wc3::model::formats::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
-            .unwrap()
-            .into_owned();
-    let actual = &parsed.geoset_animations().next().unwrap();
-    assert_eq!(actual.geoset_id, 2);
-    assert_eq!(actual.alpha, Animatable::Static(0.5));
-    assert!(actual.flags.drop_shadow());
-    assert!(actual.flags.color());
-    assert_eq!(actual.flags.bits(), 7);
-    assert_eq!(actual.color, Animatable::Static([0.1, 0.2, 0.3]));
-}
 
 #[test]
 fn static_wire_color_is_bgr_but_tracks_and_public_color_are_rgb() {

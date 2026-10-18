@@ -1,62 +1,10 @@
 use wc3::model::formats::mdlx::animation::ValueKeyframe;
 use wc3::model::formats::mdlx::animation::{Animatable, Track};
-use wc3::model::formats::mdlx::Color;
 
 use wc3::model::formats::mdlx::mdx::Read as _;
 use wc3::model::formats::mdlx::mdx::Write as _;
 
 use wc3::model::formats::mdlx::scene::{Light, LightFalloff, LightShadowRange, LightType, Node};
-use wc3::model::formats::mdlx::Document;
-
-#[test]
-fn light_fields_round_trip() {
-    let mut light = Light::<wc3::model::formats::mdlx::V1200>::new(
-        Node::new("Torch", 2).unwrap(),
-        LightType::Directional,
-    );
-    light.attenuation_start = Animatable::Static(100.0);
-    light.attenuation_end = Animatable::Static(500.0);
-    light.color = Animatable::Static([1.0, 0.5, 0.25]);
-    light.intensity = Animatable::Static(2.0);
-    light.ambient_color = Animatable::Static([0.1, 0.2, 0.3]);
-    light.ambient_intensity = Animatable::Static(0.5);
-    let mut model = Document::<wc3::model::formats::mdlx::V1200>::new();
-    model.set_lights([light]);
-    let parsed =
-        Document::<wc3::model::formats::mdlx::V1200>::decode_mdx(&model.encode_mdx().unwrap())
-            .unwrap()
-            .into_owned();
-    let light = &parsed.lights().next().unwrap();
-    assert_eq!(light.node.name.text(), "Torch");
-    assert_eq!(light.light_type, LightType::Directional);
-    assert_eq!(light.attenuation_start, Animatable::Static(100.0));
-    assert_eq!(light.attenuation_end, Animatable::Static(500.0));
-    assert_eq!(light.color, Animatable::Static([1.0, 0.5, 0.25]));
-    assert_eq!(light.intensity, Animatable::Static(2.0));
-    assert_eq!(light.ambient_color, Animatable::Static([0.1, 0.2, 0.3]));
-    assert_eq!(light.ambient_intensity, Animatable::Static(0.5));
-}
-
-#[test]
-fn light_color_track_round_trip() {
-    let mut light = Light::<wc3::model::formats::mdlx::V800>::new(
-        Node::new("Lamp", 3).unwrap(),
-        LightType::Omnidirectional,
-    );
-    let track = Track::<Color>::linear(
-        [ValueKeyframe {
-            frame: 250,
-            value: [1.0, 0.5, 0.25],
-        }],
-        None,
-    )
-    .unwrap();
-    light.color.set_track(track.clone());
-    let parsed = Light::<wc3::model::formats::mdlx::V800>::decode_mdx(&light.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned();
-    assert_eq!(parsed.color.track(), Some(&track));
-}
 
 #[test]
 fn extended_light_fields_and_tracks_round_trip() {

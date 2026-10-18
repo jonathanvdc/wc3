@@ -1,17 +1,11 @@
 mod animations;
-mod attachments;
 mod bind_pose;
 mod cameras;
 mod collision;
-mod events;
 mod geoset_animations;
 mod geosets;
 mod lights;
 mod materials;
 mod model_info;
 mod nodes;
-mod particle;
-mod particle2;
-mod popcorn;
-mod ribbon;
 mod textures;
