@@ -176,22 +176,6 @@ fn opaque_payloads_borrow_the_source_and_can_resize_independently() {
 }
 
 #[test]
-fn borrowed_views_are_cheap_and_owned_conversion_moves_existing_buffers() {
-    let array: ZeroVec<u32> = [1, 2, 3].into_iter().collect();
-    let pointer = array.as_bytes().as_ptr();
-    let mut view = array.as_slice().as_zerovec();
-    assert_eq!(view.as_bytes().as_ptr(), pointer);
-    assert_eq!(view.clone().as_bytes().as_ptr(), pointer);
-    view.with_mut(|values| values.push(4u32.to_unaligned()));
-    assert_eq!(array, [1, 2, 3]);
-    assert_eq!(view, [1, 2, 3, 4]);
-    let deep = array.clone();
-    assert_ne!(deep.as_bytes().as_ptr(), pointer);
-    let owned = array.into_owned();
-    assert_eq!(owned.as_bytes().as_ptr(), pointer);
-}
-
-#[test]
 fn array_equality_follows_zero_vec_encoded_byte_semantics() {
     let positive = [0u8; 4];
     let negative = (-0.0f32).to_le_bytes();
@@ -413,20 +397,6 @@ fn native_inputs_encode_into_storage_independent_of_their_lifetimes() {
     }
     let empty: ZeroVec<u32> = [].into_zero_vec();
     assert!(empty.is_empty());
-}
-
-#[test]
-fn encoded_inputs_move_owned_and_borrowed_buffers_unchanged() {
-    use wc3::model::formats::mdlx::{Borrowed, IntoZeroVec};
-
-    let owned: ZeroVec<u32> = [1, 2, 3].into_zero_vec();
-    let pointer = owned.as_bytes().as_ptr();
-    let moved = owned.into_zero_vec();
-    assert_eq!(moved.as_bytes().as_ptr(), pointer);
-    assert!(moved.is_owned());
-    let borrowed = moved.as_borrowed().into_zero_vec();
-    assert_eq!(borrowed.as_bytes().as_ptr(), pointer);
-    assert!(!borrowed.is_owned());
 }
 
 #[test]

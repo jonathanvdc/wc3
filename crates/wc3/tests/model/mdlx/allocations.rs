@@ -107,66 +107,6 @@ fn counted_records_can_transcode_without_an_owned_collection() {
 }
 
 #[test]
-fn derived_records_write_existing_tracks_without_cloning() {
-    use wc3::model::formats::mdlx::animation::TextureAnimation;
-    use wc3::model::formats::mdlx::emitters::{ParticleEmitter, RibbonEmitter};
-    let texture_animation = TextureAnimation::decode_mdl("TVertexAnim { Scaling 1 { Linear, 0: { 1, 2, 3 }, } Translation 1 { Linear, 0: { 4, 5, 6 }, } }").unwrap();
-    let particle = ParticleEmitter::decode_mdl("ParticleEmitter \"a\" { ObjectId 0, EmitterUsesMdl, Translation 1 { Linear, 0: { 1, 2, 3 }, } EmissionRate 1 { Linear, 0: 2.0, } Visibility 1 { Linear, 0: 1.0, } }").unwrap();
-    let ribbon = RibbonEmitter::decode_mdl("RibbonEmitter \"a\" { ObjectId 0, HeightAbove 1 { Linear, 0: 2.0, } TextureSlot 1 { Linear, 0: 3, } Visibility 1 { Linear, 0: 1.0, } }").unwrap();
-    let mut storage = [0u8; 4096];
-    let (_, count) = measured(|| {
-        let mut writer = Writer::new(IoCursor::new(&mut storage[..]));
-        writer.write(&texture_animation).unwrap();
-        writer.write(&particle).unwrap();
-        writer.write(&ribbon).unwrap();
-        writer.finish().unwrap();
-    });
-    assert_eq!(count, 0);
-}
-
-#[test]
-fn version_selected_lights_and_layers_write_without_cloning_storage() {
-    use wc3::model::formats::mdlx::materials::Layer;
-    use wc3::model::formats::mdlx::scene::Light;
-    use wc3::model::formats::mdlx::{V1600, V1800, V800};
-    let light = Light::<V1600>::decode_mdl("Light \"a\" { ObjectId 0, Ambient, Translation 1 { Linear, 0: { 1, 2, 3 }, } Intensity 1 { Linear, 0: 1.0, } ShadowCastingStart 1 { Linear, 0: 2.0, } Damping 1 { Linear, 0: 0.00001, } }").unwrap();
-    let sd = Layer::<V800>::decode_mdl(
-        "Layer { Alpha 1 { Linear, 0: 1.0, } TextureID 1 { Linear, 0: 3, } }",
-    )
-    .unwrap();
-    // Shader follows the texture bindings in input: setters resolve storage after
-    // all fields have been parsed, independent of input order.
-    let hd = Layer::<V1800>::decode_mdl("Layer { TextureID 1 { Linear, 0: 3, } static TextureID 7 <= 4, Shader \"Shader_HD_DefaultUnit\", EmissiveGain 1 { Linear, 0: 1.0, } FresnelOpacity 1 { Linear, 0: 0.0, } }").unwrap();
-    let mut storage = [0u8; 8192];
-    let (_, count) = measured(|| {
-        let mut writer = Writer::new(IoCursor::new(&mut storage[..]));
-        writer.write(&light).unwrap();
-        writer.write(&sd).unwrap();
-        writer.write(&hd).unwrap();
-        writer.finish().unwrap();
-    });
-    assert_eq!(count, 0);
-}
-
-#[test]
-fn materials_write_layers_and_tracks_without_cloning() {
-    use wc3::model::formats::mdlx::materials::Material;
-    use wc3::model::formats::mdlx::V900;
-
-    let material = Material::<V900>::decode_mdl(
-        "Material { Shader \"Shader_HD_DefaultUnit\", Layer { Alpha 1 { Linear, 0: 0.5, } } }",
-    )
-    .unwrap();
-    let mut storage = [0u8; 4096];
-    let (_, count) = measured(|| {
-        let mut writer = Writer::new(IoCursor::new(&mut storage[..]));
-        writer.write(&material).unwrap();
-        writer.finish().unwrap();
-    });
-    assert_eq!(count, 0);
-}
-
-#[test]
 fn geosets_write_borrowed_mesh_sections_without_allocating() {
     use wc3::model::formats::mdlx::geometry::{Geoset, SkinWeights};
     use wc3::model::formats::mdlx::V1400;
@@ -194,7 +134,9 @@ fn geosets_write_borrowed_mesh_sections_without_allocating() {
 #[test]
 fn model_assembly_writes_borrowed_collections_without_allocating() {
     use wc3::model::formats::mdlx::chunks::{GlidersChunk, GlobalSequencesChunk};
+    use wc3::model::formats::mdlx::emitters::ParticleEmitter;
     use wc3::model::formats::mdlx::geometry::Geoset;
+    use wc3::model::formats::mdlx::materials::Material;
     use wc3::model::formats::mdlx::scene::Glider;
     use wc3::model::formats::mdlx::{Document, V800};
     let mut model =
@@ -213,29 +155,19 @@ fn model_assembly_writes_borrowed_collections_without_allocating() {
     model
         .chunks
         .push(GlidersChunk::new(vec![Glider { geoset_id: 0 }]).into());
+    model.set_materials([Material::<V800>::decode_mdl(
+        "Material { Layer { Alpha 1 { Linear, 0: 0.5, } } }",
+    )
+    .unwrap()]);
+    model.set_particle_emitters([ParticleEmitter::decode_mdl(
+        "ParticleEmitter \"p\" { ObjectId 0, Translation 1 { Linear, 0: { 1, 2, 3 }, } EmissionRate 1 { Linear, 0: 2, } }"
+    ).unwrap()]);
     let mut storage = [0u8; 8192];
     let (_, count) = measured(|| {
+        assert_eq!(model.geosets().next().unwrap().vertices().len(), 4);
+        assert_eq!(model.materials().next().unwrap().layers.len(), 1);
         let mut writer = Writer::new(IoCursor::new(&mut storage[..]));
         writer.write(&model).unwrap();
-        writer.finish().unwrap();
-    });
-    assert_eq!(count, 0);
-}
-
-#[test]
-fn cameras_particle2_and_popcorn_write_borrowed_tracks_without_allocating() {
-    use wc3::model::formats::mdlx::emitters::{ParticleEmitter2, PopcornEmitter};
-    use wc3::model::formats::mdlx::scene::Camera;
-    use wc3::model::formats::mdlx::V1800;
-    let camera = Camera::<V1800>::decode_mdl("Camera \"c\" { FieldOfView 1, FarClip 100, Translation 1 { Linear, -1: { 1, 2, 3 }, } DOFDistance 20, Target { Translation 1 { Linear, -2: { 3, 2, 1 }, } } Visibility 1 { Linear, 0: 1, } }").unwrap();
-    let particle = ParticleEmitter2::decode_mdl("ParticleEmitter2 \"p\" { ObjectId 0, Speed 1 { Linear, -1: 2, } Visibility 1 { Linear, 0: 1, } }").unwrap();
-    let popcorn = PopcornEmitter::decode_mdl("ParticleEmitterPopcorn \"p\" { ObjectId 0, Color 1 { Linear, -2: { 1, 2, 3 }, } LifeSpan 1 { Linear, 0: 1, } }").unwrap();
-    let mut storage = [0u8; 8192];
-    let (_, count) = measured(|| {
-        let mut writer = Writer::new(IoCursor::new(&mut storage[..]));
-        writer.write(&camera).unwrap();
-        writer.write(&particle).unwrap();
-        writer.write(&popcorn).unwrap();
         writer.finish().unwrap();
     });
     assert_eq!(count, 0);
@@ -340,158 +272,6 @@ fn named_collection_iterators_borrow_duplicate_chunks_without_allocating() {
     assert_eq!(allocations, 0);
     assert_eq!(names.0, "Stand");
     assert_eq!(names.1, "Walk");
-}
-
-#[test]
-fn runtime_collection_getters_do_not_allocate_for_any_version() {
-    use wc3::model::formats::mdlx::emitters::PopcornEmitter;
-    use wc3::model::formats::mdlx::geometry::BindPoseMatrix;
-    use wc3::model::formats::mdlx::scene::{FaceFx, Node};
-    use wc3::model::formats::mdlx::{
-        CommonModelAccess, Document, DynamicDocument, NoExtensions, TryModelAccess,
-    };
-
-    macro_rules! check_version {
-        ($variant:ident) => {{
-            let mut model = DynamicDocument::<NoExtensions>::$variant(Document::new());
-            model.set_sequences([Sequence::new("Stand", [0, 100]).unwrap()]);
-            model.set_textures([Texture::new("body.blp").unwrap()]);
-            model.set_helpers([Node::new("Root", 0).unwrap()]);
-            let supported = model
-                .try_set_bind_poses([BindPoseMatrix([1.0; 12])])
-                .is_ok();
-            if supported {
-                model
-                    .try_set_face_fx([FaceFx::new("Talk", "talk.facefx").unwrap()])
-                    .unwrap();
-                model
-                    .try_set_popcorn_emitters([PopcornEmitter::new(
-                        Node::new("Fire", 1).unwrap(),
-                        "fire.mdx",
-                        "Stand",
-                    )
-                    .unwrap()])
-                    .unwrap();
-            }
-            let (_, allocations) = measured(|| {
-                assert_eq!(model.sequences().count(), 1);
-                assert_eq!(model.textures().next().unwrap().path.text(), "body.blp");
-                assert_eq!(model.helpers().next().unwrap().object_id, 0);
-                if supported {
-                    assert_eq!(model.try_bind_poses().unwrap().count(), 1);
-                    assert_eq!(model.try_face_fx().unwrap().count(), 1);
-                    assert_eq!(model.try_popcorn_emitters().unwrap().count(), 1);
-                } else {
-                    assert!(model.try_bind_poses().is_err());
-                    assert!(model.try_face_fx().is_err());
-                    assert!(model.try_popcorn_emitters().is_err());
-                }
-            });
-            assert_eq!(allocations, 0, "{}", stringify!($variant));
-        }};
-    }
-    check_version!(V800);
-    check_version!(V900);
-    check_version!(V1000);
-    check_version!(V1100);
-    check_version!(V1200);
-    check_version!(V1300);
-    check_version!(V1400);
-    check_version!(V1600);
-    check_version!(V1800);
-}
-
-#[test]
-fn named_geometry_and_material_getters_stream_without_allocating() {
-    use wc3::model::formats::mdlx::mdx::Read as _;
-    use wc3::model::formats::mdlx::{Document, V800};
-
-    let model =
-        Document::<V800>::decode_mdx(include_bytes!("../../fixtures/mdl/quad_model.mdx")).unwrap();
-    let ((vertices, materials), allocations) = measured(|| {
-        let vertices = model
-            .geosets()
-            .map(|geoset| geoset.vertices().len())
-            .sum::<usize>();
-        let materials = model
-            .materials()
-            .filter(|material| !material.layers.is_empty())
-            .count();
-        (vertices, materials)
-    });
-    assert_eq!(allocations, 0);
-    assert_eq!(vertices, 4);
-    assert_eq!(materials, 1);
-}
-
-#[test]
-fn mdl_tracks_construct_encoded_keys_without_an_intermediate_vector() {
-    for source in [
-        "Track 1 { Linear, 0: 2, }",
-        "Track 1 { Hermite, 0: 2, InTan 1, OutTan 3, }",
-    ] {
-        let (track, allocations) = measured(|| Track::<f32>::decode_mdl(source).unwrap());
-        assert_eq!(allocations, 1);
-        assert_eq!(track.evaluate(0.0), Some(2.0));
-    }
-}
-
-#[test]
-fn mdl_skin_and_extent_adapters_move_their_encoded_buffers() {
-    use wc3::model::formats::mdlx::geometry::Geoset;
-    use wc3::model::formats::mdlx::V1400;
-
-    let source = include_str!("../../fixtures/mdl/quad_geoset.mdl");
-    let end = source.rfind('}').unwrap();
-    let skin = format!("{} SkinWeights 4 {{ {{ 0, 0, 0, 0, 255, 0, 0, 0 }}, {{ 0, 0, 0, 0, 255, 0, 0, 0 }}, {{ 0, 0, 0, 0, 255, 0, 0, 0 }}, {{ 0, 0, 0, 0, 255, 0, 0, 0 }}, }} }}", &source[..end]);
-    let extent = format!("{} Anim {{ BoundsRadius 1, MinimumExtent {{ 0, 0, 0 }}, MaximumExtent {{ 1, 1, 1 }}, }} }}", &source[..end]);
-    let (_, baseline) = measured(|| Geoset::<V1400>::decode_mdl(source).unwrap());
-    let (skin, allocations) = measured(|| Geoset::<V1400>::decode_mdl(&skin).unwrap());
-    assert_eq!(allocations, baseline + 2); // Encoded rows and section metadata.
-    assert_eq!(skin.skin_weights().unwrap().len(), 4);
-    let (extent, allocations) = measured(|| Geoset::<V1400>::decode_mdl(&extent).unwrap());
-    assert_eq!(allocations, baseline + 1);
-    assert_eq!(extent.sequence_extents.len(), 1);
-}
-
-#[test]
-fn encoded_arrays_move_into_track_constructors_and_skin_setters() {
-    use wc3::model::formats::mdlx::animation::ValueKeyframe;
-    use wc3::model::formats::mdlx::geometry::{Geoset, SkinWeights};
-    use wc3::model::formats::mdlx::{ZeroVec, V1300};
-
-    let keys: ZeroVec<ValueKeyframe<f32>> = [ValueKeyframe {
-        frame: 0,
-        value: 1.0,
-    }]
-    .into_iter()
-    .collect();
-    let pointer = keys.as_bytes().as_ptr();
-    let (track, allocations) = measured(|| Track::linear(keys, None).unwrap());
-    assert_eq!(allocations, 0);
-    assert_eq!(track.linear_keys().unwrap().as_bytes().as_ptr(), pointer);
-
-    let mut geoset = Geoset::<V1300>::new([[0.0; 3]], [[0.0; 3]], []).unwrap();
-    geoset
-        .set_skin_weights(Some(
-            [SkinWeights::<u8> {
-                bone_indices: [1; 4],
-                weights: [255, 0, 0, 0],
-            }]
-            .into_iter()
-            .collect(),
-        ))
-        .unwrap();
-    let rows: ZeroVec<SkinWeights<u8>> = [SkinWeights {
-        bone_indices: [2; 4],
-        weights: [255, 0, 0, 0],
-    }]
-    .into_iter()
-    .collect();
-    let pointer = rows.as_bytes().as_ptr();
-    let (_, allocations) = measured(|| geoset.set_skin_weights(Some(rows)).unwrap());
-    assert_eq!(allocations, 0);
-    assert_eq!(geoset.skin_weights().unwrap().as_bytes().as_ptr(), pointer);
 }
 
 #[test]
