@@ -536,7 +536,7 @@ fn constant_materials_share_assets_between_instances() {
 fn animated_materials_are_isolated_between_playback_clocks() {
     let mut slot_values = SlotValues::default();
 
-    use wc3::model::{Channel, Curve, Time as ModelTime, TimeSource, Track};
+    use wc3::model::{Curve, DynamicTrack, Time as ModelTime, TimeSource, Track};
     let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
     let material = source.materials().iter().next().unwrap().0;
     let property = slot_values.add(1.);
@@ -554,7 +554,7 @@ fn animated_materials_are_isolated_between_playback_clocks() {
                     })
                     .unwrap(),
                 )?;
-                builder.add_global_channel(Channel::Scalar(Track {
+                builder.add_global_track(DynamicTrack::Scalar(Track {
                     target: property,
                     curve: Curve::linear(
                         [ModelTime::seconds(0.)?, ModelTime::seconds(1.)?],
@@ -799,16 +799,16 @@ fn m3_authored_controller_selection_drives_live_and_baked_pose_with_explicit_emp
         ControllerSelection as SemanticControllerSelection, SequenceControls,
     };
     use wc3::model::Time as ModelTime;
-    use wc3::model::{Channel, Clip, ClipControls, Controller, Curve, TimeSource, Track};
+    use wc3::model::{Clip, ClipControls, Controller, Curve, DynamicTrack, TimeSource, Track};
 
     let (mut source, joint) = fixture(UniversalBinding::Identity(IdentityBinding));
     let clip = source
         .edit(|builder| {
             let edit_result = (|| {
                 let controller = builder.add_controller(Controller::default())?;
-                builder.add_controller_channel(
+                builder.add_controller_track(
                     controller,
-                    Channel::Vector3(Track {
+                    DynamicTrack::Vector3(Track {
                         target: builder.model().node(joint).unwrap().transform.translation,
                         curve: Curve::linear(
                             [ModelTime::seconds(1.)?, ModelTime::seconds(2.)?],

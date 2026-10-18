@@ -17,7 +17,7 @@ use semantic::profiles::M2 as M2Vocabulary;
 pub(in super::super) type Graph<'a> = semantic::Model<'a, M2Vocabulary>;
 pub(in super::super) type GraphBuilder<'a> = semantic::ModelBuilder<'a, M2Vocabulary>;
 pub use export::plan;
-use semantic::{Channel, ImageResource, Property, SharedClock, Texture, Time};
+use semantic::{DynamicTrack, ImageResource, Property, SharedClock, Texture, Time};
 
 /// Imports an M2 bundle without a canonical intermediate encoding.
 pub fn import<'a, 'data: 'a, D: Dialect>(
@@ -307,8 +307,10 @@ where
                 if let Some((curve, global)) =
                     curve::<D, [f32; 3], [f32; 3]>(source, track, owner, index, start, |v| v)?
                 {
-                    builder
-                        .add_channel(id, Channel::Vector3(bind(curve, global, target, &clocks)?))?
+                    builder.add_track(
+                        id,
+                        DynamicTrack::Vector3(bind(curve, global, target, &clocks)?),
+                    )?
                 }
             }
             if let Some((curve, global)) =
@@ -325,7 +327,7 @@ where
                 animation::insert(
                     &mut builder,
                     Some(id),
-                    Channel::Rotation(bind(curve, global, rotation, &clocks)?),
+                    DynamicTrack::Rotation(bind(curve, global, rotation, &clocks)?),
                 )?
             }
         }
@@ -354,7 +356,7 @@ where
                         animation::insert(
                             &mut builder,
                             None,
-                            Channel::Vector3(bind(c, g, target, &clocks)?),
+                            DynamicTrack::Vector3(bind(c, g, target, &clocks)?),
                         )?
                     }
                 }
@@ -372,7 +374,7 @@ where
                     animation::insert(
                         &mut builder,
                         None,
-                        Channel::Rotation(bind(c, g, rotation, &clocks)?),
+                        DynamicTrack::Rotation(bind(c, g, rotation, &clocks)?),
                     )?
                 }
             }

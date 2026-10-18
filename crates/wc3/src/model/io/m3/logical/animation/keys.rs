@@ -4,7 +4,7 @@ use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::materialize;
 use crate::model::{profiles::m3 as surface, EventId, FeatureId, ValueSlot};
-use crate::model::{Channel, Curve, Interpolation, Quaternion, Time, TimeSource, Track};
+use crate::model::{Curve, DynamicTrack, Interpolation, Quaternion, Time, TimeSource, Track};
 use native::Envelope;
 
 fn read_error(error: native::ReadError) -> Error {
@@ -74,7 +74,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
     target: &Target,
     mode: Interpolation,
     context: &mut Context,
-) -> Result<Option<Channel<'a>>, Error> {
+) -> Result<Option<DynamicTrack<'a>>, Error> {
     let index = (selector & 0xffff) as usize;
     macro_rules! keys {
         ($block:ty, $reference:expr, $record:ty, $convert:expr, $target:pat => $property:expr, $channel:ident) => {{
@@ -114,7 +114,7 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                     }),
                     mode,
                 )?;
-                Some(Channel::$channel(Track {
+                Some(DynamicTrack::$channel(Track {
                     target: *$property,
                     curve,
                     clock: TimeSource::Animation,

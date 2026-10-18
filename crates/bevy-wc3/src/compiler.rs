@@ -556,7 +556,7 @@ pub fn compile_model_with_options(
                 .as_ref()
                 .is_some_and(|(_, animation)| animation.uses_shared_time())
         })
-        || model.channels().next().is_some();
+        || model.tracks().next().is_some();
     let pose_animated = nodes.iter().any(|node| {
         node.channels.translation
             || node.channels.rotation

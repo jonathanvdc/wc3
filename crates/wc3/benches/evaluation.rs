@@ -3,7 +3,7 @@ use glam::Quat;
 use std::hint::black_box;
 use wc3::model::profiles::Universal;
 use wc3::model::{
-    AnimationProgram, AnimationSample, BillboardConvention, Channel, Curve, EvaluatedPose,
+    AnimationProgram, AnimationSample, BillboardConvention, Curve, DynamicTrack, EvaluatedPose,
     GeometryData, Mesh, Model, ModelPose, PoseBehavior, PoseInputs, Quaternion, Time, TimeSource,
     Track, Transform,
 };
@@ -23,7 +23,7 @@ fn poses(c: &mut Criterion) {
             let rotation = node.transform.rotation;
             let id = builder.add_node(node).unwrap();
             builder
-                .add_global_channel(Channel::Rotation(Track {
+                .add_global_track(DynamicTrack::Rotation(Track {
                     target: rotation,
                     clock: TimeSource::Animation,
                     curve: Curve::linear(

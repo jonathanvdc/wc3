@@ -405,7 +405,7 @@ fn independent_image_roles_share_each_effective_native_wrap_sampler() {
 #[test]
 fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
     let mut slot_values = SlotValues::default();
-    use wc3::model::{Channel, Curve, Time as ModelTime, TimeSource, Track};
+    use wc3::model::{Curve, DynamicTrack, Time as ModelTime, TimeSource, Track};
     let mut builder = Model::builder("animated material roles");
     let material = builder.reserve_material();
     let property = slot_values.add(1.);
@@ -423,7 +423,7 @@ fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
         )
         .unwrap();
     builder
-        .add_global_channel(Channel::Scalar(Track {
+        .add_global_track(DynamicTrack::Scalar(Track {
             target: property,
             clock: TimeSource::Animation,
             curve: Curve::linear(

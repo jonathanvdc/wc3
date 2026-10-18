@@ -288,7 +288,7 @@ fn common_animation_destinations_validate_and_narrow_with_borrowed_keys() {
     let mut slot_values = SlotValues::default();
     use wc3::model::common::ZeroVec;
 
-    use wc3::model::{Channel, Curve, Time, TimeSource, Track};
+    use wc3::model::{Curve, DynamicTrack, Time, TimeSource, Track};
     let mut draft = Model::<Mdlx>::builder("animated light");
     let node = draft.add_named_node("light").unwrap();
     let feature = draft.reserve_feature(node);
@@ -320,7 +320,7 @@ fn common_animation_destinations_validate_and_narrow_with_borrowed_keys() {
     let pointer = curve.values().as_bytes().as_ptr();
     model
         .edit(|draft| {
-            draft.add_global_channel(Channel::Scalar(Track {
+            draft.add_global_track(DynamicTrack::Scalar(Track {
                 target: intensity,
                 curve,
                 clock: TimeSource::Animation,
@@ -329,10 +329,10 @@ fn common_animation_destinations_validate_and_narrow_with_borrowed_keys() {
         .unwrap();
     let native = model.try_narrow::<Mdlx>().unwrap();
     let channel = native
-        .global_channels()
+        .global_tracks()
         .find(|v| v.clock() == TimeSource::Animation)
         .unwrap();
-    let Channel::Scalar(track) = channel else {
+    let DynamicTrack::Scalar(track) = channel else {
         panic!("channel value domain changed")
     };
     assert_eq!(track.target, intensity);

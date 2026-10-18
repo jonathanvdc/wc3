@@ -1,8 +1,8 @@
 use wc3::model::profiles::{mdlx, Mdlx, Universal};
 use wc3::model::FromFeature as SlotFromFeature;
 use wc3::model::TrailAppearance;
-use wc3::model::{Channel, Curve, Model, Time, TimeSource, Track};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
+use wc3::model::{Curve, DynamicTrack, Model, Time, TimeSource, Track};
 use wc3::model::{ParticleEmission, ParticleLifetime, ParticleMotion};
 
 #[test]
@@ -33,7 +33,7 @@ fn atlas_speed_keeps_one_shared_identity_through_native_publication() {
         )
         .unwrap();
     draft
-        .add_global_channel(Channel::Scalar(Track {
+        .add_global_track(DynamicTrack::Scalar(Track {
             target: native,
             curve: Curve::linear(
                 [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
@@ -51,7 +51,7 @@ fn atlas_speed_keeps_one_shared_identity_through_native_publication() {
     .widen::<Universal>();
     assert_eq!(
         model
-            .global_channels()
+            .global_tracks()
             .find(|v| v.clock() == TimeSource::Animation)
             .unwrap()
             .target(),
@@ -60,14 +60,14 @@ fn atlas_speed_keeps_one_shared_identity_through_native_publication() {
     let restored = model.try_narrow::<Mdlx>().unwrap();
     assert_eq!(
         restored
-            .global_channels()
+            .global_tracks()
             .filter(|v| v.clock() == TimeSource::Animation)
             .count(),
         1
     );
     assert_eq!(
         restored
-            .global_channels()
+            .global_tracks()
             .find(|v| v.clock() == TimeSource::Animation)
             .unwrap()
             .target(),
@@ -103,7 +103,7 @@ fn common_trail_fields_bind_the_owned_component_and_export_exactly() {
     .widen::<Universal>();
     model
         .edit(|draft| {
-            draft.add_global_channel(Channel::Scalar(Track {
+            draft.add_global_track(DynamicTrack::Scalar(Track {
                 target: opacity,
                 curve: Curve::linear(
                     [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
@@ -117,7 +117,7 @@ fn common_trail_fields_bind_the_owned_component_and_export_exactly() {
     let restored = model.try_narrow::<Mdlx>().unwrap();
     assert_eq!(
         restored
-            .global_channels()
+            .global_tracks()
             .filter(|v| v.clock() == TimeSource::Animation)
             .count(),
         1
@@ -150,7 +150,7 @@ fn a_shared_continuous_rate_narrows_on_non_burst_atlas_emitters() {
         )
         .unwrap();
     draft
-        .add_global_channel(Channel::Scalar(Track {
+        .add_global_track(DynamicTrack::Scalar(Track {
             target: rate,
             curve: Curve::linear([Time::seconds(0.).unwrap()], [12f32]).unwrap(),
             clock: TimeSource::Animation,

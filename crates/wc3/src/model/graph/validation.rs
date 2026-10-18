@@ -43,10 +43,7 @@ impl<P: Profile> Model<'_, P> {
                 }
             }
         }
-        if self
-            .channels()
-            .any(|channel| !slots.contains(&channel.target()))
-        {
+        if self.tracks().any(|track| !slots.contains(&track.target())) {
             return Err(Error::new(
                 "animation.target",
                 "native output has no consuming field for an animated slot",
@@ -210,8 +207,8 @@ impl<P: Profile> Model<'_, P> {
             controller.animations.visit_links(&mut visit);
         }
         for animation in self.animations.values() {
-            for channel in &animation.channels {
-                channel.visit_links(&mut visit);
+            for track in &animation.tracks {
+                track.visit_links(&mut visit);
             }
             for event in animation.events.values() {
                 event.node.visit_links(&mut visit);

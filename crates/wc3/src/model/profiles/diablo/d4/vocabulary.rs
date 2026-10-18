@@ -152,11 +152,11 @@ impl Profile for D4 {
         }
         if !model.clips().is_empty()
             || model
-                .global_channels()
+                .global_tracks()
                 .find(|v| v.clock() == TimeSource::Animation)
                 .is_some()
             || model
-                .global_channels()
+                .global_tracks()
                 .find(|v| matches!(v.clock(), TimeSource::Shared(_)))
                 .is_some()
             || !model.controllers().is_empty()

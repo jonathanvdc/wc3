@@ -158,7 +158,9 @@ fn an_empty_program_does_not_require_a_default_step_type() {
 fn a_mixed_program_samples_each_shader_without_changing_step_order() {
     let mut slot_values = SlotValues::default();
     use wc3::model::profiles::Universal;
-    use wc3::model::{AnimationSample, Channel, Curve, Material, Model, Time, TimeSource, Track};
+    use wc3::model::{
+        AnimationSample, Curve, DynamicTrack, Material, Model, Time, TimeSource, Track,
+    };
     let mut draft = Model::<Universal>::builder("mixed step animation");
     let id = draft.reserve_material();
     let layered = slot_values.add(1f32);
@@ -192,7 +194,7 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
         .unwrap();
     for (target, values) in [(layered, [0., 1.]), (shader, [0.5, 1.])] {
         draft
-            .add_global_channel(Channel::Scalar(Track {
+            .add_global_track(DynamicTrack::Scalar(Track {
                 target,
                 clock: TimeSource::Animation,
                 curve: Curve::linear(
@@ -538,7 +540,9 @@ fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassificati
     let mut slot_values = SlotValues::default();
     use wc3::model::materials::mdlx::{Fresnel, MaterialStep as Wc3MaterialStep};
     use wc3::model::profiles::Universal;
-    use wc3::model::{AnimationSample, Channel, Curve, Material, Model, Time, TimeSource, Track};
+    use wc3::model::{
+        AnimationSample, Curve, DynamicTrack, Material, Model, Time, TimeSource, Track,
+    };
     for selector in [1, 99] {
         let mut draft = Model::<Universal>::builder("shader inputs");
         let id = draft.reserve_material();
@@ -570,7 +574,7 @@ fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassificati
             .unwrap();
         for target in [opacity, gain, fresnel] {
             draft
-                .add_global_channel(Channel::Scalar(Track {
+                .add_global_track(DynamicTrack::Scalar(Track {
                     target,
                     clock: TimeSource::Animation,
                     curve: Curve::linear(

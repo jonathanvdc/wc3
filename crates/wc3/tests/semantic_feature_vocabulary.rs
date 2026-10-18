@@ -182,7 +182,7 @@ fn custom_vocabulary_uses_profile_independent_slots() {
         .unwrap();
     builder.import_values(&slot_values).unwrap();
     builder
-        .add_global_channel(wc3::model::Channel::Scalar(wc3::model::Track {
+        .add_global_track(wc3::model::DynamicTrack::Scalar(wc3::model::Track {
             target: intensity,
             clock: TimeSource::Animation,
             curve: wc3::model::Curve::step([wc3::model::Time::default()], [2.]).unwrap(),

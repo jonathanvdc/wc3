@@ -1,4 +1,4 @@
-//! Typed curves and property destinations, independent of file clocks and channel numbers.
+//! Typed curves and property destinations, independent of file clocks and track numbers.
 
 /// Resettable values with authored sampling controls.
 pub mod programmed;
@@ -67,11 +67,11 @@ pub enum TimeSource {
 #[derive(Clone, Debug, Default)]
 pub struct Animation<'a> {
     /// Typed curves in evaluation order; later applicable curves win.
-    pub channels: Vec<Channel<'a>>,
+    pub tracks: Vec<DynamicTrack<'a>>,
     /// Identified event occurrences, traversed separately from value sampling.
     pub events: BTreeMap<EventId, Event<'a>>,
 }
-/// Layer identity and ordering for a set of channels.
+/// Layer identity and ordering for a set of tracks.
 #[derive(Clone, Debug)]
 pub struct Controller<'a, P: Profile = Universal> {
     /// Vocabulary-specific controller behavior.
@@ -96,7 +96,7 @@ impl<P: Profile> Default for Controller<'_, P> {
         }
     }
 }
-/// One typed animation channel.
+/// One typed animation track.
 #[derive(Clone, Debug)]
 pub struct Track<'a, T: CurveValue + PropertyValue> {
     /// Typed animated destination.
@@ -106,9 +106,12 @@ pub struct Track<'a, T: CurveValue + PropertyValue> {
     /// Evaluation clock.
     pub clock: TimeSource,
 }
-/// Heterogeneous channels targeting typed value slots.
+/// A track whose value type is selected by its variant.
 ///
-/// A channel cannot write a slot of another value type:
+/// Each variant retains a typed `Track<T>`, allowing heterogeneous tracks to
+/// share one collection while preserving the relationship between curve and target.
+///
+/// A track cannot write a slot of another value type:
 /// ```compile_fail
 /// use wc3::model::{Property, TimeSource, Curve, Track};
 /// fn invalid(target: Property<bool>, curve: Curve<'static, f32>) -> Track<'static, f32> {
@@ -116,7 +119,7 @@ pub struct Track<'a, T: CurveValue + PropertyValue> {
 /// }
 /// ```
 #[derive(Clone, Debug)]
-pub enum Channel<'a> {
+pub enum DynamicTrack<'a> {
     /// Four unsigned integer components.
     Unsigned4(Track<'a, [u32; 4]>),
     /// Four byte components.
@@ -226,8 +229,8 @@ pub struct Event<'a> {
     pub payload: ZeroVec<'a, u8>,
 }
 
-impl Channel<'_> {
-    /// TimeSource on which this channel is evaluated.
+impl DynamicTrack<'_> {
+    /// TimeSource on which this track is evaluated.
     pub fn clock(&self) -> TimeSource {
         match self {
             Self::Unsigned4(track) => track.clock,
@@ -246,7 +249,7 @@ impl Channel<'_> {
             Self::OptionalTexture(track) => track.clock,
         }
     }
-    /// Logical destination of this typed channel.
+    /// Logical destination of this typed track.
     pub fn target(&self) -> ValueSlot {
         match self {
             Self::Unsigned4(track) => track.target.slot(),

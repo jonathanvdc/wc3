@@ -2,7 +2,7 @@ use wc3::model::conversion::ExportOptions;
 use wc3::model::formats::mdlx::V800;
 use wc3::model::io::mdlx;
 use wc3::model::profiles::{mdlx as profile, Mdlx, Universal};
-use wc3::model::{Channel, Curve, Model, Time, TimeSource, Track};
+use wc3::model::{Curve, DynamicTrack, Model, Time, TimeSource, Track};
 
 #[test]
 fn profile_mapping_preserves_slot_targets_and_key_buffers() {
@@ -18,7 +18,7 @@ fn profile_mapping_preserves_slot_targets_and_key_buffers() {
     let times = [Time::default(), Time::seconds(1.).unwrap()];
     let keys = [1f32, 2.];
     draft
-        .add_global_channel(Channel::Scalar(Track {
+        .add_global_track(DynamicTrack::Scalar(Track {
             target: slot,
             curve: Curve::linear(times, keys).unwrap(),
             clock: TimeSource::Animation,
@@ -30,8 +30,8 @@ fn profile_mapping_preserves_slot_targets_and_key_buffers() {
         .widen::<Universal>()
         .try_narrow::<Mdlx>()
         .unwrap();
-    let Channel::Scalar(track) = &model
-        .global_channels()
+    let DynamicTrack::Scalar(track) = &model
+        .global_tracks()
         .find(|v| v.clock() == TimeSource::Animation)
         .unwrap()
     else {
@@ -55,7 +55,7 @@ fn native_export_duplicates_curves_for_fields_sharing_a_slot() {
             .unwrap();
     }
     draft
-        .add_global_channel(Channel::Scalar(Track {
+        .add_global_track(DynamicTrack::Scalar(Track {
             target: slot,
             curve: Curve::step([Time::default()], [2.]).unwrap(),
             clock: TimeSource::Animation,
@@ -79,7 +79,7 @@ fn native_profiles_reject_animation_without_a_consuming_field() {
     let mut draft = Model::<Mdlx>::builder("unused output");
     let slot = draft.add_value(1f32);
     draft
-        .add_global_channel(Channel::Scalar(Track {
+        .add_global_track(DynamicTrack::Scalar(Track {
             target: slot,
             curve: Curve::step([Time::default()], [2.]).unwrap(),
             clock: TimeSource::Animation,

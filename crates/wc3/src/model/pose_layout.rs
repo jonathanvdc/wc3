@@ -192,7 +192,7 @@ impl PoseLayout {
 impl Model<'_> {
     /// Prepares hierarchy relationships and channel-presence masks once for repeated evaluation.
     pub fn prepare_pose(&self) -> Result<PoseLayout, Error> {
-        let targets: HashSet<_> = self.channels().map(|channel| channel.target()).collect();
+        let targets: HashSet<_> = self.tracks().map(|channel| channel.target()).collect();
         let indices: HashMap<_, _> = self
             .nodes()
             .iter()

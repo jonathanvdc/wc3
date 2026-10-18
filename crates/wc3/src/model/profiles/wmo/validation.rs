@@ -114,11 +114,11 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
         || !value.controllers().is_empty()
         || !value.skins().is_empty()
         || value
-            .global_channels()
+            .global_tracks()
             .find(|v| v.clock() == TimeSource::Animation)
             .is_some()
         || value
-            .global_channels()
+            .global_tracks()
             .find(|v| matches!(v.clock(), TimeSource::Shared(_)))
             .is_some()
         || value

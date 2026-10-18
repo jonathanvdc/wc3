@@ -254,7 +254,7 @@ fn gravity_fixture(
 
 #[test]
 fn native_packed_gravity_preserves_sign_and_compiles_emitters() {
-    use wc3::model::Channel;
+    use wc3::model::DynamicTrack;
 
     for (x, magnitude, expected_x, expected_z) in [
         (64, 100i16, 1., 1.),
@@ -267,10 +267,10 @@ fn native_packed_gravity_preserves_sign_and_compiles_emitters() {
             .unwrap()
             .value;
         let gravity = imported
-            .global_channels()
+            .global_tracks()
             .filter(|v| matches!(v.clock(), TimeSource::Shared(_)))
             .find_map(|channel| {
-                let Channel::Vector3(track) = channel else {
+                let DynamicTrack::Vector3(track) = channel else {
                     return None;
                 };
                 Some(track.curve.values().get(0).unwrap())

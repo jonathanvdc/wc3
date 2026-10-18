@@ -195,7 +195,7 @@ impl<T: 'static, P: Profile> ValidateLinks for PropertyBinding<T, P> {
         }
     }
 }
-use crate::model::{Channel, TimeSource, Track};
+use crate::model::{DynamicTrack, TimeSource, Track};
 impl<T: CurveValue + PropertyValue + 'static> ValidateLinks for Track<'_, T> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         for value in self.curve.values().iter() {
@@ -208,7 +208,7 @@ impl<T: CurveValue + PropertyValue + 'static> ValidateLinks for Track<'_, T> {
         }
     }
 }
-impl ValidateLinks for Channel<'_> {
+impl ValidateLinks for DynamicTrack<'_> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         match self {
             Self::Unsigned4(t) => t.visit_links(v),

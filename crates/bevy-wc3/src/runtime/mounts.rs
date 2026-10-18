@@ -415,7 +415,7 @@ mod activation_tests {
 
     use wc3::model::PropertyValues as SlotValues;
     use wc3::model::{
-        Attachment, Channel, Clip, Curve, Model, NodeFeature, Socket as SemanticSocket,
+        Attachment, Clip, Curve, DynamicTrack, Model, NodeFeature, Socket as SemanticSocket,
         SocketIdentity, Time, TimeSource, Track,
     };
     use wc3::model::{ModelMount, MountTarget};
@@ -439,9 +439,9 @@ mod activation_tests {
         let clip = host
             .add_clip(Clip::named("hide equipment").with_duration(Time::seconds(1.).unwrap()))
             .unwrap();
-        host.add_channel(
+        host.add_track(
             clip,
-            Channel::Scalar(Track {
+            DynamicTrack::Scalar(Track {
                 target: visibility,
                 curve: Curve::step(
                     vec![Time::seconds(0.).unwrap(), Time::seconds(0.5).unwrap()],

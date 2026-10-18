@@ -4,7 +4,7 @@ use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::materialize;
 use crate::model::{
-    profiles::m3 as surface, Channel, ControllerId, Curve, FeatureId, Interpolation, Time,
+    profiles::m3 as surface, ControllerId, Curve, DynamicTrack, FeatureId, Interpolation, Time,
     TimeSource, Track,
 };
 use native::Envelope;
@@ -95,9 +95,9 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
         let min_rows = extents.clone();
         let max_rows = extents.clone();
         let radius_rows = extents.clone();
-        builder.add_controller_channel(
+        builder.add_controller_track(
             layer,
-            Channel::Vector3(Track {
+            DynamicTrack::Vector3(Track {
                 target: minimum,
                 curve: Curve::from_samples(
                     time_values.clone(),
@@ -109,9 +109,9 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                 clock: TimeSource::Animation,
             }),
         )?;
-        builder.add_controller_channel(
+        builder.add_controller_track(
             layer,
-            Channel::Vector3(Track {
+            DynamicTrack::Vector3(Track {
                 target: maximum,
                 curve: Curve::from_samples(
                     time_values.clone(),
@@ -123,9 +123,9 @@ pub(super) fn read<'a, E: Envelope + Send + Sync>(
                 clock: TimeSource::Animation,
             }),
         )?;
-        builder.add_controller_channel(
+        builder.add_controller_track(
             layer,
-            Channel::Scalar(Track {
+            DynamicTrack::Scalar(Track {
                 target: radius,
                 curve: Curve::from_samples(
                     time_values.clone(),

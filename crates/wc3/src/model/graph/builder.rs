@@ -2,10 +2,11 @@
 use crate::model::ids::Scope;
 use crate::model::profiles::{Profile, Universal};
 use crate::model::{
-    Animation, AnimationId, AttachedFeature, Basis, Bounds, Channel, Clip, ClipId, ClockId,
-    Controller, ControllerId, DrawAppearanceSchema, DrawSubsetId, Error, Event, EventId, FeatureId,
-    InstanceId, LengthUnit, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshId,
-    MeshInstance, Model, ModelId, Node, NodeId, SharedClock, Skin, SkinId, SystemId, Texture,
+    Animation, AnimationId, AttachedFeature, Basis, Bounds, Clip, ClipId, ClockId, Controller,
+    ControllerId, DrawAppearanceSchema, DrawSubsetId, DynamicTrack, Error, Event, EventId,
+    FeatureId, InstanceId, LengthUnit, Look, LookBinding, LookId, Material, MaterialId, Mesh,
+    MeshId, MeshInstance, Model, ModelId, Node, NodeId, SharedClock, Skin, SkinId, SystemId,
+    Texture,
 };
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
@@ -307,17 +308,17 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         self.model.global_animations = ids;
     }
     /// Appends a curve to its reusable owner.
-    pub fn add_animation_channel(
+    pub fn add_animation_track(
         &mut self,
         id: AnimationId,
-        channel: Channel<'a>,
+        track: DynamicTrack<'a>,
     ) -> Result<(), Error> {
         self.model
             .animations
             .get_mut(&id)
             .ok_or_else(|| Error::new("animation", "unknown identity"))?
-            .channels
-            .push(channel);
+            .tracks
+            .push(track);
         Ok(())
     }
     /// Adds an identified event occurrence to its reusable owner.
@@ -354,13 +355,13 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         Ok(animation)
     }
     /// Appends a curve to the controller's first animation, creating one if empty.
-    pub fn add_controller_channel(
+    pub fn add_controller_track(
         &mut self,
         id: ControllerId,
-        channel: Channel<'a>,
+        track: DynamicTrack<'a>,
     ) -> Result<(), Error> {
         let animation = self.controller_animation(id)?;
-        self.add_animation_channel(animation, channel)
+        self.add_animation_track(animation, track)
     }
     /// Appends an occurrence to the controller's first animation, creating one if empty.
     pub fn add_controller_event(
@@ -460,9 +461,9 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         id
     }
     /// Appends a model-level curve; its time source is authoritative.
-    pub fn add_global_channel(&mut self, channel: Channel<'a>) -> Result<(), Error> {
+    pub fn add_global_track(&mut self, track: DynamicTrack<'a>) -> Result<(), Error> {
         let id = self.global_animation();
-        self.add_animation_channel(id, channel)
+        self.add_animation_track(id, track)
     }
     /// Appends a model-level event; its time source is authoritative.
     pub fn add_global_event(&mut self, event: Event<'a>) -> Result<EventId, Error> {
@@ -710,9 +711,9 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         Ok(animation)
     }
     /// Appends a curve to the clip's first animation, creating one if empty.
-    pub fn add_channel(&mut self, id: ClipId, channel: Channel<'a>) -> Result<(), Error> {
+    pub fn add_track(&mut self, id: ClipId, track: DynamicTrack<'a>) -> Result<(), Error> {
         let animation = self.clip_animation(id)?;
-        self.add_animation_channel(animation, channel)
+        self.add_animation_track(animation, track)
     }
     /// Appends an occurrence to the clip's first animation, creating one if empty.
     pub fn add_event(&mut self, id: ClipId, event: Event<'a>) -> Result<(), Error> {

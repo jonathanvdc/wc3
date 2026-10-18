@@ -8,8 +8,8 @@ use wc3::model::materials::m3::MaterialStep;
 use wc3::model::profiles::m3::BoneControls;
 use wc3::model::profiles::{Universal, M3};
 use wc3::model::Quaternion;
-use wc3::model::{Channel, Curve, M3Geometry, Time as ModelTime, TimeSource, Track};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
+use wc3::model::{Curve, DynamicTrack, M3Geometry, Time as ModelTime, TimeSource, Track};
 
 #[test]
 fn native_zero_flag_hierarchy_preserves_skinned_rest_and_animated_parent_placement() {
@@ -140,7 +140,7 @@ fn native_zero_flag_hierarchy_preserves_skinned_rest_and_animated_parent_placeme
         .0;
     source
         .edit(|builder| {
-            builder.add_global_channel(Channel::Vector3(Track {
+            builder.add_global_track(DynamicTrack::Vector3(Track {
                 target: builder.model().node(parent).unwrap().transform.translation,
                 clock: TimeSource::Animation,
                 curve: Curve::linear(

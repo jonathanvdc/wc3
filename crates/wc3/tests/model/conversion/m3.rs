@@ -92,9 +92,9 @@ pub(super) fn asset() -> Model<'static, M3> {
         })
         .unwrap();
     builder
-        .add_controller_channel(
+        .add_controller_track(
             controller,
-            sem::Channel::Vector3(sem::Track {
+            sem::DynamicTrack::Vector3(sem::Track {
                 target: builder.model().node(node).unwrap().transform.translation,
                 clock: sem::TimeSource::Animation,
                 curve: sem::Curve::linear(
@@ -157,8 +157,8 @@ fn geometry_skin_and_animation_survive_native_round_trip() {
         "Root"
     );
     let (_, controller) = model.controllers().iter().next().unwrap();
-    let sem::Channel::Vector3(track) = model
-        .animation_channels(&controller.animations)
+    let sem::DynamicTrack::Vector3(track) = model
+        .animation_tracks(&controller.animations)
         .next()
         .unwrap()
     else {

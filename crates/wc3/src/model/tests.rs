@@ -336,7 +336,7 @@ fn absolute_timeline_does_not_require_a_playback_clip() {
     let mut builder = ModelBuilder::new("timeline");
     let node = builder.add_named_node("animated").unwrap();
     builder
-        .add_global_channel(Channel::Vector3(Track {
+        .add_global_track(DynamicTrack::Vector3(Track {
             target: builder.model().node(node).unwrap().transform.translation,
             curve: Curve::from_samples([Time::default()], [[1., 2., 3.]], Interpolation::Step)
                 .unwrap(),
@@ -351,7 +351,7 @@ fn absolute_timeline_does_not_require_a_playback_clip() {
     assert_eq!(model.clips().len(), 0);
     assert_eq!(
         model
-            .global_channels()
+            .global_tracks()
             .filter(|v| v.clock() == TimeSource::Animation)
             .count(),
         1

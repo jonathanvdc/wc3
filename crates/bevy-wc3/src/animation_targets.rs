@@ -1,7 +1,7 @@
 //! Shared node-channel presence and conservative material constant analysis.
 use std::collections::{HashMap, HashSet};
 use wc3::model::{
-    Channel, Interpolation, Model, Property, PropertyValue, PropertyValues, ValueSlot,
+    DynamicTrack, Interpolation, Model, Property, PropertyValue, PropertyValues, ValueSlot,
 };
 
 pub(crate) struct AnimationTargets<'a> {
@@ -13,9 +13,9 @@ impl<'a> AnimationTargets<'a> {
     pub(crate) fn new(model: &'a Model<'_>) -> Self {
         let mut targets = HashSet::new();
         let mut scalar_constants = HashMap::<ValueSlot, Option<f32>>::new();
-        for channel in model.channels() {
+        for channel in model.tracks() {
             targets.insert(channel.target());
-            if let Channel::Scalar(track) = channel {
+            if let DynamicTrack::Scalar(track) = channel {
                 let values = track.curve.values();
                 let constant = values.get(0).filter(|first| {
                     first.is_finite()

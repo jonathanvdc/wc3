@@ -7,16 +7,16 @@ use crate::model::formats::mdlx::{
 };
 use crate::model::profiles::Mdlx;
 use crate::model::{
-    Channel, ClockId, CurveValue, ModelBuilder, Property, PropertyDescriptor, PropertyValue,
+    ClockId, CurveValue, DynamicTrack, ModelBuilder, Property, PropertyDescriptor, PropertyValue,
     Quaternion, Texture, TimeSource, Track,
 };
 
 pub(super) trait Value: CurveValue + PropertyValue {
     fn kind() -> &'static str;
-    fn channel<'a>(track: Track<'a, Self>) -> Channel<'a>
+    fn channel<'a>(track: Track<'a, Self>) -> DynamicTrack<'a>
     where
         Self: Sized;
-    fn track<'a, 'b>(channel: &'b Channel<'a>) -> Option<&'b Track<'a, Self>>
+    fn track<'a, 'b>(channel: &'b DynamicTrack<'a>) -> Option<&'b Track<'a, Self>>
     where
         Self: Sized;
 }
@@ -24,8 +24,8 @@ macro_rules! value {
     ($($ty:ty => $variant:ident),* $(,)?) => {$ (
         impl Value for $ty {
             fn kind() -> &'static str { stringify!($variant) }
-            fn channel<'a>(track: Track<'a, Self>) -> Channel<'a> { Channel::$variant(track) }
-            fn track<'a, 'b>(channel: &'b Channel<'a>) -> Option<&'b Track<'a, Self>> { if let Channel::$variant(track) = channel { Some(track) } else { None } }
+            fn channel<'a>(track: Track<'a, Self>) -> DynamicTrack<'a> { DynamicTrack::$variant(track) }
+            fn track<'a, 'b>(channel: &'b DynamicTrack<'a>) -> Option<&'b Track<'a, Self>> { if let DynamicTrack::$variant(track) = channel { Some(track) } else { None } }
         }
     )*};
 }
@@ -98,7 +98,7 @@ impl<'a> Decoder<'a, '_> {
             .transpose()?
             .map_or(TimeSource::Animation, TimeSource::Shared);
         let curve = curves::read_maps(source, 0., map, tangents)?;
-        self.builder.add_global_channel(U::channel(Track {
+        self.builder.add_global_track(U::channel(Track {
             target: slot,
             curve,
             clock,

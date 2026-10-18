@@ -53,7 +53,7 @@ where
                     animation::insert(
                         builder,
                         clip,
-                        Channel::$variant(bind(c, g, property.clone(), clocks)?),
+                        DynamicTrack::$variant(bind(c, g, property.clone(), clocks)?),
                     )?
                 }
             }
@@ -97,7 +97,7 @@ where
                 animation::insert(
                     builder,
                     clip,
-                    Channel::Boolean(bind(curve, global, property, clocks)?),
+                    DynamicTrack::Boolean(bind(curve, global, property, clocks)?),
                 )?;
             }
         }
@@ -482,12 +482,16 @@ where
                     animation::insert(
                         builder,
                         clip,
-                        Channel::Vector3(bind(c, g, property, clocks)?),
+                        DynamicTrack::Vector3(bind(c, g, property, clocks)?),
                     )?;
                 }
             }
             if let Some((c, g)) = animation::spline_curve(source, &value.roll, seq, start)? {
-                animation::insert(builder, clip, Channel::Scalar(bind(c, g, roll, clocks)?))?;
+                animation::insert(
+                    builder,
+                    clip,
+                    DynamicTrack::Scalar(bind(c, g, roll, clocks)?),
+                )?;
             }
         }
         builder.set_feature(feature, profile::ActorKind::Camera(camera))?;

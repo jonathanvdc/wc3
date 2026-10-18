@@ -1,6 +1,6 @@
 //! Authoring limits inherent to Warcraft III rather than a particular native dialect.
 use super::Mdlx;
-use crate::model::{Billboard, Channel, Error, Interpolation, Model, TimeSource, Transform};
+use crate::model::{Billboard, DynamicTrack, Error, Interpolation, Model, TimeSource, Transform};
 pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
     value.validate_animation_consumers()?;
     if value.bounds().is_none()
@@ -33,7 +33,7 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
         if clip.animations.iter().any(|id| {
             let animation = value.animation(*id).expect("validated selection");
             animation
-                .channels
+                .tracks
                 .iter()
                 .any(|channel| matches!(channel.clock(), TimeSource::Shared(_)))
                 || animation
@@ -54,7 +54,7 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
             .filter(|id| {
                 let animation = value.animation(*id).expect("validated selection");
                 animation
-                    .channels
+                    .tracks
                     .iter()
                     .any(|channel| channel.clock() == TimeSource::Animation)
                     || animation
@@ -71,7 +71,7 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
         }
         ordinary_selection = Some(selection);
     }
-    for channel in value.channels() {
+    for channel in value.tracks() {
         validate_channel(channel)?;
     }
     for (_, instance) in value.instances() {
@@ -104,18 +104,18 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
     }
     Ok(())
 }
-fn validate_channel(channel: &Channel<'_>) -> Result<(), Error> {
+fn validate_channel(channel: &DynamicTrack<'_>) -> Result<(), Error> {
     let mode = match channel {
-        Channel::Scalar(track) => track.curve.interpolation(),
-        Channel::Vector3(track) => track.curve.interpolation(),
-        Channel::Rotation(track) => track.curve.interpolation(),
-        Channel::Unsigned(track) => track.curve.interpolation(),
-        Channel::Texture(track) => track.curve.interpolation(),
-        Channel::OptionalTexture(track) => track.curve.interpolation(),
+        DynamicTrack::Scalar(track) => track.curve.interpolation(),
+        DynamicTrack::Vector3(track) => track.curve.interpolation(),
+        DynamicTrack::Rotation(track) => track.curve.interpolation(),
+        DynamicTrack::Unsigned(track) => track.curve.interpolation(),
+        DynamicTrack::Texture(track) => track.curve.interpolation(),
+        DynamicTrack::OptionalTexture(track) => track.curve.interpolation(),
         _ => {
             return Err(Error::new(
                 "animation.value",
-                "Warcraft III channels carry scalar floats, three-component vectors, quaternions, integer selectors, or texture selections",
+                "Warcraft III tracks carry scalar floats, three-component vectors, quaternions, integer selectors, or texture selections",
             ));
         }
     };

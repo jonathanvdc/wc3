@@ -7,7 +7,7 @@ use crate::model::profiles::diablo::d3::ClipControls;
 use crate::model::profiles::diablo::d3::{NodeRole, D3};
 use crate::model::Model;
 use crate::model::Quaternion;
-use crate::model::{Channel, Clip, Curve, Interpolation, Time, TimeSource, Track};
+use crate::model::{Clip, Curve, DynamicTrack, Interpolation, Time, TimeSource, Track};
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
 pub(super) fn read<'a>(
@@ -134,7 +134,7 @@ pub(super) fn read<'a>(
                         Time::seconds(f64::from(keys.get(k).unwrap().frame) / fps).unwrap()
                     });
                     let values = materialize(keys.len(), move |k| keys.get(k).unwrap().position);
-                    channels.push(Channel::Vector3(Track {
+                    channels.push(DynamicTrack::Vector3(Track {
                         target: model.node(node).unwrap().transform.translation,
                         curve: Curve::linear(times, values)?,
                         clock: TimeSource::Animation,
@@ -148,7 +148,7 @@ pub(super) fn read<'a>(
                     let values = materialize(keys.len(), move |k| {
                         Quaternion(keys.get(k).unwrap().rotation.components())
                     });
-                    channels.push(Channel::Rotation(Track {
+                    channels.push(DynamicTrack::Rotation(Track {
                         target: model.node(node).unwrap().transform.rotation,
                         curve: Curve::nlerp(times, values)?,
                         clock: TimeSource::Animation,
@@ -160,7 +160,7 @@ pub(super) fn read<'a>(
                         Time::seconds(f64::from(keys.get(k).unwrap().frame) / fps).unwrap()
                     });
                     let values = materialize(keys.len(), move |k| [keys.get(k).unwrap().scale; 3]);
-                    channels.push(Channel::Vector3(Track {
+                    channels.push(DynamicTrack::Vector3(Track {
                         target: model.node(node).unwrap().transform.scale,
                         curve: Curve::linear(times, values)?,
                         clock: TimeSource::Animation,
@@ -174,7 +174,7 @@ pub(super) fn read<'a>(
         for (clip, channels) in programs {
             let id = builder.add_clip(clip)?;
             for channel in channels {
-                builder.add_channel(id, channel)?;
+                builder.add_track(id, channel)?;
             }
         }
         Ok(())
@@ -321,7 +321,7 @@ pub(super) fn write(
             ..Default::default()
         };
         let mut seen = Vec::new();
-        for channel in model.clip_channels(id) {
+        for channel in model.clip_tracks(id) {
             if channel.clock() != TimeSource::Animation {
                 return Err(Error::new(
                     "d3.animation.clock",
@@ -369,7 +369,7 @@ pub(super) fn write(
                 }
                 seen.push((index, kind));
                 match (kind, channel) {
-                    (0, Channel::Vector3(track)) => {
+                    (0, DynamicTrack::Vector3(track)) => {
                         if track.curve.interpolation() != Interpolation::Linear {
                             return Err(Error::new(
                                 "d3.animation.interpolation",
@@ -400,7 +400,7 @@ pub(super) fn write(
                             ..Default::default()
                         };
                     }
-                    (1, Channel::Rotation(track)) => {
+                    (1, DynamicTrack::Rotation(track)) => {
                         if track.curve.interpolation() != Interpolation::Nlerp {
                             return Err(Error::new(
                                 "d3.animation.interpolation",
@@ -437,7 +437,7 @@ pub(super) fn write(
                             ..Default::default()
                         };
                     }
-                    (2, Channel::Vector3(track)) => {
+                    (2, DynamicTrack::Vector3(track)) => {
                         if track.curve.interpolation() != Interpolation::Linear {
                             return Err(Error::new(
                                 "d3.animation.interpolation",

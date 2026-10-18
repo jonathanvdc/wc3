@@ -6,8 +6,8 @@ use wc3::model::io::mdlx;
 use wc3::model::materials::mdlx::LayeredSurface;
 use wc3::model::profiles::Universal;
 use wc3::model::{
-    AnimationSample, Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Basis,
-    Channel, Curve, DeformableGeometry, GeometryData, LengthUnit, Mesh, MeshAppearance, Model,
+    AnimationSample, Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Basis, Curve,
+    DeformableGeometry, DynamicTrack, GeometryData, LengthUnit, Mesh, MeshAppearance, Model,
     ModelPose, PoseInputs, PoseLayout, PrimitiveKind, Time, TimeSource, Track, Transform,
 };
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
@@ -32,7 +32,7 @@ fn standing_snapshot_retains_bindings_and_supports_editable_geometry_without_ima
     let root = model.nodes().iter().next().unwrap().0;
     model
         .edit(|draft| {
-            draft.add_global_channel(Channel::Vector3(Track {
+            draft.add_global_track(DynamicTrack::Vector3(Track {
                 target: draft.model().node(root).unwrap().transform.translation,
                 clock: TimeSource::Animation,
                 curve: Curve::linear([time(0.), time(1.)], [[0.; 3], [0., 0., 4.]])?,
@@ -150,7 +150,7 @@ fn repeated_pose_sampling_reuses_buffers_and_retimed_sampling_preserves_override
     let definition = builder.new_node("child").with_parent(root);
     let child = builder.add_node(definition).unwrap();
     builder
-        .add_global_channel(Channel::Vector3(Track {
+        .add_global_track(DynamicTrack::Vector3(Track {
             target: builder.model().node(root).unwrap().transform.translation,
             clock: TimeSource::Animation,
             curve: Curve::linear([time(0.), time(1.)], [[0.; 3], [4., 0., 0.]]).unwrap(),
@@ -301,12 +301,12 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
     model
         .edit(|draft| {
             draft.set_material(material_id, material)?;
-            draft.add_global_channel(Channel::Scalar(Track {
+            draft.add_global_track(DynamicTrack::Scalar(Track {
                 target: opacity,
                 clock: TimeSource::Animation,
                 curve: Curve::linear([time(0.), time(1.)], [0.2, 0.8])?,
             }))?;
-            draft.add_global_channel(Channel::OptionalTexture(Track {
+            draft.add_global_track(DynamicTrack::OptionalTexture(Track {
                 target: selection,
                 clock: TimeSource::Animation,
                 curve: Curve::step([time(0.), time(1.)], [None, Some(texture)])?,

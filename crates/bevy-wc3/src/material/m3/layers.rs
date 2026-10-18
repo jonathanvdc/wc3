@@ -3,7 +3,7 @@ use crate::animation_targets::AnimationTargets;
 use bevy::math::{Affine2, Mat2, Mat3, UVec4, Vec2, Vec4};
 use bevy::render::render_resource::ShaderType;
 use wc3::model::materials::m3::{PropertyBinding, TextureLayer};
-use wc3::model::{ChannelValue, SampledAnimation, ValueSample};
+use wc3::model::{SampledAnimation, TrackValue, ValueSample};
 
 pub(super) const ROLE_COUNT: usize = 15;
 #[derive(Clone, Copy, Debug, PartialEq, ShaderType)]
@@ -57,7 +57,7 @@ pub(crate) struct M3Animation {
     pub layers: [Option<TextureLayer>; ROLE_COUNT],
     pub weights: Vec<PropertyBinding<f32>>,
 }
-fn value<T: ChannelValue>(property: &PropertyBinding<T>, sample: &impl ValueSample) -> T {
+fn value<T: TrackValue>(property: &PropertyBinding<T>, sample: &impl ValueSample) -> T {
     sample.animated(&property.value)
 }
 pub(super) fn layer_uniform(

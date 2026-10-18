@@ -1,7 +1,7 @@
 use wc3::model::profiles::{m2, Universal, M2};
 use wc3::model::{
-    AnimationProgram, AnimationSample, Attachment, Channel, Clip, Curve, Light, LightActivation,
-    Model, NodeFeature, Time, TimeSource, Track,
+    AnimationProgram, AnimationSample, Attachment, Clip, Curve, DynamicTrack, Light,
+    LightActivation, Model, NodeFeature, Time, TimeSource, Track,
 };
 
 fn time(value: f64) -> Time {
@@ -37,9 +37,9 @@ fn boolean_sources_remain_shared_across_socket_and_light_slots() {
         (light_source, [true, false]),
     ] {
         draft
-            .add_channel(
+            .add_track(
                 clip,
-                Channel::Boolean(Track {
+                DynamicTrack::Boolean(Track {
                     target,
                     curve: Curve::step([time(0.), time(0.5)], keys).unwrap(),
                     clock: TimeSource::Animation,
@@ -90,7 +90,7 @@ fn explicit_boolean_conversion_samples_at_retimed_clocks() {
     let source = draft.add_value(true);
     let visibility = draft.values_mut().scalar_from_boolean(source).unwrap();
     draft
-        .add_global_channel(Channel::Boolean(Track {
+        .add_global_track(DynamicTrack::Boolean(Track {
             target: source,
             curve: Curve::step([time(0.), time(1.)], [true, false]).unwrap(),
             clock: TimeSource::Animation,

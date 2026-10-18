@@ -186,7 +186,7 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
     use bevy::image::{ImageAddressMode, ImageSampler};
     use wc3::model::materials::mdlx::Layer;
 
-    use wc3::model::{AddressMode, AnimationSample, Channel, Curve, Time, TimeSource, Track};
+    use wc3::model::{AddressMode, AnimationSample, Curve, DynamicTrack, Time, TimeSource, Track};
     let (mut model, _) = model();
     let material = model.materials().iter().next().unwrap().0;
     let time = |value| Time::seconds(value).unwrap();
@@ -214,7 +214,7 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
                     })?,
                 )?;
                 for target in targets {
-                    draft.add_global_channel(Channel::OptionalTexture(Track {
+                    draft.add_global_track(DynamicTrack::OptionalTexture(Track {
                         target,
                         clock: TimeSource::Animation,
                         curve: Curve::step([time(0.), time(1.)], [Some(first), Some(second)])?,

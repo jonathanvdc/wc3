@@ -2,7 +2,7 @@ use super::*;
 use crate::{compile_model, spawn_model};
 use bevy::ecs::world::CommandQueue;
 use wc3::model::{
-    AimedCamera, Camera as ModelCamera, CameraConvention, Channel, Curve, Model, NodeFeature,
+    AimedCamera, Camera as ModelCamera, CameraConvention, Curve, DynamicTrack, Model, NodeFeature,
     Time as ModelTime, TimeSource, Track,
 };
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
@@ -13,7 +13,7 @@ fn binding_samples_current_animation_and_root_without_pose_or_global_update_lag(
     let mut builder = Model::builder("bound camera");
     let node = builder.add_named_node("camera").unwrap();
     builder
-        .add_global_channel(Channel::Vector3(Track {
+        .add_global_track(DynamicTrack::Vector3(Track {
             target: builder.model().node(node).unwrap().transform.translation,
             clock: TimeSource::Animation,
             curve: Curve::linear(

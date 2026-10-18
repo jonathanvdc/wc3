@@ -9,7 +9,7 @@ use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::profiles::M3;
 use crate::model::ValueSlot;
-use crate::model::{profiles::m3 as surface, Channel, Controller, NodeId, Time};
+use crate::model::{profiles::m3 as surface, Controller, DynamicTrack, NodeId, Time};
 use native::Envelope;
 use std::collections::BTreeMap;
 
@@ -224,13 +224,13 @@ pub(super) fn add<E: Envelope>(
                 };
                 let matching = |target: ValueSlot| {
                     model
-                        .animation_channels(&clip.animations)
+                        .animation_tracks(&clip.animations)
                         .find(|c| c.target() == target)
                 };
                 let (
-                    Some(Channel::Vector3(minimum)),
-                    Some(Channel::Vector3(maximum)),
-                    Some(Channel::Scalar(radius)),
+                    Some(DynamicTrack::Vector3(minimum)),
+                    Some(DynamicTrack::Vector3(maximum)),
+                    Some(DynamicTrack::Scalar(radius)),
                 ) = (
                     matching(binding.minimum.slot()),
                     matching(binding.maximum.slot()),

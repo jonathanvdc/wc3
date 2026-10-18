@@ -245,7 +245,7 @@ where
                                     animation::insert(
                                         builder,
                                         clip,
-                                        Channel::Vector3(bind(c, g, rgb, clocks)?),
+                                        DynamicTrack::Vector3(bind(c, g, rgb, clocks)?),
                                     )?
                                 }
                                 if let Some((c, g)) =
@@ -256,7 +256,7 @@ where
                                     animation::insert(
                                         builder,
                                         clip,
-                                        Channel::Scalar(bind(c, g, alpha, clocks)?),
+                                        DynamicTrack::Scalar(bind(c, g, alpha, clocks)?),
                                     )?
                                 }
                             }
@@ -282,7 +282,7 @@ where
                                     animation::insert(
                                         builder,
                                         clip,
-                                        Channel::Scalar(bind(c, g, prop, clocks)?),
+                                        DynamicTrack::Scalar(bind(c, g, prop, clocks)?),
                                     )?
                                 }
                             }
@@ -322,7 +322,7 @@ where
                                         animation::insert(
                                             builder,
                                             clip,
-                                            Channel::Vector3(bind(c, g, prop, clocks)?),
+                                            DynamicTrack::Vector3(bind(c, g, prop, clocks)?),
                                         )?
                                     }
                                 }
@@ -337,7 +337,7 @@ where
                                     animation::insert(
                                         builder,
                                         clip,
-                                        Channel::Rotation(bind(c, g, ro, clocks)?),
+                                        DynamicTrack::Rotation(bind(c, g, ro, clocks)?),
                                     )?
                                 }
                             }

@@ -1,6 +1,6 @@
 use wc3::model::profiles::{Mdlx, Universal};
 use wc3::model::{
-    AnimationProgram, AnimationSample, Channel, Clip, Curve, Model, PoseInputs, PropertyValue,
+    AnimationProgram, AnimationSample, Clip, Curve, DynamicTrack, Model, PoseInputs, PropertyValue,
     PropertyValues, Quaternion, Time, TimeSource, Track,
 };
 
@@ -34,7 +34,7 @@ fn two_nodes_can_consume_the_same_animated_translation() {
     node.transform.translation = translation;
     draft.set_node(second, node).unwrap();
     draft
-        .add_global_channel(Channel::Vector3(Track {
+        .add_global_track(DynamicTrack::Vector3(Track {
             target: translation,
             curve: Curve::linear([time(0.), time(1.)], [[0.; 3], [4.; 3]]).unwrap(),
             clock: TimeSource::Animation,
@@ -64,9 +64,9 @@ fn instance_tables_are_independent_and_each_evaluation_resets_constants() {
         .add_clip(Clip::named("animated").with_duration(time(2.)))
         .unwrap();
     draft
-        .add_channel(
+        .add_track(
             clip,
-            Channel::Scalar(Track {
+            DynamicTrack::Scalar(Track {
                 target: value,
                 curve: Curve::linear([time(0.), time(2.)], [3., 7.]).unwrap(),
                 clock: TimeSource::Animation,
@@ -123,7 +123,7 @@ fn explicit_boolean_reads_evaluate_the_source_slot() {
     let boolean = draft.add_value(false);
     let scalar = draft.values_mut().scalar_from_boolean(boolean).unwrap();
     draft
-        .add_global_channel(Channel::Boolean(Track {
+        .add_global_track(DynamicTrack::Boolean(Track {
             target: boolean,
             curve: Curve::step([time(0.), time(1.)], [false, true]).unwrap(),
             clock: TimeSource::Animation,
@@ -181,7 +181,7 @@ fn boolean_defaults_and_direct_scalar_writers_have_explicit_precedence() {
     draft.values_mut().set(source, true).unwrap();
     assert_eq!(draft.model().values()[output], 1.);
     draft
-        .add_global_channel(Channel::Scalar(Track {
+        .add_global_track(DynamicTrack::Scalar(Track {
             target: output,
             clock: TimeSource::Animation,
             curve: Curve::step([time(0.)], [0.25]).unwrap(),
@@ -239,7 +239,7 @@ fn reusable_programs_keep_clip_mapping_and_defaults_after_compilation() {
     let property = draft.add_value(7f32);
     let constant = draft.add_value(false);
     let animation = draft.add_animation(Animation {
-        channels: vec![Channel::Scalar(Track {
+        tracks: vec![DynamicTrack::Scalar(Track {
             target: property,
             clock: TimeSource::Animation,
             curve: Curve::linear(
@@ -345,7 +345,7 @@ fn global_precedence_follows_selection_order_across_time_sources() {
         .unwrap();
     let mut animation = |clock, end| {
         draft.add_animation(Animation {
-            channels: vec![Channel::Scalar(Track {
+            tracks: vec![DynamicTrack::Scalar(Track {
                 target: property,
                 clock,
                 curve: Curve::linear([time(0.), time(1.)], [0., end]).unwrap(),
@@ -396,14 +396,14 @@ fn zero_and_offset_source_intervals_use_the_same_sampling_rule() {
         .add_clock(SharedClock::Repeating { period: time(2.) })
         .unwrap();
     draft
-        .add_global_channel(Channel::Scalar(Track {
+        .add_global_track(DynamicTrack::Scalar(Track {
             target: independent,
             clock: TimeSource::Shared(clock),
             curve: Curve::linear([time(0.), time(2.)], [0., 8.]).unwrap(),
         }))
         .unwrap();
     let animation = draft.add_animation(Animation {
-        channels: vec![Channel::Scalar(Track {
+        tracks: vec![DynamicTrack::Scalar(Track {
             target: property,
             clock: TimeSource::Animation,
             curve: Curve::linear(

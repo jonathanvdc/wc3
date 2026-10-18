@@ -277,7 +277,7 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
     let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
     let model = &imported.value;
     let (clip_id, _clip) = model.clips().iter().next().unwrap();
-    let sm::Channel::Vector3(track) = model.clip_channels(clip_id).next().unwrap() else {
+    let sm::DynamicTrack::Vector3(track) = model.clip_tracks(clip_id).next().unwrap() else {
         panic!("translation channel lost")
     };
     assert_eq!(track.curve.interpolation(), sm::Interpolation::Hermite);
@@ -368,9 +368,9 @@ fn quantization_requires_an_explicit_tolerance() {
     )
     .unwrap();
     builder
-        .add_channel(
+        .add_track(
             clip,
-            sm::Channel::Vector3(sm::Track {
+            sm::DynamicTrack::Vector3(sm::Track {
                 target: builder.model().node(node).unwrap().transform.translation,
                 curve,
                 clock: sm::TimeSource::Animation,
@@ -828,8 +828,8 @@ fn packed_particle_gravity_is_a_direction_and_rejects_malformed_words() {
             _ => None,
         })
         .unwrap();
-    let sm::Channel::Vector3(track) = semantic
-        .global_channels()
+    let sm::DynamicTrack::Vector3(track) = semantic
+        .global_tracks()
         .filter(|v| matches!(v.clock(), TimeSource::Shared(_)))
         .find(|channel| channel.target() == gravity_slot.slot())
         .unwrap()
@@ -923,7 +923,7 @@ fn local_effect_transforms_drive_the_effects_emitted_bone() {
                 (vec![sm::Time::default()]).into_zero_vec(),
                 (vec![[5., 0., 0.]]).into_zero_vec(),
             )?;
-            draft.add_global_channel(sm::Channel::Vector3(sm::Track {
+            draft.add_global_track(sm::DynamicTrack::Vector3(sm::Track {
                 target: draft.model().node(node).unwrap().transform.translation,
                 curve,
                 clock: sm::TimeSource::Shared(clock),
@@ -1134,7 +1134,7 @@ fn native_alias_keeps_light_programme_on_its_referenced_clip() {
     assert_eq!(clips.len(), 2);
     assert_eq!(clips[1].1.controls.alias, Some(clips[0].0));
     assert_eq!(clips[1].1.animations, clips[0].1.animations);
-    assert!(model.clip_channels(clips[0].0).next().is_some());
+    assert!(model.clip_tracks(clips[0].0).next().is_some());
     let program = sm::AnimationProgram::compile(model);
     let sample = program
         .sample(sm::AnimationSample {
@@ -1143,7 +1143,7 @@ fn native_alias_keeps_light_programme_on_its_referenced_clip() {
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
-    let sm::Channel::Scalar(track) = model.clip_channels(clips[0].0).next().unwrap() else {
+    let sm::DynamicTrack::Scalar(track) = model.clip_tracks(clips[0].0).next().unwrap() else {
         panic!("light intensity must remain a typed scalar channel")
     };
     assert_eq!(sample.override_value(&track.target), Some(4.));
@@ -1707,9 +1707,9 @@ fn offset_animation_interval_exports_as_native_local_keys() {
         )
         .unwrap();
     builder
-        .add_channel(
+        .add_track(
             clip,
-            sm::Channel::Vector3(sm::Track {
+            sm::DynamicTrack::Vector3(sm::Track {
                 target: property,
                 clock: TimeSource::Animation,
                 curve: sm::Curve::linear(
@@ -1740,8 +1740,8 @@ fn offset_animation_interval_exports_as_native_local_keys() {
         })
         .unwrap();
     assert_eq!(sample.animated(&node.transform.translation), [3.; 3]);
-    let sm::Channel::Vector3(track) = imported
-        .clip_channels(clip)
+    let sm::DynamicTrack::Vector3(track) = imported
+        .clip_tracks(clip)
         .find(|channel| channel.target() == node.transform.translation.slot())
         .unwrap()
     else {

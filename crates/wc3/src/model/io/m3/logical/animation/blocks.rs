@@ -1,7 +1,9 @@
 //! Typed native key block construction from authored logical curves.
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
-use crate::model::{profiles::m3 as surface, Channel, Interpolation, Quaternion, Time, TimeSource};
+use crate::model::{
+    profiles::m3 as surface, DynamicTrack, Interpolation, Quaternion, Time, TimeSource,
+};
 use native::{Envelope, Ref};
 
 fn append<E: Envelope, T: native::Record + native::Write<E> + native::RecordLayout<E>>(
@@ -96,7 +98,7 @@ impl Blocks {
     pub(super) fn add<E: Envelope>(
         &mut self,
         document: &mut native::Container<'_, E>,
-        channel: &Channel<'_>,
+        channel: &DynamicTrack<'_>,
         origin: Time,
         end: Time,
         controls: Option<&surface::BlockControls>,
@@ -167,14 +169,14 @@ impl Blocks {
             }};
         }
         Ok(match channel {
-            Channel::Scalar(t) => block!(t, Real, Ok, floats, AnimationBlockReal, 5),
-            Channel::Vector2(t) => {
+            DynamicTrack::Scalar(t) => block!(t, Real, Ok, floats, AnimationBlockReal, 5),
+            DynamicTrack::Vector2(t) => {
                 block!(t, Vector2, Ok, vectors2, AnimationBlockVector2, 1)
             }
-            Channel::Vector3(t) => {
+            DynamicTrack::Vector3(t) => {
                 block!(t, Vector3, Ok, vectors3, AnimationBlockVector3, 2)
             }
-            Channel::Rotation(t) => block!(
+            DynamicTrack::Rotation(t) => block!(
                 t,
                 Quaternion,
                 |v: Quaternion| Ok(v.components()),
@@ -182,8 +184,8 @@ impl Blocks {
                 AnimationBlockQuaternion,
                 3
             ),
-            Channel::Bytes4(t) => block!(t, Color, Ok, colors, AnimationBlockColor, 4),
-            Channel::Vector4(t) => {
+            DynamicTrack::Bytes4(t) => block!(t, Color, Ok, colors, AnimationBlockColor, 4),
+            DynamicTrack::Vector4(t) => {
                 block!(
                     t,
                     Color,
@@ -193,8 +195,8 @@ impl Blocks {
                     4
                 )
             }
-            Channel::Byte(t) => block!(t, Byte, Ok, bytes, AnimationBlockByte, 6),
-            Channel::Signed(t)
+            DynamicTrack::Byte(t) => block!(t, Byte, Ok, bytes, AnimationBlockByte, 6),
+            DynamicTrack::Signed(t)
                 if controls.is_some_and(|c| c.encoding == surface::KeyEncoding::Signed16) =>
             {
                 block!(
@@ -209,9 +211,9 @@ impl Blocks {
                     7
                 )
             }
-            Channel::Signed(t) => block!(t, I32, Ok, signed32, AnimationBlockI32, 9),
-            Channel::Unsigned16(t) => block!(t, U16, Ok, unsigned16, AnimationBlockU16, 8),
-            Channel::Unsigned(t)
+            DynamicTrack::Signed(t) => block!(t, I32, Ok, signed32, AnimationBlockI32, 9),
+            DynamicTrack::Unsigned16(t) => block!(t, U16, Ok, unsigned16, AnimationBlockU16, 8),
+            DynamicTrack::Unsigned(t)
                 if controls.is_some_and(|c| c.encoding == surface::KeyEncoding::Flags) =>
             {
                 block!(
@@ -223,7 +225,7 @@ impl Blocks {
                     11
                 )
             }
-            Channel::Unsigned(t) => block!(t, U32, Ok, unsigned32, AnimationBlockU32, 10),
+            DynamicTrack::Unsigned(t) => block!(t, U32, Ok, unsigned32, AnimationBlockU32, 10),
             _ => {
                 context.unsupported(
                     "m3.animation.type",

@@ -202,7 +202,7 @@ fn native_profiles_use_the_same_shader_specific_steps_as_universal() {
 fn named_crossfade_inputs_keep_native_animation_ordinals_when_frozen() {
     let mut slot_values = SlotValues::default();
 
-    use wc3::model::{AnimationSample, Channel, Curve, Material, Time, TimeSource, Track};
+    use wc3::model::{AnimationSample, Curve, DynamicTrack, Material, Time, TimeSource, Track};
     let mut draft = Model::<Universal>::builder("named input animation");
     let id = draft.reserve_material();
     let target = slot_values.add(0f32);
@@ -218,7 +218,7 @@ fn named_crossfade_inputs_keep_native_animation_ordinals_when_frozen() {
         )
         .unwrap();
     draft
-        .add_global_channel(Channel::Scalar(Track {
+        .add_global_track(DynamicTrack::Scalar(Track {
             target,
             clock: TimeSource::Animation,
             curve: Curve::linear(

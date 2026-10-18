@@ -9,9 +9,9 @@ use crate::model::profiles::{self, Extends, Profile, SurfacePayload, Universal};
 use crate::model::resources::PathResource;
 use crate::model::PropertyValues;
 use crate::model::{
-    Basis, Billboard, Channel, ClipControls, DrawControls, Error, ExplicitBinding, FeatureKind,
-    GeometrySchema as _, Inheritance, InstanceControls, Interpolation, LengthUnit, Link,
-    M3Geometry, MeshControls, Model, ModelMetadata, NodeControls, SingleLook, SkinId, System,
+    Basis, Billboard, ClipControls, DrawControls, DynamicTrack, Error, ExplicitBinding,
+    FeatureKind, GeometrySchema as _, Inheritance, InstanceControls, Interpolation, LengthUnit,
+    Link, M3Geometry, MeshControls, Model, ModelMetadata, NodeControls, SingleLook, SkinId, System,
     TimeSource, Topology, Transform, UniversalAppearance, UniversalBinding, ValidateLinks,
     VertexInfluences,
 };
@@ -158,25 +158,25 @@ impl Profile for M3 {
                 "M3 sequence selectors use controller-owned programs",
             ));
         }
-        if model.global_channels().next().is_some() || model.global_events().next().is_some() {
+        if model.global_tracks().next().is_some() || model.global_events().next().is_some() {
             return Err(Error::new(
                 "m3.animation",
                 "M3 animation programs require native controller selections",
             ));
         }
         for (_, controller) in model.controllers() {
-            for channel in model.animation_channels(&controller.animations) {
+            for channel in model.animation_tracks(&controller.animations) {
                 let mode = match channel {
-                    Channel::Scalar(t) => t.curve.interpolation(),
-                    Channel::Vector2(t) => t.curve.interpolation(),
-                    Channel::Vector3(t) => t.curve.interpolation(),
-                    Channel::Rotation(t) => t.curve.interpolation(),
-                    Channel::Bytes4(t) => t.curve.interpolation(),
-                    Channel::Byte(t) => t.curve.interpolation(),
-                    Channel::Unsigned16(t) => t.curve.interpolation(),
-                    Channel::Unsigned(t) => t.curve.interpolation(),
-                    Channel::Signed(t) => t.curve.interpolation(),
-                    Channel::Vector4(t) => t.curve.interpolation(),
+                    DynamicTrack::Scalar(t) => t.curve.interpolation(),
+                    DynamicTrack::Vector2(t) => t.curve.interpolation(),
+                    DynamicTrack::Vector3(t) => t.curve.interpolation(),
+                    DynamicTrack::Rotation(t) => t.curve.interpolation(),
+                    DynamicTrack::Bytes4(t) => t.curve.interpolation(),
+                    DynamicTrack::Byte(t) => t.curve.interpolation(),
+                    DynamicTrack::Unsigned16(t) => t.curve.interpolation(),
+                    DynamicTrack::Unsigned(t) => t.curve.interpolation(),
+                    DynamicTrack::Signed(t) => t.curve.interpolation(),
+                    DynamicTrack::Vector4(t) => t.curve.interpolation(),
                     _ => {
                         return Err(Error::new(
                             "m3.controller.value",
@@ -193,7 +193,7 @@ impl Profile for M3 {
             }
 
             if model
-                .animation_channels(&controller.animations)
+                .animation_tracks(&controller.animations)
                 .any(|channel| channel.clock() != TimeSource::Animation)
                 || model
                     .animation_events(&controller.animations)

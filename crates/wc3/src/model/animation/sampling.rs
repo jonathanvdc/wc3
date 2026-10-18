@@ -2,8 +2,8 @@
 use super::curves::{CurveValue, SampleValue};
 use crate::model::profiles::Profile;
 use crate::model::{
-    AnimationId, Channel, ClipId, ClockId, ControllerId, Error, Model, Property, PropertyValue,
-    PropertyValues, Quaternion, Texture, Time, TimeSource, Track, ValueSlot,
+    AnimationId, ClipId, ClockId, ControllerId, DynamicTrack, Error, Model, Property,
+    PropertyValue, PropertyValues, Quaternion, Texture, Time, TimeSource, Track, ValueSlot,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -31,7 +31,7 @@ pub struct AnimationSample<'a> {
 ///
 /// Model-level animations precede selected clip animations, then selected
 /// controllers in ascending priority order. Selection order is authoritative. Later
-/// matching channels override earlier channels. Equal-priority controllers keep
+/// matching tracks override earlier tracks. Equal-priority controllers keep
 /// caller order. Controller concurrency is playback policy, not implicit selection.
 pub struct SampledAnimation<'view, 'data> {
     values: &'view PropertyValues,
@@ -40,23 +40,23 @@ pub struct SampledAnimation<'view, 'data> {
     animation_time: Time,
     source_interval: Option<(Time, Time)>,
     shared_time: Time,
-    channels: ChannelSelection<'view, 'data>,
+    tracks: TrackSelection<'view, 'data>,
 }
 
-enum ChannelSelection<'view, 'data> {
-    Flat(Vec<&'view Channel<'data>>),
+enum TrackSelection<'view, 'data> {
+    Flat(Vec<&'view DynamicTrack<'data>>),
     Indexed(IndexedSelection<'view>),
 }
 // Ordinary clips need only inline borrowed programme references. Controller
 // storage allocates only when the caller explicitly selects controllers.
 struct IndexedSelection<'view> {
-    animations: &'view BTreeMap<AnimationId, IndexedChannels>,
+    animations: &'view BTreeMap<AnimationId, IndexedTracks>,
     global: &'view [AnimationId],
     clip: &'view [AnimationId],
     controllers: Vec<&'view ControllerProgram>,
 }
 impl<'view> IndexedSelection<'view> {
-    fn iter(&self) -> impl DoubleEndedIterator<Item = &'view IndexedChannels> + '_ {
+    fn iter(&self) -> impl DoubleEndedIterator<Item = &'view IndexedTracks> + '_ {
         self.global
             .iter()
             .chain(self.clip)
@@ -69,37 +69,40 @@ impl<'view> IndexedSelection<'view> {
     }
 }
 #[derive(Clone, Debug)]
-struct IndexedChannels {
-    channels: Vec<Channel<'static>>,
+struct IndexedTracks {
+    tracks: Vec<DynamicTrack<'static>>,
     index: HashMap<ValueSlot, Vec<usize>>,
 }
-impl IndexedChannels {
-    fn new(channels: Vec<Channel<'static>>) -> Self {
+impl IndexedTracks {
+    fn new(tracks: Vec<DynamicTrack<'static>>) -> Self {
         let mut index: HashMap<ValueSlot, Vec<usize>> = HashMap::new();
-        for (ordinal, channel) in channels.iter().enumerate() {
-            index.entry(channel.target()).or_default().push(ordinal);
+        for (ordinal, dynamic_track) in tracks.iter().enumerate() {
+            index
+                .entry(dynamic_track.target())
+                .or_default()
+                .push(ordinal);
         }
-        Self { channels, index }
+        Self { tracks, index }
     }
 }
 
-/// A value represented by a typed semantic animation channel.
-pub trait ChannelValue: SampleValue + PropertyValue {
-    /// Borrows the matching typed track when this channel carries this value type.
-    fn channel_track<'view, 'data>(
-        channel: &'view Channel<'data>,
+/// A value represented by a typed semantic animation track.
+pub trait TrackValue: SampleValue + PropertyValue {
+    /// Borrows the matching typed track when this track carries this value type.
+    fn typed_track<'view, 'data>(
+        dynamic_track: &'view DynamicTrack<'data>,
     ) -> Option<&'view Track<'data, Self>>;
 }
-macro_rules! channel_value {
+macro_rules! track_value {
     ($($ty:ty => $variant:ident),* $(,)?) => {$ (
-        impl ChannelValue for $ty {
-            fn channel_track<'view, 'data>(channel: &'view Channel<'data>) -> Option<&'view Track<'data, Self>> {
-                if let Channel::$variant(track) = channel { Some(track) } else { None }
+        impl TrackValue for $ty {
+            fn typed_track<'view, 'data>(dynamic_track: &'view DynamicTrack<'data>) -> Option<&'view Track<'data, Self>> {
+                if let DynamicTrack::$variant(track) = dynamic_track { Some(track) } else { None }
             }
         }
     )* };
 }
-channel_value! {
+track_value! {
     [u32; 4] => Unsigned4, [u8; 4] => Bytes4, Quaternion => Rotation,
     f32 => Scalar, [f32; 2] => Vector2, [f32; 3] => Vector3,
     [f32; 4] => Vector4, u32 => Unsigned, i32 => Signed,
@@ -113,12 +116,12 @@ impl<'data, P: Profile> Model<'data, P> {
         &'view self,
         sample: AnimationSample<'_>,
     ) -> Result<SampledAnimation<'view, 'data>, Error> {
-        let mut channels: Vec<_> = self.global_channels().collect();
+        let mut tracks: Vec<_> = self.global_tracks().collect();
         let (clip_policy, animation_time, source_interval) = if let Some(id) = sample.clip {
             let clip = self
                 .clip(id)
                 .ok_or_else(|| Error::new("animation.sample.clip", "unknown clip identity"))?;
-            channels.extend(self.clip_channels(id));
+            tracks.extend(self.clip_tracks(id));
             resolve_times(
                 sample,
                 clip.duration(),
@@ -145,7 +148,7 @@ impl<'data, P: Profile> Model<'data, P> {
         }
         controllers.sort_by_key(|controller| controller.priority);
         for controller in controllers {
-            channels.extend(self.animation_channels(&controller.animations));
+            tracks.extend(self.animation_tracks(&controller.animations));
         }
         Ok(SampledAnimation {
             values: self.values(),
@@ -159,7 +162,7 @@ impl<'data, P: Profile> Model<'data, P> {
             animation_time,
             source_interval,
             shared_time: sample.shared_time,
-            channels: ChannelSelection::Flat(channels),
+            tracks: TrackSelection::Flat(tracks),
         })
     }
 }
@@ -193,41 +196,33 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
         self.shared_time
     }
 
-    /// Evaluates the selected channels for a typed property, or returns no override.
-    pub fn override_value<T: ChannelValue>(&self, property: &Property<T>) -> Option<T> {
+    /// Evaluates the selected tracks for a typed property, or returns no override.
+    pub fn override_value<T: TrackValue>(&self, property: &Property<T>) -> Option<T> {
         self.override_at(property, self.times())
     }
-    fn override_at<T: ChannelValue>(
-        &self,
-        property: &Property<T>,
-        times: SampleTimes,
-    ) -> Option<T> {
-        match &self.channels {
-            ChannelSelection::Flat(channels) => channels
+    fn override_at<T: TrackValue>(&self, property: &Property<T>, times: SampleTimes) -> Option<T> {
+        match &self.tracks {
+            TrackSelection::Flat(tracks) => tracks
                 .iter()
                 .rev()
-                .find_map(|channel| self.sample_channel(channel, property, times)),
-            ChannelSelection::Indexed(programmes) => {
-                programmes.iter().rev().find_map(|programme| {
-                    programme
-                        .index
-                        .get(&property.slot())?
-                        .iter()
-                        .rev()
-                        .find_map(|index| {
-                            self.sample_channel(&programme.channels[*index], property, times)
-                        })
-                })
-            }
+                .find_map(|dynamic_track| self.sample_track(dynamic_track, property, times)),
+            TrackSelection::Indexed(programmes) => programmes.iter().rev().find_map(|programme| {
+                programme
+                    .index
+                    .get(&property.slot())?
+                    .iter()
+                    .rev()
+                    .find_map(|index| self.sample_track(&programme.tracks[*index], property, times))
+            }),
         }
     }
-    fn sample_channel<T: ChannelValue>(
+    fn sample_track<T: TrackValue>(
         &self,
-        channel: &Channel<'_>,
+        dynamic_track: &DynamicTrack<'_>,
         property: &Property<T>,
         times: SampleTimes,
     ) -> Option<T> {
-        let track = T::channel_track(channel)?;
+        let track = T::typed_track(dynamic_track)?;
         if track.target != *property {
             return None;
         }
@@ -289,20 +284,20 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
     /// Borrows the effective typed source track and its clock metadata.
     /// Empty curves and curves without keys in the selected source interval
     /// fall through to lower-priority tracks, exactly as value sampling does.
-    pub fn track<T: ChannelValue>(
+    pub fn track<T: TrackValue>(
         &self,
         property: &Property<T>,
     ) -> Option<SampledTrack<'_, 'data, T>> {
         self.track_at(property, self.times())
     }
-    fn track_at<T: ChannelValue>(
+    fn track_at<T: TrackValue>(
         &self,
         property: &Property<T>,
         times: SampleTimes,
     ) -> Option<SampledTrack<'_, 'data, T>> {
-        let resolve = |channel: &'view Channel<'data>| {
-            self.sample_channel(channel, property, times)?;
-            let track = T::channel_track(channel)?;
+        let resolve = |dynamic_track: &'view DynamicTrack<'data>| {
+            self.sample_track(dynamic_track, property, times)?;
+            let track = T::typed_track(dynamic_track)?;
             let (time, period, origin, interval) = match track.clock {
                 TimeSource::Animation => (
                     times.animation,
@@ -340,24 +335,23 @@ impl<'view, 'data> SampledAnimation<'view, 'data> {
                 interval,
             })
         };
-        match &self.channels {
-            ChannelSelection::Flat(channels) => {
-                channels.iter().rev().find_map(|channel| resolve(channel))
-            }
-            ChannelSelection::Indexed(programmes) => {
-                programmes.iter().rev().find_map(|programme| {
-                    programme
-                        .index
-                        .get(&property.slot())?
-                        .iter()
-                        .rev()
-                        .find_map(|index| resolve(&programme.channels[*index]))
-                })
-            }
+        match &self.tracks {
+            TrackSelection::Flat(tracks) => tracks
+                .iter()
+                .rev()
+                .find_map(|dynamic_track| resolve(dynamic_track)),
+            TrackSelection::Indexed(programmes) => programmes.iter().rev().find_map(|programme| {
+                programme
+                    .index
+                    .get(&property.slot())?
+                    .iter()
+                    .rev()
+                    .find_map(|index| resolve(&programme.tracks[*index]))
+            }),
         }
     }
-    /// Evaluates an animated value, preserving its authored default without a channel.
-    pub fn animated<T: ChannelValue>(&self, value: &Property<T>) -> T {
+    /// Evaluates an animated value, preserving its authored default without a track.
+    pub fn animated<T: TrackValue>(&self, value: &Property<T>) -> T {
         self.override_value(value)
             .unwrap_or_else(|| T::resolve(self.values, *value, self))
     }
@@ -397,19 +391,16 @@ impl RetimedAnimation<'_, '_, '_> {
         self
     }
     /// Evaluates the same selected programmes at the overridden clocks.
-    pub fn override_value<T: ChannelValue>(&self, property: &Property<T>) -> Option<T> {
+    pub fn override_value<T: TrackValue>(&self, property: &Property<T>) -> Option<T> {
         self.selection.override_at(property, self.times)
     }
-    /// Preserves an authored default when no selected channel supplies a value.
-    pub fn animated<T: ChannelValue>(&self, value: &Property<T>) -> T {
+    /// Preserves an authored default when no selected track supplies a value.
+    pub fn animated<T: TrackValue>(&self, value: &Property<T>) -> T {
         self.override_value(value)
             .unwrap_or_else(|| T::resolve(self.selection.values, *value, self))
     }
     /// Borrows the effective source track at the overridden clock values.
-    pub fn track<T: ChannelValue>(
-        &self,
-        property: &Property<T>,
-    ) -> Option<SampledTrack<'_, '_, T>> {
+    pub fn track<T: TrackValue>(&self, property: &Property<T>) -> Option<SampledTrack<'_, '_, T>> {
         self.selection.track_at(property, self.times)
     }
 }
@@ -442,10 +433,10 @@ impl<T: CurveValue + PropertyValue> Track<'_, T> {
         }
     }
 }
-impl Channel<'_> {
+impl DynamicTrack<'_> {
     /// Detaches borrowed curve storage without translating property identities.
-    pub fn into_owned(self) -> Channel<'static> {
-        macro_rules! owned { ($($variant:ident),*) => { match self { $(Self::$variant(track) => Channel::$variant(track.into_owned()),)* } }; }
+    pub fn into_owned(self) -> DynamicTrack<'static> {
+        macro_rules! owned { ($($variant:ident),*) => { match self { $(Self::$variant(track) => DynamicTrack::$variant(track.into_owned()),)* } }; }
         owned!(
             Unsigned4,
             Bytes4,
@@ -485,7 +476,7 @@ struct ControllerProgram {
 pub struct AnimationProgram {
     values: PropertyValues,
     clocks: BTreeMap<ClockId, Time>,
-    animations: BTreeMap<AnimationId, IndexedChannels>,
+    animations: BTreeMap<AnimationId, IndexedTracks>,
     global: Vec<AnimationId>,
     clips: BTreeMap<ClipId, ClipProgram>,
     controllers: BTreeMap<ControllerId, ControllerProgram>,
@@ -497,8 +488,14 @@ impl AnimationProgram {
     }
     /// Copies each reusable animation once and retains playback selections.
     pub fn compile<P: Profile>(model: &Model<'_, P>) -> Self {
-        let own = |channels: &[Channel<'_>]| {
-            IndexedChannels::new(channels.iter().cloned().map(Channel::into_owned).collect())
+        let own = |tracks: &[DynamicTrack<'_>]| {
+            IndexedTracks::new(
+                tracks
+                    .iter()
+                    .cloned()
+                    .map(DynamicTrack::into_owned)
+                    .collect(),
+            )
         };
         Self {
             values: model.values().clone(),
@@ -510,7 +507,7 @@ impl AnimationProgram {
             animations: model
                 .animations()
                 .iter()
-                .map(|(id, animation)| (id, own(&animation.channels)))
+                .map(|(id, animation)| (id, own(&animation.tracks)))
                 .collect(),
             global: model.global_animations().to_vec(),
             clips: model
@@ -547,7 +544,7 @@ impl AnimationProgram {
     ///
     /// `clips` pairs destination clip identities with source clips. Both use the
     /// destination's time in seconds; curves are not stretched. Source global and
-    /// shared-clock channels remain active. `include` can exclude properties whose
+    /// shared-clock tracks remain active. `include` can exclude properties whose
     /// ownership is supplied by another rig. No source clip becomes independently
     /// selectable. Mapped clips must have matching source starts; a failed
     /// combination leaves both inputs unchanged.
@@ -555,7 +552,7 @@ impl AnimationProgram {
         &self,
         source: &Self,
         clips: &[(ClipId, ClipId)],
-        mut include: impl FnMut(&Channel<'static>) -> bool,
+        mut include: impl FnMut(&DynamicTrack<'static>) -> bool,
     ) -> Result<Self, Error> {
         let mut result = self.clone();
         result.values.extend(&source.values)?;
@@ -605,20 +602,20 @@ impl AnimationProgram {
                     "animation identities overlap",
                 ));
             }
-            let mut channels = Vec::new();
-            for channel in &animation.channels {
-                if !include(channel) {
+            let mut tracks = Vec::new();
+            for dynamic_track in &animation.tracks {
+                if !include(dynamic_track) {
                     continue;
                 }
-                if owned.contains(&channel.target()) {
+                if owned.contains(&dynamic_track.target()) {
                     return Err(Error::new(
                         "animation.compose.properties",
                         "property owners overlap",
                     ));
                 }
-                channels.push(channel.clone());
+                tracks.push(dynamic_track.clone());
             }
-            result.animations.insert(id, IndexedChannels::new(channels));
+            result.animations.insert(id, IndexedTracks::new(tracks));
         }
         result.global.extend(&source.global);
         for &(destination, source_clip) in clips {
@@ -678,7 +675,7 @@ impl AnimationProgram {
             animation_time,
             source_interval,
             shared_time: sample.shared_time,
-            channels: ChannelSelection::Indexed(IndexedSelection {
+            tracks: TrackSelection::Indexed(IndexedSelection {
                 animations: &self.animations,
                 global: &self.global,
                 clip: selected_clip,
@@ -710,13 +707,13 @@ fn resolve_times(
 pub trait ValueSample {
     /// Authored constants for the selected model.
     fn values(&self) -> &PropertyValues;
-    /// Samples an override, returning `None` when no selected channel writes it.
-    fn override_value<T: ChannelValue>(&self, property: &Property<T>) -> Option<T>;
+    /// Samples an override, returning `None` when no selected track writes it.
+    fn override_value<T: TrackValue>(&self, property: &Property<T>) -> Option<T>;
     /// Reads a slot, using its authored constant when no selected writer supplies it.
     ///
     /// Panics if the slot is absent from this model. Use `values().get(slot)` to
     /// check an identity before reading an externally supplied reference.
-    fn animated<T: ChannelValue>(&self, value: &Property<T>) -> T {
+    fn animated<T: TrackValue>(&self, value: &Property<T>) -> T {
         self.override_value(value)
             .unwrap_or_else(|| T::resolve(self.values(), *value, self))
     }
@@ -725,7 +722,7 @@ impl ValueSample for SampledAnimation<'_, '_> {
     fn values(&self) -> &PropertyValues {
         self.values
     }
-    fn override_value<T: ChannelValue>(&self, property: &Property<T>) -> Option<T> {
+    fn override_value<T: TrackValue>(&self, property: &Property<T>) -> Option<T> {
         self.override_value(property)
     }
 }
@@ -733,7 +730,7 @@ impl ValueSample for RetimedAnimation<'_, '_, '_> {
     fn values(&self) -> &PropertyValues {
         self.selection.values
     }
-    fn override_value<T: ChannelValue>(&self, property: &Property<T>) -> Option<T> {
+    fn override_value<T: TrackValue>(&self, property: &Property<T>) -> Option<T> {
         self.override_value(property)
     }
 }
@@ -742,7 +739,7 @@ impl ValueSample for PropertyValues {
     fn values(&self) -> &PropertyValues {
         self
     }
-    fn override_value<T: ChannelValue>(&self, slot: &Property<T>) -> Option<T> {
+    fn override_value<T: TrackValue>(&self, slot: &Property<T>) -> Option<T> {
         self.get(*slot).copied()
     }
 }

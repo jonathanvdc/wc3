@@ -35,7 +35,7 @@ impl Encoder<'_, '_, '_> {
     }
     pub fn audit(&mut self) -> Result<(), Error> {
         let model = self.model;
-        for channel in model.channels() {
+        for channel in model.tracks() {
             if !self
                 .used
                 .iter()
@@ -116,7 +116,7 @@ impl Encoder<'_, '_, '_> {
         }
         let mut seen = HashSet::new();
         selections.retain(|id| seen.insert(*id));
-        for channel in self.model.animation_channels(&selections) {
+        for channel in self.model.animation_tracks(&selections) {
             let Some(track) = U::track(channel) else {
                 continue;
             };

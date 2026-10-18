@@ -4,7 +4,7 @@ use crate::model::io::owned;
 use crate::model::{
     conversion::{Context, ExportOptions},
     formats::m3::{self as native, records as nr},
-    Channel, Clip, Controller, Curve, Interpolation, Quaternion, Time, TimeSource, Track,
+    Clip, Controller, Curve, DynamicTrack, Interpolation, Quaternion, Time, TimeSource, Track,
 };
 use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use zerovec::ZeroVec;
@@ -66,9 +66,9 @@ fn exact_unsigned_keys_rebuild_typed_native_controller_tables() {
     };
     builder.set_clip_controls(clip, selection).unwrap();
     builder
-        .add_controller_channel(
+        .add_controller_track(
             controller,
-            Channel::Unsigned(Track {
+            DynamicTrack::Unsigned(Track {
                 target: batching,
                 curve: Curve::from_samples(
                     owned(vec![Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()]),

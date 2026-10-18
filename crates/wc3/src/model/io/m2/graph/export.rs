@@ -121,17 +121,17 @@ where
             let animated = model
                 .clips()
                 .iter()
-                .flat_map(|(id, _)| model.clip_channels(id))
+                .flat_map(|(id, _)| model.clip_tracks(id))
                 .chain(
                     model
-                        .global_channels()
+                        .global_tracks()
                         .filter(|v| matches!(v.clock(), TimeSource::Shared(_))),
                 )
                 .any(|channel| match channel {
-                    semantic::Channel::Vector3(t) => {
+                    semantic::DynamicTrack::Vector3(t) => {
                         t.target == node.transform.translation || t.target == node.transform.scale
                     }
-                    semantic::Channel::Rotation(t) => t.target == node.transform.rotation,
+                    semantic::DynamicTrack::Rotation(t) => t.target == node.transform.rotation,
                     _ => false,
                 });
             if (animated

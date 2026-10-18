@@ -4,9 +4,9 @@ use crate::model::profiles::{Profile, Universal};
 use crate::model::DrawId;
 use crate::model::{
     Animation, AnimationId, AnimationObject, AppearanceSchema as _, AttachedFeature, Basis, Bounds,
-    Channel, Clip, ClipId, ClockId, Controller, ControllerId, Error, Event, EventId, FeatureId,
-    InstanceId, LengthUnit, Look, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance,
-    ModelId, Node, NodeId, Skin, SkinId, SystemId, Time,
+    Clip, ClipId, ClockId, Controller, ControllerId, DynamicTrack, Error, Event, EventId,
+    FeatureId, InstanceId, LengthUnit, Look, LookId, Material, MaterialId, Mesh, MeshId,
+    MeshInstance, ModelId, Node, NodeId, Skin, SkinId, SystemId, Time,
 };
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
@@ -19,7 +19,7 @@ use crate::model::{Dependencies, Link, Table, Texture, ValidateLinks as _};
 use crate::model::{Property, PropertyValue, PropertyValues, ValueSlot};
 use std::borrow::Cow;
 use std::collections::HashSet;
-/// A repeating or frozen clock shared by animation channels.
+/// A repeating or frozen clock shared by animation tracks.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SharedClock {
     /// Samples time zero and has no traversed event interval.
@@ -72,8 +72,7 @@ impl<'a, P: Profile> Model<'a, P> {
     }
     /// Whether any authored program writes this slot.
     pub fn is_animated<T: PropertyValue>(&self, slot: Property<T>) -> bool {
-        self.channels()
-            .any(|channel| channel.target() == slot.slot())
+        self.tracks().any(|track| track.target() == slot.slot())
             || match slot.slot() {
                 ValueSlot::Scalar(id) => self
                     .values
@@ -82,11 +81,11 @@ impl<'a, P: Profile> Model<'a, P> {
                 _ => false,
             }
     }
-    /// Channels in every authored program, independent of playback selection.
-    pub fn channels(&self) -> impl Iterator<Item = &Channel<'a>> {
+    /// Tracks in every authored program, independent of playback selection.
+    pub fn tracks(&self) -> impl Iterator<Item = &DynamicTrack<'a>> {
         self.animations
             .values()
-            .flat_map(|animation| &animation.channels)
+            .flat_map(|animation| &animation.tracks)
     }
     /// Reusable animation definitions in stable identity order.
     pub fn animations(&self) -> &Table<AnimationObject, Animation<'a>> {
@@ -100,15 +99,14 @@ impl<'a, P: Profile> Model<'a, P> {
     pub fn global_animations(&self) -> &[AnimationId] {
         &self.global_animations
     }
-    /// Channels selected by reusable animation identities, in evaluation order.
+    /// Tracks selected by reusable animation identities, in evaluation order.
     ///
     /// Panics if an identity is absent from this model.
-    pub fn animation_channels<'v>(
+    pub fn animation_tracks<'v>(
         &'v self,
         ids: &'v [AnimationId],
-    ) -> impl DoubleEndedIterator<Item = &'v Channel<'a>> {
-        ids.iter()
-            .flat_map(|id| self.animations[id].channels.iter())
+    ) -> impl DoubleEndedIterator<Item = &'v DynamicTrack<'a>> {
+        ids.iter().flat_map(|id| self.animations[id].tracks.iter())
     }
     /// Events selected by reusable animation identities.
     ///
@@ -120,17 +118,17 @@ impl<'a, P: Profile> Model<'a, P> {
         ids.iter()
             .flat_map(|id| self.animations[id].events.values())
     }
-    /// Channels active independently of the selected clip.
-    pub fn global_channels(&self) -> impl DoubleEndedIterator<Item = &Channel<'a>> {
-        self.animation_channels(&self.global_animations)
+    /// Tracks active independently of the selected clip.
+    pub fn global_tracks(&self) -> impl DoubleEndedIterator<Item = &DynamicTrack<'a>> {
+        self.animation_tracks(&self.global_animations)
     }
     /// Events active independently of the selected clip.
     pub fn global_events(&self) -> impl Iterator<Item = &Event<'a>> {
         self.animation_events(&self.global_animations)
     }
-    /// Channels selected by a clip. Missing clip identities yield no channels.
-    pub fn clip_channels(&self, id: ClipId) -> impl DoubleEndedIterator<Item = &Channel<'a>> {
-        self.animation_channels(self.clip(id).map_or(&[], |clip| &clip.animations))
+    /// Tracks selected by a clip. Missing clip identities yield no tracks.
+    pub fn clip_tracks(&self, id: ClipId) -> impl DoubleEndedIterator<Item = &DynamicTrack<'a>> {
+        self.animation_tracks(self.clip(id).map_or(&[], |clip| &clip.animations))
     }
     /// Events selected by a clip. Missing clip identities yield no events.
     pub fn clip_events(&self, id: ClipId) -> impl Iterator<Item = &Event<'a>> {
@@ -204,8 +202,8 @@ impl<'a, P: Profile> Model<'a, P> {
             system.visit_links(&mut visit);
         }
         self.values.visit_values(&mut visit);
-        for channel in self.channels() {
-            channel.visit_links(&mut visit);
+        for track in self.tracks() {
+            track.visit_links(&mut visit);
         }
         for clip in self.clips.values() {
             clip.controls.visit_links(&mut visit);

@@ -743,7 +743,7 @@ mod tests {
     use wc3::model::formats::mdlx::{DynamicDocument, NoExtensions};
     use wc3::model::io::mdlx as semantic_mdlx;
 
-    use wc3::model::{AnimationProgram, AnimationSample, Channel, Curve, SharedClock, Track};
+    use wc3::model::{AnimationProgram, AnimationSample, Curve, DynamicTrack, SharedClock, Track};
     fn time(value: f64) -> ModelTime {
         ModelTime::seconds(value).unwrap()
     }
@@ -787,7 +787,7 @@ mod tests {
                 builder.set_feature(feature, payload)?;
                 let clock = builder.add_clock(SharedClock::Repeating { period: time(1.) })?;
                 if boolean {
-                    return builder.add_global_channel(Channel::Boolean(Track {
+                    return builder.add_global_track(DynamicTrack::Boolean(Track {
                         target: boolean_source,
                         curve: Curve::step(
                             keys.iter().map(|(t, _)| time(*t)).collect::<Vec<_>>(),
@@ -796,7 +796,7 @@ mod tests {
                         clock: TimeSource::Shared(clock),
                     }));
                 }
-                builder.add_global_channel(Channel::Scalar(Track {
+                builder.add_global_track(DynamicTrack::Scalar(Track {
                     target: property,
                     curve: Curve::step(
                         keys.iter().map(|(t, _)| time(*t)).collect::<Vec<_>>(),

@@ -7,7 +7,7 @@ use super::{blocks::Blocks, AnimationId, AnimationIds};
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::{
-    profiles::m3 as surface, Channel, Interpolation, NodeId, Time, TimeSource, ValueSlot,
+    profiles::m3 as surface, DynamicTrack, Interpolation, NodeId, Time, TimeSource, ValueSlot,
 };
 use native::{Envelope, Ref};
 use std::collections::{BTreeSet, HashMap};
@@ -61,22 +61,22 @@ fn target(value: &Target) -> ValueSlot {
         Target::Unsigned4(p) => p.slot(),
     }
 }
-fn interpolation(channel: &Channel<'_>) -> Interpolation {
+fn interpolation(channel: &DynamicTrack<'_>) -> Interpolation {
     match channel {
-        Channel::Scalar(t) => t.curve.interpolation(),
-        Channel::Vector2(t) => t.curve.interpolation(),
-        Channel::Vector3(t) => t.curve.interpolation(),
-        Channel::Vector4(t) => t.curve.interpolation(),
-        Channel::Rotation(t) => t.curve.interpolation(),
-        Channel::Unsigned(t) => t.curve.interpolation(),
-        Channel::Signed(t) => t.curve.interpolation(),
-        Channel::Unsigned16(t) => t.curve.interpolation(),
-        Channel::Byte(t) => t.curve.interpolation(),
-        Channel::Boolean(t) => t.curve.interpolation(),
-        Channel::Bytes4(t) => t.curve.interpolation(),
-        Channel::Unsigned4(t) => t.curve.interpolation(),
-        Channel::Texture(t) => t.curve.interpolation(),
-        Channel::OptionalTexture(t) => t.curve.interpolation(),
+        DynamicTrack::Scalar(t) => t.curve.interpolation(),
+        DynamicTrack::Vector2(t) => t.curve.interpolation(),
+        DynamicTrack::Vector3(t) => t.curve.interpolation(),
+        DynamicTrack::Vector4(t) => t.curve.interpolation(),
+        DynamicTrack::Rotation(t) => t.curve.interpolation(),
+        DynamicTrack::Unsigned(t) => t.curve.interpolation(),
+        DynamicTrack::Signed(t) => t.curve.interpolation(),
+        DynamicTrack::Unsigned16(t) => t.curve.interpolation(),
+        DynamicTrack::Byte(t) => t.curve.interpolation(),
+        DynamicTrack::Boolean(t) => t.curve.interpolation(),
+        DynamicTrack::Bytes4(t) => t.curve.interpolation(),
+        DynamicTrack::Unsigned4(t) => t.curve.interpolation(),
+        DynamicTrack::Texture(t) => t.curve.interpolation(),
+        DynamicTrack::OptionalTexture(t) => t.curve.interpolation(),
     }
 }
 
@@ -113,7 +113,7 @@ pub(in crate::model::io::m3::logical) fn prepare(
     let mut ids = AnimationIds::new(model.values());
     let mut claimed = HashMap::new();
     for (_, program) in model.controllers() {
-        for channel in model.animation_channels(&program.animations) {
+        for channel in model.animation_tracks(&program.animations) {
             let mode = match interpolation(channel) {
                 Interpolation::Step => surface::values::Interpolation::Constant,
                 Interpolation::Linear => surface::values::Interpolation::Linear,
@@ -159,7 +159,7 @@ pub(in crate::model::io::m3::logical) fn prepare(
         }
     }
     if model
-        .global_channels()
+        .global_tracks()
         .find(|v| matches!(v.clock(), TimeSource::Shared(_)))
         .is_some()
         || model
@@ -210,7 +210,7 @@ pub(in crate::model::io::m3::logical) fn write<E: Envelope>(
         let mut identities = Vec::new();
         let mut selectors = Vec::new();
         let mut used = BTreeSet::new();
-        for channel in model.animation_channels(&logical.animations) {
+        for channel in model.animation_tracks(&logical.animations) {
             if channel.clock() != TimeSource::Animation {
                 context.unsupported("m3.animation.clock", "controller uses a foreign clock")?;
                 continue;

@@ -240,7 +240,7 @@ pub(in crate::model::io::m3::logical) fn read<'a, E: Envelope + Send + Sync>(
                 if let Some(channel) =
                     keys::read(document, controller, selector, destination, mode, context)?
                 {
-                    builder.add_controller_channel(layer, channel)?;
+                    builder.add_controller_track(layer, channel)?;
                 }
             }
         }

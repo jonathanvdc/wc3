@@ -318,7 +318,7 @@ the selected image's sampler and native options with each key. Export rebuilds
 native indirection tables and interns equal records; native table identity and
 unused records are not semantic authoring objects. `Model::sampled_images()`
 collects distinct sampled-image values from materials, effects, allocated value
-slots, and animation channels. This does not introduce shared editable texture
+slots, and animation tracks. This does not introduce shared editable texture
 objects.
 
 Sampling belongs to the input that uses it. M3 bindings retain sampling programs for flipbook, video, and noise,
@@ -418,7 +418,7 @@ index; those namespaces remain distinct even when their numeric values coincide.
 Its `visibility: Property<f32>` describes mounted content visibility; constant
 `1.0` represents an uncontrolled socket. Native M2 boolean visibility is read as
 scalar zero or one through `PropertyValues::scalar_from_boolean`, preserving the source
-slot, shared channels, and clocks. The socket also retains unresolved authored
+slot, shared tracks, and clocks. The socket also retains unresolved authored
 controls. Exact M2 narrowing requires the original explicit boolean source;
 fractional visibility cannot be represented. Native formats without a visibility
 control require constant-one visibility. Exact export checks identity namespace,
@@ -697,7 +697,7 @@ resource identities belong to the selected game vocabulary.
 
 Animation programs are reusable model-owned definitions. Clips and native
 controllers select them by identity; model-level selections remain active without
-a clip. MDLX ordinary channels share one animation, and each clip selects its
+a clip. MDLX ordinary tracks share one animation, and each clip selects its
 authored interval in that animation. M2 clips select separate animations with
 source intervals starting at zero. Global sequences use independent shared clocks.
 
@@ -715,21 +715,23 @@ reference shares both its constant and its animation; allocating a fresh slot
 creates an independent value. Animation never needs to traverse an owner object
 to find a field.
 
-`Track<T>` connects a slot to a checked `Curve<T>` and an explicit clock. Channels
-are independent of model profiles. A native exporter finds the fields consuming
-each slot and writes the corresponding native tracks, duplicating a curve when
-several fields share its slot. Exact projection rejects animation that the target
+`Track<T>` connects a slot to a checked `Curve<T>` and an explicit clock.
+`DynamicTrack` wraps typed tracks in an enum whose variants select the value type,
+so tracks of different types can share one collection. Both types are independent
+of model profiles. A native exporter finds the fields consuming each slot and
+writes the corresponding native tracks, duplicating a curve when several fields
+share its slot. Exact projection rejects animation that the target
 format cannot attach to a supported field. Profile property descriptors describe
 native schemas; they no longer identify runtime animation destinations.
 
-`Animation` owns ordered channels and identified event occurrences. Add it with
-`ModelBuilder::add_animation`, then reference its `AnimationId` from
-`Clip::animations`, `Controller::animations`, or the model's ordered
+`Animation` owns ordered tracks in `Animation::tracks` and identified event
+occurrences. Add it with `ModelBuilder::add_animation`, then reference its
+`AnimationId` from `Clip::animations`, `Controller::animations`, or the model's ordered
 `global_animations` selection. Reusing an identity shares its curves and events;
-clips retain their own duration and loop/clamp policy. `add_global_channel`,
-`add_channel`, and `add_controller_channel` append to the selection's first
+clips retain their own duration and loop/clamp policy. `add_global_track`,
+`add_track`, and `add_controller_track` append to the selection's first
 animation, creating one when the selection is empty. Editing that animation affects
-every selection of it. Use `add_animation_channel` for explicit ownership.
+every selection of it. Use `add_animation_track` for explicit ownership.
 
 `TimeSource::Animation` evaluates ordinary tracks at the selected clip's
 `source_start` plus wrapped or clamped local playback time. Every clip selects an
@@ -749,7 +751,7 @@ explicit controller selection. Direct model sampling and compiled
 `AnimationProgram` sampling use the same curve evaluator and clip-time mapping.
 Model-level animations run first, followed by the clip's animations, followed by
 controllers in ascending priority; equal priorities preserve caller order. Within
-each selection, animation and channel order are authoritative. Later applicable
+each selection, animation and track order are authoritative. Later applicable
 tracks override earlier ones; empty curves fall through to earlier tracks and
 ultimately authored defaults. Native controller concurrency remains application
 playback policy. Value sampling does not advance clocks or dispatch events;
@@ -766,12 +768,12 @@ error. Widening and narrowing retain existing slot identities and may allocate
 additional constants required by the destination payload.
 
 ```rust
-use wc3::model::{Channel, TimeSource, Curve, Model, Time, Track};
+use wc3::model::{DynamicTrack, TimeSource, Curve, Model, Time, Track};
 let mut builder = Model::builder("Moving node");
 let node = builder.new_node("Root");
 let translation = node.transform.translation;
 builder.add_node(node)?;
-builder.add_global_channel(Channel::Vector3(Track {
+builder.add_global_track(DynamicTrack::Vector3(Track {
     target: translation,
     clock: TimeSource::Animation,
     curve: Curve::linear(
@@ -792,7 +794,7 @@ value types, but those types cannot add subtables to `PropertyValues`.
 Boolean-to-scalar reads are explicit: `PropertyValues::scalar_from_boolean` allocates a
 scalar slot linked to a boolean source, sampled as zero or one. Both identities
 remain available, so native conversions can recover the original boolean field.
-A direct scalar channel on that output takes precedence over its converted read.
+A direct scalar track on that output takes precedence over its converted read.
 This relation belongs to the value table rather than a field-specific binding.
 
 Choose interpolation through `Curve::step`, `linear`, `hermite`, `bezier`, `tcb`,

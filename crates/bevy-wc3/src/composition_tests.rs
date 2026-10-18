@@ -3,7 +3,7 @@ use crate::{compile_model, BakeSpace, Playback, PoseBaker, PoseOptions};
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::{
-    Channel, Clip, Curve, Draw, ExplicitBinding, GeometryData, GeometryInfluences, Influence,
+    Clip, Curve, Draw, DynamicTrack, ExplicitBinding, GeometryData, GeometryInfluences, Influence,
     Material, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node as ModelNode, Quaternion,
     Skin, Time, TimeSource, Track, UniversalBinding,
 };
@@ -96,9 +96,9 @@ fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
         .add_clip(Clip::named("turn").with_duration(Time::seconds(1.).unwrap()))
         .unwrap();
     builder
-        .add_channel(
+        .add_track(
             clip,
-            Channel::Rotation(Track {
+            DynamicTrack::Rotation(Track {
                 target: builder.model().node(joint).unwrap().transform.rotation,
                 curve: Curve::linear(
                     [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
@@ -456,9 +456,9 @@ fn mapped_controller_clips_activate_part_programmes_on_checked_host_timeline() {
                     ModelNode::named("extra", &mut slot_values).with_parent(source_joint),
                 )?;
                 let controller = builder.add_controller(Controller::default())?;
-                builder.add_controller_channel(
+                builder.add_controller_track(
                     controller,
-                    Channel::Vector3(Track {
+                    DynamicTrack::Vector3(Track {
                         target: builder.model().node(extra).unwrap().transform.translation,
                         curve: Curve::linear(
                             [Time::seconds(1.)?, Time::seconds(2.)?],

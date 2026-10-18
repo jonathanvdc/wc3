@@ -165,14 +165,14 @@ pub(in super::super) trait ChannelValue: PropertyValue + CurveValue {
     }
 
     fn channel<'v, 'data>(
-        value: &'v semantic::Channel<'data>,
+        value: &'v semantic::DynamicTrack<'data>,
     ) -> Option<&'v semantic::Track<'data, Self>>
     where
         Self: Sized;
 }
-macro_rules! channel_value {($($ty:ty=>$variant:ident),*)=>{$(impl ChannelValue for $ty{fn channel<'v,'data>(value:&'v semantic::Channel<'data>)->Option<&'v semantic::Track<'data,Self>>{if let semantic::Channel::$variant(value)=value{Some(value)}else{None}}})*};}
+macro_rules! channel_value {($($ty:ty=>$variant:ident),*)=>{$(impl ChannelValue for $ty{fn channel<'v,'data>(value:&'v semantic::DynamicTrack<'data>)->Option<&'v semantic::Track<'data,Self>>{if let semantic::DynamicTrack::$variant(value)=value{Some(value)}else{None}}})*};}
 channel_value!(u32=>Unsigned,i32=>Signed,u16=>Unsigned16,u8=>Byte,bool=>Boolean);
-macro_rules! float_channel {($($ty:ty=>$variant:ident),*)=>{$(impl ChannelValue for $ty{fn channel<'v,'data>(value:&'v semantic::Channel<'data>)->Option<&'v semantic::Track<'data,Self>>{if let semantic::Channel::$variant(value)=value{Some(value)}else{None}}fn restrict<'a>(track:&semantic::Track<'a,Self>,start:Time,end:Time)->Result<semantic::Track<'a,Self>,Error>{if track.curve.times().iter().any(|t|t<start||t>end){crop(track,start,end)}else{Ok(track.clone())}}})*};}
+macro_rules! float_channel {($($ty:ty=>$variant:ident),*)=>{$(impl ChannelValue for $ty{fn channel<'v,'data>(value:&'v semantic::DynamicTrack<'data>)->Option<&'v semantic::Track<'data,Self>>{if let semantic::DynamicTrack::$variant(value)=value{Some(value)}else{None}}fn restrict<'a>(track:&semantic::Track<'a,Self>,start:Time,end:Time)->Result<semantic::Track<'a,Self>,Error>{if track.curve.times().iter().any(|t|t<start||t>end){crop(track,start,end)}else{Ok(track.clone())}}})*};}
 float_channel!(f32=>Scalar,[f32;2]=>Vector2,[f32;3]=>Vector3,[f32;4]=>Vector4,semantic::Quaternion=>Rotation);
 pub(super) fn encode<V: ModelLayout, U: ChannelValue, T: Value>(
     model: &Graph<'_>,
@@ -188,7 +188,7 @@ where
     V::TrackValues<'static, T>: ValuesFactory<T>,
 {
     let shared = model
-        .global_channels()
+        .global_tracks()
         .filter(|v| matches!(v.clock(), TimeSource::Shared(_)))
         .filter_map(U::channel)
         .find(|t| t.target == *target);
@@ -200,7 +200,7 @@ where
             .iter()
             .map(|(id, _clip)| {
                 model
-                    .clip_channels(id)
+                    .clip_tracks(id)
                     .filter_map(U::channel)
                     .find(|t| t.target == *target)
             })
@@ -505,7 +505,7 @@ pub(in super::super) fn sequences(
 pub(in super::super) fn insert<'a>(
     builder: &mut GraphBuilder<'a>,
     clip: Option<semantic::ClipId>,
-    channel: semantic::Channel<'a>,
+    channel: semantic::DynamicTrack<'a>,
 ) -> Result<(), Error> {
     let (target, clock) = (channel.target(), channel.clock());
     match clock {
@@ -521,7 +521,7 @@ pub(in super::super) fn insert<'a>(
                 {
                     return Ok(());
                 }
-                builder.add_channel(clip, channel)?
+                builder.add_track(clip, channel)?
             } else {
                 return Err(Error::new(
                     "m2.animation.clock",
@@ -532,11 +532,11 @@ pub(in super::super) fn insert<'a>(
         TimeSource::Shared(_) => {
             if !builder
                 .model()
-                .global_channels()
+                .global_tracks()
                 .filter(|v| matches!(v.clock(), TimeSource::Shared(_)))
                 .any(|v| (v.target(), v.clock()) == (target, clock))
             {
-                builder.add_global_channel(channel)?
+                builder.add_global_track(channel)?
             }
         }
     }

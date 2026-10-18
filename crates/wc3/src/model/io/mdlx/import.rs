@@ -6,8 +6,8 @@ use crate::model::formats::mdlx::{self as native, Chunk, Dialect, ModelChunk};
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
 use crate::model::{
-    AddressMode, Animation, Billboard, Bounds, Channel, Clip, ImageResource, Inheritance, Material,
-    ModelBuilder, Quaternion, Sampler, SharedClock, Texture, Time, TimeSource, Track,
+    AddressMode, Animation, Billboard, Bounds, Clip, DynamicTrack, ImageResource, Inheritance,
+    Material, ModelBuilder, Quaternion, Sampler, SharedClock, Texture, Time, TimeSource, Track,
 };
 use crate::model::{MdlxImageResource, Model, TextureControls};
 use std::borrow::Cow;
@@ -251,12 +251,12 @@ where
                         })
                         .transpose()?
                         .map_or(TimeSource::Animation, TimeSource::Shared);
-                    let channel = Channel::$variant(Track {
+                    let channel = DynamicTrack::$variant(Track {
                         target: $property,
                         curve: curves::read(track, 0., $map)?,
                         clock,
                     });
-                    builder.add_global_channel(channel)?;
+                    builder.add_global_track(channel)?;
                 }
             };
         }
@@ -363,10 +363,10 @@ where
         let source = builder.remove_animation(id).expect("imported animation");
         let mut ordinary = Animation::default();
         let mut shared = Animation::default();
-        for channel in source.channels {
+        for channel in source.tracks {
             match channel.clock() {
-                TimeSource::Animation => ordinary.channels.push(channel),
-                TimeSource::Shared(_) => shared.channels.push(channel),
+                TimeSource::Animation => ordinary.tracks.push(channel),
+                TimeSource::Shared(_) => shared.tracks.push(channel),
             }
         }
         for (id, event) in source.events {
@@ -379,11 +379,11 @@ where
                 }
             }
         }
-        if !shared.channels.is_empty() || !shared.events.is_empty() {
+        if !shared.tracks.is_empty() || !shared.events.is_empty() {
             let animation = builder.add_animation(shared);
             builder.add_global_animation(animation)?;
         }
-        if !ordinary.channels.is_empty() || !ordinary.events.is_empty() {
+        if !ordinary.tracks.is_empty() || !ordinary.events.is_empty() {
             let animation = builder.add_animation(ordinary);
             for &(clip, _) in &clips {
                 let mut selection = builder.model().clip(clip).expect("imported clip").clone();

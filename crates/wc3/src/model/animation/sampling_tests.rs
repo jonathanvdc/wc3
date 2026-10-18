@@ -6,8 +6,12 @@ use std::ptr::eq;
 fn time(seconds: f64) -> Time {
     Time::seconds(seconds).unwrap()
 }
-fn channel(property: Property<[f32; 3]>, clock: TimeSource, end: f32) -> Channel<'static> {
-    Channel::Vector3(Track {
+fn dynamic_track(
+    property: Property<[f32; 3]>,
+    clock: TimeSource,
+    end: f32,
+) -> DynamicTrack<'static> {
+    DynamicTrack::Vector3(Track {
         target: property,
         curve: Curve::linear(
             [time(0.), time(1.), time(2.)],
@@ -26,7 +30,7 @@ fn frozen_shared_clock_keeps_authored_origin_without_a_loop_period() {
     let _node_scale = builder.model().node(node).unwrap().transform.scale;
     let clock = builder.add_clock(SharedClock::Frozen).unwrap();
     builder
-        .add_global_channel(Channel::Vector3(Track {
+        .add_global_track(DynamicTrack::Vector3(Track {
             target: node_translation,
             curve: Curve::linear([time(0.), time(2.)], [[3.; 3], [9.; 3]]).unwrap(),
             clock: TimeSource::Shared(clock),
@@ -61,8 +65,11 @@ fn composed_programs_share_clocks_and_keep_property_owners_disjoint() {
     let clip = host
         .add_clip(Clip::named("host clip").with_duration(time(2.)))
         .unwrap();
-    host.add_channel(clip, channel(node_translation, TimeSource::Animation, 2.))
-        .unwrap();
+    host.add_track(
+        clip,
+        dynamic_track(node_translation, TimeSource::Animation, 2.),
+    )
+    .unwrap();
     let host = AnimationProgram::compile(
         &{
             host.import_values(&slot_values).unwrap();
@@ -77,12 +84,12 @@ fn composed_programs_share_clocks_and_keep_property_owners_disjoint() {
     let part_clip = part
         .add_clip(Clip::named("part clip").with_duration(time(2.)))
         .unwrap();
-    part.add_channel(
+    part.add_track(
         part_clip,
-        channel(extra_translation, TimeSource::Animation, 4.),
+        dynamic_track(extra_translation, TimeSource::Animation, 4.),
     )
     .unwrap();
-    part.add_global_channel(channel(extra_scale, TimeSource::Animation, 6.))
+    part.add_global_track(dynamic_track(extra_scale, TimeSource::Animation, 6.))
         .unwrap();
     let part = AnimationProgram::compile(
         &{
@@ -132,10 +139,13 @@ fn event_boundary_override_keeps_own_clock_end_and_other_clock_start() {
         .add_clip(Clip::named("loop").with_duration(time(2.)))
         .unwrap();
     builder
-        .add_channel(clip, channel(node_translation, TimeSource::Animation, 4.))
+        .add_track(
+            clip,
+            dynamic_track(node_translation, TimeSource::Animation, 4.),
+        )
         .unwrap();
     builder
-        .add_global_channel(channel(node_scale, TimeSource::Shared(clock), 8.))
+        .add_global_track(dynamic_track(node_scale, TimeSource::Shared(clock), 8.))
         .unwrap();
     let model = {
         builder.import_values(&slot_values).unwrap();
@@ -172,7 +182,7 @@ fn alias_local_clock_and_owned_program_survive_source_drop() {
         .add_clip(Clip::named("original").with_duration(time(2.)))
         .unwrap();
     builder
-        .add_channel(original, channel(property, TimeSource::Animation, 4.))
+        .add_track(original, dynamic_track(property, TimeSource::Animation, 4.))
         .unwrap();
     let alias = builder
         .add_clip(
@@ -202,7 +212,7 @@ fn alias_local_clock_and_owned_program_survive_source_drop() {
     let program = AnimationProgram::compile(&model);
     drop(model);
     let sampled = program.sample(sample).unwrap();
-    let ChannelSelection::Indexed(selection) = &sampled.channels else {
+    let TrackSelection::Indexed(selection) = &sampled.tracks else {
         panic!("owned programs must use indexed selection")
     };
     assert_eq!(selection.controllers.capacity(), 0);
@@ -222,13 +232,13 @@ fn independent_clocks_and_controller_priority_are_explicit() {
         .add_clock(SharedClock::Repeating { period: time(2.) })
         .unwrap();
     builder
-        .add_global_channel(channel(translation, TimeSource::Animation, 4.))
+        .add_global_track(dynamic_track(translation, TimeSource::Animation, 4.))
         .unwrap();
     builder
-        .add_global_channel(channel(scale, TimeSource::Shared(clock), 8.))
+        .add_global_track(dynamic_track(scale, TimeSource::Shared(clock), 8.))
         .unwrap();
     let animation_0 = builder.add_animation(crate::model::Animation {
-        channels: vec![channel(translation, TimeSource::Animation, 10.)],
+        tracks: vec![dynamic_track(translation, TimeSource::Animation, 10.)],
         ..Default::default()
     });
     let low = builder
@@ -239,7 +249,7 @@ fn independent_clocks_and_controller_priority_are_explicit() {
         })
         .unwrap();
     let animation_1 = builder.add_animation(crate::model::Animation {
-        channels: vec![channel(translation, TimeSource::Animation, 20.)],
+        tracks: vec![dynamic_track(translation, TimeSource::Animation, 20.)],
         ..Default::default()
     });
     let high = builder
@@ -286,7 +296,7 @@ fn indexed_empty_override_falls_back_and_timeline_keys_are_bounded() {
     let _node_scale = builder.model().node(node).unwrap().transform.scale;
     let property = node_translation;
     builder
-        .add_global_channel(Channel::Vector3(Track {
+        .add_global_track(DynamicTrack::Vector3(Track {
             target: property,
             clock: TimeSource::Animation,
             curve: Curve::linear(
@@ -297,7 +307,7 @@ fn indexed_empty_override_falls_back_and_timeline_keys_are_bounded() {
         }))
         .unwrap();
     let animation_2 = builder.add_animation(crate::model::Animation {
-        channels: vec![Channel::Vector3(Track {
+        tracks: vec![DynamicTrack::Vector3(Track {
             target: property,
             clock: TimeSource::Animation,
             curve: Curve::step(Vec::<Time>::new(), Vec::<[f32; 3]>::new()).unwrap(),
@@ -354,7 +364,7 @@ fn retiming_borrows_indexed_programmes_and_preserves_alias_clock_policy() {
         .add_clip(Clip::named("base").with_duration(time(2.)))
         .unwrap();
     builder
-        .add_channel(base, channel(property, TimeSource::Animation, 4.))
+        .add_track(base, dynamic_track(property, TimeSource::Animation, 4.))
         .unwrap();
     let alias = builder
         .add_clip(
@@ -399,7 +409,7 @@ fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
         .add_clock(SharedClock::Repeating { period: time(2.) })
         .unwrap();
     builder
-        .add_global_channel(Channel::Vector3(Track {
+        .add_global_track(DynamicTrack::Vector3(Track {
             target: translation,
             clock: TimeSource::Animation,
             curve: Curve::linear(
@@ -410,10 +420,10 @@ fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
         }))
         .unwrap();
     builder
-        .add_global_channel(channel(scale, TimeSource::Shared(period), 8.))
+        .add_global_track(dynamic_track(scale, TimeSource::Shared(period), 8.))
         .unwrap();
     let animation_3 = builder.add_animation(crate::model::Animation {
-        channels: vec![Channel::Vector3(Track {
+        tracks: vec![DynamicTrack::Vector3(Track {
             target: translation,
             clock: TimeSource::Animation,
             curve: Curve::step(Vec::<Time>::new(), Vec::<[f32; 3]>::new()).unwrap(),
@@ -474,7 +484,7 @@ fn compiled_property_sampling_throughput() {
             let _node_scale = builder.model().node(node).unwrap().transform.scale;
             let property = node_translation;
             builder
-                .add_global_channel(channel(property, TimeSource::Animation, 4.))
+                .add_global_track(dynamic_track(property, TimeSource::Animation, 4.))
                 .unwrap();
             properties.push(property);
         }

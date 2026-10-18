@@ -1,6 +1,6 @@
 use wc3::model::profiles::{m2, mdlx, Mdlx, Universal, M2};
 use wc3::model::{
-    AnimationSample, Camera, Channel, Clip, Construct, Curve, FromFeature, Model, NodeFeature,
+    AnimationSample, Camera, Clip, Construct, Curve, DynamicTrack, FromFeature, Model, NodeFeature,
     PropertyValues, Time, TimeSource, Track,
 };
 
@@ -18,7 +18,7 @@ fn vertical_fov_animation_cannot_narrow_to_a_static_native_field() {
     let node = draft.add_named_node("camera").unwrap();
     draft.add_feature(node, feature).unwrap();
     draft
-        .add_global_channel(Channel::Scalar(Track {
+        .add_global_track(DynamicTrack::Scalar(Track {
             target: fov,
             curve: Curve::linear([Time::default(), Time::seconds(1.).unwrap()], [0.5f32, 1.])
                 .unwrap(),
@@ -43,9 +43,9 @@ fn a_fov_slot_keeps_its_diagonal_camera_convention() {
         .add_clip(Clip::named("lens").with_duration(Time::seconds(1.).unwrap()))
         .unwrap();
     draft
-        .add_channel(
+        .add_track(
             clip,
-            Channel::Scalar(Track {
+            DynamicTrack::Scalar(Track {
                 target: fov,
                 curve: Curve::step([Time::default()], [0.75f32]).unwrap(),
                 clock: TimeSource::Animation,

@@ -9,7 +9,7 @@ use wc3::model::{
         animation::{SequenceFlags, Track, ValueKeyframe},
     },
     profiles::{mdlx as profile, Mdlx},
-    Bounds, Channel, Model,
+    Bounds, DynamicTrack, Model,
 };
 
 #[test]
@@ -54,10 +54,10 @@ fn additive_camera_keys_remain_exact_and_borrowed() {
     assert_eq!(camera.target, [30_000_000., 40., 50.]);
     let property = camera.eye_offset;
     let curve = graph
-        .channels()
+        .tracks()
         .filter(|v| v.clock() == TimeSource::Animation)
         .find_map(|channel| match channel {
-            Channel::Vector3(track) if track.target == property => Some(&track.curve),
+            DynamicTrack::Vector3(track) if track.target == property => Some(&track.curve),
             _ => None,
         })
         .unwrap();
@@ -116,10 +116,10 @@ fn native_integer_effect_curves_keep_full_width() {
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     let curve = graph
-        .channels()
+        .tracks()
         .filter(|v| v.clock() == TimeSource::Animation)
         .find_map(|channel| match channel {
-            Channel::Unsigned(track) => Some(&track.curve),
+            DynamicTrack::Unsigned(track) => Some(&track.curve),
             _ => None,
         })
         .unwrap();
@@ -389,7 +389,7 @@ fn absolute_tracks_without_sequences_do_not_invent_playback_clips() {
     assert_eq!(model.clips().len(), 0);
     assert_eq!(
         model
-            .channels()
+            .tracks()
             .filter(|v| v.clock() == TimeSource::Animation)
             .count(),
         1
@@ -438,7 +438,7 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
     assert_eq!(graph.clips().len(), 2);
     assert_eq!(
         graph
-            .channels()
+            .tracks()
             .filter(|v| v.clock() == TimeSource::Animation)
             .count(),
         1
@@ -454,10 +454,10 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
         .collect();
     assert_eq!(selections[0], selections[1]);
     assert!(graph
-        .global_channels()
+        .global_tracks()
         .all(|channel| matches!(channel.clock(), TimeSource::Shared(_))));
-    let Channel::Vector3(mut track) = graph
-        .channels()
+    let DynamicTrack::Vector3(mut track) = graph
+        .tracks()
         .find(|v| v.clock() == TimeSource::Animation)
         .unwrap()
         .clone()
@@ -473,11 +473,11 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
                 .model()
                 .animations()
                 .iter()
-                .find(|(_, animation)| !animation.channels.is_empty())
+                .find(|(_, animation)| !animation.tracks.is_empty())
                 .unwrap()
                 .0;
             let mut animation = builder.model().animation(id).unwrap().clone();
-            animation.channels[0] = Channel::Vector3(track);
+            animation.tracks[0] = DynamicTrack::Vector3(track);
             builder.set_animation(id, animation)
         })
         .unwrap();
@@ -527,12 +527,12 @@ fn global_tracks_without_sequences_stay_on_the_shared_clock() {
     let graph = &imported.value;
     assert_eq!(graph.clips().len(), 0);
     assert!(graph
-        .channels()
+        .tracks()
         .find(|v| v.clock() == TimeSource::Animation)
         .is_none());
     assert_eq!(
         graph
-            .channels()
+            .tracks()
             .filter(|v| matches!(v.clock(), TimeSource::Shared(_)))
             .count(),
         1
@@ -572,8 +572,8 @@ fn tcb_curves_cannot_be_encoded_as_native_mdlx_tracks() {
     source.set_helpers([node]);
     let mut imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
-    let Channel::Vector3(mut track) = graph
-        .channels()
+    let DynamicTrack::Vector3(mut track) = graph
+        .tracks()
         .find(|v| v.clock() == TimeSource::Animation)
         .unwrap()
         .clone()
@@ -593,11 +593,11 @@ fn tcb_curves_cannot_be_encoded_as_native_mdlx_tracks() {
                 .model()
                 .animations()
                 .iter()
-                .find(|(_, animation)| !animation.channels.is_empty())
+                .find(|(_, animation)| !animation.tracks.is_empty())
                 .unwrap()
                 .0;
             let mut animation = builder.model().animation(id).unwrap().clone();
-            animation.channels[0] = Channel::Vector3(track);
+            animation.tracks[0] = DynamicTrack::Vector3(track);
             builder.set_animation(id, animation)
         })
         .is_ok()

@@ -21,7 +21,7 @@
 //! Nodes, materials, and effects retain slot references; constants and evaluated
 //! instance values live in separate tables with the same identities.
 //! [`Track`] connects a slot to a checked [`Curve`] and explicit [`TimeSource`].
-//! Slots and channels are profile-independent, and native exporters resolve
+//! Slots and tracks are profile-independent, and native exporters resolve
 //! consuming fields when translating them into native tracks.
 //! Curve constructors select interpolation together with its required key shape:
 //! [`HermiteKeyframe`](crate::model::HermiteKeyframe) carries derivatives,
@@ -55,10 +55,10 @@ mod rotation;
 pub use rotation::*;
 pub mod animation;
 pub use animation::{
-    curves::*, properties::*, Animation, AnimationProgram, AnimationSample, Channel, ChannelValue,
-    Clip, Construct, Controller, Event, Interpolation, Property, PropertyValue, PropertyValues,
-    RetimedAnimation, SampledAnimation, SampledTrack, Time, TimeSource, Track, ValueObject,
-    ValueSample, ValueSlot,
+    curves::*, properties::*, Animation, AnimationProgram, AnimationSample, Clip, Construct,
+    Controller, DynamicTrack, Event, Interpolation, Property, PropertyValue, PropertyValues,
+    RetimedAnimation, SampledAnimation, SampledTrack, Time, TimeSource, Track, TrackValue,
+    ValueObject, ValueSample, ValueSlot,
 };
 mod playback_controls;
 pub use playback_controls::*;
