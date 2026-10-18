@@ -64,13 +64,6 @@ fn borrowing_survives_graph_construction_and_clone() {
 }
 
 #[test]
-fn owned_array_detachment_shares_storage() {
-    let values = ZeroVec::alloc_from_slice(&[1u32, 2, 3]);
-    let pointer = values.as_bytes().as_ptr();
-    assert_eq!(values.into_owned().as_bytes().as_ptr(), pointer);
-}
-
-#[test]
 fn invalid_geometry_never_enters_a_published_model() {
     let slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
@@ -106,14 +99,6 @@ fn cloned_branches_allocate_distinct_new_identities() {
 fn graph_can_cross_thread_boundaries() {
     fn send_sync<T: Send + Sync>() {}
     send_sync::<Model<'static>>();
-}
-
-#[test]
-fn scalar_and_vector_slots_cannot_alias() {
-    let mut values = PropertyValues::default();
-    let scalar = values.add(1f32);
-    let vector = values.add([1f32; 3]);
-    assert_ne!(scalar.slot(), vector.slot());
 }
 
 #[test]

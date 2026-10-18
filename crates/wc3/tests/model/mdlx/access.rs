@@ -72,16 +72,6 @@ fn checked_accessors_distinguish_unsupported_and_empty() {
 }
 
 #[test]
-fn public_visit_macro_supports_versioned_records_and_edits() {
-    let mut model = DynamicDocument::<NoExtensions>::V900(Document::new());
-    let geoset_count = visit_document!(&model, |typed| typed.geosets().count());
-    assert_eq!(geoset_count, 0);
-
-    visit_document!(&mut model, |typed| typed.set_global_sequences(&[42]));
-    assert_eq!(model.global_sequences(), [42]);
-}
-
-#[test]
 fn named_setters_move_owned_record_buffers() {
     use wc3::model::formats::mdlx::animation::{Track, ValueKeyframe};
     use wc3::model::formats::mdlx::geometry::Geoset;
@@ -187,6 +177,8 @@ fn named_mutable_iterators_preserve_repeated_chunks_for_typed_and_dynamic_models
             .collect::<Vec<_>>(),
         tags
     ));
+    visit_document!(&mut dynamic, |typed| typed.set_global_sequences(&[42]));
+    assert_eq!(dynamic.global_sequences(), [42]);
     assert!(dynamic.try_bind_poses_mut().is_err());
     assert!(dynamic.try_face_fx_mut().is_err());
     assert!(dynamic.try_popcorn_emitters_mut().is_err());

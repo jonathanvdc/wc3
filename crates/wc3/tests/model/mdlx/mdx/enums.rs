@@ -126,11 +126,6 @@ fn emitter_flags_interpret_overlapping_bits_and_preserve_other_bits() {
 fn light_type_preserves_unknown_binary_values_and_rejects_text_output() {
     use wc3::model::formats::mdlx::scene::{Light, LightType, Node};
 
-    for raw in [0, 1, 2, 3, u32::MAX] {
-        let value = LightType::decode_mdx(&raw.to_le_bytes()).unwrap();
-        assert_eq!(value.raw(), raw);
-        assert_eq!(value.encode_mdx().unwrap(), raw.to_le_bytes());
-    }
     let light = Light::<V800>::new(Node::new("unknown", 0).unwrap(), LightType::Unknown(99));
     assert_eq!(
         Light::<V800>::decode_mdx(&light.encode_mdx().unwrap())

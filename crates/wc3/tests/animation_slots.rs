@@ -14,6 +14,9 @@ fn types_select_independent_subtables_and_copies_share_slots() {
     let mut values = PropertyValues::default();
     let scalar = values.add(2f32);
     let rotation = values.add(Quaternion::IDENTITY);
+    let vector = values.add([1f32; 3]);
+    assert_ne!(scalar.slot(), vector.slot());
+    assert_eq!(values[vector], [1.; 3]);
     let shared = scalar;
     values.set(shared, 7.).unwrap();
     assert_eq!(values[scalar], 7.);
