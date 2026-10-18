@@ -72,26 +72,12 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     let mut texture_ids = BTreeMap::new();
     for source in asset.sampled_images() {
         let id = source;
-        let metadata = source.mdlx_controls()?;
         let path: &[u8] = match asset
             .image_resource(source.resource)
             .expect("validated image")
         {
             MdlxImageResource::Path(bytes) => bytes.as_ref(),
-            MdlxImageResource::Replaceable(_) => match metadata.fallback_path.map(|id| {
-                asset
-                    .image_resource(id)
-                    .expect("validated fallback filename")
-            }) {
-                Some(MdlxImageResource::Path(path)) => path.as_ref(),
-                Some(_) => {
-                    return Err(Error::new(
-                        "texture.fallback_path",
-                        "fallback filename requires a path resource",
-                    ))
-                }
-                None => &[],
-            },
+            MdlxImageResource::Replaceable { filename, .. } => filename.as_ref(),
         };
         if path.len() > 260 || path.contains(&0) {
             return Err(Error::new(
@@ -104,13 +90,13 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
         let mut field = [0u8; 260];
         field[..path.len()].copy_from_slice(path);
         value.path = FixedText::from_bytes(field);
-        if let MdlxImageResource::Replaceable(category) = asset
+        if let MdlxImageResource::Replaceable { id: category, .. } = asset
             .image_resource(source.resource)
             .expect("validated image")
         {
             value.replaceable_id = *category;
         }
-        value.flags = TextureFlags(metadata.unclassified.bits());
+        value.flags = TextureFlags::default();
         if !matches!(source.sampler.u, AddressMode::Repeat | AddressMode::Clamp)
             || !matches!(source.sampler.v, AddressMode::Repeat | AddressMode::Clamp)
         {

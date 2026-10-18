@@ -985,7 +985,7 @@ fn legacy_particle_shape_and_head_tail_controls_survive_conversion() {
 }
 
 #[test]
-fn texture_options_keep_unknown_bits_and_reject_unencoded_interpretations() {
+fn texture_sampling_drops_uninterpreted_flags_and_rejects_unencoded_interpretations() {
     let mut slot_values = SlotValues::default();
     let mut source = native_triangle();
     source.model.core_mut().textures[0].flags = TextureFlags::from_bits_retain(0x8000_0001);
@@ -994,17 +994,13 @@ fn texture_options_keep_unknown_bits_and_reject_unencoded_interpretations() {
         .value;
     let id = asset.sampled_images()[0];
     let texture = id;
-    let sm::TextureControls::M2(controls) = texture.controls.unwrap() else {
-        panic!("M2 input options lost")
-    };
-    assert_eq!(controls.flags.bits(), 0x8000_0000);
     assert_eq!(texture.color_space, sm::ColorSpace::Unspecified);
     let native = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
         .value;
-    assert_eq!(native.model.core().textures[0].flags.bits(), 0x8000_0001);
+    assert_eq!(native.model.core().textures[0].flags.bits(), 1);
     let (material, value) = asset.materials().iter().next().unwrap();
     let original = value.surface.clone();
     for invalid_color in [false, true] {
@@ -1049,16 +1045,8 @@ fn replacement_texture_retains_its_separately_declared_filename() {
         .unwrap()
         .value;
     let texture = asset.sampled_images()[0];
-    assert_eq!(
-        asset.image_resource(texture.resource).unwrap(),
-        &sm::M2ImageResource::Replaceable(0x1234)
-    );
-    let sm::TextureControls::M2(controls) = texture.controls.unwrap() else {
-        panic!("M2 options lost")
-    };
-    assert!(
-        matches!(asset.image_resource(controls.path.unwrap()), Some(sm::M2ImageResource::Path(Cow::Borrowed(path))) if *path == b"textures/checker.blp")
-    );
+    assert!(matches!(asset.image_resource(texture.resource).unwrap(),
+        sm::M2ImageResource::Replaceable { id: 0x1234, filename: Cow::Borrowed(path) } if *path == b"textures/checker.blp"));
     let native = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -2008,4 +1996,39 @@ fn m2_export_rejects_incompatible_facing_and_transform_operations() {
     node.inheritance.rotation = false;
     model.edit(|draft| draft.set_node(id, node)).unwrap();
     assert!(io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default()).is_err());
+}
+
+#[test]
+fn file_data_image_declarations_retain_accompanying_filenames() {
+    let mut model = native_triangle().model.into_chunked();
+    model
+        .insert_extension(
+            0,
+            m2::chunks::Chunk::TextureIds(ZeroVec::alloc_from_slice(&[42])),
+        )
+        .unwrap();
+    let source = m2::Bundle::from_model(model);
+    let asset = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let texture = asset.sampled_images()[0];
+    assert!(matches!(asset.image_resource(texture.resource),
+        Some(sm::M2ImageResource::FileDataId { id: 42, filename: Cow::Borrowed(path) }) if *path == b"textures/checker.blp"));
+    assert_eq!(asset.dependencies().images().len(), 1);
+    let asset = asset
+        .widen::<sm::profiles::Universal>()
+        .try_narrow::<sm::profiles::M2>()
+        .unwrap();
+    let output = io::m2::plan::<m2::Chunked<m2::V256>>(&asset, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert_eq!(
+        output.model.core().textures[0].filename.as_bytes(),
+        b"textures/checker.blp\0"
+    );
+    assert!(output.model.extensions().any(
+        |chunk| matches!(chunk, m2::chunks::Chunk::TextureIds(ids) if ids.get(0) == Some(42))
+    ));
 }

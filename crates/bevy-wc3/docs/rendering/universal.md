@@ -15,9 +15,11 @@ source and semantic graph can be released after compilation.
 
 The image callback receives a `TextureRequest` with a complete sampled-image
 value, its structural input address where applicable, and its resolved declaration from the model-owned image table. Resource
-identity, effective sampler, color space, role, and producer controls remain
-available to the application. Inputs sharing one image dependency can require
-different sampling or color interpretation. `TextureRequestKey` identifies a logical input selection. Assembly replacements
+identity, any accompanying native filename, effective sampler, color space, and
+role remain available to the application. The filename belongs to the profile
+image resource; sampled inputs carry no additional native texture controls.
+Inputs sharing one image dependency can require different sampling or color
+interpretation. `TextureRequestKey` identifies a logical input selection. Assembly replacements
 target image dependencies or structural input addresses, with input choices taking
 precedence. The native
 loader and assembly compiler then share GPU images when resolved resources,

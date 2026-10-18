@@ -112,14 +112,7 @@ impl ValidateLinks for super::NodeControls {
         }
     }
 }
-impl ValidateLinks for super::TextureControls {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        self.fallback_path.visit_links(visitor);
-        if self.unclassified.bits() & 3 != 0 {
-            visitor(Link::InvalidValue);
-        }
-    }
-}
+
 impl ValidateLinks for super::Geometry {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         for (clip, bounds, radius) in &self.sequence_bounds {

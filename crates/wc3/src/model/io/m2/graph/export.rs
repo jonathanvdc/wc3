@@ -151,30 +151,19 @@ where
     }
     let mut texture_ids = Vec::new();
     for texture in &textures {
-        let controls = texture.m2_controls()?;
         let (kind, path, id) = match asset
             .image_resource(texture.resource)
             .expect("validated image")
         {
             M2ImageResource::Path(path) => (TextureSource::File, path.as_ref(), 0),
-            M2ImageResource::FileDataId(id) => (TextureSource::File, &[][..], *id),
-            M2ImageResource::Replaceable(id) => (TextureSource::from_raw(*id), &[][..], 0),
-        };
-        let path = match controls.path.map(|id| {
-            asset
-                .image_resource(id)
-                .expect("validated alternate filename")
-        }) {
-            Some(M2ImageResource::Path(path)) => path.as_ref(),
-            Some(_) => {
-                return Err(Error::new(
-                    "m2.texture.path",
-                    "alternate filename requires a path resource",
-                ))
+            M2ImageResource::FileDataId { id, filename } => {
+                (TextureSource::File, filename.as_ref(), *id)
             }
-            None => path,
+            M2ImageResource::Replaceable { id, filename } => {
+                (TextureSource::from_raw(*id), filename.as_ref(), 0)
+            }
         };
-        let mut flags = TextureFlags::from_bits_retain(controls.flags.bits());
+        let mut flags = TextureFlags::default();
         flags.set_wrap_u(texture.sampler.u == semantic::AddressMode::Repeat);
         flags.set_wrap_v(texture.sampler.v == semantic::AddressMode::Repeat);
         core.textures.push(native::records::Texture {

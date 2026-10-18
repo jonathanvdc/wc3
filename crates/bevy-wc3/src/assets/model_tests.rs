@@ -420,7 +420,10 @@ impl ResourceResolver for TextureOverrides {
         request: &TextureRequest<'_, '_>,
         _owner: &AssetPath<'_>,
     ) -> ImageResource<'static> {
-        assert!(matches!(request.resource, ImageResource::Replaceable(1)));
+        assert!(matches!(
+            request.resource,
+            ImageResource::Replaceable { id: 1, .. }
+        ));
         assert_eq!(index, 0, "both samplers share the same image dependency");
         let variant = usize::from(request.sampler.u == wc3::model::AddressMode::Repeat);
         ImageResource::Path(Cow::Owned(format!("mapped{variant}.blp").into_bytes()))

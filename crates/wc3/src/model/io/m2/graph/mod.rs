@@ -89,26 +89,20 @@ where
             .and_then(|ids| ids.get(index))
             .filter(|id| *id != 0)
         {
-            ImageResource::FileDataId(id)
+            ImageResource::FileDataId {
+                id,
+                filename: Cow::Borrowed(path),
+            }
         } else if texture.kind == TextureSource::File {
             ImageResource::Path(Cow::Borrowed(path))
         } else {
-            ImageResource::Replaceable(texture.kind.raw())
+            ImageResource::Replaceable {
+                id: texture.kind.raw(),
+                filename: Cow::Borrowed(path),
+            }
         };
-        let image_resource = builder.intern_image_resource(resource.clone().try_into()?);
+        let image_resource = builder.intern_image_resource(resource.try_into()?);
         textures.push(semantic::Texture {
-            controls: Some(semantic::TextureControls::M2(profile::TextureControls {
-                path: if !path.is_empty() && !matches!(resource, ImageResource::Path(_)) {
-                    Some(
-                        builder.intern_image_resource(semantic::M2ImageResource::Path(
-                            Cow::Borrowed(path),
-                        )),
-                    )
-                } else {
-                    None
-                },
-                flags: profile::SupplementalTextureFlags::from_bits_retain(texture.flags.bits()),
-            })),
             resource: image_resource,
             color_space: semantic::ColorSpace::Unspecified,
             sampler: semantic::Sampler {
@@ -489,16 +483,21 @@ pub(in crate::model::io::m2) fn texture_index(
     image: Texture,
 ) -> Option<usize> {
     textures.iter().position(|candidate| {
-        if *candidate == image { return true; }
-        if candidate.sampler != image.sampler || candidate.color_space != image.color_space { return false; }
-        let (Some(left), Some(right)) = (model.image_resource(candidate.resource), model.image_resource(image.resource)) else { return false; };
-        if left != right { return false; }
-        let (Ok(left), Ok(right)) = (candidate.m2_controls(), image.m2_controls()) else { return false; };
-        if left.flags != right.flags { return false; }
-        match (left.path, right.path) {
-            (None, None) => true,
-            (Some(left), Some(right)) => matches!((model.image_resource(left), model.image_resource(right)), (Some(left), Some(right)) if left == right),
-            _ => false,
+        if *candidate == image {
+            return true;
         }
+        if candidate.sampler != image.sampler || candidate.color_space != image.color_space {
+            return false;
+        }
+        let (Some(left), Some(right)) = (
+            model.image_resource(candidate.resource),
+            model.image_resource(image.resource),
+        ) else {
+            return false;
+        };
+        if left != right {
+            return false;
+        }
+        true
     })
 }

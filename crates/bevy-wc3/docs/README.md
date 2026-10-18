@@ -28,7 +28,7 @@ draws it through Bevy. Start with the [renderer overview](rendering/renderer.md)
 then choose a topic:
 
 - [Semantic compiler and native resources](rendering/universal.md): Universal material-program compilation,
-  typed image dependencies, input-owned sampling, native resource providers, semantic animation, and family-specific interpretation limits.
+  typed image declarations, input-owned sampling, native resource providers, semantic animation, and family-specific interpretation limits.
 - [Model assembly](rendering/assembly.md): application-defined selections, typed
   geometry and texture choices, shared skeletons and rigid components.
 - [WoW characters and equipment](rendering/characters.md): the optional native

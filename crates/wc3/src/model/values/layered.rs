@@ -1,24 +1,6 @@
 //! Independent option words retain unresolved bits without assigning new meanings.
 use bitfield::bitfield;
 bitfield! {
-    /// Unresolved texture flags retained alongside named authoring controls.
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct TextureFlags(u32);
-    /// Complete retained option word.
-    pub bits, _:31,0;
-}
-impl TextureFlags {
-    /// Constructs an option word without discarding any unrecognized bits.
-    pub const fn from_bits_retain(bits: u32) -> Self {
-        Self(bits)
-    }
-}
-impl From<u32> for TextureFlags {
-    fn from(bits: u32) -> Self {
-        Self::from_bits_retain(bits)
-    }
-}
-bitfield! {
     /// Unresolved sequence flags retained alongside named authoring controls.
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
     pub struct SequenceFlags(u32);

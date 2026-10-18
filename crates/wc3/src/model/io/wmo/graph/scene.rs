@@ -84,7 +84,6 @@ pub(super) fn read<'a, 'data: 'a>(
                         resource,
                         sampler: Sampler::default(),
                         color_space: ColorSpace::Unspecified,
-                        controls: Default::default(),
                     })
                 };
                 let mut flags = row.flags;
@@ -211,7 +210,7 @@ pub(super) fn read<'a, 'data: 'a>(
                     })
                     .transpose()?;
                 let resource = if let Some(file) = file_id {
-                    ImageResource::FileDataId(file)
+                    ImageResource::file_data_id(file)
                 } else {
                     let bytes = crate::model::formats::wmo::resources::string_at(paths, selector)
                         .map_err(|error| Error::new("world.doodad", error.to_string()))?;

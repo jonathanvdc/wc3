@@ -166,7 +166,7 @@ fn narrowing_checks_unused_resources_and_nested_companion_addresses() {
 fn unused_resource_values_are_validated() {
     let slot_values = SlotValues::default();
     let mut draft = Model::<M2>::builder("invalid image");
-    draft.add_image_resource(M2ImageResource::FileDataId(0));
+    draft.add_image_resource(M2ImageResource::file_data_id(0));
     assert!({
         draft.import_values(&slot_values).unwrap();
         draft.finish()
@@ -285,4 +285,41 @@ fn typed_collections_preserve_order_and_reject_foreign_identities() {
     assert_eq!(model.nodes().keys().collect::<Vec<_>>(), nodes);
     assert_eq!(model.nodes().get(first).unwrap().name, "first");
     assert!(model.dependencies().images().contains_key(image));
+}
+
+#[test]
+fn accompanying_image_filenames_survive_profile_conversion_without_copying() {
+    let mut draft = Model::<M2>::builder("image declaration");
+    let filename: Cow<'_, [u8]> = Cow::Owned(b"authored.blp".to_vec());
+    let pointer = filename.as_ptr();
+    let image = draft.add_image_resource(M2ImageResource::FileDataId { id: 42, filename });
+    let model = draft.finish().unwrap().widen::<Universal>();
+    assert!(matches!(model.image_resource(image),
+        Some(ImageResource::FileDataId { id: 42, filename }) if filename.as_ptr() == pointer));
+    let model = model.try_narrow::<M2>().unwrap();
+    assert!(matches!(model.image_resource(image),
+        Some(M2ImageResource::FileDataId { id: 42, filename }) if filename.as_ptr() == pointer));
+}
+
+#[test]
+fn address_only_vocabularies_reject_accompanying_image_filenames() {
+    use wc3::model::WorldImageResource;
+    let declaration = ImageResource::FileDataId {
+        id: 42,
+        filename: b"authored.blp".as_slice().into(),
+    };
+    assert!(WorldImageResource::try_from(declaration.clone()).is_err());
+    assert!(ResourceLocator::try_from(declaration.clone()).is_err());
+    assert_eq!(declaration.clone().into_owned(), declaration);
+    assert!(WorldImageResource::try_from(ImageResource::file_data_id(42)).is_ok());
+}
+
+#[test]
+fn accompanying_image_filenames_reject_embedded_nuls() {
+    let mut draft = Model::<Mdlx>::builder("invalid image filename");
+    draft.add_image_resource(MdlxImageResource::Replaceable {
+        id: 1,
+        filename: b"authored\0.blp".as_slice().into(),
+    });
+    assert!(draft.finish().is_err());
 }

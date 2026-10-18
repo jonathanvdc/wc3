@@ -28,7 +28,7 @@ use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 /// use wc3::model::{Model, ImageResource};
 /// use wc3::model::profiles::Mdlx;
 /// let mut draft = Model::<Mdlx>::builder("invalid resource");
-/// draft.add_image_resource(ImageResource::FileDataId(42));
+/// draft.add_image_resource(ImageResource::file_data_id(42));
 /// ```
 #[derive(Clone, Debug, Default)]
 pub struct Mdlx;

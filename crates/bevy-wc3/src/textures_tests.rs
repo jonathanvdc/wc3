@@ -127,13 +127,13 @@ fn image_requests_retain_native_input_metadata_for_replacement_selection() {
     let mut slot_values = SlotValues::default();
     use wc3::model::materials::mdlx::MaterialStep as MdlxStep;
     use wc3::model::profiles::mdlx::Material as MdlxMaterial;
-    use wc3::model::TextureControls;
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let first = builder.add_file_texture("shared.png").unwrap();
     let mut second = first;
-    second.controls = Some(TextureControls::Mdlx(SlotConstruct::construct(
-        &mut slot_values,
-    )));
+    second.resource = builder.add_image_resource(ImageResource::Replaceable {
+        id: 1,
+        filename: b"shared.png".as_slice().into(),
+    });
     let layers = [first, second].map(|image| {
         let mut layer = MdlxStep::construct(&mut slot_values);
         layer.shader.inputs_mut().binding.image = slot_values.add(Some(image));

@@ -93,34 +93,6 @@ impl From<MaterialFlags> for u16 {
 }
 
 bitfield! {
-    /// Native TextureFlags; unknown bits are retained.
-    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-    pub struct TextureFlags(u32);
-    /// Exact stored bits.
-    pub bits, _: 31, 0;
-    /// Returns or changes the wrap u bit.
-    pub wrap_u, set_wrap_u: 0;
-    /// Returns or changes the wrap v bit.
-    pub wrap_v, set_wrap_v: 1;
-}
-impl TextureFlags {
-    /// Constructs flags without discarding unknown bits.
-    pub const fn from_bits_retain(bits: u32) -> Self {
-        Self(bits)
-    }
-}
-impl From<u32> for TextureFlags {
-    fn from(bits: u32) -> Self {
-        Self::from_bits_retain(bits)
-    }
-}
-impl From<TextureFlags> for u32 {
-    fn from(flags: TextureFlags) -> Self {
-        flags.bits()
-    }
-}
-
-bitfield! {
     /// Native BatchFlags; unknown bits are retained.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub struct BatchFlags(u8);

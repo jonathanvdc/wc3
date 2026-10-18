@@ -118,7 +118,7 @@ pub mod features;
 pub use features::*;
 /// Compile-time logical vocabularies and lossless embeddings.
 pub mod controls;
-pub use controls::{DrawControls, InstanceControls, MeshControls, NodeControls, TextureControls};
+pub use controls::{DrawControls, InstanceControls, MeshControls, NodeControls};
 mod texture_transform;
 pub use texture_transform::*;
 pub mod systems;

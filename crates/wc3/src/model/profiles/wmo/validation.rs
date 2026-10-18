@@ -253,10 +253,7 @@ pub(super) fn resources(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
         }
     }
     for texture in value.sampled_images() {
-        if texture.color_space != ColorSpace::Unspecified
-            || texture.controls.is_some()
-            || texture.sampler != Sampler::default()
-        {
+        if texture.color_space != ColorSpace::Unspecified || texture.sampler != Sampler::default() {
             return Err(Error::new("world.images.sampling", "lightmap and light-cookie declarations have no native sampler or transfer-function fields"));
         }
     }

@@ -34,7 +34,7 @@ impl ResourceResolver for ModelResolver {
         _owner: &AssetPath<'_>,
     ) -> ImageResource<'static> {
         let path = self.bitmaps.get(&index).or_else(|| {
-            if let ImageResource::Replaceable(id) = request.resource {
+            if let ImageResource::Replaceable { id, .. } = request.resource {
                 self.replaceables.get(id)
             } else {
                 None

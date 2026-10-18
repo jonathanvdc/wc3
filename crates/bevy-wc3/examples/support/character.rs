@@ -82,7 +82,9 @@ fn replacements(values: BTreeMap<u32, Replacement>) -> BTreeMap<u32, TextureRepl
         .into_iter()
         .map(|(slot, value)| {
             let value = match value {
-                Replacement::Image(id) => TextureReplacement::Image(ImageResource::FileDataId(id)),
+                Replacement::Image(id) => {
+                    TextureReplacement::Image(ImageResource::file_data_id(id))
+                }
                 Replacement::Atlas(atlas) => TextureReplacement::Atlas {
                     atlas: Atlas {
                         width: atlas.width,
@@ -93,7 +95,7 @@ fn replacements(values: BTreeMap<u32, Replacement>) -> BTreeMap<u32, TextureRepl
                         .layers
                         .into_iter()
                         .map(|layer| TextureLayer {
-                            resource: ImageResource::FileDataId(layer.image),
+                            resource: ImageResource::file_data_id(layer.image),
                             source: layer.source.map(rect),
                             destination: rect(layer.destination),
                             opacity: layer.opacity,
@@ -232,7 +234,7 @@ pub fn load(
         &models,
         images,
         |resource| {
-            let ImageResource::FileDataId(id) = resource else {
+            let ImageResource::FileDataId { id, .. } = resource else {
                 return Err(ModelError::new(format!(
                     "character image must have a FileDataID: {resource:?}"
                 )));

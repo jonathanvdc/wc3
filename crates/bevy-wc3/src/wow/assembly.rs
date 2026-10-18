@@ -89,7 +89,7 @@ fn source(
         .images()
         .iter()
         .filter_map(|(id, resource)| match resource {
-            ImageResource::Replaceable(category) => replacements
+            ImageResource::Replaceable { id: category, .. } => replacements
                 .get(category)
                 .map(|replacement| (id, replacement.clone())),
             _ => None,

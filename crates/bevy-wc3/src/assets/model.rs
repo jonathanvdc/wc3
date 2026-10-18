@@ -216,10 +216,12 @@ pub trait ResourceResolver: Send + Sync + 'static {
         owner: &AssetPath<'_>,
     ) -> Vec<AssetPath<'static>> {
         let resource = self.texture_resource(index, request, owner);
+        let locator = match resource {
+            ImageResource::FileDataId { id, .. } => Some(ModelResource::FileDataId(id)),
+            resource => resource.try_into().ok(),
+        };
         image_candidates(
-            resource
-                .try_into()
-                .map_or_else(|_| Vec::new(), |resource| self.candidates(&resource, owner)),
+            locator.map_or_else(Vec::new, |resource| self.candidates(&resource, owner)),
         )
     }
     /// Candidate child models for an authored attachment or particle emitter.

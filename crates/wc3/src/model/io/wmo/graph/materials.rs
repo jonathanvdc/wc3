@@ -361,7 +361,7 @@ fn resource<'view, 'data: 'view>(
             .map_err(|error| Error::new("world.texture", error.to_string()))?;
         Ok((!bytes.is_empty()).then_some(ImageResource::Path(Cow::Borrowed(bytes))))
     } else {
-        Ok((selector != 0).then_some(ImageResource::FileDataId(selector)))
+        Ok((selector != 0).then_some(ImageResource::file_data_id(selector)))
     }
 }
 

@@ -7,12 +7,12 @@ use crate::model::conversion::{Context, Conversion, Error, ImportOptions};
 use crate::model::formats::mdlx::{self as native, Chunk, Dialect, ModelChunk};
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
+use crate::model::Model;
 use crate::model::TransformSemantics;
 use crate::model::{
     AddressMode, Animation, Bounds, Clip, DynamicTrack, ImageResource, Inheritance, Material,
     ModelBuilder, Quaternion, Sampler, SharedClock, Texture, Time, TimeSource, Track,
 };
-use crate::model::{MdlxImageResource, Model, TextureControls};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
@@ -88,34 +88,22 @@ where
     }
     let mut texture_ids = Vec::new();
     for texture in source.textures() {
+        let bytes = texture.path.as_bytes();
+        let end = bytes
+            .iter()
+            .position(|byte| *byte == 0)
+            .unwrap_or(bytes.len());
+        let filename = S::bytes(&bytes[..end]);
         let resource = if texture.replaceable_id != 0 {
-            ImageResource::Replaceable(texture.replaceable_id)
-        } else {
-            {
-                let bytes = texture.path.as_bytes();
-                let end = bytes
-                    .iter()
-                    .position(|byte| *byte == 0)
-                    .unwrap_or(bytes.len());
-                ImageResource::Path(S::bytes(&bytes[..end]))
+            ImageResource::Replaceable {
+                id: texture.replaceable_id,
+                filename,
             }
+        } else {
+            ImageResource::Path(filename)
         };
         let resource = builder.intern_image_resource(resource.try_into()?);
         texture_ids.push(Texture {
-            controls: Some(TextureControls::Mdlx(profile::TextureControls {
-                fallback_path: if texture.replaceable_id != 0 && !texture.path.text().is_empty() {
-                    let bytes = texture.path.as_bytes();
-                    let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
-                    Some(
-                        builder.intern_image_resource(MdlxImageResource::Path(S::bytes(
-                            &bytes[..end],
-                        ))),
-                    )
-                } else {
-                    None
-                },
-                unclassified: (texture.flags.bits() & !3).into(),
-            })),
             resource,
             color_space: Default::default(),
             sampler: Sampler {

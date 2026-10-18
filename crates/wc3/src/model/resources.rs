@@ -17,10 +17,20 @@ pub enum ImageResource<'a> {
     /// Native path spelling, including non-UTF-8 paths.
     Path(Cow<'a, [u8]>),
     /// World of Warcraft resource identity.
-    FileDataId(u32),
+    FileDataId {
+        /// Primary numeric identity.
+        id: u32,
+        /// Accompanying native filename; empty when none was authored.
+        filename: Cow<'a, [u8]>,
+    },
 
     /// Application-provided replacement texture category.
-    Replaceable(u32),
+    Replaceable {
+        /// Primary numeric identity.
+        id: u32,
+        /// Accompanying native filename; empty when none was authored.
+        filename: Cow<'a, [u8]>,
+    },
     /// Image bytes supplied with the authoring data, with no established encoding interpretation.
     EmbeddedImage {
         /// Authored image bytes, borrowed when available.
@@ -44,9 +54,15 @@ impl ImageResource<'_> {
                 suffix: Cow::Owned(suffix.into_owned()),
             },
             Self::Path(value) => ImageResource::Path(Cow::Owned(value.into_owned())),
-            Self::FileDataId(value) => ImageResource::FileDataId(value),
+            Self::FileDataId { id, filename } => ImageResource::FileDataId {
+                id,
+                filename: Cow::Owned(filename.into_owned()),
+            },
 
-            Self::Replaceable(value) => ImageResource::Replaceable(value),
+            Self::Replaceable { id, filename } => ImageResource::Replaceable {
+                id,
+                filename: Cow::Owned(filename.into_owned()),
+            },
             Self::EmbeddedImage { bytes } => ImageResource::EmbeddedImage {
                 bytes: Cow::Owned(bytes.into_owned()),
             },
@@ -59,7 +75,13 @@ impl ImageResource<'_> {
 }
 
 impl ValidateLinks for ImageResource<'_> {
-    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if let Self::FileDataId { filename, .. } | Self::Replaceable { filename, .. } = self {
+            if filename.contains(&0) {
+                visitor(Link::InvalidValue);
+            }
+        }
+    }
 }
 
 /// A dependency addressed by native path bytes.
@@ -96,13 +118,20 @@ pub enum MdlxImageResource<'a> {
     /// Native path spelling, including non-UTF-8 bytes.
     Path(Cow<'a, [u8]>),
     /// Application-selected replacement category.
-    Replaceable(u32),
+    Replaceable {
+        /// Primary numeric identity.
+        id: u32,
+        /// Accompanying native filename; empty when none was authored.
+        filename: Cow<'a, [u8]>,
+    },
 }
 impl<'a> From<MdlxImageResource<'a>> for ImageResource<'a> {
     fn from(value: MdlxImageResource<'a>) -> Self {
         match value {
             MdlxImageResource::Path(value) => ImageResource::Path(value),
-            MdlxImageResource::Replaceable(value) => ImageResource::Replaceable(value),
+            MdlxImageResource::Replaceable { id, filename } => {
+                ImageResource::Replaceable { id, filename }
+            }
         }
     }
 }
@@ -111,7 +140,7 @@ impl<'a> TryFrom<ImageResource<'a>> for MdlxImageResource<'a> {
     fn try_from(value: ImageResource<'a>) -> Result<Self, Error> {
         match value {
             ImageResource::Path(value) => Ok(Self::Path(value)),
-            ImageResource::Replaceable(value) => Ok(Self::Replaceable(value)),
+            ImageResource::Replaceable { id, filename } => Ok(Self::Replaceable { id, filename }),
             _ => Err(Error::new(
                 "resources",
                 "address is not admitted by the destination resource vocabulary",
@@ -120,7 +149,13 @@ impl<'a> TryFrom<ImageResource<'a>> for MdlxImageResource<'a> {
     }
 }
 impl ValidateLinks for MdlxImageResource<'_> {
-    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if let Self::Replaceable { filename, .. } = self {
+            if filename.contains(&0) {
+                visitor(Link::InvalidValue);
+            }
+        }
+    }
 }
 /// WoW image paths, file-data identities, and replacement categories.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -128,16 +163,30 @@ pub enum M2ImageResource<'a> {
     /// Native path spelling, including non-UTF-8 bytes.
     Path(Cow<'a, [u8]>),
     /// External file-data table identity.
-    FileDataId(u32),
+    FileDataId {
+        /// Primary numeric identity.
+        id: u32,
+        /// Accompanying native filename; empty when none was authored.
+        filename: Cow<'a, [u8]>,
+    },
     /// Application-selected replacement category.
-    Replaceable(u32),
+    Replaceable {
+        /// Primary numeric identity.
+        id: u32,
+        /// Accompanying native filename; empty when none was authored.
+        filename: Cow<'a, [u8]>,
+    },
 }
 impl<'a> From<M2ImageResource<'a>> for ImageResource<'a> {
     fn from(value: M2ImageResource<'a>) -> Self {
         match value {
             M2ImageResource::Path(value) => ImageResource::Path(value),
-            M2ImageResource::FileDataId(value) => ImageResource::FileDataId(value),
-            M2ImageResource::Replaceable(value) => ImageResource::Replaceable(value),
+            M2ImageResource::FileDataId { id, filename } => {
+                ImageResource::FileDataId { id, filename }
+            }
+            M2ImageResource::Replaceable { id, filename } => {
+                ImageResource::Replaceable { id, filename }
+            }
         }
     }
 }
@@ -146,8 +195,8 @@ impl<'a> TryFrom<ImageResource<'a>> for M2ImageResource<'a> {
     fn try_from(value: ImageResource<'a>) -> Result<Self, Error> {
         match value {
             ImageResource::Path(value) => Ok(Self::Path(value)),
-            ImageResource::FileDataId(value) => Ok(Self::FileDataId(value)),
-            ImageResource::Replaceable(value) => Ok(Self::Replaceable(value)),
+            ImageResource::FileDataId { id, filename } => Ok(Self::FileDataId { id, filename }),
+            ImageResource::Replaceable { id, filename } => Ok(Self::Replaceable { id, filename }),
             _ => Err(Error::new(
                 "resources",
                 "address is not admitted by the destination resource vocabulary",
@@ -157,7 +206,15 @@ impl<'a> TryFrom<ImageResource<'a>> for M2ImageResource<'a> {
 }
 impl ValidateLinks for M2ImageResource<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        if matches!(self, Self::FileDataId(0) | Self::Replaceable(0)) {
+        if let Self::FileDataId { filename, .. } | Self::Replaceable { filename, .. } = self {
+            if filename.contains(&0) {
+                visitor(Link::InvalidValue);
+            }
+        }
+        if matches!(
+            self,
+            Self::FileDataId { id: 0, .. } | Self::Replaceable { id: 0, .. }
+        ) {
             visitor(Link::InvalidValue);
         }
     }
@@ -179,7 +236,10 @@ impl<'a> From<WorldImageResource<'a>> for ImageResource<'a> {
     fn from(value: WorldImageResource<'a>) -> Self {
         match value {
             WorldImageResource::Path(value) => ImageResource::Path(value),
-            WorldImageResource::FileDataId(value) => ImageResource::FileDataId(value),
+            WorldImageResource::FileDataId(id) => ImageResource::FileDataId {
+                id,
+                filename: Cow::Borrowed(&[]),
+            },
             WorldImageResource::EmbeddedImage { bytes } => ImageResource::EmbeddedImage { bytes },
         }
     }
@@ -189,7 +249,9 @@ impl<'a> TryFrom<ImageResource<'a>> for WorldImageResource<'a> {
     fn try_from(value: ImageResource<'a>) -> Result<Self, Error> {
         match value {
             ImageResource::Path(value) => Ok(Self::Path(value)),
-            ImageResource::FileDataId(value) => Ok(Self::FileDataId(value)),
+            ImageResource::FileDataId { id, filename } if filename.is_empty() => {
+                Ok(Self::FileDataId(id))
+            }
             ImageResource::EmbeddedImage { bytes } => Ok(Self::EmbeddedImage { bytes }),
             _ => Err(Error::new(
                 "resources",
@@ -213,7 +275,10 @@ impl<'a> From<WorldModelResource<'a>> for ImageResource<'a> {
     fn from(value: WorldModelResource<'a>) -> Self {
         match value {
             WorldModelResource::Path(value) => ImageResource::Path(value),
-            WorldModelResource::FileDataId(value) => ImageResource::FileDataId(value),
+            WorldModelResource::FileDataId(id) => ImageResource::FileDataId {
+                id,
+                filename: Cow::Borrowed(&[]),
+            },
         }
     }
 }
@@ -222,7 +287,9 @@ impl<'a> TryFrom<ImageResource<'a>> for WorldModelResource<'a> {
     fn try_from(value: ImageResource<'a>) -> Result<Self, Error> {
         match value {
             ImageResource::Path(value) => Ok(Self::Path(value)),
-            ImageResource::FileDataId(value) => Ok(Self::FileDataId(value)),
+            ImageResource::FileDataId { id, filename } if filename.is_empty() => {
+                Ok(Self::FileDataId(id))
+            }
             _ => Err(Error::new(
                 "resources",
                 "address is not admitted by the destination resource vocabulary",
@@ -288,7 +355,10 @@ impl<'a> From<ResourceLocator<'a>> for ImageResource<'a> {
             ResourceLocator::Root => Self::Root,
             ResourceLocator::Relative { owner, suffix } => Self::Relative { owner, suffix },
             ResourceLocator::Path(value) => Self::Path(value),
-            ResourceLocator::FileDataId(value) => Self::FileDataId(value),
+            ResourceLocator::FileDataId(id) => Self::FileDataId {
+                id,
+                filename: Cow::Borrowed(&[]),
+            },
 
             ResourceLocator::Named { namespace, name } => Self::Named { namespace, name },
         }
@@ -301,7 +371,9 @@ impl<'a> TryFrom<ImageResource<'a>> for ResourceLocator<'a> {
             ImageResource::Root => Ok(Self::Root),
             ImageResource::Relative { owner, suffix } => Ok(Self::Relative { owner, suffix }),
             ImageResource::Path(value) => Ok(Self::Path(value)),
-            ImageResource::FileDataId(value) => Ok(Self::FileDataId(value)),
+            ImageResource::FileDataId { id, filename } if filename.is_empty() => {
+                Ok(Self::FileDataId(id))
+            }
 
             ImageResource::Named { namespace, name } => Ok(Self::Named { namespace, name }),
             _ => Err(Error::new(
@@ -416,6 +488,50 @@ impl ValidateLinks for M2ResourceLocator<'_> {
             Self::Relative { owner, .. } => owner.visit_links(visitor),
             Self::FileDataId(0) => visitor(Link::InvalidValue),
             _ => {}
+        }
+    }
+}
+
+impl ImageResource<'_> {
+    /// Declares a numeric image identity without an accompanying filename.
+    pub fn file_data_id(id: u32) -> Self {
+        Self::FileDataId {
+            id,
+            filename: Cow::Borrowed(&[]),
+        }
+    }
+    /// Declares a numeric image identity without an accompanying filename.
+    pub fn replaceable(id: u32) -> Self {
+        Self::Replaceable {
+            id,
+            filename: Cow::Borrowed(&[]),
+        }
+    }
+}
+
+impl MdlxImageResource<'_> {
+    /// Declares a numeric image identity without an accompanying filename.
+    pub fn replaceable(id: u32) -> Self {
+        Self::Replaceable {
+            id,
+            filename: Cow::Borrowed(&[]),
+        }
+    }
+}
+
+impl M2ImageResource<'_> {
+    /// Declares a numeric image identity without an accompanying filename.
+    pub fn file_data_id(id: u32) -> Self {
+        Self::FileDataId {
+            id,
+            filename: Cow::Borrowed(&[]),
+        }
+    }
+    /// Declares a numeric image identity without an accompanying filename.
+    pub fn replaceable(id: u32) -> Self {
+        Self::Replaceable {
+            id,
+            filename: Cow::Borrowed(&[]),
         }
     }
 }

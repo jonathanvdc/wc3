@@ -6,7 +6,7 @@ use wc3::model::materials::mdlx;
 use wc3::model::materials::program::MaterialStep;
 use wc3::model::{
     ColorSpace, FeatureId, ImageResource, ImageResourceId, MaterialId, Model, NodeFeature,
-    ParticleEmitter, Sampler, Texture, TextureControls,
+    ParticleEmitter, Sampler, Texture,
 };
 
 /// Purpose of one sampled image, independent of its resource identity.
@@ -98,8 +98,6 @@ pub struct TextureRequestKey {
     pub resource: ImageResourceId,
     /// Authored transfer declaration used by animated selections.
     pub declared: ColorSpace,
-    /// Native controls available to source resolution.
-    pub controls: Option<TextureControls>,
     /// Effective transfer function for this use.
     pub color_space: TextureColorSpace,
     /// Effective addressing selected by this surface use.
@@ -110,7 +108,7 @@ pub struct TextureRequestKey {
 pub struct TextureRequest<'view, 'data> {
     /// Structural input address; absent for unscoped animated image availability.
     pub input: Option<TextureInput>,
-    /// Image handle, sampler, and producer-specific texture declarations.
+    /// Image declaration handle, sampler, and color interpretation.
     pub texture: Texture,
     /// Image declaration resolved from the owning model.
     pub resource: &'view ImageResource<'data>,
@@ -128,7 +126,6 @@ impl TextureRequest<'_, '_> {
             input: self.input,
             resource: self.texture.resource,
             declared: self.texture.color_space,
-            controls: self.texture.controls,
             color_space: self.color_space,
             sampler: self.sampler,
         }
@@ -330,7 +327,6 @@ impl TextureImages {
                     // and explicit color declarations when they select this interpretation.
                     let texture = Texture {
                         resource: key.resource,
-                        controls: key.controls,
                         color_space: key.declared,
                         sampler: key.sampler,
                     };
@@ -360,7 +356,6 @@ impl TextureImages {
             input: self.input,
             resource: texture.resource,
             declared: texture.color_space,
-            controls: texture.controls,
             color_space: TextureColorSpace::selected(declared, role),
             sampler,
         };
@@ -383,7 +378,6 @@ impl TextureImages {
             input: self.input.map(|input| input.with_slot(slot)),
             resource: texture.resource,
             declared: texture.color_space,
-            controls: texture.controls,
             color_space: TextureColorSpace::selected(texture.color_space, role),
             sampler: texture.sampler,
         })

@@ -59,7 +59,6 @@ pub(super) fn read<'a, D: Dialect>(
                         .add_image_resource(WorldImageResource::FileDataId(row.texture_file_id));
                     Some(Texture {
                         resource: image_resource,
-                        controls: Default::default(),
                         color_space: ColorSpace::Unspecified,
                         sampler: Sampler::default(),
                     })

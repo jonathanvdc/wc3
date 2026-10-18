@@ -80,7 +80,7 @@ fn incompatible_shared_textures_fail_before_image_provider() {
     let mut source = Source::new(ResourceLocator::FileDataId(1));
     source.images.insert(
         texture.resource,
-        TextureReplacement::Image(ImageResource::FileDataId(99)),
+        TextureReplacement::Image(ImageResource::file_data_id(99)),
     );
     let assembly = Assembly::new(source);
     let mut calls = 0;
@@ -145,7 +145,7 @@ fn replacements_distinguish_identical_inputs_before_resolved_images_are_shared()
     let mut source = Source::new(resource.clone());
     source.images.insert(
         first.resource,
-        TextureReplacement::Image(ImageResource::FileDataId(100)),
+        TextureReplacement::Image(ImageResource::file_data_id(100)),
     );
     source.inputs.insert(
         TextureInput::Material {
@@ -153,11 +153,11 @@ fn replacements_distinguish_identical_inputs_before_resolved_images_are_shared()
             step: 1,
             slot: 0,
         },
-        TextureReplacement::Image(ImageResource::FileDataId(200)),
+        TextureReplacement::Image(ImageResource::file_data_id(200)),
     );
     let mut images = Assets::<Image>::default();
     let compiled = compile_assembly(&Assembly::new(source), &models, &mut images, |resource| {
-        let ImageResource::FileDataId(value) = resource else {
+        let ImageResource::FileDataId { id: value, .. } = resource else {
             panic!("replacement was ignored")
         };
         Ok(RgbaImage::new(1, 1, vec![*value as u8, 0, 0, 255]).unwrap())
@@ -236,7 +236,7 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
     let mut source = Source::new(resource.clone());
     source.images.insert(
         first.resource,
-        TextureReplacement::Image(ImageResource::FileDataId(100)),
+        TextureReplacement::Image(ImageResource::file_data_id(100)),
     );
     source.inputs.insert(
         TextureInput::Material {
@@ -244,13 +244,13 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
             step: 1,
             slot: 0,
         },
-        TextureReplacement::Image(ImageResource::FileDataId(200)),
+        TextureReplacement::Image(ImageResource::file_data_id(200)),
     );
     let models = [(resource, model)].into_iter().collect::<Models<'_>>();
     let mut images = Assets::<Image>::default();
     let compiled = compile_assembly(&Assembly::new(source), &models, &mut images, |resource| {
         let value = match resource {
-            ImageResource::FileDataId(value) => *value as u8,
+            ImageResource::FileDataId { id: value, .. } => *value as u8,
             ImageResource::Path(path) if path.as_ref() == b"second.png" => 50,
             _ => panic!("unexpected image source {resource:?}"),
         };
@@ -295,7 +295,7 @@ fn absent_input_is_rejected_before_resolving_images() {
             step: 99,
             slot: 0,
         },
-        TextureReplacement::Image(ImageResource::FileDataId(100)),
+        TextureReplacement::Image(ImageResource::file_data_id(100)),
     );
     let result = compile_assembly(
         &Assembly::new(source),

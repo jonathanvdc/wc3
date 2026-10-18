@@ -54,7 +54,8 @@ game-specific pass ordering scheme.
 emissive, Fresnel, and approximate reflection. Role-aware image requests preserve
 samplers and color-space distinctions without changing shared source images.
 Material and effect inputs reference model-owned image declarations through typed
-handles and own their sampling and coordinate transforms. Native shared texture
+handles and own their sampling and coordinate transforms. Accompanying native
+filenames live in those resource declarations. Native shared texture
 and transform records become independent input values during import. Image
 requests expose the selected value and resolved declaration to the application;
 equal resolved resources, samplers, and transfer functions share GPU images.

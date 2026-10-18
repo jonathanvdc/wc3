@@ -203,9 +203,11 @@ joint identities cannot be substituted across simulation systems.
 
 Applications can implement `Profile` with their own payloads. Relationship
 traversal through `ValidateLinks` makes those payloads participate in checked
-publication. Image inputs retain sampling declarations permitted by their profile. M2 can
-preserve an alternate filename alongside a replaceable-image or file-data-ID
-selection; that filename is another shared image dependency. Unknown numeric
+publication. Image inputs retain sampling declarations permitted by their profile.
+MDLX and M2 image declarations retain an accompanying `filename` directly
+alongside a replacement ID or file-data ID. Their `P::ImageResource` payload owns
+both the identity and filename;
+inputs keep only the resource handle and their sampling choices. Unknown numeric
 sampling selectors stay within their shader vocabulary. Common `ColorSpace` and
 `Sampler` values describe understood transfer functions and U/V addressing,
 while profile validation rejects choices with no established native mapping.
@@ -304,9 +306,12 @@ so editing one imported use does not affect another use of the same native recor
 
 Native import expands texture and transform table references into complete
 input values while sharing image declarations. Animated MDLX image choices carry
-the selected image's sampler and native options with each key. Export rebuilds
+the selected image's resource handle and sampler with each key. Export rebuilds
 native indirection tables and interns equal records; native table identity and
-unused records are not semantic authoring objects. `Model::sampled_images()`
+unused records are not semantic authoring objects. Uninterpreted native texture
+flag bits are discarded during semantic import; U/V wrapping is represented by
+the input sampler and reconstructed during export. Native codec documents retain
+the original flag words when semantic conversion is unnecessary. `Model::sampled_images()`
 collects distinct sampled-image values from materials, effects, allocated value
 slots, and animation tracks. This does not introduce shared editable texture
 objects.

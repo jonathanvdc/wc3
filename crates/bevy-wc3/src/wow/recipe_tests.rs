@@ -53,7 +53,7 @@ fn checked_rectangles_reject_overflow_before_asset_work() {
                     clear: [0; 4],
                 },
                 layers: vec![TextureLayer {
-                    resource: ImageResource::FileDataId(2),
+                    resource: ImageResource::file_data_id(2),
                     source: None,
                     destination: PixelRect {
                         x: u32::MAX,

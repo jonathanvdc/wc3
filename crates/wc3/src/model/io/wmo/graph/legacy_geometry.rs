@@ -251,7 +251,6 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
                         });
                     region.lightmap_images.push(Texture {
                         resource: image_resource,
-                        controls: Default::default(),
                         color_space: ColorSpace::Unspecified,
                         sampler: Sampler::default(),
                     });

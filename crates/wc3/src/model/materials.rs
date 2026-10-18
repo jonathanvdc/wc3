@@ -15,11 +15,8 @@ pub mod bindings;
 /// Composable draw state and rasterization controls.
 pub mod state;
 
-use crate::model::profiles::{
-    m2::TextureControls as M2TextureControls, mdlx::TextureControls as MdlxTextureControls,
-};
 use crate::model::profiles::{Profile, SurfacePayload, Universal};
-use crate::model::{Error, ImageResourceId, Link, TextureControls, ValidateLinks};
+use crate::model::{Error, ImageResourceId, Link, ValidateLinks};
 use std::borrow::Cow;
 
 /// Texture color interpretation.
@@ -66,8 +63,6 @@ pub struct Sampler {
 #[zerovec::skip_derive(Ord)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Texture {
-    /// Native sampling declarations with established owner-local semantics.
-    pub controls: Option<TextureControls>,
     /// Shared image dependency.
     pub resource: ImageResourceId,
     /// Interpretation of the selected image values.
@@ -80,44 +75,15 @@ impl Texture {
     pub fn new(resource: ImageResourceId) -> Self {
         Self {
             resource,
-            controls: None,
             color_space: ColorSpace::Unspecified,
             sampler: Sampler::default(),
         }
-    }
-    /// Warcraft III sampling declarations, rejecting incompatible native behavior.
-    pub(crate) fn mdlx_controls(self) -> Result<MdlxTextureControls, Error> {
-        match self.controls {
-            None => Ok(Default::default()),
-            Some(TextureControls::Mdlx(value)) => Ok(value),
-            _ => Err(Error::new(
-                "texture.controls",
-                "input carries sampling declarations outside the Warcraft III vocabulary",
-            )),
-        }
-    }
-    /// World of Warcraft sampling declarations, rejecting incompatible native behavior.
-    pub(crate) fn m2_controls(self) -> Result<M2TextureControls, Error> {
-        match self.controls {
-            None => Ok(Default::default()),
-            Some(TextureControls::M2(value)) => Ok(value),
-            _ => Err(Error::new(
-                "texture.controls",
-                "input carries sampling declarations outside the M2 vocabulary",
-            )),
-        }
-    }
-    /// Attaches native sampling declarations.
-    pub fn with_controls(mut self, controls: impl Into<TextureControls>) -> Self {
-        self.controls = Some(controls.into());
-        self
     }
 }
 impl ValidateLinks for Texture {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         visitor(Link::SampledImage(*self));
         self.resource.visit_links(visitor);
-        self.controls.visit_links(visitor);
     }
 }
 impl ValidateLinks for Sampler {

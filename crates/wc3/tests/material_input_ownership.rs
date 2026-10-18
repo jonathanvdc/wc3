@@ -215,3 +215,32 @@ fn sampling_a_material_freezes_its_owned_coordinate_animation() {
         );
     }
 }
+
+#[test]
+fn replaceable_image_declarations_retain_filenames_and_drop_uninterpreted_flags() {
+    use std::borrow::Cow;
+    use wc3::model::MdlxImageResource;
+    let mut source = source();
+    let mut texture = NativeTexture::new("authored.blp").unwrap();
+    texture.replaceable_id = 1;
+    texture.flags = mdlx::materials::TextureFlags(0x8000_0001);
+    source.set_textures([texture]);
+    let model = io::mdlx::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let texture = model.sampled_images()[0];
+    assert!(matches!(model.image_resource(texture.resource),
+        Some(MdlxImageResource::Replaceable { id: 1, filename: Cow::Borrowed(path) }) if *path == b"authored.blp"));
+    assert_eq!(model.dependencies().images().len(), 1);
+    assert_eq!(texture.sampler.u, AddressMode::Repeat);
+    assert_eq!(texture.sampler.v, AddressMode::Clamp);
+    let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let texture = output.textures().next().unwrap();
+    assert_eq!(texture.replaceable_id, 1);
+    assert_eq!(texture.path.text(), "authored.blp");
+    assert_eq!(texture.flags.bits(), 1);
+}

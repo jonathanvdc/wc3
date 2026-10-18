@@ -86,7 +86,7 @@ impl CharacterCatalog {
         let mut replacement_textures: BTreeMap<u32, Vec<Texture>> = BTreeMap::new();
         for texture in model.sampled_images() {
             let id = texture;
-            if let ImageResource::Replaceable(category) = model
+            if let ImageResource::Replaceable { id: category, .. } = model
                 .image_resource(texture.resource)
                 .expect("validated image resource")
             {

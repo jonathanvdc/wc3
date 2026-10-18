@@ -1,15 +1,7 @@
 //! Layered-model ownership, sequence bounds, and hierarchy controls.
 use super::BillboardFlags;
-use crate::model::{Bounds, ClipId, FeatureId, ImageResourceId, Link, MeshId, ValidateLinks};
-/// Texture resource authoring controls beyond the common sampling description.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TextureControls {
-    /// Authored filename retained even when a replaceable category drives sampling.
-    pub fallback_path: Option<ImageResourceId>,
-    /// Texture behavior bits with unresolved meanings.
-    pub unclassified: TextureFlags,
-}
-use crate::model::values::layered::{NodeFlags, SequenceFlags, TextureFlags};
+use crate::model::values::layered::{NodeFlags, SequenceFlags};
+use crate::model::{Bounds, ClipId, FeatureId, Link, MeshId, ValidateLinks};
 use std::borrow::Cow;
 
 /// Authored sequence controls beyond common animation timing.
