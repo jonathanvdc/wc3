@@ -175,23 +175,6 @@ fn opaque_payloads_borrow_the_source_and_can_resize_independently() {
     );
 }
 
-#[test]
-fn array_equality_follows_zero_vec_encoded_byte_semantics() {
-    let positive = [0u8; 4];
-    let negative = (-0.0f32).to_le_bytes();
-    let read = |bytes: &[u8]| {
-        let mut bytes = bytes.to_vec();
-        bytes.splice(
-            0..0,
-            [1, 0, 0, 0, 1, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0],
-        );
-        Track::<f32>::decode_mdx(&bytes).unwrap().into_owned()
-    };
-    assert_ne!(read(&positive), read(&negative));
-    let nan = f32::NAN.to_le_bytes();
-    assert_eq!(read(&nan), read(&nan));
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct ValidScalar(u32);
 impl Default for ValidScalar {

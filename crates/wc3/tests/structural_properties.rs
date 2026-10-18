@@ -1,46 +1,8 @@
 use wc3::model::conversion::ExportOptions;
 use wc3::model::formats::mdlx::V800;
 use wc3::model::io::mdlx;
-use wc3::model::profiles::{mdlx as profile, Mdlx, Universal};
+use wc3::model::profiles::{mdlx as profile, Mdlx};
 use wc3::model::{Curve, DynamicTrack, Model, Time, TimeSource, Track};
-
-#[test]
-fn profile_mapping_preserves_slot_targets_and_key_buffers() {
-    let mut draft = Model::<Mdlx>::builder("light");
-    let node = draft.add_named_node("light").unwrap();
-    let mut light: profile::Light = draft.construct();
-    let slot = light.diffuse.intensity;
-    draft.values_mut().set(slot, 1.).unwrap();
-    light.diffuse.intensity = slot;
-    draft
-        .add_feature(node, profile::Node::Light(light))
-        .unwrap();
-    let times = [Time::default(), Time::seconds(1.).unwrap()];
-    let keys = [1f32, 2.];
-    draft
-        .add_global_track(DynamicTrack::Scalar(Track {
-            target: slot,
-            curve: Curve::linear(times, keys).unwrap(),
-            clock: TimeSource::Animation,
-        }))
-        .unwrap();
-    let model = draft
-        .finish()
-        .unwrap()
-        .widen::<Universal>()
-        .try_narrow::<Mdlx>()
-        .unwrap();
-    let DynamicTrack::Scalar(track) = &model
-        .global_tracks()
-        .find(|v| v.clock() == TimeSource::Animation)
-        .unwrap()
-    else {
-        panic!()
-    };
-    assert_eq!(track.target, slot);
-    assert_eq!(track.curve.times().to_vec(), times);
-    assert_eq!(track.curve.values().to_vec(), keys);
-}
 
 #[test]
 fn native_export_duplicates_curves_for_fields_sharing_a_slot() {

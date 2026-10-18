@@ -205,19 +205,6 @@ fn typed_vocabulary_widening_preserves_ids_and_borrowed_storage() {
 }
 
 #[test]
-fn canonical_packed_arrays_can_be_exported_without_copying() {
-    use zerovec::ZeroVec;
-    let packed = ZeroVec::alloc_from_slice(&[1u32, 2, 3]);
-    let values = packed.as_borrowed();
-    assert_eq!(values.get(1), Some(2));
-    assert_eq!(values.as_bytes().as_ptr(), packed.as_bytes().as_ptr());
-    assert_eq!(
-        values.as_borrowed().as_bytes().as_ptr(),
-        packed.as_bytes().as_ptr()
-    );
-}
-
-#[test]
 fn application_vocabularies_participate_in_graph_validation() {
     use crate::model::profiles::{Profile, SurfacePayload, Unavailable};
     #[derive(Clone, Debug)]

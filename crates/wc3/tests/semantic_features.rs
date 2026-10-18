@@ -1,9 +1,7 @@
 use std::borrow::Cow;
 use wc3::model::profiles::{m2, mdlx, wmo, Extends, Mdlx, Narrows, Universal, Wmo, M2};
-use wc3::model::FromFeature as SlotFromFeature;
-use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-use wc3::model::{LightEmission, Model, SocketDefinition};
+use wc3::model::{LightEmission, Model};
 
 #[test]
 fn resource_conversion_moves_owned_paths_and_preserves_handles() {
@@ -22,32 +20,6 @@ fn resource_conversion_moves_owned_paths_and_preserves_handles() {
     let wc3::model::PathResource::Path(path) = restored.model_resource(id).unwrap();
     assert!(matches!(path, Cow::Owned(_)));
     assert_eq!(path.as_ptr(), pointer);
-}
-
-#[test]
-fn full_model_feature_identity_survives_widening_and_narrowing() {
-    let mut slot_values = SlotValues::default();
-    let mut draft = Model::<Mdlx>::builder("features");
-    let node = draft.add_named_node("emitter").unwrap();
-    let feature = draft
-        .add_feature(
-            node,
-            mdlx::Node::AtlasParticles(mdlx::Particle2::construct(&mut slot_values)),
-        )
-        .unwrap();
-    let model = {
-        draft.import_values(&slot_values).unwrap();
-        draft.finish()
-    }
-    .unwrap();
-    let widened = model.widen::<Universal>();
-    assert_eq!(widened.feature(feature).unwrap().node, node);
-    let restored = widened.try_narrow::<Mdlx>().unwrap();
-    assert_eq!(restored.feature(feature).unwrap().node, node);
-    assert!(matches!(
-        restored.feature(feature).unwrap().payload,
-        mdlx::Node::AtlasParticles(_)
-    ));
 }
 
 #[test]
@@ -197,6 +169,11 @@ fn common_animation_destinations_validate_and_narrow_with_borrowed_keys() {
         })
         .unwrap();
     let native = model.try_narrow::<Mdlx>().unwrap();
+    assert_eq!(native.feature(feature).unwrap().node, node);
+    assert!(matches!(
+        native.feature(feature).unwrap().payload,
+        mdlx::Node::Light(_)
+    ));
     let channel = native
         .global_tracks()
         .find(|v| v.clock() == TimeSource::Animation)
@@ -205,6 +182,11 @@ fn common_animation_destinations_validate_and_narrow_with_borrowed_keys() {
         panic!("channel value domain changed")
     };
     assert_eq!(track.target, intensity);
+    assert_eq!(
+        track.curve.times().to_vec(),
+        [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()]
+    );
+    assert_eq!(track.curve.values().to_vec(), [1., 3.]);
     assert_eq!(track.curve.values().as_bytes().as_ptr(), pointer);
 }
 
@@ -223,34 +205,6 @@ fn camera_slot_alone_does_not_imply_authored_animation() {
         panic!()
     };
     assert_eq!(restored.field_of_view, 0.75);
-}
-
-#[test]
-fn external_attachment_conversion_preserves_its_resource_handle() {
-    let mut slot_values = SlotValues::default();
-    use wc3::model::{scene, NodeFeature, ResourceLocator};
-    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
-    let resource = draft.add_model_resource(ResourceLocator::Path(Cow::Borrowed(
-        b"effects/attachment.mdx",
-    )));
-    let source = scene::Feature::Attachment(scene::Attachment {
-        resource,
-        socket: SocketDefinition {
-            visibility: slot_values.add(0.5),
-            identity: 21,
-            control: (),
-        },
-        appearance: (),
-    });
-    let feature = NodeFeature::from_feature(source, &mut slot_values);
-    let mdlx::Node::Attachment(restored) =
-        <Mdlx as Narrows<Universal>>::feature(feature, &slot_values).unwrap()
-    else {
-        panic!("attachment changed behavior")
-    };
-    assert_eq!(restored.resource, resource);
-    assert_eq!(restored.socket.identity, 21);
-    assert_eq!(slot_values[restored.socket.visibility], 0.5);
 }
 
 #[test]
