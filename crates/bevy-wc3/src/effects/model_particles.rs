@@ -476,6 +476,7 @@ pub(crate) fn synchronize_model_particles(
 
 #[cfg(test)]
 mod tests {
+    use crate::runtime::synchronize_model_cameras;
     use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
     use super::*;
@@ -503,12 +504,17 @@ mod tests {
     fn delayed_children_follow_particle_age_and_frozen_world_trajectory() {
         let mut slot_values = SlotValues::default();
         let mut app = App::new();
-        app.add_systems(Update, synchronize_model_particles);
+        app.add_systems(
+            Update,
+            (synchronize_model_particles, synchronize_model_cameras).chain(),
+        );
+        let camera = app.world_mut().spawn_empty().id();
         let root = app
             .world_mut()
             .spawn((
                 Playback {
                     shared_time: 3.,
+                    driving_camera: Some(camera),
                     ..SlotConstruct::construct(&mut slot_values)
                 },
                 Transform::from_xyz(100., 200., 300.),
@@ -524,11 +530,20 @@ mod tests {
         let playback = app.world().get::<Playback>(child).unwrap();
         assert_eq!((playback.clip_time, playback.shared_time), (2., 2.));
         assert!(playback.paused);
+        assert_eq!(playback.driving_camera, Some(camera));
+        app.world_mut()
+            .get_mut::<Playback>(root)
+            .unwrap()
+            .driving_camera = None;
         app.world_mut()
             .get_mut::<Transform>(root)
             .unwrap()
             .translation = Vec3::splat(-500.);
         app.update();
+        assert_eq!(
+            app.world().get::<Playback>(child).unwrap().driving_camera,
+            None
+        );
         assert_eq!(
             app.world().get::<Transform>(child).unwrap().translation,
             Vec3::new(7., 4., -3.)

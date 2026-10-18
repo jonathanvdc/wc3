@@ -1,10 +1,13 @@
 //! Independently rigged rigid equipment mounted beneath a host's animated nodes.
 use super::Playback;
+use crate::child_coordinates::ChildCoordinates;
+use crate::effects::model_particles::ModelParticleChild;
 use crate::events::EventTraversal;
 use crate::physics::PhysicsSimulation;
 use crate::transition::TransitionRequest;
 use bevy::prelude::*;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 use wc3::model::ClipId;
 #[cfg(test)]
@@ -560,5 +563,157 @@ mod activation_tests {
             child,
             &hierarchy.get(app.world()).unwrap()
         ));
+    }
+}
+
+// Resolve each camera from the complete authored owner chain before applying any
+// writes, so nested attachments and detached particles never observe stale parent
+// playback snapshots. Application-owned model children retain their own driver.
+type CameraOwners<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static Playback,
+        Option<&'static MountedModel>,
+        Option<&'static ChildCoordinates>,
+        Option<&'static ModelParticleChild>,
+        Option<&'static ChildOf>,
+    ),
+>;
+
+pub(crate) fn synchronize_model_cameras(
+    mut queries: ParamSet<(CameraOwners, Query<&mut Playback>)>,
+    hierarchy: Query<&ChildOf>,
+    mut pending: Local<Vec<(Entity, Option<Entity>)>>,
+) {
+    pending.clear();
+    let owners = queries.p0();
+    let parent = |entity: Entity| -> Option<Entity> {
+        let (_, _, mount, placement, particle, parent) = owners.get(entity).ok()?;
+        if let Some(mount) = mount {
+            return Some(mount.parent);
+        }
+        if let Some(particle) = particle {
+            return Some(particle.parent_model());
+        }
+        placement?;
+        let mut ancestor = parent.map(ChildOf::parent)?;
+        let mut visited = HashSet::new();
+        while visited.insert(ancestor) {
+            if owners.contains(ancestor) {
+                return Some(ancestor);
+            }
+            ancestor = hierarchy.get(ancestor).ok()?.parent();
+        }
+        None
+    };
+    for (entity, playback, _, _, _, _) in &owners {
+        let Some(mut ancestor) = parent(entity) else {
+            continue;
+        };
+        let mut driver = playback.driving_camera;
+        let mut visited = HashSet::from([entity]);
+        while visited.insert(ancestor) {
+            let Ok((_, owner, _, _, _, _)) = owners.get(ancestor) else {
+                break;
+            };
+            driver = owner.driving_camera;
+            let Some(next) = parent(ancestor) else {
+                break;
+            };
+            ancestor = next;
+        }
+        if driver != playback.driving_camera {
+            pending.push((entity, driver));
+        }
+    }
+    let mut playbacks = queries.p1();
+    for &(entity, driver) in pending.iter() {
+        if let Ok(mut playback) = playbacks.get_mut(entity) {
+            playback.driving_camera = driver;
+        }
+    }
+}
+
+#[cfg(test)]
+mod camera_owner_tests {
+    use super::*;
+    use crate::CoordinatePolicy;
+
+    #[test]
+    fn nested_authored_children_use_current_root_driver_without_changing_clocks() {
+        let mut app = App::new();
+        app.add_systems(Update, synchronize_model_cameras);
+        let first = app.world_mut().spawn_empty().id();
+        let second = app.world_mut().spawn_empty().id();
+        let root = app
+            .world_mut()
+            .spawn(Playback {
+                driving_camera: Some(first),
+                ..Default::default()
+            })
+            .id();
+        let anchor = app.world_mut().spawn(ChildOf(root)).id();
+        let placement = ChildCoordinates {
+            coordinates: CoordinatePolicy::Host,
+            parent_basis: Transform::IDENTITY,
+        };
+        let child = app
+            .world_mut()
+            .spawn((
+                Playback {
+                    clip_time: 3.,
+                    ..Default::default()
+                },
+                placement,
+                ChildOf(anchor),
+            ))
+            .id();
+        let grandchild = app
+            .world_mut()
+            .spawn((
+                Playback {
+                    clip_time: 7.,
+                    ..Default::default()
+                },
+                placement,
+                ChildOf(child),
+            ))
+            .id();
+        let application_child = app
+            .world_mut()
+            .spawn((Playback::default(), ChildOf(root)))
+            .id();
+        for camera in [Some(first), Some(second), None] {
+            app.world_mut()
+                .get_mut::<Playback>(root)
+                .unwrap()
+                .driving_camera = camera;
+            app.update();
+            assert_eq!(
+                app.world().get::<Playback>(child).unwrap().driving_camera,
+                camera
+            );
+            assert_eq!(
+                app.world()
+                    .get::<Playback>(grandchild)
+                    .unwrap()
+                    .driving_camera,
+                camera
+            );
+            assert_eq!(app.world().get::<Playback>(child).unwrap().clip_time, 3.);
+            assert_eq!(
+                app.world().get::<Playback>(grandchild).unwrap().clip_time,
+                7.
+            );
+            assert_eq!(
+                app.world()
+                    .get::<Playback>(application_child)
+                    .unwrap()
+                    .driving_camera,
+                None
+            );
+        }
     }
 }

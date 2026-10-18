@@ -7,11 +7,17 @@ evaluator across live poses, effect births, event occurrences, and offline bakin
 
 ## Driving camera
 
-Set `Playback::driving_camera` explicitly on each camera-sensitive model
-instance. There is no automatic main-camera or window-camera selection. Missing
+Set `Playback::driving_camera` explicitly on each camera-sensitive application
+model root. There is no automatic main-camera or window-camera selection. Missing
 camera input leaves camera-dependent adjustments unavailable while ordinary
 animation can still evaluate. One instance has one resolved skeleton for all views;
 use separate instances for portrait and world billboards.
+
+Authored attachments, composed mounts and external model particles inherit their
+ultimate owning model's current driver before pose evaluation. Nested ownership
+resolves in the same frame, including changes and removal of the driver, while
+child animation clocks remain independent. Application-owned model children keep
+their own camera choice.
 
 Pose evaluation runs in `PostUpdate` under `Wc3Systems::EvaluateNodePoses`, before
 transform propagation. Move roots and driving cameras before that set. Authored
