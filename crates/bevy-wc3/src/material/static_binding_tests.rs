@@ -2,7 +2,6 @@
 use super::*;
 use crate::animation_targets::AnimationTargets;
 use crate::material::native_fixtures::m2;
-use wc3::model::profiles::m2::properties;
 use wc3::model::profiles::{mdlx, Universal};
 use wc3::model::{
     AnimationSample, Clip, Controller, Curve, DynamicTrack, Material, MaterialId, MaterialSurface,
@@ -20,7 +19,6 @@ fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
         opacity: slot_values.add(0.75),
         ..SlotConstruct::construct(&mut slot_values)
     };
-    let _unit = properties::TextureUnit(0);
     let texture: m2::TextureUnit = m2::TextureUnit {
         contribution: slot_values.add(0.8),
         ..SlotConstruct::construct(&mut slot_values)

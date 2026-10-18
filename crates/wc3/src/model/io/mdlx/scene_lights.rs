@@ -19,13 +19,12 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             .get(&source.node.object_id)
             .ok_or_else(|| Error::new("light.node", "node identity does not exist"))?;
         let feature = decoder.builder.reserve_feature(id);
-        let owner = feature;
+
         macro_rules! a {
-            ($field:ident, $key:ident) => {
+            ($field:ident) => {
                 decoder.bind(
                     &source.$field,
-                    owner,
-                    profile::properties::light::$key,
+                    concat!("light.", stringify!($field)),
                     |value| value,
                 )?
             };
@@ -38,42 +37,17 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         };
         let shadow_range = if let Ok(range) = source.try_shadow_casting_range_ref() {
             Some([
-                decoder.bind(
-                    &range.start,
-                    owner,
-                    profile::properties::light::SHADOW_START,
-                    |value| value,
-                )?,
-                decoder.bind(
-                    &range.end,
-                    owner,
-                    profile::properties::light::SHADOW_END,
-                    |value| value,
-                )?,
+                decoder.bind(&range.start, "light::SHADOW_START", |value| value)?,
+                decoder.bind(&range.end, "light::SHADOW_END", |value| value)?,
             ])
         } else {
             None
         };
         let falloff = if let Some(falloff) = source.authored_falloff() {
             Some([
-                decoder.bind(
-                    &falloff.quadratic,
-                    owner,
-                    profile::properties::light::QUADRATIC,
-                    |value| value,
-                )?,
-                decoder.bind(
-                    &falloff.linear,
-                    owner,
-                    profile::properties::light::LINEAR,
-                    |value| value,
-                )?,
-                decoder.bind(
-                    &falloff.damping,
-                    owner,
-                    profile::properties::light::DAMPING,
-                    |value| value,
-                )?,
+                decoder.bind(&falloff.quadratic, "light::QUADRATIC", |value| value)?,
+                decoder.bind(&falloff.linear, "light::LINEAR", |value| value)?,
+                decoder.bind(&falloff.damping, "light::DAMPING", |value| value)?,
             ])
         } else {
             None
@@ -81,17 +55,14 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         {
             let payload = profile::Node::Light(profile::Light {
                 kind,
-                attenuation: [
-                    a!(attenuation_start, ATTENUATION_START),
-                    a!(attenuation_end, ATTENUATION_END),
-                ],
+                attenuation: [a!(attenuation_start), a!(attenuation_end)],
                 diffuse: LightEmission {
-                    color: a!(color, COLOR),
-                    intensity: a!(intensity, INTENSITY),
+                    color: a!(color),
+                    intensity: a!(intensity),
                 },
                 ambient: LightEmission {
-                    color: a!(ambient_color, AMBIENT_COLOR),
-                    intensity: a!(ambient_intensity, AMBIENT_INTENSITY),
+                    color: a!(ambient_color),
+                    intensity: a!(ambient_intensity),
                 },
                 activation: VisibleLight {
                     shadow_casting: source.try_shadow_casting().ok(),
@@ -101,8 +72,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     visibility: decoder.track(
                         source.visibility.as_ref(),
                         1.,
-                        owner,
-                        profile::properties::light::VISIBILITY,
+                        "light::VISIBILITY",
                         |value| value,
                     )?,
                 },
@@ -118,29 +88,26 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             .set(node.transform.translation, source.position)?;
         let id = decoder.builder.add_node(node)?;
         let feature = decoder.builder.reserve_feature(id);
-        let owner = feature;
+
         let eye_offset = decoder.track(
             source.translation.as_ref(),
             [0.; 3],
-            owner,
-            profile::properties::camera::EYE_OFFSET,
+            "camera::EYE_OFFSET",
             |value| value,
         )?;
         let target_offset = decoder.track(
             source.target_translation.as_ref(),
             [0.; 3],
-            owner,
-            profile::properties::camera::TARGET_OFFSET,
+            "camera::TARGET_OFFSET",
             |value| value,
         )?;
         macro_rules! optional {
-            ($field:ident, $key:ident) => {
+            ($field:ident) => {
                 if source.$field.is_some() {
                     Some(decoder.track(
                         source.$field.as_ref(),
                         0.,
-                        owner,
-                        profile::properties::camera::$key,
+                        concat!("camera.", stringify!($field)),
                         |value| value,
                     )?)
                 } else {
@@ -155,24 +122,17 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                 target_offset,
                 field_of_view: source.field_of_view,
                 clipping: [source.near_clip, source.far_clip],
-                roll: decoder.track(
-                    source.rotation.as_ref(),
-                    0.,
-                    owner,
-                    profile::properties::camera::ROLL,
-                    |value| value,
-                )?,
+                roll: decoder.track(source.rotation.as_ref(), 0., "camera::ROLL", |value| value)?,
                 convention: PhotographicControls {
                     visibility: decoder.track(
                         source.visibility.as_ref(),
                         1.,
-                        owner,
-                        profile::properties::camera::VISIBILITY,
+                        "camera::VISIBILITY",
                         |value| value,
                     )?,
-                    focus_distance: optional!(focus_distance, FOCUS_DISTANCE),
-                    focal_length: optional!(focal_length, FOCAL_LENGTH),
-                    f_stop: optional!(f_stop, F_STOP),
+                    focus_distance: optional!(focus_distance),
+                    focal_length: optional!(focal_length),
+                    f_stop: optional!(f_stop),
                 },
             });
             decoder.builder.set_feature(feature, payload)?;

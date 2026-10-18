@@ -425,3 +425,67 @@ fn a_pass_stack_keeps_world_lighting_local_to_each_pass() {
     assert_eq!(compiled.draws[1].world_state[3], 2);
     assert_eq!(compiled.draws[2].world_state, [0; 4]);
 }
+
+#[test]
+fn draw_selection_resolves_images_referenced_by_texture_slots_and_curves() {
+    use wc3::model::{Curve, Draw, DynamicTrack, ImageResource, Time, TimeSource, Track};
+
+    let mut builder = ModelBuilder::new("animated image selection");
+    let first = Texture::new(
+        builder.add_image_resource(ImageResource::Path(b"first.blp".as_slice().into())),
+    );
+    let second = Texture::new(
+        builder.add_image_resource(ImageResource::Path(b"second.blp".as_slice().into())),
+    );
+    let layer = Layer::construct(builder.values_mut());
+    let image = layer.binding.image;
+    builder.values_mut().set(image, Some(first)).unwrap();
+    let surface = MaterialSurface::try_from(LayeredSurface {
+        layers: vec![layer],
+        ..SlotConstruct::construct(builder.values_mut())
+    })
+    .unwrap();
+    let material = builder
+        .add_material(SemanticMaterial {
+            name: "animated texture".into(),
+            surface,
+        })
+        .unwrap();
+    let node = builder.add_named_node("root").unwrap();
+    let mut mesh = ModelMesh::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]);
+    let subset = mesh.add_primary_subset(0, 1);
+    let mesh = builder.add_mesh(mesh).unwrap();
+    let mut instance = MeshInstance::new(node, mesh);
+    let draw = Draw::new(subset, None);
+    let draw_id = draw.id();
+    instance.draws.push(draw);
+    builder
+        .add_instance_with_materials(instance, vec![material])
+        .unwrap();
+    builder
+        .add_global_track(DynamicTrack::OptionalTexture(Track {
+            target: image,
+            clock: TimeSource::Animation,
+            curve: Curve::step([Time::seconds(0.).unwrap()], [Some(second)]).unwrap(),
+        }))
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let mut resolved = HashSet::new();
+    compile_model_with_options(
+        &model,
+        CompileOptions {
+            draws: DrawSelection {
+                draws: Some([draw_id].into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        |request| {
+            resolved.insert(request.texture.resource);
+            None
+        },
+    )
+    .unwrap();
+    assert!(resolved.contains(&first.resource));
+    assert!(resolved.contains(&second.resource));
+}

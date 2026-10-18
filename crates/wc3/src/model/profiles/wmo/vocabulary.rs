@@ -1,6 +1,7 @@
 //! Built-in WMO authoring vocabulary and its lossless embeddings.
 use crate::model::profiles::{wmo, Extends, NoControls, Profile, Unavailable, Universal};
 use crate::model::resources::{WorldImageResource, WorldModelResource};
+use crate::model::Link;
 use crate::model::Model;
 use crate::model::PropertyValues;
 use crate::model::{
@@ -8,7 +9,6 @@ use crate::model::{
     System, UniversalAppearance, WmoGeometry,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
-use crate::model::{Link, PropertyIdentityKey};
 /// Vocabulary that maps mechanically to Wmo logical features.
 #[derive(Clone, Debug, Default)]
 pub struct Wmo;
@@ -19,7 +19,6 @@ impl Profile for Wmo {
     type PhysicsResource<'a> = Unavailable;
     type BoneOverrideResource<'a> = Unavailable;
 
-    type Property = Unavailable;
     type Appearance<'a> = SingleLook<'a>;
     type Binding<'a> = Unavailable;
     type Geometry<'a> = WmoGeometry<'a>;
@@ -98,9 +97,6 @@ impl Extends<Wmo> for Universal {
         match value {}
     }
 
-    fn property(value: <Wmo as Profile>::Property) -> Self::Property {
-        match value {}
-    }
     fn appearance<'a>(value: <Wmo as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::Single(value)
     }
@@ -184,10 +180,7 @@ impl<'a> FeatureVocabulary<'a> for Wmo {
     fn feature<'view>(value: &'view FeatureSet<'a, Self>) -> FeatureView<'view, 'a> {
         value.profile_feature()
     }
-    fn supports_property(value: &FeatureSet<'a, Self>, key: &PropertyIdentityKey) -> bool {
-        let _ = (value, key);
-        false
-    }
+
     fn kind(value: &FeatureSet<'a, Self>) -> FeatureKind {
         value.profile_payload_kind()
     }

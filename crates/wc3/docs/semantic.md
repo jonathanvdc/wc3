@@ -283,8 +283,8 @@ their raw selection and complete binding order on `UnresolvedMaterialStep`.
 Legacy M2 surplus inputs and unused WMO slots remain explicit unused bindings,
 preserving graph references without turning them into active shader inputs.
 Animation follows the input-owned slot references through input and material-step
-reordering. Profile property descriptors describe the native schema; native export
-resolves each consuming field to its current native position.
+reordering. Native export resolves each consuming field to its current native
+position.
 
 M2 import sorts each skin section’s batches by native `material_layer`, retaining
 source order for ties. Consecutive batches with the same auxiliary section word
@@ -299,8 +299,8 @@ coordinates, color processing, and a contribution to one shader input; it does
 not add a step. An M3 composite section instead references another complete
 material and can expand into several rendering passes. Native profiles retain
 these exact authoring schemas. Native MDLX surfaces use `LayeredSurface` and its
-`SurfaceLayer` vocabulary; M2 inputs implement `ShaderInput` for property selection,
-local validation, and graph traversal.
+`SurfaceLayer` vocabulary; M2 inputs implement `ShaderInput` for local validation
+and graph traversal.
 
 Texture inputs compose through `TextureBinding<Image, Coordinates, Sampling,
 Contribution>`. The selected image representation can retain animated texture
@@ -387,8 +387,8 @@ no outer source-format variant to unwrap before discovering a feature's purpose.
 
 `NodeFeature` is an alias for `FeatureSet<Universal>`. Native feature aliases
 select the same enum with `Mdlx`, `M2`, `M3`, or `Wmo` as its vocabulary.
-`FeatureVocabulary` chooses each family's payload and supplies its inspection,
-property, and relationship rules. Unsupported families select `Unavailable`.
+`FeatureVocabulary` chooses each family's payload and supplies its inspection
+and relationship rules. Unsupported families select `Unavailable`.
 For example, an MDLX particle carries a constrained `ParticleComposition`,
 while Universal's particle family also admits resource instances and broader
 simulated definitions. The family names describe behavior in every selection:
@@ -721,8 +721,8 @@ so tracks of different types can share one collection. Both types are independen
 of model profiles. A native exporter finds the fields consuming each slot and
 writes the corresponding native tracks, duplicating a curve when several fields
 share its slot. Exact projection rejects animation that the target
-format cannot attach to a supported field. Profile property descriptors describe
-native schemas; they no longer identify runtime animation destinations.
+format cannot attach to a supported field. Slot identities carry their value type
+and ownership domain, so bindings need no separate owner or field selector.
 
 `Animation` owns ordered tracks in `Animation::tracks` and identified event
 occurrences. Add it with `ModelBuilder::add_animation`, then reference its

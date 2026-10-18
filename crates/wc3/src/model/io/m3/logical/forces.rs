@@ -7,9 +7,8 @@ use super::{
 use super::{Graph, GraphBuilder};
 use crate::model::conversion::Error;
 use crate::model::formats::m3::{self as native, records as nr};
-use crate::model::profiles::m3::properties::{Field, FieldPath};
+use crate::model::profiles::m3 as surface;
 use crate::model::NodeId;
-use crate::model::{profiles::m3 as surface, OwnerId};
 use native::{Envelope, Ref};
 use std::collections::BTreeMap;
 pub(super) fn force<'a, E: Envelope>(
@@ -46,30 +45,10 @@ pub(super) fn force<'a, E: Envelope>(
                     height: anim(r.height, builder.values_mut()),
                     length: anim(r.length, builder.values_mut()),
                 };
-                bindings::field(
-                    &mut payload.strength,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Force).child(Field::Strength),
-                    registry,
-                );
-                bindings::field(
-                    &mut payload.width,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Force).child(Field::Width),
-                    registry,
-                );
-                bindings::field(
-                    &mut payload.height,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Force).child(Field::Height),
-                    registry,
-                );
-                bindings::field(
-                    &mut payload.length,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Force).child(Field::Length),
-                    registry,
-                );
+                bindings::field(&mut payload.strength, registry);
+                bindings::field(&mut payload.width, registry);
+                bindings::field(&mut payload.height, registry);
+                bindings::field(&mut payload.length, registry);
                 builder.set_feature(feature, surface::Feature::Force((payload).into()))?;
             }
         };
@@ -113,42 +92,12 @@ pub(super) fn warp<'a, E: Envelope>(
             axial: anim(r.axial, builder.values_mut()),
             radial: anim(r.radial, builder.values_mut()),
         };
-        bindings::field(
-            &mut payload.radius,
-            OwnerId::Feature(feature),
-            &FieldPath::root(Field::Warp).child(Field::Radius),
-            registry,
-        );
-        bindings::field(
-            &mut payload.height,
-            OwnerId::Feature(feature),
-            &FieldPath::root(Field::Warp).child(Field::Height),
-            registry,
-        );
-        bindings::field(
-            &mut payload.strength,
-            OwnerId::Feature(feature),
-            &FieldPath::root(Field::Warp).child(Field::Strength),
-            registry,
-        );
-        bindings::field(
-            &mut payload.angular,
-            OwnerId::Feature(feature),
-            &FieldPath::root(Field::Warp).child(Field::Angular),
-            registry,
-        );
-        bindings::field(
-            &mut payload.axial,
-            OwnerId::Feature(feature),
-            &FieldPath::root(Field::Warp).child(Field::Axial),
-            registry,
-        );
-        bindings::field(
-            &mut payload.radial,
-            OwnerId::Feature(feature),
-            &FieldPath::root(Field::Warp).child(Field::Radial),
-            registry,
-        );
+        bindings::field(&mut payload.radius, registry);
+        bindings::field(&mut payload.height, registry);
+        bindings::field(&mut payload.strength, registry);
+        bindings::field(&mut payload.angular, registry);
+        bindings::field(&mut payload.axial, registry);
+        bindings::field(&mut payload.radial, registry);
         builder.set_feature(feature, surface::Feature::Warp((payload).into()))?;
     }
     Ok(())

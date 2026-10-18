@@ -43,7 +43,6 @@ pub(super) fn import<'view, E: Envelope>(
                 let mut reader = Reader {
                     builder: &mut *builder,
                     source,
-                    owner,
                     particles: &[],
                     ribbons: &[],
                     projectors: &[],

@@ -6,10 +6,9 @@ use crate::model::formats::mdlx::{self as native, FormatVersion};
 use crate::model::materials::bindings::{Coordinates, TextureBinding};
 use crate::model::materials::mdlx::{AlphaAdditiveEncoding, LayerOptions};
 use crate::model::materials::state::{DepthState, Lighting, Operation, PassState};
-use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::mdlx::{Blend, Fresnel, Layer, Material, Shading, TextureSlot};
 use crate::model::{Construct, PropertyValues};
-use crate::model::{MaterialId, Quaternion, Texture, TextureTransform};
+use crate::model::{Quaternion, Texture, TextureTransform};
 
 pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
     source: &'source native::Material<'_, V>,
@@ -146,79 +145,59 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
     source: &'source native::Material<'_, V>,
     textures: &[Texture],
     transforms: &[&native::TextureAnimation<'_>],
-    id: MaterialId,
     decoder: &mut Decoder<'a, '_>,
 ) -> Result<Material<'a>, Error> {
     let mut material = read::<_, S>(source, textures, transforms, decoder.builder.values_mut())?;
-    let owner = id;
-    for (index, (source, layer)) in source.layers.iter().zip(&mut material.layers).enumerate() {
-        let layer_key = profile::properties::Layer(index);
+
+    for (source, layer) in source.layers.iter().zip(&mut material.layers) {
         if source.texture_animation_id != u32::MAX {
             let transform = &transforms[source.texture_animation_id as usize];
             layer.binding.coordinates.transform = TextureTransform {
                 translation: decoder.track(
                     transform.translation.as_ref(),
                     [0.; 3],
-                    owner,
-                    layer_key.translation(),
+                    "layer.translation",
                     |value| value,
                 )?,
                 rotation: decoder.track(
                     transform.rotation.as_ref(),
                     Quaternion::IDENTITY,
-                    owner,
-                    layer_key.rotation(),
+                    "layer.rotation",
                     Quaternion,
                 )?,
                 scale: decoder.track(
                     transform.scaling.as_ref(),
                     [1.; 3],
-                    owner,
-                    layer_key.scale(),
+                    "layer.scale",
                     |value| value,
                 )?,
             };
         }
         let map = texture_map(textures, &source.texture_id)?;
-        layer.binding.image = decoder.bind(&source.texture_id, owner, layer_key.texture(), map)?;
-        layer.opacity = decoder.bind(&source.alpha, owner, layer_key.opacity(), |value| value)?;
+        layer.binding.image = decoder.bind(&source.texture_id, "layer.texture", map)?;
+        layer.opacity = decoder.bind(&source.alpha, "layer.opacity", |value| value)?;
         if let Ok(source) = source.try_emissive_gain() {
-            layer.emissive_gain =
-                Some(decoder.bind(source, owner, layer_key.emissive_gain(), |value| value)?);
+            layer.emissive_gain = Some(decoder.bind(source, "layer.emissive_gain", |value| value)?);
         }
         if let Ok(source) = source.try_fresnel() {
             layer.fresnel = Some(Fresnel {
-                color: decoder.bind(&source.color, owner, layer_key.fresnel_color(), |value| {
-                    value
-                })?,
-                opacity: decoder.bind(
-                    &source.opacity,
-                    owner,
-                    layer_key.fresnel_opacity(),
-                    |value| value,
-                )?,
+                color: decoder.bind(&source.color, "layer.fresnel_color", |value| value)?,
+                opacity: decoder.bind(&source.opacity, "layer.fresnel_opacity", |value| value)?,
                 team_color: decoder.bind(
                     &source.team_color,
-                    owner,
-                    layer_key.fresnel_team_color(),
+                    "layer.fresnel_team_color",
                     |value| value,
                 )?,
             });
         }
-        for (slot_index, (source, slot)) in source
+        for (source, slot) in source
             .try_texture_slots()
             .unwrap_or_default()
             .iter()
             .zip(&mut layer.textures)
-            .enumerate()
         {
             let map = texture_map(textures, &source.texture_id)?;
-            slot.binding.image = decoder.bind(
-                &source.texture_id,
-                owner,
-                layer_key.texture_slot(slot_index),
-                map,
-            )?;
+            slot.binding.image = decoder.bind(&source.texture_id, "layer.texture_slot", map)?;
         }
     }
     Ok(material)

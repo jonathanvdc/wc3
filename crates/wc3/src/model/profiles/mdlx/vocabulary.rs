@@ -1,16 +1,12 @@
 //! Built-in MDLX authoring vocabulary and its lossless embeddings.
-use super::properties::Target as PropertySelector;
-use crate::model::profiles::UniversalProperty;
 use crate::model::profiles::{mdlx, Extends, NoControls, Profile, Unavailable, Universal};
 use crate::model::resources::{MdlxImageResource, PathResource};
 use crate::model::Link;
 use crate::model::Model;
-use crate::model::PropertyIdentityKey;
 use crate::model::PropertyValues;
 use crate::model::{
     ClipControls, Error, FeatureKind, IdentityBinding, MaterialSurface, MdlxGeometry, MeshControls,
-    ModelMetadata, NodeControls, PropertyPayload, SingleLook, UniversalAppearance,
-    UniversalBinding,
+    ModelMetadata, NodeControls, SingleLook, UniversalAppearance, UniversalBinding,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 /// Vocabulary that maps mechanically to Warcraft III logical features.
@@ -42,7 +38,6 @@ impl Profile for Mdlx {
     type PhysicsResource<'a> = Unavailable;
     type BoneOverrideResource<'a> = Unavailable;
 
-    type Property = PropertySelector;
     fn default_bounds() -> Option<crate::model::Bounds> {
         Some(Default::default())
     }
@@ -67,10 +62,6 @@ impl Profile for Mdlx {
     }
 }
 impl mdlx::Node<'_> {
-    pub(crate) fn profile_supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        super::properties::Target::from_identity(key).is_some_and(|key| key.supports_feature(self))
-    }
-
     pub(crate) fn profile_payload_kind(&self) -> FeatureKind {
         match self {
             mdlx::Node::GeometryAnimation(_) => FeatureKind::MdlxGeometryAnimation,
@@ -101,9 +92,6 @@ impl Extends<Mdlx> for Universal {
         match value {}
     }
 
-    fn property(value: <Mdlx as Profile>::Property) -> Self::Property {
-        UniversalProperty::Mdlx(value)
-    }
     fn appearance<'a>(value: <Mdlx as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::Single(value)
     }
@@ -186,9 +174,7 @@ impl<'a> FeatureVocabulary<'a> for Mdlx {
     fn feature<'view>(value: &'view FeatureSet<'a, Self>) -> FeatureView<'view, 'a> {
         value.profile_feature()
     }
-    fn supports_property(value: &FeatureSet<'a, Self>, key: &PropertyIdentityKey) -> bool {
-        value.profile_supports_property(key)
-    }
+
     fn kind(value: &FeatureSet<'a, Self>) -> FeatureKind {
         value.profile_payload_kind()
     }

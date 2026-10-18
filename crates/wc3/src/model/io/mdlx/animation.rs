@@ -7,8 +7,8 @@ use crate::model::formats::mdlx::{
 };
 use crate::model::profiles::Mdlx;
 use crate::model::{
-    ClockId, CurveValue, DynamicTrack, ModelBuilder, Property, PropertyDescriptor, PropertyValue,
-    Quaternion, Texture, TimeSource, Track,
+    ClockId, CurveValue, DynamicTrack, ModelBuilder, Property, PropertyValue, Quaternion, Texture,
+    TimeSource, Track,
 };
 
 pub(super) trait Value: CurveValue + PropertyValue {
@@ -37,41 +37,36 @@ pub(super) struct Decoder<'a, 'b> {
     pub globals: &'b [ClockId],
 }
 impl<'a> Decoder<'a, '_> {
-    pub fn bind<T, U, D>(
+    pub fn bind<T, U>(
         &mut self,
         source: &Animatable<'_, T>,
-        owner: D::Owner,
-        descriptor: D,
+        name: &str,
         map: impl Fn(T) -> U + Clone + Send + Sync + 'a,
     ) -> Result<Property<U>, Error>
     where
         T: TrackValue + Send + Sync + 'a,
         T::ULE: Sync,
         U: Value + 'a,
-        D: PropertyDescriptor<Profile = Mdlx, Value = U> + Clone,
     {
         let default = map(source.value().copied().unwrap_or_default());
-        self.track(source.track(), default, owner, descriptor, map)
+        self.track(source.track(), default, name, map)
     }
-    pub fn track<T, U, D>(
+    pub fn track<T, U>(
         &mut self,
         source: Option<&NativeTrack<'_, T>>,
         default: U,
-        _owner: D::Owner,
-        descriptor: D,
+        name: &str,
         map: impl Fn(T) -> U + Clone + Send + Sync + 'a,
     ) -> Result<Property<U>, Error>
     where
         T: TrackValue + Send + Sync + 'a,
         T::ULE: Sync,
         U: Value + 'a,
-        D: PropertyDescriptor<Profile = Mdlx, Value = U> + Clone,
     {
         let Some(source) = source else {
             return Ok(self.builder.add_value(default));
         };
-        let name = format!("{:?}", descriptor.clone().key());
-        self.track_property(source, default, &name, map.clone(), map)
+        self.track_property(source, default, name, map.clone(), map)
     }
     pub fn track_property<T, U>(
         &mut self,

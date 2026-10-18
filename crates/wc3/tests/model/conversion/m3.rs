@@ -269,7 +269,6 @@ fn imported_graph_widens_and_narrows_without_changing_identity_or_values() {
     let imported = io::m3::import(&decoded, &ImportOptions::default())
         .unwrap()
         .value;
-    let model_id = imported.id();
     let mesh_id = imported.meshes().iter().next().unwrap().0;
     let node_id = imported.nodes().iter().next().unwrap().0;
     assert!(imported.mesh(mesh_id).unwrap().positions().is_owned());
@@ -277,7 +276,6 @@ fn imported_graph_widens_and_narrows_without_changing_identity_or_values() {
         .widen::<sem::profiles::Universal>()
         .try_narrow::<M3>()
         .unwrap();
-    assert_eq!(narrowed.id(), model_id);
     assert!(narrowed.node(node_id).is_some());
     let mesh = narrowed.mesh(mesh_id).unwrap();
     assert!(mesh.positions().is_owned());

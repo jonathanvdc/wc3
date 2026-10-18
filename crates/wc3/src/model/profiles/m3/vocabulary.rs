@@ -1,10 +1,6 @@
 //! Built-in M3 authoring vocabulary and its lossless embeddings.
-use super::properties::Target as PropertySelector;
-use super::properties::{Field, FieldSegment};
-use crate::model::materials::m3::properties::MaterialProperties;
 use crate::model::profiles::m3;
 use crate::model::profiles::Unavailable;
-use crate::model::profiles::UniversalProperty;
 use crate::model::profiles::{self, Extends, Profile, SurfacePayload, Universal};
 use crate::model::resources::PathResource;
 use crate::model::PropertyValues;
@@ -16,7 +12,6 @@ use crate::model::{
     VertexInfluences,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
-use crate::model::{PropertyIdentityKey, PropertyPayload};
 use std::collections::HashSet;
 
 use std::str::from_utf8;
@@ -30,7 +25,6 @@ impl Profile for M3 {
     type PhysicsResource<'a> = Unavailable;
     type BoneOverrideResource<'a> = Unavailable;
 
-    type Property = PropertySelector;
     fn default_bounds() -> Option<crate::model::Bounds> {
         Some(Default::default())
     }
@@ -504,16 +498,6 @@ impl Profile for M3 {
     }
 }
 impl SurfacePayload for profiles::m3::MaterialStep<'_> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        PropertySelector::from_identity(key).is_some_and(|key| match key {
-            PropertySelector::Field(path) => match path.segments().split_first() {
-                Some((FieldSegment::Field(Field::Material), rest)) => self.supports_path(rest),
-                _ => false,
-            },
-            _ => false,
-        })
-    }
-
     fn validate(&self) -> Result<(), Error> {
         let mut invalid = false;
         self.visit_links(&mut |link| invalid |= matches!(link, Link::InvalidValue));
@@ -528,10 +512,6 @@ impl SurfacePayload for profiles::m3::MaterialStep<'_> {
     }
 }
 impl profiles::m3::Feature<'_> {
-    pub(crate) fn profile_supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        super::properties::Target::from_identity(key).is_some_and(|key| key.supports_feature(self))
-    }
-
     pub(crate) fn profile_payload_kind(&self) -> FeatureKind {
         match self {
             profiles::m3::Feature::Particle(_) => FeatureKind::M3Particle,
@@ -565,9 +545,6 @@ impl Extends<M3> for Universal {
         match value {}
     }
 
-    fn property(value: <M3 as Profile>::Property) -> Self::Property {
-        UniversalProperty::M3(value)
-    }
     fn appearance<'a>(value: <M3 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::Single(value)
     }
@@ -647,9 +624,7 @@ impl<'a> FeatureVocabulary<'a> for M3 {
     fn feature<'view>(value: &'view FeatureSet<'a, Self>) -> FeatureView<'view, 'a> {
         value.profile_feature()
     }
-    fn supports_property(value: &FeatureSet<'a, Self>, key: &PropertyIdentityKey) -> bool {
-        value.profile_supports_property(key)
-    }
+
     fn kind(value: &FeatureSet<'a, Self>) -> FeatureKind {
         value.profile_payload_kind()
     }

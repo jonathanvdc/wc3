@@ -1,5 +1,4 @@
 use wc3::model::profiles::{mdlx, Mdlx, Universal};
-use wc3::model::FromFeature as SlotFromFeature;
 use wc3::model::TrailAppearance;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{Curve, DynamicTrack, Model, Time, TimeSource, Track};
@@ -163,23 +162,4 @@ fn a_shared_continuous_rate_narrows_on_non_burst_atlas_emitters() {
     .unwrap()
     .widen::<Universal>();
     assert!(model.try_narrow::<Mdlx>().is_ok());
-}
-
-#[test]
-fn changing_gravity_representation_removes_the_old_scalar_destination() {
-    let mut slot_values = SlotValues::default();
-    use wc3::model::profiles::FeaturePayload;
-    use wc3::model::{NodeFeature, ParticleDefinition, ParticleGravity, PropertyPayload};
-    let mut definition = ParticleDefinition::from_feature(
-        mdlx::Particle2::construct(&mut slot_values),
-        &mut slot_values,
-    );
-    let key = mdlx::properties::Target::Particle2(mdlx::properties::Particle2Field::Gravity)
-        .identity()
-        .to_owned();
-    assert!(
-        NodeFeature::from_feature(definition.clone(), &mut slot_values).supports_property(&key)
-    );
-    definition.motion.gravity = ParticleGravity::Vector(slot_values.add([0., 0., -9.8]));
-    assert!(!NodeFeature::from_feature(definition, &mut slot_values).supports_property(&key));
 }

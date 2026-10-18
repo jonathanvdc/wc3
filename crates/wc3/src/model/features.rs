@@ -23,7 +23,7 @@ pub use set::*;
 mod conversions;
 pub use conversions::{FromFeature, TryFromFeature};
 mod links;
-mod selector_support;
+
 /// Complete logical payload of an attached behavior.
 pub type NodeFeature<'a> = FeatureSet<'a, Universal>;
 /// An external effect or a composed simulation definition.

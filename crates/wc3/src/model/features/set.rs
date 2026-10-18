@@ -1,8 +1,6 @@
 //! A shared feature family vocabulary selected independently from graph storage.
 use crate::model::profiles::FeaturePayload;
-use crate::model::{
-    FeatureKind, FeatureSchema, FeatureView, Link, PropertyIdentityKey, ValidateLinks,
-};
+use crate::model::{FeatureKind, FeatureSchema, FeatureView, Link, ValidateLinks};
 use std::fmt::Debug;
 /// Selects the concrete forms admitted by each shared behavior family.
 pub trait FeatureVocabulary<'a>: Clone + Debug + Send + Sync {
@@ -66,8 +64,7 @@ pub trait FeatureVocabulary<'a>: Clone + Debug + Send + Sync {
     fn visit_links(value: &FeatureSet<'a, Self>, visitor: &mut dyn FnMut(Link));
     /// Borrows the shared semantic inspection view.
     fn feature<'view>(value: &'view FeatureSet<'a, Self>) -> FeatureView<'view, 'a>;
-    /// Tests whether a property destination exists on the selected behavior.
-    fn supports_property(value: &FeatureSet<'a, Self>, key: &PropertyIdentityKey) -> bool;
+
     /// Classifies graph relationships requiring a specific behavior.
     fn kind(value: &FeatureSet<'a, Self>) -> FeatureKind;
 }
@@ -155,9 +152,6 @@ impl<'a, V: FeatureVocabulary<'a>> FeatureSchema<'a> for FeatureSet<'a, V> {
     }
 }
 impl<'a, V: FeatureVocabulary<'a>> FeaturePayload for FeatureSet<'a, V> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        V::supports_property(self, key)
-    }
     fn kind(&self) -> FeatureKind {
         V::kind(self)
     }

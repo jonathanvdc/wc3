@@ -1,6 +1,5 @@
 //! Independent emitters and their explicitly inherited instances.
 use super::emitter_links::Links;
-use crate::model::profiles::m3::properties::{Field, FieldPath};
 pub(super) mod context;
 mod encode;
 mod export;
@@ -65,7 +64,6 @@ pub(super) fn import<'view, E: Envelope>(
                 let mut reader = Reader {
                     builder: &mut *builder,
                     source,
-                    owner: particles[index],
                     particles: &particles,
                     ribbons,
                     projectors,
@@ -101,15 +99,12 @@ pub(super) fn import<'view, E: Envelope>(
                             Error::new("m3.particle.copy.node", "copy anchor exceeds skeleton")
                         })?;
                     let owner = reader.builder.reserve_feature(node);
-                    reader.owner = owner;
                     let payload = surface::ParticleCopy {
                         source: particles[index],
                         emission_rate: reader
-                            .property(&FieldPath::root(Field::ParticleCopy).child(Field::EmissionRate),
-copy.emission_rate),
+                            .property(copy.emission_rate),
                         squirt_amount: reader
-                            .property(&FieldPath::root(Field::ParticleCopy).child(Field::SquirtAmount),
-copy.squirt_amount),
+                            .property(copy.squirt_amount),
                     };
                     reader.builder.set_feature(owner, surface::Feature::ParticleCopy((payload).into()))?;
                 }

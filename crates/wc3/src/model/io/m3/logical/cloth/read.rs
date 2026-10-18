@@ -10,7 +10,7 @@ use crate::model::formats::m3::{records, Container, Envelope, Ref};
 use crate::model::io::materialize;
 use crate::model::{
     profiles::m3::{CageInfluence, Cloth, ClothCollider, ClothId, ClothProxy, ClothSystem, System},
-    MeshId, NodeId, NodeInfluence, OwnerId,
+    MeshId, NodeId, NodeInfluence,
 };
 use std::array::from_fn;
 use std::collections::BTreeMap;
@@ -271,7 +271,7 @@ pub(in crate::model::io::m3::logical) fn read<'view, E: Envelope + Send + Sync>(
     let definition = builder.construct();
     let id = builder.add_system(System::Cloth(definition))?;
     let mut system = System::Cloth(ClothSystem { cloths });
-    bindings::system(&mut system, OwnerId::System(id), registry);
+    bindings::system(&mut system, registry);
     builder.set_system(id, system)?;
     Ok(())
 }

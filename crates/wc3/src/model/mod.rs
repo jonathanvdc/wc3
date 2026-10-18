@@ -55,10 +55,10 @@ mod rotation;
 pub use rotation::*;
 pub mod animation;
 pub use animation::{
-    curves::*, properties::*, Animation, AnimationProgram, AnimationSample, Clip, Construct,
-    Controller, DynamicTrack, Event, Interpolation, Property, PropertyValue, PropertyValues,
-    RetimedAnimation, SampledAnimation, SampledTrack, Time, TimeSource, Track, TrackValue,
-    ValueObject, ValueSample, ValueSlot,
+    curves::*, Animation, AnimationProgram, AnimationSample, Clip, Construct, Controller,
+    DynamicTrack, Event, Interpolation, Property, PropertyValue, PropertyValues, RetimedAnimation,
+    SampledAnimation, SampledTrack, Time, TimeSource, Track, TrackValue, ValueObject, ValueSample,
+    ValueSlot,
 };
 mod playback_controls;
 pub use playback_controls::*;
@@ -107,8 +107,7 @@ mod look;
 pub use look::*;
 mod feature_schema;
 pub use feature_schema::*;
-pub mod feature_properties;
-pub use feature_properties::{socket, FeatureProperty};
+
 pub mod features;
 pub use features::*;
 /// Compile-time logical vocabularies and lossless embeddings.

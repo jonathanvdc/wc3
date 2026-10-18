@@ -3,7 +3,6 @@ use super::super::{particles::context::Reader, slots::Slot};
 use super::spline;
 use crate::model::conversion::Error;
 use crate::model::formats::m3::{self as native, records as nr};
-use crate::model::profiles::m3::properties::{Field, FieldPath};
 use crate::model::{profiles::m3 as surface, NodeId};
 use crate::model::{
     ParticleLifetime, ParticleMotion, ProgrammedAge, ProgrammedDirection, ProgrammedForces,
@@ -240,14 +239,8 @@ where
         material: Some(reader.material(material_index)?),
         additional_flags: surface::values::RibbonAdditionalFlags(additional_flags),
         motion: ParticleMotion {
-            speed: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::InitialSpeed),
-                initial_speed,
-            ),
-            variation: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::InitialSpeedRandom),
-                initial_speed_random,
-            ),
+            speed: reader.property(initial_speed),
+            variation: reader.property(initial_speed_random),
             gravity: ProgrammedTrailGravity {
                 x: gravity_x,
                 y: gravity_y,
@@ -255,33 +248,15 @@ where
             },
         },
         direction: ProgrammedDirection {
-            initial_yaw: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::InitialYaw),
-                initial_yaw,
-            ),
-            initial_pitch: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::InitialPitch),
-                initial_pitch,
-            ),
-            initial_horizontal: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::InitialHorizontal),
-                initial_horizontal,
-            ),
-            initial_vertical: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::InitialVertical),
-                initial_vertical,
-            ),
+            initial_yaw: reader.property(initial_yaw),
+            initial_pitch: reader.property(initial_pitch),
+            initial_horizontal: reader.property(initial_horizontal),
+            initial_vertical: reader.property(initial_vertical),
             drag,
         },
         lifetime: ParticleLifetime {
-            duration: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::Lifetime),
-                lifetime,
-            ),
-            variation: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::LifetimeRandom),
-                lifetime_random,
-            ),
+            duration: reader.property(lifetime),
+            variation: reader.property(lifetime_random),
         },
         kill_radius,
         appearance: ProgrammedAge {
@@ -293,26 +268,11 @@ where
             color_mid_hold_time,
             alpha_mid_hold_time,
             rotation_mid_hold_time,
-            size_animation: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::SizeAnimation),
-                size_animation,
-            ),
-            rotation_animation: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::RotationAnimation),
-                rotation_animation,
-            ),
-            color_start: reader.fixed_color(
-                &FieldPath::root(Field::Ribbon).child(Field::ColorStart),
-                color_start,
-            ),
-            color_mid: reader.fixed_color(
-                &FieldPath::root(Field::Ribbon).child(Field::ColorMid),
-                color_mid,
-            ),
-            color_end: reader.fixed_color(
-                &FieldPath::root(Field::Ribbon).child(Field::ColorEnd),
-                color_end,
-            ),
+            size_animation: reader.property(size_animation),
+            rotation_animation: reader.property(rotation_animation),
+            color_start: reader.fixed_color(color_start),
+            color_mid: reader.fixed_color(color_mid),
+            color_end: reader.fixed_color(color_end),
         },
         forces: ProgrammedForces {
             mass,
@@ -336,12 +296,9 @@ where
         divisions,
         edges,
         inner_radius,
-        max_length: reader.property(
-            &FieldPath::root(Field::Ribbon).child(Field::MaxLength),
-            max_length,
-        ),
+        max_length: reader.property(max_length),
         spline_points: spline::read(reader, nodes, spline_ribbons)?,
-        active: reader.property(&FieldPath::root(Field::Ribbon).child(Field::Active), active),
+        active: reader.property(active),
         flags: surface::values::RibbonFlags(flags.bits()),
         size_smoothing: surface::values::Smoothing::from_raw(size_smoothing),
         color_smoothing: surface::values::Smoothing::from_raw(color_smoothing),
@@ -351,67 +308,31 @@ where
         lod_cut,
         yaw: surface::VariationControl {
             kind: surface::values::Variation::from_raw(yaw_type),
-            amplitude: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::YawAmplitude),
-                yaw_amplitude,
-            ),
-            frequency: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::YawFrequency),
-                yaw_frequency,
-            ),
+            amplitude: reader.property(yaw_amplitude),
+            frequency: reader.property(yaw_frequency),
         },
         pitch: surface::VariationControl {
             kind: surface::values::Variation::from_raw(pitch_type),
-            amplitude: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::PitchAmplitude),
-                pitch_amplitude,
-            ),
-            frequency: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::PitchFrequency),
-                pitch_frequency,
-            ),
+            amplitude: reader.property(pitch_amplitude),
+            frequency: reader.property(pitch_frequency),
         },
         speed: surface::VariationControl {
             kind: surface::values::Variation::from_raw((speed_type).raw()),
-            amplitude: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::SpeedAmplitude),
-                speed_amplitude,
-            ),
-            frequency: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::SpeedFrequency),
-                speed_frequency,
-            ),
+            amplitude: reader.property(speed_amplitude),
+            frequency: reader.property(speed_frequency),
         },
         size: surface::VariationControl {
             kind: surface::values::Variation::from_raw((size_type).raw()),
-            amplitude: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::SizeAmplitude),
-                size_amplitude,
-            ),
-            frequency: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::SizeFrequency),
-                size_frequency,
-            ),
+            amplitude: reader.property(size_amplitude),
+            frequency: reader.property(size_frequency),
         },
         alpha: surface::VariationControl {
             kind: surface::values::Variation::from_raw((alpha_type).raw()),
-            amplitude: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::AlphaAmplitude),
-                alpha_amplitude,
-            ),
-            frequency: reader.property(
-                &FieldPath::root(Field::Ribbon).child(Field::AlphaFrequency),
-                alpha_frequency,
-            ),
+            amplitude: reader.property(alpha_amplitude),
+            frequency: reader.property(alpha_frequency),
         },
-        particle_velocity: reader.property(
-            &FieldPath::root(Field::Ribbon).child(Field::ParticleVelocity),
-            particle_velocity,
-        ),
-        overlay: reader.property(
-            &FieldPath::root(Field::Ribbon).child(Field::Overlay),
-            overlay,
-        ),
+        particle_velocity: reader.property(particle_velocity),
+        overlay: reader.property(overlay),
         deprecated_unknown: deprecated_unknown3fbae7d6,
     })
 }

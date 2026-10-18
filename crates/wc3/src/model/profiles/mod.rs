@@ -3,39 +3,27 @@ use crate::model::EffectResourceId;
 use crate::model::PropertyValues;
 use crate::model::ResourceLocator;
 use crate::model::{
-    AppearanceSchema, BindingSchema, Bounds, Error, FeatureKind, FeatureProperty, GeometrySchema,
-    Link, MaterialSurface, Model, ModelMetadata, NodeFeature, SkinId, SystemPayload, ValidateLinks,
+    AppearanceSchema, BindingSchema, Bounds, Error, FeatureKind, GeometrySchema, Link,
+    MaterialSurface, Model, ModelMetadata, NodeFeature, SkinId, SystemPayload, ValidateLinks,
 };
 use crate::model::{
     Attachment, EventSource, FeatureSet, FeatureView, FeatureVocabulary, ImageResource, Light,
     ParticleEmitter, RibbonEmitter,
 };
-use crate::model::{Camera, CameraConvention, FeatureSchema, OwnerId};
+use crate::model::{Camera, FeatureSchema};
 use crate::model::{
     ClipControls, DrawControls, GeometryData, InstanceControls, MeshControls, NodeControls, System,
     UniversalAppearance, UniversalBinding,
 };
-use crate::model::{PropertyIdentityKey, PropertyKeyRef, PropertyPayload, PropertyTarget};
-use std::any::TypeId;
 use std::fmt::Debug;
 
 /// A checked surface supplied by a semantic profile.
 pub trait SurfacePayload: Clone + Debug + Send + Sync + ValidateLinks {
-    /// Checks that a structural property selects an existing field in this surface.
-    fn supports_property(&self, _key: &PropertyIdentityKey) -> bool {
-        true
-    }
-
     /// Checks local invariants independent of graph references.
     fn validate(&self) -> Result<(), Error>;
 }
 /// A checked attached behavior supplied by a semantic profile.
 pub trait FeaturePayload: Clone + Debug + Send + Sync + ValidateLinks {
-    /// Checks the selected field family and any owner-local element ordinal.
-    fn supports_property(&self, _key: &PropertyIdentityKey) -> bool {
-        true
-    }
-
     /// Relationship category used by typed feature references.
     fn kind(&self) -> FeatureKind;
 }
@@ -96,8 +84,6 @@ pub trait Profile: Clone + Debug + 'static {
     type PhysicsResource<'a>: ControlsPayload;
     /// External boneoverride resource declarations admitted by this vocabulary.
     type BoneOverrideResource<'a>: ControlsPayload;
-    /// Structural animation-property vocabulary accepted by this profile.
-    type Property: PropertyPayload;
     /// Complete material-assignment and appearance vocabulary.
     type Appearance<'a>: AppearanceSchema<'a>;
     /// Joint binding interpretations supported by this vocabulary.
@@ -124,32 +110,7 @@ pub trait Profile: Clone + Debug + 'static {
     type Clip<'a>: ControlsPayload + Default;
     /// Additional layered-controller behavior.
     type Controller<'a>: ControlsPayload + Default;
-    /// Checks a structural selector against its actual owner payload.
-    fn validate_property(
-        model: &Model<'_, Self>,
-        target: &PropertyTarget<Self>,
-    ) -> Result<(), Error> {
-        if let PropertyTarget::Profile { owner, key } = target {
-            let identity = key.identity().to_owned();
-            let supported = match owner {
-                OwnerId::Feature(id) => model
-                    .feature(*id)
-                    .is_some_and(|v| v.payload.supports_property(&identity)),
-                OwnerId::Material(id) => model
-                    .material(*id)
-                    .is_some_and(|v| v.surface.supports_property(&identity)),
-                OwnerId::Model(id) => *id == model.id(),
-                _ => true,
-            };
-            if !supported {
-                return Err(Error::new(
-                    "animation.target",
-                    "structural selector does not select a field or element of its actual owner",
-                ));
-            }
-        }
-        Ok(())
-    }
+
     /// Initial bounding volume for a new model draft.
     fn default_bounds() -> Option<Bounds> {
         None
@@ -190,13 +151,6 @@ impl<A: ValidateLinks, B: ValidateLinks> ValidateLinks for Either<A, B> {
     }
 }
 impl<A: SurfacePayload, B: SurfacePayload> SurfacePayload for Either<A, B> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        match self {
-            Self::Left(v) => v.supports_property(key),
-            Self::Right(v) => v.supports_property(key),
-        }
-    }
-
     fn validate(&self) -> Result<(), Error> {
         match self {
             Self::Left(value) => value.validate(),
@@ -205,13 +159,6 @@ impl<A: SurfacePayload, B: SurfacePayload> SurfacePayload for Either<A, B> {
     }
 }
 impl<A: FeaturePayload, B: FeaturePayload> FeaturePayload for Either<A, B> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        match self {
-            Self::Left(v) => v.supports_property(key),
-            Self::Right(v) => v.supports_property(key),
-        }
-    }
-
     fn kind(&self) -> FeatureKind {
         match self {
             Self::Left(value) => value.kind(),
@@ -229,7 +176,6 @@ impl Profile for Universal {
     type PhysicsResource<'a> = ResourceLocator<'a>;
     type BoneOverrideResource<'a> = ResourceLocator<'a>;
 
-    type Property = UniversalProperty;
     type Appearance<'a> = UniversalAppearance<'a>;
     type Binding<'a> = UniversalBinding<'a>;
     type Geometry<'a> = GeometryData<'a>;
@@ -268,8 +214,6 @@ pub trait Extends<Source: Profile>: Profile {
         value: Source::BoneOverrideResource<'a>,
     ) -> Self::BoneOverrideResource<'a>;
 
-    /// Embeds structural property selectors without changing their identity.
-    fn property(value: Source::Property) -> Self::Property;
     /// Embeds the complete appearance vocabulary while preserving identities.
     fn appearance<'a>(value: Source::Appearance<'a>) -> Self::Appearance<'a>;
     /// Embeds the authored joint binding without changing its interpretation.
@@ -316,9 +260,6 @@ impl<P: Profile> Extends<P> for P {
         value
     }
 
-    fn property(value: P::Property) -> Self::Property {
-        value
-    }
     fn appearance<'a>(value: <P as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         value
     }
@@ -359,25 +300,7 @@ impl<P: Profile> Extends<P> for P {
         value
     }
 }
-impl NodeFeature<'_> {
-    pub(crate) fn profile_supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        if let Some(supported) = self.supports_shared_feature_property(key) {
-            return supported;
-        }
-        if matches!(
-            key.downcast_ref::<FeatureProperty>(),
-            Some(FeatureProperty::CameraVerticalFieldOfView)
-        ) {
-            return matches!(self, NodeFeature::Camera(Camera::Aimed(camera)) if matches!(camera.convention, CameraConvention::Vertical(_)));
-        }
-        mdlx::properties::Target::from_identity(key)
-            .is_some_and(|target| target.supports_universal_feature(self))
-            || m2::properties::Target::from_identity(key)
-                .is_some_and(|target| target.supports_universal_feature(self))
-            || m3::properties::Target::from_identity(key)
-                .is_some_and(|target| target.supports_universal_feature(self))
-    }
-}
+impl NodeFeature<'_> {}
 
 pub use m2::M2;
 pub use m3::M3;
@@ -400,82 +323,6 @@ pub mod diablo;
 pub use diablo::d3::D3;
 
 pub use diablo::d4::D4;
-
-impl PropertyPayload for Unavailable {
-    fn identity(&self) -> PropertyKeyRef<'_> {
-        match *self {}
-    }
-}
-impl<A: PropertyPayload, B: PropertyPayload> PropertyPayload for Either<A, B> {
-    fn identity(&self) -> PropertyKeyRef<'_> {
-        match self {
-            Self::Left(v) => v.identity(),
-            Self::Right(v) => v.identity(),
-        }
-    }
-    fn from_identity(key: &PropertyIdentityKey) -> Option<Self> {
-        A::from_identity(key)
-            .map(Self::Left)
-            .or_else(|| B::from_identity(key).map(Self::Right))
-    }
-    fn value_type(&self) -> Option<TypeId> {
-        match self {
-            Self::Left(v) => v.value_type(),
-            Self::Right(v) => v.value_type(),
-        }
-    }
-    fn accepts_owner(&self, owner: OwnerId) -> bool {
-        match self {
-            Self::Left(v) => v.accepts_owner(owner),
-            Self::Right(v) => v.accepts_owner(owner),
-        }
-    }
-}
-/// Structural property selectors from all built-in semantic vocabularies.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum UniversalProperty {
-    /// Shared behavior destination with format-independent semantics.
-    Feature(FeatureProperty),
-    /// Warcraft III destination.
-    Mdlx(mdlx::properties::Target),
-    /// World of Warcraft destination.
-    M2(m2::properties::Target),
-    /// StarCraft II destination.
-    M3(m3::properties::Target),
-}
-impl PropertyPayload for UniversalProperty {
-    fn identity(&self) -> PropertyKeyRef<'_> {
-        match self {
-            Self::Feature(v) => v.identity(),
-            Self::Mdlx(v) => v.identity(),
-            Self::M2(v) => v.identity(),
-            Self::M3(v) => v.identity(),
-        }
-    }
-    fn from_identity(key: &PropertyIdentityKey) -> Option<Self> {
-        FeatureProperty::from_identity(key)
-            .map(Self::Feature)
-            .or_else(|| mdlx::properties::Target::from_identity(key).map(Self::Mdlx))
-            .or_else(|| m2::properties::Target::from_identity(key).map(Self::M2))
-            .or_else(|| m3::properties::Target::from_identity(key).map(Self::M3))
-    }
-    fn value_type(&self) -> Option<TypeId> {
-        match self {
-            Self::Feature(v) => v.value_type(),
-            Self::Mdlx(v) => v.value_type(),
-            Self::M2(v) => v.value_type(),
-            Self::M3(v) => v.value_type(),
-        }
-    }
-    fn accepts_owner(&self, owner: OwnerId) -> bool {
-        match self {
-            Self::Feature(v) => v.accepts_owner(owner),
-            Self::Mdlx(v) => v.accepts_owner(owner),
-            Self::M2(v) => v.accepts_owner(owner),
-            Self::M3(v) => v.accepts_owner(owner),
-        }
-    }
-}
 
 impl<'a> FeatureVocabulary<'a> for Universal {
     type Light = Light;
@@ -512,9 +359,7 @@ impl<'a> FeatureVocabulary<'a> for Universal {
     fn feature<'view>(value: &'view FeatureSet<'a, Self>) -> FeatureView<'view, 'a> {
         value.profile_feature()
     }
-    fn supports_property(value: &FeatureSet<'a, Self>, key: &PropertyIdentityKey) -> bool {
-        value.profile_supports_property(key)
-    }
+
     fn kind(value: &FeatureSet<'a, Self>) -> FeatureKind {
         value.profile_kind()
     }

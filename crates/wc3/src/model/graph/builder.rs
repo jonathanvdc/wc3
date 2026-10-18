@@ -5,8 +5,7 @@ use crate::model::{
     Animation, AnimationId, AttachedFeature, Basis, Bounds, Clip, ClipId, ClockId, Controller,
     ControllerId, DrawAppearanceSchema, DrawSubsetId, DynamicTrack, Error, Event, EventId,
     FeatureId, InstanceId, LengthUnit, Look, LookBinding, LookId, Material, MaterialId, Mesh,
-    MeshId, MeshInstance, Model, ModelId, Node, NodeId, SharedClock, Skin, SkinId, SystemId,
-    Texture,
+    MeshId, MeshInstance, Model, Node, NodeId, SharedClock, Skin, SkinId, SystemId, Texture,
 };
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
@@ -213,21 +212,15 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     pub fn values_mut(&mut self) -> &mut PropertyValues {
         &mut self.model.values
     }
-    /// Identity reserved for this model before publication.
-    pub fn id(&self) -> ModelId {
-        self.model.id()
-    }
 
     /// Begins an unpublished graph using the explicit payload vocabulary `P`.
     pub(crate) fn with_profile(name: impl Into<Cow<'a, str>>) -> Self {
         let scope = Scope::default();
-        let id = scope.allocate();
         Self {
             model: Model {
                 values: PropertyValues::scoped(scope.clone()),
                 dependencies: Dependencies::default(),
                 scope,
-                id,
                 name: name.into(),
                 basis: Basis::default(),
                 units: LengthUnit::default(),

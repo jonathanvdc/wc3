@@ -1,7 +1,5 @@
 //! Logical relationship traversal for checked graph construction.
-use crate::model::{
-    AnimationId, ClipId, ClockId, MaterialId, MeshId, ModelId, NodeId, SkinId, Texture,
-};
+use crate::model::{AnimationId, ClipId, ClockId, MaterialId, MeshId, NodeId, SkinId, Texture};
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
 };
@@ -10,7 +8,6 @@ use crate::model::{
     MaterialSlotId, SystemId, SystemMember,
 };
 use crate::model::{PropertyValue, ValueSlot};
-use std::any::TypeId;
 use std::borrow::Cow;
 /// A relationship to another object in the semantic graph.
 #[derive(Clone, Debug)]
@@ -30,8 +27,6 @@ pub enum Link {
     /// External boneoverride dependency.
     BoneOverrideResource(BoneOverrideResourceId),
 
-    /// Another model in the containing collection.
-    Model(ModelId),
     /// An identified occurrence in a programme.
     Event(EventId),
     /// Named material slot owned by the model's appearance vocabulary.
@@ -65,15 +60,6 @@ pub enum Link {
     Instance(InstanceId),
     /// Attached feature relationship.
     Feature(FeatureId),
-    /// The value type of a logical animated destination.
-    Property {
-        /// Animated destination whose owner must exist.
-        target: PropertyIdentity,
-        /// Rust value type required by this destination.
-        value_type: TypeId,
-        /// Whether this reference declares an authored destination, rather than targeting it.
-        definition: bool,
-    },
     /// Node relationship.
     Node(NodeId),
     /// Geometry relationship requiring a particular authored purpose.
@@ -124,11 +110,7 @@ impl<T: ValidateLinks> ValidateLinks for Option<T> {
         }
     }
 }
-impl ValidateLinks for ModelId {
-    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        visitor(Link::Model(*self));
-    }
-}
+
 impl ValidateLinks for NodeId {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
         v(Link::Node(*self))
@@ -161,40 +143,6 @@ impl ValidateLinks for ClockId {
     }
 }
 
-use crate::model::profiles::Profile;
-use crate::model::{PropertyBinding, PropertyIdentity, PropertyPayload, PropertyTarget};
-impl<T: 'static, P: Profile> ValidateLinks for PropertyBinding<T, P> {
-    fn visit_links(&self, v: &mut dyn FnMut(Link)) {
-        v(Link::Property {
-            target: self.target().identity(),
-            value_type: TypeId::of::<T>(),
-            definition: true,
-        });
-        if self
-            .target()
-            .value_type()
-            .is_some_and(|expected| expected != TypeId::of::<T>())
-        {
-            v(Link::InvalidValue);
-        }
-        match self.target() {
-            PropertyTarget::Translation(id)
-            | PropertyTarget::Rotation(id)
-            | PropertyTarget::Scale(id)
-            | PropertyTarget::Visibility(id) => id.visit_links(v),
-            PropertyTarget::MaterialOpacity(id) | PropertyTarget::MaterialTexture(id, _) => {
-                id.visit_links(v)
-            }
-            PropertyTarget::MeshColor(id) | PropertyTarget::MeshOpacity(id) => id.visit_links(v),
-            PropertyTarget::Profile { owner, key } => {
-                if !key.accepts_owner(*owner) {
-                    v(Link::InvalidValue);
-                }
-                owner.visit_links(v);
-            }
-        }
-    }
-}
 use crate::model::{DynamicTrack, TimeSource, Track};
 impl<T: CurveValue + PropertyValue + 'static> ValidateLinks for Track<'_, T> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {

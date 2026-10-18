@@ -4,7 +4,7 @@ use super::parameters::{OrderedParameters, ParameterEntry, ShaderValue};
 use super::program::MaterialProgram;
 use crate::model::profiles::SurfacePayload;
 use crate::model::Construct;
-use crate::model::{Error, ImageResourceId, Link, PropertyIdentityKey, ValidateLinks};
+use crate::model::{Error, ImageResourceId, Link, ValidateLinks};
 
 /// A texture input retains negative source selections independently of image handles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -203,9 +203,6 @@ impl ValidateLinks for MaterialValues {
 }
 
 impl SurfacePayload for MaterialProgram<MaterialStep> {
-    fn supports_property(&self, _: &PropertyIdentityKey) -> bool {
-        false
-    }
     fn validate(&self) -> Result<(), Error> {
         if self.steps.len() > 1 {
             return Err(Error::new(

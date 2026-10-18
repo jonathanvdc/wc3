@@ -1,9 +1,7 @@
 use wc3::model::common::ZeroVec;
-use wc3::model::profiles::mdlx::properties::{light, Layer, LightField, Target as MdlxTarget};
-use wc3::model::profiles::{Mdlx, Universal};
 use wc3::model::{
-    BezierKeyframe, ContinuousDomain, Curve, CurveValue, HermiteKeyframe, Interpolation, Material,
-    Model, OwnerId, PropertyTarget, Quaternion, TcbKeyframe, TcbParameters, Time, ValueKeyframe,
+    BezierKeyframe, ContinuousDomain, Curve, CurveValue, HermiteKeyframe, Interpolation,
+    Quaternion, TcbKeyframe, TcbParameters, Time, ValueKeyframe,
 };
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use zerovec::ule::AsULE;
@@ -143,36 +141,6 @@ fn spherical_keyframes_and_discrete_keys_select_their_shapes() {
     .unwrap();
     assert_eq!(curve.interpolation(), Interpolation::Step);
     assert_eq!(curve.values().get(0), Some(true));
-}
-
-#[test]
-fn descriptors_preserve_structural_fields_and_typed_owner_identities() {
-    let mut slot_values = SlotValues::default();
-    let mut builder = Model::<Universal>::builder("properties");
-    let node = builder.add_named_node("light").unwrap();
-    let feature = builder.reserve_feature(node);
-    let intensity = light::INTENSITY.bind(feature);
-    assert_eq!(
-        intensity.target(),
-        &PropertyTarget::<Mdlx>::Profile {
-            owner: OwnerId::Feature(feature),
-            key: MdlxTarget::Light(LightField::Intensity),
-        }
-    );
-    let material = builder
-        .add_material(Material {
-            name: "".into(),
-            surface: SlotConstruct::construct(&mut slot_values),
-        })
-        .unwrap();
-    let texture = Layer(2).texture_slot(3).bind(material);
-    assert_eq!(
-        texture.target(),
-        &PropertyTarget::<Mdlx>::Profile {
-            owner: OwnerId::Material(material),
-            key: MdlxTarget::LayerTexture { layer: 2, slot: 3 },
-        }
-    );
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -71,10 +71,6 @@ impl<K> Debug for Id<K> {
             .finish()
     }
 }
-/// Model identity marker, stable across edits and profile mappings.
-pub enum ModelObject {}
-/// Model handle identifying the owner of model-level properties.
-pub type ModelId = Id<ModelObject>;
 /// Node identity marker.
 pub enum NodeObject {}
 /// Geometry identity marker.

@@ -20,7 +20,6 @@ impl Profile for D4 {
     type PhysicsResource<'a> = Unavailable;
     type BoneOverrideResource<'a> = Unavailable;
 
-    type Property = Unavailable;
     type Appearance<'a> = Appearance;
     type Binding<'a> = ExplicitBinding<'a>;
     type Geometry<'a> = Geometry<'a>;
@@ -213,9 +212,6 @@ impl Extends<D4> for Universal {
         match value {}
     }
 
-    fn property(value: <D4 as Profile>::Property) -> Self::Property {
-        match value {}
-    }
     fn appearance<'a>(value: <D4 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::D4(value)
     }

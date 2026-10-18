@@ -49,8 +49,7 @@ pub enum Interpolation {
     /// Kochanek–Bartels spline with authored tension, continuity, and bias per key.
     Tcb,
 }
-pub mod properties;
-pub use properties::*;
+
 mod slots;
 pub use slots::*;
 

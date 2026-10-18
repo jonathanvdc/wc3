@@ -14,7 +14,7 @@ use crate::model::conversion::{Context, Error};
 use crate::model::formats::m3::{self, records, Container, Document, Envelope, Ref};
 use crate::model::{
     profiles::m3::{PhysicsSystem, System},
-    NodeId, OwnerId,
+    NodeId,
 };
 use std::collections::BTreeMap;
 
@@ -62,7 +62,7 @@ pub(super) fn read<'view, E: Envelope + Send + Sync>(
         joints,
         constraints,
     });
-    bindings::system(&mut system, OwnerId::System(id), bindings);
+    bindings::system(&mut system, bindings);
     builder.set_system(id, system)?;
     Ok(())
 }

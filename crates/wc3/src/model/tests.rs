@@ -256,8 +256,6 @@ fn application_vocabularies_participate_in_graph_validation() {
         type PhysicsResource<'a> = crate::model::profiles::Unavailable;
         type BoneOverrideResource<'a> = crate::model::profiles::Unavailable;
 
-        type Property = profiles::Unavailable;
-
         type Appearance<'a> = UniversalAppearance<'a>;
         type Binding<'a> = UniversalBinding<'a>;
         type Geometry<'a> = GeometryData<'a>;

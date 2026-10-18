@@ -7,8 +7,7 @@ use super::{
 use crate::model::conversion::Error;
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::io::m3::logical::GraphBuilder;
-use crate::model::profiles::m3::properties::{Field, FieldPath};
-use crate::model::{profiles::m3 as surface, OwnerId};
+use crate::model::profiles::m3 as surface;
 use native::{Envelope, Ref};
 trait Optional<T> {
     fn optional(self) -> Option<T>;
@@ -97,43 +96,13 @@ pub(super) fn read<'a, E: Envelope>(
                     near_focus_range: anim(r.near_focus_range, builder.values_mut()),
                     dof_amount: anim(r.dof_amount, builder.values_mut()),
                 };
-                bindings::field(
-                    &mut camera.field_of_view,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Camera).child(Field::FieldOfView),
-                    registry,
-                );
-                bindings::field(
-                    &mut camera.shadow_clip_distance,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Camera).child(Field::ShadowClipDistance),
-                    registry,
-                );
-                bindings::field(
-                    &mut camera.focus_distance,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Camera).child(Field::FocusDistance),
-                    registry,
-                );
-                bindings::field(
-                    &mut camera.far_focus_range,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Camera).child(Field::FarFocusRange),
-                    registry,
-                );
-                bindings::field(
-                    &mut camera.near_focus_range,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Camera).child(Field::NearFocusRange),
-                    registry,
-                );
-                bindings::field(
-                    &mut camera.dof_amount,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Camera).child(Field::DofAmount),
-                    registry,
-                );
-                bind_optics(&mut camera.optics, OwnerId::Feature(feature), registry);
+                bindings::field(&mut camera.field_of_view, registry);
+                bindings::field(&mut camera.shadow_clip_distance, registry);
+                bindings::field(&mut camera.focus_distance, registry);
+                bindings::field(&mut camera.far_focus_range, registry);
+                bindings::field(&mut camera.near_focus_range, registry);
+                bindings::field(&mut camera.dof_amount, registry);
+                bind_optics(&mut camera.optics, registry);
                 builder.set_feature(feature, surface::Feature::Camera((camera).into()))?;
             }
         };
@@ -209,63 +178,33 @@ fn optics(fields: OpticalFields) -> Result<surface::CameraOptics, Error> {
         )),
     }
 }
-fn bind_optics(optics: &mut surface::CameraOptics, owner: OwnerId, registry: &mut Bindings) {
+fn bind_optics(optics: &mut surface::CameraOptics, registry: &mut Bindings) {
     match optics {
         surface::CameraOptics::Legacy { .. } => {}
-        surface::CameraOptics::Clipping(clipping) => bind_clipping(clipping, owner, registry),
+        surface::CameraOptics::Clipping(clipping) => bind_clipping(clipping, registry),
         surface::CameraOptics::Falloff { clipping, falloff } => {
-            bind_clipping(clipping, owner, registry);
-            bind_falloff(falloff, owner, registry);
+            bind_clipping(clipping, registry);
+            bind_falloff(falloff, registry);
         }
         surface::CameraOptics::Bokeh {
             clipping,
             falloff,
             bokeh,
         } => {
-            bind_clipping(clipping, owner, registry);
-            bind_falloff(falloff, owner, registry);
-            bindings::field(
-                &mut bokeh.f_stop,
-                owner,
-                &FieldPath::root(Field::Camera).child(Field::BokehFStop),
-                registry,
-            );
-            bindings::field(
-                &mut bokeh.maximum_circle,
-                owner,
-                &FieldPath::root(Field::Camera).child(Field::BokehMaxCoCDiameter),
-                registry,
-            );
+            bind_clipping(clipping, registry);
+            bind_falloff(falloff, registry);
+            bindings::field(&mut bokeh.f_stop, registry);
+            bindings::field(&mut bokeh.maximum_circle, registry);
         }
     }
 }
-fn bind_clipping(clipping: &mut surface::CameraClipping, owner: OwnerId, registry: &mut Bindings) {
-    bindings::field(
-        &mut clipping.far,
-        owner,
-        &FieldPath::root(Field::Camera).child(Field::FarClip),
-        registry,
-    );
-    bindings::field(
-        &mut clipping.near,
-        owner,
-        &FieldPath::root(Field::Camera).child(Field::NearClip),
-        registry,
-    );
+fn bind_clipping(clipping: &mut surface::CameraClipping, registry: &mut Bindings) {
+    bindings::field(&mut clipping.far, registry);
+    bindings::field(&mut clipping.near, registry);
 }
-fn bind_falloff(falloff: &mut surface::CameraFalloff, owner: OwnerId, registry: &mut Bindings) {
-    bindings::field(
-        &mut falloff.start,
-        owner,
-        &FieldPath::root(Field::Camera).child(Field::NearFalloffStart),
-        registry,
-    );
-    bindings::field(
-        &mut falloff.end,
-        owner,
-        &FieldPath::root(Field::Camera).child(Field::NearFalloffEnd),
-        registry,
-    );
+fn bind_falloff(falloff: &mut surface::CameraFalloff, registry: &mut Bindings) {
+    bindings::field(&mut falloff.start, registry);
+    bindings::field(&mut falloff.end, registry);
 }
 
 pub(super) fn write<E: Envelope>(

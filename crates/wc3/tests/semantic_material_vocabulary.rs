@@ -1,13 +1,10 @@
 use wc3::model::controls::playback::ControllerProgram;
 use wc3::model::materials::bindings::{Coordinates, ImageSelection};
-use wc3::model::materials::m2::FrameSampling;
-use wc3::model::materials::m2::{
-    GuildMaterialStep, MaterialStep as M2MaterialStep, ShaderInput, TextureUnit,
-};
+use wc3::model::materials::m2::{GuildMaterialStep, MaterialStep as M2MaterialStep, ShaderInput};
 use wc3::model::materials::mdlx::{LayeredSurface, SurfaceLayer};
 use wc3::model::profiles::{m2, mdlx, SurfacePayload};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-use wc3::model::{Error, Link, PropertyPayload, TextureTransform, ValidateLinks};
+use wc3::model::{Error, Link, TextureTransform, ValidateLinks};
 
 #[derive(Clone, Debug, Default)]
 struct CheckedPass {
@@ -77,53 +74,6 @@ fn controller_program_traverses_its_selected_block_vocabulary() {
         }
     });
     assert_eq!(invalid, 1);
-}
-
-#[test]
-fn selected_coordinate_form_controls_which_destinations_exist() {
-    let mut slot_values = SlotValues::default();
-    use m2::properties::{Target, TextureUnitField};
-    let input = TextureUnit {
-        image: ImageSelection {
-            source: SlotConstruct::construct(&mut slot_values),
-            texture: None,
-        },
-        coordinates: Coordinates {
-            source: 0,
-            transform: (),
-        },
-        contribution: slot_values.add(1.),
-        sampling: FrameSampling {
-            frame: slot_values.add(0),
-        },
-    };
-    let weight = Target::TextureUnit {
-        step: 0,
-        index: 0,
-        field: TextureUnitField::Weight,
-    }
-    .identity()
-    .to_owned();
-    let translation = Target::TextureUnit {
-        step: 0,
-        index: 0,
-        field: TextureUnitField::Translation,
-    }
-    .identity()
-    .to_owned();
-    assert!(input.supports_property(&weight, 0));
-    assert!(!input.supports_property(&weight, 1));
-    assert!(!input.supports_property(&translation, 0));
-    let animated_input = TextureUnit {
-        coordinates: Coordinates {
-            source: input.coordinates.source,
-            transform: TextureTransform::construct(&mut slot_values),
-        },
-        image: input.image,
-        contribution: input.contribution,
-        sampling: input.sampling,
-    };
-    assert!(animated_input.supports_property(&translation, 0));
 }
 
 #[test]

@@ -74,7 +74,6 @@ impl<'a, P: Profile> Model<'a, P> {
                     .collect(),
             },
             scope: self.scope,
-            id: self.id,
             name: self.name,
             basis: self.basis,
             units: self.units,

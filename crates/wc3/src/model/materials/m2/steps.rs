@@ -1,11 +1,10 @@
 //! Interpreted M2 shader definitions. Native selector encodings are confined to conversion.
 use super::{GuildPalette, ModelRasterization, ShaderInput, TextureUnit};
 use crate::model::materials::state::PassState;
-use crate::model::profiles::m2::properties::Target;
 use crate::model::profiles::SurfacePayload;
 use crate::model::values::model::{BatchFlags, BlendMode};
 use crate::model::{Construct, PropertyValues};
-use crate::model::{Error, Link, Property, PropertyIdentityKey, PropertyPayload, ValidateLinks};
+use crate::model::{Error, Link, Property, ValidateLinks};
 use std::borrow::Cow;
 
 /// Shared M2 draw declarations and animated surface multipliers.
@@ -865,17 +864,7 @@ impl<'a> MaterialStep<'a> {
             _ => None,
         }
     }
-    /// Whether this step exposes the structural M2 animation destination.
-    pub fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        matches!(
-            Target::from_identity(key),
-            Some(Target::Color { .. } | Target::Opacity { .. })
-        ) || self
-            .inputs()
-            .iter()
-            .enumerate()
-            .any(|(ordinal, input)| input.supports_property(key, ordinal))
-    }
+
     /// Validates the equation's authored values.
     pub fn validate(&self) -> Result<(), Error> {
         let palette = match self {
@@ -968,9 +957,6 @@ impl ValidateLinks for MaterialStep<'_> {
 }
 
 impl SurfacePayload for MaterialStep<'_> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        self.supports_property(key)
-    }
     fn validate(&self) -> Result<(), Error> {
         self.validate()
     }

@@ -1,10 +1,9 @@
 //! World of Warcraft shader inputs and draw-state semantics.
 use super::bindings::{Coordinates, ImageSelection, TextureBinding};
 use super::state::{DepthState, Lighting, Operation, Rasterization};
-use crate::model::profiles::m2::properties::{Target, TextureUnitField};
 use crate::model::values::model::{MaterialFlags, TextureSource};
 use crate::model::{Construct, PropertyValues};
-use crate::model::{Error, Link, Property, PropertyIdentityKey, PropertyPayload, ValidateLinks};
+use crate::model::{Error, Link, Property, ValidateLinks};
 use std::fmt::Debug;
 
 pub use crate::model::TextureTransform;
@@ -60,62 +59,13 @@ impl Default for GuildPalette {
 }
 /// A complete independently animated shader-input vocabulary.
 pub trait ShaderInput: Clone + Debug + Send + Sync + ValidateLinks {
-    /// Whether this input exposes a structural destination at its ordinal.
-    fn supports_property(&self, _key: &PropertyIdentityKey, _ordinal: usize) -> bool {
-        false
-    }
     /// Checks input values before graph publication.
     fn validate(&self) -> Result<(), Error> {
         Ok(())
     }
 }
-/// An animated destination supplied by a texture-coordinate representation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CoordinateProperty {
-    /// Coordinate translation.
-    Translation,
-    /// Coordinate rotation.
-    Rotation,
-    /// Coordinate scaling.
-    Scale,
-}
-/// Coordinate behavior admitted by a shader input's selected transform type.
-pub trait ShaderCoordinates: Clone + Debug + Send + Sync + ValidateLinks {
-    /// Whether this coordinate form exposes the requested animated destination.
-    fn supports_property(&self, property: CoordinateProperty) -> bool;
-}
-impl ShaderCoordinates for TextureTransform {
-    fn supports_property(&self, _property: CoordinateProperty) -> bool {
-        true
-    }
-}
-impl ShaderCoordinates for () {
-    fn supports_property(&self, _property: CoordinateProperty) -> bool {
-        false
-    }
-}
-impl<T: ShaderCoordinates> ShaderInput for TextureUnit<T> {
-    fn supports_property(&self, key: &PropertyIdentityKey, ordinal: usize) -> bool {
-        match Target::from_identity(key) {
-            Some(Target::TextureUnit { index, field, .. }) if index == ordinal => match field {
-                TextureUnitField::Weight => true,
-                TextureUnitField::Translation => self
-                    .coordinates
-                    .transform
-                    .supports_property(CoordinateProperty::Translation),
-                TextureUnitField::Rotation => self
-                    .coordinates
-                    .transform
-                    .supports_property(CoordinateProperty::Rotation),
-                TextureUnitField::Scale => self
-                    .coordinates
-                    .transform
-                    .supports_property(CoordinateProperty::Scale),
-            },
-            _ => false,
-        }
-    }
-}
+
+impl<T: Clone + Debug + Send + Sync + ValidateLinks> ShaderInput for TextureUnit<T> {}
 /// Model shaders select common depth, face, and lighting operations with retained extension flags.
 pub type ModelRasterization =
     Rasterization<DepthState<Operation, Operation>, bool, Lighting, MaterialFlags>;

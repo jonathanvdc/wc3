@@ -7,9 +7,8 @@ use super::{
 use super::{Graph, GraphBuilder};
 use crate::model::conversion::Error;
 use crate::model::formats::m3::{self as native, records as nr};
-use crate::model::profiles::m3::properties::{Field, FieldPath};
+use crate::model::profiles::m3 as surface;
 use crate::model::NodeId;
-use crate::model::{profiles::m3 as surface, OwnerId};
 use native::{Envelope, Ref};
 use std::collections::BTreeMap;
 pub(super) fn read<'a, E: Envelope>(
@@ -50,54 +49,14 @@ pub(super) fn read<'a, E: Envelope>(
                     hot_spot: anim(r.hot_spot, builder.values_mut()),
                     falloff: anim(r.falloff, builder.values_mut()),
                 };
-                bindings::field(
-                    &mut light.diffuse_color,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Light).child(Field::DiffuseColor),
-                    registry,
-                );
-                bindings::field(
-                    &mut light.intensity_multiplier,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Light).child(Field::IntensityMultiplier),
-                    registry,
-                );
-                bindings::field(
-                    &mut light.specular_color,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Light).child(Field::SpecularColor),
-                    registry,
-                );
-                bindings::field(
-                    &mut light.specular_multiplier,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Light).child(Field::SpecularMultiplier),
-                    registry,
-                );
-                bindings::field(
-                    &mut light.decay,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Light).child(Field::Decay),
-                    registry,
-                );
-                bindings::field(
-                    &mut light.attenuation_start,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Light).child(Field::AttenuationStart),
-                    registry,
-                );
-                bindings::field(
-                    &mut light.hot_spot,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Light).child(Field::HotSpot),
-                    registry,
-                );
-                bindings::field(
-                    &mut light.falloff,
-                    OwnerId::Feature(feature),
-                    &FieldPath::root(Field::Light).child(Field::Falloff),
-                    registry,
-                );
+                bindings::field(&mut light.diffuse_color, registry);
+                bindings::field(&mut light.intensity_multiplier, registry);
+                bindings::field(&mut light.specular_color, registry);
+                bindings::field(&mut light.specular_multiplier, registry);
+                bindings::field(&mut light.decay, registry);
+                bindings::field(&mut light.attenuation_start, registry);
+                bindings::field(&mut light.hot_spot, registry);
+                bindings::field(&mut light.falloff, registry);
                 builder.set_feature(feature, surface::Feature::Light((light).into()))?;
             }
         };

@@ -1,7 +1,7 @@
 //! Exact checked projections of complete owner payloads.
 use super::Profile;
+use crate::model::Error;
 use crate::model::PropertyValues;
-use crate::model::{Error, PropertyPayload};
 mod m2;
 mod m3;
 mod mdlx;
@@ -30,12 +30,6 @@ pub trait Narrows<Source: Profile>: Profile {
     fn bone_override_resource<'a>(
         value: Source::BoneOverrideResource<'a>,
     ) -> Result<Self::BoneOverrideResource<'a>, Error>;
-
-    /// Projects structural selectors when their exact vocabulary is supported.
-    fn property(value: Source::Property) -> Result<Self::Property, Error> {
-        Self::Property::from_identity(&value.identity().to_owned())
-            .ok_or_else(|| incompatible("animation property"))
-    }
 
     /// Projects the complete appearance vocabulary while preserving identities.
     fn appearance<'a>(value: Source::Appearance<'a>) -> Result<Self::Appearance<'a>, Error>;
@@ -92,9 +86,6 @@ impl<P: Profile> Narrows<P> for P {
         Ok(value)
     }
 
-    fn property(value: P::Property) -> Result<Self::Property, Error> {
-        Ok(value)
-    }
     fn appearance<'a>(value: P::Appearance<'a>) -> Result<Self::Appearance<'a>, Error> {
         Ok(value)
     }

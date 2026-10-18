@@ -3,7 +3,7 @@ use super::{Blend, MaterialRasterization, ShaderOverrides};
 use crate::model::materials::bindings::TextureBinding;
 use crate::model::materials::state::PassState;
 use crate::model::profiles::SurfacePayload;
-use crate::model::{Error, ImageResourceId, Link, PropertyIdentityKey, Sampler, ValidateLinks};
+use crate::model::{Error, ImageResourceId, Link, Sampler, ValidateLinks};
 use std::borrow::Cow;
 
 /// A world shader image input with complete, independently owned address behavior.
@@ -688,8 +688,5 @@ impl ValidateLinks for MaterialStep<'_> {
 impl SurfacePayload for MaterialStep<'_> {
     fn validate(&self) -> Result<(), Error> {
         self.validate()
-    }
-    fn supports_property(&self, _key: &PropertyIdentityKey) -> bool {
-        false
     }
 }

@@ -127,7 +127,6 @@ fn metadata_edits_validate_and_preserve_the_published_model_on_failure() {
         draft.finish()
     }
     .unwrap();
-    let identity = model.id();
     assert_eq!(model.metadata().blend_time, 0.25);
     assert!(model
         .edit(|draft| {
@@ -143,7 +142,6 @@ fn metadata_edits_validate_and_preserve_the_published_model_on_failure() {
         })
         .is_err());
     assert_eq!(model.metadata().blend_time, 0.25);
-    assert_eq!(model.id(), identity);
     model
         .edit(|draft| {
             let mut metadata = draft.model().metadata().clone();
@@ -154,5 +152,4 @@ fn metadata_edits_validate_and_preserve_the_published_model_on_failure() {
         .unwrap();
     let restored = model.widen::<Universal>().try_narrow::<Mdlx>().unwrap();
     assert_eq!(restored.metadata().blend_time, 0.5);
-    assert_eq!(restored.id(), identity);
 }

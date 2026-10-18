@@ -1,6 +1,5 @@
 //! World of Warcraft model authoring features independent of binary layout.
 /// Typed animated destinations for World of Warcraft features.
-pub mod properties;
 mod texture;
 pub use crate::model::controls::texture::{SupplementalTextureFlags, TextureControls};
 pub use crate::model::materials::m2::*;

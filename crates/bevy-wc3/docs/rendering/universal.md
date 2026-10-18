@@ -27,6 +27,9 @@ while normal and numeric data maps use linear images. Explicit transfer-function
 declarations remain authoritative. WMO bindings own their sampler; native material
 clamp flags are expanded into those bindings during import. M3 layers retain their
 address selectors in their typed sampling programme, including empty image slots.
+When draw selection limits the compiled materials, texture-valued slots keep both
+authored constants and curve-selected images available. This discovery is
+conservative: encountering such a slot retains all sampled images in the model.
 
 Meshes are cached by geometry, subset, selected texture coordinates, and skin.
 After complete attribute projection, skinning, and indexing, byte-identical meshes

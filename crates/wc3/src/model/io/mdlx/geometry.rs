@@ -239,25 +239,15 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                 decoder.builder.add_named_node("GeometryAnimation")?
             };
             let feature = decoder.builder.reserve_feature(placement);
-            let owner = feature;
+
             let mut flags = source.flags;
             flags.set_drop_shadow(false);
             flags.set_color(false);
             {
                 let payload = profile::Node::GeometryAnimation(profile::GeometryAnimation {
                     mesh,
-                    opacity: decoder.bind(
-                        &source.alpha,
-                        owner,
-                        profile::properties::geometry::OPACITY,
-                        |value| value,
-                    )?,
-                    color: decoder.bind(
-                        &source.color,
-                        owner,
-                        profile::properties::geometry::COLOR,
-                        |value| value,
-                    )?,
+                    opacity: decoder.bind(&source.alpha, "geometry::OPACITY", |value| value)?,
+                    color: decoder.bind(&source.color, "geometry::COLOR", |value| value)?,
                     use_color: source.flags.color(),
                     drop_shadow: source.flags.drop_shadow(),
                     unclassified: flags.bits().into(),

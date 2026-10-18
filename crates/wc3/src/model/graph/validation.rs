@@ -2,10 +2,10 @@
 use crate::model::profiles::{FeaturePayload, Profile};
 use crate::model::ValueSlot;
 use crate::model::{
-    AppearanceSchema, BindingSchema as _, Error, GeometrySchema, Link, Model, PropertyIdentity,
-    PropertyTarget, SharedClock, SystemPayload, Time, TimeSource, ValidateLinks, VertexInfluences,
+    AppearanceSchema, BindingSchema as _, Error, GeometrySchema, Link, Model, SharedClock,
+    SystemPayload, Time, TimeSource, ValidateLinks, VertexInfluences,
 };
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::iter::once;
 impl<P: Profile> Model<'_, P> {
     /// Checks that native programs only write slots represented by their consuming definitions.
@@ -107,10 +107,6 @@ impl<P: Profile> Model<'_, P> {
 impl<P: Profile> Model<'_, P> {
     fn validate_relationships(&self) -> Result<(), Error> {
         let mut missing = false;
-        let mut property_types = HashMap::new();
-        let mut declared_properties = HashSet::new();
-        let mut animated_properties = HashSet::new();
-        let mut conflicting_types = false;
         let mut visit = |link| {
             missing |= match link {
                 Link::Value(slot) => !self.values.contains(slot),
@@ -122,31 +118,12 @@ impl<P: Profile> Model<'_, P> {
                     !self.dependencies.bone_overrides.contains_key(id)
                 }
 
-                Link::Model(id) => id != self.id,
                 Link::AppearanceSlot(id) => !self.appearance.contains_slot(id),
                 Link::SystemMember { system, member } => !self
                     .systems
                     .get(system)
                     .is_some_and(|value| value.contains(member)),
                 Link::InvalidValue => true,
-                Link::Property {
-                    target,
-                    value_type,
-                    definition,
-                } => {
-                    if definition {
-                        declared_properties.insert(target.clone());
-                    } else {
-                        animated_properties.insert(target.clone());
-                    }
-                    if property_types
-                        .insert(target.clone(), value_type)
-                        .is_some_and(|previous| previous != value_type)
-                    {
-                        conflicting_types = true;
-                    }
-                    false
-                }
                 Link::Node(id) => !self.nodes.contains_key(id),
                 Link::FeatureAlternatives { id, kinds } => self
                     .features
@@ -249,25 +226,6 @@ impl<P: Profile> Model<'_, P> {
         self.metadata.visit_links(&mut visit);
         for system in self.systems.values() {
             system.visit_links(&mut visit);
-        }
-        if animated_properties.iter().any(|target| {
-            matches!(target, PropertyIdentity::Profile { .. })
-                && !declared_properties.contains(target)
-        }) {
-            return Err(Error::new(
-                "animation.target",
-                "structural destination is not declared by an authored owner field",
-            ));
-        }
-        for target in property_types.keys() {
-            let target = PropertyTarget::<P>::from_identity(target)?;
-            P::validate_property(self, &target)?;
-        }
-        if conflicting_types {
-            return Err(Error::new(
-                "animation.properties",
-                "one logical property is bound to incompatible value types",
-            ));
         }
         if missing {
             return Err(Error::new(

@@ -1,10 +1,7 @@
 //! Logical material properties bind to typed graph destinations, never section addresses.
 use crate::model::materials::m3::properties::{MaterialProperties, PropertyMut};
-use crate::model::profiles::m3::properties::{Field, FieldPath};
 use crate::model::PropertyValue;
-use crate::model::{
-    profiles::m3 as surface, OwnerId, Property as Destination, Quaternion, ValueSlot,
-};
+use crate::model::{profiles::m3 as surface, Property as Destination, Quaternion, ValueSlot};
 use std::collections::{BTreeMap, HashMap};
 #[derive(Clone, Debug)]
 pub(super) enum Target {
@@ -101,10 +98,10 @@ impl Bindings {
     }
 }
 trait Bind {
-    fn bind(&mut self, owner: OwnerId, path: &FieldPath, bindings: &mut Bindings);
+    fn bind(&mut self, bindings: &mut Bindings);
 }
 impl<T: Value> Bind for surface::PropertyBinding<T> {
-    fn bind(&mut self, _owner: OwnerId, _path: &FieldPath, bindings: &mut Bindings) {
+    fn bind(&mut self, bindings: &mut Bindings) {
         let destination = self.value;
         bindings.register_mode(&destination, self.control.interpolation);
         bindings
@@ -114,71 +111,57 @@ impl<T: Value> Bind for surface::PropertyBinding<T> {
             .push(T::target(destination));
     }
 }
-pub(super) fn material(
-    value: &mut surface::MaterialStep<'_>,
-    owner: OwnerId,
-    bindings: &mut Bindings,
-) {
-    value.visit_properties_mut(
-        &FieldPath::root(Field::Material),
-        &mut |value, path| match value {
-            PropertyMut::Scalar(v) => v.bind(owner, path, bindings),
-            PropertyMut::Vector2(v) => v.bind(owner, path, bindings),
-            PropertyMut::Vector3(v) => v.bind(owner, path, bindings),
-            PropertyMut::Vector4(v) => v.bind(owner, path, bindings),
-            PropertyMut::Unsigned(v) => v.bind(owner, path, bindings),
-            PropertyMut::Unsigned16(v) => v.bind(owner, path, bindings),
-        },
-    );
+pub(super) fn material(value: &mut surface::MaterialStep<'_>, bindings: &mut Bindings) {
+    value.visit_properties_mut(&mut |value| match value {
+        PropertyMut::Scalar(v) => v.bind(bindings),
+        PropertyMut::Vector2(v) => v.bind(bindings),
+        PropertyMut::Vector3(v) => v.bind(bindings),
+        PropertyMut::Vector4(v) => v.bind(bindings),
+        PropertyMut::Unsigned(v) => v.bind(bindings),
+        PropertyMut::Unsigned16(v) => v.bind(bindings),
+    });
 }
-pub(super) fn field<T: Value>(
-    value: &mut surface::PropertyBinding<T>,
-    owner: OwnerId,
-    path: &FieldPath,
-    bindings: &mut Bindings,
-) {
-    value.bind(owner, path, bindings)
+pub(super) fn field<T: Value>(value: &mut surface::PropertyBinding<T>, bindings: &mut Bindings) {
+    value.bind(bindings)
 }
 
 pub(super) use super::property_ids::collect;
 
 impl Bind for surface::Body<'_> {
-    fn bind(&mut self, owner: OwnerId, path: &FieldPath, bindings: &mut Bindings) {
+    fn bind(&mut self, bindings: &mut Bindings) {
         if let Some(dynamic) = &mut self.dynamic {
-            dynamic
-                .state
-                .bind(owner, &path.child(Field::State), bindings);
+            dynamic.state.bind(bindings);
         }
     }
 }
 impl Bind for surface::Cloth<'_> {
-    fn bind(&mut self, owner: OwnerId, path: &FieldPath, bindings: &mut Bindings) {
+    fn bind(&mut self, bindings: &mut Bindings) {
         if let Some(active) = &mut self.active {
-            active.bind(owner, &path.child(Field::Active), bindings);
+            active.bind(bindings);
         }
     }
 }
 impl Bind for surface::System<'_> {
-    fn bind(&mut self, owner: OwnerId, path: &FieldPath, bindings: &mut Bindings) {
+    fn bind(&mut self, bindings: &mut Bindings) {
         match self {
             surface::System::AnimationPartitions(_)
             | surface::System::Collision(_)
             | surface::System::TurretGroups(_)
             | surface::System::ControllerSelections(_) => {}
             surface::System::Physics(system) => {
-                for (index, body) in system.bodies.iter_mut().enumerate() {
-                    body.bind(owner, &path.child(Field::Body).indexed(index), bindings);
+                for body in &mut system.bodies {
+                    body.bind(bindings);
                 }
             }
             surface::System::Cloth(system) => {
-                for (index, cloth) in system.cloths.iter_mut().enumerate() {
-                    cloth.bind(owner, &path.child(Field::Cloth).indexed(index), bindings);
+                for cloth in &mut system.cloths {
+                    cloth.bind(bindings);
                 }
             }
         }
     }
 }
 
-pub(super) fn system(value: &mut surface::System<'_>, owner: OwnerId, bindings: &mut Bindings) {
-    value.bind(owner, &FieldPath::root(Field::Physics), bindings);
+pub(super) fn system(value: &mut surface::System<'_>, bindings: &mut Bindings) {
+    value.bind(bindings);
 }

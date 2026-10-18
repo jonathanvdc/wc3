@@ -1,17 +1,14 @@
 //! Built-in M2 authoring vocabulary and its lossless embeddings.
-use super::properties::Target as PropertySelector;
 use crate::model::profiles::Unavailable;
-use crate::model::profiles::UniversalProperty;
 use crate::model::profiles::{m2, Extends, NoControls, Profile, Universal};
 use crate::model::resources::{M2ImageResource, PathResource};
 use crate::model::Link;
 use crate::model::M2ResourceLocator;
-use crate::model::PropertyIdentityKey;
 use crate::model::PropertyValues;
 use crate::model::{
     Basis, Bounds, ClipControls, DrawControls, DrawLooks, Error, FeatureKind, IdentityBinding,
     LengthUnit, M2Geometry, MaterialSurface, MeshControls, Model, ModelMetadata, NodeControls,
-    PropertyPayload, System, UniversalAppearance, UniversalBinding,
+    System, UniversalAppearance, UniversalBinding,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 /// Vocabulary that maps mechanically to M2 logical features.
@@ -24,7 +21,6 @@ impl Profile for M2 {
     type PhysicsResource<'a> = M2ResourceLocator<'a>;
     type BoneOverrideResource<'a> = M2ResourceLocator<'a>;
 
-    type Property = PropertySelector;
     fn default_bounds() -> Option<Bounds> {
         Some(Default::default())
     }
@@ -121,10 +117,6 @@ impl Profile for M2 {
     }
 }
 impl m2::ActorKind<'_> {
-    pub(crate) fn profile_supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        super::properties::Target::from_identity(key).is_some_and(|key| key.supports_feature(self))
-    }
-
     pub(crate) fn profile_payload_kind(&self) -> FeatureKind {
         FeatureKind::Other
     }
@@ -150,9 +142,6 @@ impl Extends<M2> for Universal {
         value.into()
     }
 
-    fn property(value: <M2 as Profile>::Property) -> Self::Property {
-        UniversalProperty::M2(value)
-    }
     fn appearance<'a>(value: <M2 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::Draw(value)
     }
@@ -234,9 +223,7 @@ impl<'a> FeatureVocabulary<'a> for M2 {
     fn feature<'view>(value: &'view FeatureSet<'a, Self>) -> FeatureView<'view, 'a> {
         value.profile_feature()
     }
-    fn supports_property(value: &FeatureSet<'a, Self>, key: &PropertyIdentityKey) -> bool {
-        value.profile_supports_property(key)
-    }
+
     fn kind(value: &FeatureSet<'a, Self>) -> FeatureKind {
         value.profile_payload_kind()
     }

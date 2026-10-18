@@ -1,14 +1,10 @@
 //! Ordered material programs with explicit shader dialects.
 use super::m2::MaterialStep as M2MaterialStep;
-use super::m3::properties::MaterialProperties;
 use super::mdlx::{LayeredSurface, MaterialDeclaration, MaterialStep as MdlxMaterialStep};
 use super::wmo::MaterialStep as WmoMaterialStep;
 use super::{diablo3, diablo4, m3};
-use crate::model::profiles::m2::properties::Target as M2Target;
-use crate::model::profiles::m3::properties::Target as M3Target;
-use crate::model::profiles::m3::properties::{Field, FieldSegment};
 use crate::model::profiles::SurfacePayload;
-use crate::model::{Error, Link, PropertyIdentityKey, ValidateLinks};
+use crate::model::{Error, Link, ValidateLinks};
 
 /// An authored sequence of material operations, interpreted into rendering passes.
 #[derive(Clone, Debug, PartialEq)]
@@ -60,15 +56,6 @@ impl ValidateLinks for MaterialStep<'_> {
     }
 }
 impl MaterialStep<'_> {
-    /// Whether this step exposes the structural animation destination.
-    pub fn supports_property(&self, key: &PropertyIdentityKey, ordinal: usize) -> bool {
-        match self {
-            Self::Mdlx(v) => v.supports_property(key, ordinal),
-            Self::M2(v) => m2_step_index(key) == Some(ordinal) && v.supports_property(key),
-            Self::M3(v) => m3_path(key).is_some_and(|path| v.supports_path(path)),
-            Self::Wmo(_) | Self::Diablo3(_) | Self::Diablo4(_) => false,
-        }
-    }
     /// Checks the dialect's local invariants independently of graph relationships.
     pub fn validate(&self) -> Result<(), Error> {
         match self {
@@ -82,29 +69,11 @@ impl MaterialStep<'_> {
     }
 }
 impl SurfacePayload for MaterialSurface<'_> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        // MDLX and M2 selectors carry a step ordinal; other selectors must identify one step.
-        self.steps
-            .iter()
-            .enumerate()
-            .filter(|(ordinal, step)| step.supports_property(key, *ordinal))
-            .take(2)
-            .count()
-            == 1
-    }
     fn validate(&self) -> Result<(), Error> {
         self.steps.iter().try_for_each(MaterialStep::validate)
     }
 }
-fn m3_path(key: &PropertyIdentityKey) -> Option<&[FieldSegment]> {
-    let M3Target::Field(path) = key.downcast_ref::<M3Target>()? else {
-        return None;
-    };
-    match path.segments().split_first() {
-        Some((FieldSegment::Field(Field::Material), rest)) => Some(rest),
-        _ => None,
-    }
-}
+
 fn incompatible(message: &str) -> Error {
     Error::new("surface", message)
 }
@@ -339,15 +308,7 @@ impl TryFrom<MaterialSurface<'_>> for MaterialProgram<diablo4::MaterialStep> {
     }
 }
 
-fn m2_step_index(key: &PropertyIdentityKey) -> Option<usize> {
-    key.downcast_ref::<M2Target>()?.material_step()
-}
 impl SurfacePayload for MaterialProgram<M2MaterialStep<'_>> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        m2_step_index(key)
-            .and_then(|i| self.steps.get(i))
-            .is_some_and(|s| s.supports_property(key))
-    }
     fn validate(&self) -> Result<(), Error> {
         self.steps.iter().try_for_each(M2MaterialStep::validate)
     }

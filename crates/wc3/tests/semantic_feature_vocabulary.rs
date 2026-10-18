@@ -4,7 +4,6 @@ use wc3::model::TimeSource;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     FeatureKind, FeatureSet, FeatureView, FeatureVocabulary, LightEmission, LightView, Link, Model,
-    PropertyIdentityKey,
 };
 use wc3::model::{FeatureSchema as _, ValidateLinks as _};
 #[derive(Clone, Debug)]
@@ -102,9 +101,7 @@ impl<'a> FeatureVocabulary<'a> for LightsOnly {
             | FeatureSet::PointLight(unavailable) => match *unavailable {},
         }
     }
-    fn supports_property(_: &FeatureSet<'a, Self>, _: &PropertyIdentityKey) -> bool {
-        false
-    }
+
     fn kind(_: &FeatureSet<'a, Self>) -> FeatureKind {
         FeatureKind::Other
     }
@@ -116,7 +113,6 @@ impl Profile for LightsOnly {
     type PhysicsResource<'a> = wc3::model::profiles::Unavailable;
     type BoneOverrideResource<'a> = wc3::model::profiles::Unavailable;
 
-    type Property = <Mdlx as Profile>::Property;
     type Appearance<'a> = <Mdlx as Profile>::Appearance<'a>;
     type Binding<'a> = <Mdlx as Profile>::Binding<'a>;
     type Geometry<'a> = <Mdlx as Profile>::Geometry<'a>;

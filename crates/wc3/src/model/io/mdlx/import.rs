@@ -290,8 +290,7 @@ where
             if source.layers.is_empty() {
                 continue;
             }
-            let surface =
-                materials::bind::<_, S>(source, &texture_ids, &transforms, *id, &mut decoder)?;
+            let surface = materials::bind::<_, S>(source, &texture_ids, &transforms, &mut decoder)?;
             decoder.builder.set_material_surface(*id, surface)?;
         }
     }

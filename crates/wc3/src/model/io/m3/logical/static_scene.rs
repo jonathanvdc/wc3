@@ -9,8 +9,7 @@ use super::{
 };
 use crate::model::conversion::Error;
 use crate::model::formats::m3::{self as native, records as nr};
-use crate::model::profiles::m3::properties::{Field, FieldPath};
-use crate::model::{profiles::m3 as surface, NodeId, OwnerId};
+use crate::model::{profiles::m3 as surface, NodeId};
 use native::{Envelope, Ref};
 use std::collections::BTreeMap;
 fn node(index: u32, nodes: &[NodeId]) -> Result<NodeId, Error> {
@@ -118,24 +117,9 @@ pub(super) fn read<'a, E: Envelope>(
             width: anim(r.width, builder.values_mut()),
             height: anim(r.height, builder.values_mut()),
         };
-        bindings::field(
-            &mut payload.length,
-            OwnerId::Feature(owner),
-            &FieldPath::root(Field::Shadow).child(Field::Length),
-            registry,
-        );
-        bindings::field(
-            &mut payload.width,
-            OwnerId::Feature(owner),
-            &FieldPath::root(Field::Shadow).child(Field::Width),
-            registry,
-        );
-        bindings::field(
-            &mut payload.height,
-            OwnerId::Feature(owner),
-            &FieldPath::root(Field::Shadow).child(Field::Height),
-            registry,
-        );
+        bindings::field(&mut payload.length, registry);
+        bindings::field(&mut payload.width, registry);
+        bindings::field(&mut payload.height, registry);
         builder.set_feature(owner, surface::Feature::ShadowBox((payload).into()))?;
     }
     for row in document
@@ -148,12 +132,7 @@ pub(super) fn read<'a, E: Envelope>(
         let mut payload = surface::ViewVolume {
             size: anim(r.size, builder.values_mut()),
         };
-        bindings::field(
-            &mut payload.size,
-            OwnerId::Feature(owner),
-            &FieldPath::root(Field::ViewVolume).child(Field::Size),
-            registry,
-        );
+        bindings::field(&mut payload.size, registry);
         builder.set_feature(owner, surface::Feature::ViewVolume((payload).into()))?;
     }
     Ok(())

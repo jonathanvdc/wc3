@@ -6,7 +6,7 @@ use crate::model::{
     Animation, AnimationId, AnimationObject, AppearanceSchema as _, AttachedFeature, Basis, Bounds,
     Clip, ClipId, ClockId, Controller, ControllerId, DynamicTrack, Error, Event, EventId,
     FeatureId, InstanceId, LengthUnit, Look, LookId, Material, MaterialId, Mesh, MeshId,
-    MeshInstance, ModelId, Node, NodeId, Skin, SkinId, SystemId, Time,
+    MeshInstance, Node, NodeId, Skin, SkinId, SystemId, Time,
 };
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
@@ -45,7 +45,6 @@ pub struct Model<'a, P: Profile = Universal> {
     values: PropertyValues,
     dependencies: Dependencies<'a, P>,
     scope: Scope,
-    id: ModelId,
     name: Cow<'a, str>,
     basis: Basis,
     units: LengthUnit,
@@ -223,10 +222,7 @@ impl<'a, P: Profile> Model<'a, P> {
         *self = draft.finish()?;
         Ok(result)
     }
-    /// Stable identity of this model and its model-level property targets.
-    pub fn id(&self) -> ModelId {
-        self.id
-    }
+
     /// Begins a draft whose payloads are constrained by `P`.
     pub fn builder(name: impl Into<Cow<'a, str>>) -> ModelBuilder<'a, P> {
         ModelBuilder::with_profile(name)

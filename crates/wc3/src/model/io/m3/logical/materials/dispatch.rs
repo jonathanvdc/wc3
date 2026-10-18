@@ -5,7 +5,6 @@ use crate::model::conversion::Context;
 
 use crate::model::io::m3::logical::GraphBuilder;
 use crate::model::{self as sem, MaterialId};
-use sem::OwnerId;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 pub(super) fn complete_maps<E: Envelope>(
@@ -269,7 +268,7 @@ pub(in crate::model::io::m3::logical) fn read<'a, E: Envelope>(
         }
         reader.name = None;
         let mut body = body(source, &mut reader, map)?;
-        bindings::material(&mut body, OwnerId::Material(materials[index]), bindings);
+        bindings::material(&mut body, bindings);
         let name = reader.name.take().unwrap_or(Cow::Borrowed(""));
         reader.builder.set_material(
             materials[index],

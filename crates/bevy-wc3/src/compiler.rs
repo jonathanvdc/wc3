@@ -25,7 +25,6 @@ use crate::composition::DrawSelection;
 use crate::physics::PhysicsDefinition;
 use crate::ModelError;
 use bevy::prelude::*;
-use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use wc3::model::profiles::m3::NodeRole as M3NodeRole;
@@ -36,7 +35,7 @@ use wc3::model::{
     AnimationProgram, Attachment, Billboard, Camera as ModelCamera, ClipControls, FeatureId,
     Light as SemanticLight, Link, MaterialId, MaterialSelection, MeshControls, Model, NodeControls,
     NodeFeature, ParticleDetails, ParticleEmitter, PoseLayout, RibbonEmitter, SkinId, Texture,
-    ValidateLinks,
+    ValidateLinks, ValueSlot,
 };
 
 fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
@@ -212,7 +211,7 @@ pub fn compile_model_with_options(
                 Link::ImageResource(id) => {
                     selected.insert(Texture::new(id));
                 }
-                Link::Property { value_type, .. } if value_type == TypeId::of::<Texture>() => {
+                Link::Value(ValueSlot::Texture(_) | ValueSlot::OptionalTexture(_)) => {
                     animated = true;
                 }
                 _ => {}

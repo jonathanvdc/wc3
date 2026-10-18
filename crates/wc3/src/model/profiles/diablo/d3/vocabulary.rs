@@ -28,7 +28,6 @@ impl Profile for D3 {
     type PhysicsResource<'a> = Unavailable;
     type BoneOverrideResource<'a> = Unavailable;
 
-    type Property = Unavailable;
     type Appearance<'a> = Appearance<'a>;
     type Binding<'a> = ExplicitBinding<'a>;
     type Geometry<'a> = Geometry<'a>;
@@ -218,9 +217,6 @@ impl Extends<D3> for Universal {
         match value {}
     }
 
-    fn property(value: <D3 as Profile>::Property) -> Self::Property {
-        match value {}
-    }
     fn appearance<'a>(value: <D3 as Profile>::Appearance<'a>) -> Self::Appearance<'a> {
         UniversalAppearance::D3(value)
     }

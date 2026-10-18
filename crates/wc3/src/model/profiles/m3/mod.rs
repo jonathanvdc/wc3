@@ -1,6 +1,5 @@
 //! Logical M3 surfaces, effects, and source controls.
 /// Typed animated destinations for StarCraft II features.
-pub mod properties;
 pub use crate::model::controls::unbound::{OrderedKeys, UnboundBlock, UnboundKeys};
 pub use crate::model::materials::m3::*;
 /// Logical option domains selected from the shared vocabulary.

@@ -1,10 +1,10 @@
 use wc3::model::materials::bindings::TextureBinding;
 use wc3::model::materials::{m2, wmo};
-use wc3::model::profiles::m2::properties::{Target, TextureUnitField};
+
 use wc3::model::profiles::wmo::WorldSystem;
 use wc3::model::profiles::{Universal, Wmo, M2};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-use wc3::model::{MaterialProgram, MaterialStep, Model, PropertyPayload};
+use wc3::model::{MaterialProgram, MaterialStep, Model};
 
 #[test]
 fn m2_table_contracts_project_to_stable_typed_equations() {
@@ -42,14 +42,6 @@ fn m2_table_contracts_project_to_stable_typed_equations() {
         assert_eq!(reconstructed, step, "table entry {index}");
         if !matches!(step, m2::MaterialStep::Unresolved(_)) {
             for ordinal in 0..count {
-                let key = Target::TextureUnit {
-                    step: 0,
-                    index: ordinal,
-                    field: TextureUnitField::Weight,
-                }
-                .identity()
-                .to_owned();
-                assert!(step.supports_property(&key));
                 assert_eq!(
                     slot_values[step.inputs()[ordinal].contribution],
                     ordinal as f32 + 0.25

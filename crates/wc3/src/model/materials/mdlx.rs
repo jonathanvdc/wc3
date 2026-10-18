@@ -2,15 +2,12 @@
 use super::bindings::{Coordinates, TextureBinding};
 use super::state::{DepthState, Lighting, Operation, PassState, Rasterization};
 use crate::model::materials::state::BlendOperations;
-use crate::model::profiles::mdlx::properties::{LayerField, Target};
 use crate::model::profiles::SurfacePayload;
 use crate::model::profiles::Unavailable;
 use crate::model::values::layered::{LayerFlags, MaterialFlags};
 use crate::model::TextureTransform;
 use crate::model::{Construct, PropertyValues};
-use crate::model::{
-    Error, Link, Property, PropertyIdentityKey, PropertyPayload, Texture, ValidateLinks,
-};
+use crate::model::{Error, Link, Property, Texture, ValidateLinks};
 use std::{borrow::Cow, fmt::Debug};
 
 /// Blending performed by a Warcraft III material layer.
@@ -105,39 +102,13 @@ pub struct LayeredSurface<'a, L = Layer> {
 
 /// A complete pass vocabulary admitted by an ordered layered surface.
 pub trait SurfaceLayer: Clone + Debug + Send + Sync + ValidateLinks {
-    /// Whether this pass exposes the supplied structural destination at its ordinal.
-    fn supports_property(&self, _key: &PropertyIdentityKey, _ordinal: usize) -> bool {
-        false
-    }
     /// Checks authored pass values before graph publication.
     fn validate(&self) -> Result<(), Error> {
         Ok(())
     }
 }
-impl SurfaceLayer for Layer {
-    fn supports_property(&self, key: &PropertyIdentityKey, ordinal: usize) -> bool {
-        match Target::from_identity(key) {
-            Some(Target::Layer { index, field }) if index == ordinal => match field {
-                LayerField::EmissiveGain => self.emissive_gain.is_some(),
-                LayerField::FresnelColor
-                | LayerField::FresnelOpacity
-                | LayerField::FresnelTeamColor => self.fresnel.is_some(),
-                _ => true,
-            },
-            Some(Target::LayerTexture { layer, slot }) if layer == ordinal => {
-                self.textures.get(slot).is_some()
-            }
-            _ => false,
-        }
-    }
-}
+impl SurfaceLayer for Layer {}
 impl<L: SurfaceLayer> SurfacePayload for LayeredSurface<'_, L> {
-    fn supports_property(&self, key: &PropertyIdentityKey) -> bool {
-        self.layers
-            .iter()
-            .enumerate()
-            .any(|(ordinal, layer)| layer.supports_property(key, ordinal))
-    }
     fn validate(&self) -> Result<(), Error> {
         if self.has_unexecuted_declarations() {
             return Err(Error::new(
@@ -354,25 +325,6 @@ impl<'a> MaterialStep<'a> {
     /// Whether material-wide draw declarations agree.
     pub(crate) fn same_declaration(&self, other: &Self) -> bool {
         self.declaration() == other.declaration()
-    }
-    /// Whether this step exposes the native structural animation destination.
-    pub fn supports_property(&self, key: &PropertyIdentityKey, ordinal: usize) -> bool {
-        let (inputs, fresnel, slots) = match self {
-            Self::Classic(v) => (&v.inputs, false, 0),
-            Self::ReforgedDefault(v) => (&v.inputs, v.fresnel.is_some(), v.textures.len()),
-            Self::Unresolved(v) => return v.layer.supports_property(key, ordinal),
-        };
-        match Target::from_identity(key) {
-            Some(Target::Layer { index, field }) if index == ordinal => match field {
-                LayerField::EmissiveGain => inputs.emissive_gain.is_some(),
-                LayerField::FresnelColor
-                | LayerField::FresnelOpacity
-                | LayerField::FresnelTeamColor => fresnel,
-                _ => true,
-            },
-            Some(Target::LayerTexture { layer, slot }) => layer == ordinal && slot < slots,
-            _ => false,
-        }
     }
 }
 impl ValidateLinks for MaterialInputs {

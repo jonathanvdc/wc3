@@ -47,13 +47,12 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
     for source in source.particle_emitters() {
         let id = node(source.node.object_id)?;
         let feature = decoder.builder.reserve_feature(id);
-        let owner = feature;
+
         macro_rules! a {
-            ($field:ident, $key:ident) => {
+            ($field:ident) => {
                 decoder.bind(
                     &source.$field,
-                    owner,
-                    profile::properties::particle::$key,
+                    concat!("particle.", stringify!($field)),
                     |value| value,
                 )?
             };
@@ -89,30 +88,29 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                                 )))
                         }))
                     },
-                    longitude: a!(longitude, LONGITUDE),
-                    latitude: a!(latitude, LATITUDE),
+                    longitude: a!(longitude),
+                    latitude: a!(latitude),
                     text_resource: flags.emitter_uses_tga(),
                     unclassified: Default::default(),
                 },
                 emission: ParticleEmission {
-                    rate: a!(emission_rate, EMISSION_RATE),
+                    rate: a!(emission_rate),
                     activation: decoder.track(
                         source.visibility.as_ref(),
                         1.,
-                        owner,
-                        profile::properties::particle::VISIBILITY,
+                        "particle::VISIBILITY",
                         |value| value,
                     )?,
                     variation: (),
                     trigger: (),
                 },
                 motion: ParticleMotion {
-                    gravity: a!(gravity, GRAVITY),
-                    speed: a!(initial_velocity, INITIAL_VELOCITY),
+                    gravity: a!(gravity),
+                    speed: a!(initial_velocity),
                     variation: (),
                 },
                 lifetime: ParticleLifetime {
-                    duration: a!(life_span, LIFE_SPAN),
+                    duration: a!(life_span),
                     variation: (),
                 },
                 appearance: (),
@@ -123,13 +121,12 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
     for source in source.particle_emitters2() {
         let id = node(source.node.object_id)?;
         let feature = decoder.builder.reserve_feature(id);
-        let owner = feature;
+
         macro_rules! a {
-            ($field:ident, $key:ident) => {
+            ($field:ident) => {
                 decoder.bind(
                     &source.$field,
-                    owner,
-                    profile::properties::particle2::$key,
+                    concat!("particle2.", stringify!($field)),
                     |value| value,
                 )?
             };
@@ -154,15 +151,15 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         {
             let payload = profile::Node::AtlasParticles(profile::Particle2 {
                 motion: ParticleMotion {
-                    speed: a!(speed, SPEED),
-                    variation: a!(variation, VARIATION),
-                    gravity: a!(gravity, GRAVITY),
+                    speed: a!(speed),
+                    variation: a!(variation),
+                    gravity: a!(gravity),
                 },
                 details: AtlasParticle {
                     shape: AtlasParticleShape {
-                        latitude: a!(latitude, LATITUDE),
-                        length: a!(length, LENGTH),
-                        width: a!(width, WIDTH),
+                        latitude: a!(latitude),
+                        length: a!(length),
+                        width: a!(width),
                         line_emitter: flags.line_emitter(),
                     },
                     rendering: AtlasParticleRendering {
@@ -186,13 +183,12 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     variation: (),
                 },
                 emission: ParticleEmission {
-                    rate: a!(emission_rate, EMISSION_RATE),
+                    rate: a!(emission_rate),
                     trigger: source.squirt_enabled(),
                     activation: decoder.track(
                         source.visibility.as_ref(),
                         1.,
-                        owner,
-                        profile::properties::particle2::VISIBILITY,
+                        "particle2::VISIBILITY",
                         |value| value,
                     )?,
                     variation: (),
@@ -211,13 +207,12 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
     for source in source.ribbon_emitters() {
         let id = node(source.node.object_id)?;
         let feature = decoder.builder.reserve_feature(id);
-        let owner = feature;
+
         macro_rules! a {
-            ($field:ident, $key:ident) => {
+            ($field:ident) => {
                 decoder.bind(
                     &source.$field,
-                    owner,
-                    profile::properties::ribbon::$key,
+                    concat!("ribbon.", stringify!($field)),
                     |value| value,
                 )?
             };
@@ -226,13 +221,13 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             let payload = profile::Node::Ribbon(profile::Ribbon {
                 geometry: TrailGeometry {
                     axis: Axis::PositiveY,
-                    height_above: a!(height_above, HEIGHT_ABOVE),
-                    height_below: a!(height_below, HEIGHT_BELOW),
+                    height_above: a!(height_above),
+                    height_below: a!(height_below),
                 },
                 appearance: TrailAppearance {
-                    opacity: a!(alpha, OPACITY),
-                    color: a!(color, COLOR),
-                    texture_slot: a!(texture_slot, TEXTURE_SLOT),
+                    opacity: a!(alpha),
+                    color: a!(color),
+                    texture_slot: a!(texture_slot),
                     atlas: [source.rows, source.columns],
                 },
                 lifetime: source.life_span,
@@ -251,8 +246,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     visibility: decoder.track(
                         source.visibility.as_ref(),
                         1.,
-                        owner,
-                        profile::properties::ribbon::VISIBILITY,
+                        "ribbon::VISIBILITY",
                         |value| value,
                     )?,
                 },
@@ -264,13 +258,12 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         for source in emitters {
             let id = node(source.node.object_id)?;
             let feature = decoder.builder.reserve_feature(id);
-            let owner = feature;
+
             macro_rules! a {
-                ($field:ident, $key:ident) => {
+                ($field:ident) => {
                     decoder.bind(
                         &source.$field,
-                        owner,
-                        profile::properties::popcorn::$key,
+                        concat!("popcorn.", stringify!($field)),
                         |value| value,
                     )?
                 };
@@ -295,17 +288,16 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                         )
                     },
                     visibility_guide: S::text(source.visibility_guide.text()),
-                    life_span: a!(life_span, LIFE_SPAN),
-                    emission_rate: a!(emission_rate, EMISSION_RATE),
-                    speed: a!(speed, SPEED),
-                    color: a!(color, COLOR),
-                    opacity: a!(alpha, OPACITY),
+                    life_span: a!(life_span),
+                    emission_rate: a!(emission_rate),
+                    speed: a!(speed),
+                    color: a!(color),
+                    opacity: a!(alpha),
                     replaceable: source.replaceable_id,
                     visibility: decoder.track(
                         source.visibility.as_ref(),
                         1.,
-                        owner,
-                        profile::properties::popcorn::VISIBILITY,
+                        "popcorn::VISIBILITY",
                         |value| value,
                     )?,
                     unlit: flags.unshaded(),
@@ -340,8 +332,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     visibility: decoder.track(
                         source.visibility.as_ref(),
                         1.,
-                        feature,
-                        profile::properties::attachment::VISIBILITY,
+                        "attachment::VISIBILITY",
                         |value| value,
                     )?,
                 },
