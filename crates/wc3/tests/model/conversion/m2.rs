@@ -354,6 +354,7 @@ fn quantization_requires_an_explicit_tolerance() {
         let definition = builder.new_node("bone").with_controls(mp::BoneControls {
             key_bone: -1,
             flags: mp::values::BoneBehaviorFlags::default(),
+            billboard_flags: Default::default(),
             submesh: 0,
             name_crc: 0,
         });
@@ -1677,6 +1678,7 @@ fn offset_animation_interval_exports_as_native_local_keys() {
     let definition = builder.new_node("bone").with_controls(mp::BoneControls {
         key_bone: -1,
         flags: mp::values::BoneBehaviorFlags::default(),
+        billboard_flags: Default::default(),
         submesh: 0,
         name_crc: 0,
     });
@@ -1886,4 +1888,124 @@ fn ordinary_event_source_retains_sequence_timing_and_duplicate_keys() {
             .collect::<Vec<_>>(),
         [250, 250, 750]
     );
+}
+
+#[test]
+fn billboard_flags_round_trip_while_effective_states_are_normalized() {
+    use sm::{Billboard, BillboardFrame, BillboardScale, EulerLocks, TransformSemantics};
+    for bits in 0..16 {
+        let mut source = native_triangle();
+        let flags = &mut source.model.core_mut().bones[0].flags;
+        flags.set_billboard(bits & 1 != 0);
+        flags.set_billboard_lock_x(bits & 2 != 0);
+        flags.set_billboard_lock_y(bits & 4 != 0);
+        flags.set_billboard_lock_z(bits & 8 != 0);
+        let original = *flags;
+        let imported = io::m2::import(&source, &ImportOptions::default())
+            .unwrap()
+            .value;
+        let bone = imported.nodes().iter().next().unwrap().1;
+        assert_eq!(bone.transform_semantics, TransformSemantics::Affine);
+        let expected = if bits & 1 == 0 {
+            Billboard::None
+        } else {
+            match bits >> 1 {
+                0 => Billboard::Spherical {
+                    frame: BillboardFrame::Yz,
+                    scale: BillboardScale::BasisLengths,
+                },
+                1 => Billboard::Euler(EulerLocks::X),
+                2 => Billboard::Euler(EulerLocks::Y),
+                3 => Billboard::Euler(EulerLocks::Xy),
+                4 => Billboard::Euler(EulerLocks::Z),
+                5 => Billboard::Euler(EulerLocks::Xz),
+                6 => Billboard::Euler(EulerLocks::Yz),
+                _ => Billboard::None,
+            }
+        };
+        assert_eq!(bone.billboard, expected);
+        // Widening and exact narrowing preserve explicit behavior and native declarations.
+        let model = imported
+            .widen::<sm::profiles::Universal>()
+            .try_narrow::<sm::profiles::M2>()
+            .unwrap();
+        let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
+            .unwrap()
+            .execute()
+            .unwrap()
+            .value;
+        assert_eq!(output.model.core().bones[0].flags, original);
+    }
+}
+
+#[test]
+fn billboard_edits_do_not_reactivate_inactive_m2_declarations() {
+    use sm::{Billboard, BillboardFrame, BillboardScale};
+    let mut source = native_triangle();
+    let flags = &mut source.model.core_mut().bones[0].flags;
+    flags.set_billboard_lock_x(true);
+    flags.set_billboard_lock_z(true);
+    let mut model = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (id, original) = model.nodes().iter().next().unwrap();
+    let mut node = original.clone();
+    node.billboard = Billboard::Spherical {
+        frame: BillboardFrame::Yz,
+        scale: BillboardScale::BasisLengths,
+    };
+    model.edit(|draft| draft.set_node(id, node)).unwrap();
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let flags = output.model.core().bones[0].flags;
+    assert!(flags.billboard());
+    assert!(!flags.billboard_lock_x() && !flags.billboard_lock_y() && !flags.billboard_lock_z());
+    let mut node = model.node(id).unwrap().clone();
+    node.billboard = Billboard::None;
+    model.edit(|draft| draft.set_node(id, node)).unwrap();
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    let flags = output.model.core().bones[0].flags;
+    assert!(!flags.billboard());
+}
+
+#[test]
+fn m2_export_rejects_incompatible_facing_and_transform_operations() {
+    use sm::{Billboard, BillboardAxis, BillboardFrame, BillboardScale, TransformSemantics};
+    let source = native_triangle();
+    for mode in [
+        Billboard::Axial(BillboardAxis::X),
+        Billboard::Spherical {
+            frame: BillboardFrame::Camera,
+            scale: BillboardScale::SignedFactors,
+        },
+        Billboard::Spherical {
+            frame: BillboardFrame::Yz,
+            scale: BillboardScale::SignedFactors,
+        },
+    ] {
+        let mut model = io::m2::import(&source, &ImportOptions::default())
+            .unwrap()
+            .value;
+        let (id, node) = model.nodes().iter().next().unwrap();
+        let mut node = node.clone();
+        node.billboard = mode;
+        model.edit(|draft| draft.set_node(id, node)).unwrap();
+        assert!(io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default()).is_err());
+    }
+    let mut model = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (id, node) = model.nodes().iter().next().unwrap();
+    let mut node = node.clone();
+    node.transform_semantics = TransformSemantics::PivotLocal;
+    node.inheritance.rotation = false;
+    model.edit(|draft| draft.set_node(id, node)).unwrap();
+    assert!(io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default()).is_err());
 }

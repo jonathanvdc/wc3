@@ -1,5 +1,5 @@
 //! Offline consumers use semantic values throughout; no image or engine assets are needed.
-use glam::{Affine3A, Mat4, Quat, Vec2, Vec3};
+use glam::{Affine3A, EulerRot, Mat4, Quat, Vec2, Vec3};
 use std::{borrow::Cow, collections::HashMap};
 use wc3::model::conversion::ImportOptions;
 use wc3::model::io::mdlx;
@@ -371,4 +371,182 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
             .transform_point2(origin),
         Vec2::splat(-0.5)
     );
+}
+
+#[test]
+fn native_controls_are_not_an_evaluation_input() {
+    use wc3::model::controls::model::BoneControls;
+    use wc3::model::{Billboard, BillboardAxis, NodeControls, Quaternion};
+    let native = mdlx::decode_mdl(
+        "Version { FormatVersion 800, } Model \"explicit\" {} Helper \"parent\" { ObjectId 0,  } Helper \"child\" { ObjectId 1, Parent 0, BillboardedLockX, DontInheritTranslation, DontInheritRotation, } PivotPoints 2 { { 1, 2, 3 }, { -1, 2, 1 }, }",
+        &ImportOptions::default(),
+    ).unwrap().value;
+    let mut model: Model = native.widen();
+    let camera = Some(Affine3A::from_rotation_translation(
+        Quat::from_euler(EulerRot::XYZ, 0.3, -0.7, 0.8),
+        Vec3::new(4., 6., 8.),
+    ));
+    let parent = model
+        .nodes()
+        .iter()
+        .find(|(_, node)| node.name == "parent")
+        .unwrap()
+        .1
+        .transform;
+    let mut values = model.values().clone();
+    values.set(parent.translation, [2., 3., 4.]).unwrap();
+    values
+        .set(
+            parent.rotation,
+            Quaternion(Quat::from_rotation_z(0.4).to_array()),
+        )
+        .unwrap();
+    values.set(parent.scale, [2., -3., 1.]).unwrap();
+    let layout = model.prepare_pose().unwrap();
+    let expected = layout
+        .evaluate(
+            &values,
+            PoseInputs {
+                camera,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert!(layout
+        .nodes()
+        .iter()
+        .any(|node| node.billboard == Billboard::Axial(BillboardAxis::X)));
+    for controls in [None, Some(NodeControls::M2(BoneControls::default()))] {
+        let nodes: Vec<_> = model
+            .nodes()
+            .iter()
+            .map(|(id, node)| {
+                let mut node = node.clone();
+                node.controls = controls.clone();
+                (id, node)
+            })
+            .collect();
+        model
+            .edit(|draft| {
+                for (id, node) in nodes {
+                    draft.set_node(id, node)?;
+                }
+                Ok(())
+            })
+            .unwrap();
+        let actual = model
+            .prepare_pose()
+            .unwrap()
+            .evaluate(
+                &values,
+                PoseInputs {
+                    camera,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        for (actual, expected) in actual.nodes.iter().zip(&expected.nodes) {
+            assert_eq!(actual.matrix, expected.matrix);
+            assert_eq!(actual.rotation, expected.rotation);
+            assert_eq!(actual.scale, expected.scale);
+        }
+    }
+}
+
+#[test]
+fn explicit_spherical_modes_preserve_pivots_and_selected_scale_measure() {
+    use wc3::model::{
+        Billboard, BillboardFrame, BillboardScale, EvaluatedPose, Inheritance, PoseBehavior,
+        Quaternion, TransformSemantics,
+    };
+    let camera =
+        Affine3A::from_rotation_translation(Quat::from_rotation_y(0.8), Vec3::new(7., -4., 3.));
+    let pose = Transform {
+        translation: [1., 2., 3.],
+        pivot: [2., -1., 3.],
+        rotation: Quaternion(Quat::from_rotation_z(0.4).to_array()),
+        scale: [-1., 2., 0.],
+    };
+    for semantics in [TransformSemantics::Affine, TransformSemantics::PivotLocal] {
+        for frame in [BillboardFrame::Camera, BillboardFrame::Yz] {
+            for scale in [BillboardScale::SignedFactors, BillboardScale::BasisLengths] {
+                for inherit_rotation in [true, false] {
+                    let behavior = PoseBehavior {
+                        inheritance: Inheritance {
+                            rotation: inherit_rotation,
+                            ..Default::default()
+                        },
+                        transform_semantics: semantics,
+                        billboard: Billboard::Spherical { frame, scale },
+                        ..Default::default()
+                    };
+                    let parent = EvaluatedPose {
+                        matrix: Mat4::from_scale_rotation_translation(
+                            Vec3::new(2., 3., -1.),
+                            Quat::from_rotation_x(0.3),
+                            Vec3::new(4., 1., -2.),
+                        ),
+                        rotation: Quat::from_rotation_x(0.3),
+                        scale: Vec3::new(2., 3., -1.),
+                        ..Default::default()
+                    };
+                    let before = behavior.evaluate(pose, parent, None);
+                    let after = behavior.evaluate(pose, parent, Some(camera));
+                    assert!(after.matrix.is_finite());
+                    let pivot = Vec3::from_array(pose.pivot);
+                    assert!(after
+                        .matrix
+                        .transform_point3(pivot)
+                        .abs_diff_eq(before.matrix.transform_point3(pivot), 1e-5));
+                    match scale {
+                        BillboardScale::SignedFactors => assert_eq!(after.scale, before.scale),
+                        BillboardScale::BasisLengths => {
+                            for axis in [Vec3::X, Vec3::Y, Vec3::Z] {
+                                assert!(
+                                    (after.matrix.transform_vector3(axis).length()
+                                        - before.matrix.transform_vector3(axis).length())
+                                    .abs()
+                                        < 1e-5
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn pivot_local_inheritance_can_compensate_an_affine_parents_motion() {
+    use wc3::model::{EvaluatedPose, Inheritance, PoseBehavior, TransformSemantics};
+    let parent = PoseBehavior::default().evaluate(
+        Transform {
+            translation: [5., 0., 0.],
+            ..Default::default()
+        },
+        EvaluatedPose::default(),
+        None,
+    );
+    let child = PoseBehavior {
+        transform_semantics: TransformSemantics::PivotLocal,
+        inheritance: Inheritance {
+            translation: false,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+    .evaluate(
+        Transform {
+            translation: [2., 0., 0.],
+            ..Default::default()
+        },
+        parent,
+        None,
+    );
+    assert_eq!(
+        child.matrix.transform_point3(Vec3::ZERO),
+        Vec3::new(2., 0., 0.)
+    );
+    assert_eq!(child.motion, Vec3::new(2., 0., 0.));
 }

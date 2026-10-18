@@ -3,6 +3,8 @@ use super::*;
 use crate::model::io::materialize;
 use crate::model::{self as semantic, profiles::m2 as profile};
 use std::collections::HashSet;
+mod billboard;
+use crate::model::controls::BillboardFlags;
 mod actors;
 mod actors_export;
 pub(super) mod animation;
@@ -140,21 +142,13 @@ where
             rotation: !bone.flags.dont_inherit_rotation(),
             scale: !bone.flags.dont_inherit_scale(),
         };
-        node.billboard = if bone.flags.billboard_lock_x()
-            || bone.flags.billboard_lock_y()
-            || bone.flags.billboard_lock_z()
-        {
-            semantic::Billboard::Locked {
-                enabled: bone.flags.billboard(),
-                x: bone.flags.billboard_lock_x(),
-                y: bone.flags.billboard_lock_y(),
-                z: bone.flags.billboard_lock_z(),
-            }
-        } else if bone.flags.billboard() {
-            semantic::Billboard::Spherical
-        } else {
-            semantic::Billboard::None
+        let billboard_flags = BillboardFlags {
+            enabled: bone.flags.billboard(),
+            x: bone.flags.billboard_lock_x(),
+            y: bone.flags.billboard_lock_y(),
+            z: bone.flags.billboard_lock_z(),
         };
+        node.billboard = billboard::decode(billboard_flags);
         let mut behavior = bone.flags;
         behavior.set_dont_inherit_translation(false);
         behavior.set_dont_inherit_rotation(false);
@@ -164,6 +158,7 @@ where
         behavior.set_billboard_lock_y(false);
         behavior.set_billboard_lock_z(false);
         node.controls = Some(profile::BoneControls {
+            billboard_flags,
             key_bone: bone.key_bone_id,
             flags: profile::values::BoneBehaviorFlags::from_bits_retain(behavior.bits()),
             submesh: bone.submesh_id,

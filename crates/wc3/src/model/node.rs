@@ -21,25 +21,92 @@ impl Default for Inheritance {
         }
     }
 }
-/// Authored billboard behavior.
+/// Composition and selective inheritance rules, independent of native controls.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TransformSemantics {
+    /// Compose parent and pivot-adjusted local affine transforms. Selective inheritance
+    /// rebuilds the inherited frame from its retained signed factors.
+    #[default]
+    Affine,
+    /// Compose pivot-local bone frames. Selective inheritance compensates accumulated
+    /// authored motion, rotation and scale inside the parent frame.
+    PivotLocal,
+}
+/// Effective camera-facing behavior. Inactive native declarations live in profile controls.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Billboard {
     /// No camera-facing correction.
     #[default]
     None,
-    /// Faces the driving camera.
-    Spherical,
-    /// Faces the camera while retaining selected authored axes.
-    Locked {
-        /// Whether camera-facing correction is active; axis choices remain authored when disabled.
-        enabled: bool,
-        /// Retain the X axis.
-        x: bool,
-        /// Retain the Y axis.
-        y: bool,
-        /// Retain the Z axis.
-        z: bool,
+    /// Replace inherited rotation with the camera frame, then apply authored rotation.
+    Spherical {
+        /// Orientation of the authored geometry within the camera frame.
+        frame: BillboardFrame,
+        /// Scale retained when replacing rotation.
+        scale: BillboardScale,
     },
+    /// Rotate around one authored axis toward the camera viewing axis. X also reflects local Z;
+    /// Y and Z do not reflect. Correction occurs in the node's authored rotation frame.
+    Axial(BillboardAxis),
+    /// Retain selected XYZ Euler components of the composed rotation and take the
+    /// remaining components from the camera. This is not an axial rotation constraint.
+    Euler(EulerLocks),
+}
+/// Geometry orientation relative to the camera's image plane.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BillboardFrame {
+    /// Authored +X is camera right, +Y is camera up, and +Z faces the camera.
+    Camera,
+    /// Authored +Y is camera right, +Z is camera up, and +X faces the camera.
+    Yz,
+}
+/// Scale treatment when a spherical billboard replaces rotation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BillboardScale {
+    /// Retain accumulated signed authored scale factors.
+    SignedFactors,
+    /// Retain affine basis lengths measured before facing correction, with authored signs.
+    BasisLengths,
+}
+/// Selected authored axis for view-facing rotation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BillboardAxis {
+    /// Rotate around X and reflect local Z.
+    X,
+    /// Rotate around Y.
+    Y,
+    /// Rotate around Z.
+    Z,
+}
+/// Nonempty, proper subsets of XYZ Euler components retained from authored rotation.
+/// Retaining all is no facing correction and is represented by `Billboard::None`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EulerLocks {
+    /// Retain X.
+    X,
+    /// Retain Y.
+    Y,
+    /// Retain Z.
+    Z,
+    /// Retain X and Y.
+    Xy,
+    /// Retain X and Z.
+    Xz,
+    /// Retain Y and Z.
+    Yz,
+}
+impl EulerLocks {
+    /// Retained XYZ components.
+    pub fn axes(self) -> [bool; 3] {
+        match self {
+            Self::X => [true, false, false],
+            Self::Y => [false, true, false],
+            Self::Z => [false, false, true],
+            Self::Xy => [true, true, false],
+            Self::Xz => [true, false, true],
+            Self::Yz => [false, true, true],
+        }
+    }
 }
 /// Authored rest transform with a pivot.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -152,6 +219,8 @@ pub struct Node<'a, P: Profile = Universal> {
     pub transform: AnimatedTransform,
     /// Parent transform inheritance.
     pub inheritance: Inheritance,
+    /// Transform composition and selective inheritance rules.
+    pub transform_semantics: TransformSemantics,
     /// Camera-facing behavior.
     pub billboard: Billboard,
     /// Whether this node is initially visible.
@@ -168,6 +237,7 @@ impl<'a, P: Profile> Node<'a, P> {
             parent: None,
             transform: AnimatedTransform::new(Transform::default(), values),
             inheritance: Inheritance::default(),
+            transform_semantics: TransformSemantics::Affine,
             billboard: Billboard::None,
             visible: values.add(true),
             camera_anchored: false,

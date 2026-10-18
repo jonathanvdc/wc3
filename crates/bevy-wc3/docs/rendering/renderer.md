@@ -27,8 +27,8 @@ adds each clip's source start to local playback time and selects keys within its
 inclusive source interval. Shared
 clocks remain independently sampleable. Local-pose transitions retain signed scale
 and shortest-path quaternion rotation; surface and visibility properties sample the
-destination directly. The shared `wc3` pose evaluator handles hierarchy, pivots, native billboard
-conventions, camera anchoring, effect births, event poses, and offline baking. See
+destination directly. The shared `wc3` pose evaluator handles hierarchy, pivots, explicit transform and facing
+semantics, camera anchoring, effect births, event poses, and offline baking. See
 [animation](animation-blending.md) and [node transforms](node-flags.md).
 
 Fixed or [automatic LOD](lod.md) selects authored geometry without recreating the

@@ -7,6 +7,7 @@ use crate::model::formats::mdlx::{
 use crate::model::profiles::Mdlx;
 use crate::model::Model;
 mod animation;
+mod billboard;
 #[cfg(test)]
 #[path = "billboard_tests.rs"]
 mod billboard_tests;

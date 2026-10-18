@@ -1,7 +1,7 @@
 //! Reusable hierarchy indexing and allocation-free pose output.
 use crate::model::{
-    AnimatedTransform, Billboard, BillboardConvention, Error, EvaluatedPose, Inheritance, Model,
-    NodeControls, NodeId, PoseBehavior, Property, Skin, Transform as ModelTransform, ValueSample,
+    AnimatedTransform, Billboard, Error, EvaluatedPose, Inheritance, Model, NodeId, PoseBehavior,
+    Property, Skin, Transform as ModelTransform, TransformSemantics, ValueSample,
 };
 use glam::{Affine3A, Mat4};
 use std::collections::{HashMap, HashSet};
@@ -39,8 +39,8 @@ pub struct PoseNode {
     pub inheritance: Inheritance,
     /// Authored camera-facing behavior.
     pub billboard: Billboard,
-    /// Native camera-facing interpretation.
-    pub billboard_convention: BillboardConvention,
+    /// Transform composition and selective inheritance rules.
+    pub transform_semantics: TransformSemantics,
     /// Authored local visibility.
     pub visible: bool,
     /// Whether the origin follows the driving camera.
@@ -54,7 +54,7 @@ impl PoseNode {
         PoseBehavior {
             inheritance: self.inheritance,
             billboard: self.billboard,
-            billboard_convention: self.billboard_convention,
+            transform_semantics: self.transform_semantics,
             camera_anchored: self.camera_anchored,
         }
     }
@@ -217,11 +217,7 @@ impl Model<'_> {
                     },
                     inheritance: node.inheritance,
                     billboard: node.billboard,
-                    billboard_convention: match node.controls {
-                        Some(NodeControls::Mdlx(_)) => BillboardConvention::Warcraft3,
-                        Some(NodeControls::M2(_)) => BillboardConvention::M2,
-                        _ => BillboardConvention::Generic,
-                    },
+                    transform_semantics: node.transform_semantics,
                     visible: *self.values().get(node.visible).expect("validated slot"),
                     camera_anchored: node.camera_anchored,
                 })

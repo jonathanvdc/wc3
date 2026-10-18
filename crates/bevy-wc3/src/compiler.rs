@@ -11,7 +11,6 @@ use super::material::compile_materials_with_images;
 use super::material::mesh_alpha_mode;
 use super::mesh_animation::{multiply, state as mesh_state, MeshAnimation, MeshMaterialState};
 use super::mesh_interner::MeshInterner;
-use super::pose::BillboardConvention;
 use super::skin_bounds::compile_skin_bounds;
 use super::textures::TextureImages;
 use super::world::WorldRuntime;
@@ -33,7 +32,7 @@ use wc3::model::systems::ModelMetadata;
 use wc3::model::systems::System;
 use wc3::model::{
     AnimationProgram, Attachment, Billboard, Camera as ModelCamera, ClipControls, FeatureId,
-    Light as SemanticLight, Link, MaterialId, MaterialSelection, Model, NodeFeature,
+    Light as SemanticLight, Link, MaterialId, MaterialSelection, Model, NodeControls, NodeFeature,
     ParticleEmitter, PoseLayout, SkinId, Texture, ValidateLinks, ValueSlot,
 };
 
@@ -112,13 +111,19 @@ pub fn compile_model_with_options(
     let mut skin_cache: HashMap<(SkinId, Vec<usize>), usize> = HashMap::new();
     let mut diagnostics = Vec::new();
     for node in &nodes {
-        if node.billboard_convention == BillboardConvention::M2
-            && matches!(node.billboard, Billboard::Locked { enabled: true, .. })
-        {
+        let Some(NodeControls::M2(controls)) =
+            model.node(node.id).and_then(|node| node.controls.as_ref())
+        else {
+            continue;
+        };
+        let flags = controls.billboard_flags;
+        let all_locked =
+            node.billboard == Billboard::None && flags.enabled && flags.x && flags.y && flags.z;
+        if matches!(node.billboard, Billboard::Euler(_)) || all_locked {
             diagnostics.push(RenderDiagnostic {
                 feature: None,
                 material: None,
-                message: format!("M2 node {:?} ({}) uses axis-locked billboarding; generic rotation locks approximate its native camera-frame behavior", node.id, node.name),
+                message: format!("M2 node {:?} ({}) uses Euler billboard locks; component retention approximates native camera-frame behavior", node.id, node.name),
             });
         }
     }
@@ -516,13 +521,9 @@ pub fn compile_model_with_options(
             || node.channels.scale
             || node.channels.visibility
     });
-    let camera_sensitive = nodes.iter().any(|node| {
-        node.camera_anchored
-            || !matches!(
-                node.billboard,
-                Billboard::None | Billboard::Locked { enabled: false, .. }
-            )
-    });
+    let camera_sensitive = nodes
+        .iter()
+        .any(|node| node.camera_anchored || !matches!(node.billboard, Billboard::None));
     let physics = Arc::new(PhysicsDefinition::compile(model, &nodes, &mut diagnostics));
     let mut compiled = CompiledModel {
         mounts: Vec::new(),

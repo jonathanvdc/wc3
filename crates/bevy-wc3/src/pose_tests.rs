@@ -2,9 +2,9 @@ use super::*;
 use crate::compile_model;
 use crate::compiled::RuntimeNode;
 use std::f32::consts::FRAC_PI_2;
-use wc3::model::ModelBuilder;
 use wc3::model::ModelMetadata;
 use wc3::model::{AnimationSample, Curve, DynamicTrack, Node, Quaternion, Time, TimeSource, Track};
+use wc3::model::{BillboardAxis, BillboardFrame, BillboardScale, ModelBuilder, TransformSemantics};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn runtime_node() -> RuntimeNode {
@@ -18,7 +18,7 @@ fn runtime_node() -> RuntimeNode {
     .unwrap();
     let compiled = compile_model(&model, |_| None).unwrap();
     let mut node = compiled.nodes[0].clone();
-    node.billboard_convention = BillboardConvention::Warcraft3;
+    node.transform_semantics = TransformSemantics::PivotLocal;
     node
 }
 
@@ -45,14 +45,16 @@ fn native_billboards_preserve_authored_rotations_and_signed_or_collapsed_scales(
         let parent = evaluate_pose(&node, parent_pose, EvaluatedPose::default(), None);
         for axis in 0..4 {
             node.billboard = if axis == 0 {
-                Billboard::Spherical
-            } else {
-                Billboard::Locked {
-                    enabled: true,
-                    x: axis == 1,
-                    y: axis == 2,
-                    z: axis == 3,
+                Billboard::Spherical {
+                    frame: BillboardFrame::Yz,
+                    scale: BillboardScale::SignedFactors,
                 }
+            } else {
+                Billboard::Axial(match axis {
+                    1 => BillboardAxis::X,
+                    2 => BillboardAxis::Y,
+                    _ => BillboardAxis::Z,
+                })
             };
             let authored = ModelTransform {
                 translation: [0.5, 0.2, -0.3],
@@ -213,7 +215,7 @@ fn birth_pose_follows_parent_rotation_between_frame_endpoints() {
 fn camera_selection_preserves_generic_nonbillboard_affine_shear() {
     let mut slot_values = SlotValues::default();
     let mut node = runtime_node();
-    node.billboard_convention = BillboardConvention::Generic;
+    node.transform_semantics = TransformSemantics::Affine;
     node.inheritance.translation = false;
     let parent = EvaluatedPose {
         matrix: Mat4::from_scale(Vec3::new(2., 1., 3.)),
@@ -278,34 +280,36 @@ fn feature_origins_use_node_pivots_without_moving_geometry_coordinates() {
 }
 
 #[test]
-fn m2_billboard_convention_is_selected_from_bone_controls() {
-    let mut slot_values = SlotValues::default();
+fn native_controls_do_not_select_transform_or_facing_behavior() {
     use wc3::model::controls::model::BoneControls;
     use wc3::model::NodeControls;
+    let mut values = SlotValues::default();
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
-    let mut node = Node::named("native billboard", &mut slot_values).with_controls(Some(
-        NodeControls::M2(BoneControls::construct(&mut slot_values)),
-    ));
-    node.billboard = Billboard::Spherical;
-    builder.add_node(node).unwrap();
-    let model = {
-        builder.import_values(&slot_values).unwrap();
-        builder.finish()
-    }
-    .unwrap();
+    let plain = Node::named("plain", &mut values);
+    let mut with_controls = plain.clone();
+    with_controls.name = "with controls".into();
+    with_controls.controls = Some(NodeControls::M2(BoneControls::default()));
+    builder.add_node(plain).unwrap();
+    builder.add_node(with_controls).unwrap();
+    builder.import_values(&values).unwrap();
+    let model = builder.finish().unwrap();
     let compiled = compile_model(&model, |_| None).unwrap();
     assert_eq!(
-        compiled.nodes[0].billboard_convention,
-        BillboardConvention::M2
+        compiled.nodes[0].transform_semantics,
+        compiled.nodes[1].transform_semantics
     );
+    assert_eq!(compiled.nodes[0].billboard, compiled.nodes[1].billboard);
 }
 
 #[test]
 fn m2_spherical_billboards_face_yz_geometry_toward_rotated_cameras() {
     let mut slot_values = SlotValues::default();
     let mut node = runtime_node();
-    node.billboard_convention = BillboardConvention::M2;
-    node.billboard = Billboard::Spherical;
+    node.transform_semantics = TransformSemantics::Affine;
+    node.billboard = Billboard::Spherical {
+        frame: BillboardFrame::Yz,
+        scale: BillboardScale::BasisLengths,
+    };
     let pivot = Vec3::new(2., -1., 3.);
     let pose = ModelTransform {
         pivot: pivot.to_array(),
@@ -334,8 +338,11 @@ fn m2_spherical_billboards_face_yz_geometry_toward_rotated_cameras() {
 fn m2_spherical_billboards_preserve_authored_rotation_pivot_and_basis_lengths() {
     let mut slot_values = SlotValues::default();
     let mut node = runtime_node();
-    node.billboard_convention = BillboardConvention::M2;
-    node.billboard = Billboard::Spherical;
+    node.transform_semantics = TransformSemantics::Affine;
+    node.billboard = Billboard::Spherical {
+        frame: BillboardFrame::Yz,
+        scale: BillboardScale::BasisLengths,
+    };
     let authored_rotation = Quat::from_euler(EulerRot::XYZ, 0.4, -0.3, 0.2);
     let pose = ModelTransform {
         translation: [0.5, 0.2, -0.3],

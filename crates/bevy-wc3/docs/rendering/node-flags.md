@@ -18,23 +18,50 @@ transform propagation. Move roots and driving cameras before that set. Authored
 camera bindings run earlier in `AnimateCameras`; ordinary application hierarchy
 motion is resolved before camera projection updates.
 
-## Inheritance and native conventions
+## Inheritance and facing behavior
 
 Translation, rotation, and scale inheritance remain independently selectable.
-Compensation retains instance placement and the node's own authored motion. Warcraft
-III native controls preserve their facing convention: full billboarding applies the
-native facing conversion and authored rotation, and takes precedence over axis
-locks. Otherwise X, then Y, then Z lock precedence applies; native X lock also
-changes local Z scale sign.
+`Node::transform_semantics` explicitly selects affine composition or pivot-local
+bone-frame compensation. MDLX import selects `TransformSemantics::PivotLocal`;
+M2 import and newly authored nodes use `Affine`. This choice applies even without
+billboarding. Native controls and model metadata do not select evaluation rules.
+Ordinary full inheritance preserves the parent affine transform in either mode.
+Pivot-local compensation removes accumulated authored motion, rotation, or scale
+inside the parent frame when inheritance is disabled.
 
-M2 spherical billboards use their own native frame: geometry in the YZ plane faces
-the camera along +X, while native +Z follows camera up. Camera orientation replaces
-inherited rotation, then authored local rotation applies within that frame. The
-transformed pivot stays fixed and each inherited basis length is retained, including
-signed and collapsed scale factors. M2 axis locks still use generic rotation-lock
-approximations and emit a diagnostic; their native mirroring and camera-frame
-reconstruction are not implemented. Generic semantic billboards retain their +Z
-facing convention.
+`Billboard` describes the effective facing operation. `None` leaves rotation alone.
+`Spherical` selects an explicit geometry frame and scale treatment, replacing
+inherited rotation before applying authored local rotation. `Euler` retains a
+nonempty proper subset of the composed rotation's XYZ Euler components and takes
+the remaining components from the camera.
+
+`Axial` uses the camera's +Z facing direction expressed in the authored rotation
+frame. X rotates local +Y toward that direction's YZ projection and reflects local
+Z. Y rotates local +X toward its XZ projection; Z rotates local +X toward its XY
+projection. A vanishing projection leaves rotation unchanged. Camera translation
+does not affect this operation. Euler component retention and axial rotation are
+different operations.
+
+MDLX full facing uses `BillboardFrame::Yz` and
+`BillboardScale::SignedFactors` within pivot-local composition. Native full facing
+takes precedence over all lock declarations; otherwise import selects X, then Y,
+then Z. M2 full facing uses the same YZ frame with
+`BillboardScale::BasisLengths` within affine composition. Authored geometry in
+the YZ plane faces the camera along +X, with +Y running across the image and +Z
+following camera up. The transformed pivot stays fixed, and the composed basis
+lengths retain their authored signs, including mirrored and collapsed scales.
+The `Camera` frame instead maps authored +X/+Y/+Z to camera right/up/facing.
+
+M2 axis locks remain an approximation expressed as Euler component retention and
+produce a rendering diagnostic. The remaining M2 axis-lock mirroring and
+camera-frame reconstruction are not implemented. Disabled native locks normalize
+to `None`; retaining all three Euler components also normalizes to `None` and
+leaves affine shear intact.
+Native declarations remain in profile controls as `billboard_flags`. Export keeps
+the original declarations while they describe the node's current effective mode;
+a changed mode emits its own flags without reactivating overridden declarations.
+Strict native export rejects incompatible facing operations or exceptional
+transform semantics instead of silently changing their meaning.
 
 Camera anchoring adds the driving camera position once along an inherited chain.
 Repeated anchored descendants account for the already inherited offset. It does not

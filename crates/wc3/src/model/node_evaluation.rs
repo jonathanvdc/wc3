@@ -1,19 +1,9 @@
-//! Affine node evaluation shared by renderers and offline processing.
-use crate::model::{Billboard, Inheritance, Transform};
+//! Explicit node transform and facing evaluation shared by renderers and offline processing.
+use crate::model::{
+    Billboard, BillboardAxis, BillboardFrame, BillboardScale, EulerLocks, Inheritance, Transform,
+    TransformSemantics,
+};
 use glam::{Affine3A, EulerRot, Mat4, Quat, Vec3};
-use std::f32::consts::FRAC_PI_2;
-
-/// Camera-facing conventions whose native node controls establish their meaning.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum BillboardConvention {
-    #[default]
-    /// Generic semantic camera facing.
-    Generic,
-    /// Warcraft III pivot-local camera facing.
-    Warcraft3,
-    /// World of Warcraft native billboard frame.
-    M2,
-}
 
 /// Signed authored factors accompany the affine transform, including collapsed axes.
 #[derive(Clone, Copy, Debug)]
@@ -24,11 +14,11 @@ pub struct EvaluatedPose {
     pub rotation: Quat,
     /// Signed scale factors, including collapsed axes.
     pub scale: Vec3,
-    /// Accumulated authored translation used for native inheritance compensation.
+    /// Accumulated authored translation used by pivot-local inheritance compensation.
     pub motion: Vec3,
     /// Camera offset already applied along this hierarchy chain.
     pub anchor: Vec3,
-    /// Current authored pivot used to enter the native bone-local frame.
+    /// Current authored pivot used to enter the pivot-local bone frame.
     pub pivot: Vec3,
 }
 impl Default for EvaluatedPose {
@@ -51,8 +41,8 @@ pub struct PoseBehavior {
     pub inheritance: Inheritance,
     /// Authored camera-facing behavior.
     pub billboard: Billboard,
-    /// Native interpretation of camera-facing controls.
-    pub billboard_convention: BillboardConvention,
+    /// Transform composition and selective inheritance rules.
+    pub transform_semantics: TransformSemantics,
     /// Follow the driving camera position.
     pub camera_anchored: bool,
 }
@@ -63,10 +53,7 @@ impl PoseBehavior {
         self.inheritance.translation
             && self.inheritance.rotation
             && self.inheritance.scale
-            && matches!(
-                self.billboard,
-                Billboard::None | Billboard::Locked { enabled: false, .. }
-            )
+            && self.billboard == Billboard::None
             && !self.camera_anchored
     }
     /// Evaluates a local pose against its parent without allocation.
@@ -158,8 +145,8 @@ fn evaluate_pose(
     parent: EvaluatedPose,
     camera: Option<Affine3A>,
 ) -> EvaluatedPose {
-    if node.billboard_convention == BillboardConvention::Warcraft3 {
-        return evaluate_wc3(node, pose, parent, camera);
+    if node.transform_semantics == TransformSemantics::PivotLocal {
+        return evaluate_pivot_local(node, pose, parent, camera);
     }
     let scale = if node.inheritance.scale {
         parent.scale
@@ -186,17 +173,17 @@ fn evaluate_pose(
         matrix: inherited * pose.to_matrix(),
         rotation: (rotation * Quat::from_array(pose.rotation.0).normalize()).normalize(),
         scale: scale * Vec3::from_array(pose.scale),
-        motion: parent.motion,
+        motion: if node.inheritance.translation {
+            parent.motion
+        } else {
+            Vec3::ZERO
+        } + inherited.transform_vector3(Vec3::from_array(pose.translation)),
         anchor: parent.anchor,
         pivot: Vec3::from_array(pose.pivot),
     };
-    if let Some(camera) = camera.filter(|_| {
-        node.camera_anchored
-            || matches!(
-                node.billboard,
-                Billboard::Spherical | Billboard::Locked { enabled: true, .. }
-            )
-    }) {
+    if let Some(camera) =
+        camera.filter(|_| node.camera_anchored || node.billboard != Billboard::None)
+    {
         let mut anchor = result.matrix.transform_point3(result.pivot);
         if node.camera_anchored {
             anchor += Vec3::from(camera.translation) - parent.anchor;
@@ -204,54 +191,17 @@ fn evaluate_pose(
         }
         let target = Quat::from_mat3(&camera.matrix3.into()).normalize();
         let next = match node.billboard {
-            Billboard::Spherical => {
-                let authored = Quat::from_array(pose.rotation.0).normalize();
-                if node.billboard_convention == BillboardConvention::M2 {
-                    // Native billboard geometry lies in YZ: +X faces the camera,
-                    // +Y runs across the image, and +Z points up. Keep authored
-                    // animation after this frame conversion, independent of the
-                    // inherited rotation that the billboard replaces.
-                    let facing = Quat::from_xyzw(-0.5, -0.5, -0.5, 0.5);
-                    result.scale = Vec3::new(
-                        result
-                            .matrix
-                            .x_axis
-                            .truncate()
-                            .length()
-                            .copysign(result.scale.x),
-                        result
-                            .matrix
-                            .y_axis
-                            .truncate()
-                            .length()
-                            .copysign(result.scale.y),
-                        result
-                            .matrix
-                            .z_axis
-                            .truncate()
-                            .length()
-                            .copysign(result.scale.z),
-                    );
-                    target * facing * authored
-                } else {
-                    target * authored
+            Billboard::Spherical { frame, scale } => {
+                if scale == BillboardScale::BasisLengths {
+                    result.scale = basis_lengths(result.matrix).copysign(result.scale);
                 }
+                target * facing_frame(frame) * Quat::from_array(pose.rotation.0).normalize()
             }
-            Billboard::Locked {
-                enabled: true,
-                x,
-                y,
-                z,
-            } => {
-                let (tx, ty, tz) = target.to_euler(EulerRot::XYZ);
-                let (rx, ry, rz) = result.rotation.to_euler(EulerRot::XYZ);
-                Quat::from_euler(
-                    EulerRot::XYZ,
-                    if x { rx } else { tx },
-                    if y { ry } else { ty },
-                    if z { rz } else { tz },
-                )
+            Billboard::Axial(axis) => {
+                let correction = axial_rotation(axis, result.rotation, target, &mut result.scale);
+                result.rotation * correction
             }
+            Billboard::Euler(locks) => euler_facing(locks, result.rotation, target),
             _ => result.rotation,
         };
         result.rotation = next;
@@ -264,10 +214,10 @@ fn evaluate_pose(
     result
 }
 
-// The native evaluator works in pivot-local bone frames. Public semantic matrices
+// Pivot-local composition works in bone frames. Public semantic matrices
 // map model coordinates, so move into and out of that frame without decomposing.
 #[inline]
-fn evaluate_wc3(
+fn evaluate_pivot_local(
     node: &PoseBehavior,
     pose: Transform,
     parent: EvaluatedPose,
@@ -291,37 +241,43 @@ fn evaluate_wc3(
     if !node.inheritance.scale {
         local.scale *= safe_ratio(Vec3::ONE, parent.scale);
     }
-    let full = matches!(node.billboard, Billboard::Spherical);
-    if !(node.inheritance.rotation || full && camera.is_some()) {
+    if !node.inheritance.rotation {
         local.rotation = parent.rotation.inverse() * local.rotation;
     }
     if let Some(camera) = camera {
         let camera_rotation = Quat::from_mat3(&camera.matrix3.into()).normalize();
-        if full {
-            let basis = Quat::from_rotation_y(-FRAC_PI_2) * Quat::from_rotation_x(-FRAC_PI_2);
-            local.rotation = parent.rotation.inverse() * camera_rotation * basis * local.rotation;
-        } else if let Billboard::Locked {
-            enabled: true,
-            x,
-            y,
-            z,
-        } = node.billboard
-        {
-            if x || y || z {
-                let ray =
-                    (parent.rotation * local.rotation).inverse() * (camera_rotation * Vec3::Z);
-                let (axis, angle) = if x {
-                    local.scale.z *= -1.;
-                    (Vec3::X, ray.z.atan2(ray.y))
-                } else if y {
-                    (Vec3::Y, (-ray.z).atan2(ray.x))
+        match node.billboard {
+            Billboard::Spherical { frame, scale } => {
+                let before = if scale == BillboardScale::BasisLengths {
+                    Some(parent_frame * local.to_matrix())
                 } else {
-                    (Vec3::Z, ray.y.atan2(ray.x))
+                    None
                 };
-                if ray.cross(axis).length_squared() > 1e-12 {
-                    local.rotation *= Quat::from_axis_angle(axis, angle);
+                local.rotation = parent.rotation.inverse()
+                    * camera_rotation
+                    * facing_frame(frame)
+                    * Quat::from_array(pose.rotation.0).normalize();
+                if let Some(before) = before {
+                    // Rescale each corrected basis to its pre-facing length. This also
+                    // handles shear in a pivot-local parent without decomposing it.
+                    let after = parent_frame * local.to_matrix();
+                    local.scale *= safe_ratio(basis_lengths(before), basis_lengths(after));
                 }
             }
+            Billboard::Axial(axis) => {
+                let correction = axial_rotation(
+                    axis,
+                    parent.rotation * local.rotation,
+                    camera_rotation,
+                    &mut local.scale,
+                );
+                local.rotation *= correction;
+            }
+            Billboard::Euler(locks) => {
+                local.rotation = parent.rotation.inverse()
+                    * euler_facing(locks, parent.rotation * local.rotation, camera_rotation);
+            }
+            Billboard::None => {}
         }
         if node.camera_anchored {
             local.translation += inverse_vector(
@@ -340,4 +296,49 @@ fn evaluate_wc3(
         anchor,
         pivot,
     }
+}
+
+#[inline]
+fn facing_frame(frame: BillboardFrame) -> Quat {
+    match frame {
+        BillboardFrame::Camera => Quat::IDENTITY,
+        BillboardFrame::Yz => Quat::from_xyzw(-0.5, -0.5, -0.5, 0.5),
+    }
+}
+#[inline]
+fn basis_lengths(matrix: Mat4) -> Vec3 {
+    Vec3::new(
+        matrix.x_axis.truncate().length(),
+        matrix.y_axis.truncate().length(),
+        matrix.z_axis.truncate().length(),
+    )
+}
+#[inline]
+fn axial_rotation(axis: BillboardAxis, rotation: Quat, camera: Quat, scale: &mut Vec3) -> Quat {
+    let ray = rotation.inverse() * (camera * Vec3::Z);
+    let (axis, angle) = match axis {
+        BillboardAxis::X => {
+            scale.z *= -1.;
+            (Vec3::X, ray.z.atan2(ray.y))
+        }
+        BillboardAxis::Y => (Vec3::Y, (-ray.z).atan2(ray.x)),
+        BillboardAxis::Z => (Vec3::Z, ray.y.atan2(ray.x)),
+    };
+    if ray.cross(axis).length_squared() > 1e-12 {
+        Quat::from_axis_angle(axis, angle)
+    } else {
+        Quat::IDENTITY
+    }
+}
+#[inline]
+fn euler_facing(locks: EulerLocks, rotation: Quat, camera: Quat) -> Quat {
+    let [x, y, z] = locks.axes();
+    let (tx, ty, tz) = camera.to_euler(EulerRot::XYZ);
+    let (rx, ry, rz) = rotation.to_euler(EulerRot::XYZ);
+    Quat::from_euler(
+        EulerRot::XYZ,
+        if x { rx } else { tx },
+        if y { ry } else { ty },
+        if z { rz } else { tz },
+    )
 }

@@ -4,7 +4,7 @@ use crate::compiled::RuntimeNode;
 use bevy::math::Affine3A;
 use bevy::prelude::*;
 use std::collections::HashMap;
-pub(crate) use wc3::model::{BillboardConvention, EvaluatedPose};
+pub(crate) use wc3::model::EvaluatedPose;
 use wc3::model::{NodeId, RetimedAnimation, Transform as ModelTransform};
 
 pub(super) fn hierarchical(node: &RuntimeNode) -> bool {

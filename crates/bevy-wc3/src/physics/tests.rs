@@ -376,7 +376,7 @@ fn composition_remaps_parent_bodies_and_constraints_to_shared_host_body() {
             channels: SlotConstruct::construct(&mut slot_values),
             inheritance: SlotConstruct::construct(&mut slot_values),
             billboard: SlotConstruct::construct(&mut slot_values),
-            billboard_convention: SlotConstruct::construct(&mut slot_values),
+            transform_semantics: SlotConstruct::construct(&mut slot_values),
             visible: true,
             camera_anchored: false,
         })
@@ -411,7 +411,7 @@ fn composition_body_offset_includes_rest_correction_anchors() {
         },
         inheritance: SlotConstruct::construct(&mut slot_values),
         billboard: SlotConstruct::construct(&mut slot_values),
-        billboard_convention: SlotConstruct::construct(&mut slot_values),
+        transform_semantics: SlotConstruct::construct(&mut slot_values),
         visible: true,
         camera_anchored: false,
     };

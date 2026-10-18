@@ -9,7 +9,7 @@ output encodings, and any deliberate material conversion.
 ## Preparing and sampling poses
 
 Use `Model::prepare_pose` once to resolve parent indices, parent-before-child
-traversal, native billboard conventions, and channel-presence masks. Its `PoseLayout`
+traversal, explicit transform and facing behavior, and channel-presence masks. Its `PoseLayout`
 is immutable and can be shared across independently sampled instances. Rebuild it
 after changing node definitions or animation channel targets. Samples must belong
 to the same model identities as the prepared layout. Animation compilation remains
@@ -56,6 +56,20 @@ source identity. Visibility includes the ancestor chain. `PoseNode::sample` and
 `PoseBehavior::evaluate` expose the same operations separately for renderers with
 prepared traversal, local transitions, physics, or occurrence-time sampling.
 `Transform::blend` interpolates local poses before hierarchy composition.
+
+Node evaluation reads `transform_semantics`, `inheritance`, `billboard`, and
+`camera_anchored` directly. Attaching or removing native controls does not change
+these operations. `TransformSemantics::Affine` composes pivot-adjusted local affine
+transforms; `PivotLocal` compensates selective inheritance inside pivot-local bone
+frames. `Billboard::Spherical` specifies a camera-relative geometry frame and
+whether to retain signed factors or the composed basis lengths measured before
+facing correction. `Axial` rotates around one authored axis toward the camera
+viewing axis, including local Z reflection for X; `Euler` retains one or two
+XYZ Euler components. Inactive and overridden native billboard declarations live
+in profile controls for export, rather than creating additional effective states.
+The renderer's [node guide](../../bevy-wc3/docs/rendering/node-flags.md) describes
+native mappings and remaining fidelity limits.
+
 `cargo bench -p wc3 --bench evaluation` measures reusable pose evaluation and
 draw projection without initializing a renderer.
 `ValueSample` accepts both ordinary and retimed animation samples, so effect

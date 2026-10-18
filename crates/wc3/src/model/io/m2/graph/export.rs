@@ -3,6 +3,7 @@ use super::animation::{encode, time_ms};
 use super::*;
 use crate::model::M2ImageResource;
 use crate::model::TimeSource;
+use crate::model::{Billboard, TransformSemantics};
 use zerovec::ZeroVec;
 
 /// Plans a typed M2 bundle, checking index limits, curves and resource identities.
@@ -296,14 +297,27 @@ where
         bone.flags
             .set_dont_inherit_rotation(!node.inheritance.rotation);
         bone.flags.set_dont_inherit_scale(!node.inheritance.scale);
-        bone.flags
-            .set_billboard(matches!(node.billboard, semantic::Billboard::Spherical));
-        if let semantic::Billboard::Locked { enabled, x, y, z } = node.billboard {
-            bone.flags.set_billboard(enabled);
-            bone.flags.set_billboard_lock_x(x);
-            bone.flags.set_billboard_lock_y(y);
-            bone.flags.set_billboard_lock_z(z)
+        if node.transform_semantics != TransformSemantics::Affine
+            && (!node.inheritance.translation
+                || !node.inheritance.rotation
+                || !node.inheritance.scale
+                || node.billboard != Billboard::None
+                || node.camera_anchored)
+        {
+            context.unsupported(
+                "node.transform_semantics",
+                "M2 requires affine composition for selective inheritance and camera controls",
+            )?;
         }
+        let flags = billboard::encode(
+            node.billboard,
+            data.map_or(BillboardFlags::default(), |b| b.billboard_flags),
+            &mut context,
+        )?;
+        bone.flags.set_billboard(flags.enabled);
+        bone.flags.set_billboard_lock_x(flags.x);
+        bone.flags.set_billboard_lock_y(flags.y);
+        bone.flags.set_billboard_lock_z(flags.z);
         bone.key_bone_id = data.map_or(-1, |b| b.key_bone);
         bone.submesh_id = data.map_or(0, |b| b.submesh);
         bone.name_crc = NameCrcField::make(data.map_or(0, |b| b.name_crc), &mut context)?;

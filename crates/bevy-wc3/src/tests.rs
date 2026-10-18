@@ -16,6 +16,7 @@ use wc3::model::{
     Material as SemanticMaterial, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node, Skin,
     UniversalBinding, ZeroVec,
 };
+use wc3::model::{BillboardFrame, BillboardScale};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{NodeId, Transform as ModelTransform};
 
@@ -754,7 +755,10 @@ fn driving_camera_and_root_local_changes_update_billboards_before_propagation() 
     let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
     let mount = source.instances().iter().next().unwrap().1.node;
     let mut node = source.node(mount).unwrap().clone();
-    node.billboard = Billboard::Spherical;
+    node.billboard = Billboard::Spherical {
+        frame: BillboardFrame::Camera,
+        scale: BillboardScale::SignedFactors,
+    };
     source
         .edit(|builder| builder.set_node(mount, node))
         .unwrap();

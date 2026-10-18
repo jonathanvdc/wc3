@@ -340,7 +340,7 @@ impl CompiledModel {
                 channels: Default::default(),
                 inheritance: Inheritance::default(),
                 billboard: Billboard::None,
-                billboard_convention: Default::default(),
+                transform_semantics: Default::default(),
                 visible: true,
                 camera_anchored: false,
             });

@@ -1,4 +1,5 @@
 //! Native Warcraft III export planning over independent logical models.
+use super::billboard;
 use super::encode_animation::{unsigned_frame, Encoder};
 use crate::model::conversion::{Context, Error, ExportOptions, Plan};
 use crate::model::formats::mdlx::mdx::FixedText;
@@ -10,6 +11,7 @@ use crate::model::formats::mdlx::{
 use crate::model::profiles::Mdlx;
 use crate::model::MdlxImageResource;
 use crate::model::Model;
+use crate::model::TransformSemantics;
 use crate::model::{AddressMode, Billboard, NodeId, Quaternion};
 use std::collections::BTreeMap;
 
@@ -174,25 +176,24 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
         node.flags
             .set_dont_inherit_scaling(!source.inheritance.scale);
         node.flags.set_camera_anchored(source.camera_anchored);
-        match source.billboard {
-            Billboard::None => {}
-            Billboard::Spherical => {
-                node.flags.set_billboarded(true);
-                let locks = source.controls.spherical_axis_locks;
-                node.flags.set_billboard_lock_x(locks.x);
-                node.flags.set_billboard_lock_y(locks.y);
-                node.flags.set_billboard_lock_z(locks.z);
-            }
-            Billboard::Locked { enabled, x, y, z } => {
-                if enabled && (x || y || z) {
-                    node.flags.set_billboard_lock_x(x);
-                    node.flags.set_billboard_lock_y(y);
-                    node.flags.set_billboard_lock_z(z);
-                } else if x || y || z || enabled {
-                    encoder.context.unsupported("node.billboard", "Warcraft III cannot encode inactive axis declarations or an active lock without an axis")?;
-                }
-            }
+        if source.transform_semantics != TransformSemantics::PivotLocal
+            && (!source.inheritance.translation
+                || !source.inheritance.rotation
+                || !source.inheritance.scale
+                || source.billboard != Billboard::None
+                || source.camera_anchored)
+        {
+            encoder.context.unsupported("node.transform_semantics", "Warcraft III requires pivot-local composition for selective inheritance and camera controls")?;
         }
+        let flags = billboard::encode(
+            source.billboard,
+            source.controls.billboard_flags,
+            &mut encoder.context,
+        )?;
+        node.flags.set_billboarded(flags.enabled);
+        node.flags.set_billboard_lock_x(flags.x);
+        node.flags.set_billboard_lock_y(flags.y);
+        node.flags.set_billboard_lock_z(flags.z);
         if !encoder.constant(source.visible) {
             encoder.context.unsupported(
                 "node.visible",

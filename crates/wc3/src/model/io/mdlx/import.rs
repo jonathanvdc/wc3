@@ -1,13 +1,16 @@
 //! Direct Warcraft III decoding into checked independent model graphs.
+use super::billboard;
 use super::storage::Storage;
 use super::{curves, materials, state::ImportState};
+use crate::model::controls::BillboardFlags;
 use crate::model::conversion::{Context, Conversion, Error, ImportOptions};
 use crate::model::formats::mdlx::{self as native, Chunk, Dialect, ModelChunk};
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
+use crate::model::TransformSemantics;
 use crate::model::{
-    AddressMode, Animation, Billboard, Bounds, Clip, DynamicTrack, ImageResource, Inheritance,
-    Material, ModelBuilder, Quaternion, Sampler, SharedClock, Texture, Time, TimeSource, Track,
+    AddressMode, Animation, Bounds, Clip, DynamicTrack, ImageResource, Inheritance, Material,
+    ModelBuilder, Quaternion, Sampler, SharedClock, Texture, Time, TimeSource, Track,
 };
 use crate::model::{MdlxImageResource, Model, TextureControls};
 use std::borrow::Cow;
@@ -73,21 +76,13 @@ where
             rotation: !node.flags.dont_inherit_rotation(),
             scale: !node.flags.dont_inherit_scaling(),
         };
-        value.billboard = if node.flags.billboarded() {
-            Billboard::Spherical
-        } else if node.flags.billboard_lock_x()
-            || node.flags.billboard_lock_y()
-            || node.flags.billboard_lock_z()
-        {
-            Billboard::Locked {
-                enabled: true,
-                x: node.flags.billboard_lock_x(),
-                y: node.flags.billboard_lock_y(),
-                z: node.flags.billboard_lock_z(),
-            }
-        } else {
-            Billboard::None
-        };
+        value.transform_semantics = TransformSemantics::PivotLocal;
+        value.billboard = billboard::decode(BillboardFlags {
+            enabled: node.flags.billboarded(),
+            x: node.flags.billboard_lock_x(),
+            y: node.flags.billboard_lock_y(),
+            z: node.flags.billboard_lock_z(),
+        });
         value.camera_anchored = node.flags.camera_anchored();
         builder.set_node(*id, value)?;
     }
@@ -324,14 +319,11 @@ where
     }
     for (id, source_node) in ids.into_iter().zip(source_nodes.iter()) {
         let controls = profile::NodeControls {
-            spherical_axis_locks: if source_node.flags.billboarded() {
-                profile::BillboardAxisLocks {
-                    x: source_node.flags.billboard_lock_x(),
-                    y: source_node.flags.billboard_lock_y(),
-                    z: source_node.flags.billboard_lock_z(),
-                }
-            } else {
-                Default::default()
+            billboard_flags: BillboardFlags {
+                enabled: source_node.flags.billboarded(),
+                x: source_node.flags.billboard_lock_x(),
+                y: source_node.flags.billboard_lock_y(),
+                z: source_node.flags.billboard_lock_z(),
             },
             unmapped_flags: native_profile
                 .node_controls

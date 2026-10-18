@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::ClipId;
 #[cfg(test)]
-use wc3::model::ModelMetadata;
+use wc3::model::{BillboardFrame, BillboardScale, ModelMetadata};
 
 #[derive(Component)]
 pub(crate) struct MountedModel {
@@ -335,7 +335,10 @@ mod camera_tests {
         .unwrap();
         let mut part = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
         let mut node = Node::named("billboard", &mut slot_values);
-        node.billboard = Billboard::Spherical;
+        node.billboard = Billboard::Spherical {
+            frame: BillboardFrame::Camera,
+            scale: BillboardScale::SignedFactors,
+        };
         let billboard = part.add_node(node).unwrap();
         let part = compile_model(
             &{

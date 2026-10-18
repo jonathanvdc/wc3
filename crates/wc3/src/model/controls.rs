@@ -160,3 +160,17 @@ impl From<layered::TextureControls> for TextureControls {
         Self::Mdlx(value)
     }
 }
+
+/// Native billboard declarations preserved independently of effective node behavior.
+/// MDLX and M2 assign different precedence and activation rules to these declarations.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BillboardFlags {
+    /// Native full-facing / activation flag.
+    pub enabled: bool,
+    /// Native X lock declaration.
+    pub x: bool,
+    /// Native Y lock declaration.
+    pub y: bool,
+    /// Native Z lock declaration.
+    pub z: bool,
+}

@@ -35,8 +35,8 @@ then choose a topic:
   table adapter, geoset interpretation, joint matching and secondary motion.
 - [Animation and blending](rendering/animation-blending.md): reusable animations, clip time mappings, typed playback controls,
   local-pose transitions, interruption, and effect/event sampling.
-- [Node transforms and flags](rendering/node-flags.md): inheritance,
-  billboarding, camera anchoring, and driving-camera selection.
+- [Node transforms and flags](rendering/node-flags.md): explicit transform semantics, inheritance,
+  effective billboarding, preserved native flags, camera anchoring, and driving-camera selection.
 - [Geometry LOD](rendering/lod.md): authored levels, automatic screen-size
   selection, quality controls, and camera policy.
 - [Geoset animation](rendering/geoset-animation.md): color, opacity,

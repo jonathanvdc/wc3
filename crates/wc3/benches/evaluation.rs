@@ -4,9 +4,9 @@ use std::hint::black_box;
 use wc3::model::profiles::Universal;
 use wc3::model::ModelMetadata;
 use wc3::model::{
-    AnimationProgram, AnimationSample, BillboardConvention, Curve, DynamicTrack, EvaluatedPose,
-    GeometryData, Mesh, Model, ModelPose, PoseBehavior, PoseInputs, Quaternion, Time, TimeSource,
-    Track, Transform,
+    AnimationProgram, AnimationSample, Curve, DynamicTrack, EvaluatedPose, GeometryData, Mesh,
+    Model, ModelPose, PoseBehavior, PoseInputs, Quaternion, Time, TimeSource, Track, Transform,
+    TransformSemantics,
 };
 
 fn poses(c: &mut Criterion) {
@@ -90,12 +90,12 @@ fn projection(c: &mut Criterion) {
 fn node_math(c: &mut Criterion) {
     let mut group = c.benchmark_group("evaluation/node");
     group.throughput(Throughput::Elements(256));
-    for (name, convention) in [
-        ("generic", BillboardConvention::Generic),
-        ("warcraft3", BillboardConvention::Warcraft3),
+    for (name, semantics) in [
+        ("affine", TransformSemantics::Affine),
+        ("pivot-local", TransformSemantics::PivotLocal),
     ] {
         let behavior = PoseBehavior {
-            billboard_convention: convention,
+            transform_semantics: semantics,
             ..Default::default()
         };
         let local = Transform {

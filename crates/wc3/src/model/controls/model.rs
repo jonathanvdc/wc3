@@ -1,4 +1,5 @@
 //! Model playback, shadow passes, geometry sorting, and external category bindings.
+use super::BillboardFlags;
 use crate::model::values::model::{self as values, ModelFlags, SequenceFlags};
 use crate::model::{Bounds, ClipId, Link, NodeId, ValidateLinks};
 use std::borrow::Cow;
@@ -122,6 +123,9 @@ pub struct BoneControls {
     pub key_bone: i32,
     /// Simulation and transform behavior beyond the common hierarchy controls.
     pub flags: values::BoneBehaviorFlags,
+    /// Original native billboard declarations, retained on export while their effective
+    /// behavior agrees with the node's current semantic billboard.
+    pub billboard_flags: BillboardFlags,
     /// Associated mesh-part category.
     pub submesh: u16,
     /// External name checksum used by host-skeleton matching.
@@ -133,6 +137,7 @@ impl Default for BoneControls {
         Self {
             key_bone: -1,
             flags: values::BoneBehaviorFlags::default(),
+            billboard_flags: BillboardFlags::default(),
             submesh: 0,
             name_crc: 0,
         }
