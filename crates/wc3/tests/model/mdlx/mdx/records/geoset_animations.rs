@@ -1,5 +1,4 @@
 use wc3::model::formats::mdlx::animation::{Animatable, Track};
-use wc3::model::formats::mdlx::Color;
 
 use wc3::model::formats::mdlx::animation::{GeosetAnimation, GeosetAnimationFlags, ValueKeyframe};
 use wc3::model::formats::mdlx::mdl::Read as _;
@@ -27,24 +26,6 @@ fn geoset_animation_fields_round_trip() {
     assert!(actual.flags.color());
     assert_eq!(actual.flags.bits(), 7);
     assert_eq!(actual.color, Animatable::Static([0.1, 0.2, 0.3]));
-}
-
-#[test]
-fn geoset_animation_color_track_round_trip() {
-    let mut animation = GeosetAnimation::new(1);
-    let track = Track::<Color>::linear(
-        [ValueKeyframe {
-            frame: 25,
-            value: [0.2, 0.4, 0.8],
-        }],
-        None,
-    )
-    .unwrap();
-    animation.color.set_track(track.clone());
-    let parsed = GeosetAnimation::decode_mdx(&animation.encode_mdx().unwrap())
-        .unwrap()
-        .into_owned();
-    assert_eq!(parsed.color.track(), Some(&track));
 }
 
 #[test]

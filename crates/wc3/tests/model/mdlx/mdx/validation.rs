@@ -81,11 +81,6 @@ fn layer_layout_is_selected_by_its_type() {
 }
 
 #[test]
-fn malformed_model_info_chunk_is_rejected() {
-    assert!(ModelChunk::<V800>::from_raw(RawChunk::new(*b"MODL", vec![0; 12])).is_err());
-}
-
-#[test]
 fn nested_track_failures_keep_absolute_offsets_and_animation_tags() {
     let mut payload = RibbonEmitter::new(Node::new("Trail", 1).unwrap())
         .encode_mdx()

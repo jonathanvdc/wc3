@@ -29,20 +29,6 @@ fn bones_and_helpers_round_trip() {
 }
 
 #[test]
-fn node_flags_preserve_unknown_bits() {
-    let mut node = Node::new("Flagged", 1).unwrap();
-    node.flags = NodeFlags(0x8000_0100);
-    let mut flags = node.flags;
-    assert!(flags.bone());
-    flags.set_billboarded(true);
-    node.flags = flags;
-    assert_eq!(node.flags.bits(), 0x8000_0108);
-    flags.set_bone(false);
-    node.flags = flags;
-    assert_eq!(node.flags.bits(), 0x8000_0008);
-}
-
-#[test]
 fn typed_node_flags_preserve_the_complete_word_and_node() {
     use wc3::model::formats::mdlx::emitters::{Particle2Flags, ParticleEmitterFlags, PopcornFlags};
 

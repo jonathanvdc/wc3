@@ -41,22 +41,6 @@ fn camera_fields_and_tracks_round_trip() {
 }
 
 #[test]
-fn newer_camera_variant_round_trip() {
-    let mut camera = Camera::<wc3::model::formats::mdlx::V1800>::new("Portrait").unwrap();
-    assert_eq!(camera.variant, CameraVariant::Variant3);
-    camera.field_of_view = 0.8;
-    let mut model = Document::<wc3::model::formats::mdlx::V1800>::new();
-    model.set_cameras([camera]);
-    let bytes = model.encode_mdx().unwrap();
-    let parsed = Document::<wc3::model::formats::mdlx::V1800>::decode_mdx(&bytes).unwrap();
-    assert_eq!(
-        parsed.cameras().next().unwrap().variant,
-        CameraVariant::Variant3
-    );
-    assert_eq!(parsed.encode_mdx().unwrap(), bytes);
-}
-
-#[test]
 fn camera_variants_round_trip() {
     let variants = [
         CameraVariant::Variant0,

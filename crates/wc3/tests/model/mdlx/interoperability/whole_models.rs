@@ -1,4 +1,6 @@
-use wc3::model::formats::mdlx::animation::{GeosetAnimation, Sequence, TextureAnimation};
+use wc3::model::formats::mdlx::animation::{
+    GeosetAnimation, Sequence, SequenceFlags, TextureAnimation, Track, ValueKeyframe,
+};
 use wc3::model::formats::mdlx::emitters::{
     ParticleEmitter, ParticleEmitter2, PopcornEmitter, RibbonEmitter,
 };
@@ -18,14 +20,42 @@ use wc3::model::formats::mdlx::{
 fn full_model<'data, V: FormatVersion>() -> Document<'data, V> {
     let version = V::NUMBER;
     let mut model = Document::<V>::new();
-    model.set_model_info(&ModelInfo::new("Complete Synthetic Document").unwrap());
-    model.set_sequences([Sequence::new("Stand", [0, 1000]).unwrap()]);
-    model.set_global_sequences(&[1000]);
-    model.set_textures([Texture::new("Textures\\Sample.blp").unwrap()]);
+    let mut info = ModelInfo::new("Complete Synthetic Document").unwrap();
+    info.bounds_radius = 42.5;
+    info.minimum_extent = [-1.0, -2.0, -3.0];
+    info.maximum_extent = [1.0, 2.0, 3.0];
+    info.blend_time = 150;
+    model.set_model_info(&info);
+    let mut sequence = Sequence::new("Stand", [0, 1000]).unwrap();
+    sequence.move_speed = 270.0;
+    sequence.flags = SequenceFlags(1);
+    sequence.rarity = 0.5;
+    sequence.sync_point = 500;
+    sequence.extent.bounds_radius = 42.0;
+    sequence.extent.minimum = [-2.0, -3.0, -4.0];
+    sequence.extent.maximum = [2.0, 3.0, 4.0];
+    model.set_sequences([sequence]);
+    model.set_global_sequences(&[1000, 2500]);
+    let mut texture = Texture::new("Textures\\Sample.blp").unwrap();
+    texture.replaceable_id = 1;
+    texture.flags.set_wrap_width(true);
+    texture.flags.set_wrap_height(true);
+    model.set_textures([texture]);
     let mut material = Material::<V>::new();
     material.layers = [Layer::<V>::new()].to_vec();
     model.set_materials([material]);
-    model.set_texture_animations([TextureAnimation::new()]);
+    let mut animation = TextureAnimation::new();
+    animation.translation = Some(
+        Track::linear(
+            [ValueKeyframe {
+                frame: 100,
+                value: [1.0, 2.0, 3.0],
+            }],
+            None,
+        )
+        .unwrap(),
+    );
+    model.set_texture_animations([animation]);
     model.set_geosets([Geoset::<V>::new([[0.0, 0.0, 0.0]], [[0.0, 0.0, 1.0]], [0, 0, 0]).unwrap()]);
     model.set_geoset_animations([GeosetAnimation::new(0)]);
     model.set_bones([Bone::new(Node::new("Root", 0).unwrap(), 0, 0)]);
@@ -36,7 +66,7 @@ fn full_model<'data, V: FormatVersion>() -> Document<'data, V> {
         0,
     )
     .unwrap()]);
-    model.set_pivot_points(&[[0.0, 0.0, 0.0]; 3]);
+    model.set_pivot_points(&[[1.0, 2.0, 3.0], [-4.0, 5.5, 0.0]]);
     model.set_event_objects([EventObject::new(
         Node::new("Event", 3).unwrap(),
         u32::MAX,
@@ -63,7 +93,7 @@ fn full_model<'data, V: FormatVersion>() -> Document<'data, V> {
             .try_set_face_fx([FaceFx::new("Face", "Textures\\Face.blp").unwrap()])
             .unwrap();
         model
-            .try_set_bind_poses([BindPoseMatrix([0.0; 12])])
+            .try_set_bind_poses([BindPoseMatrix([2.0; 12])])
             .unwrap();
         model
             .try_set_popcorn_emitters([PopcornEmitter::new(
@@ -97,5 +127,44 @@ fn check_version<V: FormatVersion>() {
     let parsed = Document::<V>::decode_mdx(&bytes).unwrap();
     assert_eq!(parsed.encode_mdx().unwrap(), bytes, "version {version}");
     assert_eq!(parsed.version(), version);
-    assert_eq!(parsed.materials().next().unwrap().layers.len(), 1);
+    assert_eq!(parsed.model_info(), model.model_info());
+    assert_eq!(parsed.global_sequences(), model.global_sequences());
+    assert_eq!(parsed.pivot_points(), model.pivot_points());
+    macro_rules! same_records {
+        ($($accessor:ident),+ $(,)?) => {
+            $(assert_eq!(
+                parsed.$accessor().collect::<Vec<_>>(),
+                model.$accessor().collect::<Vec<_>>(),
+                "{} at version {version}", stringify!($accessor)
+            );)+
+        };
+    }
+    same_records!(
+        sequences,
+        textures,
+        texture_animations,
+        materials,
+        geosets,
+        geoset_animations,
+        bones,
+        helpers,
+        attachments,
+        event_objects,
+        collision_shapes,
+        particle_emitters,
+        particle_emitters2,
+        ribbon_emitters,
+        cameras,
+        lights
+    );
+    if version >= 900 {
+        assert_eq!(
+            parsed.try_bind_poses().unwrap().collect::<Vec<_>>(),
+            model.try_bind_poses().unwrap().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            parsed.try_face_fx().unwrap().collect::<Vec<_>>(),
+            model.try_face_fx().unwrap().collect::<Vec<_>>()
+        );
+    }
 }

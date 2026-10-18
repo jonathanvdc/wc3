@@ -4,28 +4,9 @@ use wc3::model::formats::mdlx::mdl::Read as _;
 use wc3::model::formats::mdlx::mdx::Read as _;
 use wc3::model::formats::mdlx::mdx::Write as _;
 
-use wc3::model::formats::mdlx::materials::{Texture, TextureFlags};
+use wc3::model::formats::mdlx::materials::Texture;
 use wc3::model::formats::mdlx::mdl::Writer;
 use wc3::model::formats::mdlx::Document;
-
-#[test]
-fn texture_fields_round_trip() {
-    let mut texture = Texture::new("Textures\\Footman.blp").unwrap();
-    texture.replaceable_id = 1;
-    texture.flags = TextureFlags(3);
-    let mut model = Document::<wc3::model::formats::mdlx::V1800>::new();
-    model.set_textures([texture]);
-
-    let decoded =
-        Document::<wc3::model::formats::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
-            .unwrap()
-            .into_owned();
-    let texture = &decoded.textures().next().unwrap();
-    assert_eq!(texture.path.text(), "Textures\\Footman.blp");
-    assert_eq!(texture.replaceable_id, 1);
-    assert!(texture.flags.wrap_width());
-    assert!(texture.flags.wrap_height());
-}
 
 #[test]
 fn texture_path_padding_roundtrips_and_is_cleared_when_replacing_the_path() {

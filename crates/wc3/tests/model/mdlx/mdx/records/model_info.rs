@@ -7,28 +7,6 @@ use wc3::model::formats::mdlx::scene::ModelInfo;
 use wc3::model::formats::mdlx::Document;
 
 #[test]
-fn model_info_edit_round_trip() {
-    let mut model = Document::<wc3::model::formats::mdlx::V1800>::new();
-    let mut info = ModelInfo::new("Footman").unwrap();
-    info.bounds_radius = 42.5;
-    info.minimum_extent = [-1.0, -2.0, -3.0];
-    info.maximum_extent = [1.0, 2.0, 3.0];
-    info.blend_time = 150;
-    model.set_model_info(&info);
-
-    let parsed =
-        Document::<wc3::model::formats::mdlx::V1800>::decode_mdx(&model.encode_mdx().unwrap())
-            .unwrap()
-            .into_owned();
-    let actual = parsed.model_info().unwrap();
-    assert_eq!(actual.name.text(), "Footman");
-    assert_eq!(actual.bounds_radius, 42.5);
-    assert_eq!(actual.minimum_extent, [-1.0, -2.0, -3.0]);
-    assert_eq!(actual.maximum_extent, [1.0, 2.0, 3.0]);
-    assert_eq!(actual.blend_time, 150);
-}
-
-#[test]
 fn renaming_preserves_the_separate_animation_file_field() {
     let mut model = Document::<wc3::model::formats::mdlx::V800>::new();
     let mut original = ModelInfo::new("Old").unwrap();
