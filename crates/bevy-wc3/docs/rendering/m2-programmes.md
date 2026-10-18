@@ -60,10 +60,8 @@ remain approximate even for implemented equations.
 | 34 | Modulated edge opacity | 1: U | Implemented facing fade |
 | 35 | Modulated product and depth/edge opacity | 2: U, V | Implemented facing fade; no scene-depth intersection |
 
-The masked crossfade at entry 22 is the only established four-image equation in
-this table. There is no additional five-image masked-crossfade entry in the
-inventoried table. Unsupported selectors and incompatible counts retain explicit
-fallback diagnostics rather than wrapping indices or guessing equations.
+Unsupported selectors and incompatible input counts produce fallback diagnostics.
+The renderer does not wrap table indices or guess an equation from texture count.
 
 ## Resource and API requirements
 
@@ -127,10 +125,3 @@ masked-crossfade stages.
 | Legacy input frame selection | Retained semantic frame controls not evaluated | Frame-to-image playback semantics |
 | Batch layer and pass ordering | Priority/depth bias approximation | Exact ordering across Bevy render phases |
 | Other retained batch/material extension bits | No general interpreter | Established meanings for the individual controls |
-
-The remaining regular-table research set is exactly entries 29, 30 and 31, plus
-the modern six-binding guild resource layout. Projective, waterfall, historical
-selector normalization and unresolved extension behavior remain separate named
-boundaries. Future native layouts or shader tables require their own
-interpretation; they are not automatically covered
-by this inventory.

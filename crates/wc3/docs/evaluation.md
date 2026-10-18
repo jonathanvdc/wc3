@@ -30,16 +30,10 @@ layout.evaluate_into(&sample, PoseInputs::default(), &mut pose)?;
 # Ok::<(), Error>(())
 ```
 
-Each potentially animated field holds a typed `Property<T>` identity. Its supported
-value type implements `PropertyValue`; authored defaults live in `PropertyValues`.
-Reusable `Animation` definitions own curves and events, while clips select animation
-identities and supply playback duration, looping, and a `source_start` that defaults
-to zero. Supply elapsed `clip_time` and independent `shared_time` in `AnimationSample`.
-Sampling adds the source start to wrapped or clamped clip time and restricts ordinary
-keys to the selected inclusive interval. Without a clip, ordinary tracks use
-`clip_time` directly without interval bounds. See the
-[semantic animation guide](semantic.md#typed-animation-curves) for authoring and
-selection precedence.
+`AnimationSample` supplies the selected clip, elapsed `clip_time`, and independent
+`shared_time`. Sampling applies the clip's source interval and looping rules.
+The [animation guide](animation.md) explains value slots, authoring, and selection
+precedence.
 
 `evaluate_into` retains output capacity and allocates nothing once its node and
 visibility buffers are sized. `evaluate` is the allocating convenience method.
@@ -57,23 +51,16 @@ source identity. Visibility includes the ancestor chain. `PoseNode::sample` and
 prepared traversal, local transitions, physics, or occurrence-time sampling.
 `Transform::blend` interpolates local poses before hierarchy composition.
 
-Node evaluation reads `transform_semantics`, `inheritance`, `billboard`, and
-`camera_anchored` directly. Attaching or removing native controls does not change
-these operations. `TransformSemantics::Affine` composes pivot-adjusted local affine
-transforms; `PivotLocal` compensates selective inheritance inside pivot-local bone
-frames. `Billboard::Spherical` specifies a camera-relative geometry frame and
-whether to retain signed factors or the composed basis lengths measured before
-facing correction. `Axial` rotates around one authored axis toward the camera
-viewing axis, including local Z reflection for X; `Euler` retains one or two
-XYZ Euler components. Inactive and overridden native billboard declarations live
-in profile controls for export, rather than creating additional effective states.
-The renderer's [node guide](../../bevy-wc3/docs/rendering/node-flags.md) describes
-native mappings and remaining fidelity limits.
+Node evaluation reads transform semantics, inheritance, billboard, and
+camera anchoring directly from the nodes. The renderer's
+[node guide](../../bevy-wc3/docs/rendering/node-flags.md) describes the native
+mappings and remaining fidelity limits. Overrides replace a complete local pose;
+blend local transforms with `Transform::blend` before hierarchy composition.
 
 `cargo bench -p wc3 --bench evaluation` measures reusable pose evaluation and
 draw projection without initializing a renderer.
 `ValueSample` accepts both ordinary and retimed animation samples, so effect
-and event times do not require selecting animation programmes again.
+and event times do not require selecting animations again.
 
 ## Projecting and deforming geometry
 
@@ -130,7 +117,7 @@ used with independently sampled instances.
 from the authored constants before sampling. A value without an active writer
 therefore returns to its authored value. This evaluates slot values while
 preserving native shader descriptions and render state; it does not execute
-shader programmes or procedural textures. `PropertyValues` itself implements
+shader programs or procedural textures. `PropertyValues` itself implements
 `ValueSample`, allowing an evaluated snapshot to supply pose and material reads.
 
 `MeshAppearance::compile` prepares geometry-owned tint and opacity controls. Rebuild

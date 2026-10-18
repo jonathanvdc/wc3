@@ -1,40 +1,54 @@
-//! Read, edit, and write Warcraft III and WoW models, BLP textures, and MPQ archives.
+//! Read, edit, and write Blizzard models, BLP textures, and MPQ archives.
 //!
-//! Start with [`model::Model`] for checked authoring values, relationships, and
-//! shared resources. Its [`model::profiles`] select game-specific semantics independently
-//! of native file layouts. [`model::io`] imports native documents and plans exports;
-//! [`model::conversion`] supplies explicit representability policies and diagnostics.
+//! Use [`model`] for Warcraft III MDX/MDL and World of Warcraft M2/WMO models,
+//! [`blp`] for textures, and [`mpq`] for archives. The library has no renderer
+//! dependency; model poses and surfaces can be evaluated on the CPU.
 //!
-//! Native documents live under [`model::formats`]. Use
-//! [`model::formats::mdlx::Document`] for a known Warcraft III format version or
-//! [`model::formats::mdlx::DynamicDocument`] for runtime version selection. Both share
-//! native record types for binary MDX and text MDL; import their codec traits for I/O.
-//! Retain native documents for record inspection, opaque data, and codec round trips.
+//! # Load a model
 //!
-//! World of Warcraft models use [`model::formats::m2::Document`] or [`model::formats::m2::DynamicDocument`].
-//! Their native skin, animation, skeleton, bone, and physics codecs retain separate
-//! documents; [`model::formats::m2::Bundle`] resolves declared references and coordinates
-//! external animation output through caller-owned storage.
+//! For checked model editing, import a file into [`model::Model`]. This example
+//! loads a self-contained Warcraft III model whose values outlive the input:
 //!
-//! World models use [`model::formats::wmo::Root`] and [`model::formats::wmo::Group`], with explicit
-//! client profiles and [`model::formats::wmo::Bundle`] for shared root/group references.
+//! ```
+//! use wc3::model::{conversion::ImportOptions, io};
 //!
-//! [`blp`] reads and writes BLP0, BLP1, and BLP2 encoded texture containers.
-//! [`mpq`] indexes, streams, creates, and edits MPQ v1–v4 archives.
+//! let source = r#"Version { FormatVersion 800, } Model "Example" {}"#;
+//! let imported = io::mdlx::decode_mdl(source, &ImportOptions::default())?;
+//! assert_eq!(imported.value.name(), "Example");
+//! # Ok::<(), wc3::model::conversion::Error>(())
+//! ```
 //!
-//! # Optional pixel and compression codecs
+//! [`model::Model::edit`] validates changes together before publishing them.
+//! [`model::io`] imports native documents and plans native output, with explicit
+//! loss policies and reports from [`model::conversion`]. A model's
+//! [`profile`](model::profiles) selects game semantics independently of the file
+//! revision.
 //!
-//! The crate has no default features. Document codecs and encoded BLP/MPQ container
-//! operations are always available. Enable `blp-decode` to read RGBA pixels and
-//! use the `image` decoder adapter; `blp-encode` adds pixel encoding. `mpq-decode`
-//! enables compressed entry extraction, and `mpq-encode` adds zlib/bzip2 writing.
-//! Stored MPQ entries and encoded copying do not require those features.
+//! For native record editing and unknown-data preservation, use
+//! [`model::formats`] instead. Warcraft III uses [`model::formats::mdlx::Document`]
+//! or [`model::formats::mdlx::DynamicDocument`]; MDX and MDL share their records.
+//! WoW uses [`model::formats::m2`] and [`model::formats::wmo`], including bundles
+//! for resolving and writing supporting files. Consult each format's reference
+//! for supported layouts and round-trip guarantees.
 //!
-//! # Ownership and output
+//! # Textures, archives, and features
 //!
-//! MDX, M2, and WMO documents and BLP containers can borrow their encoded input. Their
-//! owned conversion methods detach data for longer-lived storage; MDL parsing builds
-//! owned records. See each module for its editing and round-trip guarantees.
+//! [`blp::Blp`] reads and writes BLP0, BLP1, and BLP2 encoded containers.
+//! [`mpq::Archive`] reads seekable archives, [`mpq::SharedArchive`] supports
+//! concurrent reads, and [`mpq::ArchiveWriter`] creates or edits archives.
+//!
+//! There are no default features. Enable `blp-decode` for RGBA pixels and the
+//! `image` decoder adapter, or `blp-encode` to encode images. `mpq-decode` enables
+//! compressed entry extraction; `mpq-encode` adds zlib/bzip2 writing. Model codecs,
+//! stored MPQ entries, and encoded container editing need none of these features.
+//!
+//! # Ownership and writing
+//!
+//! Native MDX, M2, and WMO documents and BLP containers can borrow their encoded
+//! input. Convert them to owned storage when they must outlive it. MDL parsing
+//! builds owned records. Checked model adapters offer their own borrowing and
+//! owned import choices.
+//!
 //! Writers can leave partial output after transport errors. Complete encoding or
 //! archive finalization before replacing a source file.
 

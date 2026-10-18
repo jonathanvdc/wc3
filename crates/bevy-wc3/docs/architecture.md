@@ -1,141 +1,97 @@
 # Renderer architecture
 
-The renderer compiles `Model<Universal>` into owned definitions, inserts reusable
-Bevy assets, then creates independent instance state. Native codecs and semantic
-adapters belong to `wc3`; rendering does not lower the graph into a particular
-native file version. The public facade lives in `src/lib.rs`, plugin registration in
-`src/plugin.rs`, and cross-feature ordering in `src/schedule.rs`.
+The renderer turns a `Model<Universal>` into reusable Bevy assets and independent
+instance state. Native decoding and semantic conversion belong to `wc3`; image
+resolution, GPU preparation, and live rendering belong here. Read the
+[application guide](usage.md) for public workflows and
+[compilation guide](rendering/universal.md) for input contracts.
 
-## Compilation, preparation, and ownership
+## From asset to instance
 
-`assets/model.rs` loads native models and required companions through an
-application resource resolver. It resolves role-specific image variants and compiles
-the semantic model before returning `ModelAsset`. Assets retain compiled
-definitions and dependency handles rather than the source graph.
+Loading, compilation, preparation, and spawning have separate ownership boundaries:
 
-`compiler.rs` assembles geometry, material, animation, feature, world, and
-effect interpreters. `wc3` projects selected connectivity ranges and attribute
-domains; `geometry.rs` converts those streams into Bevy meshes and packs GPU joint
-attributes. The renderer deduplicates complete compiled vertex records. Complete mesh
-outputs share assets when their attributes, indices, and topology agree. Each
-skinned geometry part retains only palette slots used by its positive vertex
-weights, remapping both influence streams together with joint identities and
-inverse binds. Geometry parts using the same source skin and retained slots share
-compiled palettes; the authored skeleton remains available for attachments,
-overrides and animation.
-`material.rs` defines `ExtendedMaterial<StandardMaterial, ModelMaterialExtension>`;
-`material/compile.rs` interprets surfaces and `material/animation.rs` samples their
-properties. `textures.rs` identifies role, color-space, and effective sampler requests.
-Unsupported semantics produce source-associated diagnostics or fail where no valid
-geometry interpretation exists.
+| Stage | Responsibility | Main modules |
+| --- | --- | --- |
+| Load | Resolve native models, required companions, and image variants into a `ModelAsset`. | `assets/model.rs`, `textures.rs` |
+| Compile | Build owned geometry, animation, materials, effects, and scene definitions. | `compiler.rs`, `geometry.rs`, `material/compile.rs` |
+| Prepare | Insert shared meshes and inverse binds into Bevy asset stores. | `compiled.rs` |
+| Spawn | Populate application roots and maintain independent live state. | `instances.rs`, `runtime/` |
 
-`compiled.rs` owns the compiled definitions and shared asset preparation.
-`composition.rs` validates rest-space joint bindings and combines skinned equipment
-with the host rig. Rigid component definitions retain independent animation and
-physics state. Shared preparation interns mesh and inverse-bind handles across the
-whole composition. `assembly/` owns resource plans, typed selections, atlas
-composition, image caching and source compilation without game vocabulary.
-`wow/` translates native geosets, replacement categories and joint-matching
-instructions into that pipeline. Applications can supply their own selection
-schemas through `assembly::Resolver<Selection>`.
-`CompiledModel::prepare` inserts unique meshes and inverse bind palettes
-into asset stores and returns `PreparedModel`. Source bytes and the graph
-may be released before preparation. Mesh, bind, animation, and definition buffers
-remain shared. Constant materials share handles; animated materials remain private
-per instance and mark assets modified only when sampled values change. Compilation
-indexes channel destinations across ordinary and shared-clock tracks in model-level and clip
-programmes. Bindings without channels, and scalar tracks proven to equal their
-authored default in every programme, do not require private material assets.
-Multi-key spline curves remain animated. Per-node channel flags also avoid querying
-static transform and visibility properties during live evaluation, occurrence
-sampling and baking. These flags retain every authored node and allow overrides and transitions
-to use the same evaluator.
+Source bytes and the semantic graph can be released after compilation. Complete
+equal meshes and bind palettes share storage; constant materials share handles.
+Animated materials remain private to an instance and only change their Bevy assets
+when sampled values change. Channel indexes avoid repeatedly sampling properties
+with no effective animation while retaining every authored node for overrides.
 
-`instances.rs` caches prepared source assets, waits for required dependencies,
-rejects cyclic ownership, and populates application roots. Replacements remove only
-renderer-owned descendants. Reloaded semantic identities are new: playback and
-overrides migrate through unique names, with observable reset counts.
+`instances.rs` waits for required dependencies and rejects cyclic ownership.
+Replacement removes renderer-owned descendants while preserving application
+children. Reloaded graph IDs are new; playback and pose selections migrate through
+unique names, with results exposed through `ModelRebind`.
 
-## Pose, surfaces, and hooks
+`composition.rs` validates shared-skeleton bindings and mounted components.
+`assembly/` resolves resource plans, selections, and texture atlases; `wow/`
+translates native character choices into those general operations. Rigid components
+retain independent clocks and physics state while sharing prepared assets.
 
-`runtime/` owns independent clocks and evaluation state. `Model::prepare_pose` in
-`wc3` resolves node order and channel masks once. `pose.rs` adapts its shared
-`PoseNode` and `PoseBehavior` evaluation to Bevy transforms and occurrence sampling.
-The evaluator composes a parent-first affine hierarchy while retaining signed
-rotation and scale factors,
-including collapsed axes. Ordinary hierarchy preserves shear; exception nodes
-requiring inheritance or camera compensation use finite factor-based transforms.
-Live poses, effect births, camera sampling, event occurrence poses, and `baking.rs`
-share the evaluator. CPU baking also delegates skin-matrix construction and
-position/normal/tangent deformation to `wc3`. Live rendering retains its prepared
-traversal and per-instance buffers and continues to deform geometry on the GPU.
-Surface tint and UV calculations use the shared semantic operations; Bevy material
-transport, image handles, and native shader interpretation remain here. Offline
-consumers can use the [same operations directly](../../wc3/docs/evaluation.md).
-Optional authored secondary motion in `physics.rs` runs after
-sampled local poses and before final ECS transforms are published. The default
-path does not allocate physics buffers. Mounted models evaluate parent-first, and
-inherited forces use the current carrier pose in the same frame.
+## Pose and scene evaluation
 
-`transition.rs` retains a frozen authored local source pose and blends it into the advancing destination. Completed fades retain that source for
-occurrence-time rewinds and skip live interpolation.
+`Model::prepare_pose` in `wc3` prepares traversal and channel information.
+`pose.rs` adapts the shared evaluator to Bevy transforms, occurrence sampling, and
+`baking.rs`. Ordinary hierarchy preserves affine shear. Nodes requiring special
+inheritance or camera compensation use finite rotation/scale factors, including
+signed and collapsed scales. CPU baking shares skin-matrix and deformation
+operations with `wc3`; live geometry deforms on the GPU.
 
-Live instances retain a complete model-space pose cache for scene features and
-effects. Ordinary skeleton entities carry local transforms through Bevy's hierarchy.
-Occurrence-time sampling and offline baking evaluate their required authored
-hierarchy independently.
+`transition.rs` freezes the source local pose and blends toward the advancing
+destination. It retains that source for within-update occurrence sampling.
+`physics.rs` optionally applies authored secondary motion after sampled local poses
+and before final transforms. Mounted rigs evaluate parent-first so inherited
+forces use the current carrier pose.
 
-`features.rs` interprets common lights, cameras, and attachment mounts. `camera.rs`
-binds authored views to application-owned cameras before projection updates.
-`events.rs` indexes typed event programmes and performs bounded chronological
-interval traversal. `lod.rs` selects authored geometry from projected rest bounds;
-`skin_bounds.rs` refreshes joint-contribution bounds only for changed input
-transforms or matching mesh/bind asset events, deferring hidden work until reveal;
-`world.rs` retains groups, placement sets, portals, liquid grids, and environmental
-integration data. `world_lighting.rs` prepares static vertex illumination and
-portal-distance transitions before geometry projection; draw-local regional lighting
-participates in material sharing without taking ownership of Bevy scene lighting.
+Scene integration is divided by purpose. `features.rs` handles lights and mounts;
+`camera.rs` binds authored views; `events.rs` traverses event windows; `lod.rs`
+selects geometry. `skin_bounds.rs` updates conservative joint-contribution bounds
+when their inputs change. `world.rs` handles world selections and environment data,
+while `world_lighting.rs` prepares vertex illumination and regional contributions
+without replacing Bevy scene lighting.
 
-Generic feature hooks preserve source identities and kinds. Unsupported complete
-payloads are not retained on spawned entities; applications needing them must
-inspect the semantic graph during compilation. Attachment placement appearance and
-supported light definitions have dedicated owned components.
+## Effects
 
-## Effect record storage
+`effects/` interprets native emitter families. Sprite and trail transport share
+record storage, extraction, upload, and ordering machinery where their behavior
+agrees; native definitions remain separate.
 
-`effects/` owns semantic emission, atlas sprites, age-driven sprites, model
-particles, and trails. Its `sprites/` and `trails/` modules provide shared GPU
-transport, with common record storage, extraction, upload, draw ordering, and
-shader-generated geometry without native model-record dependencies.
-
-Atlas sprites and trails retain immutable births in bounded ring storage. GPU
-updates upload changed birth ranges; per-view sorting uses separate indices. Ribbon
-material passes share section storage. Age-driven sprites currently reuse CPU mesh
-buffers and upload only when population, view, or evaluated appearance changes.
-Model particles instantiate independently animated child models with explicit owner
-cleanup. Each interpreter exposes population and omitted-work counters and applies
-bounded birth/long-update budgets.
+Atlas sprites and trails store immutable births in bounded rings. GPU updates
+upload changed ranges, and per-view sorting uses separate indices. Ribbon passes
+share section records. M2 age-driven sprites reuse CPU mesh buffers, updating them
+when population, view, or evaluated appearance changes. Model particles create
+independent child models with explicit cleanup when their owner disappears.
+Population, birth, and long-update budgets bound work and expose omitted-work
+counters. The focused [effect guides](README.md#rendering-reference) describe their
+semantics and limits.
 
 ## Scheduling contract
 
-`Wc3Systems` remains the plugin's scheduling integration vocabulary. Ordering only
-applies within the schedule containing that set. The main stages are:
+`Wc3Systems` is the public scheduling interface. Ordering applies only within the
+schedule containing the set; use the appropriate schedule when integrating an
+application system.
 
 | Schedule | Set | Contract |
 | --- | --- | --- |
-| `Update` | `SpawnInstances` | Populate ready requests and replace invalidated source definitions. |
-| `Update` | `AdvanceAnimation` | Synchronize composed mount controls, advance clocks, and synchronize existing model-particle child playback. |
+| `Update` | `SpawnInstances` | Populate ready requests and replace invalidated definitions. |
+| `Update` | `AdvanceAnimation` | Synchronize mount controls, advance clocks, and update existing model-particle playback. |
 | `PostUpdate` | `AnimateCameras` | Sample bound views before Bevy projection updates and node poses. |
-| `PostUpdate` | `EvaluateNodePoses` | Apply attachment restarts, authored poses, optional secondary motion, material animation, and scene features before propagation. |
+| `PostUpdate` | `EvaluateNodePoses` | Evaluate attachment restarts, poses, secondary motion, materials, and scene features before propagation. |
 | `PostUpdate` | `SelectLod` | Select geometry after camera updates and transform propagation, before visibility. |
 | `PostUpdate` | `SimulateEffects` | Sample births and advance effects after propagation. |
-| `PostUpdate` | `DispatchEvents` | Emit crossed events with occurrence poses after propagation. |
+| `PostUpdate` | `DispatchEvents` | Emit crossed events with their occurrence poses after propagation. |
 
 Move roots and camera parents before `AnimateCameras` when using authored camera
 bindings, and before `EvaluateNodePoses` for ordinary pose inputs. Read events after
-`DispatchEvents` or in the next `Update`. Zero simulation delta permits
-asset/pipeline/readback work without advancing model or effect clocks.
+`DispatchEvents` or in the next `Update`. Zero simulation delta allows loading,
+pipeline warmup, and readback without advancing animation or effects.
 
-Private tests live beside their implementation modules; public API tests and
-fixtures live under `tests/`. The shared [capture tool](tools.md) exercises the same
-plugin path as applications.
+The public facade is `src/lib.rs`, plugin registration is in `src/plugin.rs`, and
+ordering is in `src/schedule.rs`. Private tests live beside their modules; public
+API tests and fixtures live under `tests/`. The [capture tool](tools.md) exercises
+the same plugin path as applications.

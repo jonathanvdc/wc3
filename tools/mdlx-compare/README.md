@@ -1,9 +1,13 @@
-# MDLX comparison
+# Compare MDLX conversions
 
-This optional workflow runs wc3 and a pinned WhiteoutLib revision independently
-against original MDX files. It retains both MDL outputs, parse diagnostics,
-canonicalized outputs, and diffs. It does not modify the input corpus or add an
-oracle dependency to the ordinary Rust tests.
+Use this tool to investigate differences between `wc3` and a pinned WhiteoutLib
+revision. Both convert the same original MDX files to MDL, then the runner keeps
+the outputs, diagnostics, and diffs for review. A disagreement needs investigation;
+neither converter is treated as authoritative.
+
+This is an optional local workflow. Inputs remain unchanged, and ordinary Rust
+tests do not depend on WhiteoutLib. For routine checks, use the workspace tests;
+use this tool when you need independent format evidence.
 
 ## Setup
 
@@ -33,17 +37,6 @@ python3 tools/mdlx-compare/compare.py build --source target/mdlx-compare/whiteou
 
 If Rust selects an incompatible macOS SDK too, set `SDKROOT` to the matching
 SDK path for the `run` command. This changes only that process's environment.
-
-## Version normalization
-
-Both converters target the same model layout before comparing text. Whiteout
-uses its normal automatic upgrade mode. At the pinned revision this
-upgrades versions 900/1000 to 1200, leaving version 800 and versions 1100+
-unchanged. wc3 applies strict conversion to the same target before MDL output;
-equivalent camera variants are normalized even when the version stays unchanged.
-Conversion reports are retained in each stage’s diagnostics, including when a
-later MDL write fails. Unsupported upgrades are reported as failures rather than
-silently discarding fields. Whiteout parser issues also require review.
 
 ## Run
 
@@ -94,7 +87,18 @@ Outputs exist only for stages that produced them. Reports include commands,
 exit codes, stdout, and diagnostics. The input path in each model report is
 relative to the corpus root recorded in `run.json`.
 
-## What the comparison proves
+## Version normalization
+
+Both converters target the same model layout before comparing text. Whiteout
+uses its normal automatic upgrade mode. At the pinned revision this
+upgrades versions 900/1000 to 1200, leaving version 800 and versions 1100+
+unchanged. wc3 applies strict conversion to the same target before MDL output;
+equivalent camera variants are normalized even when the version stays unchanged.
+Conversion reports are retained in each stage’s diagnostics, including when a
+later MDL write fails. Unsupported upgrades are reported as failures rather than
+silently discarding fields. Whiteout parser issues also require review.
+
+## Interpret a difference
 
 Both converters receive the original binary input. wc3 reads each output and
 writes it in the same dialect, normalizing whitespace, property spelling,
@@ -118,8 +122,7 @@ restriction. Agreement does not prove both converters retained every binary
 value: retain the independent byte-preservation corpus checks too.
 
 Review failures as conversion refusals, parse failures, canonical differences,
-or oracle parser issues. Neither implementation automatically wins. Record
-confirmed expectations in ordinary tests rather than accepting all current
+or oracle parser issues. Record confirmed expectations in ordinary tests rather than accepting all current
 oracle output as a golden baseline.
 
 ## Turn a finding into a fixture
@@ -140,9 +143,9 @@ fixture protects the actual behavior in question:
 6. Record the source URL, author, original SHA-256, oracle revision, reduction
    steps, behavior protected, and redistribution terms in fixture notes.
 
-No automatic reducer or fixture promotion is included: first use the reports
-to choose a concrete disagreement and its reduction predicate. Full models,
-third-party source, build artifacts, and compatibility reports stay local.
+Reduction is manual: choose the exact discrepancy to preserve before removing
+data. Full models, third-party source, build artifacts, and compatibility reports
+stay local.
 
 ## Check the runner
 

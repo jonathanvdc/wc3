@@ -1,47 +1,51 @@
-# wc3 documentation
+# wc3 guides
 
-Start with the [crate README](../README.md) to choose model, texture, or archive
-APIs and enable the optional codecs you need. These guides connect that overview
-to editing workflows and runnable tools.
+Start with the [crate README](../README.md) for a first model example and an
+overview of textures and archives. Choose a guide below when you need to edit an asset, evaluate it, or
+understand a format's preservation rules.
 
-- [Semantic model graphs](semantic.md) explains graph relationships, typed
-  authoring profiles, dependency ownership, playback declarations, borrowed arrays,
-  typed material programs and shader dialects, widening, and checked edits.
-- [Model import and export](conversion.md) explains native imports and export plans,
-  concrete profiles, selected appearance, and representability policies.
-- [Warcraft III native document editing](models.md) explains version selection, collection
-  edits, buffer ownership, conversion, and resource references.
-- [World of Warcraft M2 models](m2.md) explains core layouts, supporting documents,
-  borrowed records and geometry streams, dependency resolution, and coordinated
-  bundle output.
-- [World of Warcraft world models](wmo.md) explains root and group dialects,
-  borrowed records, collision and liquids, resource identities, and bundle edits.
-- [Asset command-line tools](tools.md) covers inspection, dependency reporting,
-  repathing, conversion, texture export, and archive operations.
+## Work with models
 
-The API reference contains the detailed contracts and executable examples:
+For tools that inspect or change model relationships, begin with the graph guide.
+Import and export are separate from file decoding and encoding, so choose the
+native-document guides below when you need direct access to encoded records.
 
-- [Model graphs](https://docs.rs/wc3/latest/wc3/model/) describes the default model
-  representation, profiles, checked edits, and native adapters.
-- [MDLX models](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/) describes record organization
-  and application chunks; [MDX](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/mdx/) and
-  [MDL](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/mdl/) describe binary and text codecs.
-- [M2 models](https://docs.rs/wc3/latest/wc3/model/formats/m2/) describes native core and
-  companion records, typed envelopes, dependency identities, and bundle assembly.
-- [WMO models](https://docs.rs/wc3/latest/wc3/model/formats/wmo/) describes root and group
-  documents, native chunk records, validation, and historical layouts.
-- [BLP textures](https://docs.rs/wc3/latest/wc3/blp/) covers encoded containers,
-  external BLP0 mipmaps, and optional image adapters.
-- [MPQ archives](https://docs.rs/wc3/latest/wc3/mpq/) covers streaming and
-  concurrent extraction, encoded copying, editing, and recovery policy.
+| Task | Guide |
+| --- | --- |
+| Understand IDs, resources, profiles, and checked edits | [Model graphs](semantic.md) |
+| Import a native asset or plan an export | [Import and export](conversion.md) |
+| Change streams, skinning, or draw subsets | [Geometry](geometry.md) |
+| Edit shader steps and texture inputs | [Materials](materials.md) |
+| Author curves, clips, clocks, and events | [Animation](animation.md) |
+| Inspect lights, cameras, attachments, and effects | [Features](features.md) |
+| Sample poses, deform geometry, or read animated surfaces | [CPU evaluation](evaluation.md) |
 
-For record contributors, the [derive guide](../../wc3-derive/README.md) links
-the format-specific derive references. For Warcraft III rendering applications, continue with
-[bevy-wc3](../../bevy-wc3/README.md); archive-backed Bevy sources use
-[bevy-mpq](../../bevy-mpq/README.md).
+## Edit native documents
 
-Build the complete API reference locally from the workspace root:
+These guides explain version selection, buffer ownership, validation, and output.
+They also identify data that is preserved without a complete interpretation.
+
+- [Warcraft III MDX and MDL](models.md) covers record edits, layout conversion,
+  resource rewriting, and binary versus text output.
+- [World of Warcraft M2](m2.md) covers core layouts, skins, external animation,
+  dependency resolution, and coordinated bundle output.
+- [World of Warcraft WMO](wmo.md) covers roots and groups, client profiles,
+  collision and liquids, resources, and bundle validation.
+- [Command-line tools](tools.md) provides runnable inspection, conversion,
+  repathing, texture, and archive commands.
+
+## API reference and integrations
+
+The API reference holds individual type contracts and codec details:
+[models](https://docs.rs/wc3/latest/wc3/model/),
+[BLP textures](https://docs.rs/wc3/latest/wc3/blp/), and
+[MPQ archives](https://docs.rs/wc3/latest/wc3/mpq/).
+Build it locally with all optional features from the workspace root:
 
 ```sh
 cargo doc -p wc3 --all-features --no-deps --open
 ```
+
+For rendering, continue with [bevy-wc3](../../bevy-wc3/README.md).
+For archive-backed Bevy assets, use [bevy-mpq](../../bevy-mpq/README.md).
+Contributors adding records can follow the [derive guide](../../wc3-derive/README.md).

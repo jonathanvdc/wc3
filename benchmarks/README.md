@@ -15,18 +15,16 @@ For the short set used on every CI push and pull request, run:
 bash benchmarks/run-quick.sh
 ```
 
-This selects representative workloads from all seven targets, reduces fixture
+This selects representative workloads from all eight targets, reduces fixture
 construction, and uses ten samples with 50 ms warmup and 100 ms measurement
 windows, 1,000 bootstrap resamples, and no plot generation. It retains optimized
 builds and the same workload IDs as the broader suite. Quick results live under
 `target/criterion/quick`, keeping their shorter sampling windows separate from
 normal local measurements.
 
-The short measurements expose large changes and verify timing loops. Reproduce
+Use the short measurements to check timing loops and spot large changes. Repeat
 small differences locally before treating them as regressions on shared runners.
-CI uploads the Criterion data for fourteen days and caches Cargo dependencies.
-Cold compilation is additional to measurement time, especially for Bevy;
-subsequent cached builds avoid rebuilding unchanged dependencies. GPU measurements
+Cold compilation adds to measurement time, especially for Bevy. GPU measurements
 remain a local check.
 
 Use `bash benchmarks/run-quick.sh --test` for the representative smoke set,
@@ -44,10 +42,11 @@ scope; its benchmark IDs distinguish the individual operations and input sizes.
 | --- | --- |
 | `wc3/model` | MDX read/write and typed traversal, MDL parse/write, version conversion, geometry access, and resource discovery in 800 and 1800 layouts. |
 | `wc3/animation` | Scalar, vector, and quaternion sampling across interpolation modes, key counts, and access patterns; sequence/global clock boundaries and event traversal. |
+| `wc3/evaluation` | Prepared pose evaluation, node transforms, and projection of 1,024 triangles. |
 | `wc3/blp` | Container read/write, base-level and full-chain pixel decoding, caller-provided output buffers, and encoding with generated or supplied mipmaps. Indexed alpha, JPEG, BGRA, and DXT1/3/5 are covered. |
 | `wc3/mpq` | Archive creation/opening, lookup, serial/shared extraction, compression, encryption, sector framing, and all four header versions. Synthetic streams cover decode-only codecs and chains. |
 | `bevy-mpq/assets` | Direct extraction versus async reads, concurrent batches at different semaphore limits, and overlay hits/misses at different depths. |
-| `bevy-wc3/preparation` | Universal import and compilation, and shared GPU asset preparation. |
+| `bevy-wc3/preparation` | Universal import and compilation, and shared mesh and bind-pose asset preparation. |
 | `bevy-wc3/runtime` | Instance spawn/despawn and headless updates, including animation, materials, transforms, PREM model particles, PRE2 quad particles, and ribbons. |
 
 Choose the target that matches the changed code. These commands run optimized
@@ -56,6 +55,7 @@ measurements with Criterion's normal sampling settings:
 ```sh
 cargo bench -p wc3 --bench model
 cargo bench -p wc3 --bench animation
+cargo bench -p wc3 --bench evaluation
 cargo bench -p wc3 --features blp-decode,blp-encode --bench blp
 cargo bench -p wc3 --features mpq-decode,mpq-encode --bench mpq
 cargo bench -p bevy-mpq --bench assets
@@ -80,17 +80,20 @@ complete statistical run takes substantially longer than its smoke run.
 ## Interpret results
 
 Read latency together with the throughput unit. Codecs report bytes or pixels,
-track sampling reports samples, and Bevy workloads report vertices or instances.
+track sampling reports samples, pose evaluation reports nodes, and Bevy workloads
+report vertices or instances.
 Chain decoding counts all mip pixels; chain encoding counts source pixels.
 Runtime instance throughput counts instances updated per second. It does not
 measure rendered frames per second.
 
 Fixtures, file creation, and correctness checks happen before measurement.
+Prepared pose evaluation reuses its output storage and a previously sampled
+animation; it does not time animation compilation or sampling.
 Spawn/despawn setup and teardown are excluded, as is teardown of the asset stores
-returned by preparation. Ordinary codec and pose loops include destruction of
-their outputs. Public geometry accessors borrow records and their encoded ZeroVec arrays; the
-geometry-access workload measures that traversal without cloning record buffers. Despawning measures entity removal;
-later asset garbage collection is excluded.
+returned by preparation. Ordinary codec loops include destruction of their outputs. The geometry-access
+workload borrows records and their encoded `ZeroVec` arrays without cloning
+buffers. Despawning measures entity removal; later asset garbage collection is
+excluded.
 
 The MPQ file-backed case measures a warm filesystem cache. Tiny fixed codec
 streams exercise decode paths but do not predict large-file throughput. Async

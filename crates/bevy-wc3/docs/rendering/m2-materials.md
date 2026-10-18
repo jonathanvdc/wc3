@@ -42,8 +42,8 @@ Supported inputs retain independent transforms and can select mesh streams or
 established environment coordinates. Four-input masking reuses at most three raw
 coordinate streams; a fourth environment route or four distinct raw streams
 produces a diagnosed fallback. The native UV0/UV0/UV0/UV1 routing is supported. Native
-import resolves repeated routes into shared controls; see the [M2 conversion
-guide](../../../wc3/docs/m2.md#shader-coordinate-ownership).
+import resolves repeated routes into shared controls; see the [texture ownership
+guide](../../../wc3/docs/materials.md#texture-ownership-and-animation).
 Unknown table entries and unsupported input counts produce an explicit first-input
 fallback diagnostic instead of wrapping the table index.
 

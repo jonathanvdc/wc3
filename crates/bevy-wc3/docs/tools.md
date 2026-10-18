@@ -58,7 +58,8 @@ The default is one capture at 1 second, 60 simulation steps per second, and
 640x480 pixels. Without camera options, the camera frames rest-pose model bounds with Bevy Y up.
 Use `--asset-root PATH` for textures shared across model directories; the same
 texture override options as the viewer are available. An authored model camera
-can replace the explicit eye/target; see [model cameras](rendering/cameras.md).
+can replace the explicit eye/target with `--model-camera INDEX`; see
+[model cameras](rendering/cameras.md).
 
 Capture times are nonnegative, strictly increasing seconds from the initial
 sequence start. Select a sequence with `--sequence INDEX`; indices start at zero.
@@ -67,6 +68,11 @@ to reach requested times exactly. Loading, pipeline warmup, and GPU readback
 use zero simulation delta,
 so wall-clock delays do not advance animation. Seeking directly to a time skips
 particle births and events and produces a different effect population.
+
+Schedule a sequence change with `--play SECONDS=INDEX`, for example
+`--sequence 0 --play 0.5=1 --blend-ms 250 --times 0.5,0.625,0.75`.
+Repeat `--play` in increasing time order for several changes. Omit `--blend-ms`
+to use authored transition timing or set it to zero for an immediate switch.
 
 Images are named `frame-0000-0.000s.png`, and so on; reruns overwrite matching
 files. The tool requires a GPU even though it does not open a window. Loading,
@@ -96,7 +102,16 @@ and its effects from rendering and rejects scheduled `--play` transitions. See
 same capture loop. This tool branch accepts modern chunked M2 version 274 and
 FileDataID resources under `ASSET_ROOT/filedata/`; ordinary native model loading
 retains its existing dialect support. The positional model must match the recipe's
-body identity. Add `--physics` for authored secondary motion, or `--bake-pose` for
+body identity. For example:
+
+```sh
+cargo run -p bevy-wc3 --example capture -- \
+  /path/to/assets/filedata/921844.m2 /tmp/wc3-equipped \
+  --asset-root /path/to/assets --character-recipe /path/to/recipe.json \
+  --sequence 0 --times 0.25,1,2
+```
+
+Add `--physics` for authored secondary motion, or `--bake-pose` for
 static composition snapshots; these modes cannot be combined.
 
 A resolved JSON recipe names the body, visible native geosets, texture replacement
@@ -159,85 +174,19 @@ sequence intervals, materials, and textures. Start from a fixture under
 camera and unrelated scene inputs fixed. Model bounds must encompass the content,
 or the capture must use an explicit camera.
 
-[Animation blending](rendering/animation-blending.md)
-shows scheduled sequence switches, and [LOD captures](rendering/lod.md)
-shows fixed and automatic geometry selection. Run `capture --help` through Cargo
-for the complete set of options.
-
-## Measure completed frames
-
-Pass `--benchmark-frames N` to measure completed frames at each requested capture
-pose. The tool warms the pose with eight synchronized frames, then measures `N`
-frames while keeping simulation time fixed. It writes a timing CSV beside the
-PNG and prints median and p95 wall times.
-
-Each sample includes CPU update, render submission, and waiting for the submitted
-GPU work to finish. Loading, screenshot readback, and file writes are excluded.
-Use the [benchmark guide](../../../benchmarks/README.md#host-gpu-measurements)
-for synthetic asset export and instructions for comparing renderer revisions.
-
-## Measure character crowds
-
-The `crowd` example measures repeated instances of one resolved equipment recipe
-with normal pipelined rendering. It uses the same character loader as `capture`,
-sharing prepared geometry and static materials while retaining independent instance
-animation. Run an optimized build; unoptimized timings do not establish a crowd
-frame budget:
+The [animation guide](rendering/animation-blending.md) explains transition sampling,
+and [LOD](rendering/lod.md) explains fixed and automatic geometry policies.
+For the complete command options, run:
 
 ```sh
-cargo run --release -p bevy-wc3 --example crowd -- \
-  /path/to/assets/filedata/BODY.m2 /path/to/recipe.json /path/to/assets \
-  /tmp/crowd-100.json --count 100 --frames 300 --warmup 120
+cargo run -p bevy-wc3 --example capture -- --help
 ```
 
-Native import is strict by default; add `--allow-loss` to explicitly accept
-conversion loss, as with `capture`. Compiled rendering diagnostics are printed
-and retained in the JSON report. The recipe resolves the same appearance as
-the capture recipe branch. The benchmark
-accepts counts from zero through one hundred. Keep the model, recipe, sequence,
-viewport and quality settings fixed when comparing zero, one, ten and one hundred
-characters. The camera and 1280×720 viewport remain fixed; characters occupy a
-centered grid with 2.5-unit spacing. Instances start the selected sequence at
-staggered phases and advance at a fixed 60 Hz simulation rate, independently of
-wall-clock throughput. `--sequence INDEX` chooses the clip. `--frozen` pauses its
-clocks, retaining the rig, skinning and rendering path.
+## Measure performance
 
-The default uses 4× MSAA and a directional light without shadows or optional
-prepasses. Add `--shadows` and `--prepasses` independently to measure their costs;
-the latter enables depth, normal and motion-vector prepasses. Geometry defaults
-to finest authored level zero. `--lod auto` selects the shared medium automatic
-policy, while `--lod LEVEL` selects a fixed authored level. Compare LOD policies
-separately from renderer optimizations because coarser geometry changes quality.
-There is no animation throttling. Compare these settings at a fixed count rather
-than attributing every extra pass to animation.
-
-Each invocation writes JSON with steady-state throughput, update latency
-percentiles, main/render scheduling windows, extraction CPU time and available
-render-pass diagnostics. Extraction measures entity synchronization and copying
-render inputs; it excludes waiting for the render thread.
-Offscreen rendering has no swapchain to bound queued GPU work. Submission fences
-limit this example to three outstanding frames while preserving CPU/render/GPU
-overlap. Warmup work is fully drained before measurement. A terminal GPU drain
-includes remaining measured work without serializing every frame. Main and render work overlap, so their times must not be
-added. Scheduling windows may include other concurrent systems and are not
-exclusive profiler samples. GPU pass timings require supported device timestamp
-features; absent samples mean unavailable, not zero cost. On macOS, encoder-wide
-GPU spans are omitted because Bevy suppresses their timestamp writes. Nested GPU
-spans must not be added as independent costs. Diagnostic sample counts can be
-lower than measured frames because two initial asynchronous reports per diagnostic
-are discarded to exclude delayed warmup samples, and the diagnostic
-transport retains the most recent completed report.
-
-The report also records the adapter, build mode, visible draw entities, unique mesh
-and material handles, model nodes, skinned draw entities, visible triangle
-references, and total draw-palette joint references. These describe resource
-sharing and scaling; draw entities are
-not hardware draw calls, and palette references are not unique skeleton bones.
-Use the zero-character scene to expose fixed scene/renderer cost. Use animated
-versus frozen instances to distinguish changing-pose work from repeated render
-preparation and GPU drawing. The benchmark reports measurements rather than
-asserting a production FPS target or native rendering fidelity; use `capture` for
-matched image checks.
+The [performance guide](performance.md) covers synchronized completed-frame timing
+and pipelined character crowds, including report interpretation and measurement
+limits. Use optimized builds and hold scene and quality settings fixed.
 
 ## Validate without rendering
 

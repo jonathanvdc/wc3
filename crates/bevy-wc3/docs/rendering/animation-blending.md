@@ -1,19 +1,17 @@
 # Animation and pose transitions
 
-`Playback` selects typed clips with independent
-playback and shared clocks in seconds. Native adapters preserve
-loop/clamp policy, shared animation identities, and sequence intervals; the runtime samples properties
-through the semantic `AnimationProgram`.
+Use `Playback` to select clips, pause, seek, or blend between local poses.
+The [application guide](../usage.md#control-animation) shows how to start a clip.
+This reference explains timing and the behavior of events and effects during a
+transition.
 
-Curves and event occurrences belong to reusable semantic `Animation` definitions.
-Clips and model-level selections reference those definitions rather than owning duplicate tracks.
-Every clip maps local playback into a source interval beginning at `source_start`,
-which defaults to zero. `AnimationProgram` derives ordinary animation time and
-inclusive key bounds from that interval. MDLX clips select the same ordinary
-animation at their authored sequence intervals; M2 clips select separate animations
-at zero. Without a clip, ordinary model-level tracks use `clip_time`
-directly without interval bounds.
-Model-level animations run in selection order before clip animations; later applicable tracks override earlier ones.
+Clips reference reusable semantic animations and map local seconds into a source
+interval beginning at `source_start`. Sampling stays within that inclusive interval,
+so unrelated sequence keys cannot affect interpolation. MDLX clips select authored
+intervals in one ordinary animation; M2 clips select separate animations at zero.
+Without a clip, model-level tracks use `clip_time` without interval bounds.
+Model-level selections sample first, then clip selections; later applicable tracks
+override earlier ones. Shared clocks run independently.
 
 ## Playback controls
 

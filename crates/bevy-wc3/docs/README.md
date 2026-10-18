@@ -1,65 +1,41 @@
-# bevy-wc3 documentation
+# bevy-wc3 guides
 
-Start with the [crate README](../README.md) for a minimal Bevy application. These
-guides separate application setup, model inspection, rendering behavior, and
-implementation details so you can choose the depth needed for your task.
+Start with the [crate README](../README.md) to view a model or build a minimal
+Bevy application. Then use the guides below for your next task.
 
-## Application and architecture
+## Use the renderer
 
-The application guide covers runtime integration; the tool guide helps inspect
-assets before integrating them. Architecture is intended for contributors and
-applications that need explicit control over scheduling or preparation.
+The application and tool guides cover the usual workflow, from resource lookup to
+animation and visual checks. Assembly is useful when one visible object consists
+of several models.
 
-- [Using bevy-wc3](usage.md): load native/semantic instances, resolve resources and images, control typed
-  playback, bake poses, mount child models, and manage replacement.
-- [Viewer and captures](tools.md): inspect assets, override textures, and render
-  PNGs at controlled simulation times, including synchronized frame measurements and pipelined character-crowd benchmarks.
-- [Architecture](architecture.md): semantic loading and preparation, shared and per-instance
-  state, renderer modules, effect record storage, and the `Wc3Systems` scheduling
-  contract.
-- [CPU model evaluation](../../wc3/docs/evaluation.md): shared pose, geometry, and
-  surface operations for offline consumers without Bevy assets.
-- API reference: `cargo doc -p bevy-wc3 --no-deps --open`.
+- [Application integration](usage.md): loading, textures, playback, replacement, sockets, and pose baking.
+- [Viewer and captures](tools.md): inspect local models and produce repeatable PNGs.
+- [Model assembly](rendering/assembly.md): geometry choices, texture atlases, and mounted or skinned parts.
+- [WoW characters and equipment](rendering/characters.md): translate native appearance choices into an assembly.
+- [Performance measurements](performance.md): completed-frame timing and character crowds.
 
-## Rendering
+## Rendering reference
 
-The files under `rendering/` describe how the renderer evaluates model data and
-draws it through Bevy. Start with the [renderer overview](rendering/renderer.md),
-then choose a topic:
+The [renderer overview](rendering/renderer.md) explains broad coverage and its
+limits. The focused guides describe implemented behavior; support for a feature
+does not by itself establish exact game fidelity.
 
-- [Semantic compiler and native resources](rendering/universal.md): Universal material-program compilation,
-  typed image declarations, input-owned sampling, native resource providers, semantic animation, and family-specific interpretation limits.
-- [Model assembly](rendering/assembly.md): application-defined selections, typed
-  geometry and texture choices, shared skeletons and rigid components.
-- [WoW characters and equipment](rendering/characters.md): the optional native
-  table adapter, geoset interpretation, joint matching and secondary motion.
-- [Animation and blending](rendering/animation-blending.md): reusable animations, clip time mappings, typed playback controls,
-  local-pose transitions, interruption, and effect/event sampling.
-- [Node transforms and flags](rendering/node-flags.md): explicit transform semantics, inheritance,
-  effective billboarding, preserved native flags, camera anchoring, and driving-camera selection.
-- [Geometry LOD](rendering/lod.md): authored levels, automatic screen-size
-  selection, quality controls, and camera policy.
-- [Geoset animation](rendering/geoset-animation.md): color, opacity,
-  material sharing, isolation, and sampling.
-- [M2 materials](rendering/m2-materials.md): ordered shader steps, texture combiners, generated
-  coordinates, weighted crossfades, edge opacity and PBR integration limits.
-- [M2 programme inventory](rendering/m2-programmes.md): complete known shader-table
-  coverage, texture and palette requirements, and bounded unresolved families.
-- [Reforged materials](rendering/reforged-materials.md): WC3 pass state, shader inputs, texture roles,
-  surface animation, UV sets, and Bevy shading integration.
-- [WMO materials](rendering/wmo-materials.md): typed shader steps, layered texture programmes, native
-  vertex-light preparation, regional ambient contributions and scene limits.
-- [Model lights](rendering/lights.md): animated scene lights, conversion
-  settings, and application customization.
-- [Model cameras](rendering/cameras.md): authored views and opt-in playback.
-- [Model events](rendering/events.md): source identities, action messages, timing, and occurrence poses.
-- [External-model particles](rendering/prem.md): MDLX resource emitters, child models,
-  world-space motion, animation, and lifetime.
-- [Sprite particles](rendering/pre2.md): MDLX atlas and M2 emitter families, emission, head/tail geometry,
-  lifetime animation, M2 packed gravity/twinkle/secondary textures, and sorting.
-- [Ribbon trails](rendering/ribbons.md): MDLX and M2 ribbons, birth-time sections, connected
-  geometry, atlas animation, gravity, and material passes.
+| Topic | Guides |
+| --- | --- |
+| Motion and geometry | [Animation and transitions](rendering/animation-blending.md), [node transforms](rendering/node-flags.md), [LOD](rendering/lod.md), [mesh color and opacity](rendering/geoset-animation.md) |
+| Materials | [Reforged](rendering/reforged-materials.md), [M2](rendering/m2-materials.md), [M2 shader inventory](rendering/m2-programmes.md), [WMO](rendering/wmo-materials.md) |
+| Scene integration | [Lights](rendering/lights.md), [cameras](rendering/cameras.md), [events](rendering/events.md), [static worlds](rendering/worlds.md) |
+| Effects | [Model particles](rendering/prem.md), [sprite particles](rendering/pre2.md), [ribbons](rendering/ribbons.md) |
 
-Each guide describes the implemented behavior and relevant input, resource, or
-integration limits. Update the relevant guide when an implementation changes,
-keeping implemented behavior distinct from unverified game fidelity.
+## Extend or contribute
+
+The compiler accepts `Model<Universal>` regardless of its source format. These
+guides explain where native interpretation ends and renderer ownership begins.
+
+- [Compilation and native resources](rendering/universal.md): geometry, image requests, import policy, and diagnostics.
+- [Architecture and scheduling](architecture.md): shared assets, instance state, module boundaries, and system order.
+- [CPU model evaluation](../../wc3/docs/evaluation.md): pose, deformation, and surface operations without Bevy.
+- [Shader sources](../src/shaders/README.md): upstream attribution and the Bevy upgrade checklist.
+
+Build the API reference with `cargo doc -p bevy-wc3 --no-deps --open`.

@@ -1,12 +1,13 @@
 # External-model particles
 
-Model-resource `mdlx::ParticleEmitter1` definitions instantiate independent child
-models at sampled birth poses. Universal retains them in `ParticleEmitter::MdlxEmitter1`.
-MDLX model-based PREM imports use this path; image-based PREM and external
-effect-only resources require other interpreters. The semantic particle resource variant
-selects a typed model or image handle; an absent handle retains that authored
-mode without declaring a dependency. Child meshes and bind palettes
-share prepared assets while playback and changing materials remain independent.
+MDLX model-based PREM emitters spawn independent animated child models at sampled
+birth poses. Their geometry and bind palettes share prepared assets, while clocks
+and changing materials remain independent. Universal stores this family as
+`ParticleEmitter::MdlxEmitter1`.
+
+Image-based PREM and external effect-only resources need other interpreters.
+The resource variant distinguishes a model from an image; an absent resource
+retains the authored mode without declaring a dependency.
 
 ## Emission and motion
 

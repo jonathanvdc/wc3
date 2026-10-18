@@ -28,7 +28,7 @@ location. A bitmap with both a literal path and a nonzero replaceable ID appears
 in both forms. ID locations identify the `replaceable_id` field explicitly.
 
 Library consumers can enumerate these occurrences with `resources()` on
-`Model<V>` or `DynamicDocument`. The iterator also exposes empty paths and preserves
+`Document<V>` or `DynamicDocument`. The iterator also exposes empty paths and preserves
 original spelling and fixed-field bytes. Internal texture indices are not external
 resources, and opaque chunks are not searched for strings. See the
 [`resources` API](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/resources/) for typed sites,

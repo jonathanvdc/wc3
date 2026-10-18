@@ -1,9 +1,10 @@
 # Node transforms and camera controls
 
-The renderer uses `wc3::model::PoseBehavior` to evaluate semantic local poses parent-first and retains full affine
-matrices alongside signed rotation and scale factors. Ordinary hierarchy preserves
-shear. Pivots, selective inheritance, billboarding, and camera anchoring share one
-evaluator across live poses, effect births, event occurrences, and offline baking.
+Nodes combine animated local transforms with pivots, inheritance, billboarding,
+and camera anchoring. Live rigs, effect births, event poses, and offline baking use
+the same `wc3` evaluator. Ordinary hierarchy preserves affine shear; special
+inheritance and facing operations also retain signed rotation and scale factors.
+Set a driving camera explicitly when a model uses camera-sensitive nodes.
 
 ## Driving camera
 
@@ -63,11 +64,8 @@ produce a rendering diagnostic. The remaining M2 axis-lock mirroring and
 camera-frame reconstruction are not implemented. Disabled native locks normalize
 to `None`; retaining all three Euler components also normalizes to `None` and
 leaves affine shear intact.
-Native declarations remain in profile controls as `billboard_flags`. Export keeps
-the original declarations while they describe the node's current effective mode;
-a changed mode emits its own flags without reactivating overridden declarations.
-Strict native export rejects incompatible facing operations or exceptional
-transform semantics instead of silently changing their meaning.
+Native declarations remain in profile controls as `billboard_flags`; runtime
+behavior follows the effective semantic mode.
 
 Camera anchoring adds the driving camera position once along an inherited chain.
 Repeated anchored descendants account for the already inherited offset. It does not

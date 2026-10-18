@@ -1,8 +1,8 @@
 # bevy-mpq
 
-`bevy-mpq` mounts MPQ archives as Bevy 0.19 asset sources and combines them
-with other readers in ordered overlays. Applications choose source names,
-archive precedence, locale/platform selection, and archive parsing limits.
+`bevy-mpq` lets Bevy load assets from MPQ archives. Mount one archive or combine
+archives and loose files into an ordered search path. The first matching entry
+wins, so a map or local override can take precedence over base game assets.
 
 ## Register an asset source
 
@@ -49,7 +49,7 @@ Use distinct source names for separate map stacks so their Bevy handles remain
 independent. The label passed to `MpqAssetReader::new` identifies the archive in
 error messages.
 
-## Lookup and overlay precedence
+## Choose lookup behavior
 
 The first mount containing an entry wins. Only missing entries permit fallback;
 I/O, checksum, and decoding failures stop the search and identify the archive
@@ -67,7 +67,7 @@ consulted only if neither exists. MPQ name lookup is ASCII case insensitive and
 accepts either slash direction. Known paths work without a listfile. Parent
 traversal and absolute asset paths are rejected by the MPQ reader.
 
-## Runtime behavior and limits
+## Control extraction and memory
 
 Reads extract complete entries on blocking workers and return readers that own
 the decoded bytes. Clones share the archive and allow up to four extractions at
@@ -83,11 +83,15 @@ unchanged while it is mounted. See the [MPQ API documentation](https://docs.rs/w
 for supported sources and recovery diagnostics.
 
 The readers have no decoded-byte cache; Bevy caches loaded assets normally.
-Directory enumeration, asset processing, filesystem watching, and MPQ patch
-delta application are unsupported. Directory queries return false, and directory
-listing returns an unsupported-operation error.
 
-## Try archive-backed models
+## Supported operations
+
+The adapter reads complete entries by path. It does not enumerate directories,
+watch files, run asset processing, or apply MPQ patch deltas. Directory queries
+return false, and directory listing returns an unsupported-operation error.
+Mount complete replacement files when building an overlay.
+
+## Load a model from archives
 
 The runnable `bevy-wc3` example demonstrates caller-owned archive composition
 and rendering through the [model plugin](../bevy-wc3/README.md):
@@ -97,6 +101,5 @@ cargo run -p bevy-wc3 --example mpq -- \
   units/human/footman/footman.mdx map.w3x base.mpq
 ```
 
-Archives are searched in argument order. This overlays complete entries; it
-does not apply binary patch entries. The example uses a fixed camera; adjust
+Archives are searched in argument order. The example uses a fixed camera; adjust
 it for models with different bounds.

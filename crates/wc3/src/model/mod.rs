@@ -1,49 +1,45 @@
-//! Editable model meaning, independent of native encoding and record layout.
+//! Checked model editing and evaluation, with native file codecs alongside it.
 //!
-//! A [`Model`](crate::model::Model) owns its graph, profile-specific metadata, and
-//! image dependency declarations. It connects hierarchy nodes, shared geometry,
-//! material definitions, resource references, animation, and scene systems through scoped IDs.
-//! A [`MeshInstance`](crate::model::MeshInstance) places a mesh at a node; its [`Draw`](crate::model::Draw) values select the
-//! geometry and rendering controls for individual steps. A [`Look`](crate::model::Look) supplies a complete
-//! material assignment for those draws. Material inputs own their animated
-//! [`TextureTransform`](crate::model::TextureTransform) values and independently select shared image resources. An [`AttachedFeature`](crate::model::AttachedFeature) gives a node an effect or behavior,
-//! while [`System`](crate::model::System) describes independently authored relationships such as physics
-//! bodies or world portals.
+//! [`Model`](crate::model::Model) connects nodes, geometry, materials, animation, resources, and scene
+//! features through typed IDs. Build one with [`Model::builder`](crate::model::Model::builder), or import a
+//! native document through [`io`](crate::model::io). [`ModelBuilder::finish`](crate::model::ModelBuilder::finish) checks the graph;
+//! [`Model::edit`](crate::model::Model::edit) stages changes and publishes them only after validation.
 //!
-//! The [`profiles::Profile`](crate::model::profiles::Profile) parameter selects the payload types allowed on these
-//! objects. `Profile::ModelMetadata` supplies model-wide declarations. Owner-local `controls` belong to their node, material input, mesh, draw,
-//! or clip. Complete material surfaces and attached features use the
-//! profile's surface and feature vocabulary. Built-in profiles describe game
-//! semantics; native codec dialects separately select file layouts and revisions.
+//! # Navigate the graph
 //!
-//! [`Property`](crate::model::Property) is a typed slot identity into the model's [`PropertyValues`](crate::model::PropertyValues) table.
-//! The sealed [`PropertyValue`](crate::model::PropertyValue) trait selects storage for each supported value type.
-//! Nodes, materials, and effects retain slot references; constants and evaluated
-//! instance values live in separate tables with the same identities.
-//! [`Track`](crate::model::Track) connects a slot to a checked [`Curve`](crate::model::Curve) and explicit [`TimeSource`](crate::model::TimeSource).
-//! Slots and tracks are profile-independent, and native exporters resolve
-//! consuming fields when translating them into native tracks.
-//! Curve constructors select interpolation together with its required key shape:
-//! [`HermiteKeyframe`](crate::model::HermiteKeyframe) carries derivatives,
-//! [`BezierKeyframe`](crate::model::BezierKeyframe) carries control points, and
-//! [`TcbKeyframe`](crate::model::TcbKeyframe) carries authored spline parameters.
-//! Capability traits prevent spherical scalar curves and interpolated discrete resource choices.
+//! A [`MeshInstance`](crate::model::MeshInstance) places a shared mesh at a node. Its [`Draw`](crate::model::Draw) values select
+//! geometry and rendering controls, while a [`Look`](crate::model::Look) assigns materials to those
+//! draws. Material inputs reference shared image declarations and own their
+//! sampling and animated [`TextureTransform`](crate::model::TextureTransform) values. [`AttachedFeature`](crate::model::AttachedFeature) adds
+//! node-bound behavior; [`System`](crate::model::System) connects independently authored scene elements,
+//! such as physics bodies or world portals.
 //!
-//! Event sources live in a model-owned table whose complete payload type is
-//! selected by `Profile::EventSource`. [`EventOccurrence`] references a source
-//! and schedules one timestamp on its clock; reusable animations own occurrences.
+//! [`profiles::Profile`](crate::model::profiles::Profile) selects the payloads allowed on these objects, including
+//! model metadata, controls, surfaces, effects, and event sources. Built-in
+//! profiles describe game semantics; native dialects separately select file
+//! layouts. [`Model::widen`](crate::model::Model::widen) embeds a model into a containing profile without
+//! changing its meanings or IDs.
 //!
-//! Fixed-width arrays use [`ZeroVec`](crate::model::ZeroVec), borrowing compatible packed storage.
-//! Native slices and differing layouts are encoded into owned arrays once. Variable-length
-//! rows use [`ValueGroups`](crate::model::ValueGroups) with flat elements and row offsets. [`ModelBuilder::finish`](crate::model::ModelBuilder::finish) checks relationships and values before
-//! publication. It returns a [`Model`](crate::model::Model) containing the graph, metadata, and resources.
-//! [`Model::edit`](crate::model::Model::edit) checks dependency changes against the complete model.
+//! # Animate and evaluate
 //!
-//! [`Model::widen`](crate::model::Model::widen) embeds payloads into a containing profile without changing
-//! their meaning, IDs, or encoded array storage. Applications implement custom
-//! profiles to select their own payload vocabularies. [`io`](crate::model::io) imports native documents
-//! and plans exports, with representability policies and diagnostics from [`conversion`](crate::model::conversion).
-//! [`formats`](crate::model::formats) contains the native documents and their codecs for faithful record editing.
+//! [`Property`](crate::model::Property) identifies a typed slot in [`PropertyValues`](crate::model::PropertyValues). Nodes, materials,
+//! and effects reference slots; authored defaults and evaluated values occupy
+//! separate tables with the same identities. A [`Track`](crate::model::Track) connects a slot to a
+//! [`Curve`](crate::model::Curve) and a [`TimeSource`](crate::model::TimeSource). Reusable animations also contain
+//! [`EventOccurrence`](crate::model::EventOccurrence) values referencing model-owned event sources.
+//!
+//! Curve constructors pair interpolation with the required key shape, including
+//! [`HermiteKeyframe`](crate::model::HermiteKeyframe), [`BezierKeyframe`](crate::model::BezierKeyframe), and [`TcbKeyframe`](crate::model::TcbKeyframe). See the evaluation
+//! APIs on [`Model`](crate::model::Model) for CPU pose, geometry, and surface sampling.
+//!
+//! # Work across the native boundary
+//!
+//! [`io`](crate::model::io) imports documents and plans exports with policies from [`conversion`](crate::model::conversion).
+//! Use [`formats`](crate::model::formats) directly for native record edits and preservation of unknown
+//! source data. Checked models retain supported meanings rather than source-file
+//! layouts. Their fixed-width [`ZeroVec`](crate::model::ZeroVec) arrays can borrow compatible native
+//! storage; [`ValueGroups`](crate::model::ValueGroups) stores variable-length rows as elements and offsets.
+
 mod error;
 /// Format-independent scene features and simulation systems.
 pub mod scene;

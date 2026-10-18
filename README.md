@@ -1,91 +1,62 @@
 # wc3
 
-This project provides Rust libraries for working with Blizzard assets, from
-editing a model or converting a texture to displaying an animated character in
-Bevy. [`wc3::model::Model`](crates/wc3/docs/semantic.md) represents models as
-checked graphs with typed authoring profiles, shared resources, geometry,
-materials, animation, and scene relationships. Profiles describe game meaning
-independently of file revisions.
+Rust libraries for reading, editing, and rendering Blizzard assets: Warcraft III
+MDX/MDL models, World of Warcraft M2/WMO models, BLP textures, and MPQ archives.
+Use them to build asset tools, process models without a renderer, or display
+animated models in Bevy.
 
-Native documents and codecs remain available under `wc3::model::formats` for
-Warcraft III MDX/MDL and World of Warcraft M2/WMO. [Import and export adapters](crates/wc3/docs/conversion.md)
-connect those documents to semantic models with explicit representability
-policies. The asset library also supports BLP textures and MPQ archives.
+## Choose a crate
 
-## Crates
+[`wc3`](crates/wc3/README.md) provides the asset APIs. You can edit models through
+a checked graph, work directly with native file records, decode textures, and
+read or write archives. It has no Bevy dependency. Start here for converters,
+editors, and offline processing.
 
-Choose `wc3` for asset tools, `bevy-wc3` for Warcraft III model rendering, and
-`bevy-mpq` for archive-backed Bevy assets. The fourth library crate, `wc3-derive`, supports
-contributors defining model codecs. These crates can be used separately or
-combined according to your application's needs.
+[`bevy-wc3`](crates/bevy-wc3/README.md) loads MDX/MDL, M2, and WMO assets into
+Bevy. It provides animation, materials, skinning, attachments, particles, and
+model assembly, with a viewer and an offscreen capture tool. Rendering support
+varies by feature and format; the [renderer overview](crates/bevy-wc3/docs/rendering/renderer.md)
+explains the current boundaries.
 
-[`wc3`](crates/wc3/README.md) is the starting point for applications that need to
-read, edit, or write assets. Semantic models are the common authoring interface;
-native documents retain the formats' record layouts and preservation behavior.
-Binary MDX and text MDL share one native document representation, with explicit
-Classic and Reforged dialects and conversion between supported versions.
-World of Warcraft M2 models have their own typed layouts and native supporting
-file codecs, with explicit dependency resolution and coordinated bundle writing.
-WMO documents expose their own root
-and group layouts, including geometry, materials, portals, liquids, and collision
-data. Alongside models, it provides BLP texture and MPQ archive
-APIs, with optional
-features for working with decoded images and compressed archive entries. This
-makes it useful for asset tools and converters as well as applications that
-supply their own renderer.
+[`bevy-mpq`](crates/bevy-mpq/README.md) mounts MPQ archives as Bevy asset sources.
+Combine archives and loose files in an ordered overlay to load models and their
+textures from the same source. It can be used independently of `bevy-wc3`.
 
-[`wc3-derive`](crates/wc3-derive/README.md) helps define the model records that
-`wc3` reads and writes. Its procedural macros describe how a Rust struct or enum
-maps to MDX bytes or MDL text, including how fields, defaults, and animation
-tracks are represented. Most applications use the existing record types and
-never need to work with these macros directly. For contributors extending the
-codecs or users defining additional records, the derives are available through
-`wc3`'s MDX, MDL, M2, and WMO modules alongside the traits they implement.
+[`wc3-derive`](crates/wc3-derive/README.md) supplies codec derives for contributors
+adding native records. Applications normally use the existing types and the
+traits re-exported by `wc3`.
 
-[`bevy-wc3`](crates/bevy-wc3/README.md) builds on the asset library to load and
-render Warcraft III models in Bevy. It turns models and their textures into
-scene instances with skinned geometry, animated sequences, and Classic or
-Reforged materials, and supports scene features such as attachments, lights,
-particles, and ribbon trails. A model viewer lets you explore assets, while an
-offscreen capture example helps check their appearance at particular animation
-times. The renderer is experimental, and its guides explain the current
-limitations and which aspects of its appearance have been visually verified.
+## Try the tools
 
-[`bevy-mpq`](crates/bevy-mpq/README.md) exposes MPQ archives as Bevy asset
-readers. Applications configure named sources and compose archives with loose
-files using an ordered overlay. The adapter is independent of the renderer;
-`bevy-wc3` preserves the source when resolving a model's dependencies.
+From a workspace checkout, inspect a Warcraft III model or open it in the viewer:
 
-Each crate's README explains how to get started and links to further examples.
-The [asset documentation index](crates/wc3/docs/README.md) connects MDLX, M2, WMO, and BLP
-editing, command-line tools, and the format APIs.
-API references are available for [`wc3`](https://docs.rs/wc3/latest/wc3/) and
-[`wc3-derive`](https://docs.rs/wc3-derive/latest/wc3_derive/), and the
-[Bevy documentation index](crates/bevy-wc3/docs/README.md) collects the application
-and rendering guides.
+```sh
+cargo run -p wc3 --example model_info -- path/to/model.mdx
+cargo run -p bevy-wc3 --example viewer -- path/to/model.mdx
+```
+
+The viewer needs a GPU and access to the model's textures. The
+[asset tool guide](crates/wc3/docs/tools.md) covers conversion, dependency listing,
+path replacement, texture export, and archives. The
+[viewer and capture guide](crates/bevy-wc3/docs/tools.md) explains resource lookup
+and rendering options. Game assets are not included.
+
+For library integration, start with the crate README, then follow the
+[asset guides](crates/wc3/docs/README.md) or
+[Bevy guides](crates/bevy-wc3/docs/README.md). Detailed API references can be built
+locally with `cargo doc --workspace --all-features --no-deps --open`.
 
 ## Development
 
-The crates are developed together in this Cargo workspace. To run their tests
-with the optional texture and archive codecs enabled, use:
+The crates are developed together in this Cargo workspace. Use the Rust toolchain
+selected in [CI](.github/workflows/ci.yml) and run these checks from the root:
 
 ```sh
 cargo test --workspace --all-features
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
 ```
 
-Use the Rust toolchain pinned in [CI](.github/workflows/ci.yml) for local checks. Rustdoc
-examples are included in `cargo test`; to check documentation links separately,
-run `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps`.
-
-Criterion suites measure the formats, animation, and Bevy integration with
-self-contained synthetic inputs. Run `bash benchmarks/run-quick.sh` for the
-representative optimized measurements used on every CI push and pull request.
-The [benchmark guide](benchmarks/README.md) explains targeted runs, smoke checks,
-scaling cases, baselines, and host GPU measurements.
-
-You can also build and browse the API documentation locally. Enabling all
-features includes the optional image and archive APIs in the generated docs:
-
-```sh
-cargo doc --workspace --all-features --no-deps --open
-```
+Tests include rustdoc examples. The [benchmark guide](benchmarks/README.md)
+covers synthetic workloads, targeted measurements, and GPU benchmarks;
+`bash benchmarks/run-quick.sh` runs the representative optimized CPU suite used
+in CI.

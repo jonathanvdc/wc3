@@ -1,251 +1,113 @@
-# Semantic compiler and native resources
+# Compilation and native resources
 
-The renderer compiles `Model<'_, Universal>` directly into Bevy assets and an
-independently animated hierarchy. Native MDLX, M2, and WMO adapters
-supply semantic models; none requires export to a Warcraft III runtime version.
-`ModelInstance` loads file-backed models onto an application entity.
+All models pass through `Model<Universal>` before rendering. Native MDLX, M2, and
+WMO adapters supply that graph, and applications can author it directly.
+Compilation produces reusable geometry and runtime definitions without exporting
+to an intermediate native format. For application code, start with
+[custom model sources](../usage.md#prepare-custom-model-sources).
 
-## Compilation and ownership
+## Compile, prepare, spawn
 
-Compilation borrows the graph, builds owned CPU meshes, and detaches animation
-buffers from their source. `CompiledModel::prepare` inserts shared meshes
-and inverse bind palettes into Bevy assets. `spawn_model` creates an
-independently animated rig beneath an application-owned transform. The encoded
-source and semantic graph can be released after compilation.
+`compile_model` borrows the graph and creates a `CompiledModel` with owned CPU
+meshes, animation, materials, and feature definitions. The graph and encoded source
+can then be released. `CompiledModel::prepare` inserts shared meshes and inverse
+bind palettes into Bevy assets and returns a `PreparedModel`. `spawn_model` uses
+that prepared value to create an independent rig beneath an application transform.
 
-The image callback receives a `TextureRequest` with a complete sampled-image
-value, its structural input address where applicable, and its resolved declaration from the model-owned image table. Resource
-identity, any accompanying native filename, effective sampler, color space, and
-role remain available to the application. The filename belongs to the profile
-image resource; sampled inputs carry no additional native texture controls.
-Inputs sharing one image dependency can require different sampling or color
-interpretation. `TextureRequestKey` identifies a logical input selection. Assembly replacements
-target image dependencies or structural input addresses, with input choices taking
-precedence. The native
-loader and assembly compiler then share GPU images when resolved resources,
-samplers, and transfer functions agree, even when input metadata differs.
-An unspecified transfer function follows the material role: color samples use sRGB,
-while normal and numeric data maps use linear images. Explicit transfer-function
-declarations remain authoritative. WMO bindings own their sampler; native material
-clamp flags are expanded into those bindings during import.
-When draw selection limits the compiled materials, texture-valued slots keep both
-authored constants and curve-selected images available. This discovery is
-conservative: encountering such a slot retains all sampled images in the model.
+Reuse the prepared model to avoid repeating setup. Meshes, bind palettes, and
+animation definitions are shared. Constant materials share handles; animated
+surfaces keep private material assets and only mark them modified when their
+sampled appearance changes. The [architecture guide](../architecture.md) describes
+the implementation and scheduling boundaries.
 
-Meshes are cached by geometry, subset, selected texture coordinates, and skin.
-After complete attribute projection, skinning, and indexing, byte-identical meshes
-also share storage across those keys. Authored tangent or other attribute
-differences retain distinct meshes; matching hashes are checked for exact equality.
-Coincident vertices are merged only when their complete compiled attributes agree,
-preserving UV seams and face attributes. Prepared instances share mesh, animation,
-and bind-palette definitions. Constant material handles are shared; animated
-surfaces have private material assets. An unchanged sampled surface does not mark
-its material asset modified.
+## Geometry and coordinates
 
-## Geometry, coordinates, and playback
+The compiler projects selected draw ranges and vertex, face, corner, and whole-mesh
+attributes into Bevy meshes. Triangle strips preserve winding; polygons are
+triangulated along their boundaries. Mixed connectivity becomes consecutive
+compatible draws. Missing coordinate streams or unsupported attribute bindings
+fail compilation instead of selecting arbitrary values.
 
-Draw subsets select their authored connectivity and primitive ranges. Triangle
-strips retain winding, polygons are triangulated along their boundaries, and mixed
-connectivity becomes consecutive compatible draws. Vertex, face, corner,
-selected-connectivity and whole-mesh attributes retain their original
-correspondence. Compilation traverses only the selected primitive range. Unsupported
-attribute-pool bindings fail compilation rather than selecting arbitrary values.
-Explicit inverse bind matrices and identity bindings retain their distinct
-interpretations. GPU skinning supports up to eight active influences per vertex and
-rejects larger distributions without truncation.
+Vertices merge only when their complete compiled attributes agree, preserving
+seams. Complete equal meshes share storage, including across otherwise distinct
+source selections. Authored tangent differences remain distinct. Each skinned draw
+uses a compact palette of its contributing joints and matching inverse binds;
+the authored skeleton remains available for animation and attachments. Explicit
+inverse binds and identity bindings retain different meanings. More than eight
+active influences per vertex is an error rather than a truncation.
 
-The model coordinate frame maps the selected native family's up and forward
-directions into Bevy's Y-up, negative-Z-forward frame. Native model metadata
-does not declare a physical length scale. Applications supply additional scale
-through their transforms outside that conversion. The driving camera for
-billboards and camera anchoring is explicitly selected on `Playback`.
+Model axes and declared units are converted beneath the application root into
+Bevy's Y-up, negative-Z-forward frame. Native model metadata does not establish a
+physical length scale; apply an application root scale where needed. A single
+`Playback::driving_camera` supplies camera-sensitive poses for each instance.
 
-Playback uses seconds. `wc3` evaluates typed curves, while `AnimationProgram`
-indexes compiled channels by typed slot identity. Authored constants live in the
-model’s `PropertyValues` table; node, material, and effect fields retain references to those
-slots. Each playback instance samples against its own clocks and selected programmes. Clips reference reusable `Animation` definitions without losing their own loop or clamp policy. Independent
-repeating shared clocks wrap by their authored periods; frozen shared clocks
-retain time zero without event traversal. The common clip source start (zero by default) and duration
-select an inclusive animation interval, preventing interpolation
-through unrelated sequence keys.
+Skinned bounds conservatively enclose positive-weight joint contributions. Changed
+transforms and source assets refresh them; hidden geometry defers this work until
+revealed. Singular or unavailable bounds disable frustum culling temporarily.
 
-`PoseOverrides` applies application-supplied local poses after authored
-animation. Removing an override resumes normal sampling. Physics, gameplay
-controllers, and solvers can use this boundary without replacing the renderer.
+## Image requests
 
-## Surfaces and scene integration
+The image callback receives a `TextureRequest`: a sampled-image value, its
+structural input address where applicable, the resolved image declaration, role,
+effective sampler, and color space. Resource declarations own native filenames;
+material and effect inputs own sampling and coordinate settings.
 
-The compiler traverses `MaterialSurface::steps` in authored order. `MaterialStep`
-selects the MDLX, M2, or WMO dialect for each operation. The selected dialect owns
-its typed shader inputs and rendering settings.
+One source image can therefore need several interpretations. Color roles default
+to sRGB; normal and numeric roles default to linear unless explicitly declared
+otherwise. Native loading and assembly share images when the resolved resource,
+effective sampler, and transfer function agree. They do not change shared source
+pixels or use native metadata as part of that physical cache key.
 
-MDLX shader selection, culling, priority, and sorting belong to each step.
-WMO exterior-lighting selection is evaluated per step, so two WMO steps in one
-material can retain different lighting behavior. Compiled rendering-pass records
-retain order, but Bevy render phases can reorder draws; exact authored execution
-order across steps is not guaranteed.
+`TextureRequestKey` identifies a logical request. Assembly replacements target image
+dependencies or structural input addresses, with input choices taking precedence.
+See [assembly image selection](assembly.md#select-geometry-and-images) and
+[per-instance replacements](../usage.md#resolve-resources-and-textures).
+When a selected material contains a texture-valued animation slot, discovery
+conservatively retains all sampled images in the model, including images that may
+only be selected by a curve.
 
-Surfaces extend Bevy's standard material and lighting pipeline. Authored blend
-factors and independent depth-test/write controls specialize the GPU pipeline. A
-default `ModelMaterialExtension` leaves a standalone `StandardMaterial`'s blend
-and depth behavior intact; compiled model passes supply explicit overrides. Color,
-opacity, texture choice, and coordinate transforms animate on the same semantic
-clocks as node poses. Supported [M2 shader programmes](m2-materials.md) combine independent texture
-inputs and generated environment coordinates before Bevy lighting; additive
-contributions enter emissive. Unsupported
-shader selectors and composition rules produce material diagnostics. DefaultUnit HD
-layers retain diffuse, RG normal, ORM, emissive, team-color, and reflection roles,
-including animated bindings and Fresnel controls. The [Reforged material
-guide](reforged-materials.md) describes the shared PBR interpretation and its
-reflection approximation.
+## Native loading
 
-`CompileOptions` selects typed material appearances. Draw-based looks retain
-their own identities and complete material assignments.
+`ModelLoader` imports native models and required companions before compilation.
+`ResourceResolver` maps paths, namespaced resources, and file-data IDs into
+registered Bevy asset sources. The default resolver tries the literal filename,
+then BLP, DDS, PNG, and TGA candidates beside the model and under its asset root.
+Named sources and authored filename case remain intact.
 
-Portable, ambient/diffuse, and WMO lights expose ordinary Bevy scene lights and
-`ModelLight` metadata. Root `ModelLightSettings` controls conversion scales
-and suppression. Common diffuse color, intensity, range, and supported shadow flags
-animate with the instance. Ambient terms authored on individual light features
-remain metadata; the renderer does not overwrite scene ambient lighting. Native WMO cone and orientation conventions,
-cookies, flicker, and regional light-set activation remain uninterpreted.
+Use `texture_resource` for replacement selection, `texture_candidates` for lookup
+policy, and `compile_options` for material appearances and other compilation
+choices. Missing required companions fail loading. Optional missing images remain
+inspectable on `ModelAsset`.
 
-`ModelAttachment` retains the complete semantic attachment definition, including
-socket identity namespaces, authored visibility, unresolved controls, the child
-resource handle, and WMO placement appearance. Its separate `resource` field
-retains the resolved, owned child declaration after the source graph is released. `AttachmentState` holds sampled visibility.
-The authored child's `ModelMount` describes its node or socket target
-independently of loading and playback policy. WMO interior direct illumination,
-linked-light and region controls remain application hooks; they are not multiplied into child albedo. Child models start their first
-clip and restart on activation, parent clip changes, or backwards parent traversal.
+M2 bundles resolve animations and attachment tables through their external skeleton
+chain. Nonempty deferred tracks need that context before validation or writing.
+Empty equipment sequences do not invent sibling animation dependencies; explicit
+animation-file declarations remain required. WMO dialect provenance must be supplied
+by the provider because the file version alone may not identify its layout.
 
-Authored cameras can be sampled on request or bound to an application-owned
-perspective `Camera3d` through `CameraBinding`. Bindings select the model
-root and camera `FeatureId`, and update lens and view before Bevy's camera update.
-They sample the current playback and pose overrides and resolve ordinary application
-transform hierarchies directly, avoiding a previous-frame rig pose or root
-transform. Activation, viewport, and render target remain application-owned.
-Animated rig nodes and other bound cameras in the root or camera-parent chain are
-rejected, as are parents requiring a sheared local camera transform; invalid
-bindings retain their previous view. Camera feature IDs change when a source is
-decoded again, so bindings must be retargeted after asset replacement.
+`ResourceResolver::import_options` defaults to strict preservation. Accepting
+conversion loss is an explicit provider choice; diagnostics retain the dropped or
+approximated interpretation. A permissive policy cannot repair malformed references
+or supply missing companions.
 
-`ModelNode`, `ModelDraw`, and feature metadata preserve semantic source
-identities. `PreparedModel::features` also exposes integration points whose
-visual interpreter is unavailable. These generic hooks retain IDs and kinds rather
-than complete owned unsupported payloads; inspect the graph during compilation when
-those definitions are required. Rendering diagnostics describe missing behavior and
-approximations; successful decoding does not imply complete support for a model's
-authored shader or effect programmes.
+## Diagnostics and fidelity
 
-## Particle simulation
+Successful decoding establishes neither shader support nor native rendering
+fidelity. Compilation reports unsupported material programmes, effects, controls,
+and approximations against their source identities. Inspect these alongside asset
+load errors when investigating a model.
 
-Staged atlas sprites use the shared GPU transport: immutable birth records carry
-motion and appearance inputs, and shaders construct head/tail geometry. Scalar
-emission controls sample at birth times. Keyed bursts track crossed keys and clock
-cycles rather than repeating a burst on every frame. Gravity and fixed-plane
-geometry follow the authored model axes after coordinate conversion.
+`ModelNode`, `ModelDraw`, and feature metadata preserve source identities.
+`PreparedModel::features()` exposes IDs and kinds even when a visual interpreter
+is unavailable. Generic hooks do not retain complete unsupported payloads; inspect
+the source graph during compilation if an application needs them.
 
-M2 age-driven sprites retain independent normalized-age color, opacity, scale, and
-atlas curves, plus authored twinkle and per-particle secondary texture motion.
-Native packed gravity is decoded to animated vectors before rendering. Modern
-head/tail flags and legacy geometry bytes resolve to an explicit semantic choice. Their current transport rebuilds one reusable CPU mesh per emitter as
-its population or view changes. Motion evaluates gravity, wind, and linear drag
-analytically. Local particles follow the current emitter transform; world particles
-retain their birth frame with optional authored emitter-follow translation.
-M2 attached particles use their current emitter frame; detached gravity does not
-rotate or scale with the animated bone. Native coordinate conventions and application scale still apply. Paused, unchanged frames avoid mesh uploads.
-Living-particle, per-update birth, and long-update budgets bound CPU work;
-`SpriteEmitter` exposes omitted work and current population.
-
-Ribbon sections use the shared GPU transport and independent authored material
-passes. Section appearance samples its birth clock; retired or omitted sections
-break connectivity instead of joining unrelated trail segments.
-
-Authored emitter hierarchy and visibility evaluate at each occurrence time,
-including nonlinear parent motion. Application root motion interpolates the two
-observed frame transforms. Continuous emission uses bounded 60 Hz midpoint
-integration; this is a numerical approximation of animated rates. Keyed bursts
-retain their discrete clock crossings. Spline/bone generators, advanced M2 texture programmes and unresolved modulation
-gain remain unsupported and produce
-diagnostics.
+The [renderer overview](renderer.md) summarizes support. Material and effect guides
+carry the detailed inventories so those limits have one primary home.
 
 ## Static worlds
 
-Prepared models expose world groups, portals, placement sets, regions, liquids, and
-authored fog and ambient definitions. `WorldSelection` can hide groups or
-select placement sets. The default is conservative; an explicit `ReachableFrom`
-policy follows portal connectivity. `WorldPortalPolicy::Clipped(PortalView)` adds
-opt-in portal-window traversal. Applications supply the containing group, eye and
-inward-facing frustum planes in semantic model coordinates, and update that view
-when their chosen camera moves. The renderer clips convex portal polygons against
-the current window and narrows each neighboring view through the visible edges.
-Different paths into the same room retain their separate windows; cycles are
-bounded without discarding other entrance paths.
-
-Exterior and unclassified groups remain visible. Unknown or exterior starting
-groups, unresolved portal controls, malformed polygons and traversal work limits
-fall back conservatively. Native portal-side conventions, supplemental plane
-adjustments and occluder planes are not interpreted; this is geometric window
-culling rather than a complete native visibility implementation. Applications own
-camera choice and containment rather than relying on guessed room bounds. Visibility
-gates intersect these selections with authored animation, material opacity and LOD.
-
-Liquid grids preserve holes, native spacing, and absolute vertex heights. An
-authored material is interpreted through the standard material compiler. A liquid
-without a resolved material exposes its mesh and `WorldLiquidSurface`
-identity for an application material provider; the renderer does not infer a shader
-from an external liquid-type database. Environment sampling exposes regional fog and
-ambient weights without changing global Bevy lighting or fog. [WMO surfaces](wmo-materials.md)
-interpret baked vertex lighting, draw lighting classes and root/region ambient
-contributions independently of those application-owned scene resources. Native regional
-lighting fidelity remains unverified.
-
-## Native resources
-
-`ModelLoader` imports native models and their required companions before
-direct compilation. Applications implement `ResourceResolver` to map
-file-data IDs, namespaced resources, or paths into registered Bevy asset sources.
-The default resolver handles relative paths and tries literal, BLP, DDS, PNG, and
-TGA candidates beside the model before the asset root. Named asset sources and
-authored filename case remain intact. `texture_resource` selects replacements by
-semantic identity, source-list index, and sample role; `texture_candidates`
-customizes lookup. `compile_options` selects authored material appearances. Required
-companion failures stop loading; missing optional images remain inspectable on
-`ModelAsset`.
-
-M2 bundles resolve bone animations and attachment tables through their external
-skeleton chain. Attachment visibility uses the owning skeleton's animation stream;
-ordinary root tracks use the inherited sequence-storage flags. Nonempty deferred
-tracks require that context before validation or writing. Empty equipment
-sequences do not manufacture sibling animation-file dependencies, while explicit
-animation-file declarations remain required.
-
-`ResourceResolver::import_options` selects native conversion policy.
-Its default is strict preservation; accepting loss is an explicit provider choice,
-and retained conversion diagnostics identify dropped or approximated records.
-A permissive policy does not invent required resources or repair malformed data.
-
-WMO layout provenance must be supplied explicitly because a file version does not always identify a dialect.
-
-The shared [viewer and capture tool](../tools.md) uses the same Universal compiler
-and runtime as application loading.
-
-## Current limits
-
-Native loading preserves native-family vocabulary rather than promising the same
-shader coverage for every family. MDLX common layers and effects, M2 common surfaces
-and age-driven sprites, and WMO groups, layered surfaces, vertex lighting, and liquid
-grids each have separate interpretation limits. Native loading, generic geometry,
-and basic surface interpretation are separate capabilities from full game-specific
-rendering. M2 illumination/constant programmes and the modern six-binding guild
-layout, specialized WMO terrain/window/LOD and extended combiners, and external
-effect programmes require additional interpreters. These gaps appear in model diagnostics.
-
-Skinned mesh bounds conservatively enclose positive-weight joint contributions,
-including eight influences. Changed contributing transforms and source assets
-refresh bounds; hidden geometry defers work until reveal. Singular or unavailable
-bounds temporarily disable frustum culling rather than hiding uncertain geometry. Automatic authored LOD
-selection and local-pose transitions are implemented; simplification, per-view
-skeletal poses, and exact native lighting remain outside that scope. Implemented
-native billboard and shader interpretations can still differ from the originating
-game.
+World groups, placement sets, portal visibility, liquid grids, and environment
+sampling are covered in [static-world integration](worlds.md). These APIs expose
+scene data while leaving global lighting, fog, camera choice, and containment to
+the application.

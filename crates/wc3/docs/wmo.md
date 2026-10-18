@@ -119,18 +119,11 @@ version-17 profile family. `from_reader_dynamic` also supports the historical
 profiles; all three return owned documents. `to_writer` encodes before writing to a
 standard I/O sink. Direct byte-buffer decoding retains borrowed arrays.
 
-Ordinary records use `wmo::Read`, `wmo::Write`, `wmo::RecordLayout`, and
-`wmo::Validate` derives. Read and write compose independently over fields;
-`RecordLayout` is the fixed inline width. Variable payload structures do not
-need a fixed layout to derive writing. Cross-field validation and context-dependent
-chunk codecs are handwritten. There is no animation-array visitor solely for
-symmetry with M2: WMO arrays carry their own record and reference meanings.
-
-Choice fields use named enums with `Unknown(wire)` variants that preserve
-unrecognized codes. Flag fields use `bitfield!` types with named getters and
-setters; `bits()` retains the complete stored word. `wmo::Value` generates
-exact code conversions for custom scalar enums alongside the codec derives.
-Revision numbers, indices, and counts keep their numerical types.
+For custom records, use the `wmo::Read`, `wmo::Write`, `wmo::RecordLayout`,
+and `wmo::Validate` derives. Cross-field validation and context-dependent chunk
+codecs remain handwritten. Named enums retain unknown codes through
+`Unknown(wire)` variants, and flag types preserve the complete stored word through
+`bits()`. See the [derive guide](../../wc3-derive/README.md) for record authoring.
 
 ## Resources and bundles
 

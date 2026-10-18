@@ -1,58 +1,20 @@
 # wc3-derive
 
-Codec derives for maintaining and extending native model
-records in [`wc3`](../wc3/README.md). Applications using the built-in model types only need
-the codec traits in `wc3`; the derives are re-exported through its format modules.
+Procedural macros for defining native model records in [`wc3`](../wc3/README.md).
+If you use the built-in model types, start with that crate's codecs. These
+derives are for contributors adding records or maintaining their layouts.
 
-## Derives
+## Define a record
 
-Import `wc3::model::formats::mdlx::{mdx, mdl}` to distinguish the binary and text derives.
-Import `wc3::model::{formats::m2, formats::wmo}` for the World of Warcraft formats. The format modules
-re-export the following macros alongside their codec traits:
-
-| Derive through `wc3` | Purpose |
-| --- | --- |
-| `mdx::Read`, `mdx::Write` | Read and write binary MDX records. |
-| `mdx::ReadOwned` | Decode MDX values into independently owned storage. |
-| `mdx::Value`, `formats::m2::Value`, `formats::wmo::Value` | Generate scalar enum `raw()` and `from_raw()` conversions. |
-| `mdl::Read`, `mdl::Write` | Read and write text MDL records. |
-| `formats::m2::Read`, `formats::m2::Write`, `formats::m2::RecordLayout` | Read and write offset-addressed M2 records and describe their inline metadata width. |
-| `formats::m2::Validate`, `formats::m2::VisitArrays` | Compose field validation and animation-leaf traversal. |
-| `formats::wmo::Read`, `formats::wmo::Write`, `formats::wmo::RecordLayout`, `formats::wmo::Validate` | Compose WMO record codecs, fixed inline widths, and field validation. |
-
-Scalar choice fields in M2 and WMO use named enums with an explicit
-integer wire width and an unknown-value variant. Each format re-exports a
-`Value` derive alongside its codec derives to provide exact code conversions.
-The format references below describe the attributes and examples. Flag words
-use `bitfield!` types with the ordinary struct codec derives instead.
-
-
-For buffer-bearing records, `wc3::model::common::Ownership` generates
-borrowed views and owned conversion independently of any codec. Records name
-their buffer lifetime `'data`; the derive delegates fields containing that
-lifetime to the shared ownership traits and clones other metadata for views.
-Named and tuple structs and enums are supported, and type and const parameters
-are preserved. `CommonPartialEq` compares structs across source-buffer
-lifetimes through their borrowed views, including fields selected by layout
-associated types. Ownership derives have no codec requirements.
-
-Derive `mdx::ReadOwned` separately when a record needs owned MDX decoding, such
-as loading through standard I/O. It uses the record's `mdx::Read` implementation
-and, for buffer-bearing records, its shared `IntoOwned` contract. It works with
-both derived and handwritten readers; records without borrowed storage do not
-need an ownership derive.
-
-The generated implementations target `wc3`'s codec APIs. Add `wc3` to use the
-re-exported derives:
+Depend on `wc3` and import the derives through its format modules. There is no
+need to depend on `wc3-derive` directly:
 
 ```sh
 cargo add wc3
 ```
 
-## Example
-
-This record has a binary representation with fields in declaration order and a
-text representation as an MDL block:
+This record stores its fields in declaration order in binary MDX and writes an
+`Example` block in text MDL:
 
 ```rust
 use wc3::model::formats::mdlx::{mdx, mdl};
@@ -76,45 +38,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-A record codec encodes that record, rather than a complete model file.
+The result is one record, not a complete model file. Whole-model codecs add
+file headers, chunks, and other framing.
 
-M2 records also read fields in declaration order, but their arrays are stored
-outside the inline metadata. Derive `m2::Read`, `m2::Write`, and
-`m2::RecordLayout` together for ordinary structs and scalar enums. `ZeroVec<T>` fields encode a
-count/offset pair followed by borrowed fixed-width values; `Vec<T>` fields encode
-a count/offset pair addressing record headers and their nested payloads. The
-writer reserves the whole inline header before allocating those payloads.
-Dedicated field types implement codecs for version-dependent or externally
-stored payloads, so containing records can use the same derives. M2 record
-methods are `read` and `write`, taking a `Decoder` or `Encoder`; whole model
-operations remain `decode_m2` and `encode_m2`.
+## Choose a format reference
 
-Ordinary M2 records can also derive `m2::Validate` and `m2::VisitArrays`.
-They process struct fields or the active enum payload in declaration order and
-return the first error. Each derive requires only its field-level trait;
-validation and traversal do not depend on codecs or ownership. Keep handwritten
-implementations for cross-field invariants and leaves whose traversal must
-supply animation context.
+The references explain supported record shapes, attributes, and the cases that
+need handwritten implementations. Each format module re-exports its traits and
+derives under the same names.
 
-## Documentation
+| Format | Main derives | Reference |
+| --- | --- | --- |
+| MDX | `mdx::Read`, `mdx::Write`, `mdx::ReadOwned`, `mdx::Value` | [Binary fields, sized records, animation tails, and enums](src/mdx.md) |
+| MDL | `mdl::Read`, `mdl::Write` | [Text blocks, properties, defaults, and hooks](src/mdl.md) |
+| M2 | `m2::Read`, `m2::Write`, `m2::RecordLayout`, `m2::Value`, `m2::Validate`, `m2::VisitArrays` | [Offset-addressed records and animation traversal](src/m2.md) |
+| WMO | `wmo::Read`, `wmo::Write`, `wmo::RecordLayout`, `wmo::Value`, `wmo::Validate` | [Inline records, validation, and enums](src/wmo.md) |
 
-Use the attribute reference when defining records, and the codec and model
-guides when connecting those records to whole-model operations:
+Import `mdx` and `mdl` from `wc3::model::formats::mdlx`, and `m2` and `wmo`
+from `wc3::model::formats`. Import a codec trait as `_` when you need its methods
+alongside a derive of the same name.
 
-- [MDX attribute reference](src/mdx.md): fixed fields, sized records, repeated
-  entries, animation tails, and numeric enums.
-- [MDL attribute reference](src/mdl.md): record shapes, field mappings, defaults,
-  animation, and validation hooks. Also included in the
-  [crate API documentation](https://docs.rs/wc3-derive/latest/wc3_derive/).
-- [M2 derive reference](src/m2.md): field-order records, array descriptors,
-  inline metadata widths, and version-selected field types.
-- [WMO derive reference](src/wmo.md): fixed inline records and validation.
-- [MDX codec documentation](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/mdx/): binary
-  derives, numeric enums, and animation records.
-- [`wc3` model documentation](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/): built-in
-  records and whole-model operations.
+## Borrowed and owned storage
 
-From a workspace checkout, build the derive documentation with:
+Buffer-bearing records can derive `wc3::model::common::Ownership` to generate
+borrowed views and conversions to owned storage. Use `'data` for the buffer
+lifetime. Fields containing that lifetime delegate to the shared ownership
+traits; other metadata is cloned for a view. Structs and enums are supported,
+including type and const parameters. Ownership does not require a codec.
+
+Derive `mdx::ReadOwned` separately to decode through standard I/O or detach a
+borrowed MDX record. It uses the record's `mdx::Read` implementation and its
+`IntoOwned` contract, whether the reader is derived or handwritten. Records
+without borrowed storage need no ownership derive.
+
+`CommonPartialEq`, also in `wc3::model::common`, compares records across buffer
+lifetimes through their borrowed views, including version-selected field types.
+
+## API documentation
+
+The [crate API documentation](https://docs.rs/wc3-derive/latest/wc3_derive/)
+includes the format references. To build it from this checkout, run:
 
 ```sh
 cargo doc -p wc3-derive --no-deps --open

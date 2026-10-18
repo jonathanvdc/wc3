@@ -1,18 +1,16 @@
 # Ribbon trails
 
-Universal retains `mdlx::RibbonEmitter` and `m2::RibbonEmitter` definitions in
-`wc3::model::RibbonEmitter::Mdlx` and `wc3::model::RibbonEmitter::M2`. The renderer
-prepares both families for a shared trail transport that retains birth-time cross
-sections and builds connected geometry on the GPU. Material passes share immutable
-section records while retaining distinct blend/depth and texture state. `bevy_wc3::RibbonEmitter` exposes source identity and
-bounded simulation statistics.
+Ribbon emitters leave connected trails of birth-time cross sections. MDLX and M2
+families use the same GPU geometry transport, while retaining separate authored
+semantics. Material passes share section records but keep their own blend, depth,
+and texture state. `bevy_wc3::RibbonEmitter` exposes source identity, population,
+and omitted-work statistics.
 
 ## Cross sections and motion
 
 `TrailGeometry.axis` explicitly selects the local section direction. MDLX ribbons
 use local +Y. M2 imports currently use explicit +Z; that native convention remains
-unverified rather than being inferred from the model's up axis. Strict native export
-rejects an incompatible authored axis. Gravity independently follows model up and
+unverified rather than being inferred from the model's up axis. Gravity independently follows model up and
 produces ballistic displacement without moving the retained birth origin.
 
 Births sample animated hierarchy, section heights, activation, and appearance at

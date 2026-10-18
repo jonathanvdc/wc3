@@ -1,8 +1,8 @@
 # Reading and editing Warcraft III documents
 
-For native record editing, MDX and MDL share the document and record types in `wc3::model::formats::mdlx`. Choose a version, decode a
-document, edit its records, and encode the result in either format. The
-[crate README](../README.md#warcraft-iii-documents) provides a first example; this guide explains
+MDX and MDL share the document types in `wc3::model::formats::mdlx`. Decode a
+document, edit its native records, and encode it in either format. The
+[crate README](../README.md) provides a first example; this guide explains
 the choices that matter for editors, converters, and asset pipelines. For checked
 authoring relationships, use the default [model representation](semantic.md) and
 its [native import and export adapters](conversion.md).

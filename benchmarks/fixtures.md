@@ -1,7 +1,7 @@
 # Benchmark fixture design
 
 The fixtures provide repeatable workloads for codec and runtime changes without
-requiring game files during a run. Generators under `support/` create model,
+requiring game files during a run. Generators under [`support/`](support/) create model,
 texture, and archive inputs; existing synthetic test fixtures supply focused
 effect and archive compatibility cases. This guide is for contributors changing
 those inputs. For commands and measurement boundaries, see the
@@ -10,10 +10,8 @@ those inputs. For commands and measurement boundaries, see the
 ## Model profiles
 
 The profiles cover small classic units, detailed units, and large buildings.
-Their geometry and animation values are procedural. The profiles retain connected rigs, pivots, valid resource references,
-multiple sequences, uneven track sizes, and irregular key times. These relationships
-matter because uniformly repeated records can exercise different paths from
-structured model data.
+Their geometry and animation values are procedural. Connected rigs, pivots, resource references, multiple sequences, and irregular
+key times exercise relationships that a flat list of repeated records would miss.
 
 | Profile | Vertices | Geosets | Bones | Sequences | Rig depth | Rotation |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -52,9 +50,9 @@ asset loading is self-contained.
 
 ## Revise a workload
 
-Inspect source metadata and relationships with `model_info` and the local asset
-tools, then translate the relevant characteristics into synthetic parameters or
-generation rules. Downloaded originals and collector tooling stay under ignored
+When using a game model to inform a workload, inspect its metadata and
+relationships with `model_info` or local asset tools. Translate the relevant
+characteristics into synthetic parameters or generation rules. Downloaded originals and collector tooling stay under ignored
 `data/`. Original geometry, animation values, pixels, and dependency paths do not
 belong in the generated fixtures, and game files must not become benchmark inputs.
 

@@ -1,4 +1,7 @@
-## WMO record derives
+# WMO derives
+
+Use these derives when defining WMO records. File framing and relationships
+between records remain the responsibility of the containing codec.
 
 Import `wc3::model::formats::wmo` to derive `wmo::Read`, `wmo::Write`,
 `wmo::RecordLayout`, and `wmo::Validate` for ordinary records. Named, tuple,
@@ -35,7 +38,7 @@ framing, liquid metadata, and batch-dependent tangent maps belong in handwritten
 implementations at the level that owns their context. Derives do not select a
 client profile from WMO's shared version number.
 
-### Scalar enums and flags
+## Scalar enums and flags
 
 Use a scalar enum for a field whose wire code selects a named choice. The
 `wmo::Value` derive supplies `from_raw`, `raw`, and `From` conversions;

@@ -1,76 +1,26 @@
 # wc3
 
-`wc3` is a Rust library for working with Warcraft III and World of Warcraft
-model assets, BLP textures, and MPQ archives. `wc3::model::Model` is the model representation
-for authoring and processing: a checked graph of geometry, materials, animation,
-scene relationships, and shared resources. Profiles select game-specific meaning
-without tying that graph to a file revision.
-
-Native documents and codecs live under `wc3::model::formats`. They retain the
-records, layouts, opaque data, and supporting files needed for native inspection
-and round trips. `wc3::model::io` connects those documents to semantic models
-through imports and export plans, with explicit representability policies from
-`wc3::model::conversion`.
-
-## Capabilities
-
-The library covers three kinds of assets. Models support checked semantic editing
-and native record editing, while textures and archives can be inspected and rewritten without
-first decoding their image or file contents. Optional features add pixel
-operations and archive compression when your application needs them.
-
-| Assets | Operations |
-| --- | --- |
-| Warcraft III MDX and MDL models | Read, edit, write, and convert between supported model versions. |
-| World of Warcraft M2 models | Read, edit, and write typed core layouts and supporting files; resolve and rebuild model bundles. |
-| World of Warcraft WMO models | Read, edit, and write root and group documents; resolve native geometry bundles. |
-| BLP0, BLP1, and BLP2 textures | Inspect and edit encoded containers; optionally decode pixels and encode images. |
-| MPQ v1–v4 archives | Index, extract, create, and edit archives; optionally decompress and compress entries. |
-
-Native codecs share byte access, output buffers, and borrowed fixed-record
-storage through `wc3::model::common`. Each format retains its own codec traits,
-reference types, layout rules, and validation. Shared storage therefore preserves
-the addressing and editing rules of the native document.
-
-The [model guide](docs/semantic.md) explains authoring profiles, graph
-relationships, shared resource ownership, and checked edits. The
-[import and export guide](docs/conversion.md) explains the native boundary and
-its representability policies. The [evaluation guide](docs/evaluation.md) covers
-Bevy-independent pose sampling, draw projection, deformation, and surface values.
-
-For Warcraft III model loading, animation, and rendering in Bevy, see the
-companion [`bevy-wc3`](../bevy-wc3/README.md) crate.
-
-## Getting started
-
-Add the library to your project with Cargo. The default configuration includes
-model codecs and the texture and archive container APIs; you can enable image
-and compression features separately as described below.
+Read, edit, and write Warcraft III and World of Warcraft models, BLP textures,
+and MPQ archives in Rust. The library supports asset tools and offline processing
+without a renderer. For displaying models in Bevy, use
+[`bevy-wc3`](../bevy-wc3/README.md).
 
 ```sh
 cargo add wc3
 ```
 
-### Authoring models
+Model codecs and encoded texture/archive operations are always available.
+[Optional features](#optional-features) add pixel decoding and archive compression.
 
-Choose a profile for the vocabulary your application edits. `Mdlx` describes
-Warcraft III semantics; a native dialect such as `V800` separately selects an
-encoding layout. The default `Universal` profile admits the built-in families.
+## Read and edit a model
 
-```rust
-use wc3::model::{Model, Node};
-use wc3::model::profiles::Mdlx;
+There are two ways to work with models. Use `wc3::model::Model` for geometry,
+materials, animation, and relationships that are checked together when edited.
+Use native documents under `wc3::model::formats` when your task depends on file
+records, version-specific fields, or preservation of unknown data.
 
-let mut draft = Model::<Mdlx>::builder("Example");
-let root = draft.add_named_node("Root")?;
-let model = draft.finish()?;
-assert_eq!(model.node(root).unwrap().name, "Root");
-# Ok::<(), wc3::model::Error>(())
-```
-
-For Warcraft III files, `model::io::mdlx::decode_mdx` and `decode_mdl` return an
-independent semantic model and an import report. This path owns its authoring
-values, so the input bytes or text can be released after decoding.
+For a self-contained Warcraft III model, decode MDX or MDL directly into the
+checked representation:
 
 ```rust
 use wc3::model::conversion::ImportOptions;
@@ -82,220 +32,117 @@ assert_eq!(imported.value.name(), "Example");
 # Ok::<(), wc3::model::conversion::Error>(())
 ```
 
-Alternatively, decode a native document and pass it to the corresponding
-`model::io` adapter. Borrowing imports retain compatible arrays from that document;
-keep the source alive while using the imported model. MDLX also provides
-`import_owned` to detach an already decoded document. Export plans produce native
-documents or bundles for encoding and report values that the selected layout
-cannot represent. The [import and export guide](docs/conversion.md) shows how to
-inspect and execute an MDLX plan.
+The returned model owns its values, so you can release the input. Import also
+returns a report. Strict import rejects unsupported data; explicitly permitted
+losses are recorded there. The [model guide](docs/semantic.md) introduces checked
+editing, and the [import and export guide](docs/conversion.md) shows how to plan
+native output and inspect conversion decisions.
 
-### Warcraft III documents
-
-MDX and MDL model types live under `wc3::model::formats::mdlx`, where the `mdx` and `mdl`
-modules provide the codecs for each format. The example below reads a small MDL
-model, changes its name, and writes the result in both formats. Importing the codec traits as
-`_` makes their methods available without introducing conflicting trait names.
+For a native edit, decode a document, change its records, and encode it again.
+MDX and MDL share the same document types; import their codec traits as `_` to
+make the methods available:
 
 ```rust
 use wc3::model::formats::mdlx::{Document, V800};
 use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
 use wc3::model::formats::mdlx::mdx::Write as _;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let source = r#"Version { FormatVersion 800, } Model "Example" {}"#;
-    let mut model = Document::<V800>::decode_mdl(source)?;
-    let mut info = model.model_info().unwrap();
-    info.name.set_text("Renamed")?;
-    model.set_model_info(&info);
+let source = r#"Version { FormatVersion 800, } Model "Example" {}"#;
+let mut model = Document::<V800>::decode_mdl(source)?;
+let mut info = model.model_info().unwrap();
+info.name.set_text("Renamed")?;
+model.set_model_info(&info);
 
-    let mdx_bytes = model.encode_mdx()?;
-    let mdl_text = model.encode_mdl()?;
-    assert!(!mdx_bytes.is_empty());
-    assert!(mdl_text.contains("Renamed"));
-    Ok(())
-}
+let mdx_bytes = model.encode_mdx()?;
+let mdl_text = model.encode_mdl()?;
+assert!(!mdx_bytes.is_empty());
+assert!(mdl_text.contains("Renamed"));
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-The example uses `Document<V800>` because its input has a known format version.
-When the version needs to be determined from the file, `DynamicDocument` provides
-the same model operations with runtime version selection. Once a model is
-loaded, its records give you access to geometry, materials, scene nodes,
-animation, and effects. The
-[`mdlx` module documentation](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/) explains
-how to edit those collections and convert between supported versions.
+`Document<V800>` selects a known layout. Use `DynamicDocument` when the file's
+version is determined at runtime. The [native MDLX guide](docs/models.md) covers
+version selection, collection edits, resource paths, and version conversion.
 
-Continue with the [model editing guide](docs/models.md) for runtime version
-selection, collection editing, borrowed buffers, conversion policies, and resource
-rewriting. The API reference supplies the record types and codec contracts.
+## Work with other assets
 
-### World of Warcraft models
+The same crate includes WoW models, textures, and archives. Each has its own
+native API and output guarantees:
 
-M2 types live under `wc3::model::formats::m2`. Choose a numeric layout and either the flat
-MD20 or chunked MD21 envelope, or use `DynamicDocument` to detect both from bytes:
+| Asset | Start with | Guide |
+| --- | --- | --- |
+| WoW M2 models | `model::formats::m2::{Document, DynamicDocument, Bundle}` | [M2 models and supporting files](docs/m2.md) |
+| WoW WMO worlds | `model::formats::wmo::{Root, Group, Bundle}` | [WMO roots and groups](docs/wmo.md) |
+| BLP0, BLP1, BLP2 textures | `blp::Blp` | [BLP API](https://docs.rs/wc3/latest/wc3/blp/) |
+| MPQ v1–v4 archives | `mpq::{Archive, SharedArchive, ArchiveWriter}` | [MPQ API](https://docs.rs/wc3/latest/wc3/mpq/) |
 
-```rust
-use wc3::model::formats::m2::{Chunked, Document, V274};
+M2 bundles connect models to skins, animation, skeleton, and other supporting
+files through a caller-provided resolver. WMO bundles connect roots and groups;
+an explicit client profile selects layout details that the file version alone
+cannot identify. Their guides explain coordinated output and preservation limits.
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let model = Document::<Chunked<V274>>::new();
-    let bytes = model.encode_m2()?;
-    let decoded = Document::<Chunked<V274>>::decode_m2(&bytes)?;
-    assert_eq!(decoded.version(), 274);
-    Ok(())
-}
-```
+BLP containers let you inspect or rewrite encoded mipmaps without decoding
+pixels. BLP0 stores mipmaps in sibling files; attach those payloads explicitly
+and use `write_files()` for output. Enable the pixel features below when you need
+RGBA images or integration with the `image` crate.
 
-The core exposes native records and borrowed encoded arrays. Standalone
-`skin`, `geometry`, `animation`, `skeleton`, `bone`, and `physics` modules handle
-supporting files; `Bundle` connects declared references through a caller-owned resolver and
-coordinates external animation offsets when writing. The [M2 guide](docs/m2.md)
-explains layout selection, ownership, complete bundle output, and preservation
-boundaries. See the [Bevy renderer guide](../bevy-wc3/docs/rendering/renderer.md)
-for implemented M2 rendering and its current limits.
-
-World geometry uses `wc3::model::formats::wmo::{Root, Group, Bundle}` with an explicit
-client profile, since WMO's version field does not identify every layout change.
-The [WMO guide](docs/wmo.md) explains borrowed chunk records, dependency
-resolution, validation, and coordinated root/group output.
-
-### Textures
-
-For BLP textures, you can choose whether to work with the encoded container or
-with decoded pixels. `Blp::read` borrows encoded content from your input buffer
-without copying it. The same `Blp<'a>` container holds borrowed or owned bytes;
-its payloads use copy-on-write storage so editing copies only borrowed data
-that you change. `as_ref()` creates a borrowed view without copying buffers,
-while `into_owned()` moves owned buffers and copies borrowed bytes into an
-independent `Blp<'static>`. This is enough for operations that do not need to
-inspect the image itself.
-
-BLP1 and BLP2 contain their mipmaps in the root file. BLP0 uses sibling `.b00`,
-`.b01`, and subsequent files; parsing its root leaves empty mipmap slots that
-callers fill explicitly. `write_files()` returns the root and attached external
-payloads, while single-file `write()` rejects BLP0.
-
-When you need pixels, the `blp-decode` feature lets you decode mipmaps to RGBA
-images. The corresponding `blp-encode` feature creates BLP textures from images,
-using either generated or authored mipmaps. Both integrate with the `image`
-crate, which you should also add as a direct dependency if your code uses its
-types. The [`blp` module documentation](https://docs.rs/wc3/latest/wc3/blp/)
-provides examples and explains the available encoding options. `EncodeOptions`
-lets you choose the filter for generated mipmaps and the DXT fitting algorithm,
-with Triangle resampling and ClusterFit compression as defaults. Applications
-that author their own mipmaps can supply those levels directly.
-
-### Archives
-
-Use `Archive` to read entries from a seekable source, or `SharedArchive` when
-several entries need to be read concurrently. Both index the archive when it is
-opened and decode payloads on demand. `SharedArchive` accepts files, shared
-memory, and custom random-access sources. [`bevy-mpq`](../bevy-mpq/README.md)
-integrates archives with Bevy asset sources.
-
-`ArchiveWriter` creates archives and edits copies of existing archives. It can
-preserve encoded entries, avoiding decompression and recompression of files you
-have not changed. Writing requires a seekable destination.
-
-To assemble a compact new archive, `copy_file_from` imports an unencrypted
-entry's encoded payload into an `ArchiveWriter`. The lower-level
-`open_encoded_file` and `add_encoded_file` APIs also support renamed entries
-and standalone encoded caches. Encoded copying does not require compression
-features; it preserves the payload without validating its decoded contents.
-
-Compressed entries need the `mpq-decode` feature for extraction, and
-`mpq-encode` enables compression when writing. The
-[`mpq` module documentation](https://docs.rs/wc3/latest/wc3/mpq/) walks through
-the API and describes format support, editing behavior, and archive recovery.
+Use `Archive` for seekable archive input or `SharedArchive` for concurrent reads.
+`ArchiveWriter` creates archives and edits copies of existing archives, including
+copying unchanged encoded entries without recompression. The
+[`bevy-mpq`](../bevy-mpq/README.md) adapter makes archives available to Bevy.
 
 ## Optional features
 
-The crate has no default features, so applications that only work with models
-or encoded containers do not pull in image or compression dependencies. Document
-codecs, BLP container operations, and MPQ indexing, stored entries, encryption,
-and encoded archive editing are always available. The following features add
-the operations that require decoding or encoding asset contents:
+There are no default features. Enable only the pixel and compression operations
+your application needs:
 
 | Feature | Adds |
 | --- | --- |
-| `blp-decode` | BLP mipmap decoding to RGBA pixels and an `image::ImageDecoder` adapter. |
-| `blp-encode` | BLP image encoding and an `image::ImageEncoder` adapter. |
-| `mpq-decode` | MPQ decompression. |
-| `mpq-encode` | MPQ zlib and bzip2 compression. |
+| `blp-decode` | RGBA mipmap decoding and an `image::ImageDecoder` adapter. |
+| `blp-encode` | Image encoding and an `image::ImageEncoder` adapter. |
+| `mpq-decode` | Compressed archive entry extraction. |
+| `mpq-encode` | Zlib and bzip2 compression when writing archives. |
 
-You can enable these features independently. For example, an application that
-both reads and creates texture images can enable the two BLP features together:
-
-```sh
-cargo add wc3 --features blp-decode,blp-encode
-```
-
-## Format behavior and limitations
-
-Reading and writing an asset does not always preserve its original bytes or
-appearance. The codecs and conversion APIs make different guarantees depending
-on the format and operation.
-
-For Warcraft III models, MDX preserves chunk order and opaque data, while MDL
-produces canonical text and reports data it cannot faithfully represent. MDL source
-formatting is therefore discarded when writing a model back to text. Readers
-accept both Warcraft III and Hive Workshop spellings, and writers use Warcraft
-III syntax by default. The [MDX](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/mdx/) and
-[MDL](https://docs.rs/wc3/latest/wc3/model/formats/mdlx/mdl/) documentation explains these
-behaviors in more detail.
-
-Converting between MDLX model versions returns a model and a report. `convert`
-leaves its source intact; `into_convert` consumes it and moves unchanged chunks.
-Strict conversion rejects unsupported nondefault data and opaque chunks when
-changing versions. Lossy conversion permits unsupported fields to be dropped;
-opaque chunks still require a separate policy. Inspect the report even after a
-successful conversion, since it also describes normalization and defaults.
-Because some Classic and Reforged features have no equivalent in another layout,
-conversion cannot guarantee identical rendering in the game.
-
-M2 writing relocates understood offset-addressed data and retains unknown chunk
-payloads. `Bundle::encode()` updates external animation streams and their owner
-records together. AFRA, classic lookup arrays, and the version-257 extra array
-remain uninterpreted; format coverage and broad game compatibility are separate
-concerns. See the
-[M2 guide](docs/m2.md#coverage-and-preservation-boundaries) for the supported
-layouts, chunk catalogue, and limits.
-
-BLP container writing canonicalizes layout rather than preserving arbitrary
-padding. BLP0 indexed and JPEG parsing, encoding, and external mipmap assembly
-are implemented, but compatibility with real beta-game textures remains
-unverified. The generic `image` decoder hook cannot resolve BLP0 sidecars, and
-its single-writer encoder cannot output them; use the explicit container APIs.
-
-Archive support also has limits: MPQ patch-file application and signature
-verification are not implemented. The
-[archive documentation](https://docs.rs/wc3/latest/wc3/mpq/) describes the
-compatibility limits and integrity checks that apply to reading and editing.
-
-## Documentation and examples
-
-The API reference provides examples for each asset type, and the repository
-includes command-line examples for inspecting, editing, and converting assets.
-The model command-line examples below operate on Warcraft III MDX and MDL:
-
-- [Documentation index](docs/README.md): MDLX, M2, WMO, and BLP workflows, command-line tools,
-  and format-specific API references.
-- [API reference](https://docs.rs/wc3/latest/wc3/).
-- [`mpq` example](examples/mpq.rs): archive listing, extraction, creation, and editing.
-- [`mpq_concurrent` example](examples/mpq_concurrent.rs): a synthetic benchmark comparing serialized and concurrent extraction; requires `mpq-decode` and `mpq-encode`.
-- [`model_dependencies` example](examples/model_dependencies.rs): deduplicated direct file references with their locations, plus replaceable resource IDs.
-- [`model_info` example](examples/model_info.rs): model metadata, geometry and emitter counts, and animation intervals.
-- [`model_convert` example](examples/model_convert.rs): MDX/MDL and model-version conversion with loss reports.
-- [`model_repath` example](examples/model_repath.rs): literal, case-sensitive prefix replacement in declared asset paths.
-- [`blp_to_png` example](examples/blp_to_png.rs): texture metadata and PNG export of a selected mip level; requires `blp-decode`.
-- [`mdlx_compare` example](examples/mdlx_compare.rs): model round-trip comparisons.
-
-The [command-line guide](docs/tools.md) collects invocation examples and explains
-format detection, dependency reporting, repathing, and conversion losses. Each
-command-line tool also provides `--help` for its options.
-
-From a workspace checkout, build the crate documentation with all optional APIs:
+For example, to read texture pixels and extract compressed archive entries:
 
 ```sh
-cargo doc -p wc3 --all-features --no-deps --open
+cargo add wc3 --features blp-decode,mpq-decode
 ```
+
+Add `image` as a direct dependency if your application names its types. Stored
+MPQ entries, encryption, archive indexing, and encoded copying need no optional
+features.
+
+## Choose the right output guarantees
+
+Native editing and checked model conversion serve different purposes. Native
+MDX documents preserve chunk order and opaque data. MDL writing produces
+canonical text and rejects data it cannot represent; it does not preserve source
+formatting. Checked model imports retain supported meanings rather than a copy
+of the source file. Keep the native document if you also need its unknown data.
+
+Conversion is strict by default. When changing versions or exporting a checked
+model, inspect the report and explicitly choose any permitted loss. Successful
+conversion establishes what the selected format can represent; it does not
+establish identical appearance in the game.
+
+M2 and WMO support varies by layout and record family; consult their guides
+before relying on preservation. BLP writing canonicalizes container layout, and
+real beta-game compatibility of BLP0 remains unverified. MPQ patch-delta
+application and signature verification are not implemented. Finish encoding or
+archive finalization before replacing a source file, since transport errors can
+leave partial output.
+
+## Continue with a task
+
+The [documentation index](docs/README.md) connects model editing, CPU evaluation,
+native formats, and command-line workflows. To try the tools from a checkout:
+
+```sh
+cargo run -p wc3 --example model_info -- path/to/model.mdx
+cargo run -p wc3 --features blp-decode --example blp_to_png -- texture.blp texture.png
+```
+
+The [tool guide](docs/tools.md) covers the other commands and their write policies.
+For complete types and contracts, browse the [API reference](https://docs.rs/wc3/latest/wc3/)
+or build it locally with `cargo doc -p wc3 --all-features --no-deps --open`.

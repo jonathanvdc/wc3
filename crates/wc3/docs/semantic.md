@@ -1,885 +1,150 @@
-# Editing semantic model graphs
+# Editing model graphs
 
-`wc3::model` describes model meaning independently of file layout.
-Use it to inspect relationships, author changes, or prepare a native export.
-The [evaluation guide](evaluation.md) describes pose sampling, editable draw
-projection, and surface evaluation for offline tools and renderer integrations.
-The MDLX, M2, and WMO codecs remain the APIs for their encoded records
-and supporting documents. A semantic graph contains actual authoring values;
-it does not retain a native model as its backing representation.
+Use `wc3::model::Model` to work with hierarchy, geometry, materials, and animation
+as a checked graph. Use [native documents](models.md) instead when you need to
+preserve encoded records, unknown chunks, or file organization. A graph contains
+supported authoring values and can borrow compatible arrays from a native document;
+it does not keep that document as its backing representation.
 
-## Objects and dependencies
+The usual workflow is to [import](conversion.md), edit through a builder, then
+plan a native export or [evaluate the result](evaluation.md). This guide introduces
+the relationships and editing rules shared by those tasks.
 
-Hierarchy nodes describe placement, transform inheritance, and camera-facing
-behavior. Meshes describe geometry, while mesh instances place that geometry at
-a node. Each instance's draws select mesh-owned draw subsets and rendering controls.
-Looks assign materials to those draws. A complete material
-surface owns its rendering and sampling behavior, including the family's layers
-or passes. Each texture input owns its coordinate transform, including animated
-translation, rotation, and scale before sampling. These values belong to the
-material input rather than the hierarchy or a shared transform table.
+## Choose a profile
 
-Attached features give a node behavior such as a camera, light, or emitter.
-A node can anchor several independently identified features. Systems own
-relationships that span several objects, such as physics constraints, cloth,
-or world groups and portals. Model metadata contains declarations that apply to
-the complete model. Additional controls belong directly to their actual owners,
-so understanding a node or draw does not require consulting a parallel extension
-table.
+`Model<'data, P>` uses a profile to select the values you can author. `Mdlx`, `M2`,
+and `Wmo` retain their model family's geometry, materials, effects, metadata, and
+animation rules. `Universal`, the default, accepts all built-in families. Choose
+the native profile for a format-specific editor and Universal for tools that need
+to handle several families through one API.
 
-IDs identify objects within their owning model. An ID from
-an unrelated owner cannot satisfy a relationship. Graph identity is independent
-of native record ordering, so output codecs can reorder tables without changing
-which objects refer to one another.
-
-`Model<'data, P>` owns its graph as typed `Table<K, V>` collections. The key
-parameter identifies an object family independently of its payload's profile and
-borrowed lifetime. Collection accessors such as `nodes()`, `meshes()`, and
-`materials()` expose immutable lookup through `get(id)`, membership through
-`contains_key(id)`, and size through `len()` and `is_empty()`. Call `iter()` to
-traverse `(Id<K>, &V)` pairs in stable identity order, or iterate the collection
-directly in a `for` loop. `keys()` and `values()` provide the corresponding views.
-Edits remain operations on a `ModelBuilder`, where object-specific checks and
-complete graph validation apply.
-
-External declarations are grouped under `model.dependencies()`, with typed
-`images()`, `models()`, `effects()`, `physics()`, and `bone_overrides()` tables.
-Materials and meshes remain graph objects with their own IDs. A material or
-effect input refers to an `ImageResourceId` and owns its sampling behavior.
-Inputs can share an image declaration while choosing independent addressing,
-coordinate transforms, and color interpretation. `Texture` is an inline sampled-image
-value used by MDLX and M2 inputs, including complete animated image selection;
-it has no graph identity. WMO shader inputs reference image
-resources directly and compose their own sampling vocabulary. Child placements and
-skyboxes use `ModelResourceId`, while external effect instances use
-`EffectResourceId`. Each handle resolves only in its owning model: for example,
-`model.dependencies().images().get(image)` resolves an image declaration.
-Singular model helpers such as `image_resource(image)` remain convenient for
-individual lookups.
-
-Declare dependencies through `ModelBuilder::add_image_resource` and the
-corresponding methods for other kinds. Reusing a handle explicitly shares a
-declaration; adding an equal declaration creates an independent entry. The
-`set_*_resource` methods replace shared declarations without changing their IDs.
-Removing an entry leaves existing references invalid, so publication rejects the
-draft until those references are repaired. Model edits are transactional, and
-cloning preserves IDs and borrowed storage while creating independently editable
-tables. Handles remain stable across table edits and profile conversions; native
-codecs assign their own output indices.
-
-Resource payloads belong to the profile: `Profile::ImageResource`,
-`ModelResource`, `EffectResource`, `PhysicsResource`, and `BoneOverrideResource`
-select the admitted declarations. For example, MDLX images admit raw paths and
-replacement categories, while M2 images also admit file-data IDs. Unsupported
-resource kinds use `Unavailable`, making their tables necessarily empty.
-Universal images use `ImageResource`; external dependencies use
-`ResourceLocator`, which excludes image-only replacement categories and embedded
-bytes. Relative locators describe addressing expressions relative to another
-locator or the caller's root, rather than edges between table entries. Resolution
-remains an application responsibility.
+A profile selects authoring behavior; a native layout such as `mdlx::V800` selects
+what a particular file revision can encode. Export checks the latter separately.
+Widening preserves values and identities. Narrowing checks that every value already
+fits the destination profile; it does not translate shaders or effects between games.
 
 ```rust
-use wc3::model::{Model, MdlxImageResource, Texture};
-use wc3::model::profiles::Mdlx;
-
-let mut draft = Model::<Mdlx>::builder("Shared image");
-let image = draft.add_image_resource(MdlxImageResource::Path(b"body.blp".as_slice().into()));
-let first = Texture::new(image);
-let mut second = first;
-second.sampler.u = wc3::model::AddressMode::Clamp;
-assert_eq!(first.resource, second.resource);
-let model = draft.finish()?;
-assert_eq!(model.dependencies().images().len(), 1);
-Ok::<(), wc3::model::Error>(())
-```
-
-`Profile::ModelMetadata` selects declarations belonging to the complete model,
-including its authored name and bounds where the format supports them. Read them
-through `Model::metadata`, edit individual fields through
-`ModelBuilder::metadata_mut`, or replace the complete declaration through
-`ModelBuilder::set_metadata`. Construction accepts this metadata too; formats with
-authored names also accept a name string as shorthand. MDLX metadata includes the
-external animation filename, sequence blend time, and face-effect resources.
-M2 metadata requires a bounding volume, while MDLX can omit its
-model-info declaration and WMO can omit root bounds for legacy output. A named
-MDLX model or one with animation-file or blend-time controls requires its
-model-info declaration. WMO bounds use an authored axis-aligned box with a sphere
-radius derived from its half-diagonal. WMO has no model-name field.
-
-`Universal` selects `ModelMetadata` directly. Its variants retain the complete
-native model declarations, including their names and bounds where supported.
-Construction requires an explicit variant. Coordinate conventions follow the
-selected native family; they are not mutable authoring fields. Widening and
-narrowing move the metadata directly between the enum and its native payload.
-The built-in spatial profiles expose coordinate and bounds accessors without
-requiring application-defined profiles to provide those capabilities. WMO doodads
-retain external model references and placements; resolving those dependencies
-remains the application's responsibility.
-
-## Choosing an authoring vocabulary
-
-`Model<'data, P>` uses `P` to select the permitted authoring vocabulary. Built-in
-profiles in `model::profiles` include `Mdlx`, `M2`, and `Wmo`.
-The default profile, `Universal`, accepts all built-in families. A profile selects
-complete geometry and joint-binding schemas, material surfaces, attached
-features, systems, dependency declarations, appearance assignments, animation programs, and the controls
-carried directly by each owner.
-
-The shared definitions live directly in topic modules: `model::materials`,
-`features`, `scene`, `controls`, `geometry`, `systems`, `appearance`, `animation`,
-and `values`. Profiles select those definitions and apply their admissibility
-rules. The root model namespace reexports common
-building blocks; the profile namespaces expose their chosen compositions.
-Choosing a profile therefore constrains authoring without introducing a second
-copy of the same data structure.
-
-Parameters express independent choices within a definition. For example,
-`AmbientDiffuseLight<Kind, Activation>` selects the illumination selector and
-activation domain; `AimedCamera<FieldOfView, Convention>` selects static or
-animated projection and its controls. `SocketDefinition<Identity,
-Visibility, Controls>` separates identity from visibility and unresolved controls.
-`ParticleComposition<Emission, Motion, Lifetime, Appearance, Details>` combines
-complete emitter components. Native profiles choose exact types for these
-parameters; Universal selects complete emitter families through `ParticleEmitter`.
-Other shared definitions use explicit alternatives where their interpretations differ.
-No optional field is needed merely because another profile uses a different
-interpretation.
-
-A profile chooses a required controls payload where absence has no meaning,
-`Option<Payload>` where the declaration is genuinely optional, or the zero-sized
-`NoControls` value where that owner has no additional controls. `Unavailable`
-prevents constructing an unsupported payload family. These distinctions apply
-to the actual types rather than a uniform outer option on every owner. M2 uses
-`Option<m2::ShadowControls>` for draw controls. Embedded image resources carry
-bytes whose encoding interpretation remains unspecified.
-
-A semantic profile and a native dialect answer different questions. `Mdlx`
-permits Warcraft III authoring behavior. A native dialect such as `mdlx::V800`
-selects record layouts that can encode some of that behavior. Choosing a semantic
-profile does not guarantee that every native revision supports every authored
-value. Format-specific imports and exports use their concrete profile; translating
-an incompatible vocabulary requires a separate representability decision.
-
-```rust
-use wc3::model::{Model, Node};
+use wc3::model::{Error, Model};
 use wc3::model::profiles::{Mdlx, Universal};
 
 let mut draft = Model::<Mdlx>::builder("Example");
 let root = draft.add_named_node("Root")?;
 let model = draft.finish()?;
 let broader: Model<'_, Universal> = model.widen();
-assert_eq!(broader.node(root).unwrap().name, "Root");
 let restored = broader.try_narrow::<Mdlx>()?;
 assert_eq!(restored.node(root).unwrap().name, "Root");
-Ok::<(), wc3::model::Error>(())
+# Ok::<(), Error>(())
 ```
 
-Widening preserves graph identities, meanings, and encoded array storage. Its
-`Extends` bound proves that the destination vocabulary can embed every source
-payload. The separate `try_narrow::<Target>()` operation checks an exact
-projection from `Universal`. It consumes the model, moves owned resource
-paths, and retains scoped identities and borrowed arrays. Each owner must already
-carry a complete payload supported by the target; missing required metadata or
-controls and foreign behavior return an error. Publication checks the complete
-model against the target profile's relationship and authoring rules.
+Universal construction requires an explicit `ModelMetadata` variant. Native
+profiles with authored names also accept a name string as shorthand. Metadata
+contains model-wide declarations such as bounds, blend time, and external animation
+references where the native family supports them. Read it with `metadata()` and
+edit it with the builder's `metadata_mut()` or `set_metadata()`.
 
-Universal enum variants distinguish data, interpretation, or supported operations,
-rather than recording the source format. MDLX and WMO appearances share
-`UniversalAppearance::Single`, while M2 and general draw alternatives share
-`UniversalAppearance::Draw`. Narrowing accepts these shared payloads wherever the
-target supports them; the other owners still need their own compatible payloads.
-The single-assignment limit survives widening. Source provenance alone does not
-make an otherwise identical appearance incompatible.
+## Follow the graph
 
-Custom profiles can implement `Narrows<SourceProfile>` to define the same checked
-per-owner projection from another vocabulary. Narrowing does not guess replacement
-materials, synthesize controls, or perform approximate semantic translation; those require a separate
-explicit transformation before narrowing.
+Nodes define placement and transform inheritance. Meshes own geometry, and mesh
+instances place that geometry at nodes. Each instance has identified draws that
+select mesh-owned subsets. Looks assign a material to each draw. Features add
+lights, cameras, attachments, and emitters to nodes; systems hold relationships
+that span several objects, such as physics constraints or world portals.
 
-There is no separate Portable or Generic profile. Format-independent features and
-checked simulation arenas live under
-`model::scene`, within the universal vocabulary. Their scoped shape, body, and
-joint identities cannot be substituted across simulation systems.
+IDs belong to their model, and mesh-local IDs belong to their mesh. Equal numeric
+indices from another owner cannot satisfy a reference. IDs remain stable through
+table edits, widening, and checked narrowing; native output assigns its own indices.
+Cloning a graph preserves its IDs while allowing independent edits.
 
-Applications can implement `Profile` with their own payloads. Relationship
-traversal through `ValidateLinks` makes those payloads participate in checked
-publication. Image inputs retain sampling declarations permitted by their profile.
-MDLX and M2 image declarations retain an accompanying `filename` directly
-alongside a replacement ID or file-data ID. Their `P::ImageResource` payload owns
-both the identity and filename;
-inputs keep only the resource handle and their sampling choices. Unknown numeric
-sampling selectors stay within their shader vocabulary. Common `ColorSpace` and
-`Sampler` values describe understood transfer functions and U/V addressing,
-while profile validation rejects choices with no established native mapping.
-MDLX layer bits historically labeled wrap hints remain unresolved layer controls;
-they do not provide another sampler authority. Surfaces additionally implement `SurfacePayload`, attached
-features implement `FeaturePayload` and `FeatureSchema`, and systems implement
-`SystemPayload`. Event sources implement `EventSourceSchema` to expose their
-evaluation clock, and their `ValidateLinks` implementation visits anchor and
-shared-clock references even when no occurrences select the source. Geometry schemas define their full attribute and connectivity vocabulary rather than
-attaching arbitrary streams to a narrower native schema.
+Collections such as `nodes()`, `meshes()`, and `materials()` support `get(id)`,
+`contains_key(id)`, `len()`, and `is_empty()`. Iterate `(Id, &value)` pairs in stable
+identity order with `iter()`, or use `keys()` and `values()` for one side.
 
-## Materials, shader inputs, and draw state
+## Declare resources once
 
-A material owns a program whose authored steps describe shader execution or
-material composition. Universal's `MaterialSurface` is a
-`MaterialProgram<MaterialStep>`, with an ordered `steps` collection. Applications
-can reuse `MaterialProgram<S>` as storage within their own surface schema, with
-their own step vocabulary and validation.
-
-`MaterialStep` selects the dialect of one operation: `Mdlx`, `M2`, or `Wmo`.
-Each dialect lives under the matching `model::materials` namespace and defines
-its own typed shader inputs and rendering settings. A single program can combine
-steps from different dialects. Shared texture bindings, blend operations, depth
-state, and rasterization components are reused where their meanings agree.
-
-`mdlx::MaterialStep` owns pass state, draw declarations, and a `Shader` whose
-variants are `Classic(MaterialInputs)`, `ReforgedDefault(ReforgedInputs)`, and
-`Unresolved(UnresolvedInputs)`. Common `MaterialInputs` contain the primary
-texture, opacity, and emissive gain. Blend, depth, and rasterization state belong
-to the pass independently of shader selection. Reforged inputs add ordered
-texture slots and Fresnel controls; unresolved inputs preserve those fields plus
-the uninterpreted shader name and selector.
-
-Native import interprets shader selection before constructing the semantic model.
-Numeric layer selectors take precedence over material shader names. Known shader
-variants carry neither IDs nor names; native export derives their selectors.
-Texture slot order, duplicate selectors, and unknown roles remain intact. Raw
-native layers remain available through the codecs for editing encoded declarations.
-
-Each step carries priority, sorting, and additional draw flags in a
-`MaterialDeclaration`. Checked native MDLX export requires those declarations to
-agree, because the native material stores them once. Unresolved names must also
-agree when several unresolved steps share a native material. Semantic programs
-can retain known steps alongside unresolved names, but exact export requires a
-layout that can encode every declaration. Current native layouts provide either
-a material shader name or per-layer selectors, so a nonempty unresolved name cannot be combined with explicit selector overrides. An empty
-program carries no shader declarations. Nondefault headers on empty native
-materials remain editable through the native codecs; semantic import rejects
-them unless an explicit loss policy accepts dropping them.
-
-The MDLX profile and Universal share the same typed steps. An MDLX material is a
-`MaterialProgram<mdlx::MaterialStep>`; widening wraps each step in the Universal
-dialect enum without interpreting or reconstructing its inputs. Narrowing checks
-that every operation belongs to the MDLX dialect. Native encoding compatibility,
-including agreement of draw declarations and shader names, is checked by export.
-Other checked profile projections likewise reject unsupported steps or extra
-operations rather than dropping them.
-
-M2 and WMO use shader-specific `MaterialStep` enums in both their native profiles
-and Universal. There is no general material input struct between those profiles.
-The M2 native profile stores an ordered program of those steps; WMO retains one
-step per native material. M2 steps distinguish modulation, additive equations, weighted interpolation,
-masked crossfades, facing opacity, and guild composition. WMO steps distinguish
-diffuse, reflection, layered, emission, and modulation equations. Each payload
-names its active texture roles; a `MaskedDualCrossfadeMaterialStep`, for example,
-owns `base`, `first`, `second`, and `alpha_mask` inputs. Guild palettes belong to
-the guild payloads. Shared draw declarations remain on each step.
-
-Known steps derive their native selectors from the equation and coordinate
-choices. Native encoding aliases normalize to the same definition where their
-semantics agree. Unresolved selectors and incompatible resource layouts retain
-their raw selection and complete binding order on `UnresolvedMaterialStep`.
-Legacy M2 surplus inputs and unused WMO slots remain explicit unused bindings,
-preserving graph references without turning them into active shader inputs.
-Animation follows the input-owned slot references through input and material-step
-reordering. Native export resolves each consuming field to its current native
-position.
-
-M2 import sorts each skin section’s batches by native `material_layer`, retaining
-source order for ties. Consecutive batches with the same auxiliary section word
-become one draw with an ordered material program. Export derives dense layer
-numbers from draw and step order within each section. The auxiliary section word belongs to
-M2-specific draw controls and is not a geometry reference. Material steps retain
-shader inputs and composition state without pointing back to their geometry.
-
-A Warcraft III draw layer becomes an MDLX step at import. M2 inputs implement
-`ShaderInput` for local validation and graph traversal.
-
-Texture inputs compose through `TextureBinding<Image, Coordinates, Sampling,
-Contribution>`. The selected image representation can retain animated texture
-choices, runtime replacement categories, external resource identities, or explicit
-absent-image codes. `Coordinates<Source, Transform>` separates mesh UV or generated
-coordinate selection from its input-owned transform. Animated TRS values retain their typed properties. Native transform conventions and units
-are preserved. MDLX transform slots belong to each material input,
-so editing one imported use does not affect another use of the same native record.
-
-Native import expands texture and transform table references into complete
-input values while sharing image declarations. Animated MDLX image choices carry
-the selected image's resource handle and sampler with each key. Export rebuilds
-native indirection tables and interns equal records; native table identity and
-unused records are not semantic authoring objects. Uninterpreted native texture
-flag bits are discarded during semantic import; U/V wrapping is represented by
-the input sampler and reconstructed during export. Native codec documents retain
-the original flag words when semantic conversion is unnecessary. `Model::sampled_images()`
-collects distinct sampled-image values from materials, effects, allocated value
-slots, and animation tracks. This does not introduce shared editable texture
-objects.
-
-Sampling belongs to the input that uses it. WMO steps retain two independently
-authored scrolling slots even when their image bindings are absent. These
-distinctions do not require optional fields on every texture binding.
-
-The following M2 step names its modulation input while reusing the shared texture
-binding vocabulary:
+`dependencies()` groups external images, models, effects, physics, and bone
+overrides in typed tables. Reusing a resource handle shares a declaration; adding
+an equal declaration creates another entry. Materials remain graph objects.
+Each texture input owns its sampling choices and coordinate transform, so two
+inputs can share an image while using different wrapping or animation.
 
 ```rust
-use wc3::model::materials::m2::{MaterialStep, ModulateMaterialStep, TextureUnit};
-use wc3::model::{Construct, PropertyValues};
+use wc3::model::{AddressMode, Error, MdlxImageResource, Model, Texture};
+use wc3::model::profiles::Mdlx;
 
-let mut values = PropertyValues::default();
-let mut modulation = TextureUnit::construct(&mut values);
-modulation.coordinates.source = 1;
-values.set(modulation.contribution, 0.75)?;
-let step = MaterialStep::Modulate(ModulateMaterialStep {
-    modulation,
-    ..ModulateMaterialStep::construct(&mut values)
-});
-let MaterialStep::Modulate(value) = step else { unreachable!() };
-assert_eq!(values[value.modulation.contribution], 0.75);
-# Ok::<(), wc3::model::Error>(())
+let mut draft = Model::<Mdlx>::builder("Shared image");
+let image = draft.add_image_resource(MdlxImageResource::Path(b"body.blp".as_slice().into()));
+let first = Texture::new(image);
+let mut second = first;
+second.sampler.u = AddressMode::Clamp;
+assert_eq!(first.resource, second.resource);
+let model = draft.finish()?;
+assert_eq!(model.dependencies().images().len(), 1);
+# Ok::<(), Error>(())
 ```
 
-A binding supplies a shader input; a step describes an authored operation.
-MDLX layers therefore retain their ordered execution behavior. `PassState<Blend, Rasterization,
-Ordering>` owns draw state. `Rasterization<Depth, Faces, Lighting, Controls>`
-selects independent domains, with `DepthState` separating comparison, writes,
-and bias. Common operations have shared names, while each composition limits
-its admitted blend operations. Explicit blend equations retain their factors,
-operation, enablement, and constant color. Unresolved codes and additional
-operations remain in their selected domains. M2 rasterization helpers separate
-known lighting, fog, face, and depth controls while retaining the remaining flag bits.
+The profile determines the resource identities it accepts: MDLX images support
+paths and replacement categories; M2 also supports file-data IDs. Universal image
+resources use `ImageResource`, while other dependencies use `ResourceLocator`.
+Relative locators describe paths relative to another locator or the application's
+root. Resolution and loading remain application responsibilities.
 
-## Attached behavior and shared feature inspection
+Use `set_*_resource` to replace a declaration without changing its identity.
+Removing a referenced resource requires repairing its users before publication.
 
-Universal's `NodeFeature` selects behavior directly: lights, cameras, attachments,
-particle and ribbon emitters, collision shapes, and geometry animation.
-Features are independently identified and anchored to ordinary hierarchy nodes,
-with no outer source-format variant to unwrap before discovering their purpose.
+## Publish edits atomically
 
-`NodeFeature` is an alias for `FeatureSet<Universal>`. Native feature aliases
-select the same enum with `Mdlx`, `M2`, or `Wmo` as its vocabulary.
-`FeatureVocabulary` chooses each family's payload and supplies its inspection
-and relationship rules. Unsupported families select `Unavailable`.
-For example, an MDLX particle carries a constrained `ParticleComposition`,
-while Universal's particle family admits complete MDLX and M2 definitions
-and external effect resource instances. The family names describe behavior in every selection:
-`Particle`, `Ribbon`, `Attachment`, and `CollisionShape`.
+A `ModelBuilder` holds an unpublished draft. `finish()` validates local values,
+references, ownership, and profile rules before returning a model. Reserved IDs
+allow forward references where supported, but every required definition must exist
+by publication time.
 
-Shared structures retain common authored fields while explicit alternatives
-preserve different interpretations. `AmbientDiffuseLight` owns independently
-animated diffuse and ambient emission and distance attenuation. Its
-`LightActivation` distinguishes fractional visibility with optional shadow and
-falloff controls from boolean enablement. World, region-point, and portable lighting retain their complete definitions as
-separate illumination models. Unresolved light-kind selectors retain their original vocabulary, so
-changing activation cannot reinterpret an unknown code in another format.
-Unresolved controls remain authored values.
+Published models are immutable. `Model::edit` stages changes in a builder and
+publishes them only after the complete graph validates. A failed edit leaves the
+original unchanged. Update related declarations in the same transaction—for
+example, removing a draw also requires removing its assignments from every look.
 
-`AimedCamera` shares eye displacement, target and target displacement, clipping,
-roll, and field of view. `CameraConvention` distinguishes vertical projection
-with visibility and photographic controls from diagonal projection with an
-application camera role. Widening a static vertical field of view represents it
-as a slot containing a constant; animating that slot prevents exact MDLX export.
-
-Attachments compose identity, visibility, and placement independently.
-`Socket` exposes a named identity, an application role, or an MDLX point
-index; those namespaces remain distinct even when their numeric values coincide.
-Its `visibility: Property<f32>` describes mounted content visibility; constant
-`1.0` represents an uncontrolled socket. Native M2 boolean visibility is read as
-scalar zero or one through `PropertyValues::scalar_from_boolean`, preserving the source
-slot, shared tracks, and clocks. The socket also retains unresolved authored
-controls. Exact M2 narrowing requires the original explicit boolean source;
-fractional visibility cannot be represented. Native formats without a visibility
-control require constant-one visibility. Exact export checks identity namespace,
-visibility representability, and control presence
-against the destination vocabulary. `ChildModel` combines a resource with an
-optional socket and placement appearance. `Attachment::Socket` exposes a socket
-without instantiating a child; `Attachment::Child` declares a child reference. MDLX
-attachments and WMO doodads therefore share the child model structure, while
-world tint and light selection remain an explicit appearance program. MDLX path strings retain their borrowed or owned
-storage as byte paths; exact MDLX narrowing requires UTF-8.
-
-`ModelMount` describes where a child follows the carrying model, independently of
-resource selection and playback. `Attachment::mount` derives this description
-for an authored child reference. Its `MountTarget` selects a node or a socket,
-with socket targets retaining authored visibility. A local transform supplies the
-offset. `CoordinatePolicy::Host` uses the host's authored axes and units;
-`CoordinatePolicy::Child` retains the child's standalone axes and units.
-
-Particle emitters retain their native semantic family. MDLX exposes
-`mdlx::ParticleEmitter1` for resource particles and `mdlx::ParticleEmitter2` for
-atlas sprites and tails; M2 exposes `m2::ParticleEmitter`. Each uses
-`ParticleComposition` to group emission, motion, lifetime, appearance, and details,
-with component types that preserve its family's authored controls. Model-clock
-animation changes emitter parameters, while particle-age programs control the
-appearance of each living particle. Native angle conventions, random variation,
-unknown controls, and resource modes retain their original meanings.
-
-Universal's `ParticleEmitter` selects `MdlxEmitter1`, `MdlxEmitter2`, or `M2`,
-each owning the same complete definition used by its native profile. Its
-`Resource` alternative references an externally defined effect. Widening adds a family tag without
-allocating property slots or changing borrowed curve storage. Narrowing into the
-matching family moves the definition back; another family returns the original
-payload as an error. The family tag keeps MDLX staged appearance and M2 age curves
-paired with their corresponding simulation rules.
-
-Ribbons follow the same contract. `mdlx::RibbonEmitter` and `m2::RibbonEmitter`
-use `TrailComposition` to share section geometry and appearance while retaining
-their exact rate, atlas selector, rendering bindings, and physical controls.
-Universal's `RibbonEmitter` owns either definition in its `Mdlx` or `M2`
-alternative, or references an external effect through `Resource`. MDLX rates
-remain `u32` and M2 rates remain `f32`; atlas selectors retain their `u32` or
-`u16` property identities. MDLX gravity and M2 emission angle stay in their
-respective definitions, as do their material and texture bindings.
-
-`FeatureSchema::feature` borrows a `FeatureView` from any profile's feature
-payload, including custom enums. Application-specific behaviors can return
-`FeatureView::Custom` while retaining their concrete profile vocabulary.
-Consumers can discover behavior before widening an entire model. `LightView::ambient_diffuse` and `CameraView::aimed` expose common
-borrowed fields across the constrained and universal representations. The views
-also retain access to complete definitions for specialized controls.
-Particle emission views distinguish continuous rates and keyed bursts. Lifetime views preserve static and animated seconds. Ribbon
-edge-strip views share color, opacity, heights, and section lifetime while
-retaining exact generation rates and the atlas selector's original animation
-value domain. Inspection neither clones payloads nor materializes their borrowed
-curves. After widening, editing selects the complete emitter family:
+For example, clone the node you want to change and replace it within the edit:
 
 ```rust
-use wc3::model::profiles::mdlx;
-use wc3::model::{Construct, ParticleEmitter, PropertyValues};
+use wc3::model::{Error, Model};
+use wc3::model::profiles::Mdlx;
 
-let mut values = PropertyValues::default();
-let native = mdlx::ParticleEmitter2::construct(&mut values);
-let mut emitter = ParticleEmitter::from(native);
-let ParticleEmitter::MdlxEmitter2(definition) = &mut emitter else { unreachable!() };
-definition.emission.rate = values.add(24.);
-definition.motion.speed = values.add(8.);
-let exported = mdlx::ParticleEmitter2::try_from(emitter).unwrap();
-assert_eq!(values[exported.emission.rate], 24.);
-assert_eq!(values[exported.motion.speed], 8.);
-```
-
-Widening moves each feature into its behavior representation. Exact narrowing
-checks its current fields and interpretations, preserving resources, animation
-bindings, and relationship identities. For example, editing shared diffuse
-intensity survives MDLX narrowing; changing boolean enablement into fractional
-visibility requires an explicit authoring decision. Unsupported features and
-unrepresentable additions return errors instead of being discarded.
-
-## Geometry representations and profile constraints
-
-`MdlxGeometry` and `M2Geometry` retain distinct constrained APIs built on the
-same packed vertex-stream types. M2 construction requires a two-element UV array
-and four weighted influence slots per vertex, and exposes no tangent or color
-constructor. MDLX supports optional normals and tangents, ordered triangle groups,
-and `JointInfluences` with either equal-weight matrix groups or four weighted
-slots. Checked constructors establish stream cardinalities and finite values; the
-profile types keep unsupported representations out of subsequent authoring operations.
-
-Widening these display types produces `GeometryData` directly, without a
-source-profile tag or an additional geometry wrapper. The arrays move unchanged,
-including borrowed encoded arrays and owned encoded buffers. Narrowing
-checks the actual streams before constructing the destination's constrained
-type. Geometry with unsupported colors cannot narrow to MDLX or M2. Missing normals, absent weighted rows,
-unsupported UV gaps, and ordered primitive groups are rejected wherever the
-target cannot retain them. Neither zero-weight influence slots nor matrix-group
-ordering are discarded, and equal-weight groups are not converted into weighted
-slots.
-
-`GeometryData` keeps positions and authored purpose explicit, with `ConnectivitySets`,
-`GeometryAttributes`, and `GeometryInfluences` owning the remaining domains.
-Connectivity sets retain primary topology and independently selectable alternatives.
-Each set can contain triangles, triangle strips, polygons, points, lines, or an
-ordered `Mixed` topology. Alternatives are separate selections, rather than extra
-faces appended to the primary topology.
-Normals, tangent frames, color and UV slots, custom data, surface records, and
-independently indexed pools all use the same attribute collection, keyed by
-semantic and domain. There is no separate backing field for a primary color or
-UV stream that could disagree with its attribute definition.
-
-Attribute insertion checks value types and rejects duplicate semantic/domain
-keys. `set` explicitly replaces a definition, while `update` checks types and
-keys before applying an atomic attribute edit. The common stream accessors borrow
-the corresponding typed attribute values. `TextureCoordinates` provides an ordered borrowed view
-over either profile-owned slots or canonical attributes, preserving empty gaps
-and sharing array storage. Attribute domains establish vertex, corner, face,
-mesh, or independently indexed correspondence; pool cardinality is independent
-of vertex count. Native projection selects the most specific authored domain
-when a semantic occurs in several domains: corner, face, vertex, then mesh.
-
-The influence variants retain absent influences,
-variable-length weighted rows, four fixed weighted slots, and ordered
-equal-weight matrix groups. Custom attributes can coexist with each influence
-representation. Narrowing to a constrained display type rejects custom attributes
-and influence representations that the destination cannot retain; even a
-variable-length row containing four entries remains distinct from four authored
-slots.
-
-Collision geometry also widens to `GeometryData`, retaining
-`GeometryKind::Collision` as its authored purpose. Face normals use face-domain
-`Normal` attributes, and per-triangle scalar controls use
-`CollisionTriangleControl`. Widening and common edits retain this purpose.
-
-`VertexData` shares the typed vertex layout used by display geometry, WMO,
-and collision. Its stream types select fixed UV arrays, optional
-streams, multiple color sets, or `()` for unavailable shading data. An explicit
-extras type owns additional vertex streams. Common remapping carries those
-streams through the same vertex correspondence, while connectivity and joint
-rows remain separate fields of their constrained geometry owner.
-
-WMO also widens to `GeometryData`. Ordered color sets use vertex-domain `Color(n)`
-attributes, retaining even empty authored slots on empty geometry. Baked-light
-coordinates use `LightmapCoordinates`. `SurfaceTriangleControls` retain complete
-face behavior, including optional material references, query and rendering flags,
-and unresolved selectors and bits. Their material references participate in
-graph validation.
-
-Surface records use face-domain `SurfaceControls` attributes with
-`AttributeValues::SurfaceControls`. The tangent pool uses a pool-domain `Tangent`
-attribute, while secondary strips are a `TriangleStrip` connectivity set. Mesh-owned
-draw subsets select these domains on the owning geometry;
-neither stream acquires vertex-domain cardinality. Checked publication validates
-these selections in both WMO and universal graphs. WMO narrowing requires
-unskinned display triangles, contiguous color slots, and supported typed vertex attributes, while retaining face controls
-and pools without copying. Other constrained geometry types reject these additional
-domains. Generic draw projection requires an explicit domain translation before
-handling surface controls, supplemental declarations, or indexed pools.
-
-## Draw subsets and instance bindings
-
-A mesh owns reusable `DrawSubset` declarations. Each subset selects a scoped
-`ConnectivityId` and a typed `PrimitiveRange`: `Primitives` counts logical
-primitives, while `StripIndices` counts authored strip indices. `Mixed` describes
-one ordered primitive collection within a set; it does not combine independently
-selected alternatives. An instance's `Draw` stores a `DrawSubsetId` and rendering
-controls. `Draw::new` creates its stable `DrawId`, retained through edits and
-reordering. Looks reference a draw through `(InstanceId, DrawId)`, so several
-instances can reuse the same geometry selection with different materials. Draw,
-subset, and connectivity identities survive widening and checked narrowing.
-Cloning a draw preserves its identity; use `Draw::new` for an independent binding.
-
-`Mesh::add_primary_subset` creates a primitive range in primary topology.
-`Mesh::add_connectivity` adds a profile-supported alternative and returns its
-mesh-scoped identity. `Mesh::add_subset` accepts an explicit selection and its
-bindings. Publication checks ownership, range counting domains, bounds, and the
-profile's supported subset operations. A subset from another mesh cannot satisfy
-an instance draw, even when both meshes have identical connectivity.
-
-WMO subsets retain their ordinary triangle selection together with optional
-strip declarations, vertex windows, and tangent-pool associations. Their instance
-draws retain lighting, pass, and other rendering behavior. Import does
-not turn a supplemental strip declaration into another draw. Export resolves
-subset identities into native batch ranges, and joining world placements relocates
-the mesh-owned selections and pool associations together.
-
-`Face` and `Corner` attributes describe primary topology. `ConnectivityFace(id)`
-and `ConnectivityCorner(id)` explicitly address another connectivity set on the
-owning mesh. Publication checks those identities and domain cardinalities, and
-rejects duplicate definitions that alias the same semantic and domain. Native
-projection uses the selected set's attributes and preserves strip winding when
-expanding strips into triangles.
-
-## Appearance and playback
-
-Appearance schemas retain the family's actual assignment domain. MDLX and WMO
-use one material assignment, while M2 supports draw alternatives.
-
-Draw-based looks are complete assignments, with exactly one material for every
-instance draw. Draws and geometry attributes carry no fallback material. Selecting
-an explicit look uses only that look; otherwise `material_for_draw` uses the
-default. Missing selections or assignments produce errors. Publication rejects
-incomplete looks, duplicate assignments, and references to absent draws or materials.
-MDLX and WMO use `SingleLook`, which always contains exactly one look,
-initially with empty bindings. That look is always the default; edit it through
-`set_look` rather than adding or removing an alternative. MDLX import places each
-geoset in one mesh instance with one draw and stores its material in that complete
-look.
-
-`ModelBuilder::add_instance_with_materials` inserts a placement and extends its
-default look with one material per draw, in the supplied order. When authoring
-alternatives, complete each look before publication. `set_look` replaces an
-assignment while preserving its identity and selection. Removing a draw likewise
-requires removing its assignments from every look in the same checked edit.
-
-Animation programs are reusable model-owned definitions. Clips select them by
-identity; model-level selections remain active without a clip. MDLX ordinary tracks share one animation, and each clip selects its
-authored interval in that animation. M2 clips select separate animations with
-source intervals starting at zero. Global sequences use independent shared clocks.
-
-## Typed animation curves
-
-A `Property<T>` is a typed identity into the model's `PropertyValues` table. Every
-potentially animated field owns such a reference, including node translation,
-rotation, scale, and visibility. The table stores authored constants. Copying a
-reference shares both its constant and its animation; allocating a fresh slot
-creates an independent value. Animation never needs to traverse an owner object
-to find a field.
-
-`Track<T>` connects a slot to a checked `Curve<T>` and an explicit clock.
-`DynamicTrack` wraps typed tracks in an enum whose variants select the value type,
-so tracks of different types can share one collection. Both types are independent
-of model profiles. A native exporter finds the fields consuming each slot and
-writes the corresponding native tracks, duplicating a curve when several fields
-share its slot. Exact projection rejects animation that the target
-format cannot attach to a supported field. Slot identities carry their value type
-and ownership domain, so bindings need no separate owner or field selector.
-
-Event sources are independent model-owned definitions. `Profile::EventSource` selects
-the complete source type directly: `mdlx::EventSource` owns a name, node anchor,
-and clock; `m2::EventSource` owns a four-byte identifier, game-data ID, node anchor,
-and clock. Universal's `EventSource::Mdlx` and `EventSource::M2` preserve those
-complete source definitions, while WMO uses `Unavailable`. Sources are separate from attached features and remain
-present even when they have no occurrences. Declare one with
-`ModelBuilder::add_event_source` and inspect it through `Model::event_sources`
-or `Model::event_source`. Equal declarations remain independent; reusing an
-`EventSourceId` explicitly shares one definition.
-
-`EventOccurrence { source, time }` schedules that action on its source's clock.
-The occurrence has no independent name, anchor, clock, or message bytes to
-contradict its source. Publication validates all source links, including unused
-sources, and rejects missing or foreign source identities. Widening preserves
-source and occurrence identities; exact narrowing rejects source kinds outside
-the target vocabulary. M2 requires ordinary event occurrences to be selected by
-clips and shared-clock occurrences to be selected at model level; publication
-rejects the opposite selections because native M2 cannot retain them.
-
-`Animation` owns ordered tracks in `Animation::tracks` and identified event
-occurrences. Add it with `ModelBuilder::add_animation`, then reference its
-`AnimationId` from `Clip::animations` or the model's ordered `global_animations`
-selection. Reusing an identity shares its curves and events;
-clips retain their own duration and loop/clamp policy. `add_global_track` and
-`add_track` append to the selection's first animation, creating one when the selection is empty. Editing that animation affects
-every selection of it. Use `add_animation_track` for explicit ownership.
-
-`TimeSource::Animation` evaluates ordinary tracks at the selected clip's
-`source_start` plus wrapped or clamped local playback time. Every clip selects an
-inclusive source interval whose length is its duration; `source_start` defaults to
-zero. Only keys inside that interval influence sampling. Animations keep their
-authored timestamps, so overlapping clips can select the same curves without
-copying or shifting keys. The MDLX vocabulary requires all clips to select the
-same ordered ordinary animations, with shared-clock animations selected at model
-level, matching its native timeline. Without a clip, ordinary model-level
-tracks use `AnimationSample::clip_time` directly without interval bounds.
-`TimeSource::Shared(ClockId)` instead wraps independent shared time by that clock's
-period. This distinction expresses independent playback, not a choice between
-local and absolute coordinates for ordinary tracks.
-
-`AnimationSample` supplies the selected clip, elapsed clip time, and shared time.
-Direct model sampling and compiled `AnimationProgram` sampling use the same curve
-evaluator and clip-time mapping. Model-level animations run first, followed by the
-clip's animations. Within each selection, animation and track order are
-authoritative. Later applicable tracks override earlier ones; empty curves fall
-through to earlier tracks and ultimately authored defaults. Value sampling does
-not advance clocks or dispatch events; event traversal separately examines the
-interval crossed between playback states.
-
-Allocate constants with `PropertyValues::add` or `ModelBuilder::add_value`. Construct
-slot-bearing payloads with `Construct::construct(&mut values)` or
-`builder.construct()`, which recursively allocates their defaults. `builder.new_node`
-and `add_named_node` allocate the node's transform and visibility slots. Changing a
-table entry preserves its identity. Model publication validates slot references,
-value domains, and resource dependencies. `import_values` preserves identities
-when combining independently constructed payloads; conflicting constants are an
-error. Widening and narrowing retain existing slot identities and may allocate
-additional constants required by the destination payload.
-
-```rust
-use wc3::model::{DynamicTrack, TimeSource, Curve, Model, ModelMetadata, Time, Track};
-use wc3::model::profiles::Universal;
-let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
-let node = builder.new_node("Root");
-let translation = node.transform.translation;
-builder.add_node(node)?;
-builder.add_global_track(DynamicTrack::Vector3(Track {
-    target: translation,
-    clock: TimeSource::Animation,
-    curve: Curve::linear(
-        [Time::seconds(0.)?, Time::seconds(1.)?],
-        [[0., 0., 0.], [1., 0., 0.]],
-    )?,
-}))?;
-let model = builder.finish()?;
-assert_eq!(model.values()[translation], [0., 0., 0.]);
-# Ok::<(), wc3::model::Error>(())
-```
-
-The sealed `PropertyValue` trait selects a subtable for each supported type. The
-trait, slots, and storage are profile-independent. Applications can define their
-own payloads using these supported slot types. Standalone curves can use custom
-value types, but those types cannot add subtables to `PropertyValues`.
-
-Boolean-to-scalar reads are explicit: `PropertyValues::scalar_from_boolean` allocates a
-scalar slot linked to a boolean source, sampled as zero or one. Both identities
-remain available, so native conversions can recover the original boolean field.
-A direct scalar track on that output takes precedence over its converted read.
-This relation belongs to the value table rather than a field-specific binding.
-
-Choose interpolation through `Curve::step`, `linear`, `hermite`, `bezier`, `tcb`,
-`slerp`, or `nlerp`. The constructor's trait bounds express the permitted value
-capabilities. Boolean and texture-selection values permit stepped curves;
-numeric domains permit linear curves; floating-point scalars, vectors, and
-quaternions also permit splines. Explicit spherical and normalized linear
-interpolation require rotation values. Integer domains retain their exact value
-types rather than passing through floating-point key storage. Constructors still
-check finite values, ordered times, and matching array lengths. Times are finite
-seconds and can precede playback. Coincident keys retain their input order: the
-first key defines the incoming limit, while the last defines the boundary value
-and outgoing segment.
-
-Custom standalone curve types implement `AsULE` for encoded storage and
-`CurveValue` for curve behavior, selecting `DiscreteDomain`, `NumericDomain`,
-`ContinuousDomain`, or `RotationDomain` through its associated `Domain` type.
-That choice derives constructor capabilities and supplies native decoder checks.
-
-Each curve stores exactly the controls required by its interpolation. Hermite
-curves expose `hermite_derivatives`, Bezier curves expose `bezier_controls`, and
-TCB curves expose `tcb_parameters`; the other accessors return `None`. Derivatives
-and control points have distinct associated domains. For quaternion keys both
-use finite four-component vectors, allowing zero derivatives and component
-controls that are not themselves rotations. Hermite derivatives retain the
-source curve's segment convention; constructing a semantic curve does not
-rescale them to derivatives per second or infer a new quaternion spline convention.
-Native adapters check decoded sampling directives against these capabilities
-and translate component layouts without changing the interpolation mode.
-
-The array constructors accept separate `ZeroVec` arrays for times, values, and
-controls through `IntoZeroVec`. Existing encoded arrays move unchanged; native
-slices, arrays, and vectors are encoded into owned storage. Typed `ValueKeyframe`,
-`HermiteKeyframe`, `BezierKeyframe`, and `TcbKeyframe` records provide a convenient
-authoring interface through the corresponding `*_keys` constructors. Those
-constructors materialize separate encoded arrays from the interleaved records.
-For example, a quaternion Hermite curve can carry zero derivatives explicitly:
-
-```rust
-use wc3::model::{Curve, HermiteKeyframe, Quaternion, Time};
-
-let keys = [HermiteKeyframe {
-    time: Time::seconds(0.)?,
-    value: Quaternion::IDENTITY,
-    incoming: [0.; 4],
-    outgoing: [0.; 4],
-}];
-let curve = Curve::hermite_keys(keys)?;
-assert!(curve.values().is_owned());
-assert_eq!(curve.hermite_derivatives().unwrap().incoming.get(0), Some([0.; 4]));
-Ok::<(), wc3::model::Error>(())
-```
-
-## Borrowing and checked edits
-
-Fixed-width semantic arrays use `ZeroVec<'data, T>` directly. Their encoded
-storage exposes logical elements through `get` and `iter`, with `AsULE` defining
-the element representation. Compatible native arrays can retain borrowed encoded
-buffers; conversions between different layouts materialize the logical values
-once. The decoded source must outlive arrays borrowing its storage. Cloning a
-borrowed array retains its buffer, while cloning an owned array copies its
-encoded storage.
-
-Variable-length rows use `ValueGroups<'data, T>`, which stores one flat `ZeroVec`
-plus encoded row offsets. `from_rows` materializes authoring rows; `get` and
-`iter` return borrowed encoded row views. Matrix groups and variable influence
-rows therefore retain their grouping without nested allocations or an abstract
-source behind each array.
-
-A `ModelBuilder` collects an unpublished draft. Reserved IDs permit forward
-references where supported; `finish` checks their definitions, ownership, and
-required relationship kinds, together with local values such as geometry ranges
-and curve parameters. It returns a `Model` containing the checked graph,
-metadata, and resources. `Model::<P>::empty(metadata)` creates an empty graph
-with explicit declarations; use `Model::<P>::builder(metadata)` when draft edits
-are needed. Native profiles with authored names also accept a name string.
-
-Published models provide immutable access. `Model::edit` stages graph, metadata,
-and texture changes in a `ModelBuilder` and publishes only after the complete
-model validates. A failed edit leaves the original model unchanged. Conversion adapters import into
-this same model and plan native output directly from it. Typed profile fields
-retain source details with an identified owner and participate in checked edits
-and exact narrowing. Retain the decoded native document separately when its
-unsupported records or original physical layout are needed.
-
-Coordinate conventions describe how to interpret native numeric values.
-`coordinate_transform` computes an explicit destination-frame transform without
-changing metadata or geometry. Native imports, output plans,
-and policies for values a destination cannot represent are described in the
-[conversion guide](conversion.md).
-
-## Common geometry editing
-
-Editors can use `GeometrySchema::edited` to change geometry without selecting a
-profile-specific constructor. `GeometryEdit` supplies atomic replacements for
-positions, vertex normals, tangent frames, primary colors, and ordered UV streams.
-An omitted field retains its existing value; an empty stream removes an optional
-value. The operation returns a validated replacement and leaves the original
-geometry unchanged on success or failure. Unchanged arrays retain their values and
-borrowed buffers; owned buffers are copied when cloning the geometry. Remapped
-streams are materialized as owned encoded arrays.
-
-`edit_capabilities` describes supported common streams, required normals or colors,
-UV-set limits, and whether the current geometry permits vertex remapping. M2, for
-example, requires normals and exactly two UV streams. Capabilities guide tools before they submit an edit;
-validation still checks cardinalities, finite values, and the profile's complete
-invariants. Universal `GeometryData` exposes the shared representation's broader
-editing capabilities: an
-M2 mesh widened to `Universal` can acquire tangents, but subsequent M2 narrowing
-rejects that added stream. Custom schemas opt in by implementing the same two
-methods; their default implementation rejects common edits.
-
-For structural edits, `VertexRemap` gives one old vertex index per new vertex and
-replacement connectivity. Repeated indices duplicate vertices, permutations
-reorder them, and unused vertices can be deleted. Each new corner must select the
-same old vertex as its corresponding old corner. Primitive kinds, mixed groups,
-polygon boundaries, face order, and corner order remain unchanged. Adapters carry
-all vertex streams through this correspondence, including skin influences,
-additional vertex attributes and WMO
-lighting colors and baked-light coordinates. Face and corner attributes and their
-scoped identities remain intact. Stream replacements apply after remapping, which
-allows a tool to duplicate vertices and move the copies in one checked operation.
-
-The following edit duplicates a shared vertex while retaining its triangle's
-corner order. The same operation works for any schema that supports remapping.
-
-```rust
-use wc3::model::common::IntoZeroVec;
-use wc3::model::{
-    GeometryData, GeometryEdit, GeometrySchema, Topology, VertexRemap,
-};
-
-let geometry = GeometryData::triangles(
-    vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
-    vec![[0, 1, 2]],
-)?;
-let edited = geometry.edited(GeometryEdit {
-    remap: Some(VertexRemap {
-        new_to_old: vec![0, 1, 2, 0],
-        topology: Topology::Triangles(vec![[3, 1, 2]].into_zero_vec()),
-    }),
-    ..GeometryEdit::default()
+let mut draft = Model::<Mdlx>::builder("Example");
+let root = draft.add_named_node("Root")?;
+let mut model = draft.finish()?;
+model.edit(|draft| {
+    let mut node = draft.model().node(root).unwrap().clone();
+    node.name = "Renamed".into();
+    draft.set_node(root, node)
 })?;
-assert_eq!(edited.positions.len(), 4);
-assert_eq!(geometry.positions.len(), 3);
-Ok::<(), wc3::model::Error>(())
+assert_eq!(model.node(root).unwrap().name, "Renamed");
+# Ok::<(), Error>(())
 ```
 
-Use `Mesh::edited` to apply a geometry edit and validate its subset references
-atomically. Remapping a subset with vertex windows, supplemental strips, or
-tangent-pool bindings requires an explicit correspondence update; the helper
-rejects those edits instead of guessing new associations.
+MDLX and WMO use one complete look, edited with `set_look`. M2 supports alternative
+looks, each assigning exactly one material to every draw. `material_for_draw`
+uses the explicitly selected look or the default; there is no fallback material
+on geometry. `add_instance_with_materials` adds a placement and extends the default
+look with its draw assignments.
 
-To publish an edit, clone the mesh from the draft's model, apply `Mesh::edited`,
-and submit the result through `ModelBuilder::set_mesh` inside
-`Model::edit`. Geometry editing does not
-recompute mesh or model bounds, transform normals automatically when positions
-change, or rewrite references held by other graph objects. Tools must update those
-related declarations in the same model transaction where needed. In
-particular, vertex references in physics systems require their own correspondence
-updates; graph validation cannot establish that an in-range index still identifies
-the intended vertex.
+Fixed-width arrays use `ZeroVec`; compatible native arrays can borrow their
+encoded storage. Keep that source alive while using the graph. Cloning a borrowed
+array retains its buffer, while cloning an owned array copies it. Variable-length
+rows use `ValueGroups`, a flat array with encoded row offsets. These storage rules
+apply independently of graph identity and transactional validation.
 
-The common protocol currently preserves topology structure. Adding or splitting
-faces, interpolating new vertices, changing skinning representations, and creating
-profile-specific attribute layers require explicit profile operations. Shared
-geometry with alternative connectivity or indexed pools rejects vertex remapping
-because those domains require separate correspondence. The constrained WMO API retains its existing strip
-restriction; pool selections need their own correspondence when vertices change.
-Ordinary stream edits remain available for those meshes. Native index widths, packing, and
-quantization continue to be checked during export.
+## Continue with a task
+
+The detailed guides separate common editing tasks from the graph overview:
+
+- [Geometry](geometry.md) covers streams, skinning, subsets, and vertex remapping.
+- [Materials](materials.md) covers ordered steps, shader inputs, and sampling ownership.
+- [Animation](animation.md) covers value slots, curves, clips, clocks, and events.
+- [Features](features.md) covers shared inspection and native effect definitions.
+- [Evaluation](evaluation.md) covers pose sampling, deformation, and surface values.
+- [Conversion](conversion.md) covers output plans and explicit loss policies.
+
+Custom profiles implement `Profile` and relationship validation through
+`ValidateLinks`. Their payloads can reuse the topic modules under `model` while
+selecting their own supported combinations. The [API reference](https://docs.rs/wc3/latest/wc3/model/)
+contains the trait contracts and individual payload definitions.

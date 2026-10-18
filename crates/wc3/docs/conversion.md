@@ -1,11 +1,9 @@
 # Importing and exporting model assets
 
-The adapters under `wc3::model::io` connect native documents to
-independent [semantic model graphs](semantic.md). Import maps decoded meanings
-into checked objects and relationships. An export planner constructs a native
-document or bundle from those objects and reports how the destination represents
-them. File decoding, dependency resolution, and encoding remain the native
-codec's responsibility; conversion performs no external I/O.
+Use `wc3::model::io` to import a native document into a checked
+[model graph](semantic.md), then plan an export into the destination format.
+Import and export work in memory. Your application supplies native documents,
+resolves dependencies, and writes the encoded outputs.
 
 The graph contains authoring values rather than an embedded source file.
 Compatible geometry and animation arrays borrow native encoded storage through
@@ -23,7 +21,8 @@ native source and wants to reuse compatible encoded arrays.
 
 ## Selecting a vocabulary and layout
 
-MDLX import returns `model::Model<'data, Mdlx>` directly. The M2 and WMO adapters use their own concrete profiles as well. Native export requires the matching vocabulary:
+MDLX import returns `Model<'data, Mdlx>`; M2 and WMO imports return their matching
+profiles. Native export requires that same vocabulary:
 for example, the MDLX planner accepts `Model<'data, Mdlx>`, rather than implicitly
 projecting a `Universal` graph into Warcraft III behavior. Widening a model
 preserves its meanings, identities, and encoded arrays; it does not translate
@@ -46,13 +45,10 @@ repair after writing.
 
 ## Editing and inspecting an output plan
 
-A `model::Model` owns its checked graph, resources, and profile-specific
-metadata. Conversion adapters return this same model. `metadata()` exposes the
-payload selected by `Profile::ModelMetadata`; use `ModelBuilder::set_metadata`
-inside `Model::edit` to replace it. `Model::edit` stages graph, texture, and
-metadata changes and publishes them atomically after validation. Dependencies, mesh
-placements, draws, and material assignments retain separate identities, so
-changing one placement need not modify every user of a shared mesh.
+Edit the imported model with `Model::edit`, which publishes the changes only
+after graph validation. Resources, placements, draws, and material assignments
+have separate identities, so changing a placement need not change every user of
+its mesh. The [graph guide](semantic.md) explains these relationships.
 
 A plan exposes its proposed native value through `draft()` and its ordered
 conversion decisions through `report()`. Inspect both before calling `execute()`.
@@ -74,13 +70,8 @@ fn prepare(source: &mdlx::Document<'_, mdlx::V800>) -> Result<(), conversion::Er
 }
 ```
 
-Selected appearance resolves the family's actual assignment domain. Native
-single-look formats use their chosen assignment; a broader appearance vocabulary
-can retain complete alternative draw assignments. Native
-draw-based imports construct a complete default look, and export resolves each
-draw through the selected look without a base-material fallback. Export preserves
-known owner-local controls instead of synchronizing a common projection against
-a parallel native extension table.
+Export uses the selected look's complete material assignments. It preserves
+supported controls on their owning objects; geometry has no fallback material.
 
 Geometry normalization is a representation decision. World-model export can
 join compatible placements within one group and detail level while preserving
@@ -115,18 +106,5 @@ model stores supported authoring values, so export needs no unknown-byte policy.
 Keep the native document separately when an application needs its original
 unknown records or bytes.
 
-Native codec APIs retain their own byte-preserving editing behavior.
-
-## Where the implementation lives
-
-Policies, reports, plans, and policy enforcement live under `model/conversion`.
-Native adapters live under `model/io`; each divides geometry, hierarchy, animation,
-materials, effects, and supporting documents into focused modules. The checked
-graph and encoded values live under `model`; authoring vocabularies
-live in its `profiles` namespace. Format-independent features and scoped simulation
-systems live under `model::scene`. Native records remain under `model::formats`, independently of the semantic graph.
-
-Public adapter tests live under `crates/wc3/tests/model/conversion`; private
-mapping tests stay beside their implementation. They check the stated graph,
-editing, or native-output behavior. Renderer fidelity requires separate rendering
-validation.
+For byte-preserving record edits, use the [MDLX](models.md), [M2](m2.md), or
+[WMO](wmo.md) native guide.

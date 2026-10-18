@@ -125,7 +125,7 @@ vertex stream's alpha is lighting data and never becomes surface transparency.
 ## Scene integration and remaining limits
 
 World groups, regional metadata, placement sets, portal-window visibility and
-liquid grids use the shared [static-world integration](universal.md#static-worlds).
+liquid grids use the shared [static-world integration](worlds.md).
 Regional fog and ambient-volume sampling expose authored weights to applications;
 they do not overwrite a camera's fog or global ambient resources. Baked lightmap
 textures and packed rectangles remain metadata requiring an interpreter.

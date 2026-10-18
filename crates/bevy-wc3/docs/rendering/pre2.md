@@ -1,10 +1,10 @@
 # Sprite particles
 
-MDLX `mdlx::ParticleEmitter2` definitions use immutable GPU birth records. M2
-`m2::ParticleEmitter` definitions use reusable CPU mesh buffers. Universal retains
-these complete families in `ParticleEmitter::MdlxEmitter2` and `ParticleEmitter::M2`. Both paths retain semantic
-emitter identities, bounded populations, authored motion, and independent instance
-clocks; they have different geometry and material capabilities.
+Sprite emitters draw small textured heads and trails with authored motion and
+lifetime appearance. MDLX `ParticleEmitter2` uses GPU birth records; M2
+`ParticleEmitter` uses reusable CPU meshes. Both paths have bounded populations
+and independent instance clocks, with different geometry and material coverage.
+Inspect `SpriteEmitter` for live populations and omitted-work counters.
 
 ## Births and motion
 
