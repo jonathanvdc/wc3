@@ -575,7 +575,7 @@ pub fn compile_model_with_options(
         physics,
         nodes: nodes.into(),
         blend_time: match model.metadata() {
-            Some(ModelMetadata::Mdlx(metadata)) => metadata.blend_time,
+            ModelMetadata::Mdlx(metadata) => metadata.blend_time,
             _ => 0.,
         },
         lod,

@@ -36,9 +36,9 @@ pub fn import_with_layouts<'a>(
     let root = &source.root;
     let mut context = Context::import(options);
     unsupported(root, &mut context)?;
-    let mut builder = Model::<D4>::builder("");
-    builder.set_bounds(Some(bounds(&root.structure.aabb_bounds)));
+    let mut builder = Model::<D4>::builder(ModelMetadata::default());
     let mut controls = ModelMetadata::default();
+    controls.bounds = bounds(&root.structure.aabb_bounds);
     controls.sno_id = root.sno_id;
     controls.record_flags = root.record_flags;
     controls.flags = root.flags;

@@ -6,7 +6,10 @@ use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
-use wc3::model::{Axis as ModelAxis, Handedness, LengthUnit, Model};
+use wc3::model::profiles::mdlx;
+use wc3::model::Model;
+use wc3::model::ModelBuilder;
+use wc3::model::ModelMetadata;
 use wc3::model::{
     Billboard, Draw, ExplicitBinding, GeometryData, GeometryInfluences, IdentityBinding, Influence,
     Material as SemanticMaterial, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node, Skin,
@@ -26,7 +29,10 @@ fn fixture_geometry<'a>(
     binding: UniversalBinding<'a>,
 ) -> (Model<'a>, NodeId) {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::builder("explicit skin fixture");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(mdlx::ModelMetadata {
+        bounds: None,
+        ..Default::default()
+    }));
     let joint = builder
         .add_node(
             Node::named("joint", &mut slot_values)
@@ -205,9 +211,9 @@ fn assert_matrix_close(actual: Mat4, expected: Mat4) {
     }
 }
 #[test]
-fn rendered_hierarchy_preserves_shear_and_declared_coordinate_units() {
+fn rendered_hierarchy_preserves_shear() {
     let mut slot_values = SlotValues::default();
-    use wc3::model::{Basis, Quaternion};
+    use wc3::model::Quaternion;
     let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
     let mount = source.instances().iter().next().unwrap().1.node;
     let parent_rotation = Quat::from_rotation_z(0.3);
@@ -215,12 +221,6 @@ fn rendered_hierarchy_preserves_shear_and_declared_coordinate_units() {
     source
         .edit(|builder| {
             let edit_result = (|| {
-                builder.set_basis(Basis::new(
-                    ModelAxis::PositiveZ,
-                    ModelAxis::PositiveY,
-                    Handedness::Right,
-                )?);
-                builder.set_units(LengthUnit::MetersPerUnit(0.25));
                 let parent = builder.add_node(
                     Node::named("nonuniform parent", &mut slot_values).with_transform(
                         ModelTransform {
@@ -289,7 +289,7 @@ fn rendered_hierarchy_preserves_shear_and_declared_coordinate_units() {
         Vec3::NEG_Z.extend(0.),
         Vec3::Y.extend(0.),
         Vec4::W,
-    ) * Mat4::from_scale(Vec3::splat(0.25));
+    );
     let parent = Mat4::from_scale_rotation_translation(
         Vec3::new(2., 1., 0.5),
         parent_rotation,

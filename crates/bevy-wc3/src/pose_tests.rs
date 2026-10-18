@@ -2,14 +2,14 @@ use super::*;
 use crate::compile_model;
 use crate::compiled::RuntimeNode;
 use std::f32::consts::FRAC_PI_2;
-use wc3::model::{
-    AnimationSample, Curve, DynamicTrack, Model, Node, Quaternion, Time, TimeSource, Track,
-};
+use wc3::model::ModelBuilder;
+use wc3::model::ModelMetadata;
+use wc3::model::{AnimationSample, Curve, DynamicTrack, Node, Quaternion, Time, TimeSource, Track};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn runtime_node() -> RuntimeNode {
     let slot_values = SlotValues::default();
-    let mut builder = Model::builder("pose reference");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     builder.add_named_node("node").unwrap();
     let model = {
         builder.import_values(&slot_values).unwrap();
@@ -143,7 +143,7 @@ fn native_noninheritance_preserves_expected_pose_with_collapsed_parent_axes() {
 #[test]
 fn birth_pose_follows_parent_rotation_between_frame_endpoints() {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::builder("rotating parent");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let parent = builder.add_named_node("parent").unwrap();
     let child = builder
         .add_node(
@@ -232,7 +232,7 @@ fn camera_selection_preserves_generic_nonbillboard_affine_shear() {
 #[test]
 fn feature_origins_use_node_pivots_without_moving_geometry_coordinates() {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::builder("pivot-local feature origin");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     builder
         .add_node(
             Node::named("feature anchor", &mut slot_values)
@@ -282,7 +282,7 @@ fn m2_billboard_convention_is_selected_from_bone_controls() {
     let mut slot_values = SlotValues::default();
     use wc3::model::controls::model::BoneControls;
     use wc3::model::NodeControls;
-    let mut builder = Model::builder("M2 bone convention");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let mut node = Node::named("native billboard", &mut slot_values).with_controls(Some(
         NodeControls::M2(BoneControls::construct(&mut slot_values)),
     ));
@@ -399,7 +399,7 @@ fn channel_presence_keeps_late_clip_shared_controller_and_static_node_poses() {
     let mut slot_values = SlotValues::default();
     use wc3::model::NodeChannels;
     use wc3::model::{Clip, Controller, SharedClock};
-    let mut builder = Model::builder("node channel inventory");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let parent = builder.add_named_node("animated parent").unwrap();
     let child = builder
         .add_node(

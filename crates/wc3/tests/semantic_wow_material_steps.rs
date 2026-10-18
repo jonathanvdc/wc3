@@ -1,5 +1,6 @@
 use wc3::model::materials::bindings::TextureBinding;
 use wc3::model::materials::{m2, wmo};
+use wc3::model::ModelMetadata;
 
 use wc3::model::profiles::wmo::WorldSystem;
 use wc3::model::profiles::{Universal, Wmo, M2};
@@ -126,7 +127,7 @@ fn wmo_equations_retain_spare_bindings_and_keep_special_paths_unresolved() {
         );
         assert_eq!(roundtrip, step, "shader {shader}");
     }
-    let mut draft = Model::<Wmo>::builder("spare bindings");
+    let mut draft = Model::<Wmo>::builder(wc3::model::profiles::wmo::ModelMetadata::default());
     let texture = draft.add_file_texture("retained.blp").unwrap();
     let mut inputs = vec![SlotConstruct::construct(&mut slot_values); 3];
     inputs[2] = TextureBinding {
@@ -171,7 +172,7 @@ fn native_profiles_use_the_same_shader_specific_steps_as_universal() {
     let narrow = broad.try_narrow::<M2>().unwrap();
     assert_eq!(narrow.material(id).unwrap().surface, program);
 
-    let mut draft = Model::<Wmo>::builder("typed WMO");
+    let mut draft = Model::<Wmo>::builder(wc3::model::profiles::wmo::ModelMetadata::default());
     draft.add_system(WorldSystem::default()).unwrap();
     let step = wmo::MaterialStep::LayeredDiffuse(SlotConstruct::construct(&mut slot_values));
     let id = draft
@@ -195,7 +196,7 @@ fn named_crossfade_inputs_keep_native_animation_ordinals_when_frozen() {
     let mut slot_values = SlotValues::default();
 
     use wc3::model::{AnimationSample, Curve, DynamicTrack, Material, Time, TimeSource, Track};
-    let mut draft = Model::<Universal>::builder("named input animation");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::M2(Default::default()));
     let id = draft.reserve_material();
     let target = slot_values.add(0f32);
     let mut payload = m2::MaskedDualCrossfadeMaterialStep::construct(&mut slot_values);

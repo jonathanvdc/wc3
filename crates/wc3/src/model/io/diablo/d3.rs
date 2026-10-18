@@ -92,8 +92,7 @@ fn import_appearance<'a>(
     let root = &source.root;
     let mut context = Context::import(options);
     unsupported(root, &mut context)?;
-    let mut builder = Model::<D3>::builder("");
-    builder.set_bounds(Some(bounds(root.bounds)));
+    let mut builder = Model::<D3>::builder(ModelMetadata::default());
     let model_frame = {
         let definition = builder.new_node("").with_controls(NodeRole::ModelSpace);
         builder.add_node(definition)
@@ -366,6 +365,7 @@ fn read_controls(
         ));
     };
     Ok(ModelMetadata {
+        bounds: bounds(v.bounds),
         sno_id: v.sno_id,
         object_type: v.object_type,
         collision_center: v.collision_sphere.center,

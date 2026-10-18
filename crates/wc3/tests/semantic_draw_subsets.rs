@@ -1,6 +1,7 @@
 use wc3::model::common::IntoZeroVec;
 use wc3::model::conversion::{Context, ExportOptions};
 use wc3::model::io::geometry;
+use wc3::model::ModelMetadata;
 use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw, DrawSubset, Material,
     Mesh, MeshInstance, ModelBuilder, PrimitiveRange, PrimitiveSelection, Topology,
@@ -17,7 +18,7 @@ fn mesh() -> Mesh<'static> {
 #[test]
 fn instances_share_mesh_owned_selections_with_independent_materials() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("shared subsets");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("placement").unwrap();
     let first = builder
         .add_material(Material {
@@ -78,7 +79,7 @@ fn instances_share_mesh_owned_selections_with_independent_materials() {
 #[test]
 fn strip_selections_use_their_own_faces_and_explicit_index_counting() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("strip subset");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("placement").unwrap();
     let material = builder
         .add_material(Material {
@@ -141,7 +142,7 @@ fn foreign_subset_and_connectivity_identities_are_rejected() {
     let mut owner = mesh();
     let subset = owner.add_primary_subset(0, 1);
     let foreign_connectivity = owner.subsets.primary();
-    let mut builder = ModelBuilder::new("foreign subset");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("placement").unwrap();
     let material = builder
         .add_material(Material {
@@ -160,7 +161,7 @@ fn foreign_subset_and_connectivity_identities_are_rejected() {
         builder.finish()
     }
     .is_err());
-    let mut builder = ModelBuilder::new("foreign connectivity");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let mut other = mesh();
     other.add_subset(DrawSubset::new(PrimitiveSelection {
         connectivity: foreign_connectivity,
@@ -177,7 +178,7 @@ fn foreign_subset_and_connectivity_identities_are_rejected() {
 #[test]
 fn range_domains_and_connectivity_attribute_cardinality_are_checked() {
     let slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("wrong range");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let mut source = mesh();
     source.add_subset(DrawSubset::new(PrimitiveSelection {
         connectivity: source.subsets.primary(),
@@ -189,7 +190,7 @@ fn range_domains_and_connectivity_attribute_cardinality_are_checked() {
         builder.finish()
     }
     .is_err());
-    let mut builder = ModelBuilder::new("wrong face count");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let mut source = mesh();
     let connectivity = source.subsets.primary();
     let data = &mut source.geometry;

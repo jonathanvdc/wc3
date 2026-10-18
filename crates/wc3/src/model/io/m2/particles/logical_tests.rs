@@ -2,9 +2,10 @@ use super::*;
 use crate::model::io::ExportOptions;
 use crate::model::profiles::Universal;
 use crate::model::Model;
+use crate::model::ModelMetadata;
 
 fn texture() -> semantic::Texture {
-    Model::<Universal>::builder("particle geometry controls")
+    Model::<Universal>::builder(ModelMetadata::M2(Default::default()))
         .add_file_texture("particle.blp")
         .unwrap()
 }

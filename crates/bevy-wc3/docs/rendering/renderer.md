@@ -17,8 +17,8 @@ inverse binds. This reduces repeated skin preparation without removing authored
 nodes or changing deformation.
 Complete compiled mesh contents are interned so equivalent draws share GPU geometry,
 while different tangent bases, attributes, and indices remain distinct.
-Models convert declared axes and units into Bevy's frame beneath the application
-root. `ModelDraw` preserves typed instance, mesh, material, draw-source, pass,
+Models convert their native coordinate conventions into Bevy's frame beneath
+the application root. `ModelDraw` preserves typed instance, mesh, material, draw-source, pass,
 and LOD identities.
 
 `Playback` selects typed clips and controller programmes in seconds. Their curves

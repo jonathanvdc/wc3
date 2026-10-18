@@ -4,6 +4,8 @@ use bevy::prelude::{Assets, Image};
 use std::collections::HashSet;
 use wc3::model::materials::mdlx::LayeredSurface;
 use wc3::model::profiles::Universal;
+use wc3::model::ModelBuilder;
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     Draw, DrawId, GeometryData, InstanceId, Material, MaterialSurface, Mesh, MeshInstance,
@@ -11,7 +13,7 @@ use wc3::model::{
 
 fn model() -> (Model<'static>, Vec<(InstanceId, DrawId)>) {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::builder("generic assembly geometry");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("root").unwrap();
     let material = builder
         .add_material(Material {
@@ -69,7 +71,7 @@ fn compatible_union_preserves_hidden_geometry_and_all_selection() {
 #[test]
 fn incompatible_shared_textures_fail_before_image_provider() {
     let (model, _) = model();
-    let texture = Model::<Universal>::builder("foreign")
+    let texture = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()))
         .add_file_texture("foreign")
         .unwrap();
     let models = [(ResourceLocator::FileDataId(1), model)]

@@ -1,4 +1,5 @@
 use wc3::model::profiles::{m2, Universal, M2};
+use wc3::model::ModelMetadata;
 use wc3::model::{
     AnimationProgram, AnimationSample, Attachment, Clip, Curve, DynamicTrack, Light,
     LightActivation, Model, NodeFeature, Time, TimeSource, Track,
@@ -86,7 +87,7 @@ fn boolean_sources_remain_shared_across_socket_and_light_slots() {
 
 #[test]
 fn explicit_boolean_conversion_samples_at_retimed_clocks() {
-    let mut draft = Model::<Universal>::builder("converted read");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let source = draft.add_value(true);
     let visibility = draft.values_mut().scalar_from_boolean(source).unwrap();
     draft
@@ -109,10 +110,12 @@ fn explicit_boolean_conversion_samples_at_retimed_clocks() {
         sample.at_times(time(0.), time(0.)).animated(&visibility),
         1.
     );
-    assert!(Model::<Universal>::builder("other")
-        .finish()
-        .unwrap()
-        .values()
-        .get(visibility)
-        .is_none());
+    assert!(
+        Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()))
+            .finish()
+            .unwrap()
+            .values()
+            .get(visibility)
+            .is_none()
+    );
 }

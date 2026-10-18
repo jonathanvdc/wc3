@@ -55,11 +55,7 @@ impl<P: Profile> Model<'_, P> {
 impl<P: Profile> Model<'_, P> {
     /// Checks values, graph relationships, metadata, and owned resources.
     pub fn validate(&self) -> Result<(), Error> {
-        self.units.validate()?;
         self.appearance.validate()?;
-        if let Some(bounds) = self.bounds {
-            bounds.validate()?;
-        }
         for (id, node) in self.nodes.iter() {
             node.transform.validate(&self.values)?;
             let mut ancestors = BTreeSet::new();

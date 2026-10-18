@@ -54,7 +54,7 @@ impl Narrows<Universal> for Wmo {
         value: <Universal as Profile>::ModelMetadata<'a>,
     ) -> Result<Self::ModelMetadata<'a>, Error> {
         match value {
-            Some(ModelMetadata::Wmo(value)) => Ok(value),
+            ModelMetadata::Wmo(value) => Ok(value),
             _ => Err(incompatible("model")),
         }
     }

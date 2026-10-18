@@ -1,12 +1,14 @@
 use super::super::{compile_model, PoseOverrides};
 use super::*;
 use wc3::model::profiles::Universal;
+use wc3::model::ModelBuilder;
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{Model, NodeId, Transform as ModelTransform};
 
 fn fixture() -> (ModelAsset, NodeId) {
     let slot_values = SlotValues::default();
-    let mut builder = Model::builder("lifecycle");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("node").unwrap();
     let model = {
         builder.import_values(&slot_values).unwrap();
@@ -274,7 +276,7 @@ fn separately_decoded_replacement_rebinds_clip_and_pose_scoped_identities() {
         .id();
     let app_child = app.world_mut().spawn(ChildOf(root)).id();
     app.update();
-    let foreign_controller = Model::<Universal>::builder("foreign controller")
+    let foreign_controller = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()))
         .add_controller(Controller::default())
         .unwrap();
     app.world_mut()
@@ -313,7 +315,7 @@ fn ambiguous_names_reset_selection_and_remove_pose_overrides() {
     let mut slot_values = SlotValues::default();
     use wc3::model::Clip;
     let prepare = |clips: &[&str], nodes: &[&str]| {
-        let mut builder = Model::builder("ambiguous rebind");
+        let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
         for name in clips {
             builder.add_clip(Clip::named((*name).to_owned())).unwrap();
         }

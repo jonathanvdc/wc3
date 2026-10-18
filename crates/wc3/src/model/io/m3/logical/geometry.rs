@@ -33,11 +33,11 @@ pub(super) fn read<'a, E: Envelope>(
     let document = source.container();
     let (division_ref, palette_ref, bounds) =
         native::visit_m3_root!(root, |r| (r.divisions, r.bone_lookup, r.bounds));
-    builder.set_bounds(Some(Bounds {
+    builder.metadata_mut().bounds = Bounds {
         minimum: bounds.minimum,
         maximum: bounds.maximum,
         sphere_radius: bounds.radius,
-    }));
+    };
     let packed = Packed::read(source)?;
     let palette = document
         .resolve::<nr::U16>(palette_ref.cast())

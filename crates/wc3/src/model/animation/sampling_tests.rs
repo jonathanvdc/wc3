@@ -1,3 +1,4 @@
+use crate::model::ModelMetadata;
 use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 use super::*;
@@ -24,7 +25,7 @@ fn dynamic_track(
 #[test]
 fn frozen_shared_clock_keeps_authored_origin_without_a_loop_period() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("frozen ornament");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("ornament").unwrap();
     let node_translation = builder.model().node(node).unwrap().transform.translation;
     let _node_scale = builder.model().node(node).unwrap().transform.scale;
@@ -58,7 +59,7 @@ fn frozen_shared_clock_keeps_authored_origin_without_a_loop_period() {
 #[test]
 fn composed_programs_share_clocks_and_keep_property_owners_disjoint() {
     let mut slot_values = SlotValues::default();
-    let mut host = ModelBuilder::new("host");
+    let mut host = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = host.add_named_node("host bone").unwrap();
     let node_translation = host.model().node(node).unwrap().transform.translation;
     let _node_scale = host.model().node(node).unwrap().transform.scale;
@@ -77,7 +78,7 @@ fn composed_programs_share_clocks_and_keep_property_owners_disjoint() {
         }
         .unwrap(),
     );
-    let mut part = ModelBuilder::new("part");
+    let mut part = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let extra = part.add_named_node("part bone").unwrap();
     let extra_translation = part.model().node(extra).unwrap().transform.translation;
     let extra_scale = part.model().node(extra).unwrap().transform.scale;
@@ -128,7 +129,7 @@ fn composed_programs_share_clocks_and_keep_property_owners_disjoint() {
 #[test]
 fn event_boundary_override_keeps_own_clock_end_and_other_clock_start() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("occurrence");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("bone").unwrap();
     let node_translation = builder.model().node(node).unwrap().transform.translation;
     let node_scale = builder.model().node(node).unwrap().transform.scale;
@@ -173,7 +174,7 @@ fn event_boundary_override_keeps_own_clock_end_and_other_clock_start() {
 #[test]
 fn alias_local_clock_and_owned_program_survive_source_drop() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("sample");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("bone").unwrap();
     let node_translation = builder.model().node(node).unwrap().transform.translation;
     let _node_scale = builder.model().node(node).unwrap().transform.scale;
@@ -222,7 +223,7 @@ fn alias_local_clock_and_owned_program_survive_source_drop() {
 #[test]
 fn independent_clocks_and_controller_priority_are_explicit() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("sample");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("bone").unwrap();
     let node_translation = builder.model().node(node).unwrap().transform.translation;
     let node_scale = builder.model().node(node).unwrap().transform.scale;
@@ -290,7 +291,7 @@ fn independent_clocks_and_controller_priority_are_explicit() {
 #[test]
 fn indexed_empty_override_falls_back_and_timeline_keys_are_bounded() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("bounded");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("bone").unwrap();
     let node_translation = builder.model().node(node).unwrap().transform.translation;
     let _node_scale = builder.model().node(node).unwrap().transform.scale;
@@ -355,7 +356,7 @@ fn indexed_empty_override_falls_back_and_timeline_keys_are_bounded() {
 #[test]
 fn retiming_borrows_indexed_programmes_and_preserves_alias_clock_policy() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("retime");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("node").unwrap();
     let node_translation = builder.model().node(node).unwrap().transform.translation;
     let _node_scale = builder.model().node(node).unwrap().transform.scale;
@@ -399,7 +400,7 @@ fn retiming_borrows_indexed_programmes_and_preserves_alias_clock_policy() {
 #[test]
 fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("offsets");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("node").unwrap();
     let node_translation = builder.model().node(node).unwrap().transform.translation;
     let node_scale = builder.model().node(node).unwrap().transform.scale;
@@ -476,7 +477,7 @@ fn compiled_property_sampling_throughput() {
     use std::hint::black_box;
     use std::time::Instant;
     for node_count in [128, 1024, 4096] {
-        let mut builder = ModelBuilder::new("throughput");
+        let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
         let mut properties = Vec::with_capacity(node_count);
         for _ in 0..node_count {
             let node = builder.add_named_node("bone").unwrap();

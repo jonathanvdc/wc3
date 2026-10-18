@@ -85,8 +85,8 @@ where
 /// separate operation; this planner does not implicitly approximate its payloads.
 ///
 /// ```compile_fail
-/// use wc3::model::{conversion::ExportOptions, io, formats::mdlx::V800, Model};
-/// let universal = Model::standalone("Example");
+/// use wc3::model::{conversion::ExportOptions, io, formats::mdlx::V800, profiles::Universal, Model, ModelMetadata};
+/// let universal = Model::<Universal>::empty(ModelMetadata::Mdlx(Default::default())).unwrap();
 /// io::mdlx::plan::<V800>(&universal, &ExportOptions::default());
 /// ```
 pub fn plan<'a, 'data, T: Dialect>(

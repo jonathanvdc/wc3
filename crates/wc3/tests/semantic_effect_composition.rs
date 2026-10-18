@@ -1,3 +1,4 @@
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     Link, ParticleComposition, ParticleEmission, TrailAppearance, TrailComposition, TrailGeometry,
@@ -24,7 +25,9 @@ fn custom_particle_composition_validates_its_selected_components() {
     assert!(!invalid);
     slot_values.set(effect.emission.rate, f32::NAN).unwrap();
     effect.visit_links(&mut |link| invalid |= matches!(link, Link::InvalidValue));
-    let mut draft = wc3::model::Model::<wc3::model::profiles::Universal>::builder("invalid slot");
+    let mut draft = wc3::model::Model::<wc3::model::profiles::Universal>::builder(
+        ModelMetadata::Mdlx(Default::default()),
+    );
     draft.import_values(&slot_values).unwrap();
     assert!(draft.finish().is_err());
 }

@@ -39,15 +39,6 @@ where
     asset.validate()?;
     let model = asset;
     let mut context = Context::export(options);
-    if model.basis() != semantic::Basis::default() {
-        context.unsupported(
-            "m2.basis",
-            "M2 output requires the Blizzard coordinate basis",
-        )?;
-    }
-    if model.units() != semantic::LengthUnit::Unspecified {
-        context.unsupported("m2.units", "M2 has no declared physical length unit")?;
-    }
     for (_, clip) in model.clips() {
         if !clip.is_looping() {
             context.unsupported(
@@ -60,7 +51,7 @@ where
 
     let mut bundle = Bundle::from_model(native::Document::<D>::new());
     let core = bundle.model.core_mut();
-    core.bounding = native_bounds(model.bounds().unwrap_or_default());
+    core.bounding = native_bounds(model.bounds());
     if let Some(family) = family {
         core.flags = ModelFlags::from_bits_retain(family.flags.bits());
     }

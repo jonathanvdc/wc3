@@ -53,9 +53,8 @@ pub(super) fn import<'a, D: Dialect>(
             handle_unknown(&mut context, FileKey::Root, tag)?;
         }
     }
-    let mut builder = ModelBuilder::<Wmo>::with_profile("World model");
+    let mut builder = ModelBuilder::<Wmo>::with_profile(ModelMetadata::default());
     let header = source.root.header();
-    builder.set_bounds(Some(bounds(header.bounds)));
     let flags = header.flags();
     let mut unknown = flags;
     unknown.set_no_vertex_attenuation(false);
@@ -82,6 +81,7 @@ pub(super) fn import<'a, D: Dialect>(
         })
         .map(|value| builder.add_model_resource(value));
     builder.set_metadata(ModelMetadata {
+        bounds: Some(bounds(header.bounds)),
         id: header.wmo_id,
         ambient: rgba(header.ambient_color),
         options: WorldOptions {

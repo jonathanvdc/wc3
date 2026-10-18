@@ -1,4 +1,5 @@
 use wc3::model::profiles::{m2, mdlx, Mdlx, Universal, M2};
+use wc3::model::ModelMetadata;
 use wc3::model::{
     AnimationSample, Camera, Clip, Construct, Curve, DynamicTrack, FromFeature, Model, NodeFeature,
     PropertyValues, Time, TimeSource, Track,
@@ -13,7 +14,7 @@ fn vertical_fov_animation_cannot_narrow_to_a_static_native_field() {
         panic!()
     };
     let fov = camera.field_of_view;
-    let mut draft = Model::<Universal>::builder("vertical camera");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     draft.import_values(&values).unwrap();
     let node = draft.add_named_node("camera").unwrap();
     draft.add_feature(node, feature).unwrap();

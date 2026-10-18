@@ -31,19 +31,16 @@ where
             "unknown source chunk has no semantic representation",
         )?;
     }
-    let mut builder =
-        ModelBuilder::<Mdlx>::with_profile(source.model_info().map_or(Cow::Borrowed(""), |info| {
-            Cow::Owned(info.name.text().into_owned())
-        }));
-    if let Some(info) = source.model_info() {
-        builder.set_bounds(Some(Bounds {
-            minimum: info.minimum_extent,
-            maximum: info.maximum_extent,
-            sphere_radius: info.bounds_radius,
-        }));
-    } else {
-        builder.set_bounds(None);
-    }
+    let mut native_profile = ImportState::default();
+    native_profile.metadata.name = source.model_info().map_or(Cow::Borrowed(""), |info| {
+        Cow::Owned(info.name.text().into_owned())
+    });
+    native_profile.metadata.bounds = source.model_info().map(|info| Bounds {
+        minimum: info.minimum_extent,
+        maximum: info.maximum_extent,
+        sphere_radius: info.bounds_radius,
+    });
+    let mut builder = ModelBuilder::<Mdlx>::with_profile(profile::ModelMetadata::default());
     let source_nodes = source.nodes();
     let ids: Vec<_> = source_nodes
         .iter()
@@ -171,7 +168,6 @@ where
             })
         })
         .collect::<Result<_, _>>()?;
-    let mut native_profile = ImportState::default();
     for (source, id) in source_nodes.iter().zip(&ids) {
         native_profile
             .node_controls

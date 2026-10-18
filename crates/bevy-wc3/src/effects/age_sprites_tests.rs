@@ -2,10 +2,11 @@ use super::*;
 use bevy::ecs::world::CommandQueue;
 use std::f32::consts::TAU;
 use wc3::model::profiles::Universal;
+use wc3::model::ModelMetadata;
 use wc3::model::{AnimationProgram, AnimationSample};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 fn emitter(slot_values: &mut SlotValues) -> Emitter {
-    let mut builder = Model::<Universal>::builder("particle identity");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let node = builder.reserve_node();
     let feature = builder.reserve_feature(node);
     let flags = ParticleFlags::default();
@@ -133,7 +134,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         dropped: 0,
         skipped_seconds: 0.,
     };
-    let mut builder = Model::<Universal>::builder("effect sample");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     builder.import_values(&slot_values).unwrap();
     let model = builder.finish().unwrap();
     let program = AnimationProgram::compile(&model);
@@ -390,7 +391,7 @@ fn world_particles_follow_only_translation_after_their_birth() {
     let prior_birth = emitter
         .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
-    let mut builder = Model::<Universal>::builder("effect sample");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     builder.import_values(&slot_values).unwrap();
     let model = builder.finish().unwrap();
     let program = AnimationProgram::compile(&model);
@@ -476,7 +477,7 @@ fn programmed_passes_share_population_capacity_pause_and_seek() {
         emitters: vec![emitter],
         ..SlotConstruct::construct(&mut slot_values)
     };
-    let mut builder = Model::<Universal>::builder("effect sample");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     builder.import_values(&slot_values).unwrap();
     let model = builder.finish().unwrap();
     let program = AnimationProgram::compile(&model);

@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn app(directory: &Path) -> App {
@@ -356,7 +357,7 @@ fn write_m2_capture_fixture() {
 fn image_candidates_preserve_location_priority_case_and_asset_sources() {
     let mut slot_values = SlotValues::default();
     use wc3::model::ModelBuilder;
-    let mut builder = ModelBuilder::new("image candidate order");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let id = builder.add_file_texture("Textures\\Body.BLP").unwrap();
     let mut layer = wc3::model::materials::mdlx::Layer::construct(&mut slot_values);
     layer.binding.image = slot_values.add(Some(id));

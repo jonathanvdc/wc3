@@ -12,7 +12,7 @@ use crate::model::conversion::{
 };
 use crate::model::formats::m3::{self as native, records as nr};
 use crate::model::Model;
-use crate::model::{profiles::m3 as surface, profiles::M3, LengthUnit};
+use crate::model::{profiles::m3 as surface, profiles::M3};
 use native::Envelope;
 use std::collections::BTreeMap;
 
@@ -23,10 +23,11 @@ pub(in crate::model::io::m3) fn read<'a, E: Envelope + Send + Sync>(
     source.validate_complete().map_err(materials::read_error)?;
     let root = source.model.root_record().map_err(materials::read_error)?;
     let name = native::visit_m3_root!(root, |r| r.name);
-    let mut builder =
-        GraphBuilder::with_profile(materials::string(source.model.container(), name)?);
+    let mut builder = GraphBuilder::with_profile(surface::ModelMetadata::default());
     let flags = native::visit_m3_root!(root, |r| r.flags.bits());
     builder.set_metadata(surface::ModelMetadata {
+        name: materials::string(source.model.container(), name)?,
+        bounds: Default::default(),
         flags: surface::values::ModelFlags(flags),
         partition_control: native::visit_m3_root!(root, |r| r.animation_split_count),
     });
@@ -220,9 +221,6 @@ pub(in crate::model::io::m3) fn plan<'view, 'source: 'view, P: ExportProfile>(
     let graph = asset;
     let mut context = Context::export(options);
 
-    if graph.units() != LengthUnit::Unspecified {
-        context.unsupported("m3.units","native M3 has no authored physical-unit declaration; unit translation is a semantic operation")?;
-    }
     let ids = animation::prepare(graph, &mut context)?;
     let mut document = native::Container::<P::Envelope>::new();
     let mut skeleton = skeleton_write::prepare(graph, &ids, &mut context)?;
@@ -286,13 +284,12 @@ pub(in crate::model::io::m3) fn plan<'view, 'source: 'view, P: ExportProfile>(
     let scene = super::static_scene::write(graph, &mut document, &skeleton.indices, &ids)?;
     let turrets = super::turrets::write(graph, &mut document, &skeleton.indices)?;
     let volumes = super::volumes::write(graph, &mut document, &skeleton.indices)?;
-    let bounds = graph
-        .bounds()
-        .map_or(nr::Extent::default(), |b| nr::Extent {
-            minimum: b.minimum,
-            maximum: b.maximum,
-            radius: b.sphere_radius,
-        });
+    let authored_bounds = graph.bounds();
+    let bounds = nr::Extent {
+        minimum: authored_bounds.minimum,
+        maximum: authored_bounds.maximum,
+        radius: authored_bounds.sphere_radius,
+    };
     let collision = super::collision::write(graph, &mut document)?;
     let cloths = super::cloth::write(
         graph,

@@ -1,3 +1,4 @@
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 #[path = "support/materials.rs"]
 mod native_fixtures;
@@ -126,7 +127,7 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
     use wc3::model::{
         AnimationSample, Curve, DynamicTrack, Material, Model, Time, TimeSource, Track,
     };
-    let mut draft = Model::<Universal>::builder("mixed step animation");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let id = draft.reserve_material();
     let layered = slot_values.add(1f32);
     let shader = slot_values.add(1f32);
@@ -427,7 +428,7 @@ fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassificati
         AnimationSample, Curve, DynamicTrack, Material, Model, Time, TimeSource, Track,
     };
     for selector in [1, 99] {
-        let mut draft = Model::<Universal>::builder("shader inputs");
+        let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
         let id = draft.reserve_material();
         let opacity = slot_values.add(1f32);
         let gain = slot_values.add(1f32);

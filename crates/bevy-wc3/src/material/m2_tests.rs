@@ -3,6 +3,7 @@ use crate::material::native_fixtures::m2;
 use naga::front::wgsl::parse_str;
 use naga::valid::{Capabilities, ValidationFlags, Validator};
 use wc3::model::values::model::BatchFlags;
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn surface(
@@ -29,7 +30,9 @@ fn surface(
 
 fn compile(surface: &m2::Material<'_>, slot_values: &SlotValues) -> SurfacePass {
     let model = {
-        let mut draft = Model::<wc3::model::profiles::Universal>::builder("shader controls");
+        let mut draft = Model::<wc3::model::profiles::Universal>::builder(ModelMetadata::M2(
+            Default::default(),
+        ));
         draft.import_values(slot_values).unwrap();
         draft.finish().unwrap()
     };

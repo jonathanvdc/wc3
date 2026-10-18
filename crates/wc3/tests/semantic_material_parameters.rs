@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use wc3::model::materials::m3::{DataGroup, DataProperty, NamedShaderKey};
 use wc3::model::materials::parameters::{OpaqueBytes, ParameterEntry};
+use wc3::model::ModelMetadata;
 
 #[test]
 fn named_parameter_groups_preserve_hash_spelling_bytes_and_duplicate_order() {
@@ -40,7 +41,7 @@ fn parameter_entries_traverse_custom_key_value_and_controls_in_order() {
             visitor(Link::SampledImage(self.0));
         }
     }
-    let mut resources = Model::<Universal>::builder("textures");
+    let mut resources = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let key = resources.add_file_texture("key").unwrap();
     let value = resources.add_file_texture("value").unwrap();
     let controls = resources.add_file_texture("controls").unwrap();

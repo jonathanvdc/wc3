@@ -110,7 +110,7 @@ impl Extends<Wmo> for Universal {
         value.map(DrawControls::Wmo)
     }
     fn model_metadata<'a>(value: <Wmo as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
-        Some(ModelMetadata::Wmo(value))
+        ModelMetadata::Wmo(value)
     }
     fn system<'a>(value: <Wmo as Profile>::System<'a>) -> Self::System<'a> {
         System::Wmo(value)

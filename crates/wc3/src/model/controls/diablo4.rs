@@ -6,6 +6,9 @@ use crate::model::{
 /// Appearance-wide authoring declarations.
 #[derive(Clone, Debug)]
 pub struct ModelMetadata {
+    /// Authored structure bounding box.
+    pub bounds: Bounds,
+
     scope: Scope,
     chunks: Vec<(ChunkId, Chunk)>,
     /// External appearance identity.
@@ -36,6 +39,7 @@ pub struct ModelMetadata {
 impl Default for ModelMetadata {
     fn default() -> Self {
         Self {
+            bounds: Bounds::default(),
             scope: Scope::default(),
             chunks: Vec::new(),
             sno_id: -1,
@@ -55,6 +59,9 @@ impl Default for ModelMetadata {
 }
 impl ValidateLinks for ModelMetadata {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if self.bounds.validate().is_err() {
+            visitor(Link::InvalidValue);
+        }
         for (_, chunk) in &self.chunks {
             if chunk.bounds.validate().is_err()
                 || chunk.lod_distances.iter().any(|v| !v.is_finite())

@@ -1,9 +1,11 @@
 use super::*;
 use wc3::model::ModelBuilder;
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 fn catalog(records: &[(u32, i32, [f32; 3])]) -> CharacterCatalog {
     let mut slot_values = SlotValues::default();
-    let mut builder: ModelBuilder<'static> = Model::builder("bone catalog fixture");
+    let mut builder: ModelBuilder<'static> =
+        ModelBuilder::new(ModelMetadata::M2(Default::default()));
     let bones = records
         .iter()
         .enumerate()

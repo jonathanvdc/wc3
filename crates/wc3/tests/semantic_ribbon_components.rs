@@ -1,4 +1,5 @@
 use wc3::model::profiles::{m2, mdlx};
+use wc3::model::ModelMetadata;
 use wc3::model::{AngleTrailControls, SurfaceTrailRendering};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
@@ -85,7 +86,7 @@ fn programmed_ribbon_composition_preserves_native_controls_and_borrowed_splines(
             },
         }
     }
-    let mut builder = Model::<Universal>::builder("ribbon components");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("ribbon spline").unwrap();
     let spline = [m3::SplinePoint {
         node,

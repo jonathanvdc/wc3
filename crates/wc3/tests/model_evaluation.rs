@@ -5,6 +5,8 @@ use wc3::model::conversion::ImportOptions;
 use wc3::model::io::mdlx;
 use wc3::model::materials::mdlx::LayeredSurface;
 use wc3::model::profiles::Universal;
+use wc3::model::ModelBuilder;
+use wc3::model::ModelMetadata;
 use wc3::model::{
     AnimationSample, Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Basis, Curve,
     DeformableGeometry, DynamicTrack, GeometryData, LengthUnit, Mesh, MeshAppearance, Model,
@@ -145,7 +147,7 @@ fn projection_carries_application_face_and_corner_fields_across_triangulation() 
 #[test]
 fn repeated_pose_sampling_reuses_buffers_and_retimed_sampling_preserves_overrides() {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::builder("hierarchy");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let root = builder.add_named_node("root").unwrap();
     let definition = builder.new_node("child").with_parent(root);
     let child = builder.add_node(definition).unwrap();
@@ -245,7 +247,7 @@ fn deformation_preserves_normal_covectors_and_reflected_tangent_handedness() {
 #[test]
 fn cpu_skinning_keeps_more_than_eight_influences() {
     use wc3::model::{GeometryInfluences, Influence, ValueGroups};
-    let mut builder = Model::<Universal>::builder("many joints");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let joints: Vec<_> = (0..9)
         .map(|i| builder.add_named_node(format!("joint {i}")).unwrap())
         .collect();

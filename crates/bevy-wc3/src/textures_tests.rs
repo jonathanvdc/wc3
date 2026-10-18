@@ -3,13 +3,14 @@ use crate::material::compile_material_with_images;
 use crate::material::native_fixtures::wmo;
 use bevy::prelude::{Assets, Image};
 use wc3::model::materials::bindings::TextureBinding;
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{Material, MaterialSurface, ModelBuilder};
 
 #[test]
 fn m3_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("M3 layer samplers");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let mut source = Texture::new(builder.add_image_resource(wc3::model::ImageResource::Path(
         "shared.dds".as_bytes().into(),
     )));
@@ -113,7 +114,7 @@ fn m3_layers_resolve_axis_wrap_variants_for_color_normals_and_occlusion() {
 #[test]
 fn world_surface_clamps_resolve_independent_variants_without_mutating_texture() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("world samplers");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let mut texture = Texture::new(builder.add_image_resource(wc3::model::ImageResource::Path(
         "shared.png".as_bytes().into(),
     )));
@@ -230,7 +231,7 @@ fn image_requests_retain_native_input_metadata_for_replacement_selection() {
     let mut slot_values = SlotValues::default();
     use wc3::model::materials::mdlx::{Layer, LayeredSurface};
     use wc3::model::TextureControls;
-    let mut builder = ModelBuilder::new("shared decoded image");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let first = builder.add_file_texture("shared.png").unwrap();
     let mut second = first;
     second.controls = Some(TextureControls::Mdlx(SlotConstruct::construct(

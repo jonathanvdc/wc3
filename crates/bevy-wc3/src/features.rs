@@ -9,6 +9,10 @@ use std::f32::consts::FRAC_PI_2;
 use wc3::model::scene::world::LightKind as WorldLightKind;
 use wc3::model::scene::{Camera as PortableCamera, LightKind};
 use wc3::model::values::programmed::LightKind as ProgrammedLightKind;
+#[cfg(test)]
+use wc3::model::ModelBuilder;
+#[cfg(test)]
+use wc3::model::ModelMetadata;
 use wc3::model::{
     AimedCamera, Attachment, Camera as ModelCamera, CameraConvention, ClipId, FeatureId,
     FeatureKind, IlluminationKind, Light as SemanticLight, LightActivation, Model, ModelMount,
@@ -672,7 +676,9 @@ mod tests {
         let slot_values = SlotValues::default();
         let compiled = {
             let path = b"child.mdx".to_vec();
-            let mut draft = Model::<wc3::model::profiles::Universal>::builder("child declaration");
+            let mut draft = Model::<wc3::model::profiles::Universal>::builder(ModelMetadata::Mdlx(
+                Default::default(),
+            ));
             let resource =
                 draft.add_model_resource(ResourceLocator::Path(std::borrow::Cow::Borrowed(&path)));
             let node = draft.add_named_node("child").unwrap();
@@ -700,7 +706,7 @@ mod tests {
     #[test]
     fn aimed_camera_samples_offsets_and_roll_without_spawning_a_view() {
         let mut slot_values = SlotValues::default();
-        let mut builder = Model::builder("authored camera");
+        let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
         let node = builder.add_named_node("camera anchor").unwrap();
         let feature = builder
             .add_feature(
@@ -755,7 +761,7 @@ mod imported_light_tests {
     #[test]
     fn world_and_programmed_diffuse_lights_use_bevy_components_without_global_ambient() {
         let mut slot_values = SlotValues::default();
-        let mut builder = Model::builder("imported lights");
+        let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
         let node = builder.add_named_node("anchor").unwrap();
         builder
             .add_feature(

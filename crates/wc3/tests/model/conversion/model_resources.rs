@@ -1,5 +1,6 @@
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
 use wc3::model::profiles::Universal;
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{ImageResource, Material, MaterialSurface, Model, ModelBuilder, Texture};
 
@@ -19,7 +20,7 @@ fn textured_material(texture: Texture, slot_values: &mut SlotValues) -> Material
 #[test]
 fn model_resource_edits_are_transactional_and_clones_are_independent() {
     let mut slot_values = SlotValues::default();
-    let mut draft = ModelBuilder::new("first");
+    let mut draft = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let texture = draft.add_file_texture("original.blp").unwrap();
     draft
         .add_material(textured_material(texture, &mut slot_values))
@@ -62,9 +63,9 @@ fn model_resource_edits_are_transactional_and_clones_are_independent() {
 #[test]
 fn unanimated_texture_references_are_checked_at_publication() {
     let mut slot_values = SlotValues::default();
-    let mut foreign = Model::<Universal>::builder("textures");
+    let mut foreign = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let texture = foreign.add_file_texture("foreign.blp").unwrap();
-    let mut draft = ModelBuilder::new("invalid");
+    let mut draft = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     draft
         .add_material(textured_material(texture, &mut slot_values))
         .unwrap();
@@ -78,7 +79,7 @@ fn unanimated_texture_references_are_checked_at_publication() {
 #[test]
 fn draft_model_exposes_its_owned_resources_before_publication() {
     let mut slot_values = SlotValues::default();
-    let mut draft = ModelBuilder::new("draft resources");
+    let mut draft = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let texture = draft.add_file_texture("model.blp").unwrap();
     assert!(draft.model().image_resource(texture.resource).is_some());
     draft
@@ -94,22 +95,11 @@ fn draft_model_exposes_its_owned_resources_before_publication() {
 }
 
 #[test]
-fn native_profiles_publish_declared_bounds_and_reject_clearing_them() {
-    use wc3::model::profiles::{Universal, M2};
+fn native_profiles_publish_required_bounds() {
+    use wc3::model::profiles::M2;
     use wc3::model::{Bounds, Model};
-    let mut native = Model::<M2>::builder("required bounds").finish().unwrap();
-    assert_eq!(native.bounds(), Some(Bounds::default()));
-    assert!(native
-        .edit(|draft| {
-            draft.set_bounds(None);
-            Ok(())
-        })
-        .is_err());
-    assert_eq!(native.bounds(), Some(Bounds::default()));
-    let universal = Model::<Universal>::builder("unspecified bounds")
-        .finish()
-        .unwrap();
-    assert_eq!(universal.bounds(), None);
+    let native = Model::<M2>::builder("required bounds").finish().unwrap();
+    assert_eq!(native.metadata().bounds, Bounds::default());
 }
 
 #[test]

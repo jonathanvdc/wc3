@@ -1,6 +1,7 @@
 use wc3::model::common::IntoZeroVec;
 use wc3::model::conversion::{Context, ExportOptions};
 use wc3::model::io::geometry;
+use wc3::model::ModelMetadata;
 use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, Draw,
     GeometryData, InstanceId, Material, Mesh, MeshId, MeshInstance, Model, ModelBuilder, Topology,
@@ -9,7 +10,7 @@ use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn fixture() -> (Model<'static>, MeshId, InstanceId) {
     let mut slot_values = SlotValues::default();
-    let mut draft = ModelBuilder::new("seams");
+    let mut draft = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = draft.add_named_node("placement").unwrap();
     let first = draft
         .add_material(

@@ -3,6 +3,7 @@ use super::*;
 use wc3::model::appearance::{diablo3, diablo4, UniversalAppearance};
 use wc3::model::controls::{diablo3 as d3_controls, diablo4 as d4_controls};
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     InstanceId, Material as SemanticMaterial, MaterialId, MaterialSurface, Mesh as ModelMesh,
@@ -36,7 +37,7 @@ fn instance(builder: &mut ModelBuilder<'static>, controls: Option<MeshControls>)
 #[test]
 fn diablo3_empty_draw_instance_renders_whole_geometry_with_selected_appearance() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("d3 whole-instance");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let a = material(&mut builder, "a");
     let b = material(&mut builder, "b");
     let mut appearance = diablo3::Appearance::default();
@@ -78,7 +79,7 @@ fn diablo3_empty_draw_instance_renders_whole_geometry_with_selected_appearance()
 #[test]
 fn diablo4_unambiguous_slot_renders_whole_geometry_without_fabricated_draw() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("d4 whole-instance");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let expected = material(&mut builder, "body");
     let mut appearance = diablo4::Appearance::default();
     let slot = appearance.add_slot(diablo4::Slot::new(42, -1, 0));
@@ -105,7 +106,7 @@ fn diablo4_unambiguous_slot_renders_whole_geometry_without_fabricated_draw() {
 #[test]
 fn generic_empty_draw_instances_remain_without_render_passes() {
     let slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("generic empty instance");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     instance(&mut builder, None);
     let model = {
         builder.import_values(&slot_values).unwrap();
@@ -125,7 +126,7 @@ fn world_draw_materials_separate_lighting_classes_and_preserve_source_colors() {
     use wc3::model::scene::world::WorldOptions;
     use wc3::model::{Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw};
 
-    let mut builder = ModelBuilder::new("world lighting classes");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     builder.set_metadata(ModelMetadata::Wmo(WorldMetadata {
         ambient: [32, 64, 96, 255],
         options: WorldOptions {
@@ -219,7 +220,7 @@ fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
     };
 
     for explicit in [false, true] {
-        let mut builder = Model::<Universal>::builder("compact palettes");
+        let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
         let joints: Vec<_> = (0..12)
             .map(|i| builder.add_named_node(format!("joint {i}")).unwrap())
             .collect();
@@ -380,7 +381,7 @@ fn a_pass_stack_keeps_world_lighting_local_to_each_pass() {
     use wc3::model::materials::program::{MaterialStep, MaterialSurface};
     use wc3::model::Draw;
 
-    let mut builder = ModelBuilder::new("world pass lighting");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("room").unwrap();
     let mut mesh = ModelMesh::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]);
     let subset = mesh.add_primary_subset(0, 1);
@@ -430,7 +431,7 @@ fn a_pass_stack_keeps_world_lighting_local_to_each_pass() {
 fn draw_selection_resolves_images_referenced_by_texture_slots_and_curves() {
     use wc3::model::{Curve, Draw, DynamicTrack, ImageResource, Time, TimeSource, Track};
 
-    let mut builder = ModelBuilder::new("animated image selection");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let first = Texture::new(
         builder.add_image_resource(ImageResource::Path(b"first.blp".as_slice().into())),
     );

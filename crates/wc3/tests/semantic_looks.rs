@@ -1,5 +1,6 @@
 use wc3::model::io::geometry;
 use wc3::model::profiles::{Mdlx, Universal};
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     Draw, DrawId, InstanceId, Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshInstance,
@@ -7,7 +8,7 @@ use wc3::model::{
 };
 
 fn fixture() -> (Model<'static>, InstanceId, [DrawId; 2], [MaterialId; 2]) {
-    let mut builder = ModelBuilder::new("complete looks");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("placement").unwrap();
     let mut mesh = Mesh::triangles(
         vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
@@ -242,7 +243,7 @@ fn new_bindings_need_new_draw_identities_even_when_the_subset_is_shared() {
 #[test]
 fn mismatched_material_count_leaves_the_builder_unchanged() {
     let slot_values = SlotValues::default();
-    let mut draft = ModelBuilder::new("mismatched materials");
+    let mut draft = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = draft.add_named_node("placement").unwrap();
     let mesh = draft
         .add_mesh(Mesh::triangles(vec![[0.; 3]; 3], vec![[0, 1, 2]]))

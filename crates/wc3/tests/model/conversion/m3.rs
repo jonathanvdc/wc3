@@ -6,7 +6,7 @@ use wc3::model::{
     self as sem,
     conversion::{ApproximationPolicy, ExportOptions, ImportOptions},
     formats::m3::{self, records as nr},
-    profiles::{m3 as surface, M3},
+    profiles::{m3 as surface, Universal, M3},
 };
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 pub(super) fn asset() -> Model<'static, M3> {
@@ -272,40 +272,13 @@ fn imported_graph_widens_and_narrows_without_changing_identity_or_values() {
     let mesh_id = imported.meshes().iter().next().unwrap().0;
     let node_id = imported.nodes().iter().next().unwrap().0;
     assert!(imported.mesh(mesh_id).unwrap().positions().is_owned());
-    let narrowed = imported
-        .widen::<sem::profiles::Universal>()
-        .try_narrow::<M3>()
-        .unwrap();
+    let narrowed = imported.widen::<Universal>().try_narrow::<M3>().unwrap();
     assert!(narrowed.node(node_id).is_some());
     let mesh = narrowed.mesh(mesh_id).unwrap();
     assert!(mesh.positions().is_owned());
     assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
     assert_eq!(narrowed.controllers().iter().count(), 1);
 }
-#[test]
-fn native_profile_rejects_coordinate_metadata_that_cannot_round_trip() {
-    let mut source = asset();
-    let original = source.basis();
-    assert!(source
-        .edit(|builder| {
-            builder.set_basis(sem::Basis::new(
-                sem::Axis::PositiveY,
-                sem::Axis::PositiveZ,
-                sem::Handedness::Right,
-            )?);
-            Ok(())
-        })
-        .is_err());
-    assert_eq!(source.basis(), original);
-    assert!(source
-        .edit(|builder| {
-            builder.set_units(sem::LengthUnit::MetersPerUnit(0.5));
-            Ok(())
-        })
-        .is_err());
-    assert_eq!(source.units(), sem::LengthUnit::Unspecified);
-}
-
 #[test]
 fn unknown_sections_and_vertex_qualifiers_require_explicit_drop() {
     let mut slot_values = SlotValues::default();

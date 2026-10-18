@@ -45,11 +45,12 @@ animated_cameras!(V265, V272, V272PreSplit, V273, V274);
 mod tests {
     use super::*;
     use crate::model::conversion::ExportOptions;
-    use crate::model::{Curve, Model, Time, TimeSource, Track};
+    use crate::model::profiles::m2::ModelMetadata;
+    use crate::model::{Curve, Time, TimeSource, Track};
 
     #[test]
     fn static_fov_rejects_boolean_timeline_animation() {
-        let mut builder = Model::builder("boolean camera source");
+        let mut builder = Graph::builder(ModelMetadata::default());
         let _node = builder.add_named_node("carrier").unwrap();
         let source = builder.add_value(true);
         let value = builder.values_mut().scalar_from_boolean(source).unwrap();

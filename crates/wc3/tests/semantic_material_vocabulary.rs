@@ -3,6 +3,7 @@ use wc3::model::materials::bindings::{Coordinates, ImageSelection};
 use wc3::model::materials::m2::{GuildMaterialStep, MaterialStep as M2MaterialStep, ShaderInput};
 use wc3::model::materials::mdlx::{LayeredSurface, SurfaceLayer};
 use wc3::model::profiles::{m2, mdlx, SurfacePayload};
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{Error, Link, TextureTransform, ValidateLinks};
 
@@ -160,7 +161,7 @@ fn image_source_vocabularies_can_supply_graph_relationships() {
     use wc3::model::profiles::Universal;
     use wc3::model::Model;
 
-    let mut resources = Model::<Universal>::builder("textures");
+    let mut resources = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let source = resources.add_file_texture("generated-source.blp").unwrap();
     let binding = TextureBinding {
         image: ImageSelection {

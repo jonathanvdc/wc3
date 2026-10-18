@@ -74,10 +74,6 @@ impl<'a, P: Profile> Model<'a, P> {
                     .collect(),
             },
             scope: self.scope,
-            name: self.name,
-            basis: self.basis,
-            units: self.units,
-            bounds: self.bounds,
             metadata: (maps.model)(self.metadata),
             systems: self
                 .systems

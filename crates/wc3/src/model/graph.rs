@@ -3,10 +3,10 @@ use crate::model::ids::Scope;
 use crate::model::profiles::{Profile, Universal};
 use crate::model::DrawId;
 use crate::model::{
-    Animation, AnimationId, AnimationObject, AppearanceSchema as _, AttachedFeature, Basis, Bounds,
-    Clip, ClipId, ClockId, Controller, ControllerId, DynamicTrack, Error, Event, EventId,
-    FeatureId, InstanceId, LengthUnit, Look, LookId, Material, MaterialId, Mesh, MeshId,
-    MeshInstance, Node, NodeId, Skin, SkinId, SystemId, Time,
+    Animation, AnimationId, AnimationObject, AppearanceSchema as _, AttachedFeature, Clip, ClipId,
+    ClockId, Controller, ControllerId, DynamicTrack, Error, Event, EventId, FeatureId, InstanceId,
+    Look, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Node, NodeId, Skin, SkinId,
+    SystemId, Time,
 };
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
@@ -17,7 +17,6 @@ use crate::model::{
 };
 use crate::model::{Dependencies, Link, Table, Texture, ValidateLinks as _};
 use crate::model::{Property, PropertyValue, PropertyValues, ValueSlot};
-use std::borrow::Cow;
 use std::collections::HashSet;
 /// A repeating or frozen clock shared by animation tracks.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -45,10 +44,6 @@ pub struct Model<'a, P: Profile = Universal> {
     values: PropertyValues,
     dependencies: Dependencies<'a, P>,
     scope: Scope,
-    name: Cow<'a, str>,
-    basis: Basis,
-    units: LengthUnit,
-    bounds: Option<Bounds>,
     metadata: P::ModelMetadata<'a>,
     systems: Table<SystemObject, P::System<'a>>,
     animations: Table<AnimationObject, Animation<'a>>,
@@ -224,28 +219,12 @@ impl<'a, P: Profile> Model<'a, P> {
     }
 
     /// Begins a draft whose payloads are constrained by `P`.
-    pub fn builder(name: impl Into<Cow<'a, str>>) -> ModelBuilder<'a, P> {
-        ModelBuilder::with_profile(name)
+    pub fn builder(metadata: impl Into<P::ModelMetadata<'a>>) -> ModelBuilder<'a, P> {
+        ModelBuilder::with_profile(metadata)
     }
-    /// Creates an empty model, checking the profile's default authoring vocabulary.
-    pub fn empty(name: impl Into<Cow<'a, str>>) -> Result<Model<'a, P>, Error> {
-        ModelBuilder::<P>::with_profile(name).finish()
-    }
-    /// Display name of the model.
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-    /// Declared axis directions and handedness of model coordinates.
-    pub fn basis(&self) -> Basis {
-        self.basis
-    }
-    /// Declared model length unit, or unspecified when the source does not declare one.
-    pub fn units(&self) -> LengthUnit {
-        self.units
-    }
-    /// Authored model bounds, when present.
-    pub fn bounds(&self) -> Option<Bounds> {
-        self.bounds
+    /// Creates an empty model with the supplied profile declarations.
+    pub fn empty(metadata: impl Into<P::ModelMetadata<'a>>) -> Result<Model<'a, P>, Error> {
+        ModelBuilder::<P>::with_profile(metadata).finish()
     }
     /// Resolves a programme's event occurrence by its actual graph identity.
     pub fn event(&self, id: EventId) -> Option<&Event<'a>> {
@@ -392,12 +371,6 @@ impl<'a, P: Profile> Model<'a, P> {
     /// Resolves a shared animation clock; returns `None` when the identity is absent from this graph.
     pub fn clock(&self, id: ClockId) -> Option<&SharedClock> {
         self.clocks.get(id)
-    }
-}
-impl<'a> Model<'a> {
-    /// Creates an empty graph accepting every built-in logical family.
-    pub fn standalone(name: impl Into<Cow<'a, str>>) -> Model<'a> {
-        Self::empty(name).expect("built-in empty vocabulary is valid")
     }
 }
 

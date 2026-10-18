@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use wc3::model::profiles::{Mdlx, Universal, M2};
+use wc3::model::ModelMetadata;
 use wc3::model::{
     Attachment, ChildModel, ImageResource, M2ImageResource, MdlxImageResource, Model, NodeFeature,
     PathResource, PlacementAppearance, ResourceLocator, Texture,
@@ -28,7 +29,7 @@ fn use_texture(draft: &mut wc3::model::ModelBuilder<'_, Universal>, texture: Tex
 #[test]
 fn image_sharing_is_explicit_and_edits_are_transactional() {
     let slot_values = SlotValues::default();
-    let mut draft = Model::<Universal>::builder("shared image");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let image = draft.add_image_resource(ImageResource::Path(b"body.blp".as_slice().into()));
     let first = Texture::new(image);
     let second = Texture::new(image);
@@ -66,9 +67,9 @@ fn image_sharing_is_explicit_and_edits_are_transactional() {
 #[test]
 fn resource_handles_require_the_owning_table_and_removed_slots_are_not_reused() {
     let slot_values = SlotValues::default();
-    let mut foreign = Model::<Universal>::builder("foreign");
+    let mut foreign = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let image = foreign.add_image_resource(ImageResource::Path(b"foreign.blp".as_slice().into()));
-    let mut draft = Model::<Universal>::builder("invalid");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     use_texture(&mut draft, Texture::new(image));
     assert!({
         draft.import_values(&slot_values).unwrap();
@@ -76,7 +77,7 @@ fn resource_handles_require_the_owning_table_and_removed_slots_are_not_reused() 
     }
     .is_err());
 
-    let mut draft = Model::<Universal>::builder("removed");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let removed = draft.add_image_resource(ImageResource::Path(b"old.blp".as_slice().into()));
     draft.remove_image_resource(removed);
     let replacement = draft.add_image_resource(ImageResource::Path(b"new.blp".as_slice().into()));
@@ -92,10 +93,10 @@ fn resource_handles_require_the_owning_table_and_removed_slots_are_not_reused() 
 #[test]
 fn child_model_handles_are_checked_at_publication() {
     let slot_values = SlotValues::default();
-    let mut foreign = Model::<Universal>::builder("foreign");
+    let mut foreign = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let resource =
         foreign.add_model_resource(ResourceLocator::Path(b"child.mdx".as_slice().into()));
-    let mut draft = Model::<Universal>::builder("invalid child");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let node = draft.add_named_node("child").unwrap();
     draft
         .add_feature(

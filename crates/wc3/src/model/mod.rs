@@ -161,3 +161,5 @@ mod table;
 pub use table::Table;
 mod dependencies;
 pub use dependencies::Dependencies;
+
+mod metadata;

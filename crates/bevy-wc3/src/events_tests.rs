@@ -1,11 +1,12 @@
 use super::*;
+use wc3::model::ModelMetadata;
 use wc3::model::{Clip, Controller, ModelBuilder, Time};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 #[test]
 fn controller_activation_and_reordering_do_not_replay_existing_programmes() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("controller transition");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let a = builder.add_controller(Controller::default()).unwrap();
     let b = builder.add_controller(Controller::default()).unwrap();
     let mut controller = definition(TimeSource::Animation, 0.5);
@@ -84,7 +85,7 @@ fn definition(clock: TimeSource, time: f64) -> EventDefinition {
 #[test]
 fn many_looping_definitions_generate_only_seeds_plus_global_dispatch_budget() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("many event streams");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let clock = builder
         .add_clock(wc3::model::SharedClock::Repeating {
             period: Time::seconds(1.).unwrap(),
@@ -129,7 +130,7 @@ fn many_looping_definitions_generate_only_seeds_plus_global_dispatch_budget() {
 #[test]
 fn compilation_resolves_event_node_index_once() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("event anchor");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder
         .add_node(wc3::model::Node::named("anchor", &mut slot_values))
         .unwrap();
@@ -240,7 +241,7 @@ fn paused_start_keys_wait_and_reverse_traversal_does_not_dispatch() {
 #[test]
 fn inclusive_loop_end_and_next_start_are_distinct_and_large_jumps_are_bounded() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("event clock");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let id = builder
         .add_clock(wc3::model::SharedClock::Repeating {
             period: Time::seconds(1.).unwrap(),
@@ -274,7 +275,7 @@ fn inclusive_loop_end_and_next_start_are_distinct_and_large_jumps_are_bounded() 
 #[test]
 fn timeline_keys_follow_selected_clip_interval_and_alias_identity() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("event clip");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let id = builder
         .add_clip(Clip::named("clip").with_duration(Time::seconds(1.).unwrap()))
         .unwrap();
@@ -354,7 +355,7 @@ fn seek_origin_preserves_forward_keys_crossed_before_first_dispatch() {
 #[test]
 fn inactive_programs_and_unchanged_or_paused_updates_do_not_scan_event_definitions() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("indexed event cost");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let mut events = RuntimeEvents::default();
     events
         .definitions
@@ -419,7 +420,7 @@ fn inactive_programs_and_unchanged_or_paused_updates_do_not_scan_event_definitio
 #[test]
 fn interval_clip_index_limits_global_timeline_scans_to_its_authored_window() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("bounded timeline index");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let id = builder.add_clip(Clip::named("interval")).unwrap();
     let events = RuntimeEvents {
         definitions: (0..10000)
@@ -457,7 +458,7 @@ fn interval_clip_index_limits_global_timeline_scans_to_its_authored_window() {
 #[test]
 fn frozen_shared_clock_does_not_traverse_event_windows() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("frozen clock events");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let clock = builder.add_clock(wc3::model::SharedClock::Frozen).unwrap();
     let events = RuntimeEvents {
         definitions: vec![definition(TimeSource::Shared(clock), 0.)],

@@ -23,12 +23,6 @@ pub(super) fn plan_with_animations(
     asset.validate()?;
     let model = asset;
     let mut context = Context::export(options);
-    if !model.name().is_empty() {
-        context.unsupported(
-            "d3.model.name",
-            "native appearance resources do not declare a model display name",
-        )?;
-    }
     if !animations && !model.clips().is_empty() {
         context.unsupported(
             "d3.animation",
@@ -72,15 +66,8 @@ pub(super) fn plan_with_animations(
         }
     };
     write_controls(model.metadata(), &mut root, look_at_name)?;
-    root.bounds = native_bounds(
-        model
-            .bounds()
-            .ok_or_else(|| Error::new("d3.bounds", "model bounds are required"))?,
-    );
-    if model
-        .bounds()
-        .is_some_and(|bounds| bounds.sphere_radius != 0.)
-    {
+    root.bounds = native_bounds(model.bounds());
+    if model.bounds().sphere_radius != 0. {
         context.unsupported("d3.bounds.sphere_radius","native AABB has no independent conservative sphere radius; collision sphere remains separately authored")?;
     }
     let bones: Vec<_> = model

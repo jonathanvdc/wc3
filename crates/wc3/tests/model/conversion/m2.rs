@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use wc3::model::common::{IntoZeroVec, ZeroVec};
 use wc3::model::io;
+use wc3::model::ModelMetadata;
 use wc3::model::TimeSource;
 use wc3::model::{
     self as sm,
@@ -1152,7 +1153,7 @@ fn native_alias_keeps_light_programme_on_its_referenced_clip() {
 #[test]
 fn zero_duration_global_tracks_are_typed_frozen_clocks_and_roundtrip_without_retiming() {
     let mut slot_values = SlotValues::default();
-    let mut invalid = sm::ModelBuilder::new("zero repeating period");
+    let mut invalid = sm::ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     invalid
         .add_clock(sm::SharedClock::Repeating {
             period: sm::Time::default(),

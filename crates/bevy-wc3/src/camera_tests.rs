@@ -1,8 +1,10 @@
 use super::*;
 use crate::{compile_model, spawn_model};
 use bevy::ecs::world::CommandQueue;
+use wc3::model::ModelBuilder;
+use wc3::model::ModelMetadata;
 use wc3::model::{
-    AimedCamera, Camera as ModelCamera, CameraConvention, Curve, DynamicTrack, Model, NodeFeature,
+    AimedCamera, Camera as ModelCamera, CameraConvention, Curve, DynamicTrack, NodeFeature,
     Time as ModelTime, TimeSource, Track,
 };
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
@@ -10,7 +12,7 @@ use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 #[test]
 fn binding_samples_current_animation_and_root_without_pose_or_global_update_lag() {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::builder("bound camera");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("camera").unwrap();
     builder
         .add_global_track(DynamicTrack::Vector3(Track {

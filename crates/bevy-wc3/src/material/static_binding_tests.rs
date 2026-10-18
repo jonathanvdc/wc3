@@ -3,6 +3,7 @@ use super::*;
 use crate::animation_targets::AnimationTargets;
 use crate::material::native_fixtures::m2;
 use wc3::model::profiles::{mdlx, Universal};
+use wc3::model::ModelMetadata;
 use wc3::model::{
     AnimationSample, Clip, Controller, Curve, DynamicTrack, Material, MaterialId, MaterialSurface,
     Model, ModelBuilder, SharedClock, Time as ModelTime, TimeSource, Track,
@@ -12,7 +13,7 @@ use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 #[test]
 fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::<Universal>::builder("bound constant M2 material");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let material = builder.reserve_material();
     let mut surface = m2::Material {
         color: slot_values.add([0.2, 0.4, 0.6]),
@@ -60,7 +61,7 @@ fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
 #[test]
 fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_controller() {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::<Universal>::builder("all channel owners");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let nodes: Vec<_> = (0..5)
         .map(|i| builder.add_named_node(format!("node {i}")).unwrap())
         .collect();
@@ -128,7 +129,7 @@ fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_controller()
 #[test]
 fn pruning_visits_every_uv_transform_weight_and_hd_control() {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::<Universal>::builder("nested runtime bindings");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("untracked").unwrap();
     let material = builder.reserve_material();
     builder
@@ -189,7 +190,7 @@ fn pruning_visits_every_uv_transform_weight_and_hd_control() {
 
 fn scalar_material() -> (ModelBuilder<'static>, MaterialId) {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::<Universal>::builder("scalar material tracks");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let material = builder.reserve_material();
     let surface = m2::Material {
         color: slot_values.add([1.; 3]),
@@ -362,7 +363,7 @@ fn equal_spline_endpoints_do_not_prove_constant_scalar_output() {
 #[test]
 fn folding_constant_weights_preserves_changing_uv_channels() {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::<Universal>::builder("weight and UV");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("UV source").unwrap();
     let material = builder.reserve_material();
     let mut unit: m2::TextureUnit = m2::TextureUnit {

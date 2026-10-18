@@ -13,15 +13,6 @@ pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
             "Warcraft III model name, animation filename, and blend time require a model-info declaration with bounds",
         ));
     }
-    if value.units() != crate::model::LengthUnit::Unspecified
-        || value.basis() != crate::model::Basis::default()
-    {
-        return Err(Error::new(
-            "model.coordinates",
-            "native model coordinates use the file family's implicit basis without authored global unit metadata",
-        ));
-    }
-
     if !value.controllers().is_empty() {
         return Err(Error::new(
             "controllers",

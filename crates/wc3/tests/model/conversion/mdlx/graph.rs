@@ -679,7 +679,7 @@ fn absent_model_info_stays_absent_while_named_drafts_declare_bounds() {
     let mut asset = named;
     assert!(asset
         .edit(|builder| {
-            builder.set_bounds(None);
+            builder.metadata_mut().bounds = None;
             Ok(())
         })
         .is_err());

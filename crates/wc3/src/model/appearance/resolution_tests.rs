@@ -1,5 +1,6 @@
 use super::*;
 use crate::model::controls::{diablo3 as d3_controls, diablo4 as d4_controls};
+use crate::model::ModelMetadata;
 use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use crate::model::{Material, Mesh, MeshInstance, ModelBuilder};
 
@@ -32,7 +33,7 @@ fn material(builder: &mut ModelBuilder<'static>) -> MaterialId {
 #[test]
 fn diablo3_resolution_preserves_alternative_and_variant_identity() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("d3 assignment");
+    let mut builder = ModelBuilder::new(ModelMetadata::D3(Default::default()));
     let first = material(&mut builder);
     let second = material(&mut builder);
     let mut appearance = diablo3::Appearance::default();
@@ -87,7 +88,7 @@ fn diablo3_resolution_preserves_alternative_and_variant_identity() {
 #[test]
 fn diablo4_single_variant_default_and_explicit_family_checks() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("d4 assignment");
+    let mut builder = ModelBuilder::new(ModelMetadata::D4(Default::default()));
     let expected = material(&mut builder);
     let mut appearance = diablo4::Appearance::default();
     let slot = appearance.add_slot(diablo4::Slot::new(42, -1, 0));
@@ -125,7 +126,7 @@ fn diablo4_single_variant_default_and_explicit_family_checks() {
 #[test]
 fn sole_alternative_default_uses_its_binding_instead_of_first_variant() {
     let mut slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("sole authored alternative");
+    let mut builder = ModelBuilder::new(ModelMetadata::D3(Default::default()));
     let first = material(&mut builder);
     let selected = material(&mut builder);
     let mut appearance = diablo3::Appearance::default();

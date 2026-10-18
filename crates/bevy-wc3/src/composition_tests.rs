@@ -2,6 +2,7 @@ use super::*;
 use crate::{compile_model, BakeSpace, Playback, PoseBaker, PoseOptions};
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
+use wc3::model::ModelMetadata;
 use wc3::model::{
     Clip, Curve, Draw, DynamicTrack, ExplicitBinding, GeometryData, GeometryInfluences, Influence,
     Material, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node as ModelNode, Quaternion,
@@ -12,7 +13,7 @@ use wc3::model::{ModelMount, MountTarget, Transform as ModelTransform};
 
 fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::<Universal>::builder("bound triangle");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let joint = builder
         .add_node(
             ModelNode::named("joint", &mut slot_values)
@@ -597,28 +598,20 @@ fn resource_only_placement_is_not_an_attachment_point() {
 }
 
 #[test]
-fn physical_placements_preserve_child_units_and_up_axis() {
+fn physical_placements_preserve_explicit_child_frame() {
     let mut slot_values = SlotValues::default();
-    use wc3::model::{Axis, Basis, CoordinatePolicy, Handedness, LengthUnit};
-    let (mut body, joint, clip) = model(1.);
-    body.edit(|builder| {
-        builder.set_units(LengthUnit::MetersPerUnit(0.01));
-        Ok(())
-    })
-    .unwrap();
-    let (mut part, _, _) = model(3.);
-    part.edit(|builder| {
-        builder.set_basis(Basis::new(
-            Axis::PositiveY,
-            Axis::NegativeZ,
-            Handedness::Right,
-        )?);
-        builder.set_units(LengthUnit::MetersPerUnit(2.));
-        Ok(())
-    })
-    .unwrap();
-    let body = compile_model(&body, |_| None).unwrap();
-    let part = compile_model(&part, |_| None).unwrap();
+    use wc3::model::{Axis, Basis, CoordinatePolicy, Handedness};
+    let (body, joint, clip) = model(1.);
+    let (part, _, _) = model(3.);
+    let mut body = compile_model(&body, |_| None).unwrap();
+    let mut part = compile_model(&part, |_| None).unwrap();
+    // Explicit compiled-frame controls isolate composition from native model metadata.
+    let target = Basis::new(Axis::PositiveY, Axis::NegativeZ, Handedness::Right).unwrap();
+    body.basis = Transform::from_matrix(
+        Basis::default().conversion_to(target) * Mat4::from_scale(Vec3::splat(0.01)),
+    );
+    part.basis = Transform::from_scale(Vec3::splat(2.));
+    part.up = Vec3::Y;
     let offset = ModelTransform {
         translation: [2., 3., 4.],
         ..SlotConstruct::construct(&mut slot_values)

@@ -1,4 +1,6 @@
 use super::*;
+use wc3::model::ModelBuilder;
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn policy() -> ColorAdjustment {
@@ -111,15 +113,15 @@ fn authored_context(
     use wc3::model::controls::world_draw::DrawControls as WorldDraw;
     use wc3::model::scene::world::{GroupOptions, Portal, PortalConnection, WorldOptions};
     use wc3::model::{Draw, DrawSubset, GeometryData, Mesh, Node, PrimitiveSelection};
-    let mut builder = Model::builder("authored lighting");
-    builder.set_metadata(Some(ModelMetadata::Wmo(WorldMetadata {
+    let mut builder = ModelBuilder::new(ModelMetadata::Wmo(Default::default()));
+    builder.set_metadata(ModelMetadata::Wmo(WorldMetadata {
         ambient: [20, 40, 60, 255],
         options: WorldOptions {
             vertex_color_alpha_only: true,
             ..SlotConstruct::construct(&mut slot_values)
         },
         ..SlotConstruct::construct(&mut slot_values)
-    })));
+    }));
     let node = Node::named("group", &mut slot_values);
     slot_values
         .set(node.transform.translation, translation)

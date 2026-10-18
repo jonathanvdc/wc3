@@ -53,9 +53,10 @@ Explicit inverse bind matrices and identity bindings retain their distinct
 interpretations. GPU skinning supports up to eight active influences per vertex and
 rejects larger distributions without truncation.
 
-The model coordinate frame maps authored up and forward directions into Bevy's Y-up,
-negative-Z-forward frame. Declared meters-per-unit scales the entire model frame.
-Application transforms remain outside that conversion. The driving camera for
+The model coordinate frame maps the selected native family's up and forward
+directions into Bevy's Y-up, negative-Z-forward frame. Native model metadata
+does not declare a physical length scale. Applications supply additional scale
+through their transforms outside that conversion. The driving camera for
 billboards and camera anchoring is explicitly selected on `Playback`.
 
 Playback uses seconds. `wc3` evaluates typed curves, while `AnimationProgram`
@@ -168,7 +169,7 @@ its population or view changes. Motion evaluates gravity, wind, and linear drag
 analytically. Local particles follow the current emitter transform; world particles
 retain their birth frame with optional authored emitter-follow translation.
 M2 attached particles use their current emitter frame; detached gravity does not
-rotate or scale with the animated bone. Declared model axes and units still apply. Paused, unchanged frames avoid mesh uploads.
+rotate or scale with the animated bone. Native coordinate conventions and application scale still apply. Paused, unchanged frames avoid mesh uploads.
 Living-particle, per-update birth, and long-update budgets bound CPU work;
 `SpriteEmitter` exposes omitted work and current population.
 

@@ -1,13 +1,14 @@
 use super::*;
 use std::f64::consts::FRAC_PI_2;
 use wc3::model::systems::model_physics::Spring;
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{ModelMount, MountTarget};
 use wc3::model::{Node, Quaternion};
 
 fn fixture(dynamic: usize) -> (PhysicsDefinition, Vec<Mat4>) {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::<Universal>::builder("secondary motion");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let mut bodies = Vec::new();
     let mut authored = Vec::new();
     for index in 0..dynamic {
@@ -216,7 +217,7 @@ fn runtime_simulates_rest_rig_and_restores_authored_pose_when_disabled() {
     use crate::{compile_model, spawn_model, ModelMaterial, ModelRig, Playback, PoseOverrides};
     use bevy::ecs::world::CommandQueue;
     use wc3::model::systems::model_physics::{Body, Physics};
-    let mut builder = Model::<Universal>::builder("armor secondary motion");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let bone = builder.add_named_node("armor-bone").unwrap();
     let placement = builder
         .add_node(
@@ -393,7 +394,7 @@ fn composition_remaps_parent_bodies_and_constraints_to_shared_host_body() {
 fn composition_body_offset_includes_rest_correction_anchors() {
     let mut slot_values = SlotValues::default();
     let (mut part, _) = fixture(1);
-    let mut builder = Model::<Universal>::builder("corrected host frames");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let host = builder.add_named_node("host").unwrap();
     let anchor = builder.add_named_node("rest correction").unwrap();
     let placement = builder.add_named_node("placement").unwrap();
@@ -536,7 +537,7 @@ fn mounted_physics_inherits_forces_through_current_frame_carrier_rotation() {
     };
     use bevy::ecs::world::CommandQueue;
     use wc3::model::systems::model_physics::Physics;
-    let mut host = Model::<Universal>::builder("physics host");
+    let mut host = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let carrier = host.add_named_node("carrier").unwrap();
     let host = compile_model(
         &{
@@ -547,7 +548,7 @@ fn mounted_physics_inherits_forces_through_current_frame_carrier_rotation() {
         |_| None,
     )
     .unwrap();
-    let mut part = Model::<Universal>::builder("physics part");
+    let mut part = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let bone = part.add_named_node("bone").unwrap();
     let placement = part
         .add_node(Node::named("body", &mut slot_values).with_parent(bone))
@@ -738,7 +739,7 @@ fn ragdoll_and_private_world_equipment_preserve_domain_and_simulate_authored_cha
     use wc3::model::systems::model_physics::{CollisionMask, Motor, Physics};
     use wc3::model::values::model::PhysicsGameFlags;
     for domain in [PhysicsKind::Ragdoll, PhysicsKind::PrivateWorld] {
-        let mut builder = Model::<Universal>::builder("native-domain belt chain");
+        let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
         let mut bodies = Vec::new();
         for index in 0..8 {
             let bone = builder

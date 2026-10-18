@@ -6,9 +6,9 @@ use crate::model::Link;
 use crate::model::M2ResourceLocator;
 use crate::model::PropertyValues;
 use crate::model::{
-    Basis, Bounds, ClipControls, DrawControls, DrawLooks, Error, FeatureKind, IdentityBinding,
-    LengthUnit, M2Geometry, MaterialSurface, MeshControls, Model, ModelMetadata, NodeControls,
-    System, UniversalAppearance, UniversalBinding,
+    ClipControls, DrawControls, DrawLooks, Error, FeatureKind, IdentityBinding, M2Geometry,
+    MaterialSurface, MeshControls, Model, ModelMetadata, NodeControls, System, UniversalAppearance,
+    UniversalBinding,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 /// Vocabulary that maps mechanically to M2 logical features.
@@ -21,14 +21,11 @@ impl Profile for M2 {
     type PhysicsResource<'a> = M2ResourceLocator<'a>;
     type BoneOverrideResource<'a> = M2ResourceLocator<'a>;
 
-    fn default_bounds() -> Option<Bounds> {
-        Some(Default::default())
-    }
     type Appearance<'a> = DrawLooks<'a>;
     type Binding<'a> = IdentityBinding;
     type Geometry<'a> = M2Geometry<'a>;
     type Draw = Option<m2::DrawControls>;
-    type ModelMetadata<'a> = m2::ModelMetadata;
+    type ModelMetadata<'a> = m2::ModelMetadata<'a>;
     type System<'a> = m2::System<'a>;
     type Surface<'a> = m2::Material<'a>;
     type Feature<'a> = m2::ActorKind<'a>;
@@ -42,19 +39,6 @@ impl Profile for M2 {
     }
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
         model.validate_animation_consumers()?;
-        if model.bounds().is_none() {
-            return Err(Error::new(
-                "model.bounds",
-                "this profile requires an authored bounding volume",
-            ));
-        }
-
-        if model.basis() != Basis::default() || model.units() != LengthUnit::Unspecified {
-            return Err(Error::new(
-                "m2.coordinates",
-                "M2 has fixed authored axes and no physical-unit declaration",
-            ));
-        }
         for (_, clip) in model.clips() {
             if let Some(alias) = clip.controls.alias {
                 let target = model.clip(alias).expect("validated alias reference");
@@ -155,7 +139,7 @@ impl Extends<M2> for Universal {
         value.map(DrawControls::M2)
     }
     fn model_metadata<'a>(value: <M2 as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
-        Some(ModelMetadata::M2(value))
+        ModelMetadata::M2(value)
     }
     fn system<'a>(value: <M2 as Profile>::System<'a>) -> Self::System<'a> {
         System::M2(value)

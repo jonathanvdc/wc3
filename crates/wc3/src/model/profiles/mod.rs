@@ -3,8 +3,8 @@ use crate::model::EffectResourceId;
 use crate::model::PropertyValues;
 use crate::model::ResourceLocator;
 use crate::model::{
-    AppearanceSchema, BindingSchema, Bounds, Error, FeatureKind, GeometrySchema, Link,
-    MaterialSurface, Model, ModelMetadata, NodeFeature, SkinId, SystemPayload, ValidateLinks,
+    AppearanceSchema, BindingSchema, Error, FeatureKind, GeometrySchema, Link, MaterialSurface,
+    Model, ModelMetadata, NodeFeature, SkinId, SystemPayload, ValidateLinks,
 };
 use crate::model::{
     Attachment, EventSource, FeatureSet, FeatureView, FeatureVocabulary, ImageResource, Light,
@@ -91,7 +91,7 @@ pub trait Profile: Clone + Debug + 'static {
     /// Complete geometry vocabulary, including supported streams and connectivity.
     type Geometry<'a>: GeometrySchema<'a>;
     /// Model-wide authoring metadata.
-    type ModelMetadata<'a>: ControlsPayload + Default;
+    type ModelMetadata<'a>: ControlsPayload;
     /// Independently authored scene systems.
     type System<'a>: SystemPayload;
     /// Complete surface payload, with no unsupported family variants.
@@ -111,10 +111,6 @@ pub trait Profile: Clone + Debug + 'static {
     /// Additional layered-controller behavior.
     type Controller<'a>: ControlsPayload + Default;
 
-    /// Initial bounding volume for a new model draft.
-    fn default_bounds() -> Option<Bounds> {
-        None
-    }
     /// Returns the binding owned by shared geometry, when the vocabulary supports one.
     fn mesh_skin(controls: &Self::Mesh<'_>) -> Option<SkinId> {
         let _ = controls;
@@ -180,7 +176,7 @@ impl Profile for Universal {
     type Binding<'a> = UniversalBinding<'a>;
     type Geometry<'a> = GeometryData<'a>;
     type Draw = Option<DrawControls>;
-    type ModelMetadata<'a> = Option<ModelMetadata<'a>>;
+    type ModelMetadata<'a> = ModelMetadata<'a>;
     type System<'a> = System<'a>;
     type Surface<'a> = MaterialSurface<'a>;
     type Feature<'a> = NodeFeature<'a>;

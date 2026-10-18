@@ -5,6 +5,8 @@ use super::layers::layer_uniform;
 use super::*;
 use std::sync::Arc;
 use wc3::model::materials::m3;
+use wc3::model::ModelBuilder;
+use wc3::model::ModelMetadata;
 use wc3::model::{AnimationSample, Material, MaterialStep, MaterialSurface};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
@@ -25,7 +27,7 @@ fn constant(slot_values: &mut SlotValues, color: [f32; 4]) -> m3::TextureLayer {
     layer
 }
 fn compile(surface: m3::StandardMaterialStep, slot_values: &SlotValues) -> SurfacePass {
-    let mut builder = Model::builder("standard controls");
+    let mut builder = ModelBuilder::new(ModelMetadata::M3(Default::default()));
     builder.import_values(slot_values).unwrap();
     let model = builder.finish().unwrap();
     compile_m3(
@@ -93,7 +95,7 @@ fn uv_transform_uses_authored_radians_center_and_pretiling_offset() {
 #[test]
 fn every_regular_role_has_a_fixed_physical_image_binding() {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::builder("standard roles");
+    let mut builder = ModelBuilder::new(ModelMetadata::M3(Default::default()));
     let texture = builder.add_file_texture("roles.dds").unwrap();
     let mut layer = constant(&mut slot_values, [1.; 4]);
     layer.binding.sampling.flags.set_color(false);
@@ -151,7 +153,7 @@ fn every_regular_role_has_a_fixed_physical_image_binding() {
 #[test]
 fn uv3_only_requests_its_raw_stream_and_pipeline_layout() {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::builder("fourth UV");
+    let mut builder = ModelBuilder::new(ModelMetadata::M3(Default::default()));
     let texture = builder.add_file_texture("uv.dds").unwrap();
     let mut layer = constant(&mut slot_values, [1.; 4]);
     layer.binding.image = Some(texture.resource);
@@ -189,7 +191,9 @@ fn uv3_only_requests_its_raw_stream_and_pipeline_layout() {
 fn unchanged_sampling_keeps_uniforms_and_team_settings_stable() {
     let mut slot_values = SlotValues::default();
     let model = {
-        let mut draft = Model::<wc3::model::profiles::Universal>::builder("static animation");
+        let mut draft = Model::<wc3::model::profiles::Universal>::builder(ModelMetadata::M3(
+            Default::default(),
+        ));
         draft.import_values(&slot_values).unwrap();
         draft.finish().unwrap()
     };
@@ -228,7 +232,7 @@ fn unchanged_sampling_keeps_uniforms_and_team_settings_stable() {
 #[test]
 fn unresolved_coordinate_generators_skip_only_the_affected_role() {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::builder("unsupported sampled coordinates");
+    let mut builder = ModelBuilder::new(ModelMetadata::M3(Default::default()));
     let texture = builder.add_file_texture("unsupported.dds").unwrap();
     let model = {
         builder.import_values(&slot_values).unwrap();
@@ -297,7 +301,7 @@ fn effect_context_enables_external_color_without_changing_authored_mesh_state() 
 #[test]
 fn unresolved_images_use_white_diffuse_and_neutral_optional_roles() {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::builder("unresolved roles");
+    let mut builder = ModelBuilder::new(ModelMetadata::M3(Default::default()));
     let texture = builder.add_file_texture("missing.dds").unwrap();
     let model = {
         builder.import_values(&slot_values).unwrap();
@@ -351,7 +355,7 @@ fn unresolved_images_use_white_diffuse_and_neutral_optional_roles() {
 #[test]
 fn independent_image_roles_share_each_effective_native_wrap_sampler() {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::builder("pooled standard sampling");
+    let mut builder = ModelBuilder::new(ModelMetadata::M3(Default::default()));
     let texture = builder.add_file_texture("wrap.dds").unwrap();
     let mut layers = Vec::new();
     for (u, v) in [
@@ -406,7 +410,7 @@ fn independent_image_roles_share_each_effective_native_wrap_sampler() {
 fn animated_role_values_sample_timeline_and_preserve_compiled_image_routes() {
     let mut slot_values = SlotValues::default();
     use wc3::model::{Curve, DynamicTrack, Time as ModelTime, TimeSource, Track};
-    let mut builder = Model::builder("animated material roles");
+    let mut builder = ModelBuilder::new(ModelMetadata::M3(Default::default()));
     let material = builder.reserve_material();
     let property = slot_values.add(1.);
     let mut opacity = constant(&mut slot_values, [1.; 4]);

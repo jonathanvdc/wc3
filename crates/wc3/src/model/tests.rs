@@ -1,4 +1,6 @@
 use crate::model::common::Borrowed as _;
+use crate::model::profiles::Universal;
+use crate::model::ModelMetadata;
 use crate::model::PathResource;
 use crate::model::PropertyValues as SlotValues;
 use crate::model::TimeSource;
@@ -6,10 +8,10 @@ use crate::model::*;
 use zerovec::ZeroVec;
 #[test]
 fn foreign_graph_handles_are_rejected() {
-    let mut first = ModelBuilder::new("first");
+    let mut first = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let parent = first.add_named_node("parent").unwrap();
     first.finish().unwrap();
-    let mut second = ModelBuilder::new("second");
+    let mut second = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let child = second.new_node("child").with_parent(parent);
     second.add_node(child).unwrap();
     assert!(second.finish().is_err());
@@ -18,7 +20,7 @@ fn foreign_graph_handles_are_rejected() {
 #[test]
 fn forward_parents_are_resolved_and_cycles_rejected() {
     let slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("model");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let parent = builder.reserve_node();
     let child = builder.new_node("child").with_parent(parent);
     builder.add_node(child).unwrap();
@@ -45,7 +47,7 @@ fn borrowing_survives_graph_construction_and_clone() {
     let slot_values = SlotValues::default();
     let positions = ZeroVec::alloc_from_slice(&[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]);
     let faces = [[0, 1, 2]];
-    let mut builder = ModelBuilder::new("triangle");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let id = builder
         .add_mesh(Mesh::triangles(positions.as_borrowed(), faces.as_slice()))
         .unwrap();
@@ -71,7 +73,7 @@ fn owned_array_detachment_shares_storage() {
 #[test]
 fn invalid_geometry_never_enters_a_published_model() {
     let slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("bad geometry");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     builder
         .add_mesh(Mesh::triangles([[0., 0., 0.]], [[0, 1, 2]]))
         .unwrap();
@@ -91,7 +93,7 @@ fn boundary_keys_may_precede_playback() {
 
 #[test]
 fn cloned_branches_allocate_distinct_new_identities() {
-    let original = Model::standalone("original");
+    let original = Model::<Universal>::empty(ModelMetadata::Mdlx(Default::default())).unwrap();
     let mut a = original.clone();
     let mut b = original;
     let a_id = a.edit(|draft| draft.add_named_node("a")).unwrap();
@@ -117,7 +119,7 @@ fn scalar_and_vector_slots_cannot_alias() {
 #[test]
 fn complete_material_looks_resolve_independently() {
     let slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("looks");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("root").unwrap();
     let mesh = builder
         .add_mesh(Mesh::triangles(
@@ -270,7 +272,7 @@ fn application_vocabularies_participate_in_graph_validation() {
         type Clip<'a> = profiles::NoControls;
         type Controller<'a> = profiles::NoControls;
     }
-    let mut first = ModelBuilder::<Application>::with_profile("application");
+    let mut first = ModelBuilder::<Application>::with_profile(profiles::NoControls);
     let texture = first.add_file_texture("custom.dds").unwrap();
     let material = first
         .add_material(Material::<Application> {
@@ -280,7 +282,7 @@ fn application_vocabularies_participate_in_graph_validation() {
         .unwrap();
     let graph = first.finish().unwrap();
     assert_eq!(graph.material(material).unwrap().surface.texture, texture);
-    let mut foreign = ModelBuilder::<Application>::with_profile("foreign");
+    let mut foreign = ModelBuilder::<Application>::with_profile(profiles::NoControls);
     foreign
         .add_material(Material::<Application> {
             name: "invalid".into(),
@@ -331,7 +333,7 @@ fn explicit_joint_bindings_check_palette_cardinality() {
 #[test]
 fn absolute_timeline_does_not_require_a_playback_clip() {
     let slot_values = SlotValues::default();
-    let mut builder = ModelBuilder::new("timeline");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("animated").unwrap();
     builder
         .add_global_track(DynamicTrack::Vector3(Track {

@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use wc3::model::profiles::{m3, mdlx, Universal};
+use wc3::model::ModelMetadata;
 use wc3::model::PropertyValues as SlotValues;
 use wc3::model::{
     AnimationProgram, AnimationSample, Attachment, ChildModel, Model, MountTarget, NodeFeature,
@@ -29,7 +30,7 @@ fn owned_attachment_preserves_native_identity_controls_and_activation() {
 #[test]
 fn native_child_mounts_retain_fractional_visibility_without_inventing_points() {
     let mut slot_values = SlotValues::default();
-    let mut model = Model::<Universal>::builder("child mounts");
+    let mut model = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let resource = model.add_model_resource(ResourceLocator::Path(Cow::Borrowed(b"weapon.mdx")));
     let native = mdlx::Attachment {
         resource,

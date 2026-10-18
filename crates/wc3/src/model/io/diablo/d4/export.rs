@@ -32,12 +32,6 @@ pub(super) fn plan(
             "Diablo IV appearance export preserves its authored alternatives",
         ));
     }
-    if !model.name().is_empty() {
-        context.unsupported(
-            "d4.model.name",
-            "native appearances store hashed identities without a model name string",
-        )?;
-    }
     for (_, node) in model.nodes() {
         if !node.name.is_empty() {
             context.unsupported(
@@ -68,18 +62,8 @@ pub(super) fn plan(
     root.deformation_scale = controls.deformation_scale;
     root.fused_prefab = controls.fused_prefab;
     root.look_variant = controls.look_variant;
-    check_aabb_radius(
-        model
-            .bounds()
-            .ok_or_else(|| error("model bounds are required"))?,
-        &mut context,
-        "d4.bounds",
-    )?;
-    root.structure.aabb_bounds = native_bounds(
-        model
-            .bounds()
-            .ok_or_else(|| error("model bounds are required"))?,
-    );
+    check_aabb_radius(model.bounds(), &mut context, "d4.bounds")?;
+    root.structure.aabb_bounds = native_bounds(model.bounds());
     root.structure.bounds = native::Sphere {
         center: controls.structure_sphere_center,
         wd_radius: controls.structure_sphere_radius,

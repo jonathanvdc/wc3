@@ -2,7 +2,9 @@
 use super::materials::{read_shader, write_shader};
 use crate::model::conversion::{Context, Conversion, Error, ExportOptions, ImportOptions, Plan};
 use crate::model::formats::diablo::d4::{self, records as native};
-use crate::model::profiles::diablo::d4::{Material as Surface, MaterialAssetControls, D4};
+use crate::model::profiles::diablo::d4::{
+    Material as Surface, MaterialAssetControls, ModelMetadata, D4,
+};
 use crate::model::{Material, MaterialId, Model};
 
 /// Imports one standalone material resource as a checked material-only graph.
@@ -23,7 +25,7 @@ pub fn import_material<'a>(
     {
         context.unsupported("d4.material.programs", "decal variants, biome/clutter programs, and playback controller paths require additional semantic declarations")?;
     }
-    let mut model = Model::<D4>::builder("");
+    let mut model = Model::<D4>::builder(ModelMetadata::default());
     let mut shader = read_shader(&root.uber_material, &mut model, &mut context)?;
     shader.asset = Some(MaterialAssetControls {
         sno_id: root.sno_id,

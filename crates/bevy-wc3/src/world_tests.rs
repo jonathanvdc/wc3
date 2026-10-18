@@ -2,11 +2,12 @@ use super::super::lod::{update_lod, LodSettings};
 use super::*;
 use bevy::mesh::VertexAttributeValues;
 use wc3::model::profiles::Universal;
+use wc3::model::ModelMetadata;
 use wc3::model::{controls::world::WorldSystem, ModelBuilder};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn system_id() -> SystemId {
-    ModelBuilder::<Universal>::new("world identities")
+    ModelBuilder::<Universal>::new(ModelMetadata::Wmo(Default::default()))
         .add_system(System::Wmo(WorldSystem::default()))
         .unwrap()
 }
@@ -127,7 +128,7 @@ fn compiled_world_spawns_liquid_hooks_and_selection_gates() {
     use wc3::model::controls::world::{Group, RegionControls};
     use wc3::model::{GeometryData, Mesh as ModelMesh, MeshInstance};
 
-    let mut builder = ModelBuilder::<Universal>::new("liquid region");
+    let mut builder = ModelBuilder::<Universal>::new(ModelMetadata::Wmo(Default::default()));
     let node = builder.add_named_node("region").unwrap();
     let geometry =
         GeometryData::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]).unwrap();

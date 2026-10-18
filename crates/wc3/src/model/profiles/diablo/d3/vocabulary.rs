@@ -10,8 +10,8 @@ use crate::model::resources::SnoResource;
 use crate::model::PropertyValues;
 use crate::model::TimeSource;
 use crate::model::{
-    Basis, Billboard, Bounds, Error, ExplicitBinding, Inheritance, LengthUnit, Model, NodeControls,
-    SnoNamespace, Transform, UniversalAppearance, UniversalBinding,
+    Billboard, Error, ExplicitBinding, Inheritance, Model, NodeControls, SnoNamespace, Transform,
+    UniversalAppearance, UniversalBinding,
 };
 use crate::model::{
     ClipControls as AnyClipControls, MeshControls as AnyMeshControls,
@@ -41,20 +41,8 @@ impl Profile for D3 {
     type Draw = NoControls;
     type Clip<'a> = ClipControls;
     type Controller<'a> = NoControls;
-    fn default_bounds() -> Option<Bounds> {
-        Some(Bounds::default())
-    }
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
         model.validate_animation_consumers()?;
-        if model.bounds().is_none()
-            || model.basis() != Basis::default()
-            || model.units() != LengthUnit::Unspecified
-        {
-            return Err(Error::new(
-                "d3.model.coordinates",
-                "expected authored bounds, the fixed Diablo basis, and unspecified physical units",
-            ));
-        }
         if let LookAtTarget::Bone(id) = model.metadata().look_at.target {
             if !model
                 .node(id)
@@ -227,7 +215,7 @@ impl Extends<D3> for Universal {
         value.into()
     }
     fn model_metadata<'a>(value: <D3 as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
-        Some(AnyModelMetadata::D3(value))
+        AnyModelMetadata::D3(value)
     }
     fn system<'a>(value: <D3 as Profile>::System<'a>) -> Self::System<'a> {
         match value {}
@@ -324,7 +312,7 @@ impl Narrows<Universal> for D3 {
         value: <Universal as Profile>::ModelMetadata<'a>,
     ) -> Result<Self::ModelMetadata<'a>, Error> {
         match value {
-            Some(AnyModelMetadata::D3(value)) => Ok(value),
+            AnyModelMetadata::D3(value) => Ok(value),
             _ => Err(Error::new(
                 "d3.narrow.model",
                 "payload belongs to another authoring vocabulary",

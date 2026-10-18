@@ -11,6 +11,8 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::values::programmed::{RibbonKind, Smoothing};
+#[cfg(test)]
+use wc3::model::ModelMetadata;
 use wc3::model::{
     ClipId, FeatureId, MaterialId, Model, NodeFeature, NodeId, ProgrammedAge, Property,
     RibbonEmitter as SemanticRibbonEmitter,
@@ -523,7 +525,7 @@ mod tests {
         use bevy::ecs::world::CommandQueue;
         use wc3::model::profiles::Universal;
         use wc3::model::{Attachment, Socket, SocketIdentity};
-        let mut builder = Model::<Universal>::builder("ribbon passes");
+        let mut builder = Model::<Universal>::builder(ModelMetadata::M3(Default::default()));
         let node = builder.add_named_node("anchor").unwrap();
         let feature = builder
             .add_feature(

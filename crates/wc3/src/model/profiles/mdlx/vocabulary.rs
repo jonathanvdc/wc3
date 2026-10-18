@@ -38,9 +38,6 @@ impl Profile for Mdlx {
     type PhysicsResource<'a> = Unavailable;
     type BoneOverrideResource<'a> = Unavailable;
 
-    fn default_bounds() -> Option<crate::model::Bounds> {
-        Some(Default::default())
-    }
     type Appearance<'a> = SingleLook<'a>;
     type Binding<'a> = IdentityBinding;
     type Geometry<'a> = MdlxGeometry<'a>;
@@ -106,7 +103,7 @@ impl Extends<Mdlx> for Universal {
         None
     }
     fn model_metadata<'a>(value: <Mdlx as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
-        Some(ModelMetadata::Mdlx(value))
+        ModelMetadata::Mdlx(value)
     }
     fn system<'a>(value: <Mdlx as Profile>::System<'a>) -> Self::System<'a> {
         match value {}

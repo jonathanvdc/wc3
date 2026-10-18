@@ -5,6 +5,9 @@ use std::borrow::Cow;
 /// Model identity and appearance-wide declarations.
 #[derive(Clone, Debug, Default)]
 pub struct ModelMetadata {
+    /// Authored appearance bounding box.
+    pub bounds: Bounds,
+
     /// Source appearance resource identity, independent of its filename.
     pub sno_id: i32,
     /// Authored object classification, including unresolved codes.
@@ -26,6 +29,9 @@ pub struct ModelMetadata {
 }
 impl ValidateLinks for ModelMetadata {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if self.bounds.validate().is_err() {
+            visitor(Link::InvalidValue);
+        }
         if self
             .collision_center
             .iter()

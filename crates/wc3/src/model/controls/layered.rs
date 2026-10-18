@@ -72,8 +72,13 @@ pub struct BillboardAxisLocks {
     pub z: bool,
 }
 /// Genuinely model-wide Warcraft III authoring controls.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModelMetadata<'a> {
+    /// Authored model name.
+    pub name: Cow<'a, str>,
+    /// Model-info bounding volume; absence means the model-info declaration is absent.
+    pub bounds: Option<Bounds>,
+
     /// External animation-file resource.
     pub animation_file: Cow<'a, str>,
     /// Sequence transition blend duration in seconds.
@@ -83,8 +88,23 @@ pub struct ModelMetadata<'a> {
 }
 impl ValidateLinks for ModelMetadata<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if self.bounds.is_some_and(|bounds| bounds.validate().is_err()) {
+            visitor(Link::InvalidValue);
+        }
         if !self.blend_time.is_finite() || self.blend_time < 0. {
             visitor(Link::InvalidValue);
+        }
+    }
+}
+
+impl Default for ModelMetadata<'_> {
+    fn default() -> Self {
+        Self {
+            name: Cow::Borrowed(""),
+            bounds: Some(Bounds::default()),
+            animation_file: Cow::Borrowed(""),
+            blend_time: 0.,
+            face_effects: Vec::new(),
         }
     }
 }

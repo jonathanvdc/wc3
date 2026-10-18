@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use wc3::model::profiles::{m2, mdlx, wmo, Extends, Mdlx, Narrows, Universal, Wmo, M2};
 use wc3::model::FromFeature as SlotFromFeature;
+use wc3::model::ModelMetadata;
 use wc3::model::{
     AtlasParticle, AtlasParticleRendering, ModelParticle, ParticleEmission, ParticleLifetime,
     ParticleMotion, StagedParticleAppearance,
@@ -185,9 +186,10 @@ fn full_model_feature_identity_survives_widening_and_narrowing() {
 #[test]
 fn world_features_retain_light_relationship_categories() {
     let mut slot_values = SlotValues::default();
-    let resource = Model::<Wmo>::builder("resource").add_model_resource(
-        wc3::model::WorldModelResource::Path(b"tree.m2".as_slice().into()),
-    );
+    let resource = Model::<Wmo>::builder(wc3::model::profiles::wmo::ModelMetadata::default())
+        .add_model_resource(wc3::model::WorldModelResource::Path(
+            b"tree.m2".as_slice().into(),
+        ));
     let features = [
         wmo::Node::Attachment(wmo::Doodad {
             resource,
@@ -344,7 +346,7 @@ fn particle_copy_relationship_rejects_a_different_particle_simulation() {
     let mut slot_values = SlotValues::default();
     use wc3::model::profiles::m3;
     use wc3::model::NodeFeature;
-    let mut draft = Model::<Universal>::builder("invalid particle inheritance");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let node = draft.add_named_node("effects").unwrap();
     let source = draft
         .add_feature(
@@ -393,7 +395,7 @@ fn camera_slot_alone_does_not_imply_authored_animation() {
 fn external_attachment_conversion_preserves_its_resource_handle() {
     let mut slot_values = SlotValues::default();
     use wc3::model::{scene, NodeFeature, ResourceLocator};
-    let mut draft = Model::<Universal>::builder("resources");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let resource = draft.add_model_resource(ResourceLocator::Path(Cow::Borrowed(
         b"effects/attachment.mdx",
     )));

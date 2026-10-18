@@ -93,15 +93,6 @@ impl WorldSystem<'_> {
 }
 
 pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
-    if value.units() != crate::model::LengthUnit::Unspecified
-        || value.basis() != crate::model::Basis::default()
-    {
-        return Err(Error::new(
-            "model.coordinates",
-            "native model coordinates use the file family's implicit basis without authored global unit metadata",
-        ));
-    }
-
     if let Some(bounds) = value.bounds() {
         aabb_bounds(bounds, "world.bounds")?;
     }

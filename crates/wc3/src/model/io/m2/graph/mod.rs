@@ -65,9 +65,10 @@ where
     let name = core.name.as_bytes();
     let name = std::str::from_utf8(name.strip_suffix(&[0]).unwrap_or(name))
         .map_err(|_| Error::new("m2.name", "invalid UTF-8 name"))?;
-    let mut builder = GraphBuilder::with_profile(Cow::Borrowed(name));
-    builder.set_bounds(Some(bounds(core.bounding)));
+    let mut builder = GraphBuilder::with_profile(profile::ModelMetadata::default());
     let mut family = profile::ModelMetadata {
+        name: Cow::Borrowed(name),
+        bounds: bounds(core.bounding),
         flags: profile::values::ModelFlags::from_bits_retain(core.flags.bits()),
         ..Default::default()
     };

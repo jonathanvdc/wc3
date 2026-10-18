@@ -3,6 +3,7 @@ use wc3::model::profiles::{
     diablo::{d3, d4},
     Either,
 };
+use wc3::model::ModelMetadata;
 use wc3::model::ValueGroups;
 use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, GeometryData, GeometryEdit,
@@ -248,7 +249,7 @@ fn edits_publish_transactionally_and_keep_unmodified_borrowed_streams() {
         })
         .unwrap();
     assert!(!edited.normals().unwrap().is_owned());
-    let mut draft = Model::<Universal>::builder("Editable");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let id = draft
         .add_mesh(Mesh::new(GeometryData::from(geometry)))
         .unwrap();

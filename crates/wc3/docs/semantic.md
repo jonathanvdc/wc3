@@ -93,12 +93,28 @@ assert_eq!(model.dependencies().images().len(), 1);
 Ok::<(), wc3::model::Error>(())
 ```
 
-`Profile::ModelMetadata` selects declarations belonging to the complete model.
-Read them through `Model::metadata` and replace them through
-`ModelBuilder::set_metadata` in a checked edit. For example, MDLX model metadata
-contains the external animation filename, sequence blend time, and face-effect
-resources. WMO doodads retain external model references and placements; resolving
-those dependencies remains the application's responsibility.
+`Profile::ModelMetadata` selects declarations belonging to the complete model,
+including its authored name and bounds where the format supports them. Read them
+through `Model::metadata`, edit individual fields through
+`ModelBuilder::metadata_mut`, or replace the complete declaration through
+`ModelBuilder::set_metadata`. Construction accepts this metadata too; formats with
+authored names also accept a name string as shorthand. MDLX metadata includes the
+external animation filename, sequence blend time, and face-effect resources.
+M2, M3, and Diablo metadata require a bounding volume, while MDLX can omit its
+model-info declaration and WMO can omit root bounds for legacy output. A named
+MDLX model or one with animation-file or blend-time controls requires its
+model-info declaration. WMO bounds use an authored axis-aligned box with a sphere
+radius derived from its half-diagonal. WMO and Diablo have no model-name field.
+
+`Universal` selects `ModelMetadata` directly. Its variants retain the complete
+native model declarations, including their names and bounds where supported.
+Construction requires an explicit variant. Coordinate conventions follow the
+selected native family; they are not mutable authoring fields. Widening and
+narrowing move the metadata directly between the enum and its native payload.
+The built-in spatial profiles expose coordinate and bounds accessors without
+requiring application-defined profiles to provide those capabilities. WMO doodads
+retain external model references and placements; resolving those dependencies
+remains the application's responsibility.
 
 ## Choosing an authoring vocabulary
 
@@ -189,11 +205,7 @@ joint identities cannot be substituted across simulation systems.
 
 Applications can implement `Profile` with their own payloads. Relationship
 traversal through `ValidateLinks` makes those payloads participate in checked
-publication. M2 and M3 publication requires a bounding declaration; MDLX and
-historical WMO retain optional bounds. A named MDLX model or one with animation-file
-or blend-time controls requires its model-info declaration. WMO bounds use an
-authored axis-aligned box with a sphere radius derived from its half-diagonal.
-Image inputs retain sampling declarations permitted by their profile. M2 can
+publication. Image inputs retain sampling declarations permitted by their profile. M2 can
 preserve an alternate filename alongside a replaceable-image or file-data-ID
 selection; that filename is another shared image dependency. Unknown numeric
 sampling selectors stay within their shader vocabulary. Common `ColorSpace` and
@@ -768,8 +780,9 @@ error. Widening and narrowing retain existing slot identities and may allocate
 additional constants required by the destination payload.
 
 ```rust
-use wc3::model::{DynamicTrack, TimeSource, Curve, Model, Time, Track};
-let mut builder = Model::builder("Moving node");
+use wc3::model::{DynamicTrack, TimeSource, Curve, Model, ModelMetadata, Time, Track};
+use wc3::model::profiles::Universal;
+let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
 let node = builder.new_node("Root");
 let translation = node.transform.translation;
 builder.add_node(node)?;
@@ -868,9 +881,9 @@ A `ModelBuilder` collects an unpublished draft. Reserved IDs permit forward
 references where supported; `finish` checks their definitions, ownership, and
 required relationship kinds, together with local values such as geometry ranges
 and curve parameters. It returns a `Model` containing the checked graph,
-metadata, and resources. `Model::standalone(name)` creates an empty universal
-model when no draft edits are needed; use `Model::<P>::builder(name)` to author
-a selected vocabulary.
+metadata, and resources. `Model::<P>::empty(metadata)` creates an empty graph
+with explicit declarations; use `Model::<P>::builder(metadata)` when draft edits
+are needed. Native profiles with authored names also accept a name string.
 
 Published models provide immutable access. `Model::edit` stages graph, metadata,
 and texture changes in a `ModelBuilder` and publishes only after the complete
@@ -880,8 +893,9 @@ retain source details with an identified owner and participate in checked edits
 and exact narrowing. Retain the decoded native document separately when its
 unsupported records or original physical layout are needed.
 
-Coordinate basis and length units describe authored numeric values. Changing
-those declarations does not transform geometry. Native imports, output plans,
+Coordinate conventions describe how to interpret native numeric values.
+`coordinate_transform` computes an explicit destination-frame transform without
+changing metadata or geometry. Native imports, output plans,
 and policies for values a destination cannot represent are described in the
 [conversion guide](conversion.md).
 

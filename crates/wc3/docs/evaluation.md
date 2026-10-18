@@ -19,8 +19,9 @@ separate: reuse
 
 ```rust
 use wc3::model::{AnimationProgram, AnimationSample, ModelPose, PoseInputs};
-# use wc3::model::{Model, Error};
-# let model = Model::standalone("Example");
+# use wc3::model::{Model, ModelMetadata, Error};
+# use wc3::model::profiles::Universal;
+# let model = Model::<Universal>::empty(ModelMetadata::Mdlx(Default::default())).unwrap();
 let layout = model.prepare_pose()?;
 let animation = AnimationProgram::compile(&model);
 let sample = animation.sample(AnimationSample::default())?;

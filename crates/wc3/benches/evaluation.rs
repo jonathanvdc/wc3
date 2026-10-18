@@ -2,6 +2,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use glam::Quat;
 use std::hint::black_box;
 use wc3::model::profiles::Universal;
+use wc3::model::ModelMetadata;
 use wc3::model::{
     AnimationProgram, AnimationSample, BillboardConvention, Curve, DynamicTrack, EvaluatedPose,
     GeometryData, Mesh, Model, ModelPose, PoseBehavior, PoseInputs, Quaternion, Time, TimeSource,
@@ -11,7 +12,7 @@ use wc3::model::{
 fn poses(c: &mut Criterion) {
     let mut group = c.benchmark_group("evaluation/pose");
     for count in [64, 256] {
-        let mut builder = Model::<Universal>::builder("pose benchmark");
+        let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
         let mut parent = None;
         for index in 0..count {
             let mut node = builder.new_node(format!("node {index}"));

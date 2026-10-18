@@ -6,6 +6,8 @@ use bevy_wc3::assembly::{
 };
 use bevy_wc3::{BakeSpace, ModelError, PartBinding, PoseBaker, PoseOptions};
 use wc3::model::materials::mdlx::{Layer, LayeredSurface};
+use wc3::model::ModelBuilder;
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     Draw, GeometryData, ImageResource, Material, MaterialSurface, Mesh as ModelMesh, MeshInstance,
@@ -20,7 +22,7 @@ fn resource(name: &'static str) -> ResourceLocator<'static> {
 }
 fn model(textured: bool) -> (Model<'static>, NodeId, Option<Texture>) {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::builder("application-authored machine");
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("mounting frame").unwrap();
     let texture = textured.then(|| builder.add_file_texture("original.png").unwrap());
     let mut geometry =

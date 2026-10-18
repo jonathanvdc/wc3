@@ -879,7 +879,7 @@ fn modern_world_output_requires_explicit_bounds_or_loss_policy() {
         .value;
     asset
         .edit(|builder| {
-            builder.set_bounds(None);
+            builder.metadata_mut().bounds = None;
             Ok(())
         })
         .unwrap();
@@ -910,7 +910,7 @@ fn world_radius_is_derived_from_each_authored_box() {
         .edit(|builder| {
             let mut bounds = original;
             bounds.sphere_radius += 1.;
-            builder.set_bounds(Some(bounds));
+            builder.metadata_mut().bounds = Some(bounds);
             Ok(())
         })
         .is_err());

@@ -2,14 +2,20 @@
 use crate::model::animation::programmed::{AnimationControl, PropertyBinding};
 use crate::model::values::programmed::{BatchFlags, RegionFlags};
 use crate::model::values::programmed::{BoneFlags, ModelFlags};
-use crate::model::{Construct, PropertyValue};
+use crate::model::{Bounds, Construct, PropertyValue};
 use crate::model::{
     FeatureId, FeatureKind, Link, NodeId, Property as Destination, Quaternion, SkinId,
     ValidateLinks,
 };
+use std::borrow::Cow;
 /// Game-wide model behavior settings.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ModelMetadata {
+pub struct ModelMetadata<'a> {
+    /// Authored model name.
+    pub name: Cow<'a, str>,
+    /// Authored model bounding volume.
+    pub bounds: Bounds,
+
     /// Authored animation-partition control; its relationship to split definitions is unresolved.
     pub partition_control: u32,
     /// Model behavior flags; unknown bits remain available.

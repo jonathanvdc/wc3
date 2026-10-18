@@ -3,6 +3,7 @@ use wc3::model::conversion::ImportOptions;
 use wc3::model::formats::mdlx::{self, mdl::Read as _, mdx::Read as _, mdx::Write as _};
 use wc3::model::io;
 use wc3::model::profiles::{Extends, Mdlx, Narrows, Universal, Wmo, M2, M3};
+use wc3::model::ModelMetadata;
 use wc3::model::{
     AppearanceSchema, DrawAppearanceSchema, DrawLooks, Look, MdlxImageResource, Model, SingleLook,
     Texture, UniversalAppearance,
@@ -52,13 +53,13 @@ fn resource_narrowing_moves_owned_paths_without_reallocating() {
 }
 
 #[test]
-fn narrowing_rejects_foreign_payloads_and_missing_required_controls() {
+fn narrowing_rejects_foreign_metadata() {
     let asset = Model::<Mdlx>::builder("Warcraft III")
         .finish()
         .unwrap()
         .widen::<Universal>();
     assert!(asset.try_narrow::<Wmo>().is_err());
-    let asset = Model::<Universal>::builder("no profile controls")
+    let asset = Model::<Universal>::builder(ModelMetadata::M2(Default::default()))
         .finish()
         .unwrap();
     assert!(asset.try_narrow::<Mdlx>().is_err());
@@ -117,7 +118,7 @@ fn universal_draw_appearances_support_m2_without_a_source_tag() {
 
 #[test]
 fn single_appearance_limit_survives_widening() {
-    let mut builder = Model::<Universal>::builder("look identities");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let foreign = builder.add_look(Look::default()).unwrap();
     let mut appearance = <Universal as Extends<M3>>::appearance(SingleLook::default());
     let sole = appearance.default_look().unwrap();

@@ -32,7 +32,8 @@ fn triangle<'a>(positions: &'a [[f32; 3]]) -> Geometry<'a> {
 fn widening_and_narrowing_preserve_geometry_identity_and_borrowed_arrays() {
     let mut slot_values = SlotValues::default();
     let positions = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]];
-    let mut builder = Model::<D3>::builder("triangle");
+    let mut builder =
+        Model::<D3>::builder(wc3::model::profiles::diablo::d3::ModelMetadata::default());
     let material = builder
         .add_material(wc3::model::Material {
             name: "".into(),
@@ -99,7 +100,8 @@ fn source_namespaces_do_not_alias_and_profiles_require_their_game() {
         id: 7,
     };
     assert_ne!(d3, d4);
-    let mut builder = Model::<D3>::builder("wrong game");
+    let mut builder =
+        Model::<D3>::builder(wc3::model::profiles::diablo::d3::ModelMetadata::default());
     let _resource = builder.add_image_resource(d4);
     assert!({
         builder.import_values(&slot_values).unwrap();
@@ -111,7 +113,8 @@ fn source_namespaces_do_not_alias_and_profiles_require_their_game() {
 #[test]
 fn nonuniform_bone_transforms_fail_checked_publication() {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::<D3>::builder("bone");
+    let mut builder =
+        Model::<D3>::builder(wc3::model::profiles::diablo::d3::ModelMetadata::default());
     let mut node = builder.new_node("bone");
     node.controls = NodeRole::Bone(Box::new(SlotConstruct::construct(&mut slot_values)));
     builder
@@ -134,7 +137,8 @@ fn d4_resource_publication_requires_the_correct_game_namespace() {
         (SnoNamespace::Diablo4, true),
         (SnoNamespace::Diablo3, false),
     ] {
-        let mut builder = Model::<D4>::builder("resource");
+        let mut builder =
+            Model::<D4>::builder(wc3::model::profiles::diablo::d4::ModelMetadata::default());
         let _resource = builder.add_image_resource(SnoResource::Sno {
             namespace,
             group: 44,
@@ -160,7 +164,8 @@ fn d4_chunks_and_look_hashes_have_model_scoped_ownership() {
     let foreign_id = foreign.add_chunk(Chunk::default());
     let mut own = d4::ModelMetadata::default();
     own.add_chunk(Chunk::default());
-    let mut builder = Model::<D4>::builder("foreign chunk");
+    let mut builder =
+        Model::<D4>::builder(wc3::model::profiles::diablo::d4::ModelMetadata::default());
     builder.set_metadata(own);
     let geometry = d4::Geometry::new(GeometryData::default()).unwrap();
     builder
@@ -179,7 +184,8 @@ fn d4_chunks_and_look_hashes_have_model_scoped_ownership() {
     let slot_a = a.add_slot(d4::Slot::new(1, 0, 0));
     let mut b = d4::Appearance::default();
     let slot_b = b.add_slot(d4::Slot::new(1, 0, 0));
-    let mut builder = Model::<D4>::builder("material");
+    let mut builder =
+        Model::<D4>::builder(wc3::model::profiles::diablo::d4::ModelMetadata::default());
     let material = builder
         .add_material(wc3::model::Material {
             name: "".into(),

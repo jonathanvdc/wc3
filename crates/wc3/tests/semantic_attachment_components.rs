@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{FromFeature as SlotFromFeature, TryFromFeature as SlotTryFromFeature};
 
@@ -72,7 +73,9 @@ fn external_attachment_keeps_resource_identity_and_visibility() {
 #[test]
 fn attachment_conversion_preserves_handles_without_inspecting_resource_addresses() {
     let mut slot_values = SlotValues::default();
-    let mut draft = wc3::model::Model::<wc3::model::profiles::Universal>::builder("resources");
+    let mut draft = wc3::model::Model::<wc3::model::profiles::Universal>::builder(
+        ModelMetadata::Mdlx(Default::default()),
+    );
     let resource = draft.add_model_resource(ResourceLocator::Path(Cow::Borrowed(&[0xff])));
     let placement = ChildModel::from(mdlx::Attachment {
         resource,
@@ -90,7 +93,9 @@ fn attachment_conversion_preserves_handles_without_inspecting_resource_addresses
 #[test]
 fn world_appearance_survives_rejected_attachment_export() {
     let mut slot_values = SlotValues::default();
-    let mut draft = wc3::model::Model::<wc3::model::profiles::Universal>::builder("resources");
+    let mut draft = wc3::model::Model::<wc3::model::profiles::Universal>::builder(
+        ModelMetadata::Mdlx(Default::default()),
+    );
     let resource = draft.add_model_resource(ResourceLocator::Path(Cow::Borrowed(b"tree.m2")));
     let source = wmo::Doodad {
         resource,
@@ -128,7 +133,7 @@ fn custom_attachment_parts_traverse_their_graph_relationships() {
         }
     }
 
-    let mut foreign = Model::<Universal>::builder("foreign owner");
+    let mut foreign = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let node = foreign.add_named_node("foreign attachment target").unwrap();
     let attachment = ChildModelDefinition {
         resource: LinkedControl(node),

@@ -23,9 +23,9 @@ pub enum ModelMetadata<'a> {
     /// Warcraft III animation resources and transition policy.
     Mdlx(layered::ModelMetadata<'a>),
     /// World of Warcraft model behavior and gameplay lookup programs.
-    M2(model_controls::ModelMetadata),
+    M2(model_controls::ModelMetadata<'a>),
     /// StarCraft II model behavior.
-    M3(programmed_controls::ModelMetadata),
+    M3(programmed_controls::ModelMetadata<'a>),
     /// World-model rendering and environment settings.
     Wmo(world::ModelMetadata),
 }

@@ -1,4 +1,5 @@
 use wc3::model::profiles::{Mdlx, Universal};
+use wc3::model::ModelMetadata;
 use wc3::model::{
     AnimationProgram, AnimationSample, Clip, Curve, DynamicTrack, Model, PoseInputs, PropertyValue,
     PropertyValues, Quaternion, Time, TimeSource, Track,
@@ -26,7 +27,7 @@ fn types_select_independent_subtables_and_copies_share_slots() {
 
 #[test]
 fn two_nodes_can_consume_the_same_animated_translation() {
-    let mut draft = Model::<Universal>::builder("shared translation");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let first = draft.add_named_node("first").unwrap();
     let second = draft.add_named_node("second").unwrap();
     let translation = draft.model().node(first).unwrap().transform.translation;
@@ -58,7 +59,7 @@ fn two_nodes_can_consume_the_same_animated_translation() {
 
 #[test]
 fn instance_tables_are_independent_and_each_evaluation_resets_constants() {
-    let mut draft = Model::<Universal>::builder("instances");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let value = draft.add_value(3f32);
     let clip = draft
         .add_clip(Clip::named("animated").with_duration(time(2.)))
@@ -104,13 +105,13 @@ fn instance_tables_are_independent_and_each_evaluation_resets_constants() {
 
 #[test]
 fn foreign_and_removed_consumer_slots_are_rejected() {
-    let mut draft = Model::<Universal>::builder("invalid reference");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let node = draft.add_named_node("node").unwrap();
     let mut definition = draft.model().node(node).unwrap().clone();
     definition.transform.translation = PropertyValues::default().add([0f32; 3]);
     draft.set_node(node, definition).unwrap();
     assert!(draft.finish().is_err());
-    let mut draft = Model::<Universal>::builder("removed reference");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let node = draft.add_named_node("node").unwrap();
     let visibility = draft.model().node(node).unwrap().visible;
     draft.values_mut().remove(visibility);
@@ -119,7 +120,7 @@ fn foreign_and_removed_consumer_slots_are_rejected() {
 
 #[test]
 fn explicit_boolean_reads_evaluate_the_source_slot() {
-    let mut draft = Model::<Universal>::builder("conversion");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let boolean = draft.add_value(false);
     let scalar = draft.values_mut().scalar_from_boolean(boolean).unwrap();
     draft
@@ -163,7 +164,7 @@ fn profile_mapping_preserves_slot_identities_and_constants() {
 
 #[test]
 fn importing_conflicting_slots_is_atomic() {
-    let mut draft = Model::<Universal>::builder("import");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let shared = draft.add_value(1f32);
     let mut source = draft.model().values().clone();
     source.set(shared, 2.).unwrap();
@@ -175,7 +176,7 @@ fn importing_conflicting_slots_is_atomic() {
 
 #[test]
 fn boolean_defaults_and_direct_scalar_writers_have_explicit_precedence() {
-    let mut draft = Model::<Universal>::builder("converted output");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let source = draft.add_value(false);
     let output = draft.values_mut().scalar_from_boolean(source).unwrap();
     draft.values_mut().set(source, true).unwrap();
@@ -198,7 +199,7 @@ fn boolean_defaults_and_direct_scalar_writers_have_explicit_precedence() {
 
 #[test]
 fn prepared_nodes_read_static_slots_from_the_supplied_instance_table() {
-    let mut draft = Model::<Universal>::builder("static instance");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let id = draft.add_named_node("node").unwrap();
     let node = draft.model().node(id).unwrap().clone();
     let model = draft.finish().unwrap();
@@ -235,7 +236,7 @@ fn construction_allocates_nested_fields_and_array_elements_independently() {
 #[test]
 fn reusable_programs_keep_clip_mapping_and_defaults_after_compilation() {
     use wc3::model::Animation;
-    let mut draft = Model::<Universal>::builder("reusable animation");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let property = draft.add_value(7f32);
     let constant = draft.add_value(false);
     let animation = draft.add_animation(Animation {
@@ -303,15 +304,15 @@ fn reusable_programs_keep_clip_mapping_and_defaults_after_compilation() {
 #[test]
 fn animation_selection_rejects_foreign_removed_and_duplicate_identities() {
     use wc3::model::Animation;
-    let mut foreign = Model::<Universal>::builder("foreign");
+    let mut foreign = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let foreign_animation = foreign.add_animation(Animation::default());
-    let mut draft = Model::<Universal>::builder("local");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     draft
         .add_clip(Clip::named("invalid").with_animation(foreign_animation))
         .unwrap();
     assert!(draft.finish().is_err());
 
-    let mut draft = Model::<Universal>::builder("duplicate");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let animation = draft.add_animation(Animation::default());
     draft
         .add_clip(
@@ -322,7 +323,7 @@ fn animation_selection_rejects_foreign_removed_and_duplicate_identities() {
         .unwrap();
     assert!(draft.finish().is_err());
 
-    let mut draft = Model::<Universal>::builder("removed");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let animation = draft.add_animation(Animation::default());
     draft.add_global_animation(animation).unwrap();
     let mut model = draft.finish().unwrap();
@@ -338,7 +339,7 @@ fn animation_selection_rejects_foreign_removed_and_duplicate_identities() {
 #[test]
 fn global_precedence_follows_selection_order_across_time_sources() {
     use wc3::model::{Animation, SharedClock};
-    let mut draft = Model::<Universal>::builder("ordered globals");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let property = draft.add_value(0f32);
     let clock = draft
         .add_clock(SharedClock::Repeating { period: time(2.) })
@@ -389,7 +390,7 @@ fn global_precedence_follows_selection_order_across_time_sources() {
 #[test]
 fn zero_and_offset_source_intervals_use_the_same_sampling_rule() {
     use wc3::model::{Animation, SharedClock};
-    let mut draft = Model::<Universal>::builder("source intervals");
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let property = draft.add_value(-1f32);
     let independent = draft.add_value(0f32);
     let clock = draft
@@ -482,7 +483,7 @@ fn zero_and_offset_source_intervals_use_the_same_sampling_rule() {
 
 #[test]
 fn composition_rejects_mismatched_source_intervals() {
-    let mut host = Model::<Universal>::builder("host");
+    let mut host = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let destination = host
         .add_clip(
             Clip::named("host clip")
@@ -490,7 +491,7 @@ fn composition_rejects_mismatched_source_intervals() {
                 .with_source_start(time(10.)),
         )
         .unwrap();
-    let mut part = Model::<Universal>::builder("part");
+    let mut part = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let source = part
         .add_clip(Clip::named("part clip").with_duration(time(1.)))
         .unwrap();

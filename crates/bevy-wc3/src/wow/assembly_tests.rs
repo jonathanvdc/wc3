@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use wc3::model::controls::model::BoneControls;
 use wc3::model::materials::bindings::ImageSelection;
 use wc3::model::materials::program::MaterialStep;
+use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     Draw, GeometryData, GeometryInfluences, IdentityBinding, Influence, Material, MaterialSurface,
@@ -15,7 +16,7 @@ use wc3::model::{ImageResource, ResourceLocator};
 
 fn model(name: &str, geosets: &[u16]) -> (Model<'static>, NodeId) {
     let mut slot_values = SlotValues::default();
-    let mut builder = Model::builder(name.to_owned());
+    let mut builder = Model::builder(ModelMetadata::M2(name.to_owned().into()));
     let joints: Vec<_> = (0..8)
         .map(|i| {
             builder

@@ -5,11 +5,10 @@ use crate::model::profiles::{self, Extends, Profile, SurfacePayload, Universal};
 use crate::model::resources::PathResource;
 use crate::model::PropertyValues;
 use crate::model::{
-    Basis, Billboard, ClipControls, DrawControls, DynamicTrack, Error, ExplicitBinding,
-    FeatureKind, GeometrySchema as _, Inheritance, InstanceControls, Interpolation, LengthUnit,
-    Link, M3Geometry, MeshControls, Model, ModelMetadata, NodeControls, SingleLook, SkinId, System,
-    TimeSource, Topology, Transform, UniversalAppearance, UniversalBinding, ValidateLinks,
-    VertexInfluences,
+    Billboard, ClipControls, DrawControls, DynamicTrack, Error, ExplicitBinding, FeatureKind,
+    GeometrySchema as _, Inheritance, InstanceControls, Interpolation, Link, M3Geometry,
+    MeshControls, Model, ModelMetadata, NodeControls, SingleLook, SkinId, System, TimeSource,
+    Topology, Transform, UniversalAppearance, UniversalBinding, ValidateLinks, VertexInfluences,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 use std::collections::HashSet;
@@ -25,14 +24,11 @@ impl Profile for M3 {
     type PhysicsResource<'a> = Unavailable;
     type BoneOverrideResource<'a> = Unavailable;
 
-    fn default_bounds() -> Option<crate::model::Bounds> {
-        Some(Default::default())
-    }
     type Appearance<'a> = SingleLook<'a>;
     type Binding<'a> = ExplicitBinding<'a>;
     type Geometry<'a> = M3Geometry<'a>;
     type Draw = Option<profiles::m3::BatchControls>;
-    type ModelMetadata<'a> = profiles::m3::ModelMetadata;
+    type ModelMetadata<'a> = profiles::m3::ModelMetadata<'a>;
     type System<'a> = profiles::m3::System<'a>;
     type Surface<'a> = profiles::m3::MaterialStep<'a>;
     type Feature<'a> = profiles::m3::Feature<'a>;
@@ -46,25 +42,6 @@ impl Profile for M3 {
     type Controller<'a> = profiles::m3::ControllerControls<'a>;
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
         model.validate_animation_consumers()?;
-        if model.bounds().is_none() {
-            return Err(Error::new(
-                "model.bounds",
-                "this profile requires an authored bounding volume",
-            ));
-        }
-
-        if model.basis() != Basis::default() {
-            return Err(Error::new(
-                "m3.basis",
-                "M3 uses its fixed authored axes; a basis translation must precede native construction",
-            ));
-        }
-        if model.units() != LengthUnit::Unspecified {
-            return Err(Error::new(
-                "m3.units",
-                "M3 has no independently authored physical-unit declaration",
-            ));
-        }
         if model
             .systems()
             .iter()
@@ -558,7 +535,7 @@ impl Extends<M3> for Universal {
         value.map(DrawControls::M3)
     }
     fn model_metadata<'a>(value: <M3 as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
-        Some(ModelMetadata::M3(value))
+        ModelMetadata::M3(value)
     }
     fn system<'a>(value: <M3 as Profile>::System<'a>) -> Self::System<'a> {
         System::M3(value)

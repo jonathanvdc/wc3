@@ -311,8 +311,12 @@ impl ValidateLinks for ViewVolume {
         self.size.visit_links(visitor);
     }
 }
-impl ValidateLinks for ModelMetadata {
-    fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
+impl ValidateLinks for ModelMetadata<'_> {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if self.bounds.validate().is_err() {
+            visitor(Link::InvalidValue);
+        }
+    }
 }
 impl ValidateLinks for BoneControls {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {

@@ -1,6 +1,7 @@
 use super::super::ModelMaterial;
 use super::*;
 use crate::material::native_fixtures::wmo as wmo_shader;
+use wc3::model::ModelMetadata;
 use wc3::model::{AnimationSample, ModelBuilder, Time};
 
 #[test]
@@ -21,7 +22,7 @@ fn world_scroll_is_sampled_absolutely_and_keeps_clamped_coordinates() {
 
 #[test]
 fn world_compiler_retains_independent_scroll_velocities() {
-    let model = ModelBuilder::<Universal>::new("world scrolling")
+    let model = ModelBuilder::<Universal>::new(ModelMetadata::Wmo(Default::default()))
         .finish()
         .unwrap();
     let surface = wmo_shader::Material {
@@ -40,7 +41,7 @@ fn world_compiler_retains_independent_scroll_velocities() {
 
 #[test]
 fn procedural_scroll_uses_shared_clock_without_a_clip_and_avoids_unchanged_writes() {
-    let model = ModelBuilder::<Universal>::new("clockless world")
+    let model = ModelBuilder::<Universal>::new(ModelMetadata::Wmo(Default::default()))
         .finish()
         .unwrap();
     let surface = wmo_shader::Material {
@@ -79,7 +80,7 @@ fn procedural_scroll_uses_shared_clock_without_a_clip_and_avoids_unchanged_write
 
 #[test]
 fn world_programmes_select_native_routes_without_sampling_unimplemented_families() {
-    let model = ModelBuilder::<Universal>::new("world programme routes")
+    let model = ModelBuilder::<Universal>::new(ModelMetadata::Wmo(Default::default()))
         .finish()
         .unwrap();
     for (shader, count, secondary, third, generated) in [
@@ -157,7 +158,7 @@ fn world_programmes_select_native_routes_without_sampling_unimplemented_families
 
 #[test]
 fn reflection_programmes_scroll_the_uv_layer_without_scrolling_generated_coordinates() {
-    let model = ModelBuilder::<Universal>::new("world reflected scrolling")
+    let model = ModelBuilder::<Universal>::new(ModelMetadata::Wmo(Default::default()))
         .finish()
         .unwrap();
     let surface = wmo_shader::Material {
@@ -219,7 +220,7 @@ fn world_illumination_is_draw_local_and_nonworld_materials_keep_their_identity()
     let mut ordinary = ModelMaterialExtension::default();
     assert_eq!(ordinary.set_world_illumination(ambient, 2), [0; 4]);
     assert_eq!(ordinary.world.ambient, Vec4::ZERO);
-    let model = ModelBuilder::<Universal>::new("world ambient")
+    let model = ModelBuilder::<Universal>::new(ModelMetadata::Wmo(Default::default()))
         .finish()
         .unwrap();
     let surface = wmo_shader::Material {
@@ -248,7 +249,7 @@ fn world_illumination_is_draw_local_and_nonworld_materials_keep_their_identity()
 fn world_extended_blends_preserve_native_rgb_and_alpha_factors() {
     use super::super::ModelMaterialKey;
     use bevy::render::render_resource::{BlendComponent, BlendFactor, BlendOperation};
-    let model = ModelBuilder::<Universal>::new("world blend factors")
+    let model = ModelBuilder::<Universal>::new(ModelMetadata::Wmo(Default::default()))
         .finish()
         .unwrap();
     for (operation, source, source_alpha) in [

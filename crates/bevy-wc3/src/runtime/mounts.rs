@@ -7,6 +7,8 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::ClipId;
+#[cfg(test)]
+use wc3::model::ModelMetadata;
 
 #[derive(Component)]
 pub(crate) struct MountedModel {
@@ -197,7 +199,7 @@ mod tests {
 
     #[test]
     fn nested_mounts_share_clocks_and_preserve_child_physics_edits() {
-        let mut builder = Model::<Universal>::builder("mount clips");
+        let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
         let clips: Vec<_> = (0..3)
             .map(|i| builder.add_clip(Clip::named(format!("clip{i}"))).unwrap())
             .collect();
@@ -308,7 +310,7 @@ mod camera_tests {
     #[test]
     fn mounted_billboards_resolve_current_carrier_frame_without_transform_propagation() {
         let mut slot_values = SlotValues::default();
-        let mut host = Model::<Universal>::builder("billboard host");
+        let mut host = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
         let carrier = host
             .add_node(
                 Node::named("carrier", &mut slot_values)
@@ -331,7 +333,7 @@ mod camera_tests {
             |_| None,
         )
         .unwrap();
-        let mut part = Model::<Universal>::builder("billboard part");
+        let mut part = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
         let mut node = Node::named("billboard", &mut slot_values);
         node.billboard = Billboard::Spherical;
         let billboard = part.add_node(node).unwrap();
@@ -423,7 +425,7 @@ mod activation_tests {
     #[test]
     fn authored_attachment_activation_gates_composed_equipment_through_ancestor() {
         let mut slot_values = SlotValues::default();
-        let mut host = Model::<Universal>::builder("attachment host");
+        let mut host = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
         let carrier = host.add_named_node("carrier").unwrap();
         let point = host.reserve_feature(carrier);
         let visibility = slot_values.add(1.);
@@ -461,7 +463,7 @@ mod activation_tests {
             |_| None,
         )
         .unwrap();
-        let mut part = Model::<Universal>::builder("helmet");
+        let mut part = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
         part.add_named_node("helmet root").unwrap();
         let part = compile_model(
             &{

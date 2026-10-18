@@ -9,6 +9,8 @@ use crate::effects::simulation::{EmissionPhase, EmissionRounding, EmitterRng};
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::f32::consts::TAU;
+#[cfg(test)]
+use wc3::model::ModelMetadata;
 use wc3::model::{
     ClipId, FeatureId, Model, NodeFeature, NodeId, ParticleActivation, ParticleDetails,
     ParticleEmitter, ParticleGravity, ParticleResource, ParticleScalar, ParticleTrigger, Property,
@@ -589,7 +591,10 @@ mod tests {
             compile_model, ModelInstanceError, ModelMaterial, ModelRig, ModelSource,
         };
         use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-        let model = Model::<wc3::model::profiles::Universal>::empty("particle cycle").unwrap();
+        let model = Model::<wc3::model::profiles::Universal>::empty(ModelMetadata::Mdlx(
+            Default::default(),
+        ))
+        .unwrap();
         let mut app = App::new();
         app.init_resource::<Assets<ModelAsset>>()
             .init_resource::<Assets<Mesh>>()

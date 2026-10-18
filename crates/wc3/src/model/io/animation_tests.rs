@@ -1,4 +1,5 @@
 use super::*;
+use crate::model::ModelMetadata;
 #[test]
 fn shortened_splines_keep_values_between_new_boundaries() {
     for interpolation in [Interpolation::Hermite, Interpolation::Bezier] {
@@ -73,7 +74,7 @@ fn spherical_restriction_preserves_rotation_and_clamped_intervals() {
 #[test]
 fn typed_restriction_retains_clock_and_target() {
     use crate::model::{profiles::Universal, Material, Model, TimeSource};
-    let mut builder = Model::<Universal>::builder("crop");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let _material = builder
         .add_material(Material {
             name: "".into(),

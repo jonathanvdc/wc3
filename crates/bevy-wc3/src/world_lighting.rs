@@ -18,7 +18,7 @@ pub(crate) fn illumination(
         _ => None,
     };
     let root_ambient = match model.metadata() {
-        Some(ModelMetadata::Wmo(metadata)) => metadata.ambient,
+        ModelMetadata::Wmo(metadata) => metadata.ambient,
         _ => [0; 4],
     };
     let ambient = region
@@ -56,7 +56,7 @@ pub(crate) struct ColorAdjustment {
 }
 impl ColorAdjustment {
     pub(crate) fn new(model: &Model<'_>, instance: &MeshInstance<'_>) -> Option<Self> {
-        let Some(ModelMetadata::Wmo(metadata)) = model.metadata() else {
+        let ModelMetadata::Wmo(metadata) = model.metadata() else {
             return None;
         };
         let Some(InstanceControls::Wmo(region)) = &instance.controls else {

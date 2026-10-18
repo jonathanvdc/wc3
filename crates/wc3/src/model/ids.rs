@@ -153,9 +153,9 @@ pub enum ImageResourceObject {}
 ///
 /// Model dependencies cannot be used as image dependencies:
 /// ```compile_fail
-/// use wc3::model::{Model, ResourceLocator, Texture};
+/// use wc3::model::{Model, ModelMetadata, ResourceLocator, Texture};
 /// use wc3::model::profiles::Universal;
-/// let mut draft = Model::<Universal>::builder("typed resources");
+/// let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
 /// let model = draft.add_model_resource(ResourceLocator::FileDataId(1));
 /// let texture = Texture::new(model);
 /// ```

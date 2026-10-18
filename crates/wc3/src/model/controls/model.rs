@@ -1,6 +1,7 @@
 //! Model playback, shadow passes, geometry sorting, and external category bindings.
 use crate::model::values::model::{self as values, ModelFlags, SequenceFlags};
 use crate::model::{Bounds, ClipId, Link, NodeId, ValidateLinks};
+use std::borrow::Cow;
 /// Native playback selection and transition controls owned by a common clip.
 #[derive(Clone, Debug)]
 pub struct SequenceControls {
@@ -69,7 +70,12 @@ impl ValidateLinks for ShadowControls {
 }
 /// Model-wide behavior and external game-category bindings.
 #[derive(Clone, Debug, Default)]
-pub struct ModelMetadata {
+pub struct ModelMetadata<'a> {
+    /// Authored model name.
+    pub name: Cow<'a, str>,
+    /// Authored model bounding volume.
+    pub bounds: Bounds,
+
     /// Model behavior flags.
     pub flags: ModelFlags,
     /// Playback bindings indexed by external animation-data category.
@@ -77,8 +83,11 @@ pub struct ModelMetadata {
     /// Skeleton bindings indexed by external key-bone category.
     pub key_bone_lookup: Vec<Option<NodeId>>,
 }
-impl ValidateLinks for ModelMetadata {
+impl ValidateLinks for ModelMetadata<'_> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
+        if self.bounds.validate().is_err() {
+            v(Link::InvalidValue);
+        }
         self.animation_lookup.visit_links(v);
         self.key_bone_lookup.visit_links(v)
     }

@@ -56,7 +56,7 @@ impl Narrows<Universal> for Mdlx {
         value: <Universal as Profile>::ModelMetadata<'a>,
     ) -> Result<Self::ModelMetadata<'a>, Error> {
         match value {
-            Some(ModelMetadata::Mdlx(value)) => Ok(value),
+            ModelMetadata::Mdlx(value) => Ok(value),
             _ => Err(incompatible("model")),
         }
     }

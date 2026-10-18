@@ -17,6 +17,8 @@ use std::mem::take;
 use std::sync::Arc;
 use wc3::model::materials::state::BlendOperations;
 use wc3::model::scene::keyframed::Frames;
+#[cfg(test)]
+use wc3::model::ModelMetadata;
 use wc3::model::{
     ClipId, FeatureId, Model, NodeFeature, NodeId, ParticleActivation, ParticleAppearance,
     ParticleDetails, ParticleEmitter, ParticleGravity, ParticleScalar, ParticleTrigger, Property,
@@ -888,7 +890,9 @@ mod tests {
     #[test]
     fn missing_bound_burst_track_does_not_emit_default() {
         let (runtime, prior, mut state) = fixture(vec![(0., 2.)]);
-        let mut builder = Model::<wc3::model::profiles::Universal>::builder("no selected source");
+        let mut builder = Model::<wc3::model::profiles::Universal>::builder(ModelMetadata::Mdlx(
+            Default::default(),
+        ));
         builder.import_values(prior.values()).unwrap();
         builder
             .values_mut()

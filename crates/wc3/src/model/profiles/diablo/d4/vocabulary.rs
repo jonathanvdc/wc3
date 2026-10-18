@@ -5,8 +5,8 @@ use crate::model::resources::SnoResource;
 use crate::model::PropertyValues;
 use crate::model::TimeSource;
 use crate::model::{
-    Basis, Billboard, Bounds, Error, ExplicitBinding, Inheritance, LengthUnit, Model, NodeControls,
-    SnoNamespace, Transform, UniversalAppearance, UniversalBinding,
+    Billboard, Error, ExplicitBinding, Inheritance, Model, NodeControls, SnoNamespace, Transform,
+    UniversalAppearance, UniversalBinding,
 };
 use crate::model::{MeshControls as AnyMeshControls, ModelMetadata as AnyModelMetadata};
 
@@ -33,20 +33,8 @@ impl Profile for D4 {
     type Draw = NoControls;
     type Clip<'a> = NoControls;
     type Controller<'a> = NoControls;
-    fn default_bounds() -> Option<Bounds> {
-        Some(Bounds::default())
-    }
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
         model.validate_animation_consumers()?;
-        if model.bounds().is_none()
-            || model.basis() != Basis::default()
-            || model.units() != LengthUnit::Unspecified
-        {
-            return Err(Error::new(
-                "d4.model.coordinates",
-                "expected authored bounds, the fixed Diablo basis, and unspecified physical units",
-            ));
-        }
         for (_, node) in model.nodes() {
             if node.transform.defaults(model.values()).pivot != [0.; 3]
                 || node.billboard != Billboard::None
@@ -222,7 +210,7 @@ impl Extends<D4> for Universal {
         value.into()
     }
     fn model_metadata<'a>(value: <D4 as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
-        Some(AnyModelMetadata::D4(value))
+        AnyModelMetadata::D4(value)
     }
     fn system<'a>(value: <D4 as Profile>::System<'a>) -> Self::System<'a> {
         match value {}
@@ -320,7 +308,7 @@ impl Narrows<Universal> for D4 {
         value: <Universal as Profile>::ModelMetadata<'a>,
     ) -> Result<Self::ModelMetadata<'a>, Error> {
         match value {
-            Some(AnyModelMetadata::D4(value)) => Ok(value),
+            AnyModelMetadata::D4(value) => Ok(value),
             _ => Err(Error::new(
                 "d4.narrow.model",
                 "payload belongs to another authoring vocabulary",

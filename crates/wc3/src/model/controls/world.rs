@@ -3,6 +3,7 @@ use crate::model::scene::world::{
     Ambient, DoodadSet, Fog, GroupOptions, Liquid, Portal, PortalConnection, WorldOptions,
 };
 use crate::model::values::world::GroupFlags2;
+use crate::model::Bounds;
 use crate::model::{FeatureId, InstanceId, ZeroVec};
 use crate::model::{Link, ModelResourceId, ValidateLinks};
 use std::borrow::Cow;
@@ -156,6 +157,9 @@ pub struct WorldSystem<'a> {
 /// Model-wide world rendering and environment controls.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ModelMetadata {
+    /// Authored root bounding box, when a root declaration exists.
+    pub bounds: Option<Bounds>,
+
     /// Optional background sky model resource.
     pub skybox: Option<ModelResourceId>,
     /// External world-model identifier.
@@ -167,6 +171,9 @@ pub struct ModelMetadata {
 }
 impl ValidateLinks for ModelMetadata {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if self.bounds.is_some_and(|bounds| bounds.validate().is_err()) {
+            visitor(Link::InvalidValue);
+        }
         self.skybox.visit_links(visitor);
     }
 }

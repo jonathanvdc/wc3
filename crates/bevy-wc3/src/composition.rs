@@ -14,6 +14,7 @@ use bevy::prelude::*;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use wc3::model::profiles::Universal;
+use wc3::model::ModelMetadata;
 use wc3::model::{
     AnimatedTransform, AnimationProgram, Billboard, ClipId, DrawId, Inheritance, InstanceId, Model,
     ModelMount, MountTarget, NodeId, Quaternion, Transform as ModelTransform,
@@ -197,7 +198,7 @@ impl CompiledModel {
         parts: impl IntoIterator<Item = ModelPart<'a>>,
     ) -> Result<Self, ModelError> {
         let mut output = self.clone();
-        let mut identities = Model::<Universal>::builder("composition frames");
+        let mut identities = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
         for part in parts {
             let source = part.model;
             let source_indices: HashMap<_, _> = source

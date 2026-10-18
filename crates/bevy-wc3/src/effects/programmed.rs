@@ -16,6 +16,8 @@ use wc3::model::animation::programmed::PropertyBinding;
 use wc3::model::values::programmed::{
     EmitterShape, ParticleInstance, Smoothing, Variation, VelocityKind,
 };
+#[cfg(test)]
+use wc3::model::ModelMetadata;
 use wc3::model::{
     ClipId, ParticleAppearance, ParticleDefinition, ParticleDetails, ParticleGravity,
     ParticleScalar, ParticleTrigger, ProgrammedAge, Property, PropertyValue, TimeSource,
@@ -723,7 +725,7 @@ pub(super) fn no_shadow_material() -> ModelMaterial {
     use wc3::model::materials::{m3, MaterialSurface};
     use wc3::model::profiles::Universal;
     use wc3::model::{Construct, Material, Model};
-    let mut builder = Model::<Universal>::builder("effect shadow flags");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::M3(Default::default()));
     let slot_values = builder.values_mut();
     let mut standard = m3::StandardMaterialStep::construct(slot_values);
     standard.state.rasterization.flags.set_no_shadows_cast(true);

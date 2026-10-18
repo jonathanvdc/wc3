@@ -2,10 +2,10 @@
 use crate::model::ids::Scope;
 use crate::model::profiles::{Profile, Universal};
 use crate::model::{
-    Animation, AnimationId, AttachedFeature, Basis, Bounds, Clip, ClipId, ClockId, Controller,
-    ControllerId, DrawAppearanceSchema, DrawSubsetId, DynamicTrack, Error, Event, EventId,
-    FeatureId, InstanceId, LengthUnit, Look, LookBinding, LookId, Material, MaterialId, Mesh,
-    MeshId, MeshInstance, Model, Node, NodeId, SharedClock, Skin, SkinId, SystemId, Texture,
+    Animation, AnimationId, AttachedFeature, Clip, ClipId, ClockId, Controller, ControllerId,
+    DrawAppearanceSchema, DrawSubsetId, DynamicTrack, Error, Event, EventId, FeatureId, InstanceId,
+    Look, LookBinding, LookId, Material, MaterialId, Mesh, MeshId, MeshInstance, Model,
+    ModelMetadata, Node, NodeId, SharedClock, Skin, SkinId, SystemId, Texture,
 };
 use crate::model::{
     BoneOverrideResourceId, EffectResourceId, ImageResourceId, ModelResourceId, PhysicsResourceId,
@@ -214,18 +214,14 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
 
     /// Begins an unpublished graph using the explicit payload vocabulary `P`.
-    pub(crate) fn with_profile(name: impl Into<Cow<'a, str>>) -> Self {
+    pub(crate) fn with_profile(metadata: impl Into<P::ModelMetadata<'a>>) -> Self {
         let scope = Scope::default();
         Self {
             model: Model {
                 values: PropertyValues::scoped(scope.clone()),
                 dependencies: Dependencies::default(),
                 scope,
-                name: name.into(),
-                basis: Basis::default(),
-                units: LengthUnit::default(),
-                bounds: P::default_bounds(),
-                metadata: Default::default(),
+                metadata: metadata.into(),
                 systems: Table::default(),
                 animations: Table::default(),
                 global_animations: Vec::new(),
@@ -433,18 +429,6 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     pub fn model(&self) -> &Model<'a, P> {
         &self.model
     }
-    /// Declares the coordinate axes and handedness of the draft.
-    pub fn set_basis(&mut self, basis: Basis) {
-        self.model.basis = basis;
-    }
-    /// Declares the length unit; publication rejects invalid scale factors.
-    pub fn set_units(&mut self, units: LengthUnit) {
-        self.model.units = units;
-    }
-    /// Sets or clears the authored model bounds.
-    pub fn set_bounds(&mut self, bounds: Option<Bounds>) {
-        self.model.bounds = bounds;
-    }
     fn global_animation(&mut self) -> AnimationId {
         if let Some(&id) = self.model.global_animations.first() {
             return id;
@@ -496,7 +480,11 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
             .payload = payload;
         Ok(())
     }
-    /// Replaces model-wide authoring metadata.
+    /// Edits model-wide declarations in this unpublished draft.
+    pub fn metadata_mut(&mut self) -> &mut P::ModelMetadata<'a> {
+        &mut self.model.metadata
+    }
+    /// Replaces model-wide declarations.
     pub fn set_metadata(&mut self, value: impl Into<P::ModelMetadata<'a>>) {
         self.model.metadata = value.into();
     }
@@ -742,9 +730,9 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
     }
 }
 impl<'a> ModelBuilder<'a> {
-    /// Begins an empty graph accepting every built-in logical family.
-    pub fn new(name: impl Into<Cow<'a, str>>) -> Self {
-        Self::with_profile(name)
+    /// Begins an empty universal graph with explicit model-wide declarations.
+    pub fn new(metadata: impl Into<ModelMetadata<'a>>) -> Self {
+        Self::with_profile(metadata)
     }
 }
 

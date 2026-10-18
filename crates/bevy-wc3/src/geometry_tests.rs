@@ -1,6 +1,7 @@
 use super::*;
 use bevy::prelude::Vec3;
 use wc3::model::profiles::Universal;
+use wc3::model::ModelMetadata;
 use wc3::model::{
     Attribute, ConnectivitySets, GeometryData, Mesh as ModelMesh, ModelBuilder, PrimitiveSelection,
 };
@@ -165,7 +166,7 @@ fn empty_uv_zero_slot_in_a_valid_model_uses_default_coordinates() {
         })
         .unwrap();
     let subset = source.add_primary_subset(0, 1);
-    let mut builder = ModelBuilder::<Universal>::new("empty UV0");
+    let mut builder = ModelBuilder::<Universal>::new(ModelMetadata::Mdlx(Default::default()));
     let id = builder.add_mesh(source).unwrap();
     let model = {
         builder.import_values(&slot_values).unwrap();
@@ -448,7 +449,7 @@ fn fourth_uv_preserves_corner_rows_without_allocating_unused_streams() {
 #[test]
 fn compact_skin_remaps_both_streams_and_ignores_vertices_outside_part() {
     use wc3::model::{GeometryInfluences, Influence, Model, ValueGroups};
-    let mut builder = Model::<Universal>::builder("joint identities");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let joints: Vec<_> = (0..16)
         .map(|i| builder.add_named_node(format!("joint {i}")).unwrap())
         .collect();

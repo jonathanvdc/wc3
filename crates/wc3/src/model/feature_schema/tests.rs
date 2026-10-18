@@ -1,6 +1,7 @@
 use super::{CameraView, FeatureSchema, FeatureView, LightView, ParticlesView};
 use crate::model::profiles::{m2, mdlx, Either};
 use crate::model::LightEmission;
+use crate::model::ModelMetadata;
 use crate::model::{scene, Axis, NodeFeature};
 use crate::model::{AngleTrailControls, SurfaceTrailRendering, TrailAppearance, TrailGeometry};
 use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
@@ -230,7 +231,7 @@ fn particle_copy_exposes_only_overrides_and_keeps_program_reset_metadata() {
     let mut slot_values = SlotValues::default();
     use crate::model::profiles::{m3, Universal};
     use crate::model::Model;
-    let mut builder = Model::<Universal>::builder("copy inspection");
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("source").unwrap();
     let source = builder.reserve_feature(node);
     let copy = m3::ParticleCopy {

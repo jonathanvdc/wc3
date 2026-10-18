@@ -20,7 +20,7 @@ pub(super) fn alpha<'a>(
     for unknown in source.unknown_chunks() {
         super::handle_unknown(&mut context, FileKey::Root, unknown.tag)?;
     }
-    let mut builder = ModelBuilder::<Wmo>::with_profile("World model");
+    let mut builder = ModelBuilder::<Wmo>::with_profile(ModelMetadata::default());
     let skybox = skybox(source).map(|value| builder.add_model_resource(value));
     builder.set_metadata(ModelMetadata {
         id: source.header().wmo_id,
@@ -125,7 +125,7 @@ pub(super) fn beta<'a>(
     source.validate_complete().map_err(read_error)?;
     let mut context = Context::import(options);
     collect_root(&source.root, &mut context)?;
-    let mut builder = ModelBuilder::<Wmo>::with_profile("World model");
+    let mut builder = ModelBuilder::<Wmo>::with_profile(ModelMetadata::default());
     let header = source.root.header();
     let flags = header.flags();
     let mut unknown = flags;
@@ -135,9 +135,9 @@ pub(super) fn beta<'a>(
     unknown.set_vertex_color_alpha_only(false);
     unknown.set_default_max_lod(false);
     unknown.set_has_group_lods(false);
-    builder.set_bounds(Some(super::bounds(header.bounds)));
     let skybox = skybox(&source.root).map(|value| builder.add_model_resource(value));
     builder.set_metadata(ModelMetadata {
+        bounds: Some(super::bounds(header.bounds)),
         id: header.wmo_id,
         ambient: super::rgba(header.ambient_color),
         skybox,

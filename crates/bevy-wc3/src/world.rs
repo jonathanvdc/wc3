@@ -359,7 +359,7 @@ impl WorldRuntime {
     pub(crate) fn compile(model: &Model<'_>) -> Result<CompiledWorld, ModelError> {
         let mut runtime = Self {
             ambient: match model.metadata() {
-                Some(ModelMetadata::Wmo(metadata)) => Some(metadata.ambient),
+                ModelMetadata::Wmo(metadata) => Some(metadata.ambient),
                 _ => None,
             },
             ..Default::default()
