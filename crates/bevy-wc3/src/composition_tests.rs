@@ -1,7 +1,8 @@
 use super::*;
 use crate::{compile_model, BakeSpace, Playback, PoseBaker, PoseOptions};
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-use wc3::model::materials::mdlx::{Layer, LayeredSurface};
+use wc3::model::materials::mdlx::{MaterialInputs, MaterialStep as MdlxStep, Shader};
+use wc3::model::profiles::mdlx::Material as MdlxMaterial;
 use wc3::model::ModelMetadata;
 use wc3::model::{
     Clip, Curve, Draw, DynamicTrack, ExplicitBinding, GeometryData, GeometryInfluences, Influence,
@@ -74,14 +75,15 @@ fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
     let material = builder
         .add_material(Material {
             name: "plain".into(),
-            surface: MaterialSurface::try_from(LayeredSurface {
-                layers: vec![Layer {
-                    opacity: slot_values.add(1.),
+            surface: MaterialSurface::from(MdlxMaterial {
+                steps: vec![MdlxStep {
+                    shader: Shader::Classic(MaterialInputs {
+                        opacity: slot_values.add(1.),
+                        ..SlotConstruct::construct(&mut slot_values)
+                    }),
                     ..SlotConstruct::construct(&mut slot_values)
                 }],
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap(),
+            }),
         })
         .unwrap();
     let mut instance = MeshInstance::new(joint, mesh);

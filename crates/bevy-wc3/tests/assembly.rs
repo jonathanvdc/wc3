@@ -5,7 +5,8 @@ use bevy_wc3::assembly::{
     TextureLayer, TextureReplacement,
 };
 use bevy_wc3::{BakeSpace, ModelError, PartBinding, PoseBaker, PoseOptions};
-use wc3::model::materials::mdlx::{Layer, LayeredSurface};
+use wc3::model::materials::mdlx::{MaterialInputs, MaterialStep as MdlxStep, Shader};
+use wc3::model::profiles::mdlx::Material as MdlxMaterial;
 use wc3::model::ModelBuilder;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
@@ -31,19 +32,18 @@ fn model(textured: bool) -> (Model<'static>, NodeId, Option<Texture>) {
     let mut mesh = ModelMesh::new(geometry);
     let subset = mesh.add_primary_subset(0, 1);
     let mesh = builder.add_mesh(mesh).unwrap();
-    let mut layer = Layer {
-        opacity: slot_values.add(1.),
+    let mut layer = MdlxStep {
+        shader: Shader::Classic(MaterialInputs {
+            opacity: slot_values.add(1.),
+            ..SlotConstruct::construct(&mut slot_values)
+        }),
         ..SlotConstruct::construct(&mut slot_values)
     };
-    layer.binding.image = slot_values.add(texture);
+    layer.shader.inputs_mut().binding.image = slot_values.add(texture);
     let material = builder
         .add_material(Material {
             name: "paint".into(),
-            surface: MaterialSurface::try_from(LayeredSurface {
-                layers: vec![layer],
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap(),
+            surface: MaterialSurface::from(MdlxMaterial { steps: vec![layer] }),
         })
         .unwrap();
     let mut instance = MeshInstance::new(node, mesh);

@@ -1,6 +1,6 @@
 //! Ordered material programs with explicit shader dialects.
 use super::m2::MaterialStep as M2MaterialStep;
-use super::mdlx::{LayeredSurface, MaterialDeclaration, MaterialStep as MdlxMaterialStep};
+use super::mdlx::MaterialStep as MdlxMaterialStep;
 use super::wmo::MaterialStep as WmoMaterialStep;
 use crate::model::profiles::SurfacePayload;
 use crate::model::{Error, Link, ValidateLinks};
@@ -64,41 +64,11 @@ impl SurfacePayload for MaterialSurface<'_> {
 fn incompatible(message: &str) -> Error {
     Error::new("surface", message)
 }
-impl<'a> TryFrom<LayeredSurface<'a>> for MaterialSurface<'a> {
-    type Error = Error;
-    fn try_from(value: LayeredSurface<'a>) -> Result<Self, Error> {
-        value.validate()?;
-        let LayeredSurface {
-            priority_plane,
-            shader,
-            constant_color,
-            two_sided,
-            sort_near_z,
-            sort_far_z,
-            full_resolution,
-            unclassified,
-            layers,
-        } = value;
-        Ok(Self {
-            steps: layers
-                .into_iter()
-                .map(|layer| {
-                    MaterialStep::Mdlx(Box::new(MdlxMaterialStep::from_layer(
-                        layer,
-                        MaterialDeclaration {
-                            priority_plane,
-                            constant_color,
-                            two_sided,
-                            sort_near_z,
-                            sort_far_z,
-                            full_resolution,
-                            unclassified,
-                        },
-                        shader.clone(),
-                    )))
-                })
-                .collect(),
-        })
+impl<'a> From<MdlxMaterialStep<'a>> for MaterialSurface<'a> {
+    fn from(value: MdlxMaterialStep<'a>) -> Self {
+        Self {
+            steps: vec![MaterialStep::Mdlx(Box::new(value))],
+        }
     }
 }
 impl<'a> From<M2MaterialStep<'a>> for MaterialSurface<'a> {
@@ -113,86 +83,6 @@ impl<'a> From<WmoMaterialStep<'a>> for MaterialSurface<'a> {
         Self {
             steps: vec![MaterialStep::Wmo(Box::new(value))],
         }
-    }
-}
-impl<'a> TryFrom<MaterialSurface<'a>> for LayeredSurface<'a> {
-    type Error = Error;
-    fn try_from(value: MaterialSurface<'a>) -> Result<Self, Error> {
-        let mut steps = value.steps.into_iter();
-        let Some(first) = steps.next() else {
-            return Ok(Self::default());
-        };
-        let MaterialStep::Mdlx(first) = first else {
-            return Err(incompatible("surface contains a non-MDLX step"));
-        };
-        let mut layers = Vec::new();
-        let mut shader = match first.as_ref() {
-            MdlxMaterialStep::Unresolved(step) => Some(step.shader_name.clone()),
-            _ => None,
-        };
-        for pass in steps {
-            let MaterialStep::Mdlx(pass) = pass else {
-                return Err(incompatible("surface contains a non-MDLX step"));
-            };
-            if !first.same_declaration(&pass) {
-                return Err(incompatible(
-                    "MDLX steps have different material-wide draw declarations",
-                ));
-            }
-            if let MdlxMaterialStep::Unresolved(step) = pass.as_ref() {
-                if shader
-                    .as_ref()
-                    .is_some_and(|name| name != &step.shader_name)
-                {
-                    return Err(incompatible(
-                        "MDLX unresolved steps require different material shader names",
-                    ));
-                }
-                shader = Some(step.shader_name.clone());
-            }
-            layers.push((
-                matches!(pass.as_ref(), MdlxMaterialStep::Classic(_)),
-                pass.to_layer(),
-            ));
-        }
-        let MaterialDeclaration {
-            priority_plane,
-            constant_color,
-            two_sided,
-            sort_near_z,
-            sort_far_z,
-            full_resolution,
-            unclassified,
-        } = first.declaration().clone();
-        layers.insert(
-            0,
-            (
-                matches!(first.as_ref(), MdlxMaterialStep::Classic(_)),
-                first.to_layer(),
-            ),
-        );
-        let shader = shader.unwrap_or_default();
-        let layers = layers
-            .into_iter()
-            .map(|(classic, mut layer)| {
-                // A shared unresolved name must not override a known classic step.
-                if classic && !shader.is_empty() {
-                    layer.shader = Some(0);
-                }
-                layer
-            })
-            .collect();
-        Ok(Self {
-            layers,
-            priority_plane,
-            shader,
-            constant_color,
-            two_sided,
-            sort_near_z,
-            sort_far_z,
-            full_resolution,
-            unclassified,
-        })
     }
 }
 impl<'a> TryFrom<MaterialSurface<'a>> for M2MaterialStep<'a> {
@@ -255,5 +145,37 @@ impl<'a> TryFrom<MaterialSurface<'a>> for MaterialProgram<M2MaterialStep<'a>> {
 impl<S> From<S> for MaterialProgram<S> {
     fn from(step: S) -> Self {
         Self { steps: vec![step] }
+    }
+}
+
+impl SurfacePayload for MaterialProgram<MdlxMaterialStep<'_>> {
+    fn validate(&self) -> Result<(), Error> {
+        Ok(())
+    }
+}
+impl<'a> From<MaterialProgram<MdlxMaterialStep<'a>>> for MaterialSurface<'a> {
+    fn from(value: MaterialProgram<MdlxMaterialStep<'a>>) -> Self {
+        Self {
+            steps: value
+                .steps
+                .into_iter()
+                .map(|step| MaterialStep::Mdlx(Box::new(step)))
+                .collect(),
+        }
+    }
+}
+impl<'a> TryFrom<MaterialSurface<'a>> for MaterialProgram<MdlxMaterialStep<'a>> {
+    type Error = Error;
+    fn try_from(value: MaterialSurface<'a>) -> Result<Self, Error> {
+        Ok(Self {
+            steps: value
+                .steps
+                .into_iter()
+                .map(|step| match step {
+                    MaterialStep::Mdlx(step) => Ok(*step),
+                    _ => Err(incompatible("surface contains a non-MDLX material step")),
+                })
+                .collect::<Result<_, _>>()?,
+        })
     }
 }

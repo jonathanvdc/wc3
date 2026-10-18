@@ -112,7 +112,18 @@ fn older_native_shader_string_uses_selected_dialect_layout() {
         output.materials().next().unwrap().try_shader().unwrap(),
         "Shader_HD_DefaultUnit"
     );
-    assert!(io::mdlx::plan::<mdlx::V1800>(&asset, &ExportOptions::default()).is_err());
+    let modern = io::mdlx::plan::<mdlx::V1800>(&asset, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .unwrap()
+        .value;
+    assert_eq!(
+        modern.materials().next().unwrap().layers[0]
+            .try_shader_type()
+            .unwrap()
+            .id(),
+        1
+    );
     // Semantic shader variants need no native selector provenance to export again.
     let universal: Model<'_, Universal> = asset.widen();
     let canonical = universal.try_narrow::<Mdlx>().unwrap();
@@ -148,7 +159,7 @@ fn complete_native_surface_is_an_editable_logical_payload() {
     let graph = &imported.value;
     let (id, material) = graph.materials().iter().next().unwrap();
     let material = material.surface.clone();
-    let opacity = material.layers[0].opacity;
+    let opacity = material.steps[0].shader.inputs().opacity;
     imported
         .value
         .edit(|builder| {

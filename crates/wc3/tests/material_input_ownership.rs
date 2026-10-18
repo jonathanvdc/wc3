@@ -42,8 +42,8 @@ fn shared_native_inputs_import_as_independent_values_and_export_as_interned_tabl
         .unwrap()
         .value;
     let (id, material) = model.materials().iter().next().unwrap();
-    let first = &material.surface.layers[0].binding;
-    let second = &material.surface.layers[1].binding;
+    let first = &material.surface.steps[0].shader.inputs().binding;
+    let second = &material.surface.steps[1].shader.inputs().binding;
     assert_eq!(model.values()[first.image], model.values()[second.image]);
     assert_ne!(first.image, second.image);
     assert_eq!(model.dependencies().images().len(), 1);
@@ -69,10 +69,16 @@ fn shared_native_inputs_import_as_independent_values_and_export_as_interned_tabl
     );
 
     let mut surface = material.surface.clone();
-    let image_slot = surface.layers[0].binding.image;
+    let image_slot = surface.steps[0].shader.inputs().binding.image;
     let mut image = model.values()[image_slot].unwrap();
     image.sampler.u = AddressMode::Repeat;
-    surface.layers[0].binding.coordinates.transform.scale = slot_values.add([2., 1., 1.]);
+    surface.steps[0]
+        .shader
+        .inputs_mut()
+        .binding
+        .coordinates
+        .transform
+        .scale = slot_values.add([2., 1., 1.]);
     model
         .edit(|draft| {
             draft.import_values(&slot_values)?;
@@ -80,13 +86,22 @@ fn shared_native_inputs_import_as_independent_values_and_export_as_interned_tabl
             draft.set_material_surface(id, surface)
         })
         .unwrap();
-    let layers = &model.material(id).unwrap().surface.layers;
+    let layers = &model.material(id).unwrap().surface.steps;
     assert_eq!(
-        model.values()[layers[1].binding.image].unwrap().sampler.u,
+        model.values()[layers[1].shader.inputs().binding.image]
+            .unwrap()
+            .sampler
+            .u,
         AddressMode::Clamp
     );
     assert_eq!(
-        model.values()[layers[1].binding.coordinates.transform.scale],
+        model.values()[layers[1]
+            .shader
+            .inputs()
+            .binding
+            .coordinates
+            .transform
+            .scale],
         [1.; 3]
     );
     let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
@@ -169,7 +184,7 @@ fn duplicate_native_texture_records_share_the_resource_and_are_deduplicated_on_e
 #[test]
 fn sampling_a_material_freezes_its_owned_coordinate_animation() {
     let mut slot_values = SlotValues::default();
-    use wc3::model::materials::mdlx::LayeredSurface;
+    use wc3::model::profiles::mdlx::Material as MdlxMaterial;
     use wc3::model::{AnimationSample, Time};
     let mut source = source();
     source.set_sequences([mdlx::animation::Sequence::new("Sample", [0, 1000]).unwrap()]);
@@ -186,10 +201,16 @@ fn sampling_a_material_freezes_its_owned_coordinate_animation() {
         .unwrap();
     let material = model.materials().iter().next().unwrap().1;
     let frozen_values = sample.evaluate();
-    let frozen = LayeredSurface::try_from(material.surface.clone()).unwrap();
-    for layer in frozen.layers {
+    let frozen = MdlxMaterial::try_from(material.surface.clone()).unwrap();
+    for layer in frozen.steps {
         assert_eq!(
-            frozen_values[layer.binding.coordinates.transform.translation],
+            frozen_values[layer
+                .shader
+                .inputs()
+                .binding
+                .coordinates
+                .transform
+                .translation],
             [0.25, 0., 0.]
         );
     }

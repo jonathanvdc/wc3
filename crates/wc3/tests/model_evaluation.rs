@@ -3,7 +3,7 @@ use glam::{Affine3A, Mat4, Quat, Vec2, Vec3};
 use std::{borrow::Cow, collections::HashMap};
 use wc3::model::conversion::ImportOptions;
 use wc3::model::io::mdlx;
-use wc3::model::materials::mdlx::LayeredSurface;
+use wc3::model::profiles::mdlx::Material as MdlxMaterial;
 use wc3::model::profiles::Universal;
 use wc3::model::ModelBuilder;
 use wc3::model::ModelMetadata;
@@ -63,13 +63,13 @@ fn standing_snapshot_retains_bindings_and_supports_editable_geometry_without_ima
                 .material_for_draw(instance_id, draw.id(), None)
                 .unwrap();
             let material = model.material(material_id).unwrap();
-            let surface = LayeredSurface::try_from(material.surface.clone()).unwrap();
+            let surface = MdlxMaterial::try_from(material.surface.clone()).unwrap();
             let frozen = sample.evaluate();
-            let texture = frozen[surface.layers[0].binding.image].unwrap();
+            let texture = frozen[surface.steps[0].shader.inputs().binding.image].unwrap();
             assert!(model.image_resource(texture.resource).is_some());
             assert_eq!(
-                sample.animated(&surface.layers[0].binding.image),
-                frozen[surface.layers[0].binding.image]
+                sample.animated(&surface.steps[0].shader.inputs().binding.image),
+                frozen[surface.steps[0].shader.inputs().binding.image]
             );
             let tint = appearances
                 .get(&instance.mesh)
@@ -285,20 +285,24 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
     use wc3::model::{SurfaceColor, TextureTransform};
     let mut model = building();
     let material_id = model.materials().iter().next().unwrap().0;
-    let opacity = LayeredSurface::try_from(model.material(material_id).unwrap().surface.clone())
+    let opacity = MdlxMaterial::try_from(model.material(material_id).unwrap().surface.clone())
         .unwrap()
-        .layers[0]
+        .steps[0]
+        .shader
+        .inputs()
         .opacity;
-    let selection = LayeredSurface::try_from(model.material(material_id).unwrap().surface.clone())
+    let selection = MdlxMaterial::try_from(model.material(material_id).unwrap().surface.clone())
         .unwrap()
-        .layers[0]
+        .steps[0]
+        .shader
+        .inputs()
         .binding
         .image;
     let texture = model.sampled_images()[0];
     let mut material = model.material(material_id).unwrap().clone();
-    let mut surface = LayeredSurface::try_from(material.surface.clone()).unwrap();
-    surface.layers[0].opacity = opacity;
-    surface.layers[0].binding.image = selection;
+    let mut surface = MdlxMaterial::try_from(material.surface.clone()).unwrap();
+    surface.steps[0].shader.inputs_mut().opacity = opacity;
+    surface.steps[0].shader.inputs_mut().binding.image = selection;
     material.surface = surface.try_into().unwrap();
     model
         .edit(|draft| {
@@ -322,21 +326,27 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
         })
         .unwrap();
     let mut source =
-        LayeredSurface::try_from(model.material(material_id).unwrap().surface.clone()).unwrap();
-    source.layers[0].opacity = opacity;
-    source.layers[0].binding.image = selection;
+        MdlxMaterial::try_from(model.material(material_id).unwrap().surface.clone()).unwrap();
+    source.steps[0].shader.inputs_mut().opacity = opacity;
+    source.steps[0].shader.inputs_mut().binding.image = selection;
     let frozen_values = sample.evaluate();
     let frozen = source.clone();
-    assert!((frozen_values[frozen.layers[0].opacity] - 0.5).abs() < 1e-6);
-    assert_eq!(frozen_values[frozen.layers[0].binding.image], None);
-    assert_eq!(frozen.layers[0].opacity, source.layers[0].opacity);
-    assert_eq!(frozen.layers[0].state, source.layers[0].state);
+    assert!((frozen_values[frozen.steps[0].shader.inputs().opacity] - 0.5).abs() < 1e-6);
     assert_eq!(
-        frozen.layers[0].binding.coordinates,
-        source.layers[0].binding.coordinates
+        frozen_values[frozen.steps[0].shader.inputs().binding.image],
+        None
+    );
+    assert_eq!(
+        frozen.steps[0].shader.inputs().opacity,
+        source.steps[0].shader.inputs().opacity
+    );
+    assert_eq!(frozen.steps[0].state, source.steps[0].state);
+    assert_eq!(
+        frozen.steps[0].shader.inputs().binding.coordinates,
+        source.steps[0].shader.inputs().binding.coordinates
     );
     let color = SurfaceColor {
-        opacity: Some(&source.layers[0].opacity),
+        opacity: Some(&source.steps[0].shader.inputs().opacity),
         fallback: [0.8, 0.6, 0.4, 1.],
         ..SlotConstruct::construct(&mut slot_values)
     };

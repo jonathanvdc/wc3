@@ -200,30 +200,16 @@ fn compile_mdlx(
     images: &Arc<TextureImages>,
 ) -> Result<SurfacePass, ModelError> {
     let mut pass = SurfacePass::default();
-    let (state, binding, opacity, emissive_gain, hd_inputs) = match surface {
-        mdlx::MaterialStep::Classic(step) => (
-            &step.inputs.state,
-            &step.inputs.binding,
-            &step.inputs.opacity,
-            &step.inputs.emissive_gain,
-            None,
-        ),
-        mdlx::MaterialStep::ReforgedDefault(step) => (
-            &step.inputs.state,
-            &step.inputs.binding,
-            &step.inputs.opacity,
-            &step.inputs.emissive_gain,
-            Some(step),
-        ),
-        mdlx::MaterialStep::Unresolved(step) => (
-            &step.layer.state,
-            &step.layer.binding,
-            &step.layer.opacity,
-            &step.layer.emissive_gain,
-            None,
-        ),
+    let state = &surface.state;
+    let inputs = surface.shader.inputs();
+    let binding = &inputs.binding;
+    let opacity = &inputs.opacity;
+    let emissive_gain = &inputs.emissive_gain;
+    let hd_inputs = match &surface.shader {
+        mdlx::Shader::ReforgedDefault(inputs) => Some(inputs),
+        _ => None,
     };
-    let declaration = surface.declaration();
+    let declaration = &surface.declaration;
     pass.sort_near = declaration.sort_near_z;
     pass.sort_far = declaration.sort_far_z;
     blend(&state.blend, &mut pass);
@@ -312,7 +298,7 @@ fn compile_mdlx(
         pass.animation.texture = None;
         pass.animation.hd = Some(hd);
         pass.diagnostics.push("DefaultUnit Fresnel and authored environment reflection use the renderer's PBR approximation; game fidelity remains unverified".into());
-    } else if let mdlx::MaterialStep::Unresolved(step) = surface {
+    } else if let mdlx::Shader::Unresolved(step) = &surface.shader {
         pass.diagnostics.push(format!(
             "extended layered shader {:?} needs its authored texture-slot and Fresnel interpreter",
             step.shader_name

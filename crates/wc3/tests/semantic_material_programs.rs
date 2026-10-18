@@ -4,55 +4,32 @@ use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 mod native_fixtures;
 use native_fixtures::m2::Material as M2Material;
 use native_fixtures::wmo;
-use wc3::model::materials::mdlx::{Layer, LayeredSurface};
+use wc3::model::conversion::{ExportOptions, ImportOptions};
+use wc3::model::formats::mdlx::{self as native, FormatVersion};
+use wc3::model::materials::mdlx::{
+    MaterialInputs, MaterialStep as MdlxStep, ReforgedInputs, Shader, UnresolvedInputs,
+};
 use wc3::model::materials::program::{MaterialProgram, MaterialStep, MaterialSurface};
 use wc3::model::profiles::SurfacePayload;
+use wc3::model::profiles::{mdlx::Material as MdlxMaterial, Mdlx};
+use wc3::model::{io, Model};
 
 #[test]
-fn layered_projection_repeats_native_declarations_on_each_step() {
-    let mut slot_values = SlotValues::default();
-    let original = LayeredSurface {
-        priority_plane: -17,
-        shader: "Shader_HD_DefaultUnit".into(),
-        constant_color: true,
-        two_sided: true,
-        sort_near_z: true,
-        sort_far_z: true,
-        full_resolution: true,
-        layers: vec![
-            Layer::construct(&mut slot_values),
-            Layer::construct(&mut slot_values),
-        ],
-        ..SlotConstruct::construct(&mut slot_values)
+fn mdlx_profile_conversion_preserves_steps_without_interpreting_them() {
+    let mut values = SlotValues::default();
+    let mut first = MdlxStep::construct(&mut values);
+    first.declaration.priority_plane = -17;
+    first.declaration.two_sided = true;
+    let mut second = first.clone();
+    second.declaration.priority_plane = 12;
+    let original = MdlxMaterial {
+        steps: vec![first, second],
     };
-    let broad = MaterialSurface::try_from(original.clone()).unwrap();
-    for step in &broad.steps {
-        let MaterialStep::Mdlx(step) = step else {
-            panic!("layered")
-        };
-        assert_eq!(step.declaration().priority_plane, -17);
-        assert!(step.declaration().two_sided);
-    }
-    let canonical = LayeredSurface::try_from(broad.clone()).unwrap();
-    assert!(canonical.shader.is_empty());
-    assert!(canonical.layers.iter().all(|layer| layer.shader == Some(1)));
-    assert_wc3_surface_eq(&MaterialSurface::try_from(canonical).unwrap(), &broad);
-    let mut changed = broad;
-    let MaterialStep::Mdlx(step) = &mut changed.steps[1] else {
-        unreachable!()
-    };
-    step.declaration_mut().priority_plane = 12;
-    changed.validate().unwrap();
-    assert!(LayeredSurface::try_from(changed).is_err());
-    assert!(MaterialSurface::try_from(LayeredSurface {
-        priority_plane: 1,
-        ..SlotConstruct::construct(&mut slot_values)
-    })
-    .is_err());
-    assert!(MaterialSurface::try_from(LayeredSurface::default())
-        .unwrap()
-        .steps
-        .is_empty());
+    let broad = MaterialSurface::from(original.clone());
+    broad.validate().unwrap();
+    assert_eq!(MdlxMaterial::try_from(broad).unwrap(), original);
+    let empty = MaterialSurface::from(MdlxMaterial::default());
+    assert!(empty.steps.is_empty());
 }
 
 #[test]
@@ -92,7 +69,7 @@ fn mixed_steps_are_valid_but_native_projection_cannot_drop_them() {
     };
     program.validate().unwrap();
     let broad = program;
-    assert!(LayeredSurface::try_from(broad.clone()).is_err());
+    assert!(MdlxMaterial::try_from(broad.clone()).is_err());
     assert!(M2Material::try_from(broad.clone()).is_err());
     assert!(wmo::Material::try_from(broad).is_err());
 }
@@ -138,13 +115,13 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
                 name: "mixed".into(),
                 surface: MaterialSurface {
                     steps: vec![
-                        MaterialStep::Mdlx(Box::new(
-                            Layer {
+                        MaterialStep::Mdlx(Box::new(MdlxStep {
+                            shader: Shader::Classic(MaterialInputs {
                                 opacity: layered,
                                 ..SlotConstruct::construct(&mut slot_values)
-                            }
-                            .into(),
-                        )),
+                            }),
+                            ..SlotConstruct::construct(&mut slot_values)
+                        })),
                         MaterialStep::M2(Box::new(
                             M2Material {
                                 opacity: shader,
@@ -191,9 +168,9 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
     let MaterialStep::M2(second) = &frozen.steps[1] else {
         panic!("model shader")
     };
-    assert_eq!(frozen_values[first.to_layer().opacity], 0.5);
+    assert_eq!(frozen_values[first.shader.inputs().opacity], 0.5);
     assert_eq!(frozen_values[second.declaration().opacity], 0.75);
-    assert_eq!(first.to_layer().opacity, layered);
+    assert_eq!(first.shader.inputs().opacity, layered);
     assert_eq!(second.declaration().opacity, shader);
     assert!(matches!(frozen.steps[2], MaterialStep::Wmo(_)));
     // Appending a step preserves the existing indexed animation targets.
@@ -215,104 +192,163 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
         .is_ok());
 }
 
+fn native_model<V: FormatVersion>(
+    name: &str,
+    selectors: &[Option<u32>],
+    slots: bool,
+) -> Model<'static, Mdlx> {
+    let mut document = native::Document::<V>::new();
+    document.set_textures([native::materials::Texture::new("shared.blp").unwrap()]);
+    let mut material = native::materials::Material::<V>::new();
+    if !name.is_empty() {
+        material.try_set_shader(name).unwrap();
+    }
+    for selector in selectors {
+        let mut layer = native::materials::Layer::<V>::new();
+        if let Some(selector) = selector {
+            layer
+                .try_set_shader_type(native::materials::ShaderType::new(*selector))
+                .unwrap();
+        }
+        if slots {
+            layer
+                .try_set_texture_slots(&[2, 2, 97].map(|slot| {
+                    native::materials::LayerTextureSlot {
+                        texture_type: slot,
+                        texture_id: 0.into(),
+                    }
+                }))
+                .unwrap();
+        }
+        material.layers.push(layer);
+    }
+    document.set_materials([material]);
+    io::mdlx::import_owned(&document, &ImportOptions::default())
+        .unwrap()
+        .value
+}
+
+fn export<V: FormatVersion>(
+    model: &Model<'_, Mdlx>,
+) -> Result<native::Document<'static, V>, wc3::model::conversion::Error> {
+    // Material test inputs own their text, and the native output is consumed here.
+    io::mdlx::plan::<V>(model, &ExportOptions::default())?
+        .execute()
+        .map(|output| output.value.into_owned())
+}
+
 #[test]
-fn wc3_shader_steps_interpret_selector_precedence_and_preserve_native_inputs() {
-    let mut slot_values = SlotValues::default();
-    use wc3::model::materials::bindings::TextureBinding;
-    use wc3::model::materials::mdlx::{MaterialStep as Wc3MaterialStep, TextureSlot};
+fn native_import_interprets_selector_precedence_before_widening() {
     for (name, selector, expected) in [
         ("", None, "classic"),
         ("Shader_SD_FixedFunction", None, "classic"),
         ("Shader_HD_DefaultUnit", None, "reforged"),
-        ("Shader_HD_DefaultUnit", Some(0), "classic"),
-        ("Shader_HD_DefaultUnit", Some(2), "classic"),
-        ("Shader_SD_FixedFunction", Some(1), "reforged"),
-        ("Shader_HD_DefaultUnit", Some(99), "unresolved"),
+        ("", Some(0), "unresolved"),
+        ("", Some(2), "unresolved"),
+        ("", Some(1), "reforged"),
+        ("", Some(99), "unresolved"),
         ("Shader_HD_Crystal", None, "unresolved"),
     ] {
-        let original = LayeredSurface {
-            shader: name.into(),
-            layers: vec![Layer {
-                shader: selector,
-                ..SlotConstruct::construct(&mut slot_values)
-            }],
-            ..SlotConstruct::construct(&mut slot_values)
+        let model = if selector.is_some() {
+            native_model::<native::V1800>(name, &[selector], false)
+        } else {
+            native_model::<native::V900>(name, &[None], false)
         };
-        let surface = MaterialSurface::try_from(original.clone()).unwrap();
-        let MaterialStep::Mdlx(step) = &surface.steps[0] else {
-            unreachable!()
-        };
-        let actual = match step.as_ref() {
-            Wc3MaterialStep::Classic(_) => "classic",
-            Wc3MaterialStep::ReforgedDefault(_) => "reforged",
-            Wc3MaterialStep::Unresolved(_) => "unresolved",
+        let original = &model.materials().iter().next().unwrap().1.surface;
+        let shader = &original.steps[0].shader;
+        let actual = match shader {
+            Shader::Classic(_) => "classic",
+            Shader::ReforgedDefault(_) => "reforged",
+            Shader::Unresolved(_) => "unresolved",
         };
         assert_eq!(actual, expected, "{name:?}, {selector:?}");
-        surface.validate().unwrap();
-        let canonical = LayeredSurface::try_from(surface.clone()).unwrap();
-        assert_wc3_surface_eq(
-            &MaterialSurface::try_from(canonical.clone()).unwrap(),
-            &surface,
-        );
-        if expected == "unresolved" {
-            assert_eq!(canonical, original);
+        let broad = MaterialSurface::from(original.clone());
+        assert_eq!(MdlxMaterial::try_from(broad).unwrap(), *original);
+        let restored = if selector.is_some() {
+            let output = export::<native::V1800>(&model).unwrap();
+            io::mdlx::import_owned(&output, &ImportOptions::default())
+                .unwrap()
+                .value
         } else {
-            assert!(canonical.shader.is_empty());
-        }
-    }
-    // Slot ordinals are animation destinations; duplicates and unknown roles survive.
-    for selector in [Some(1), Some(99), None] {
-        let original = LayeredSurface {
-            layers: vec![Layer {
-                shader: selector,
-                textures: [2, 2, 97]
-                    .map(|slot| TextureSlot {
-                        slot,
-                        binding: TextureBinding::construct(&mut slot_values),
-                    })
-                    .into(),
-                ..SlotConstruct::construct(&mut slot_values)
-            }],
-            ..SlotConstruct::construct(&mut slot_values)
+            let output = export::<native::V900>(&model).unwrap();
+            io::mdlx::import_owned(&output, &ImportOptions::default())
+                .unwrap()
+                .value
         };
-        let surface = MaterialSurface::try_from(original.clone()).unwrap();
-        let MaterialStep::Mdlx(step) = &surface.steps[0] else {
-            unreachable!()
-        };
+        let restored = &restored.materials().iter().next().unwrap().1.surface;
         assert_eq!(
-            matches!(step.as_ref(), Wc3MaterialStep::ReforgedDefault(_)),
-            selector == Some(1)
+            std::mem::discriminant(&restored.steps[0].shader),
+            std::mem::discriminant(shader)
         );
-        assert_eq!(LayeredSurface::try_from(surface).unwrap(), original);
+        if let Shader::Unresolved(inputs) = &restored.steps[0].shader {
+            assert_eq!(inputs.shader_name, name);
+        }
     }
 }
 
 #[test]
-fn wc3_shader_variants_derive_native_selection_and_preserve_fresnel() {
-    let mut slot_values = SlotValues::default();
-    use wc3::model::materials::mdlx::{
-        MaterialStep as Wc3MaterialStep, ReforgedDefaultMaterialStep,
-    };
+fn native_import_preserves_duplicate_and_unknown_texture_roles() {
+    for selector in [1, 99, 0] {
+        let model = native_model::<native::V1800>("", &[Some(selector)], true);
+        let material = &model.materials().iter().next().unwrap().1.surface;
+        assert_eq!(
+            matches!(material.steps[0].shader, Shader::ReforgedDefault(_)),
+            selector == 1
+        );
+        assert_eq!(
+            material.steps[0]
+                .shader
+                .textures()
+                .iter()
+                .map(|slot| slot.slot)
+                .collect::<Vec<_>>(),
+            [2, 2, 97]
+        );
+        let output = export::<native::V1800>(&model).unwrap();
+        assert_eq!(
+            output.materials().next().unwrap().layers[0]
+                .try_texture_slots()
+                .unwrap()
+                .iter()
+                .map(|slot| slot.texture_type)
+                .collect::<Vec<_>>(),
+            [2, 2, 97]
+        );
+    }
+}
 
-    let mut step =
-        Wc3MaterialStep::ReforgedDefault(ReforgedDefaultMaterialStep::construct(&mut slot_values));
-    assert_eq!(step.to_layer().shader, Some(1));
-    let Wc3MaterialStep::ReforgedDefault(hd) = &mut step else {
-        unreachable!()
+#[test]
+fn reforged_shader_derives_native_selection_and_preserves_fresnel() {
+    let mut builder = Model::<Mdlx>::builder(wc3::model::profiles::mdlx::ModelMetadata::default());
+    let values = builder.values_mut();
+    let mut hd = ReforgedInputs::construct(values);
+    hd.fresnel = Some(SlotConstruct::construct(values));
+    let step = MdlxStep {
+        shader: Shader::ReforgedDefault(hd),
+        ..SlotConstruct::construct(values)
     };
-    hd.fresnel = Some(SlotConstruct::construct(&mut slot_values));
-    let mut surface = MaterialSurface::default();
-    surface.steps.push(MaterialStep::Mdlx(Box::new(step)));
-    surface.validate().unwrap();
-    let native = LayeredSurface::try_from(surface).unwrap();
-    assert!(native.shader.is_empty());
-    assert_eq!(native.layers[0].shader, Some(1));
+    builder
+        .add_material(wc3::model::Material {
+            name: "HD".into(),
+            surface: MdlxMaterial { steps: vec![step] },
+        })
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let output = export::<native::V1800>(&model).unwrap();
+    let material = output.materials().next().unwrap();
+    assert_eq!(material.layers[0].try_shader_type().unwrap().id(), 1);
+    assert!(material.layers[0].try_fresnel().is_ok());
+    let output = export::<native::V1000>(&model).unwrap();
+    assert_eq!(
+        output.materials().next().unwrap().try_shader().unwrap(),
+        "Shader_HD_DefaultUnit"
+    );
 }
 
 #[test]
 fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassification() {
     let mut slot_values = SlotValues::default();
-    use wc3::model::materials::mdlx::{Fresnel, MaterialStep as Wc3MaterialStep};
+    use wc3::model::materials::mdlx::Fresnel;
     use wc3::model::profiles::Universal;
     use wc3::model::{
         AnimationSample, Curve, DynamicTrack, Material, Model, Time, TimeSource, Track,
@@ -328,20 +364,37 @@ fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassificati
                 id,
                 Material {
                     name: "animated shader".into(),
-                    surface: MaterialSurface::try_from(LayeredSurface {
-                        layers: vec![Layer {
-                            shader: Some(selector),
+                    surface: {
+                        let inputs = MaterialInputs {
                             opacity,
                             emissive_gain: Some(gain),
-                            fresnel: Some(Fresnel {
-                                opacity: fresnel,
-                                ..SlotConstruct::construct(&mut slot_values)
-                            }),
                             ..SlotConstruct::construct(&mut slot_values)
-                        }],
-                        ..SlotConstruct::construct(&mut slot_values)
-                    })
-                    .unwrap(),
+                        };
+                        let fresnel = Some(Fresnel {
+                            opacity: fresnel,
+                            ..SlotConstruct::construct(&mut slot_values)
+                        });
+                        let shader = if selector == 1 {
+                            Shader::ReforgedDefault(ReforgedInputs {
+                                inputs,
+                                fresnel,
+                                textures: vec![],
+                            })
+                        } else {
+                            Shader::Unresolved(UnresolvedInputs {
+                                inputs,
+                                fresnel,
+                                selector: Some(selector),
+                                ..SlotConstruct::construct(&mut slot_values)
+                            })
+                        };
+                        MaterialSurface::from(MdlxMaterial {
+                            steps: vec![MdlxStep {
+                                shader,
+                                ..SlotConstruct::construct(&mut slot_values)
+                            }],
+                        })
+                    },
                 },
             )
             .unwrap();
@@ -375,69 +428,120 @@ fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassificati
             unreachable!()
         };
         assert_eq!(
-            matches!(step.as_ref(), Wc3MaterialStep::ReforgedDefault(_)),
+            matches!(step.shader, Shader::ReforgedDefault(_)),
             selector == 1
         );
-        assert_eq!(
-            matches!(step.as_ref(), Wc3MaterialStep::Unresolved(_)),
-            selector == 99
-        );
-        let layer = step.to_layer();
+        assert_eq!(matches!(step.shader, Shader::Unresolved(_)), selector == 99);
+        let layer = step.shader.inputs();
         assert_eq!(frozen_values[layer.opacity], 0.5);
         assert_eq!(layer.opacity, opacity);
         let gain = layer.emissive_gain.unwrap();
         assert_eq!(frozen_values[gain], 0.5);
         assert!(frozen_values.get(gain).is_some());
-        let fresnel = layer.fresnel.unwrap().opacity;
+        let fresnel = step.shader.fresnel().unwrap().opacity;
         assert_eq!(frozen_values[fresnel], 0.5);
         assert!(frozen_values.get(fresnel).is_some());
     }
 }
 
 #[test]
-fn wc3_known_steps_normalize_shader_spellings_and_mix_with_unresolved_steps() {
-    let mut slot_values = SlotValues::default();
-    use wc3::model::materials::mdlx::MaterialStep as Wc3MaterialStep;
-    let original = LayeredSurface {
-        shader: "Shader_HD_DefaultUnit".into(),
-        layers: [2, 1, 99]
-            .map(|shader| Layer {
-                shader: Some(shader),
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .into(),
-        ..SlotConstruct::construct(&mut slot_values)
-    };
-    let surface = MaterialSurface::try_from(original.clone()).unwrap();
-    let canonical = LayeredSurface::try_from(surface.clone()).unwrap();
-    assert_eq!(canonical.shader, original.shader);
-    assert_eq!(canonical.layers[0].shader, Some(0));
-    assert_eq!(canonical.layers[1].shader, Some(1));
-    assert_eq!(canonical.layers[2], original.layers[2]);
-    assert_wc3_surface_eq(&MaterialSurface::try_from(canonical).unwrap(), &surface);
-
-    let mut incompatible = surface;
-    let MaterialStep::Mdlx(step) = &incompatible.steps[2] else {
-        unreachable!()
-    };
-    let Wc3MaterialStep::Unresolved(mut unresolved) = step.as_ref().clone() else {
-        unreachable!()
-    };
-    unresolved.shader_name = "another shader".into();
-    incompatible
-        .steps
-        .push(MaterialStep::Mdlx(Box::new(Wc3MaterialStep::Unresolved(
-            unresolved,
-        ))));
-    assert!(LayeredSurface::try_from(incompatible).is_err());
+fn native_export_checks_shared_declarations_and_shader_names() {
+    let mut model = native_model::<native::V1800>("", &[Some(2), Some(1), Some(99)], false);
+    let output = export::<native::V1800>(&model).unwrap();
+    let material = output.materials().next().unwrap();
+    assert!(material.try_shader().unwrap_or_default().is_empty());
+    assert_eq!(
+        material
+            .layers
+            .iter()
+            .map(|layer| layer.try_shader_type().unwrap().id())
+            .collect::<Vec<_>>(),
+        [2, 1, 99]
+    );
+    let id = model.materials().iter().next().unwrap().0;
+    model
+        .edit(|builder| {
+            let mut material = builder.model().material(id).unwrap().clone();
+            let mut other = material.surface.steps[2].clone();
+            let Shader::Unresolved(inputs) = &mut other.shader else {
+                unreachable!()
+            };
+            inputs.shader_name = "another shader".into();
+            material.surface.steps.push(other);
+            builder.set_material(id, material)
+        })
+        .unwrap();
+    assert!(export::<native::V1800>(&model)
+        .unwrap_err()
+        .description
+        .contains("different material shader names"));
+    model
+        .edit(|builder| {
+            let mut material = builder.model().material(id).unwrap().clone();
+            material.surface.steps.pop();
+            material.surface.steps[1].declaration.priority_plane += 1;
+            builder.set_material(id, material)
+        })
+        .unwrap();
+    assert!(export::<native::V1800>(&model)
+        .unwrap_err()
+        .description
+        .contains("different material-wide draw declarations"));
 }
 
-fn assert_wc3_surface_eq(actual: &MaterialSurface<'_>, expected: &MaterialSurface<'_>) {
-    assert_eq!(actual.steps.len(), expected.steps.len());
-    for (actual, expected) in actual.steps.iter().zip(&expected.steps) {
-        let (MaterialStep::Mdlx(actual), MaterialStep::Mdlx(expected)) = (actual, expected) else {
-            panic!("expected WC3 steps")
-        };
-        assert_eq!(actual, expected);
+#[test]
+fn additional_texture_slots_roundtrip_their_own_images_and_animation() {
+    use native::animation::{Animatable, Sequence, Track, ValueKeyframe};
+    use native::materials::{Layer, LayerTextureSlot, Material, ShaderType, Texture};
+    for selector in [1, 99] {
+        let mut document = native::Document::<native::V1800>::new();
+        document.set_textures(
+            ["primary.blp", "normal.blp", "animated.blp"].map(|name| Texture::new(name).unwrap()),
+        );
+        document.set_sequences([Sequence::new("slots", [0, 1000]).unwrap()]);
+        let mut material = Material::new();
+        let mut layer = Layer::<native::V1800>::new();
+        layer
+            .try_set_shader_type(ShaderType::new(selector))
+            .unwrap();
+        let mut animated = Animatable::from(1);
+        animated.set_track(
+            Track::step(
+                [
+                    ValueKeyframe { frame: 0, value: 1 },
+                    ValueKeyframe {
+                        frame: 1000,
+                        value: 2,
+                    },
+                ],
+                None,
+            )
+            .unwrap(),
+        );
+        layer
+            .try_set_texture_slots(&[LayerTextureSlot {
+                texture_type: 1,
+                texture_id: animated,
+            }])
+            .unwrap();
+        material.layers.push(layer);
+        document.set_materials([material]);
+        let model = io::mdlx::import_owned(&document, &ImportOptions::default())
+            .unwrap()
+            .value;
+        let output = export::<native::V1800>(&model).unwrap();
+        let material = output.materials().next().unwrap();
+        let layer = &material.layers[0];
+        let textures: Vec<_> = output.textures().collect();
+        let primary = *layer.texture_id.value().unwrap();
+        let slot = &layer.try_texture_slots().unwrap()[0];
+        let track = slot.texture_id.track().unwrap();
+        let start = track.evaluate(0.).unwrap();
+        let end = track.evaluate(1000.).unwrap();
+        assert_ne!(primary, start);
+        assert_ne!(start, end);
+        assert_eq!(textures[primary as usize].path.text(), "primary.blp");
+        assert_eq!(textures[start as usize].path.text(), "normal.blp");
+        assert_eq!(textures[end as usize].path.text(), "animated.blp");
     }
 }

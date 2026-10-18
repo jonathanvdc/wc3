@@ -5,8 +5,9 @@ use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use std::collections::HashMap;
-use wc3::model::materials::mdlx::{Layer, LayeredSurface};
+use wc3::model::materials::mdlx::{MaterialInputs, MaterialStep as MdlxStep, Shader};
 use wc3::model::profiles::mdlx;
+use wc3::model::profiles::mdlx::Material as MdlxMaterial;
 use wc3::model::Model;
 use wc3::model::ModelBuilder;
 use wc3::model::ModelMetadata;
@@ -88,14 +89,15 @@ fn fixture_geometry<'a>(
     let material = builder
         .add_material(SemanticMaterial {
             name: "plain".into(),
-            surface: MaterialSurface::try_from(LayeredSurface {
-                layers: vec![Layer {
-                    opacity: slot_values.add(1.),
+            surface: MaterialSurface::from(MdlxMaterial {
+                steps: vec![MdlxStep {
+                    shader: Shader::Classic(MaterialInputs {
+                        opacity: slot_values.add(1.),
+                        ..SlotConstruct::construct(&mut slot_values)
+                    }),
                     ..SlotConstruct::construct(&mut slot_values)
                 }],
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap(),
+            }),
         })
         .unwrap();
     let mut instance = MeshInstance::new(mount, mesh);
@@ -545,14 +547,15 @@ fn animated_materials_are_isolated_between_playback_clocks() {
             let edit_result = (|| {
                 builder.set_material_surface(
                     material,
-                    MaterialSurface::try_from(LayeredSurface {
-                        layers: vec![Layer {
-                            opacity: property,
+                    MaterialSurface::from(MdlxMaterial {
+                        steps: vec![MdlxStep {
+                            shader: Shader::Classic(MaterialInputs {
+                                opacity: property,
+                                ..SlotConstruct::construct(&mut slot_values)
+                            }),
                             ..SlotConstruct::construct(&mut slot_values)
                         }],
-                        ..SlotConstruct::construct(&mut slot_values)
-                    })
-                    .unwrap(),
+                    }),
                 )?;
                 builder.add_global_track(DynamicTrack::Scalar(Track {
                     target: property,

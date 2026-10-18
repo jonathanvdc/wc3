@@ -228,35 +228,37 @@ its own typed shader inputs and rendering settings. A single program can combine
 steps from different dialects. Shared texture bindings, blend operations, depth
 state, and rasterization components are reused where their meanings agree.
 
-`mdlx::MaterialStep` distinguishes `Classic(ClassicMaterialStep)`,
-`ReforgedDefault(ReforgedDefaultMaterialStep)`, and
-`Unresolved(UnresolvedMaterialStep)`. Classic and Reforged default steps share
-`MaterialInputs` for their primary texture, opacity, emissive gain, and draw state;
-only Reforged default steps expose additional texture slots and Fresnel inputs.
-Unresolved steps retain the complete uninterpreted layer. Numeric layer selectors
-take precedence over shader names when interpreting native inputs. Texture slot
-order, duplicate selectors, and unknown roles remain intact.
+`mdlx::MaterialStep` owns pass state, draw declarations, and a `Shader` whose
+variants are `Classic(MaterialInputs)`, `ReforgedDefault(ReforgedInputs)`, and
+`Unresolved(UnresolvedInputs)`. Common `MaterialInputs` contain the primary
+texture, opacity, and emissive gain. Blend, depth, and rasterization state belong
+to the pass independently of shader selection. Reforged inputs add ordered
+texture slots and Fresnel controls; unresolved inputs preserve those fields plus
+the uninterpreted shader name and selector.
 
-The shader variant is the authority for known shader selection. Known steps carry
-neither shader IDs nor shader names, and their native selectors are derived on
-projection: the implicit classic shader or the Reforged default selector. Known
-native spellings normalize through the semantic program. Unresolved steps retain
-their material shader name and layer selector because their interpretation is not
-known; the native codecs and native-profile layers remain available for editing
-raw encodings.
+Native import interprets shader selection before constructing the semantic model.
+Numeric layer selectors take precedence over material shader names. Known shader
+variants carry neither IDs nor names; native export derives their selectors.
+Texture slot order, duplicate selectors, and unknown roles remain intact. Raw
+native layers remain available through the codecs for editing encoded declarations.
 
 Each step carries priority, sorting, and additional draw flags in a
-`MaterialDeclaration`. Checked MDLX projection requires those declarations to
+`MaterialDeclaration`. Checked native MDLX export requires those declarations to
 agree, because the native material stores them once. Unresolved names must also
-agree when several unresolved steps share a native material. Known variants can
-coexist with an unresolved name through explicit layer selectors. An empty
+agree when several unresolved steps share a native material. Semantic programs
+can retain known steps alongside unresolved names, but exact export requires a
+layout that can encode every declaration. Current native layouts provide either
+a material shader name or per-layer selectors, so a nonempty unresolved name cannot be combined with explicit selector overrides. An empty
 program carries no shader declarations. Nondefault headers on empty native
 materials remain editable through the native codecs; semantic import rejects
 them unless an explicit loss policy accepts dropping them.
 
-Native-profile surfaces convert into the universal program without retaining
-another copy. MDLX conversion uses checked `TryFrom` because empty declarations
-may be unrepresentable. Checked projections reject unsupported steps or extra
+The MDLX profile and Universal share the same typed steps. An MDLX material is a
+`MaterialProgram<mdlx::MaterialStep>`; widening wraps each step in the Universal
+dialect enum without interpreting or reconstructing its inputs. Narrowing checks
+that every operation belongs to the MDLX dialect. Native encoding compatibility,
+including agreement of draw declarations and shader names, is checked by export.
+Other checked profile projections likewise reject unsupported steps or extra
 operations rather than dropping them.
 
 M2 and WMO use shader-specific `MaterialStep` enums in both their native profiles
@@ -286,8 +288,7 @@ numbers from draw and step order within each section. The auxiliary section word
 M2-specific draw controls and is not a geometry reference. Material steps retain
 shader inputs and composition state without pointing back to their geometry.
 
-A Warcraft III draw layer becomes an MDLX step. Native MDLX surfaces use
-`LayeredSurface` and its `SurfaceLayer` vocabulary; M2 inputs implement
+A Warcraft III draw layer becomes an MDLX step at import. M2 inputs implement
 `ShaderInput` for local validation and graph traversal.
 
 Texture inputs compose through `TextureBinding<Image, Coordinates, Sampling,

@@ -125,7 +125,8 @@ fn native_world_clamp_authority_imports_without_texture_sampler_mutation() {
 #[test]
 fn image_requests_retain_native_input_metadata_for_replacement_selection() {
     let mut slot_values = SlotValues::default();
-    use wc3::model::materials::mdlx::{Layer, LayeredSurface};
+    use wc3::model::materials::mdlx::MaterialStep as MdlxStep;
+    use wc3::model::profiles::mdlx::Material as MdlxMaterial;
     use wc3::model::TextureControls;
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let first = builder.add_file_texture("shared.png").unwrap();
@@ -134,18 +135,16 @@ fn image_requests_retain_native_input_metadata_for_replacement_selection() {
         &mut slot_values,
     )));
     let layers = [first, second].map(|image| {
-        let mut layer = Layer::construct(&mut slot_values);
-        layer.binding.image = slot_values.add(Some(image));
+        let mut layer = MdlxStep::construct(&mut slot_values);
+        layer.shader.inputs_mut().binding.image = slot_values.add(Some(image));
         layer
     });
     builder
         .add_material(Material {
             name: "surface".into(),
-            surface: MaterialSurface::try_from(LayeredSurface {
-                layers: layers.into(),
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap(),
+            surface: MaterialSurface::from(MdlxMaterial {
+                steps: layers.into(),
+            }),
         })
         .unwrap();
     let model = {

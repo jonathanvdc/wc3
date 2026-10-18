@@ -173,13 +173,9 @@ pub fn texture_requests<'view, 'data>(
             };
             match pass {
                 MaterialStep::Mdlx(layer) => {
-                    let base = match layer.as_ref() {
-                        mdlx::MaterialStep::Classic(layer) => &layer.inputs.binding.image,
-                        mdlx::MaterialStep::ReforgedDefault(layer) => &layer.inputs.binding.image,
-                        mdlx::MaterialStep::Unresolved(layer) => &layer.layer.binding.image,
-                    };
+                    let base = &layer.shader.inputs().binding.image;
                     let mut slots = vec![(0, base)];
-                    if let mdlx::MaterialStep::ReforgedDefault(layer) = layer.as_ref() {
+                    if let mdlx::Shader::ReforgedDefault(layer) = &layer.shader {
                         for slot in &layer.textures {
                             slots.retain(|(index, _)| *index != slot.slot);
                             slots.push((slot.slot, &slot.binding.image));

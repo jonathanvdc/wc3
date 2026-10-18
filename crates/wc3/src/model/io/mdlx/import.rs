@@ -142,7 +142,11 @@ where
     for material in source.materials() {
         let mut surface =
             materials::read::<_, S>(material, &texture_ids, &transforms, builder.values_mut())?;
-        if surface.has_unexecuted_declarations() {
+        if material.layers.is_empty()
+            && (material.priority_plane != 0
+                || material.render_mode.bits() != 0
+                || !material.try_shader().unwrap_or_default().is_empty())
+        {
             context.unsupported(
                 "material.empty_declarations",
                 "nondefault declarations on an empty material require the native codec",

@@ -359,17 +359,14 @@ fn image_candidates_preserve_location_priority_case_and_asset_sources() {
     use wc3::model::ModelBuilder;
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let id = builder.add_file_texture("Textures\\Body.BLP").unwrap();
-    let mut layer = wc3::model::materials::mdlx::Layer::construct(&mut slot_values);
-    layer.binding.image = slot_values.add(Some(id));
+    let mut layer = wc3::model::materials::mdlx::MaterialStep::construct(&mut slot_values);
+    layer.shader.inputs_mut().binding.image = slot_values.add(Some(id));
     builder
         .add_material(wc3::model::Material {
             name: "image input".into(),
-            surface: wc3::model::MaterialSurface::try_from(
-                wc3::model::materials::mdlx::LayeredSurface {
-                    layers: vec![layer],
-                    ..SlotConstruct::construct(&mut slot_values)
-                },
-            )
+            surface: wc3::model::MaterialSurface::try_from(wc3::model::profiles::mdlx::Material {
+                steps: vec![layer],
+            })
             .unwrap(),
         })
         .unwrap();

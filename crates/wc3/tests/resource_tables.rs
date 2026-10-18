@@ -9,19 +9,16 @@ use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn use_texture(draft: &mut wc3::model::ModelBuilder<'_, Universal>, texture: Texture) {
     let mut slot_values = SlotValues::default();
-    use wc3::model::materials::mdlx::{Layer, LayeredSurface};
+    use wc3::model::materials::mdlx::MaterialStep as MdlxStep;
+    use wc3::model::profiles::mdlx::Material as MdlxMaterial;
     use wc3::model::{Material, MaterialSurface};
-    let mut layer = Layer::construct(&mut slot_values);
-    layer.binding.image = slot_values.add(Some(texture));
+    let mut layer = MdlxStep::construct(&mut slot_values);
+    layer.shader.inputs_mut().binding.image = slot_values.add(Some(texture));
     draft.import_values(&slot_values).unwrap();
     draft
         .add_material(Material {
             name: "input".into(),
-            surface: MaterialSurface::try_from(LayeredSurface {
-                layers: vec![layer],
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap(),
+            surface: MaterialSurface::from(MdlxMaterial { steps: vec![layer] }),
         })
         .unwrap();
 }

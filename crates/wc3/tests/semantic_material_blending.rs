@@ -40,7 +40,7 @@ fn warcraft_layer_additive_selectors_share_weighted_rgb_operation_and_roundtrip_
         ),
     ] {
         let model = layer_model(selector);
-        let blend = model.materials().iter().next().unwrap().1.surface.layers[0]
+        let blend = model.materials().iter().next().unwrap().1.surface.steps[0]
             .state
             .blend;
         assert_eq!(blend, mdlx::Blend::AdditiveAlpha(encoding));
@@ -63,7 +63,7 @@ fn unweighted_semantic_addition_has_no_exact_warcraft_layer_encoding() {
     let mut model = layer_model("Additive");
     let (material, source) = model.materials().iter().next().unwrap();
     let mut surface = source.surface.clone();
-    surface.layers[0].state.blend = mdlx::Blend::Additive;
+    surface.steps[0].state.blend = mdlx::Blend::Additive;
     model
         .edit(|builder| builder.set_material_surface(material, surface))
         .unwrap();

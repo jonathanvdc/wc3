@@ -42,8 +42,9 @@ Authored material programs contain dialect-specific steps, which the compiler
 interprets into rendering passes. `ModelMaterial` extends Bevy `StandardMaterial` with authored blend/depth states
 and supported native combiners. Classic layered surfaces, [M2 texture combinations](m2-materials.md),
 and [WMO surfaces](wmo-materials.md) map into that pipeline.
-M2 and WMO steps name their shader-specific inputs; native selector decoding belongs
-to the model adapters. M2 native layers become ordered material steps with
+MDLX steps separate pass state from typed shader inputs, using the same step
+vocabulary in the MDLX profile and Universal. Native selector decoding belongs
+to the model adapters for every dialect. M2 native layers become ordered material steps with
 independent animation targets. Unsupported combinations remain diagnostic fallbacks. Unlit and unfogged controls use
 Bevy's corresponding behavior; mesh priority is a sort/depth bias, not a complete
 game-specific pass ordering scheme.

@@ -1,4 +1,4 @@
-//! Direct native layered-material decoding into logical surface fields.
+//! Native material decoding and shader interpretation into typed semantic steps.
 use super::animation::Decoder;
 use super::storage::Storage;
 use crate::model::conversion::Error;
@@ -6,7 +6,10 @@ use crate::model::formats::mdlx::{self as native, FormatVersion};
 use crate::model::materials::bindings::{Coordinates, TextureBinding};
 use crate::model::materials::mdlx::{AlphaAdditiveEncoding, LayerOptions};
 use crate::model::materials::state::{DepthState, Lighting, Operation, PassState};
-use crate::model::profiles::mdlx::{Blend, Fresnel, Layer, Material, Shading, TextureSlot};
+use crate::model::profiles::mdlx::{
+    Blend, Fresnel, Material, MaterialDeclaration, MaterialInputs, MaterialStep, ReforgedInputs,
+    Shader, Shading, TextureSlot, UnresolvedInputs,
+};
 use crate::model::{Construct, PropertyValues};
 use crate::model::{Quaternion, Texture, TextureTransform};
 
@@ -31,7 +34,23 @@ pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                 )
             })
     };
-    let mut layers = Vec::with_capacity(source.layers.len());
+    let flags = source.render_mode;
+    let mut unresolved = flags;
+    unresolved.set_constant_color(false);
+    unresolved.set_two_sided(false);
+    unresolved.set_sort_primitives_far_z(false);
+    unresolved.set_sort_primitives_near_z(false);
+    unresolved.set_full_resolution(false);
+    let declaration = MaterialDeclaration {
+        priority_plane: source.priority_plane,
+        constant_color: flags.constant_color(),
+        two_sided: flags.two_sided(),
+        sort_near_z: flags.sort_primitives_near_z(),
+        sort_far_z: flags.sort_primitives_far_z(),
+        full_resolution: flags.full_resolution(),
+        unclassified: unresolved.bits().into(),
+    };
+    let mut steps = Vec::with_capacity(source.layers.len());
     for layer in &source.layers {
         let flags = layer.shading_flags;
         let mut unresolved = flags;
@@ -58,7 +77,7 @@ pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                 },
             });
         }
-        layers.push(Layer {
+        let inputs = MaterialInputs {
             binding: TextureBinding {
                 image: values.add(texture(
                     layer.texture_id.value().copied().unwrap_or_default(),
@@ -83,62 +102,67 @@ pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                 .try_emissive_gain()
                 .ok()
                 .map(|value| values.add(value.value().copied().unwrap_or_default())),
-            fresnel,
-            shader: layer.try_shader_type().ok().map(|value| value.id()),
-            textures: slots,
-            state: PassState {
-                blend: match layer.filter_mode {
-                    native::LayerFilterMode::None => Blend::Opaque,
-                    native::LayerFilterMode::Transparent => Blend::AlphaKey(()),
-                    native::LayerFilterMode::Blend => Blend::Alpha,
-                    native::LayerFilterMode::Additive => {
-                        Blend::AdditiveAlpha(AlphaAdditiveEncoding::Additive)
-                    }
-                    native::LayerFilterMode::AddAlpha => {
-                        Blend::AdditiveAlpha(AlphaAdditiveEncoding::AddAlpha)
-                    }
-                    native::LayerFilterMode::Modulate => Blend::Modulate,
-                    native::LayerFilterMode::Modulate2x => Blend::Modulate2x,
-                    native::LayerFilterMode::Unknown(value) => Blend::Unknown(value),
-                },
-                rasterization: Shading {
-                    depth: DepthState {
-                        test: Operation::bypassed(flags.no_depth_test()),
-                        write: Operation::bypassed(flags.no_depth_set()),
-                        bias: (),
-                    },
-                    faces: flags.two_sided(),
-                    lighting: Lighting {
-                        unlit: flags.unshaded(),
-                        unfogged: flags.unfogged(),
-                    },
-                    controls: LayerOptions {
-                        sphere_environment: flags.sphere_env_map(),
-                        unclassified: unresolved.bits().into(),
-                    },
-                },
-                ordering: (),
+        };
+        let state = PassState {
+            blend: match layer.filter_mode {
+                native::LayerFilterMode::None => Blend::Opaque,
+                native::LayerFilterMode::Transparent => Blend::AlphaKey(()),
+                native::LayerFilterMode::Blend => Blend::Alpha,
+                native::LayerFilterMode::Additive => {
+                    Blend::AdditiveAlpha(AlphaAdditiveEncoding::Additive)
+                }
+                native::LayerFilterMode::AddAlpha => {
+                    Blend::AdditiveAlpha(AlphaAdditiveEncoding::AddAlpha)
+                }
+                native::LayerFilterMode::Modulate => Blend::Modulate,
+                native::LayerFilterMode::Modulate2x => Blend::Modulate2x,
+                native::LayerFilterMode::Unknown(value) => Blend::Unknown(value),
             },
+            rasterization: Shading {
+                depth: DepthState {
+                    test: Operation::bypassed(flags.no_depth_test()),
+                    write: Operation::bypassed(flags.no_depth_set()),
+                    bias: (),
+                },
+                faces: flags.two_sided(),
+                lighting: Lighting {
+                    unlit: flags.unshaded(),
+                    unfogged: flags.unfogged(),
+                },
+                controls: LayerOptions {
+                    sphere_environment: flags.sphere_env_map(),
+                    unclassified: unresolved.bits().into(),
+                },
+            },
+            ordering: (),
+        };
+        let shader_name = S::text(source.try_shader().unwrap_or_default());
+        let selector = layer.try_shader_type().ok().map(|value| value.id());
+        let family = shader_family(selector, &shader_name);
+        let shader = match family {
+            ShaderFamily::Classic if slots.is_empty() && fresnel.is_none() => {
+                Shader::Classic(inputs)
+            }
+            ShaderFamily::ReforgedDefault => Shader::ReforgedDefault(ReforgedInputs {
+                inputs,
+                textures: slots,
+                fresnel,
+            }),
+            _ => Shader::Unresolved(UnresolvedInputs {
+                shader_name,
+                selector,
+                inputs,
+                textures: slots,
+                fresnel,
+            }),
+        };
+        steps.push(MaterialStep {
+            state,
+            declaration: declaration.clone(),
+            shader,
         });
     }
-    let flags = source.render_mode;
-    let mut unresolved = flags;
-    unresolved.set_constant_color(false);
-    unresolved.set_two_sided(false);
-    unresolved.set_sort_primitives_far_z(false);
-    unresolved.set_sort_primitives_near_z(false);
-    unresolved.set_full_resolution(false);
-    Ok(Material {
-        priority_plane: source.priority_plane,
-        shader: S::text(source.try_shader().unwrap_or_default()),
-        constant_color: flags.constant_color(),
-        two_sided: flags.two_sided(),
-        sort_near_z: flags.sort_primitives_near_z(),
-        sort_far_z: flags.sort_primitives_far_z(),
-        full_resolution: flags.full_resolution(),
-        unclassified: unresolved.bits().into(),
-        layers,
-    })
+    Ok(Material { steps })
 }
 
 pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
@@ -149,10 +173,11 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
 ) -> Result<Material<'a>, Error> {
     let mut material = read::<_, S>(source, textures, transforms, decoder.builder.values_mut())?;
 
-    for (source, layer) in source.layers.iter().zip(&mut material.layers) {
+    for (source, layer) in source.layers.iter().zip(&mut material.steps) {
+        let inputs = layer.shader.inputs_mut();
         if source.texture_animation_id != u32::MAX {
             let transform = &transforms[source.texture_animation_id as usize];
-            layer.binding.coordinates.transform = TextureTransform {
+            inputs.binding.coordinates.transform = TextureTransform {
                 translation: decoder.track(
                     transform.translation.as_ref(),
                     [0.; 3],
@@ -174,13 +199,14 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
             };
         }
         let map = texture_map(textures, &source.texture_id)?;
-        layer.binding.image = decoder.bind(&source.texture_id, "layer.texture", map)?;
-        layer.opacity = decoder.bind(&source.alpha, "layer.opacity", |value| value)?;
+        inputs.binding.image = decoder.bind(&source.texture_id, "layer.texture", map)?;
+        inputs.opacity = decoder.bind(&source.alpha, "layer.opacity", |value| value)?;
         if let Ok(source) = source.try_emissive_gain() {
-            layer.emissive_gain = Some(decoder.bind(source, "layer.emissive_gain", |value| value)?);
+            inputs.emissive_gain =
+                Some(decoder.bind(source, "layer.emissive_gain", |value| value)?);
         }
         if let Ok(source) = source.try_fresnel() {
-            layer.fresnel = Some(Fresnel {
+            *layer.shader.fresnel_mut().expect("imported Fresnel inputs") = Fresnel {
                 color: decoder.bind(&source.color, "layer.fresnel_color", |value| value)?,
                 opacity: decoder.bind(&source.opacity, "layer.fresnel_opacity", |value| value)?,
                 team_color: decoder.bind(
@@ -188,13 +214,13 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                     "layer.fresnel_team_color",
                     |value| value,
                 )?,
-            });
+            };
         }
         for (source, slot) in source
             .try_texture_slots()
             .unwrap_or_default()
             .iter()
-            .zip(&mut layer.textures)
+            .zip(layer.shader.textures_mut())
         {
             let map = texture_map(textures, &source.texture_id)?;
             slot.binding.image = decoder.bind(&source.texture_id, "layer.texture_slot", map)?;
@@ -229,4 +255,55 @@ fn texture_map<'a>(
     }
     let textures = textures.to_vec();
     Ok(move |selector| textures.get(selector as usize).copied())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ShaderFamily {
+    Classic,
+    ReforgedDefault,
+    Unresolved,
+}
+fn shader_family(selector: Option<u32>, name: &str) -> ShaderFamily {
+    match selector {
+        Some(1) => ShaderFamily::ReforgedDefault,
+        Some(0 | 2) => ShaderFamily::Classic,
+        Some(_) => ShaderFamily::Unresolved,
+        None => match name {
+            "Shader_HD_DefaultUnit" => ShaderFamily::ReforgedDefault,
+            "" | "Shader_SD_FixedFunction" => ShaderFamily::Classic,
+            _ => ShaderFamily::Unresolved,
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{shader_family, ShaderFamily};
+
+    #[test]
+    fn numeric_selection_takes_precedence_over_names() {
+        for name in [
+            "",
+            "Shader_SD_FixedFunction",
+            "Shader_HD_DefaultUnit",
+            "Shader_HD_Crystal",
+        ] {
+            for (selector, family) in [
+                (0, ShaderFamily::Classic),
+                (2, ShaderFamily::Classic),
+                (1, ShaderFamily::ReforgedDefault),
+                (99, ShaderFamily::Unresolved),
+            ] {
+                assert_eq!(shader_family(Some(selector), name), family);
+            }
+        }
+        for (name, family) in [
+            ("", ShaderFamily::Classic),
+            ("Shader_SD_FixedFunction", ShaderFamily::Classic),
+            ("Shader_HD_DefaultUnit", ShaderFamily::ReforgedDefault),
+            ("Shader_HD_Crystal", ShaderFamily::Unresolved),
+        ] {
+            assert_eq!(shader_family(None, name), family);
+        }
+    }
 }

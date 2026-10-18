@@ -1,20 +1,23 @@
 # Reforged DefaultUnit surfaces
 
-The WC3 material vocabulary distinguishes `MaterialStep::Classic`,
-`MaterialStep::ReforgedDefault`, and `MaterialStep::Unresolved`.
-`ReforgedDefaultMaterialStep` owns the DefaultUnit texture slots and Fresnel inputs;
-`ClassicMaterialStep` contains the classic inputs without those HD fields.
-Shader selection is interpreted before rendering, with a numeric layer selector
-taking precedence over the material shader name. The known variants then own
-shader identity without storing redundant names or IDs. Only unresolved steps
-retain raw shader selection. Native output derives known selectors from the
-variant, while texture slot order remains intact for structural animation targets.
+A WC3 `MaterialStep` owns pass state and draw declarations separately from its
+`Shader`. The shader vocabulary distinguishes `Shader::Classic`,
+`Shader::ReforgedDefault`, and `Shader::Unresolved`. `MaterialInputs` holds the
+primary texture, opacity, and emissive gain. `ReforgedInputs` adds DefaultUnit
+texture slots and Fresnel controls; classic inputs have no HD fields.
+Native import interprets shader selection, with a numeric layer selector taking
+precedence over the material shader name. Both the MDLX and Universal profiles
+use these same steps. Known shader variants own shader identity without redundant
+names or IDs, while unresolved inputs retain raw selection. Native export derives
+known selectors and checks agreement of shared material declarations. Texture slot
+order remains intact for animation and export.
 
 Reforged default materials combine diffuse, normal, surface, emissive, team-color,
-and reflection roles in `ModelMaterial`. Native adapters normalize older
-six-layer forms into semantic roles before rendering. Unknown/Crystal shaders retain
-a diagnosed diffuse fallback; they do not receive DefaultUnit slot rules merely
-because they contain several textures.
+and reflection roles in `ModelMaterial`. Native import currently retains one step
+per native layer. Older six-layer DefaultUnit layouts therefore do not yet combine
+into one set of semantic role bindings. Unknown/Crystal shaders retain a diagnosed
+diffuse fallback; they do not receive DefaultUnit slot rules merely because they
+contain several textures.
 
 ## PBR integration and roles
 

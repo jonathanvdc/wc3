@@ -2,7 +2,7 @@ use super::plan::plan;
 use super::*;
 use bevy::prelude::{Assets, Image};
 use std::collections::HashSet;
-use wc3::model::materials::mdlx::LayeredSurface;
+use wc3::model::profiles::mdlx::Material as MdlxMaterial;
 use wc3::model::profiles::Universal;
 use wc3::model::ModelBuilder;
 use wc3::model::ModelMetadata;
@@ -18,7 +18,7 @@ fn model() -> (Model<'static>, Vec<(InstanceId, DrawId)>) {
     let material = builder
         .add_material(Material {
             name: "generic".into(),
-            surface: MaterialSurface::try_from(LayeredSurface::default()).unwrap(),
+            surface: MaterialSurface::from(MdlxMaterial::default()),
         })
         .unwrap();
     let mut ids = Vec::new();
@@ -117,7 +117,7 @@ fn only_repeated_skinned_sources_coalesce() {
 #[test]
 fn replacements_distinguish_identical_inputs_before_resolved_images_are_shared() {
     let mut slot_values = SlotValues::default();
-    use wc3::model::materials::mdlx::Layer;
+    use wc3::model::materials::mdlx::MaterialStep as MdlxStep;
 
     let (mut model, _) = model();
     let material = model.materials().iter().next().unwrap().0;
@@ -126,16 +126,15 @@ fn replacements_distinguish_identical_inputs_before_resolved_images_are_shared()
             let first = draft.add_file_texture("source.png")?;
             let second = first;
             let layers = [first, second].map(|image| {
-                let mut layer = Layer::construct(&mut slot_values);
-                layer.binding.image = slot_values.add(Some(image));
+                let mut layer = MdlxStep::construct(&mut slot_values);
+                layer.shader.inputs_mut().binding.image = slot_values.add(Some(image));
                 layer
             });
             draft.set_material_surface(
                 material,
-                MaterialSurface::try_from(LayeredSurface {
-                    layers: layers.into(),
-                    ..SlotConstruct::construct(&mut slot_values)
-                })?,
+                MaterialSurface::from(MdlxMaterial {
+                    steps: layers.into(),
+                }),
             )?;
             draft.import_values(&slot_values)?;
             Ok(first)
@@ -186,7 +185,7 @@ fn replacements_distinguish_identical_inputs_before_resolved_images_are_shared()
 fn input_replacement_survives_sampler_edits_and_animated_selection() {
     let mut slot_values = SlotValues::default();
     use bevy::image::{ImageAddressMode, ImageSampler};
-    use wc3::model::materials::mdlx::Layer;
+    use wc3::model::materials::mdlx::MaterialStep as MdlxStep;
 
     use wc3::model::{AddressMode, AnimationSample, Curve, DynamicTrack, Time, TimeSource, Track};
     let (mut model, _) = model();
@@ -200,20 +199,25 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
                 second.sampler.u = AddressMode::Mirror;
                 let layers = (0..2)
                     .map(|_index| {
-                        let mut layer = Layer::construct(&mut slot_values);
-                        layer.binding.image = slot_values.add(Some(first));
-                        layer.binding.coordinates.transform.translation =
-                            slot_values.add([0.25, 0., 0.]);
+                        let mut layer = MdlxStep::construct(&mut slot_values);
+                        layer.shader.inputs_mut().binding.image = slot_values.add(Some(first));
+                        layer
+                            .shader
+                            .inputs_mut()
+                            .binding
+                            .coordinates
+                            .transform
+                            .translation = slot_values.add([0.25, 0., 0.]);
                         layer
                     })
                     .collect::<Vec<_>>();
-                let targets: Vec<_> = layers.iter().map(|layer| layer.binding.image).collect();
+                let targets: Vec<_> = layers
+                    .iter()
+                    .map(|layer| layer.shader.inputs().binding.image)
+                    .collect();
                 draft.set_material_surface(
                     material,
-                    MaterialSurface::try_from(LayeredSurface {
-                        layers,
-                        ..SlotConstruct::construct(&mut slot_values)
-                    })?,
+                    MaterialSurface::from(MdlxMaterial { steps: layers }),
                 )?;
                 for target in targets {
                     draft.add_global_track(DynamicTrack::OptionalTexture(Track {

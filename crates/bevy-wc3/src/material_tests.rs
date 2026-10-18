@@ -93,14 +93,12 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
             )
             .unwrap()
     });
-    let mut layer = mdlx::Layer {
-        shader: Some(1),
-        opacity: slot_values.add(0.8),
-        ..SlotConstruct::construct(&mut slot_values)
-    };
+    let mut layer = mdlx::MaterialStep::construct(&mut slot_values);
+    let mut hd = mdlx::ReforgedInputs::construct(&mut slot_values);
+    hd.inputs.opacity = slot_values.add(0.8);
     layer.state.blend = BlendOperations::AlphaKey(());
-    layer.binding.image = slot_values.add(Some(ids[0]));
-    layer.textures = ids
+    hd.inputs.binding.image = slot_values.add(Some(ids[0]));
+    hd.textures = ids
         .iter()
         .enumerate()
         .map(|(slot, id)| mdlx::TextureSlot {
@@ -111,20 +109,19 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
             },
         })
         .collect();
-    layer.emissive_gain = Some(slot_values.add(2.));
-    layer.fresnel = Some(mdlx::Fresnel {
+    hd.inputs.emissive_gain = Some(slot_values.add(2.));
+    hd.fresnel = Some(mdlx::Fresnel {
         color: slot_values.add([0.2, 0.4, 0.8]),
         opacity: slot_values.add(0.5),
         team_color: slot_values.add(0.3),
     });
+    layer.shader = mdlx::Shader::ReforgedDefault(hd);
     let id = builder
         .add_material(Material {
             name: "HD".into(),
-            surface: MaterialSurface::try_from(mdlx::LayeredSurface {
-                layers: vec![layer],
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap(),
+            surface: MaterialSurface::from(wc3::model::profiles::mdlx::Material {
+                steps: vec![layer],
+            }),
         })
         .unwrap();
     let model = {
@@ -198,26 +195,24 @@ fn unknown_layer_shader_does_not_infer_hd_data_roles() {
     let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let texture = builder.add_file_texture("unknown.png").unwrap();
-    let mut layer = mdlx::Layer {
-        shader: Some(55),
-        ..SlotConstruct::construct(&mut slot_values)
-    };
-    layer.textures.push(mdlx::TextureSlot {
+    let mut layer = mdlx::MaterialStep::construct(&mut slot_values);
+    let mut unresolved = mdlx::UnresolvedInputs::construct(&mut slot_values);
+    unresolved.selector = Some(55);
+    unresolved.shader_name = "Shader_HD_DefaultUnit".into();
+    unresolved.textures.push(mdlx::TextureSlot {
         slot: 1,
         binding: wc3::model::materials::bindings::TextureBinding {
             image: slot_values.add(Some(texture)),
             ..SlotConstruct::construct(&mut slot_values)
         },
     });
+    layer.shader = mdlx::Shader::Unresolved(unresolved);
     let id = builder
         .add_material(Material {
             name: "unknown".into(),
-            surface: MaterialSurface::try_from(mdlx::LayeredSurface {
-                shader: "Shader_HD_DefaultUnit".into(),
-                layers: vec![layer],
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap(),
+            surface: MaterialSurface::from(wc3::model::profiles::mdlx::Material {
+                steps: vec![layer],
+            }),
         })
         .unwrap();
     let model = {
@@ -260,19 +255,15 @@ fn same_resource_texture_variants_keep_independent_image_handles() {
 
     let layers = [srgb, linear]
         .map(|texture| {
-            let mut layer = mdlx::Layer::construct(&mut slot_values);
-            layer.binding.image = slot_values.add(Some(texture));
+            let mut layer = mdlx::MaterialStep::construct(&mut slot_values);
+            layer.shader.inputs_mut().binding.image = slot_values.add(Some(texture));
             layer
         })
         .to_vec();
     let id = builder
         .add_material(Material {
             name: "variants".into(),
-            surface: MaterialSurface::try_from(mdlx::LayeredSurface {
-                layers,
-                ..SlotConstruct::construct(&mut slot_values)
-            })
-            .unwrap(),
+            surface: MaterialSurface::from(wc3::model::profiles::mdlx::Material { steps: layers }),
         })
         .unwrap();
     let model = {

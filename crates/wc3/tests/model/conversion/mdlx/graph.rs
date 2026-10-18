@@ -159,7 +159,7 @@ fn unknown_native_blend_remains_its_own_operation() {
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let surface = &imported.value.materials().iter().next().unwrap().1.surface;
     let material = surface;
-    assert_eq!(material.layers[0].state.blend, profile::Blend::Unknown(8));
+    assert_eq!(material.steps[0].state.blend, profile::Blend::Unknown(8));
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -322,7 +322,12 @@ fn shared_uv_transform_links_are_scoped_and_rebuild_animation() {
     let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
     let graph = &imported.value;
     let (_id, material) = graph.materials().iter().next().unwrap();
-    let transform = &material.surface.layers[0].binding.coordinates.transform;
+    let transform = &material.surface.steps[0]
+        .shader
+        .inputs()
+        .binding
+        .coordinates
+        .transform;
     assert!(graph.is_animated(transform.translation));
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()

@@ -1,8 +1,8 @@
 use super::super::DrawSource;
 use super::*;
-use wc3::model::appearance::{  UniversalAppearance};
-use wc3::model::controls::{ };
-use wc3::model::materials::mdlx::{Layer, LayeredSurface};
+use wc3::model::appearance::UniversalAppearance;
+use wc3::model::materials::mdlx::MaterialStep as MdlxStep;
+use wc3::model::profiles::mdlx::Material as MdlxMaterial;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
@@ -12,11 +12,9 @@ use wc3::model::{
 
 fn material(builder: &mut ModelBuilder<'static>, name: &str) -> MaterialId {
     let slot_values = builder.values_mut();
-    let surface = MaterialSurface::try_from(LayeredSurface {
-        layers: vec![Layer::construct(slot_values)],
-        ..SlotConstruct::construct(slot_values)
-    })
-    .unwrap();
+    let surface = MaterialSurface::from(MdlxMaterial {
+        steps: vec![MdlxStep::construct(slot_values)],
+    });
     builder
         .add_material(SemanticMaterial {
             name: name.to_owned().into(),
@@ -217,14 +215,12 @@ fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
         let material = builder
             .add_material(SemanticMaterial {
                 name: "two passes".into(),
-                surface: MaterialSurface::try_from(LayeredSurface {
-                    layers: vec![
-                        Layer::construct(&mut slot_values),
-                        Layer::construct(&mut slot_values),
+                surface: MaterialSurface::from(MdlxMaterial {
+                    steps: vec![
+                        MdlxStep::construct(&mut slot_values),
+                        MdlxStep::construct(&mut slot_values),
                     ],
-                    ..SlotConstruct::construct(&mut slot_values)
-                })
-                .unwrap(),
+                }),
             })
             .unwrap();
         let mut instance = MeshInstance::new(joints[0], mesh);
@@ -370,14 +366,10 @@ fn draw_selection_resolves_images_referenced_by_texture_slots_and_curves() {
     let second = Texture::new(
         builder.add_image_resource(ImageResource::Path(b"second.blp".as_slice().into())),
     );
-    let layer = Layer::construct(builder.values_mut());
-    let image = layer.binding.image;
+    let layer = MdlxStep::construct(builder.values_mut());
+    let image = layer.shader.inputs().binding.image;
     builder.values_mut().set(image, Some(first)).unwrap();
-    let surface = MaterialSurface::try_from(LayeredSurface {
-        layers: vec![layer],
-        ..SlotConstruct::construct(builder.values_mut())
-    })
-    .unwrap();
+    let surface = MaterialSurface::from(MdlxMaterial { steps: vec![layer] });
     let material = builder
         .add_material(SemanticMaterial {
             name: "animated texture".into(),
