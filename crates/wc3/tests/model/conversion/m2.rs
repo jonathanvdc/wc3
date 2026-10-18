@@ -2032,3 +2032,35 @@ fn file_data_image_declarations_retain_accompanying_filenames() {
         |chunk| matches!(chunk, m2::chunks::Chunk::TextureIds(ids) if ids.get(0) == Some(42))
     ));
 }
+
+#[test]
+fn animation_categories_preserve_named_and_unknown_ids_through_conversion() {
+    for category in [mp::AnimationId::WALK, mp::AnimationId::new(u16::MAX)] {
+        let mut slot_values = SlotValues::default();
+        let mut source = native_triangle();
+        source
+            .model
+            .core_mut()
+            .sequences
+            .push(m2::records::Sequence {
+                id: category.get(),
+                timing: m2::records::LegacyTiming {
+                    start: 0,
+                    end: 1000,
+                },
+                flags: SequenceFlags::from_bits_retain(0x20),
+                variation_next: -1,
+                ..SlotConstruct::construct(&mut slot_values)
+            });
+        let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
+        let (_, clip) = imported.value.clips().iter().next().unwrap();
+        assert_eq!(clip.controls.animation_id, category);
+        let exported =
+            io::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
+                .unwrap()
+                .execute()
+                .unwrap()
+                .value;
+        assert_eq!(exported.model.core().sequences[0].id, category.get());
+    }
+}

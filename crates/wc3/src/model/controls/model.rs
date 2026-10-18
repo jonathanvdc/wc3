@@ -1,13 +1,13 @@
 //! Model playback, shadow passes, geometry sorting, and external category bindings.
 use super::BillboardFlags;
-use crate::model::values::model::{self as values, ModelFlags, SequenceFlags};
+use crate::model::values::model::{self as values, AnimationId, ModelFlags, SequenceFlags};
 use crate::model::{Bounds, ClipId, Link, NodeId, ValidateLinks};
 use std::borrow::Cow;
 /// Native playback selection and transition controls owned by a common clip.
 #[derive(Clone, Debug)]
 pub struct SequenceControls {
     /// External animation-data category selecting this playback program.
-    pub animation_id: u16,
+    pub animation_id: AnimationId,
     /// Variation identity within the animation-data category.
     pub variation: u16,
     /// Movement speed associated with playback, in model units per second.
@@ -30,7 +30,7 @@ pub struct SequenceControls {
 impl Default for SequenceControls {
     fn default() -> Self {
         Self {
-            animation_id: 0,
+            animation_id: AnimationId::STAND,
             variation: 0,
             movement_speed: 0.0,
             flags: SequenceFlags::default(),

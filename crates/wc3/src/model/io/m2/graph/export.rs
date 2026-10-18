@@ -189,7 +189,7 @@ where
         flags.set_stored_in_model(false);
         core.sequences.push(native::records::Sequence {
             timing: SequenceClock::from_window(start, duration),
-            id: data.animation_id,
+            id: data.animation_id.get(),
             variation_index: data.variation,
             move_speed: data.movement_speed,
             flags,

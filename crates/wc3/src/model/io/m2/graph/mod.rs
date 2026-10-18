@@ -251,7 +251,7 @@ where
                 } else {
                     None
                 },
-                animation_id: sequence.id,
+                animation_id: sequence.id.into(),
                 variation: sequence.variation_index,
                 movement_speed: sequence.move_speed,
                 flags,

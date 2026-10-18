@@ -11,6 +11,7 @@ pub use crate::model::systems::model_physics::*;
 /// Logical option domains selected from the shared vocabulary.
 pub use crate::model::values::model as values;
 pub use particles::*;
+pub use values::AnimationId;
 
 pub use crate::model::systems::model::*;
 
