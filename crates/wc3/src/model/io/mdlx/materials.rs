@@ -2,7 +2,8 @@
 use super::animation::Decoder;
 use super::storage::Storage;
 use crate::model::conversion::Error;
-use crate::model::formats::mdlx::{self as native, FormatVersion};
+use crate::model::formats::mdlx::materials::{Layer, LayerFresnel};
+use crate::model::formats::mdlx::{self as native, Animatable, FormatVersion};
 use crate::model::materials::bindings::{Coordinates, TextureBinding};
 use crate::model::materials::mdlx::{AlphaAdditiveEncoding, LayerOptions};
 use crate::model::materials::state::{DepthState, Lighting, Operation, PassState};
@@ -77,7 +78,7 @@ pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                 },
             });
         }
-        let inputs = MaterialInputs {
+        let mut inputs = MaterialInputs {
             binding: TextureBinding {
                 image: values.add(texture(
                     layer.texture_id.value().copied().unwrap_or_default(),
@@ -140,7 +141,10 @@ pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
         let selector = layer.try_shader_type().ok().map(|value| value.id());
         let family = shader_family(selector, &shader_name);
         let shader = match family {
-            ShaderFamily::Classic if slots.is_empty() && fresnel.is_none() => {
+            ShaderFamily::Classic if classic_texture(layer).is_some() => {
+                let primary = classic_texture(layer).expect("checked classic representation");
+                inputs.binding.image =
+                    values.add(texture(primary.value().copied().unwrap_or_default())?);
                 Shader::Classic(inputs)
             }
             ShaderFamily::ReforgedDefault => Shader::ReforgedDefault(ReforgedInputs {
@@ -174,6 +178,7 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
     let mut material = read::<_, S>(source, textures, transforms, decoder.builder.values_mut())?;
 
     for (source, layer) in source.layers.iter().zip(&mut material.steps) {
+        let classic = matches!(layer.shader, Shader::Classic(_));
         let inputs = layer.shader.inputs_mut();
         if source.texture_animation_id != u32::MAX {
             let transform = &transforms[source.texture_animation_id as usize];
@@ -198,15 +203,20 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                 )?,
             };
         }
-        let map = texture_map(textures, &source.texture_id)?;
-        inputs.binding.image = decoder.bind(&source.texture_id, "layer.texture", map)?;
+        let primary = if classic {
+            classic_texture(source).expect("normalized classic representation")
+        } else {
+            &source.texture_id
+        };
+        let map = texture_map(textures, primary)?;
+        inputs.binding.image = decoder.bind(primary, "layer.texture", map)?;
         inputs.opacity = decoder.bind(&source.alpha, "layer.opacity", |value| value)?;
         if let Ok(source) = source.try_emissive_gain() {
             inputs.emissive_gain =
                 Some(decoder.bind(source, "layer.emissive_gain", |value| value)?);
         }
-        if let Ok(source) = source.try_fresnel() {
-            *layer.shader.fresnel_mut().expect("imported Fresnel inputs") = Fresnel {
+        if let (Ok(source), Some(target)) = (source.try_fresnel(), layer.shader.fresnel_mut()) {
+            *target = Fresnel {
                 color: decoder.bind(&source.color, "layer.fresnel_color", |value| value)?,
                 opacity: decoder.bind(&source.opacity, "layer.fresnel_opacity", |value| value)?,
                 team_color: decoder.bind(
@@ -227,6 +237,31 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
         }
     }
     Ok(material)
+}
+
+/// Normalize only inert version storage and the canonical diffuse-slot layout.
+/// Native version conversion uses legacy Static(0) as its placeholder after
+/// moving the complete texture selection and animation into slot zero.
+fn classic_texture<'layer, 'data, V: FormatVersion>(
+    layer: &'layer Layer<'data, V>,
+) -> Option<&'layer Animatable<'data, u32>> {
+    if layer
+        .try_fresnel()
+        .is_ok_and(|fresnel| *fresnel != LayerFresnel::default())
+    {
+        return None;
+    }
+    match layer.try_texture_slots().unwrap_or_default() {
+        [] => Some(&layer.texture_id),
+        [slot]
+            if slot.texture_type == 0
+                && (layer.texture_id == Animatable::Static(0)
+                    || layer.texture_id == slot.texture_id) =>
+        {
+            Some(&slot.texture_id)
+        }
+        _ => None,
+    }
 }
 
 fn texture_map<'a>(

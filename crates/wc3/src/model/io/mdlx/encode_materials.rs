@@ -7,6 +7,7 @@ use crate::model::materials::mdlx::{AlphaAdditiveEncoding, Shader};
 use crate::model::profiles::mdlx as profile;
 use crate::model::Texture;
 use std::collections::BTreeMap;
+use std::mem::replace;
 
 pub(super) fn write<'a, V: FormatVersion>(
     source: &profile::Material<'_>,
@@ -176,7 +177,7 @@ pub(super) fn write<'a, V: FormatVersion>(
                     .unsupported(format!("{path}.shader"), error.to_string())?;
             }
         }
-        let slots = source
+        let mut slots = source
             .shader
             .textures()
             .iter()
@@ -192,6 +193,12 @@ pub(super) fn write<'a, V: FormatVersion>(
                 })
             })
             .collect::<Result<Vec<_>, Error>>()?;
+        if matches!(source.shader, Shader::Classic(_)) && V::NUMBER >= 1100 {
+            slots.push(native::materials::LayerTextureSlot {
+                texture_type: 0,
+                texture_id: replace(&mut layer.texture_id, native::Animatable::Static(0)),
+            });
+        }
         if !slots.is_empty() {
             if let Err(error) = layer.try_set_texture_slots(&slots) {
                 encoder

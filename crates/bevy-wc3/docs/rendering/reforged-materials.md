@@ -1,20 +1,24 @@
 # Reforged DefaultUnit surfaces
 
-A WC3 `MaterialStep` owns pass state and draw declarations separately from its
-`Shader`. The shader vocabulary distinguishes `Shader::Classic`,
-`Shader::ReforgedDefault`, and `Shader::Unresolved`. `MaterialInputs` holds the
-primary texture, opacity, and emissive gain. `ReforgedInputs` adds DefaultUnit
-texture slots and Fresnel controls; classic inputs have no HD fields.
-Native import interprets shader selection, with a numeric layer selector taking
-precedence over the material shader name. Both the MDLX and Universal profiles
-use these same steps. Known shader variants own shader identity without redundant
-names or IDs, while unresolved inputs retain raw selection. Native export derives
-known selectors and checks agreement of shared material declarations. Texture slot
-order remains intact for animation and export.
+DefaultUnit materials combine diffuse, normal, surface, emissive, team-color,
+and reflection inputs within Bevy's PBR pipeline. This guide describes those roles,
+animation, and the remaining native shading limits.
 
-Reforged default materials combine diffuse, normal, surface, emissive, team-color,
-and reflection roles in `ModelMaterial`. Native import currently retains one step
-per native layer. Older six-layer DefaultUnit layouts therefore do not yet combine
+A WC3 `MaterialStep` keeps pass state separate from its typed shader inputs.
+`Shader::Classic`, `Shader::ReforgedDefault`, and `Shader::Unresolved` distinguish
+their interpretation. `MaterialInputs` supplies the primary texture, opacity,
+and emissive gain; `ReforgedInputs` adds HD texture roles and Fresnel controls.
+Native import chooses the shader, with numeric layer selection taking precedence
+over the material shader name.
+
+Modern native classic layers can carry mandatory neutral Fresnel storage and a
+canonical diffuse slot zero. Import normalizes those fields into the classic
+primary input, preserving its texture animation; export restores diffuse-slot
+storage for versions 1100 and later. Nondefault or animated Fresnel, duplicate or
+unknown slots, and conflicting legacy bindings remain unresolved rather than
+losing authored information.
+
+Native import currently retains one step per native layer. Older six-layer DefaultUnit layouts therefore do not yet combine
 into one set of semantic role bindings. Unknown/Crystal shaders retain a diagnosed
 diffuse fallback; they do not receive DefaultUnit slot rules merely because they
 contain several textures.

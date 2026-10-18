@@ -243,8 +243,8 @@ fn native_import_interprets_selector_precedence_before_widening() {
         ("", None, "classic"),
         ("Shader_SD_FixedFunction", None, "classic"),
         ("Shader_HD_DefaultUnit", None, "reforged"),
-        ("", Some(0), "unresolved"),
-        ("", Some(2), "unresolved"),
+        ("", Some(0), "classic"),
+        ("", Some(2), "classic"),
         ("", Some(1), "reforged"),
         ("", Some(99), "unresolved"),
         ("Shader_HD_Crystal", None, "unresolved"),
@@ -456,7 +456,7 @@ fn native_export_checks_shared_declarations_and_shader_names() {
             .iter()
             .map(|layer| layer.try_shader_type().unwrap().id())
             .collect::<Vec<_>>(),
-        [2, 1, 99]
+        [0, 1, 99]
     );
     let id = model.materials().iter().next().unwrap().0;
     model
@@ -543,5 +543,132 @@ fn additional_texture_slots_roundtrip_their_own_images_and_animation() {
         assert_eq!(textures[primary as usize].path.text(), "primary.blp");
         assert_eq!(textures[start as usize].path.text(), "normal.blp");
         assert_eq!(textures[end as usize].path.text(), "animated.blp");
+    }
+}
+
+#[test]
+fn modern_classic_layers_normalize_only_neutral_extension_storage() {
+    use native::animation::{Animatable, Track, ValueKeyframe};
+    use native::materials::{Layer, LayerTextureSlot, Material, ShaderType, Texture};
+    for selector in [0, 2] {
+        for variant in 0..6 {
+            let mut document = native::Document::<native::V1800>::new();
+            document
+                .set_textures(["base.blp", "selected.blp"].map(|name| Texture::new(name).unwrap()));
+            let mut layer = Layer::new();
+            layer.set_shader_type(ShaderType::new(selector));
+            let mut texture = Animatable::Static(1);
+            texture.set_track(
+                Track::step(
+                    [
+                        ValueKeyframe { frame: 0, value: 0 },
+                        ValueKeyframe {
+                            frame: 1000,
+                            value: 1,
+                        },
+                    ],
+                    None,
+                )
+                .unwrap(),
+            );
+            layer.set_texture_slots(&[LayerTextureSlot {
+                texture_type: 0,
+                texture_id: texture.clone(),
+            }]);
+            match variant {
+                1 => {
+                    let mut fresnel = layer.fresnel().clone();
+                    fresnel.opacity = Animatable::Static(0.5);
+                    layer.set_fresnel(fresnel);
+                }
+                2 => {
+                    let mut fresnel = layer.fresnel().clone();
+                    fresnel.opacity.set_track(
+                        Track::step(
+                            [
+                                ValueKeyframe {
+                                    frame: 0,
+                                    value: 0.0,
+                                },
+                                ValueKeyframe {
+                                    frame: 1000,
+                                    value: 0.0,
+                                },
+                            ],
+                            None,
+                        )
+                        .unwrap(),
+                    );
+                    layer.set_fresnel(fresnel);
+                }
+                3 => layer.set_texture_slots(&[LayerTextureSlot {
+                    texture_type: 1,
+                    texture_id: texture.clone(),
+                }]),
+                4 => layer.texture_id = Animatable::Static(1),
+                5 => layer.set_texture_slots(&[
+                    LayerTextureSlot {
+                        texture_type: 0,
+                        texture_id: texture.clone(),
+                    },
+                    LayerTextureSlot {
+                        texture_type: 0,
+                        texture_id: texture.clone(),
+                    },
+                ]),
+                _ => {}
+            }
+            let mut material = Material::new();
+            material.layers.push(layer);
+            document.set_materials([material]);
+            let model = io::mdlx::import_owned(&document, &ImportOptions::default())
+                .unwrap()
+                .value;
+            let shader = &model.materials().iter().next().unwrap().1.surface.steps[0].shader;
+            assert_eq!(
+                matches!(shader, Shader::Classic(_)),
+                variant == 0,
+                "selector {selector}, variant {variant}"
+            );
+            let output = export::<native::V1800>(&model).unwrap();
+            let material = output.materials().next().unwrap();
+            let exported = &material.layers[0];
+            if variant == 0 {
+                assert_eq!(exported.texture_id, Animatable::Static(0));
+                assert_eq!(exported.texture_slots().len(), 1);
+                assert_eq!(exported.texture_slots()[0].texture_type, 0);
+                let track = exported.texture_slots()[0].texture_id.track().unwrap();
+                let textures = output.textures().collect::<Vec<_>>();
+                assert_eq!(
+                    textures[track.evaluate(0.).unwrap() as usize].path.text(),
+                    "base.blp"
+                );
+                assert_eq!(
+                    textures[track.evaluate(1000.).unwrap() as usize]
+                        .path
+                        .text(),
+                    "selected.blp"
+                );
+                let restored = io::mdlx::import_owned(&output, &ImportOptions::default())
+                    .unwrap()
+                    .value;
+                assert!(matches!(
+                    restored.materials().iter().next().unwrap().1.surface.steps[0].shader,
+                    Shader::Classic(_)
+                ));
+            } else {
+                assert!(matches!(shader, Shader::Unresolved(_)));
+                assert_eq!(
+                    exported.fresnel(),
+                    document.materials().next().unwrap().layers[0].fresnel()
+                );
+                assert_eq!(
+                    exported.texture_slots().len(),
+                    document.materials().next().unwrap().layers[0]
+                        .texture_slots()
+                        .len()
+                );
+            }
+        }
     }
 }
