@@ -8,11 +8,10 @@ use wc3::model::{
 };
 
 #[test]
-fn external_attachment_keeps_resource_identity_and_visibility() {
+fn external_attachment_keeps_resource_identity_and_visibility_without_inspecting_addresses() {
     let mut slot_values = SlotValues::default();
     let mut draft = wc3::model::Model::<wc3::model::profiles::Mdlx>::builder("resources");
-    let resource =
-        draft.add_model_resource(wc3::model::PathResource::Path(Cow::Borrowed(b"weapon.mdx")));
+    let resource = draft.add_model_resource(wc3::model::PathResource::Path(Cow::Borrowed(&[0xff])));
     let source = mdlx::Attachment {
         resource,
         socket: SocketDefinition {
@@ -31,26 +30,6 @@ fn external_attachment_keeps_resource_identity_and_visibility() {
     assert_eq!(recovered.resource, resource);
     assert_eq!(recovered.socket.identity, 42);
     assert_eq!(slot_values[recovered.socket.visibility], 0.625);
-}
-
-#[test]
-fn attachment_conversion_preserves_handles_without_inspecting_resource_addresses() {
-    let mut slot_values = SlotValues::default();
-    let mut draft = wc3::model::Model::<wc3::model::profiles::Universal>::builder(
-        ModelMetadata::Mdlx(Default::default()),
-    );
-    let resource = draft.add_model_resource(ResourceLocator::Path(Cow::Borrowed(&[0xff])));
-    let placement = ChildModel::from(mdlx::Attachment {
-        resource,
-        socket: SocketDefinition {
-            identity: 17,
-            visibility: slot_values.add(0.5),
-            control: (),
-        },
-        appearance: (),
-    });
-    let recovered = mdlx::Attachment::try_from(placement).unwrap();
-    assert_eq!(recovered.resource, resource);
 }
 
 #[test]

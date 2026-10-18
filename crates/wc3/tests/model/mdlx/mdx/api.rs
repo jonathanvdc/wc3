@@ -11,7 +11,7 @@ use wc3::model::formats::mdlx::chunks::{
 use wc3::model::formats::mdlx::emitters::{ParticleEmitter, ParticleEmitter2, RibbonEmitter};
 use wc3::model::formats::mdlx::geometry::Geoset;
 use wc3::model::formats::mdlx::mdx::{self, Cursor, Encoder, Read as _, Write as _};
-use wc3::model::formats::mdlx::scene::{Bone, Camera, Node};
+use wc3::model::formats::mdlx::scene::{Attachment, Bone, Camera, EventObject, Node};
 use wc3::model::formats::mdlx::{Borrowed, Document, IntoOwned, V1800, V800};
 
 fn round_trip<T>(value: &T)
@@ -109,11 +109,20 @@ fn cursor_decoders_stop_at_the_next_record() {
             second
         );
         cursor.finish().unwrap();
+        assert!(<<T as Borrowed<'_>>::View as mdx::Read>::decode_mdx(&bytes).is_err());
     }
 
     let first = Node::new("First", 1).unwrap();
     let second = Node::new("Second", 2).unwrap();
     check(first.clone(), second.clone());
+    check(
+        Attachment::new(first.clone(), "first.mdx", 1).unwrap(),
+        Attachment::new(second.clone(), "second.mdx", 2).unwrap(),
+    );
+    check(
+        EventObject::new(first.clone(), 0, &[10, 20]),
+        EventObject::new(second.clone(), 1, &[30]),
+    );
     check(
         Bone::new(first.clone(), 1, 2),
         Bone::new(second.clone(), 3, 4),
