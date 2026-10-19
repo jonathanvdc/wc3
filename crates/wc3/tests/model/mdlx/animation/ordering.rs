@@ -3,7 +3,7 @@ use wc3::model::formats::mdlx::mdl::{Read as _, Write as _};
 use wc3::model::formats::mdlx::mdx::Read as _;
 
 #[test]
-fn constructors_stably_sort_all_interpolation_modes() {
+fn constructors_preserve_order_in_all_interpolation_modes() {
     let keys = [
         ValueKeyframe {
             frame: 10,
@@ -22,7 +22,7 @@ fn constructors_stably_sort_all_interpolation_modes() {
             value: 4.0,
         },
     ];
-    let expected = [keys[3], keys[0], keys[2], keys[1]];
+    let expected = keys;
     assert_eq!(
         *Track::step(keys, None).unwrap().step_keys().unwrap(),
         expected
@@ -50,7 +50,7 @@ fn constructors_stably_sort_all_interpolation_modes() {
 }
 
 #[test]
-fn both_readers_sort_all_modes_without_losing_duplicate_tangents() {
+fn both_readers_preserve_all_modes_without_losing_duplicate_tangents() {
     for (mode, name) in [
         (0u32, "DontInterp"),
         (1, "Linear"),
@@ -99,28 +99,8 @@ fn both_readers_sort_all_modes_without_losing_duplicate_tangents() {
             }
             keys.iter().map(|key| (key.frame, key.value)).collect()
         };
-        assert_eq!(values, [(-10, 2.0), (-10, 4.0), (10, 1.0), (10, 3.0)]);
-        assert_eq!(binary.evaluate(-100.0), Some(4.0));
-        assert_eq!(binary.evaluate(-10.0), Some(4.0));
-        assert_eq!(binary.evaluate(10.0), Some(3.0));
-        assert_eq!(binary.evaluate(100.0), Some(3.0));
-        assert_eq!(binary.evaluate_in(0.0, -10..=-10), Some(4.0));
-        assert_eq!(binary.evaluate_in(0.0, 10..=10), Some(3.0));
-        let expected = match mode {
-            0 => 4.0,
-            1 => 3.5,
-            2 => 4.875,
-            3 => 14.75,
-            _ => unreachable!(),
-        };
-        assert_eq!(binary.evaluate(0.0), Some(expected));
-        assert_eq!(
-            binary.key_frame_at_or_before_in(100.0, -10..=-10),
-            Some(-10)
-        );
-        assert_eq!(binary.key_frame_at_or_before_in(0.0, 10..=10), None);
-        assert_eq!(binary.key_frame_at_or_before(f64::INFINITY), None);
+        assert_eq!(values, [(10, 1.0), (-10, 2.0), (10, 3.0), (-10, 4.0)]);
         let canonical = binary.encode_mdl().unwrap();
-        assert!(canonical.find("-10:").unwrap() < canonical.find("10: 1").unwrap());
+        assert!(canonical.find("10: 1").unwrap() < canonical.find("-10:").unwrap());
     }
 }

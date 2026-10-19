@@ -88,8 +88,16 @@ fn emitter_animation_is_active_and_not_dependent_on_source_bytes() {
     let emitter = output.particle_emitters2().next().unwrap();
     assert_eq!(emitter.emission_rate.value(), Some(&5.));
     assert_eq!(
-        emitter.emission_rate.track().unwrap().evaluate(500.),
-        Some(6.5)
+        emitter
+            .emission_rate
+            .track()
+            .unwrap()
+            .linear_keys()
+            .unwrap()
+            .iter()
+            .map(|key| key.value)
+            .collect::<Vec<_>>(),
+        [3., 10.]
     );
 }
 

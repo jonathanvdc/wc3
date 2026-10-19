@@ -39,13 +39,14 @@ where
     };
     let failure = |error: SemanticError| Error::new("animation.curve", error.to_string());
     if let Some(keys) = source.step_keys().or_else(|| source.linear_keys()) {
-        let mut indices = Vec::new();
+        let mut indices: Vec<_> = (0..keys.len()).collect();
+        indices.sort_by_key(|&index| keys.get(index).expect("source key").frame);
         let mut times = Vec::new();
-        for (index, key) in keys.iter().enumerate() {
+        for &index in &indices {
+            let key = keys.get(index).expect("source key");
             let time = Time::seconds((f64::from(key.frame) - (offset * 1000.).round()) / 1000.)
                 .map_err(failure)?;
             times.push(time);
-            indices.push(index);
         }
         let values = materialize(indices.len(), move |index| {
             value_map(keys.get(indices[index]).expect("checked source key").value)
@@ -56,13 +57,14 @@ where
             .hermite_keys()
             .or_else(|| source.bezier_keys())
             .expect("typed native track has one key storage variant");
-        let mut indices = Vec::new();
+        let mut indices: Vec<_> = (0..keys.len()).collect();
+        indices.sort_by_key(|&index| keys.get(index).expect("source key").frame);
         let mut times = Vec::new();
-        for (index, key) in keys.iter().enumerate() {
+        for &index in &indices {
+            let key = keys.get(index).expect("source key");
             let time = Time::seconds((f64::from(key.frame) - (offset * 1000.).round()) / 1000.)
                 .map_err(failure)?;
             times.push(time);
-            indices.push(index);
         }
         let incoming_indices = indices.clone();
         let outgoing_indices = indices.clone();
@@ -100,6 +102,73 @@ mod tests {
     use crate::model::{Model, Quat, TimeSource, Track as SemanticTrack};
 
     #[test]
+    fn import_stably_orders_native_keys_without_mutating_transport() {
+        use crate::model::formats::mdlx::animation::ValueKeyframe;
+        let keys = [
+            ValueKeyframe {
+                frame: 1000,
+                value: 2.,
+            },
+            ValueKeyframe {
+                frame: 0,
+                value: 0.,
+            },
+            ValueKeyframe {
+                frame: 1000,
+                value: 3.,
+            },
+        ];
+        for source in [
+            Track::step(keys, None).unwrap(),
+            Track::linear(keys, None).unwrap(),
+        ] {
+            let curve = read(&source, 0., |v| v).unwrap();
+            assert_eq!(curve.sample(Time::seconds(1.).unwrap()), Some(3.));
+            assert_eq!(curve.sample(Time::seconds(0.).unwrap()), Some(0.));
+            assert_eq!(
+                source
+                    .step_keys()
+                    .or_else(|| source.linear_keys())
+                    .unwrap()
+                    .get(0)
+                    .unwrap()
+                    .frame,
+                1000
+            );
+        }
+        let keys = keys.map(|key| TangentKeyframe {
+            frame: key.frame,
+            value: key.value,
+            in_tangent: key.value + 10.,
+            out_tangent: key.value + 20.,
+        });
+        for source in [
+            Track::hermite(keys, None).unwrap(),
+            Track::bezier(keys, None).unwrap(),
+        ] {
+            let curve = read(&source, 0., |v| v).unwrap();
+            assert_eq!(curve.sample(Time::seconds(1.).unwrap()), Some(3.));
+            assert_eq!(curve.sample(Time::seconds(0.).unwrap()), Some(0.));
+            assert_eq!(
+                source
+                    .hermite_keys()
+                    .or_else(|| source.bezier_keys())
+                    .unwrap()
+                    .get(0)
+                    .unwrap(),
+                keys[0]
+            );
+            let middle = curve.sample(Time::seconds(0.5).unwrap()).unwrap();
+            let expected = if source.hermite_keys().is_some() {
+                2.
+            } else {
+                12.25
+            };
+            assert_eq!(middle, expected);
+        }
+    }
+
+    #[test]
     fn imported_rotation_splines_preserve_native_angular_sampling() {
         let a = [0.0, 0.0, 0.0, 1.0];
         let b = [0.0, 0.0, 1.0, 0.0];
@@ -126,7 +195,15 @@ mod tests {
             let curve = read(&source, 0.0, Quat::from_array).unwrap();
             assert!(curve.uses_spherical_controls());
             for t in [0.1, 0.25, 0.5, 0.8] {
-                let expected = source.evaluate_in(t * 1000.0, 0..=1000).unwrap();
+                let blend = |a: [f32; 4], b: [f32; 4], t: f32| {
+                    Quat::from_array(a).slerp(Quat::from_array(b), t).to_array()
+                };
+                let t32 = t as f32;
+                let expected = blend(
+                    blend(a, b, t32),
+                    blend(out, incoming, t32),
+                    2. * t32 * (1. - t32),
+                );
                 let actual = curve.sample(Time::seconds(t).unwrap()).unwrap().to_array();
                 for (actual, expected) in actual.into_iter().zip(expected) {
                     assert!((actual - expected).abs() < 1e-5);

@@ -196,7 +196,7 @@ fn hive_dialect_writes_named_tracks_and_mesh_data_without_allocating() {
 }
 
 #[test]
-fn borrowed_arrays_clone_sample_and_encode_without_allocating() {
+fn borrowed_arrays_clone_inspect_and_encode_without_allocating() {
     use wc3::model::formats::mdlx::mdx::{Read as _, Write as _};
     let track = Track::<f32>::decode_mdl("Track 2 { Linear, 0: 0, 100: 1, }").unwrap();
     let bytes = track.encode_mdx().unwrap();
@@ -204,7 +204,6 @@ fn borrowed_arrays_clone_sample_and_encode_without_allocating() {
     let mut output = Vec::with_capacity(128);
     let (_, count) = measured(|| {
         let clone = track.clone();
-        assert_eq!(clone.evaluate(50.0), Some(0.5));
         let keys = clone.linear_keys().unwrap();
         assert_eq!(keys.iter().count(), 2);
         assert!(!keys.is_owned());

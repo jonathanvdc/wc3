@@ -540,8 +540,8 @@ fn additional_texture_slots_roundtrip_their_own_images_and_animation() {
         let primary = *layer.texture_id.value().unwrap();
         let slot = &layer.try_texture_slots().unwrap()[0];
         let track = slot.texture_id.track().unwrap();
-        let start = track.evaluate(0.).unwrap();
-        let end = track.evaluate(1000.).unwrap();
+        let start = track.step_keys().unwrap().get(0).unwrap().value;
+        let end = track.step_keys().unwrap().get(1).unwrap().value;
         assert_ne!(primary, start);
         assert_ne!(start, end);
         assert_eq!(textures[primary as usize].path.text(), "primary.blp");
@@ -644,11 +644,13 @@ fn modern_classic_layers_normalize_only_neutral_extension_storage() {
                 let track = exported.texture_slots()[0].texture_id.track().unwrap();
                 let textures = output.textures().collect::<Vec<_>>();
                 assert_eq!(
-                    textures[track.evaluate(0.).unwrap() as usize].path.text(),
+                    textures[track.step_keys().unwrap().get(0).unwrap().value as usize]
+                        .path
+                        .text(),
                     "base.blp"
                 );
                 assert_eq!(
-                    textures[track.evaluate(1000.).unwrap() as usize]
+                    textures[track.step_keys().unwrap().get(1).unwrap().value as usize]
                         .path
                         .text(),
                     "selected.blp"
@@ -840,8 +842,13 @@ Materials 1 {
     assert_eq!(layers.len(), 6);
     let output_textures: Vec<_> = output.textures().collect();
     let track = layers[1].texture_id.track().unwrap();
-    for (time, expected) in [(0., "normal.dds"), (750., "normal_alt.dds")] {
-        let index = track.evaluate(time).unwrap() as usize;
+    for (key, expected) in track
+        .step_keys()
+        .unwrap()
+        .iter()
+        .zip(["normal.dds", "normal_alt.dds"])
+    {
+        let index = key.value as usize;
         assert_eq!(output_textures[index].path.text(), expected);
     }
     for version in [1000, 1100] {

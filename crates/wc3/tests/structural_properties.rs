@@ -32,7 +32,18 @@ fn native_export_duplicates_curves_for_fields_sharing_a_slot() {
     let lights: Vec<_> = native.lights().collect();
     assert_eq!(lights.len(), 2);
     for light in lights {
-        assert_eq!(light.intensity.track().unwrap().evaluate(0.), Some(2.));
+        assert_eq!(
+            light
+                .intensity
+                .track()
+                .unwrap()
+                .step_keys()
+                .unwrap()
+                .get(0)
+                .unwrap()
+                .value,
+            2.
+        );
     }
 }
 

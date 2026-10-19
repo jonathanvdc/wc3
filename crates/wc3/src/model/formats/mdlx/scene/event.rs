@@ -14,7 +14,6 @@ use crate::model::formats::mdlx::{Cursor, EventObjectsChunk};
 use crate::model::formats::mdlx::{Document, Node};
 use crate::model::formats::mdlx::{Encoder, ZeroVec};
 use std::io::Write as IoWrite;
-use zerovec::ule::AsULE;
 
 const TRACK_TAG: Tag = *b"KEVT";
 
@@ -28,33 +27,29 @@ pub struct EventObject<'data> {
     pub node: Node<'data>,
     /// Global sequence ID, or `u32::MAX` when absent.
     pub global_sequence_id: u32,
-    /// Sorted event times in milliseconds. Negative times allow animation lead-in.
+    /// Stored event times in milliseconds. Negative times allow animation lead-in.
     frames: ZeroVec<'data, i32>,
 }
 
 impl<'data> EventObject<'data> {
-    /// Creates an event object, sorting its frame times in ascending order.
+    /// Creates an event object, retaining its authored frame order.
     /// Duplicate timestamps are retained.
     pub fn new(node: Node<'data>, global_sequence_id: u32, frames: &[i32]) -> Self {
-        let mut frames = frames.to_vec();
-        frames.sort();
         Self {
             node,
             global_sequence_id,
-            frames: frames.into_iter().collect(),
+            frames: ZeroVec::alloc_from_slice(frames),
         }
     }
 
-    /// Returns the event times in ascending order, including duplicates.
+    /// Returns event times in stored order, including duplicates.
     pub fn frames(&self) -> &ZeroVec<'data, i32> {
         &self.frames
     }
 
-    /// Replaces the event times, sorting them in ascending order.
+    /// Replaces event times without changing their order.
     pub fn set_frames(&mut self, frames: &[i32]) {
         self.frames = ZeroVec::alloc_from_slice(frames);
-        self.frames
-            .with_mut(|frames| frames.sort_by_key(|frame| i32::from_unaligned(*frame)));
     }
 }
 
@@ -103,16 +98,7 @@ impl<'data> mdx::Read<'data> for EventObject<'data> {
         let size = count.checked_mul(4).ok_or_else(|| {
             mdx::ReadError::new(cursor.absolute_position(), mdx::ReadErrorKind::SizeOverflow)
         })?;
-        let mut frames = read_array::<i32>(cursor.subcursor(size)?, 4)?;
-        let mut previous = None;
-        let sorted = frames.iter().all(|frame| {
-            let ordered = previous.is_none_or(|previous| previous <= frame);
-            previous = Some(frame);
-            ordered
-        });
-        if !sorted {
-            frames.with_mut(|frames| frames.sort_by_key(|frame| i32::from_unaligned(*frame)));
-        }
+        let frames = read_array::<i32>(cursor.subcursor(size)?, 4)?;
         Ok(Self {
             node,
             global_sequence_id,
@@ -230,8 +216,7 @@ fn validate_event<'data>(value: &EventMdl<'data>) -> Result<(), mdl::WriteError>
 impl<'data> mdl::Read for EventObject<'data> {
     fn read_mdl(parser: &mut Parser<'_>) -> Result<Self, mdl::ReadError> {
         let value = parser.read::<EventMdl<'data>>()?;
-        let mut frames = value.track.frames;
-        frames.with_mut(|values| values.sort_by_key(|value| i32::from_unaligned(*value)));
+        let frames = value.track.frames;
         Ok(Self {
             node: value.node,
             global_sequence_id: value.track.sequence,

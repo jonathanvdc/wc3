@@ -61,9 +61,11 @@ without allocating a typed buffer; `get()` and `iter()` return ordinary Rust
 values. `Geoset::new` and the track constructors accept native arrays, vectors,
 and slices through `IntoZeroVec`. For example,
 `Track::linear([first, second], None)` encodes those keys into owned storage.
-Passing an existing ZeroVec retains its buffer during conversion; sorting
-unordered borrowed track keys creates an owned copy. Collect generated values
-into `ZeroVec` explicitly.
+Passing an existing ZeroVec retains its buffer during conversion. Track and event
+records preserve their stored order and duplicate times, including unordered
+borrowed keys. Semantic import canonicalizes curves for evaluation; native codecs
+do not sample animation or resolve playback clocks. Collect generated values into
+`ZeroVec` explicitly.
 
 The arrays expose ZeroVec directly for inspection and editing. Edit encoded ULE
 elements with `to_mut_slice()` or `with_mut()`. Only the array being edited becomes

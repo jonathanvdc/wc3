@@ -72,7 +72,7 @@ fn geometry_borrows_unaligned_source_and_only_an_edited_array_becomes_owned() {
 }
 
 #[test]
-fn sorted_track_sampling_keeps_wire_storage_and_unsorted_input_sorts_stably() {
+fn track_decoding_retains_borrowed_wire_storage_and_unordered_keys() {
     let track = Track::linear(
         [
             ValueKeyframe {
@@ -91,17 +91,15 @@ fn sorted_track_sampling_keeps_wire_storage_and_unsorted_input_sorts_stably() {
     let decoded = Track::<f32>::decode_mdx(&bytes).unwrap();
     let keys = decoded.linear_keys().unwrap();
     assert_eq!(keys.as_bytes().as_ptr(), bytes[12..].as_ptr());
-    assert_eq!(decoded.evaluate(0.0), Some(1.0));
-    assert_eq!(decoded.key_frame_at_or_before(0.0), Some(-10));
     assert!(!keys.is_owned());
     assert_eq!(decoded.encode_mdx().unwrap(), bytes);
     let first = bytes[12..20].to_vec();
     let mut reversed = bytes.clone();
     reversed.copy_within(20..28, 12);
     reversed[20..28].copy_from_slice(&first);
-    let sorted = Track::<f32>::decode_mdx(&reversed).unwrap();
-    assert!(sorted.linear_keys().unwrap().is_owned());
-    assert_eq!(sorted.encode_mdx().unwrap(), bytes);
+    let decoded = Track::<f32>::decode_mdx(&reversed).unwrap();
+    assert!(!decoded.linear_keys().unwrap().is_owned());
+    assert_eq!(decoded.encode_mdx().unwrap(), reversed);
 }
 
 #[test]
@@ -413,7 +411,7 @@ fn geometry_construction_moves_encoded_arrays_and_accepts_mixed_native_inputs() 
 }
 
 #[test]
-fn track_constructors_copy_native_slices_and_sort_without_changing_the_source() {
+fn track_constructors_copy_native_slices_without_changing_order() {
     use wc3::model::formats::mdlx::animation::TangentKeyframe;
 
     let keys = [
@@ -427,7 +425,7 @@ fn track_constructors_copy_native_slices_and_sort_without_changing_the_source() 
         },
     ];
     let track: Track<'static, f32> = Track::linear(keys.as_slice(), None).unwrap();
-    assert_eq!(track.evaluate(50.0), Some(1.5));
+    assert_eq!(*track.linear_keys().unwrap(), keys);
     assert_eq!(keys[0].frame, 100);
     assert!(track.linear_keys().unwrap().is_owned());
     let tangents = keys.map(|key| TangentKeyframe {

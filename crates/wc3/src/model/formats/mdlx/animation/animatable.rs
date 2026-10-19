@@ -1,12 +1,11 @@
 //! A property's stored value and optional animation.
-use super::{AnimationTime, Interpolate, Track, TrackValue};
+use super::{Track, TrackValue};
 use crate::model::common::Ownership;
 use crate::model::formats::mdlx::mdl::{Parser, TokenKind, Writer};
 use crate::model::formats::mdlx::IoError;
 use crate::model::formats::mdlx::{mdl, mdx};
 use std::io::Write as IoWrite;
 use std::mem::replace;
-use std::ops::RangeInclusive;
 
 /// A static value, animation, or animation with a stored base value.
 ///
@@ -179,32 +178,5 @@ impl<'data, T: TrackValue + mdl::Write> mdl::WriteAnimationProperty for Option<T
 impl<'data, T: TrackValue> mdl::ValueEq for Option<Track<'data, T>> {
     fn eq_mdl(&self, other: &Self) -> bool {
         self == other
-    }
-}
-
-impl<'data, T: Interpolate> Animatable<'data, T> {
-    /// Samples the animation using its sequence clock, falling back to the stored
-    /// base value when no animation value is available. Property-specific defaults
-    /// remain the caller's choice when neither animation nor base supplies a value.
-    pub fn sample(&self, time: &AnimationTime<'_>) -> Option<T> {
-        self.track()
-            .and_then(|track| track.sample(time))
-            .or_else(|| self.value().copied())
-    }
-
-    /// Samples the animation, falling back to the stored base value if sampling
-    /// returns `None`. Static values are returned regardless of time.
-    pub fn evaluate(&self, time_ms: f64) -> Option<T> {
-        self.track()
-            .and_then(|track| track.evaluate(time_ms))
-            .or_else(|| self.value().copied())
-    }
-
-    /// Samples only keys in an inclusive sequence interval, falling back to
-    /// the stored base value when no animation value is available.
-    pub fn evaluate_in(&self, time_ms: f64, interval: RangeInclusive<i32>) -> Option<T> {
-        self.track()
-            .and_then(|track| track.evaluate_in(time_ms, interval))
-            .or_else(|| self.value().copied())
     }
 }

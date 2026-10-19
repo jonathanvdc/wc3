@@ -1,7 +1,5 @@
 //! Typed keyframe tracks.
-use super::{
-    AnimationTime, Interpolate, Interpolation, Keyframe, TangentKeyframe, TrackValue, ValueKeyframe,
-};
+use super::{Interpolation, TangentKeyframe, TrackValue, ValueKeyframe};
 use crate::model::common::Ownership;
 use crate::model::formats::mdlx::mdl::{Parser, TokenKind, Writer};
 use crate::model::formats::mdlx::mdx::read_array;
@@ -10,7 +8,6 @@ use crate::model::formats::mdlx::IoError;
 use crate::model::formats::mdlx::{mdl, mdx};
 use crate::model::formats::mdlx::{Cursor, Encoder, IntoZeroVec, ValueError, ZeroVec};
 use std::io::Write as IoWrite;
-use std::ops::{Range, RangeInclusive};
 use zerovec::ule::AsULE;
 
 #[derive(Clone, Debug, PartialEq, Ownership, mdx::ReadOwned)]
@@ -28,12 +25,8 @@ enum Keyframes<'data, T: TrackValue> {
 /// `global_sequence_id` is an index into the model global-sequence collection,
 /// or `None` to use the current model sequence.
 ///
-/// Constructors and readers stably sort keys by ascending frame time. Duplicate
-/// timestamps retain their input order, and evaluation uses the last key at each
-/// timestamp. Writing a parsed track emits this sorted order. Constructors accept
-/// native arrays, vectors, and slices through [`IntoZeroVec`]. Already sorted
-/// ZeroVec input retains its storage; sorting unordered borrowed keys creates an
-/// owned copy.
+/// Constructors and readers preserve key order and duplicate timestamps exactly.
+/// Key accessors expose encoded storage without sorting or evaluating it.
 #[derive(Clone, Debug, PartialEq, Ownership, mdx::ReadOwned)]
 pub struct Track<'data, T: TrackValue> {
     global_sequence_id: Option<u32>,
@@ -90,7 +83,7 @@ impl<'data, T: TrackValue> Track<'data, T> {
         }
         Ok(Self {
             global_sequence_id,
-            keyframes: keyframes.into_sorted(),
+            keyframes,
         })
     }
     /// Returns the optional global sequence index.
@@ -106,28 +99,28 @@ impl<'data, T: TrackValue> Track<'data, T> {
             Keyframes::Bezier(_) => Interpolation::Bezier,
         }
     }
-    /// Returns keys in ascending frame order only for stepped interpolation.
+    /// Returns keys in stored order only for stepped interpolation.
     pub fn step_keys(&self) -> Option<&ZeroVec<'data, ValueKeyframe<T>>> {
         match &self.keyframes {
             Keyframes::Step(keys) => Some(keys),
             _ => None,
         }
     }
-    /// Returns keys in ascending frame order only for linear interpolation.
+    /// Returns keys in stored order only for linear interpolation.
     pub fn linear_keys(&self) -> Option<&ZeroVec<'data, ValueKeyframe<T>>> {
         match &self.keyframes {
             Keyframes::Linear(keys) => Some(keys),
             _ => None,
         }
     }
-    /// Returns keys and tangents in ascending frame order only for Hermite interpolation.
+    /// Returns keys and tangents in stored order only for Hermite interpolation.
     pub fn hermite_keys(&self) -> Option<&ZeroVec<'data, TangentKeyframe<T>>> {
         match &self.keyframes {
             Keyframes::Hermite(keys) => Some(keys),
             _ => None,
         }
     }
-    /// Returns keys and tangents in ascending frame order only for Bezier interpolation.
+    /// Returns keys and tangents in stored order only for Bezier interpolation.
     pub fn bezier_keys(&self) -> Option<&ZeroVec<'data, TangentKeyframe<T>>> {
         match &self.keyframes {
             Keyframes::Bezier(keys) => Some(keys),
@@ -136,14 +129,6 @@ impl<'data, T: TrackValue> Track<'data, T> {
     }
 }
 impl<'data, T: TrackValue> Keyframes<'data, T> {
-    fn into_sorted(mut self) -> Self {
-        match &mut self {
-            Self::Step(keys) | Self::Linear(keys) => sort_keys(keys),
-            Self::Hermite(keys) | Self::Bezier(keys) => sort_keys(keys),
-        }
-        self
-    }
-
     fn len(&self) -> usize {
         match self {
             Self::Step(v) | Self::Linear(v) => v.len(),
@@ -215,7 +200,7 @@ impl<'data, T: TrackValue> mdx::Read<'data> for Track<'data, T> {
         *cursor = next;
         Ok(Self {
             global_sequence_id: (sequence != u32::MAX).then_some(sequence),
-            keyframes: keyframes.into_sorted(),
+            keyframes,
         })
     }
 }
@@ -367,7 +352,7 @@ where
         };
         Ok(Self {
             global_sequence_id: sequence,
-            keyframes: keyframes.into_sorted(),
+            keyframes,
         })
     }
 }
@@ -441,197 +426,4 @@ fn write_tangent<W: IoWrite, T: mdl::Write>(
     writer.raw(" ")?;
     writer.write(value)?;
     writer.raw(",\n")
-}
-
-impl<'data, T: TrackValue> Track<'data, T> {
-    /// Returns the latest key timestamp at or before an absolute track time.
-    ///
-    /// Lookup takes O(log n) time. Empty tracks, nonfinite times, and times before
-    /// the first key return `None`. Callers resolve clocks and looping.
-    pub fn key_frame_at_or_before(&self, time_ms: f64) -> Option<i32> {
-        self.key_frame_at_or_before_in(time_ms, i32::MIN..=i32::MAX)
-    }
-
-    /// Returns the latest key timestamp at or before an absolute track time,
-    /// considering only keys within the inclusive sequence interval.
-    pub fn key_frame_at_or_before_in(
-        &self,
-        time_ms: f64,
-        interval: RangeInclusive<i32>,
-    ) -> Option<i32> {
-        if !time_ms.is_finite() || interval.is_empty() {
-            return None;
-        }
-        match &self.keyframes {
-            Keyframes::Step(keys) | Keyframes::Linear(keys) => {
-                latest_frame(keys, time_ms, &interval)
-            }
-            Keyframes::Hermite(keys) | Keyframes::Bezier(keys) => {
-                latest_frame(keys, time_ms, &interval)
-            }
-        }
-    }
-}
-
-// Encoded ValueKeyframe and TangentKeyframe arrays both start each key with
-// an i32 timestamp. Validation has already checked their complete wire layout.
-fn key_frame<'data, K: Keyframe + AsULE>(keys: &ZeroVec<'data, K>, index: usize) -> i32 {
-    let offset = index * size_of::<K::ULE>();
-    i32::from_le_bytes(
-        keys.as_bytes()[offset..offset + 4]
-            .try_into()
-            .expect("validated timestamp"),
-    )
-}
-fn sort_keys<'data, K: Keyframe + AsULE>(keys: &mut ZeroVec<'data, K>) {
-    let sorted = (1..keys.len()).all(|index| key_frame(keys, index - 1) <= key_frame(keys, index));
-    if !sorted {
-        keys.with_mut(|values| values.sort_by_key(|value| K::from_unaligned(*value).frame()));
-    }
-}
-fn partition<'data, K: Keyframe + AsULE>(
-    keys: &ZeroVec<'data, K>,
-    range: Range<usize>,
-    predicate: impl Fn(i32) -> bool,
-) -> usize {
-    let mut start = range.start;
-    let mut end = range.end;
-    while start < end {
-        let middle = start + (end - start) / 2;
-        if predicate(key_frame(keys, middle)) {
-            start = middle + 1;
-        } else {
-            end = middle;
-        }
-    }
-    start
-}
-fn key_range<'data, K: Keyframe + AsULE>(
-    keys: &ZeroVec<'data, K>,
-    interval: &RangeInclusive<i32>,
-) -> (usize, usize) {
-    let start = partition(keys, 0..keys.len(), |frame| frame < *interval.start());
-    let end = partition(keys, start..keys.len(), |frame| frame <= *interval.end());
-    (start, end)
-}
-fn latest_frame<'data, K: Keyframe + AsULE>(
-    keys: &ZeroVec<'data, K>,
-    time_ms: f64,
-    interval: &RangeInclusive<i32>,
-) -> Option<i32> {
-    let (start, end) = key_range(keys, interval);
-    let after = partition(keys, start..end, |frame| f64::from(frame) <= time_ms);
-    (after > start).then(|| key_frame(keys, after - 1))
-}
-
-impl<'data, T: Interpolate> Track<'data, T> {
-    /// Samples this track using its model or global sequence clock.
-    pub fn sample(&self, time: &AnimationTime<'_>) -> Option<T> {
-        let (time_ms, interval) = time.track_time(self)?;
-        self.evaluate_in(time_ms, interval)
-    }
-
-    /// Samples at a time in milliseconds in this track's timeline.
-    ///
-    /// Empty tracks and nonfinite times return `None`. Outside the key range,
-    /// the nearest endpoint is returned. At duplicate timestamps the last
-    /// stored key wins. Evaluation takes O(log n) time.
-    /// Global sequence IDs do not affect sampling: callers resolve clocks and
-    /// looping before calling this method.
-    pub fn evaluate(&self, time_ms: f64) -> Option<T> {
-        self.evaluate_in(time_ms, i32::MIN..=i32::MAX)
-    }
-
-    /// Samples using only keys within the inclusive sequence interval.
-    ///
-    /// Returns `None` when the interval contains no keys or is reversed.
-    /// Time is an absolute track timestamp, not an offset from the interval's
-    /// start. Endpoint clamping and duplicate handling match [`Self::evaluate`].
-    pub fn evaluate_in(&self, time_ms: f64, interval: RangeInclusive<i32>) -> Option<T> {
-        if !time_ms.is_finite() || interval.is_empty() {
-            return None;
-        }
-        match &self.keyframes {
-            Keyframes::Step(keys) | Keyframes::Linear(keys) => {
-                let (a, b) = surrounding(keys, time_ms, &interval)?;
-                if a.frame == b.frame || matches!(self.keyframes, Keyframes::Step(_)) {
-                    return Some(a.value);
-                }
-                let t = ((time_ms - f64::from(a.frame)) / (f64::from(b.frame) - f64::from(a.frame)))
-                    as f32;
-                Some(T::linear(a.value, b.value, t))
-            }
-            Keyframes::Hermite(keys) | Keyframes::Bezier(keys) => {
-                let (a, b) = surrounding(keys, time_ms, &interval)?;
-                if a.frame == b.frame {
-                    return Some(a.value);
-                }
-                let t = ((time_ms - f64::from(a.frame)) / (f64::from(b.frame) - f64::from(a.frame)))
-                    as f32;
-                Some(if matches!(self.keyframes, Keyframes::Hermite(_)) {
-                    T::hermite(a.value, a.out_tangent, b.in_tangent, b.value, t)
-                } else {
-                    T::bezier(a.value, a.out_tangent, b.in_tangent, b.value, t)
-                })
-            }
-        }
-    }
-}
-
-fn surrounding<'data, K: Keyframe + AsULE>(
-    keys: &ZeroVec<'data, K>,
-    time: f64,
-    interval: &RangeInclusive<i32>,
-) -> Option<(K, K)> {
-    let (start, end) = key_range(keys, interval);
-    if start == end {
-        return None;
-    }
-    let after = partition(keys, start..end, |frame| f64::from(frame) <= time);
-    let left = (after > start).then(|| keys.get(after - 1).expect("key index"));
-    let right = if left
-        .as_ref()
-        .is_some_and(|key| f64::from(key.frame()) == time)
-    {
-        left
-    } else if after < end {
-        let frame = keys.get(after).expect("key index").frame();
-        let next = partition(keys, after..end, |key_frame| key_frame <= frame);
-        keys.get(next - 1)
-    } else {
-        None
-    };
-    Some((left.or(right)?, right.or(left)?))
-}
-
-#[cfg(test)]
-mod key_lookup_tests {
-    use super::*;
-
-    #[test]
-    fn lookup_respects_time_and_sequence_for_unordered_keys() {
-        let track = Track::step(
-            [
-                ValueKeyframe {
-                    frame: 200,
-                    value: 1.0,
-                },
-                ValueKeyframe {
-                    frame: 50,
-                    value: 2.0,
-                },
-                ValueKeyframe {
-                    frame: 150,
-                    value: 3.0,
-                },
-            ],
-            None,
-        )
-        .unwrap();
-        assert_eq!(track.key_frame_at_or_before(175.0), Some(150));
-        assert_eq!(track.key_frame_at_or_before(25.0), None);
-        assert_eq!(track.key_frame_at_or_before_in(125.0, 100..=200), None);
-        assert_eq!(track.key_frame_at_or_before_in(250.0, 100..=175), Some(150));
-        assert_eq!(track.key_frame_at_or_before(f64::NAN), None);
-    }
 }

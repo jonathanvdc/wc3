@@ -154,12 +154,16 @@ fn animated_selection_retains_each_selected_images_sampler() {
     let textures: Vec<_> = output.textures().collect();
     let layer = &output.materials().next().unwrap().layers[0];
     let track = layer.texture_id.track().unwrap();
-    assert!(!textures[track.evaluate(0.).unwrap() as usize]
-        .flags
-        .wrap_width());
-    assert!(textures[track.evaluate(500.).unwrap() as usize]
-        .flags
-        .wrap_width());
+    assert!(
+        !textures[track.step_keys().unwrap().get(0).unwrap().value as usize]
+            .flags
+            .wrap_width()
+    );
+    assert!(
+        textures[track.step_keys().unwrap().get(1).unwrap().value as usize]
+            .flags
+            .wrap_width()
+    );
 }
 
 #[test]

@@ -51,8 +51,11 @@ fn unspecified_emissive_header_uses_unity_and_retains_authored_track() {
         assert_eq!(gain.track().is_some(), key.is_some());
         if let Some(value) = key {
             let track = gain.track().unwrap();
-            assert_eq!(track.evaluate(0.), Some(value));
-            assert_eq!(track.evaluate(1000.), Some(value));
+            assert!(track
+                .step_keys()
+                .unwrap()
+                .iter()
+                .all(|key| key.value == value));
         }
     }
 }
