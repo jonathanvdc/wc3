@@ -682,7 +682,7 @@ fn absent_model_info_stays_absent_and_encoding_requires_bounds_for_metadata() {
 
 #[test]
 fn empty_material_declarations_survive_import_widening_and_export() {
-    let mut source = mdlx::Document::<mdlx::V1800>::new();
+    let mut source = mdlx::Document::<mdlx::V1000>::new();
     let mut material = mdlx::materials::Material::new();
     material.priority_plane = 7;
     material.render_mode.set_two_sided(true);
@@ -698,7 +698,7 @@ fn empty_material_declarations_survive_import_widening_and_export() {
     assert!(declaration.two_sided);
     assert_eq!(declaration.shader_name, "empty shader");
     let restored = broad.try_narrow::<Mdlx>().unwrap();
-    let output = io::mdlx::plan::<mdlx::V1800>(&restored, &ExportOptions::default())
+    let output = io::mdlx::plan::<mdlx::V1000>(&restored, &ExportOptions::default())
         .unwrap()
         .execute()
         .value;
@@ -707,6 +707,9 @@ fn empty_material_declarations_survive_import_widening_and_export() {
     assert_eq!(material.priority_plane, 7);
     assert!(material.render_mode.two_sided());
     assert_eq!(material.try_shader().unwrap(), "empty shader");
+    // An uninterpreted declaration cannot be normalized into a numeric selector.
+    let error = io::mdlx::plan::<mdlx::V1800>(&restored, &ExportOptions::default()).unwrap_err();
+    assert_eq!(error.path, "material.shader");
 }
 
 #[test]

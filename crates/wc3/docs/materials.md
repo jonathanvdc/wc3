@@ -67,7 +67,11 @@ Projection into M2 or WMO rejects nondefault MDLX declarations.
 Export checks whether the selected native layout can encode the complete program.
 Layouts with only a material shader name cannot express arbitrary per-layer
 selection. Layouts without a material shader-name field cannot encode a nonempty
-authored name. These are encoding limits; the semantic material remains valid.
+authored unresolved name. A known shader name can normalize to equivalent numeric
+layer selectors when every step matches that known selection; export reports that
+representation change. Unresolved names and declarations on empty materials require
+a layout that retains them. These are encoding limits; the semantic material remains
+valid.
 
 ## M2 and WMO shaders
 

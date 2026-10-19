@@ -118,10 +118,11 @@ fn older_native_shader_string_uses_selected_dialect_layout() {
         output.materials().next().unwrap().try_shader().unwrap(),
         "Shader_HD_DefaultUnit"
     );
-    let modern = io::mdlx::plan::<mdlx::V1800>(&asset, &ExportOptions::default())
-        .unwrap()
-        .execute()
-        .value;
+    let modern = io::mdlx::plan::<mdlx::V1800>(&asset, &ExportOptions::default()).unwrap();
+    assert!(modern.report().issues.iter().any(|issue| {
+        issue.path == "material.shader" && issue.kind == conversion::IssueKind::Normalized
+    }));
+    let modern = modern.execute().value;
     assert_eq!(
         modern.materials().next().unwrap().layers[0]
             .try_shader_type()

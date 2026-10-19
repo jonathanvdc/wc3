@@ -1,7 +1,7 @@
 //! Typed material programs checked and written to a Warcraft III dialect.
 use super::encode_animation::Encoder;
 use super::encode_helpers::texture_transform;
-use crate::model::conversion::Error;
+use crate::model::conversion::{Error, IssueKind};
 use crate::model::formats::mdlx::{self as native, FormatVersion};
 use crate::model::materials::mdlx::{AlphaAdditiveEncoding, Shader};
 use crate::model::profiles::mdlx as profile;
@@ -65,9 +65,21 @@ pub(super) fn write<'a, V: FormatVersion>(
     };
     if let Err(error) = material.try_set_shader(shader_name) {
         if !shader_name.is_empty() {
-            encoder
-                .context
-                .unsupported(format!("{path}.shader"), error.to_string())?;
+            let known_selection = !source.steps.is_empty()
+                && match shader_name {
+                    "Shader_HD_DefaultUnit" => source.steps.iter().all(|step| matches!(step.shader, Shader::ReforgedDefault(_))),
+                    "Shader_SD_FixedFunction" => source.steps.iter().all(|step| matches!(step.shader, Shader::Classic(_))),
+                    _ => false,
+                };
+            if known_selection {
+                encoder.context.issue(
+                    format!("{path}.shader"),
+                    IssueKind::Normalized,
+                    "encoded the known material shader selection through the destination's per-layer selectors",
+                );
+            } else {
+                encoder.context.unsupported(format!("{path}.shader"), error.to_string())?;
+            }
         }
     }
     for (index, source) in source.steps.iter().enumerate() {

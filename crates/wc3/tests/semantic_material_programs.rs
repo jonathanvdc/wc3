@@ -253,9 +253,10 @@ fn export<V: FormatVersion>(
     model: &Model<'_, Mdlx>,
 ) -> Result<native::Document<'static, V>, wc3::model::conversion::Error> {
     // Material test inputs own their text, and the native output is consumed here.
-    io::mdlx::plan::<V>(model, &ExportOptions::default())?
+    Ok(io::mdlx::plan::<V>(model, &ExportOptions::default())?
         .execute()
-        .map(|output| output.value.into_owned())
+        .value
+        .into_owned())
 }
 
 #[test]
@@ -491,14 +492,27 @@ fn native_export_uses_one_material_declaration_for_all_steps() {
         .edit(|builder| {
             let mut material = builder.model().material(id).unwrap().clone();
             material.surface.declaration.priority_plane = 17;
-            material.surface.declaration.shader_name = "one shared shader".into();
             builder.set_material(id, material)
         })
         .unwrap();
     let output = export::<native::V1800>(&model).unwrap();
     let material = output.materials().next().unwrap();
     assert_eq!(material.priority_plane, 17);
-    assert_eq!(material.try_shader().unwrap(), "one shared shader");
+    assert!(material.try_shader().is_err());
+}
+
+#[test]
+fn known_shader_header_requires_matching_steps_for_layout_normalization() {
+    let mut model = native_model::<native::V1000>("Shader_HD_DefaultUnit", &[None], false);
+    let id = model.materials().iter().next().unwrap().0;
+    model.edit(|builder| {
+        let mut material = builder.model().material(id).unwrap().clone();
+        let inputs = material.surface.steps[0].shader.inputs().clone();
+        material.surface.steps[0].shader = Shader::Classic(inputs);
+        builder.set_material(id, material)
+    }).unwrap();
+    let error = export::<native::V1800>(&model).unwrap_err();
+    assert_eq!(error.path, "material.shader");
 }
 
 #[test]
