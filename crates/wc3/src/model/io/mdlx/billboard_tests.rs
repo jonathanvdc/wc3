@@ -47,7 +47,6 @@ fn every_native_billboard_flag_combination_preserves_behavior_and_wire_bits() {
         let output = plan::<V800>(&model, &ExportOptions::default())
             .unwrap()
             .execute()
-            .unwrap()
             .value;
         assert_eq!(output.nodes()[0].flags.bits() & 0x78, flags.bits());
     }
@@ -65,7 +64,6 @@ fn semantic_edits_do_not_reactivate_overridden_axis_declarations() {
         let output = plan::<V800>(&model, &ExportOptions::default())
             .unwrap()
             .execute()
-            .unwrap()
             .value;
         assert_eq!(
             output.nodes()[0].flags.bits() & 0x78,

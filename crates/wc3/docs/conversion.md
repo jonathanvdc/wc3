@@ -131,7 +131,7 @@ its mesh. The [graph guide](semantic.md) explains these relationships.
 
 A plan exposes its proposed native value through `draft()` and its ordered
 conversion decisions through `report()`. Inspect both before calling `execute()`.
-Execution accepts the prepared draft and returns the value with its report;
+Execution infallibly accepts the validated draft and returns the value with its report;
 it does not perform file writes. Use the resulting document or bundle's codec when
 ready to encode it.
 
@@ -144,7 +144,7 @@ fn prepare(source: &mdlx::Document<'_, mdlx::V800>) -> Result<(), conversion::Er
     let plan = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())?;
     let _proposed_model = plan.draft();
     let _decisions = plan.report();
-    let _output = plan.execute()?;
+    let _output = plan.execute();
     Ok(())
 }
 ```

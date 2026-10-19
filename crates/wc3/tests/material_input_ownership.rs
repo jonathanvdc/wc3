@@ -57,7 +57,6 @@ fn shared_native_inputs_import_as_independent_values_and_export_as_interned_tabl
     let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(output.textures().count(), 1);
     assert_eq!(output.texture_animations().count(), 1);
@@ -108,7 +107,6 @@ fn shared_native_inputs_import_as_independent_values_and_export_as_interned_tabl
     let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(output.textures().count(), 2);
     assert_eq!(output.texture_animations().count(), 2);
@@ -149,7 +147,6 @@ fn animated_selection_retains_each_selected_images_sampler() {
     let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let textures: Vec<_> = output.textures().collect();
     let layer = &output.materials().next().unwrap().layers[0];
@@ -181,7 +178,6 @@ fn duplicate_native_texture_records_share_the_resource_and_are_deduplicated_on_e
     let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(output.textures().count(), 1);
 }
@@ -242,7 +238,6 @@ fn replaceable_image_declarations_retain_filenames_and_drop_uninterpreted_flags(
     let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let texture = output.textures().next().unwrap();
     assert_eq!(texture.replaceable_id, 1);

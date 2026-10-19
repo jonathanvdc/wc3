@@ -27,7 +27,6 @@ fn native_export_duplicates_curves_for_fields_sharing_a_slot() {
     let native = mdlx::plan::<V800>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let lights: Vec<_> = native.lights().collect();
     assert_eq!(lights.len(), 2);

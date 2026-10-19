@@ -83,7 +83,6 @@ fn roundtrip<D: Dialect>() {
     let output = io::wmo::plan::<D>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     output.validate_complete().unwrap();
     assert_eq!(output.root.header().wmo_id, 55);
@@ -156,7 +155,6 @@ fn region_lights_are_independent_editable_features() {
     let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let group = output.group(GroupKey { index: 0, lod: 0 }).unwrap();
     let light = group
@@ -213,7 +211,6 @@ fn edited_geometry_rebuilds_native_companions() {
     let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let group = output.group(GroupKey { index: 0, lod: 0 }).unwrap();
     let positions = group
@@ -287,7 +284,6 @@ fn draw_batches_override_collision_face_material_and_keep_classification() {
     let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let group = output.group(GroupKey { index: 0, lod: 0 }).unwrap();
     assert_eq!(group.header().interior_batch_count, 1);
@@ -368,7 +364,6 @@ fn liquid_grid_fields_are_editable_without_source_packets() {
     let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let liquid = output
         .group(GroupKey { index: 0, lod: 0 })
@@ -421,7 +416,6 @@ fn unknown_native_blends_keep_their_family_namespace_during_edits() {
         let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
             .unwrap()
             .execute()
-            .unwrap()
             .value;
         let material = output
             .root
@@ -470,7 +464,6 @@ fn unknown_payloads_are_rejected_or_dropped_before_rebuilding_files() {
     let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert!(output.root.chunks().all(|chunk| chunk.tag() != *b"XTRA"));
 }
@@ -523,7 +516,6 @@ fn portals_are_scoped_authoring_relationships_and_rebuild_native_windows() {
     let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     output.validate_complete().unwrap();
     assert_eq!(output.root.header().portal_count, 1);
@@ -609,7 +601,6 @@ fn strip_connectivity_and_tangent_pools_are_independent_editable_geometry() {
     let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     output.validate_complete().unwrap();
     let group = output.group(GroupKey { index: 0, lod: 0 }).unwrap();
@@ -699,7 +690,6 @@ fn ambient_memberships_remap_scoped_volumes_across_native_table_order() {
     let output = io::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     output.validate_complete().unwrap();
     let group = output.group(GroupKey { index: 0, lod: 0 }).unwrap();
@@ -786,8 +776,7 @@ fn compatible_same_detail_geometry_joins_without_changing_material_look_or_sourc
         .unwrap();
     let result = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
-        .execute()
-        .unwrap();
+        .execute();
     assert!(result
         .report
         .issues
@@ -836,7 +825,6 @@ fn implicitly_filled_region_keeps_its_liquid_category_without_a_surface_grid() {
     let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let group = output.group(key).unwrap();
     assert!(group.header().flags.has_liquid());
@@ -873,7 +861,6 @@ fn semantic_world_controls_drop_unclassified_bits() {
     let output = io::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(output.root.header().flags().bits(), 0);
 }

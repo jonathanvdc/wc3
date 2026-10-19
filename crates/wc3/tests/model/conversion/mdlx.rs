@@ -39,7 +39,6 @@ fn native_model_sequence_and_geoset_metadata_rebuilds_without_source_bytes() {
     let output = io::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(output.model_info().unwrap().blend_time, 123);
     assert_eq!(
@@ -83,7 +82,6 @@ fn emitter_animation_is_active_and_not_dependent_on_source_bytes() {
     let output = io::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let emitter = output.particle_emitters2().next().unwrap();
     assert_eq!(emitter.emission_rate.value(), Some(&5.));
@@ -115,7 +113,6 @@ fn older_native_shader_string_uses_selected_dialect_layout() {
     let output = io::mdlx::plan::<mdlx::V1000>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         output.materials().next().unwrap().try_shader().unwrap(),
@@ -124,7 +121,6 @@ fn older_native_shader_string_uses_selected_dialect_layout() {
     let modern = io::mdlx::plan::<mdlx::V1800>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         modern.materials().next().unwrap().layers[0]
@@ -139,7 +135,6 @@ fn older_native_shader_string_uses_selected_dialect_layout() {
     let output = io::mdlx::plan::<mdlx::V1000>(&canonical, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         output.materials().next().unwrap().try_shader().unwrap(),
@@ -156,7 +151,6 @@ fn empty_native_tables_do_not_replace_reserved_root() {
     let output = io::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(output.nodes().len(), 0);
     assert_eq!(output.materials().count(), 0);
@@ -179,7 +173,6 @@ fn complete_native_surface_is_an_editable_logical_payload() {
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         output.materials().next().unwrap().layers[0].alpha.value(),
@@ -217,7 +210,6 @@ fn complete_native_emitter_is_an_editable_logical_feature() {
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         output
@@ -281,7 +273,6 @@ fn unknown_blocks_are_rejected_or_dropped_before_authoring_edits() {
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert!(output
         .chunks
@@ -345,7 +336,6 @@ fn spline_keys_materialize_once_and_remain_editable() {
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         output
@@ -383,7 +373,6 @@ fn ambient_illumination_and_nonlooping_clips_preserve_behavior() {
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         output.lights().next().unwrap().light_type,
@@ -408,7 +397,6 @@ fn owned_import_survives_native_document_and_input_drop() {
     let output = io::mdlx::plan::<mdlx::V800>(&imported, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(output.geosets().next().unwrap().vertices().len(), 4);
     assert_eq!(
@@ -494,7 +482,6 @@ fn semantic_export_restores_native_node_kinds_for_mdl() {
     let output = io::mdlx::plan::<mdlx::V1100>(&semantic, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let encoded = output.encode_mdl().unwrap();
     let decoded = mdlx::Document::<mdlx::V1100>::decode_mdl(&encoded).unwrap();

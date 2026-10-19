@@ -51,7 +51,6 @@ fn camera_bind_poses_follow_hierarchy_records_and_roundtrip_without_loss() {
         let output = io::mdlx::plan::<native::V1800>(&model, &ExportOptions::default())
             .unwrap()
             .execute()
-            .unwrap()
             .value;
         assert_eq!(output.bind_poses().copied().collect::<Vec<_>>(), poses);
         assert_eq!(output.nodes().len(), usize::from(hierarchy));
@@ -73,7 +72,6 @@ fn camera_bind_poses_follow_hierarchy_records_and_roundtrip_without_loss() {
         let repeated = io::mdlx::plan::<native::V1800>(&restored, &ExportOptions::default())
             .unwrap()
             .execute()
-            .unwrap()
             .value;
         assert_eq!(repeated.nodes().len(), usize::from(hierarchy));
         assert_eq!(repeated.bind_poses().copied().collect::<Vec<_>>(), poses);
@@ -89,7 +87,6 @@ fn camera_bind_poses_follow_hierarchy_records_and_roundtrip_without_loss() {
         let output = io::mdlx::plan::<native::V1800>(&missing_pose, &ExportOptions::default())
             .unwrap()
             .execute()
-            .unwrap()
             .value;
         assert_eq!(output.bind_poses().last(), Some(&matrix([0.; 3])));
         poses.push(matrix([9.; 3]));

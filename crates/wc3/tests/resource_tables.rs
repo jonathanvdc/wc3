@@ -230,7 +230,6 @@ fn resource_particle_modes_round_trip_with_present_and_absent_dependencies() {
                 let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
                     .unwrap()
                     .execute()
-                    .unwrap()
                     .value;
                 let particle = output.particle_emitters().next().unwrap();
                 assert_eq!(particle.flags().emitter_uses_mdl(), model_resource);

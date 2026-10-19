@@ -50,7 +50,6 @@ fn warcraft_layer_additive_selectors_share_weighted_rgb_operation_and_roundtrip_
         let output = semantic_mdlx::plan::<V800>(&model, &ExportOptions::default())
             .unwrap()
             .execute()
-            .unwrap()
             .value;
         assert_eq!(
             output.materials().next().unwrap().layers[0].filter_mode,
@@ -100,7 +99,6 @@ fn atlas_additive_preserves_its_encoding_and_rejects_material_only_selector() {
     let output = semantic_mdlx::plan::<V800>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         output.particle_emitters2().next().unwrap().filter_mode,

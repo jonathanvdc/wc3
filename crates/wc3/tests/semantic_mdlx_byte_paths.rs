@@ -43,7 +43,6 @@ fn semantic_roundtrip_preserves_non_utf8_effect_and_attachment_paths() {
     let output = io::mdlx::plan::<native::V1000>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let bytes = output.encode_mdx().unwrap();
     let output = native::Document::<native::V1000>::decode_mdx(&bytes).unwrap();

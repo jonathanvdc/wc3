@@ -31,7 +31,6 @@ fn known_layer_declarations_roundtrip_independently_of_common_lighting_and_sampl
     let output = io::mdlx::plan::<native::V800>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let bytes = output.encode_mdx().unwrap();
     let decoded = native::Document::<native::V800>::decode_mdx(&bytes).unwrap();

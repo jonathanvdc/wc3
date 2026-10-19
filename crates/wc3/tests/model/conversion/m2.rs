@@ -93,7 +93,6 @@ fn particle_program_bundle(programs: &[[u8; 2]]) -> m2::Bundle<'static, m2::Chun
         io::m2::plan::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
             .unwrap()
             .execute()
-            .unwrap()
             .value;
     for _ in 0..2 {
         let mut particle = m2::records::ParticleEmitter::<m2::V274>::new(ModelFlags::default());
@@ -144,7 +143,6 @@ fn particle_texture_programs_follow_the_material_prefix_and_round_trip() {
     let output = io::m2::plan::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let restored = output
         .model
@@ -221,7 +219,6 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     let target = io::m2::plan::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         target
@@ -297,7 +294,6 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
     let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let track = exported.model.core().bones[0]
         .translation
@@ -344,7 +340,6 @@ fn semantic_geometry_edits_rebuild_native_values() {
     let output = io::m2::plan::<m2::Flat<m2::V263>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         output.model.core().vertices.get(1).unwrap().position,
@@ -499,7 +494,6 @@ fn lights_particles_ribbons_and_collision_use_logical_fields() {
     let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let core = exported.model.core();
     assert_eq!(core.lights.len(), 1);
@@ -564,7 +558,6 @@ fn native_material_edits_affect_rebuilt_output() {
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(output.model.core().skins[0].batches[0].shader_id, 0x10);
 }
@@ -599,8 +592,7 @@ fn unknown_extensions_require_explicit_drop_policy() {
         .any(|issue| issue.path == "m2.chunk" && issue.kind == conversion::IssueKind::Dropped));
     let output = io::m2::plan::<m2::Chunked<m2::V256>>(&imported.value, &ExportOptions::default())
         .unwrap()
-        .execute()
-        .unwrap();
+        .execute();
     assert!(!output
         .value
         .model
@@ -687,7 +679,6 @@ fn native_physics_shapes_and_body_offsets_are_editable() {
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let file = output
         .files()
@@ -776,7 +767,6 @@ fn sparse_bone_overrides_use_editable_pose_matrices() {
     let output = io::m2::plan::<m2::Chunked<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let bone = output
         .files()
@@ -839,7 +829,6 @@ fn packed_particle_gravity_is_a_direction_and_rejects_malformed_words() {
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &options)
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     match &output.model.core().particles[0].gravity.values {
         LegacyValues::Values(values) => assert_eq!(values.get(0), Some(word)),
@@ -874,7 +863,6 @@ fn static_node_transforms_become_constant_native_curves() {
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let LegacyValues::Values(values) = &output.model.core().bones[0].translation.values else {
         panic!("unexpected spline")
@@ -929,7 +917,6 @@ fn local_effect_transforms_drive_the_effects_emitted_bone() {
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(output.model.core().lights[0].bone_id, 1);
     let LegacyValues::Values(values) = &output.model.core().bones[1].translation.values else {
@@ -958,7 +945,6 @@ fn unknown_native_blend_does_not_collide_with_common_transparency() {
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         output.model.core().materials.get(0).unwrap().blending_mode,
@@ -983,7 +969,6 @@ fn legacy_particle_shape_and_head_tail_controls_survive_conversion() {
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         output.model.core().particles[0].texture_scale.particle_type,
@@ -1009,7 +994,6 @@ fn texture_sampling_drops_uninterpreted_flags_and_rejects_unencoded_interpretati
     let native = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(native.model.core().textures[0].flags.bits(), 1);
     let (material, value) = asset.materials().iter().next().unwrap();
@@ -1061,7 +1045,6 @@ fn replacement_texture_retains_its_separately_declared_filename() {
     let native = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let texture = &native.model.core().textures[0];
     assert_eq!(texture.kind, TextureSource::Unknown(0x1234));
@@ -1183,7 +1166,6 @@ fn zero_duration_global_tracks_are_typed_frozen_clocks_and_roundtrip_without_ret
     let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         exported.model.core().global_sequences.to_vec(),
@@ -1264,7 +1246,6 @@ fn native_shader_routes_share_repeated_coordinate_animation() {
     let native = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let reread = io::m2::import(&native, &ImportOptions::default())
         .unwrap()
@@ -1294,7 +1275,6 @@ fn native_environment_then_t1_exports_the_active_transform_in_slot_zero() {
     let native = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let core = native.model.core();
     let index = core.texture_transform_combos.get(0).unwrap() as usize;
@@ -1322,7 +1302,6 @@ fn native_three_route_programme_uses_third_transform_for_uv1() {
     let native = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let core = native.model.core();
     let index = core.texture_transform_combos.get(2).unwrap() as usize;
@@ -1409,7 +1388,7 @@ fn application_guild_palettes_survive_profile_changes_but_require_export_loss_po
         },
     )
     .unwrap();
-    let exported = planned.execute().unwrap();
+    let exported = planned.execute();
     assert!(exported
         .report
         .issues
@@ -1491,7 +1470,6 @@ fn batch_layers_become_ordered_steps_with_independent_animation() {
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let core = output.model.core();
     let batches = &core.skins[0].batches;
@@ -1532,7 +1510,6 @@ fn batch_layers_become_ordered_steps_with_independent_animation() {
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&edited, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         output.model.core().skins[0]
@@ -1566,7 +1543,6 @@ fn auxiliary_section_words_are_draw_local_and_survive_profile_changes() {
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         output.model.core().skins[0]
@@ -1618,7 +1594,6 @@ fn ribbon_export_flattens_material_programs_into_ordered_native_materials() {
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let core = output.model.core();
     let materials = &core.ribbons[0].material_indices;
@@ -1666,7 +1641,6 @@ fn export_interns_equivalent_images_with_independent_resource_declarations() {
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(output.model.core().textures.len(), 1);
 }
@@ -1714,7 +1688,6 @@ fn offset_animation_interval_exports_as_native_local_keys() {
     let output = io::m2::plan::<m2::Flat<m2::V264>>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let imported = io::m2::import(&output, &ImportOptions::default())
         .unwrap()
@@ -1774,7 +1747,6 @@ fn event_sources_round_trip_native_codes_data_clocks_and_duplicate_occurrences()
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&restored, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let events = &output.model.core().events;
     assert_eq!(events.len(), 2);
@@ -1881,7 +1853,6 @@ fn ordinary_event_source_retains_sequence_timing_and_unordered_duplicate_keys() 
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let core = output.model.core();
     let origin = core.sequences[0].timing.start;
@@ -1939,7 +1910,6 @@ fn billboard_flags_round_trip_while_effective_states_are_normalized() {
         let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
             .unwrap()
             .execute()
-            .unwrap()
             .value;
         assert_eq!(output.model.core().bones[0].flags, original);
     }
@@ -1965,7 +1935,6 @@ fn billboard_edits_do_not_reactivate_inactive_m2_declarations() {
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let flags = output.model.core().bones[0].flags;
     assert!(flags.billboard());
@@ -1976,7 +1945,6 @@ fn billboard_edits_do_not_reactivate_inactive_m2_declarations() {
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let flags = output.model.core().bones[0].flags;
     assert!(!flags.billboard());
@@ -2041,7 +2009,6 @@ fn file_data_image_declarations_retain_accompanying_filenames() {
     let output = io::m2::plan::<m2::Chunked<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(
         output.model.core().textures[0].filename.as_bytes(),
@@ -2078,7 +2045,6 @@ fn animation_categories_preserve_named_and_unknown_ids_through_conversion() {
             io::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
                 .unwrap()
                 .execute()
-                .unwrap()
                 .value;
         assert_eq!(exported.model.core().sequences[0].id, category.get());
     }

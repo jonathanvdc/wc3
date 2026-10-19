@@ -305,7 +305,6 @@ fn write_animated_m2(directory: &Path) {
     let modern = semantic_m2::plan::<m2::Chunked<m2::V274>>(&imported, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let encoded = modern.encode().unwrap();
     fs::create_dir_all(directory).unwrap();

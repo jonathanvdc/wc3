@@ -24,7 +24,6 @@ fn ribbon_axis_import_roundtrip_and_strict_export_loss() {
     let output = plan::<V800>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     let roundtrip = import(&output, &ImportOptions::default()).unwrap().value;
     let Feature::Ribbon(ribbon) = &roundtrip.features().iter().next().unwrap().1.payload else {

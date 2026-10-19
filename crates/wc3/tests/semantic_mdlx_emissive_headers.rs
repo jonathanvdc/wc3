@@ -43,7 +43,6 @@ fn unspecified_emissive_header_uses_unity_and_retains_authored_track() {
         let output = io::mdlx::plan::<V1000>(&model, &ExportOptions::default())
             .unwrap()
             .execute()
-            .unwrap()
             .value;
         let material = output.materials().next().unwrap();
         let gain = material.layers[0].emissive_gain();

@@ -167,7 +167,6 @@ fn alpha_direct_geometry_and_lighting_controls_survive_edits() {
     let output = io::wmo::plan::<io::wmo::V14>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     output.validate().unwrap();
     let group = output.group(0).unwrap();
@@ -215,7 +214,6 @@ fn beta_native_header_and_draw_controls_survive_semantic_roundtrip() {
     let output = io::wmo::plan::<io::wmo::V16>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     output.validate_complete().unwrap();
     let group = output.group(0).unwrap();
@@ -274,7 +272,6 @@ fn historical_multiple_placements_relocate_lighting_windows() {
     let encoded = io::wmo::plan::<io::wmo::V14>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
-        .unwrap()
         .value;
     assert_eq!(asset.instances().iter().count(), 2);
     assert_eq!(

@@ -38,7 +38,7 @@ fn selected_drop_prepares_a_valid_target_and_reports_its_consequence() {
     assert_eq!(plan.report().issues.len(), 1);
     assert_eq!(plan.report().issues[0].kind, IssueKind::Dropped);
     assert!(plan.report().issues[0].description.contains("behavior"));
-    let converted = plan.execute().unwrap();
+    let converted = plan.execute();
     converted.value.validate().unwrap();
     assert_eq!(converted.report.issues.len(), 1);
 }
@@ -147,7 +147,6 @@ fn selected_supported_features_are_preserved_without_loss_reports() {
         .plan(&source)
         .unwrap()
         .execute()
-        .unwrap()
         .value
         .widen::<Universal>();
     let plan = Policy::<Mdlx>::new()
