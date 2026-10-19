@@ -169,7 +169,7 @@ fn animated_selection_retains_each_selected_images_sampler() {
 }
 
 #[test]
-fn equal_native_texture_declarations_retain_independent_resources_and_inputs() {
+fn equal_native_texture_declarations_retain_independent_inputs_before_export_normalization() {
     let mut source = source();
     let texture = NativeTexture::new("shared.blp").unwrap();
     source.set_textures([texture.clone(), texture]);
@@ -196,7 +196,8 @@ fn equal_native_texture_declarations_retain_independent_resources_and_inputs() {
         .unwrap()
         .execute()
         .value;
-    assert_eq!(output.textures().count(), 2);
+    // Equal declarations can share a transport record once the output is compiled.
+    assert_eq!(output.textures().count(), 1);
 }
 
 #[test]
