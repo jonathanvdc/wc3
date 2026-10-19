@@ -66,6 +66,32 @@ Animation and grip policy remain application choices. Select an authored weapon
 stance through `Playback`, and use `PoseOverrides` for finger-pose layers,
 off-hand IK or gameplay controls. Equipping a model installs its socket placement.
 
+## Facial bone corrections
+
+`CharacterDefinition::bone_sets` selects imported BONE resources by their complete
+resource identities; `AppearancePatch::bone_sets` carries the same selections from
+client tables. An empty selection retains the base face. Unknown resources,
+overlapping bone ownership and ambiguous resource declarations are errors.
+Selecting a face does not modify shared animations or inverse-bind matrices.
+
+For each fresh animated local skin matrix `A`, bind pivot `p` and selected correction
+`C`, evaluation computes `q = A * p` and applies `T(q) * C * T(-q) * A` before
+multiplication by the corrected parent matrix, following the documented
+[native correction contract](https://github.com/wowmodelviewer/wowmodelviewer/blob/3e11ee5284f451d8f08318e3f38b08865708280f/docs/fbx-customization.md#combining-facial-shape-with-animation).
+Thus corrections follow the animated
+joint origin and propagate through ordinary children. They retain full affine
+matrices, including shear from nonuniform corrections and animation rotation.
+Pose baking and live skinning use the same evaluator; after ordinary Bevy transform
+propagation, the renderer publishes exact affine globals for corrected rigs and
+their descendants. Node `Transform` values remain an informational TRS approximation.
+
+Correction targets and their descendants must use ordinary affine inheritance
+without billboards, camera anchoring or selective inheritance. Unsupported paths
+fail compilation. Raw FacePose 808 clips are a separate authored pose and must not
+be layered over an already selected face correction. Application pose overrides
+are sampled before the correction, so replacing a local animation sample preserves
+the selected face. Recompile with an empty selection to clear it.
+
 ## Secondary motion
 
 Armor deformation from skeletal animation does not require a physics solver.

@@ -6,6 +6,9 @@ use crate::model::{
 use glam::{Affine3A, EulerRot, Mat4, Quat, Vec3};
 
 /// Signed authored factors accompany the affine transform, including collapsed axes.
+/// Explicit affine corrections affect `matrix`; these factors retain the authored TRS
+/// sample and cannot represent corrective shear. Corrected descendants require full
+/// affine inheritance rather than reconstructing a frame from the factors.
 #[derive(Clone, Copy, Debug)]
 pub struct EvaluatedPose {
     /// Full affine mapping from authored model coordinates into the evaluated frame.

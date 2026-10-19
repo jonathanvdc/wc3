@@ -1,6 +1,6 @@
 use super::CharacterCatalog;
 use crate::assembly::TextureReplacement;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use wc3::model::{ClipId, NodeId, ResourceLocator, SocketIdentity};
@@ -193,6 +193,8 @@ pub struct CharacterDefinition {
     pub textures: BTreeMap<u32, TextureReplacement>,
     /// Additional rigid and deforming model parts.
     pub parts: Vec<ModelPart>,
+    /// Selected native BONE resources; an empty set retains the base face.
+    pub bone_sets: HashSet<ResourceLocator<'static>>,
 }
 impl CharacterDefinition {
     /// Validates atlas layouts before loading models or mutating a live character.

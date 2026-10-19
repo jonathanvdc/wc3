@@ -3,7 +3,7 @@ use crate::model::{
     AnimatedTransform, Billboard, Error, EvaluatedPose, Inheritance, Model, NodeId, PoseBehavior,
     Property, Skin, Transform as ModelTransform, TransformSemantics, ValueSample,
 };
-use glam::{Affine3A, Mat4};
+use glam::{Affine3A, Mat4, Vec3};
 use std::collections::{HashMap, HashSet};
 /// Authored node properties with a channel in any playback programme.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -45,6 +45,9 @@ pub struct PoseNode {
     pub visible: bool,
     /// Whether the origin follows the driving camera.
     pub camera_anchored: bool,
+    /// Parent-axis affine correction about the freshly animated joint origin.
+    /// Applied after animation and before hierarchy accumulation; bind poses remain unchanged.
+    pub correction: Option<Mat4>,
 }
 
 impl PoseNode {
@@ -57,6 +60,26 @@ impl PoseNode {
             transform_semantics: self.transform_semantics,
             camera_anchored: self.camera_anchored,
         }
+    }
+    /// Evaluates animation and a selected affine correction without decomposing shear.
+    /// Corrected hierarchies require ordinary affine inheritance, checked by `PoseLayout::new`.
+    pub fn evaluate(
+        &self,
+        pose: ModelTransform,
+        parent: EvaluatedPose,
+        camera: Option<Affine3A>,
+    ) -> EvaluatedPose {
+        let mut evaluated = self.behavior().evaluate(pose, parent, camera);
+        if let Some(correction) = self.correction {
+            let local = pose.to_matrix();
+            let origin = local.transform_point3(Vec3::from_array(pose.pivot));
+            evaluated.matrix = parent.matrix
+                * Mat4::from_translation(origin)
+                * correction
+                * Mat4::from_translation(-origin)
+                * local;
+        }
+        evaluated
     }
     /// Samples local animation without hierarchy composition or application overrides.
     #[inline]
@@ -140,6 +163,30 @@ impl PoseLayout {
         if order.len() != nodes.len() {
             return Err(Error::new("pose", "model hierarchy contains a cycle"));
         }
+        let mut corrected = vec![false; nodes.len()];
+        for &index in &order {
+            let node = &nodes[index];
+            corrected[index] =
+                node.correction.is_some() || node.parent.is_some_and(|parent| corrected[parent]);
+            if corrected[index]
+                && (!node.behavior().hierarchical()
+                    || node.transform_semantics != TransformSemantics::Affine)
+            {
+                return Err(Error::new("pose.correction", "corrected hierarchies require ordinary affine inheritance without billboards or camera anchoring"));
+            }
+            if node.correction.is_some_and(|matrix| {
+                !matrix.is_finite()
+                    || matrix.x_axis.w != 0.
+                    || matrix.y_axis.w != 0.
+                    || matrix.z_axis.w != 0.
+                    || matrix.w_axis.w != 1.
+            }) {
+                return Err(Error::new(
+                    "pose.correction",
+                    "correction must be a finite affine matrix",
+                ));
+            }
+        }
         Ok(Self { nodes, order })
     }
     /// Samples a hierarchy into a new output. Use `evaluate_into` for repeated playback.
@@ -182,7 +229,7 @@ impl PoseLayout {
             let parent = node
                 .parent
                 .map_or_else(EvaluatedPose::default, |p| output.nodes[p]);
-            output.nodes[index] = node.behavior().evaluate(local, parent, inputs.camera);
+            output.nodes[index] = node.evaluate(local, parent, inputs.camera);
             output.visible[index] =
                 node.sample_visibility(sample) && node.parent.is_none_or(|p| output.visible[p]);
         }
@@ -220,6 +267,7 @@ impl Model<'_> {
                     transform_semantics: node.transform_semantics,
                     visible: *self.values().get(node.visible).expect("validated slot"),
                     camera_anchored: node.camera_anchored,
+                    correction: None,
                 })
                 .collect(),
         )

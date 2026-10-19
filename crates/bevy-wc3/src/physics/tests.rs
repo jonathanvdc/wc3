@@ -379,6 +379,7 @@ fn composition_remaps_parent_bodies_and_constraints_to_shared_host_body() {
             transform_semantics: SlotConstruct::construct(&mut slot_values),
             visible: true,
             camera_anchored: false,
+            correction: None,
         })
         .collect();
     host.append_remapped(&part, &[0, 1], &nodes);
@@ -414,6 +415,7 @@ fn composition_body_offset_includes_rest_correction_anchors() {
         transform_semantics: SlotConstruct::construct(&mut slot_values),
         visible: true,
         camera_anchored: false,
+        correction: None,
     };
     let nodes = [
         make(host, None, 4.),

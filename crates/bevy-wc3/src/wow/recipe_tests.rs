@@ -41,6 +41,7 @@ fn conflicting_customization_and_equipment_are_rejected_before_resolution() {
 #[test]
 fn checked_rectangles_reject_overflow_before_asset_work() {
     let definition = CharacterDefinition {
+        bone_sets: Default::default(),
         model: ResourceLocator::FileDataId(1),
         geosets: GeosetSelection::default(),
         parts: vec![],

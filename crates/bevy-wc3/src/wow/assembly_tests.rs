@@ -97,6 +97,7 @@ fn model(name: &str, geosets: &[u16]) -> (Model<'static>, NodeId) {
 }
 fn definition() -> CharacterDefinition {
     CharacterDefinition {
+        bone_sets: Default::default(),
         model: ResourceLocator::FileDataId(1),
         geosets: GeosetSelection {
             visible: [401].into_iter().collect(),
@@ -393,4 +394,91 @@ fn rigid_equipment_mounts_at_the_attachment_feature_and_preserves_its_pivot() {
         compiled.mounts[0].transform.translation.to_array(),
         [1., 2., 3.]
     );
+}
+
+#[test]
+fn selected_native_bone_resources_are_checked_and_retained_in_compiled_pose() {
+    use bevy::prelude::Vec3;
+    use wc3::model::systems::{
+        model::{BoneOverride, System as M2System},
+        System,
+    };
+    let (mut body, joint) = model("body", &[401]);
+    let resource = ResourceLocator::FileDataId(55);
+    let correction = Mat4::from_translation(Vec3::new(0.1, 0.2, 0.3));
+    body.edit(|builder| {
+        let first = builder.add_bone_override_resource(resource.clone());
+        let second = builder.add_bone_override_resource(ResourceLocator::FileDataId(56));
+        builder.add_system(System::M2(M2System::BoneOverrides(vec![
+            BoneOverride {
+                resource: Some(first),
+                bones: vec![joint],
+                transforms: [correction.to_cols_array_2d()].into_iter().collect(),
+            },
+            BoneOverride {
+                resource: Some(second),
+                bones: vec![joint],
+                transforms: [correction.to_cols_array_2d()].into_iter().collect(),
+            },
+        ])))?;
+        Ok(())
+    })
+    .unwrap();
+    let mut definition = definition();
+    definition.parts.clear();
+    let models = Models::from([(definition.model.clone(), body)]);
+    let mut images = Assets::default();
+    definition.bone_sets.insert(resource);
+    let compiled = compile_character(&definition, &models, &mut images, |_| {
+        RgbaImage::new(1, 1, vec![255; 4]).map_err(|e| ModelError(e.to_string()))
+    })
+    .unwrap();
+    assert_eq!(
+        compiled
+            .nodes
+            .iter()
+            .find(|node| node.id == joint)
+            .unwrap()
+            .correction,
+        Some(correction)
+    );
+    let template = compiled
+        .image_template
+        .as_ref()
+        .expect("rebindable appearance template");
+    assert_eq!(
+        template
+            .nodes
+            .iter()
+            .find(|node| node.id == joint)
+            .unwrap()
+            .correction,
+        Some(correction)
+    );
+    definition.bone_sets.insert(ResourceLocator::FileDataId(56));
+    assert!(
+        compile_character(&definition, &models, &mut images, |_| panic!(
+            "overlap rejected before image I/O"
+        ))
+        .err()
+        .unwrap()
+        .0
+        .contains("overlap")
+    );
+    definition.bone_sets = [ResourceLocator::FileDataId(99)].into_iter().collect();
+    assert!(
+        compile_character(&definition, &models, &mut images, |_| panic!(
+            "unknown resource rejected before image I/O"
+        ))
+        .err()
+        .unwrap()
+        .0
+        .contains("absent")
+    );
+    definition.bone_sets.clear();
+    let compiled = compile_character(&definition, &models, &mut images, |_| {
+        RgbaImage::new(1, 1, vec![255; 4]).map_err(|e| ModelError(e.to_string()))
+    })
+    .unwrap();
+    assert!(compiled.nodes.iter().all(|node| node.correction.is_none()));
 }

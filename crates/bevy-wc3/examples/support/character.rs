@@ -146,6 +146,7 @@ pub fn load(
         parts.len()
     );
     let definition = CharacterDefinition {
+        bone_sets: Default::default(),
         model: ResourceLocator::FileDataId(recipe.body),
         geosets: GeosetSelection {
             visible: recipe.geosets,

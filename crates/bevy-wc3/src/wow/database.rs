@@ -3,7 +3,8 @@ use super::{
     Sex,
 };
 use crate::assembly::{TextureLayer, TextureReplacement};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use wc3::model::ResourceLocator;
 
 /// Explicit visibility change over a table-defined set of mutually exclusive geosets.
 #[derive(Clone, Debug)]
@@ -26,6 +27,8 @@ pub struct AppearancePatch {
     pub atlas_layers: BTreeMap<u32, Vec<TextureLayer>>,
     /// Additional rigid or deforming equipment models.
     pub parts: Vec<ModelPart>,
+    /// Selected native BONE resources contributed by this choice.
+    pub bone_sets: HashSet<ResourceLocator<'static>>,
 }
 /// Build-specific resolved table rows with deterministic appearance assembly.
 ///
@@ -120,6 +123,7 @@ impl CharacterDatabase for CharacterTables {
                     }
                 }
             }
+            definition.bone_sets.extend(patch.bone_sets.iter().cloned());
             definition.parts.extend(patch.parts.iter().cloned());
         }
         definition.validate()?;

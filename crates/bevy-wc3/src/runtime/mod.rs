@@ -1,4 +1,5 @@
 //! Per-instance playback, spawning, pose evaluation and event dispatch.
+mod affine;
 mod effects;
 mod evaluation;
 mod event_dispatch;
@@ -7,6 +8,7 @@ mod mounts;
 mod playback;
 mod spawn;
 
+pub(crate) use affine::publish_affine_poses;
 pub(crate) use effects::simulate_particles;
 pub(crate) use evaluation::{animate_instances, apply_lod_visibility};
 pub(crate) use event_dispatch::dispatch_events;

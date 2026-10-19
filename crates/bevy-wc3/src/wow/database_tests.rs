@@ -6,6 +6,7 @@ fn tables() -> CharacterTables {
         bodies: BTreeMap::from([(
             (4, Sex::Female),
             CharacterDefinition {
+                bone_sets: Default::default(),
                 model: ResourceLocator::FileDataId(1),
                 geosets: GeosetSelection {
                     visible: BTreeSet::from([0, 101, 401]),

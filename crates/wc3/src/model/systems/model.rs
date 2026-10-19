@@ -9,7 +9,8 @@ pub struct BoneOverride<'a> {
     pub resource: Option<BoneOverrideResourceId>,
     /// Bones receiving the matrices, in matching order.
     pub bones: Vec<NodeId>,
-    /// Model-space override transforms.
+    /// Native parent-axis affine corrections around each freshly animated joint origin.
+    /// Raw matrix columns retain translation in the fourth vector; these are not complete poses.
     pub transforms: ZeroVec<'a, [[f32; 4]; 4]>,
 }
 /// Independent authoring systems that can coexist in one logical model.

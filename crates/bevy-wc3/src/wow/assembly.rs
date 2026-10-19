@@ -5,11 +5,15 @@ use crate::assembly::{
     compile_with_bindings, Models, PendingAssembly, PendingPart, RgbaImage, Source,
     TextureReplacement,
 };
+use crate::bounds::rest_bounds;
 use crate::mesh_attributes::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT};
 use crate::{CompiledModel, DrawSelection, JointMap, ModelError, PartBinding};
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::{Assets, Image, Mat4, Mesh};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::Arc;
+use wc3::model::systems::{model::System as M2System, System};
+use wc3::model::PoseLayout;
 use wc3::model::{ImageResource, Model, NodeFeature, NodeId, ResourceLocator};
 use wc3::model::{ModelMount, MountTarget, Transform as ModelTransform};
 
@@ -43,6 +47,15 @@ fn compile_character_impl(
     definition
         .validate()
         .map_err(|error| ModelError(error.to_string()))?;
+    let root_node_count = models
+        .get(&definition.model)
+        .map_or(0, |model| model.nodes().len());
+    let corrections = bone_corrections(
+        models
+            .get(&definition.model)
+            .ok_or_else(|| ModelError("missing character model".into()))?,
+        &definition.bone_sets,
+    )?;
     let assembly = PendingAssembly {
         root: source(
             &definition.model,
@@ -67,14 +80,85 @@ fn compile_character_impl(
             .collect::<Result<Vec<_>, ModelError>>()?,
     };
     let body_catalog = CharacterCatalog::inspect(&models[&definition.model]);
-    compile_with_bindings(
+    let mut compiled = compile_with_bindings(
         &assembly,
         models,
         images,
         resolve_image,
         |binding| matches!(binding.binding, EquipmentBinding::SharedSkeleton),
         |body, source, compiled, binding| bind_part(body, source, compiled, binding, &body_catalog),
-    )
+    )?;
+    if !corrections.is_empty() {
+        apply_root_corrections(&mut compiled, root_node_count, &corrections)?;
+    }
+    Ok(compiled)
+}
+
+fn apply_root_corrections(
+    compiled: &mut CompiledModel,
+    root_node_count: usize,
+    corrections: &HashMap<NodeId, Mat4>,
+) -> Result<(), ModelError> {
+    // Image rebinding must retain the same selected face as the visible model.
+    if let Some(template) = &mut compiled.image_template {
+        apply_root_corrections(Arc::make_mut(template), root_node_count, corrections)?;
+    }
+    // Composition retains the root's node prefix; source-local identities in
+    // appended parts are not root customization targets.
+    for node in Arc::make_mut(&mut compiled.nodes)
+        .iter_mut()
+        .take(root_node_count)
+    {
+        node.correction = corrections.get(&node.id).copied();
+    }
+    // Validate every descendant, including composed equipment, before publishing a model.
+    PoseLayout::new(compiled.nodes.to_vec()).map_err(|error| ModelError(error.to_string()))?;
+    compiled.rest_bounds = rest_bounds(compiled, None);
+    Ok(())
+}
+
+fn bone_corrections(
+    model: &Model<'_>,
+    selected: &HashSet<ResourceLocator<'static>>,
+) -> Result<HashMap<NodeId, Mat4>, ModelError> {
+    let mut remaining = selected.clone();
+    let mut corrections = HashMap::new();
+    for (_, system) in model.systems() {
+        let System::M2(M2System::BoneOverrides(sets)) = system else {
+            continue;
+        };
+        for set in sets {
+            let Some(resource) = set.resource.and_then(|id| model.bone_override_resource(id))
+            else {
+                continue;
+            };
+            if !selected.contains(resource) {
+                continue;
+            }
+            if !remaining.remove(resource) {
+                return Err(ModelError(format!(
+                    "ambiguous native bone correction resource {resource:?}"
+                )));
+            }
+            for (index, node) in set.bones.iter().enumerate() {
+                let matrix =
+                    Mat4::from_cols_array_2d(&set.transforms.get(index).ok_or_else(|| {
+                        ModelError("native bone correction matrix is missing".into())
+                    })?);
+                if corrections.insert(*node, matrix).is_some() {
+                    return Err(ModelError(format!(
+                        "selected native bone sets overlap at {node:?}"
+                    )));
+                }
+            }
+        }
+    }
+    if let Some(resource) = remaining.iter().next() {
+        return Err(ModelError(format!(
+            "selected native bone correction resource is absent: {resource:?}"
+        )));
+    }
+    Ok(corrections)
 }
 
 fn source(

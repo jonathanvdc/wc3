@@ -6,13 +6,13 @@ use super::super::{ReadError, WriteError, ZeroVec};
 use super::{chunk_bytes, encode_records, flat_records, write_chunk, BoneMatrix};
 use crate::model::common::Ownership;
 #[derive(Clone, Debug, Default, PartialEq, Ownership)]
-/// Sparse replacement bone transforms for one character-customization choice.
+/// Sparse bone corrections for one character-customization choice.
 pub struct BoneFile<'data> {
     /// Bone-file format version preceding BIDA/BOMT framing; known files use 1.
     pub version: u32,
     /// BIDA indices into the owning model's bone array, paired one-to-one with `matrices`.
     pub indices: ZeroVec<'data, u16>,
-    /// BOMT replacement transforms corresponding to `indices`, in row-major order with translation in the last row.
+    /// BOMT correction transforms corresponding to `indices`; raw floats map directly to column-vector matrices with translation at indices 12–14.
     pub matrices: Vec<BoneMatrix>,
 }
 impl<'data> BoneFile<'data> {

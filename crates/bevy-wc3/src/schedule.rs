@@ -32,6 +32,8 @@ pub enum Wc3Systems {
     SimulateModelParticles,
     /// Samples quad-particle births and ribbon sections after transform propagation.
     SimulateEffects,
+    /// Publishes exact affine bone corrections after normal transform propagation.
+    PublishAffinePoses,
     /// Publishes model event messages after transform propagation in `PostUpdate`.
     DispatchEvents,
     /// Selects geometry LOD after camera/transform updates, before visibility.
@@ -62,6 +64,12 @@ pub(crate) fn configure(app: &mut App) {
             )
                 .chain()
                 .before(TransformSystems::Propagate),
+            Wc3Systems::PublishAffinePoses
+                .after(TransformSystems::Propagate)
+                .before(Wc3Systems::SimulateEffects)
+                .before(Wc3Systems::DispatchEvents)
+                .before(Wc3Systems::SelectLod)
+                .before(CameraUpdateSystems),
             Wc3Systems::SimulateEffects.after(TransformSystems::Propagate),
             Wc3Systems::DispatchEvents.after(TransformSystems::Propagate),
             Wc3Systems::SelectLod

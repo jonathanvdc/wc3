@@ -424,8 +424,11 @@ impl ResourceResolver for TextureOverrides {
             request.resource,
             ImageResource::Replaceable { id: 1, .. }
         ));
-        assert_eq!(index, 0, "both samplers share the same image dependency");
         let variant = usize::from(request.sampler.u == wc3::model::AddressMode::Repeat);
+        assert_eq!(
+            index, variant,
+            "native bitmap declarations retain their table identities"
+        );
         ImageResource::Path(Cow::Owned(format!("mapped{variant}.blp").into_bytes()))
     }
 }

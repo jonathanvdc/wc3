@@ -127,6 +127,10 @@ reuse compiled geometry, and preparation shares meshes and inverse-bind palettes
 across occurrences. Live rigs retain independent state. Reuse compiled and
 prepared assemblies across instances to amortize setup work.
 
+Native facial bone corrections are selected by the [WoW adapter](characters.md#facial-bone-corrections).
+They preserve full affine matrices through live skinning and offline baking; generic
+assembly does not infer which imported correction resources should be active.
+
 `PreparedModel::mounts()` and `ModelRig::mounts()` expose corresponding component
 definitions and live roots. `PoseOverrides` provides application pose control.
 `PhysicsSimulation` enables supported authored rigid-body secondary motion, with

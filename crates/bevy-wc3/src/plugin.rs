@@ -4,7 +4,7 @@ use crate::effects::render::configure_effect_views;
 use crate::effects::sprites::ParticleRenderPlugin;
 use crate::effects::trails::RibbonRenderPlugin;
 use crate::image_replacements::{refresh_image_replacements, ReplacementImages};
-use crate::runtime::{synchronize_model_cameras, synchronize_mounted_models};
+use crate::runtime::{publish_affine_poses, synchronize_model_cameras, synchronize_mounted_models};
 use crate::schedule::{configure, Wc3Systems};
 use crate::{
     advance_animation, animate_cameras, animate_instances, apply_lod_visibility,
@@ -84,6 +84,10 @@ impl Plugin for Wc3BevyPlugin {
             )
                 .chain()
                 .in_set(Wc3Systems::EvaluateNodePoses),
+        );
+        app.add_systems(
+            PostUpdate,
+            publish_affine_poses.in_set(Wc3Systems::PublishAffinePoses),
         );
         app.add_systems(
             PostUpdate,

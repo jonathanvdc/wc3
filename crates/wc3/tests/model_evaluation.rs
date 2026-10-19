@@ -550,3 +550,100 @@ fn pivot_local_inheritance_can_compensate_an_affine_parents_motion() {
     );
     assert_eq!(child.motion, Vec3::new(2., 0., 0.));
 }
+
+#[test]
+fn affine_bone_corrections_follow_animated_origins_and_propagate_without_feedback() {
+    use wc3::model::Quaternion;
+    let mut builder = ModelBuilder::new(ModelMetadata::M2("corrections".into()));
+    let root = builder.add_named_node("animated parent").unwrap();
+    let child = builder.new_node("corrected joint").with_parent(root);
+    let child = builder.add_node(child).unwrap();
+    let leaf = builder.new_node("ordinary child").with_parent(child);
+    builder.add_node(leaf).unwrap();
+    let model = builder.finish().unwrap();
+    let mut nodes = model.prepare_pose().unwrap().nodes().to_vec();
+    let correction = Mat4::from_scale_rotation_translation(
+        Vec3::new(1.4, 0.6, 1.1),
+        Quat::from_rotation_x(0.7),
+        Vec3::new(0.1, -0.2, 0.05),
+    );
+    nodes[1].correction = Some(correction);
+    let layout = PoseLayout::new(nodes.clone()).unwrap();
+    let parent_pose = Transform {
+        translation: [2., -1., 3.],
+        rotation: Quaternion(Quat::from_rotation_y(0.6).to_array()),
+        ..Default::default()
+    };
+    let joint_pose = Transform {
+        translation: [0.4, -0.1, 0.3],
+        pivot: [1., 2., 3.],
+        rotation: Quaternion(Quat::from_rotation_z(0.8).to_array()),
+        ..Default::default()
+    };
+    let leaf_pose = Transform {
+        translation: [0., 0.3, 0.],
+        ..Default::default()
+    };
+    let poses = [parent_pose, joint_pose, leaf_pose];
+    let overrides = nodes
+        .iter()
+        .zip(poses)
+        .map(|(node, pose)| (node.id, pose))
+        .collect();
+    let local = joint_pose.to_matrix();
+    let origin = local.transform_point3(Vec3::from_array(joint_pose.pivot));
+    let expected = parent_pose.to_matrix()
+        * Mat4::from_translation(origin)
+        * correction
+        * Mat4::from_translation(-origin)
+        * local;
+    let sample = model.animation_sample(AnimationSample::default()).unwrap();
+    let mut output = ModelPose::default();
+    for _ in 0..3 {
+        layout
+            .evaluate_into(
+                &sample,
+                PoseInputs {
+                    overrides: Some(&overrides),
+                    ..Default::default()
+                },
+                &mut output,
+            )
+            .unwrap();
+        assert!(output.nodes[1].matrix.abs_diff_eq(expected, 1e-6));
+        assert!(output.nodes[2]
+            .matrix
+            .abs_diff_eq(expected * leaf_pose.to_matrix(), 1e-6));
+    }
+    let fixed_pivot = parent_pose.to_matrix()
+        * Mat4::from_translation(Vec3::from_array(joint_pose.pivot))
+        * correction
+        * Mat4::from_translation(-Vec3::from_array(joint_pose.pivot))
+        * local;
+    assert!(!expected.abs_diff_eq(fixed_pivot, 1e-3));
+    let columns = [expected.x_axis.truncate(), expected.y_axis.truncate()];
+    assert!(
+        columns[0].dot(columns[1]).abs() > 0.01,
+        "noncommuting correction retains shear"
+    );
+    nodes[1].correction = None;
+    let cleared = PoseLayout::new(nodes.clone())
+        .unwrap()
+        .evaluate(
+            &sample,
+            PoseInputs {
+                overrides: Some(&overrides),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert!(cleared.nodes[1]
+        .matrix
+        .abs_diff_eq(parent_pose.to_matrix() * local, 1e-6));
+    nodes[1].correction = Some(correction);
+    nodes[2].inheritance.scale = false;
+    assert!(PoseLayout::new(nodes.clone()).is_err());
+    nodes[2].inheritance.scale = true;
+    nodes[1].correction = Some(Mat4::from_cols_array(&[f32::NAN; 16]));
+    assert!(PoseLayout::new(nodes).is_err());
+}

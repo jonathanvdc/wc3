@@ -8,7 +8,7 @@ pub(crate) use wc3::model::EvaluatedPose;
 use wc3::model::{NodeId, RetimedAnimation, Transform as ModelTransform};
 
 pub(super) fn hierarchical(node: &RuntimeNode) -> bool {
-    node.behavior().hierarchical()
+    node.correction.is_none() && node.behavior().hierarchical()
 }
 pub(super) fn evaluate_pose(
     node: &RuntimeNode,
@@ -16,7 +16,7 @@ pub(super) fn evaluate_pose(
     parent: EvaluatedPose,
     camera: Option<Affine3A>,
 ) -> EvaluatedPose {
-    node.behavior().evaluate(pose, parent, camera)
+    node.evaluate(pose, parent, camera)
 }
 pub(super) fn as_transform(pose: EvaluatedPose) -> Transform {
     Transform {

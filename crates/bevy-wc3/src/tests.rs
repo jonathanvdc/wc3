@@ -898,3 +898,107 @@ fn instance_replacements_bind_real_materials_and_share_geometry() {
         Some(&default)
     );
 }
+
+#[test]
+fn corrected_affine_joints_publish_shear_to_skinning_and_external_children() {
+    use crate::runtime::publish_affine_poses;
+    use bevy::transform::TransformSystems;
+    use std::sync::Arc;
+    use wc3::model::{Quaternion, TransformSemantics};
+    let (source, joint_id) = fixture(UniversalBinding::Identity(IdentityBinding));
+    let mut compiled = compile_model(&source, |_| None).unwrap();
+    let original_binds = compiled.skins[0].binds.clone();
+    let index = compiled
+        .nodes
+        .iter()
+        .position(|node| node.id == joint_id)
+        .unwrap();
+    let correction = Mat4::from_scale_rotation_translation(
+        Vec3::new(1.4, 0.6, 1.1),
+        Quat::from_rotation_x(0.7),
+        Vec3::new(0.1, -0.2, 0.05),
+    );
+    let node = &mut Arc::make_mut(&mut compiled.nodes)[index];
+    node.transform_semantics = TransformSemantics::Affine;
+    node.correction = Some(correction);
+    let pose = ModelTransform {
+        translation: [3., 0., 0.],
+        rotation: Quaternion(Quat::from_rotation_z(0.8).to_array()),
+        ..Default::default()
+    };
+    let local = pose.to_matrix();
+    let origin = local.transform_point3(Vec3::from_array(pose.pivot));
+    let expected =
+        Mat4::from_translation(origin) * correction * Mat4::from_translation(-origin) * local;
+    let mut meshes = Assets::default();
+    let mut binds = Assets::default();
+    let prepared = compiled.prepare(&mut meshes, &mut binds);
+    assert_eq!(compiled.skins[0].binds.as_ref(), original_binds.as_ref());
+    let mut app = App::new();
+    app.add_plugins(TransformPlugin);
+    app.add_systems(Update, animate_instances);
+    app.add_systems(
+        PostUpdate,
+        publish_affine_poses.after(TransformSystems::Propagate),
+    );
+    let mut materials = Assets::default();
+    let mut queue = CommandQueue::default();
+    let root = spawn_model(
+        &mut Commands::new(&mut queue, app.world()),
+        &mut meshes,
+        &mut materials,
+        &prepared,
+        Transform::from_xyz(10., 0., 0.),
+    );
+    queue.apply(app.world_mut());
+    let joint = app
+        .world()
+        .get::<ModelRig>(root)
+        .unwrap()
+        .node(joint_id)
+        .unwrap();
+    let child_local = Transform::from_xyz(0.3, 0.4, 0.5);
+    let child = app.world_mut().spawn((child_local, ChildOf(joint))).id();
+    let overrides = PoseOverrides(HashMap::from([(joint_id, pose)]));
+    app.world_mut()
+        .entity_mut(root)
+        .insert(PoseOverrides(overrides.0.clone()));
+    app.insert_resource(materials);
+    let expected =
+        Transform::from_xyz(10., 0., 0.).to_matrix() * prepared.basis.to_matrix() * expected;
+    for _ in 0..3 {
+        app.update();
+        assert!(app
+            .world()
+            .get::<GlobalTransform>(joint)
+            .unwrap()
+            .to_matrix()
+            .abs_diff_eq(expected, 1e-5));
+        assert!(app
+            .world()
+            .get::<GlobalTransform>(child)
+            .unwrap()
+            .to_matrix()
+            .abs_diff_eq(expected * child_local.to_matrix(), 1e-5));
+    }
+    let baked = PoseBaker::default()
+        .bake(
+            &prepared,
+            &meshes,
+            &binds,
+            PoseOptions {
+                overrides: Some(&overrides),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let Some(VertexAttributeValues::Float32x3(positions)) =
+        baked.parts[0].mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+    else {
+        panic!("baked positions");
+    };
+    let baked_expected =
+        (Mat4::from_translation(Vec3::new(-10., 0., 0.)) * expected).transform_point3(Vec3::ZERO);
+    assert!(Vec3::from_array(positions[0]).abs_diff_eq(baked_expected, 1e-5));
+    assert_eq!(compiled.skins[0].binds.as_ref(), original_binds.as_ref());
+}

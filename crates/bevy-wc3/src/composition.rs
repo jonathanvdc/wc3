@@ -367,6 +367,7 @@ impl CompiledModel {
                 transform_semantics: Default::default(),
                 visible: true,
                 camera_anchored: false,
+                correction: None,
             });
             let mut node_map = vec![usize::MAX; source.nodes.len()];
             for (index, node) in source.nodes.iter().enumerate() {
