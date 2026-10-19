@@ -887,3 +887,56 @@ fn skeleton_attachments_keep_parent_bones_and_use_the_afsa_activation_stream() {
         assert_eq!(sample.override_value(&property), Some(expected));
     }
 }
+
+#[test]
+fn event_occurrences_preserve_native_order_while_value_tracks_require_order() {
+    use wc3::model::formats::m2::{
+        records::{Event, ModernTimeline, Track, TrackBase, Validate},
+        V274,
+    };
+    let timeline = ModernTimeline {
+        timestamps: vec![Array::Inline(ZeroVec::alloc_from_slice(&[267, 0, 267]))],
+    };
+    let mut model = Document::<Chunked<V274>>::new();
+    model
+        .core_mut()
+        .sequences
+        .push(sequence::<V274>(0, 0, 0x20, 0));
+    model.core_mut().events.push(Event {
+        identifier: *b"$CST",
+        enabled: TrackBase {
+            timeline: timeline.clone(),
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    model.validate().unwrap();
+    let bytes = model.encode_m2().unwrap();
+    let decoded = Document::<Chunked<V274>>::decode_m2(&bytes).unwrap();
+    decoded.validate().unwrap();
+    assert_eq!(decoded.core().events[0].enabled.timeline, timeline);
+
+    let mut track = Track::<f32, V274>::default();
+    track.base.timeline = timeline.clone();
+    track
+        .values
+        .replace(
+            0,
+            ValuesLeaf::Values(Array::Inline(ZeroVec::alloc_from_slice(&[1., 2., 3.]))),
+        )
+        .unwrap();
+    assert_eq!(
+        track.validate().unwrap_err().field,
+        "track timestamps decrease"
+    );
+    let mut spline = SplineTrack::<f32, V274>::default();
+    spline.base.timeline = timeline;
+    spline
+        .values
+        .replace(0, Array::Inline(ZeroVec::alloc_from_slice(&[[0.; 3]; 3])))
+        .unwrap();
+    assert_eq!(
+        spline.validate().unwrap_err().field,
+        "track timestamps decrease"
+    );
+}

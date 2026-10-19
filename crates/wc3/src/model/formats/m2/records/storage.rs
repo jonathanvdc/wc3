@@ -93,9 +93,27 @@ fn sorted<T: Value + PartialOrd>(values: &ZeroVec<'_, T>) -> bool {
 }
 
 /// Timestamp storage of one native animation family.
+/// Validation checks storage structure; interpolated value tracks additionally require ordered keys.
 pub trait TimelineStorage<'data>:
     Clone + Debug + PartialEq + Default + Write + RecordLayout + Validate
 {
+    /// Validates ordering required when timestamps index interpolated values.
+    /// Timestamp-only event occurrences retain their native order instead.
+    fn validate_ordered(&self) -> Result<(), ReadError> {
+        self.validate()?;
+        for index in 0..self.len() {
+            if let Some(times) = self.inline(index) {
+                let mut previous = None;
+                for time in times.iter() {
+                    if previous.is_some_and(|previous| time < previous) {
+                        return Err(ReadError::invalid(0, "track timestamps decrease"));
+                    }
+                    previous = Some(time);
+                }
+            }
+        }
+        Ok(())
+    }
     /// Reads timestamp descriptors with the owning track's global-loop context.
     fn read_context(input: &mut Decoder<'data>, global: u16) -> Result<Self, ReadError>;
     /// Number of native timestamp leaves.
@@ -129,9 +147,6 @@ pub struct LegacyTimeline<'data> {
 }
 impl Validate for LegacyTimeline<'_> {
     fn validate(&self) -> Result<(), ReadError> {
-        if !sorted(&self.timestamps) {
-            return Err(ReadError::invalid(0, "track timestamps decrease"));
-        }
         for [first, last] in self.ranges.iter() {
             if first > last
                 || (self.timestamps.is_empty() && (first != 0 || last != 0))
@@ -200,13 +215,6 @@ impl RecordLayout for ModernTimeline<'_> {
 }
 impl Validate for ModernTimeline<'_> {
     fn validate(&self) -> Result<(), ReadError> {
-        for leaf in &self.timestamps {
-            if let Array::Inline(v) = leaf {
-                if !sorted(v) {
-                    return Err(ReadError::invalid(0, "track timestamps decrease"));
-                }
-            }
-        }
         Ok(())
     }
 }
@@ -670,6 +678,7 @@ where
 }
 
 /// Timestamp-only native track with a statically selected timeline family.
+/// Event occurrences retain their native order, including decreasing or duplicate timestamps.
 #[derive(Clone, Debug, PartialEq, Ownership)]
 pub struct TrackBase<'data, V: ModelLayout> {
     /// Runtime interpolation operation: step, linear, Hermite, or Bezier.
@@ -782,7 +791,7 @@ where
     [T; 3]: Value,
 {
     fn validate(&self) -> Result<(), ReadError> {
-        self.base.validate()?;
+        self.base.timeline.validate_ordered()?;
         if self.base.interpolation.spline() != self.values.is_spline() {
             return Err(ReadError::invalid(
                 0,
@@ -877,7 +886,7 @@ where
     [T; 3]: Value,
 {
     fn validate(&self) -> Result<(), ReadError> {
-        self.base.validate()?;
+        self.base.timeline.validate_ordered()?;
         if self.base.timeline.len() != self.values.len() {
             return Err(ReadError::invalid(0, "spline timeline counts"));
         }

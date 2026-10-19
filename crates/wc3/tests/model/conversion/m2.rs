@@ -1729,7 +1729,7 @@ fn event_sources_round_trip_native_codes_data_clocks_and_duplicate_occurrences()
     let mut source = native_triangle();
     let core = source.model.core_mut();
     core.global_sequences = ZeroVec::alloc_from_slice(&[1000]);
-    for (identifier, timestamps) in [(*b"$SND", vec![250, 250, 750]), (*b"$EMP", vec![])] {
+    for (identifier, timestamps) in [(*b"$SND", vec![750, 250, 250]), (*b"$EMP", vec![])] {
         core.events.push(m2::records::Event {
             identifier,
             data: 0x8000_0001,
@@ -1762,7 +1762,7 @@ fn event_sources_round_trip_native_codes_data_clocks_and_duplicate_occurrences()
     assert_eq!(events[0].identifier, *b"$SND");
     assert_eq!(events[0].data, 0x8000_0001);
     assert_eq!(events[0].position, [1., 2., 3.]);
-    assert_eq!(*events[0].enabled.timeline.timestamps, [250, 250, 750]);
+    assert_eq!(*events[0].enabled.timeline.timestamps, [750, 250, 250]);
     assert_eq!(events[1].identifier, *b"$EMP");
     assert!(events[1].enabled.timeline.timestamps.is_empty());
     assert_eq!(
@@ -1821,7 +1821,7 @@ fn event_sources_reject_selections_that_native_m2_cannot_encode() {
 }
 
 #[test]
-fn ordinary_event_source_retains_sequence_timing_and_duplicate_keys() {
+fn ordinary_event_source_retains_sequence_timing_and_unordered_duplicate_keys() {
     let mut source = native_triangle();
     let core = source.model.core_mut();
     core.sequences.push(m2::records::Sequence {
@@ -1844,7 +1844,7 @@ fn ordinary_event_source_retains_sequence_timing_and_duplicate_keys() {
             global_sequence: u16::MAX,
             timeline: LegacyTimeline {
                 ranges: ZeroVec::alloc_from_slice(&[[0, 2]]),
-                timestamps: ZeroVec::alloc_from_slice(&[2250, 2250, 2750]),
+                timestamps: ZeroVec::alloc_from_slice(&[2750, 2250, 2250]),
             },
         },
     });
@@ -1857,7 +1857,7 @@ fn ordinary_event_source_retains_sequence_timing_and_duplicate_keys() {
             .clip_events(clip)
             .map(|event| event.time.as_seconds())
             .collect::<Vec<_>>(),
-        [0.25, 0.25, 0.75]
+        [0.75, 0.25, 0.25]
     );
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())
         .unwrap()
@@ -1874,7 +1874,7 @@ fn ordinary_event_source_retains_sequence_timing_and_duplicate_keys() {
             .iter()
             .map(|ms| ms - origin)
             .collect::<Vec<_>>(),
-        [250, 250, 750]
+        [750, 250, 250]
     );
 }
 
