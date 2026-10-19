@@ -64,7 +64,7 @@ WMO face controls, tangent pools, and supplemental strips keep their own domains
 and mesh-owned subset bindings. Publication validates these selections. Narrowing
 to WMO requires unskinned display triangles, contiguous color slots, and supported
 attributes; MDLX and M2 reject those additional domains. Generic projection needs
-an explicit translation for surface controls and indexed pools.
+an explicit translation for triangle properties and indexed pools.
 
 ## Draw subsets and instance bindings
 

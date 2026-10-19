@@ -259,7 +259,7 @@ pub(super) fn read<'a, 'data: 'a>(
                                     light,
                                 },
                             ),
-                            controls: {
+                            flags: {
                                 let mut flags = flags;
                                 flags.set_has_light_reference(false);
                                 flags.bits().into()

@@ -255,7 +255,7 @@ pub(super) fn write<'a, D: Dialect>(
                 }
                 let mut reference = records::DoodadReference::default();
                 reference.set_name_index(selector);
-                let mut flags = records::DoodadFlags(source.appearance.controls.bits());
+                let mut flags = records::DoodadFlags(source.appearance.flags.bits());
                 flags.set_has_light_reference(matches!(
                     source.appearance.tint,
                     profile::DoodadTint::Lit { .. }

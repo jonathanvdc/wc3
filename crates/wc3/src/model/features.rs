@@ -78,7 +78,7 @@ impl NodeFeature<'_> {
             Self::Light(Light::Point(_)) => FeatureKind::WmoPointLight,
             Self::LightProgram(_) => FeatureKind::WmoPointProgram,
             Self::Attachment(Attachment::Child(ChildModel {
-                appearance: PlacementAppearance::World { .. },
+                appearance: PlacementAppearance::World(_),
                 ..
             })) => FeatureKind::WmoDoodad,
             _ => FeatureKind::Other,

@@ -299,7 +299,7 @@ impl<'data> GeometryData<'data> {
         {
             return Err(Error::new(
                 "geometry.domains",
-                "target cannot retain surface controls or indexed pools",
+                "target cannot retain triangle properties, additional connectivity, or indexed pools",
             ));
         }
         Ok(())
@@ -449,7 +449,10 @@ impl<'data> GeometrySchema<'data> for GeometryData<'data> {
             !matches!(self.connectivity.primary, Topology::Triangles(_))
                 || values.len() != self.connectivity.primary.primitive_count()
         }) {
-            return Err(Error::new("geometry.connectivity", "surface controls must cover primary triangles and strip indices must address vertices"));
+            return Err(Error::new(
+                "geometry.connectivity",
+                "triangle properties must cover primary triangles",
+            ));
         }
         Ok(())
     }

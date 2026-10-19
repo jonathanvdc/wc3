@@ -45,7 +45,7 @@ fn world_appearance_survives_rejected_attachment_export() {
         appearance: WorldPlacementAppearance {
             tint: wmo::DoodadTint::Color([1, 2, 3, 4]),
             color_multiplier: Some(0.25),
-            controls: SlotConstruct::construct(&mut slot_values),
+            flags: SlotConstruct::construct(&mut slot_values),
         },
     };
     let placement = ChildModel::from(source.clone());
@@ -53,10 +53,10 @@ fn world_appearance_survives_rejected_attachment_export() {
     let placement = *mdlx::Attachment::try_from(placement).unwrap_err();
     assert!(matches!(
         placement.appearance,
-        PlacementAppearance::World {
+        PlacementAppearance::World(WorldPlacementAppearance {
             color_multiplier: Some(0.25),
             ..
-        }
+        })
     ));
     assert_eq!(wmo::Doodad::try_from(placement).unwrap(), source);
 }

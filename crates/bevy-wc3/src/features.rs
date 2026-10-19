@@ -191,7 +191,7 @@ impl RuntimeFeatures {
             SemanticLight::Point(_)=>Some((feature.id,"Region point-light color, intensity and range use Bevy lights; native attenuation-start and unresolved controls remain uninterpreted")),
             _=>None,
         }).chain(self.attachments.iter().filter_map(|definition| match definition.definition.child().map(|value| &value.appearance) {
-            Some(SemanticPlacementAppearance::World { .. }) => Some((definition.feature.id, "WMO placement appearance is retained on ModelAttachment; interior direct illumination, region-derived ambient lighting, linked lights and placement controls require application interpretation, without changing child albedo or scene lighting")),
+            Some(SemanticPlacementAppearance::World(_)) => Some((definition.feature.id, "WMO placement appearance is retained on ModelAttachment; interior direct illumination, region-derived ambient lighting, linked lights and placement flags require application interpretation, without changing child albedo or scene lighting")),
             _ => None,
         }))
     }

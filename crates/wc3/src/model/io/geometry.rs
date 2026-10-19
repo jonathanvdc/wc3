@@ -208,7 +208,7 @@ pub fn project<'a, 'data: 'a, P: Profile>(
     {
         return Err(Error::new(
             "geometry.domains",
-            "surface controls and indexed draw pools require an explicit domain translation",
+            "triangle properties and indexed draw pools require an explicit domain translation",
         ));
     }
     if instance.draws.iter().any(|draw| {

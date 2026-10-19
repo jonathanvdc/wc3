@@ -83,8 +83,8 @@ pub struct Shape<'a> {
     pub transform: Mat4,
     /// Contact response.
     pub material: ContactMaterial,
-    /// Profile-specific contact callback categories with unresolved meanings.
-    pub game_controls: u16,
+    /// Profile-specific contact callback category value with unresolved meanings.
+    pub callback_categories: u16,
 }
 /// Simulation motion behavior.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

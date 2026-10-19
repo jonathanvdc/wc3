@@ -233,7 +233,7 @@ mod tests {
             geometry: Geometry::Sphere(1.),
             transform: Mat4::ZERO,
             material: ContactMaterial::default(),
-            game_controls: 0,
+            callback_categories: 0,
         }
     }
     #[test]

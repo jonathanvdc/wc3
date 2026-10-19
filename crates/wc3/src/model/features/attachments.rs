@@ -119,7 +119,7 @@ pub struct ChildModelDefinition<R, S, A> {
     pub resource: R,
     /// Exposed socket, when admitted by the selected vocabulary.
     pub socket: S,
-    /// Authored placement appearance and controls.
+    /// Authored placement appearance and flags.
     pub appearance: A,
 }
 
@@ -136,23 +136,16 @@ pub struct WorldPlacementAppearance {
     pub tint: wmo::DoodadTint,
     /// Optional tint multiplier.
     pub color_multiplier: Option<f32>,
-    /// Authored placement controls.
-    pub controls: wmo::DoodadFlags,
+    /// Authored placement flags with unresolved meanings.
+    pub flags: wmo::DoodadFlags,
 }
 /// Appearance of an external resource placement.
 #[derive(Clone, Debug)]
 pub enum PlacementAppearance {
     /// No authored appearance override.
     Unmodified,
-    /// World placement tint, illumination, and unresolved controls.
-    World {
-        /// Tint with optional referenced world-light illumination.
-        tint: wmo::DoodadTint,
-        /// Optional multiplier applied to the placement tint.
-        color_multiplier: Option<f32>,
-        /// Authored placement flags with unresolved meanings.
-        controls: wmo::DoodadFlags,
-    },
+    /// World placement tint, illumination, and authored flags.
+    World(WorldPlacementAppearance),
 }
 
 impl<'a> FromFeature<m2::Attachment> for Socket<'a> {
@@ -231,11 +224,7 @@ impl<'a> From<wmo::Doodad> for ChildModel<'a> {
         Self {
             resource: value.resource,
             socket: None,
-            appearance: PlacementAppearance::World {
-                tint: value.appearance.tint,
-                color_multiplier: value.appearance.color_multiplier,
-                controls: value.appearance.controls,
-            },
+            appearance: PlacementAppearance::World(value.appearance),
         }
     }
 }
@@ -246,20 +235,11 @@ impl<'a> TryFrom<ChildModel<'a>> for wmo::Doodad {
             ChildModel {
                 resource,
                 socket: None,
-                appearance:
-                    PlacementAppearance::World {
-                        tint,
-                        color_multiplier,
-                        controls,
-                    },
+                appearance: PlacementAppearance::World(appearance),
             } => Ok(Self {
                 resource,
                 socket: (),
-                appearance: WorldPlacementAppearance {
-                    tint,
-                    color_multiplier,
-                    controls,
-                },
+                appearance,
             }),
             value => Err(Box::new(value)),
         }
@@ -288,34 +268,25 @@ impl<R: ValidateLinks, S: ValidateLinks, A: ValidateLinks> ValidateLinks
 }
 impl ValidateLinks for PlacementAppearance {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        if let Self::World {
-            tint,
-            color_multiplier,
-            ..
-        } = self
-        {
-            visit_world_appearance(tint, *color_multiplier, visitor);
+        if let Self::World(appearance) = self {
+            appearance.visit_links(visitor);
         }
     }
 }
 impl ValidateLinks for WorldPlacementAppearance {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        visit_world_appearance(&self.tint, self.color_multiplier, visitor);
-    }
-}
-fn visit_world_appearance(
-    tint: &wmo::DoodadTint,
-    color_multiplier: Option<f32>,
-    visitor: &mut dyn FnMut(Link),
-) {
-    if color_multiplier.is_some_and(|value| !value.is_finite()) {
-        visitor(Link::InvalidValue);
-    }
-    if let wmo::DoodadTint::Lit { light: id, .. } = tint {
-        visitor(Link::TypedFeature {
-            id: *id,
-            kind: FeatureKind::WmoLight,
-        });
+        if self
+            .color_multiplier
+            .is_some_and(|value| !value.is_finite())
+        {
+            visitor(Link::InvalidValue);
+        }
+        if let wmo::DoodadTint::Lit { light: id, .. } = &self.tint {
+            visitor(Link::TypedFeature {
+                id: *id,
+                kind: FeatureKind::WmoLight,
+            });
+        }
     }
 }
 impl Default for WorldPlacementAppearance {
@@ -323,7 +294,7 @@ impl Default for WorldPlacementAppearance {
         Self {
             tint: wmo::DoodadTint::Color([255; 4]),
             color_multiplier: None,
-            controls: Default::default(),
+            flags: Default::default(),
         }
     }
 }

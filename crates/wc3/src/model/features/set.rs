@@ -106,7 +106,6 @@ where
     V::ParticleProgram: PartialEq,
     V::FaceActor: PartialEq,
     V::LightProgram: PartialEq,
-
     V::Particle2: PartialEq,
     V::PointLight: PartialEq,
 {

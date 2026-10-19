@@ -64,8 +64,12 @@ against the destination vocabulary. `ChildModel` combines a resource with an
 optional socket and placement appearance. `Attachment::Socket` exposes a socket
 without instantiating a child; `Attachment::Child` declares a child reference. MDLX
 attachments and WMO doodads therefore share the child model structure, while
-world tint and light selection remain an explicit appearance program. MDLX path strings retain their borrowed or owned
-storage as byte paths; exact MDLX narrowing requires UTF-8.
+world tint and light selection remain an explicit appearance program.
+`PlacementAppearance::World` contains the same `WorldPlacementAppearance` used
+by native-profile doodads, preserving tint, light selection, multiplier, and
+placement flags without copying those fields into another definition. MDLX
+resource paths retain their borrowed or owned byte storage, including non-UTF-8
+paths; the text MDL container rejects paths it cannot represent.
 
 `ModelMount` describes where a child follows the carrying model, independently of
 resource selection and playback. `Attachment::mount` derives this description
