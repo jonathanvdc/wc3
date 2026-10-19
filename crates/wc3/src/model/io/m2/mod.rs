@@ -37,7 +37,9 @@ mod particles;
 pub use particles::ParticleConversion;
 use particles::{gravity_vector, gravity_word};
 mod graph;
-pub use graph::{import, plan};
+pub use graph::plan;
+mod import;
+pub use import::{import, ImportDialect};
 fn failure(error: impl ToString) -> Error {
     Error::new("m2", error.to_string())
 }

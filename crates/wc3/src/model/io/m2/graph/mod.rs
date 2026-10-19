@@ -22,7 +22,7 @@ pub use export::plan;
 use semantic::{DynamicTrack, ImageResource, Property, SharedClock, Texture, Time};
 
 /// Imports an M2 bundle without a canonical intermediate encoding.
-pub fn import<'a, 'data: 'a, D: Dialect>(
+pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     options: &ImportOptions,
 ) -> Result<Conversion<Model<'a, M2Vocabulary>>, Error>
