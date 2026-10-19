@@ -9,7 +9,10 @@ output encodings, and any deliberate material conversion.
 ## Preparing and sampling poses
 
 Use `Model::prepare_pose` once to resolve parent indices, parent-before-child
-traversal, explicit transform and facing behavior, and channel-presence masks. Its `PoseLayout`
+traversal, explicit transform and facing behavior, and channel-presence masks.
+`PoseLayout::index` uses a prepared identity map, so joint-palette evaluation does
+not scan the hierarchy for every joint. Prepared node identities must be unique.
+The resulting `PoseLayout`
 is immutable and can be shared across independently sampled instances. Rebuild it
 after changing node definitions or animation channel targets. Samples must belong
 to the same model identities as the prepared layout. Animation compilation remains

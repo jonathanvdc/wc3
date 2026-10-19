@@ -106,6 +106,8 @@ pub struct PoseLayout {
     nodes: Vec<PoseNode>,
     /// Parent-before-child traversal indexing `nodes`.
     order: Vec<usize>,
+    /// Resolved identity lookup; derived once from the prepared node order.
+    indices: HashMap<NodeId, usize>,
 }
 /// Reusable per-instance output. Matrices remain in authored model coordinates.
 #[derive(Clone, Debug, Default)]
@@ -138,11 +140,22 @@ impl PoseLayout {
     }
     /// Finds a stable node identity in prepared order.
     pub fn index(&self, id: NodeId) -> Option<usize> {
-        self.nodes.iter().position(|node| node.id == id)
+        self.indices.get(&id).copied()
     }
 
     /// Validates resolved parent indices and computes a reusable traversal.
     pub fn new(nodes: Vec<PoseNode>) -> Result<Self, Error> {
+        let indices: HashMap<_, _> = nodes
+            .iter()
+            .enumerate()
+            .map(|(index, node)| (node.id, index))
+            .collect();
+        if indices.len() != nodes.len() {
+            return Err(Error::new(
+                "pose.nodes",
+                "prepared node identities must be unique",
+            ));
+        }
         let mut order = Vec::with_capacity(nodes.len());
         let mut children = vec![Vec::new(); nodes.len()];
         for (index, node) in nodes.iter().enumerate() {
@@ -187,7 +200,11 @@ impl PoseLayout {
                 ));
             }
         }
-        Ok(Self { nodes, order })
+        Ok(Self {
+            nodes,
+            order,
+            indices,
+        })
     }
     /// Samples a hierarchy into a new output. Use `evaluate_into` for repeated playback.
     pub fn evaluate(

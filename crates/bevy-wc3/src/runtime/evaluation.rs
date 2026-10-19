@@ -323,15 +323,9 @@ pub(crate) fn animate_instances(
             let mut output = transforms.p1();
             for &index in model.order.iter() {
                 let node = &model.nodes[index];
-                let pose = overrides
-                    .0
-                    .get(&node.id)
-                    .copied()
-                    .unwrap_or_else(|| node.sample(&sample));
-                let pose = if overrides.0.contains_key(&node.id) {
-                    pose
-                } else {
-                    transition.blend(index, pose)
+                let pose = match overrides.0.get(&node.id) {
+                    Some(pose) => *pose,
+                    None => transition.blend(index, node.sample(&sample)),
                 };
                 transition.record(index, pose);
                 if physics_active {

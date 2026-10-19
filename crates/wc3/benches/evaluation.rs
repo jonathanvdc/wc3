@@ -67,6 +67,38 @@ fn poses(c: &mut Criterion) {
     group.finish();
 }
 
+fn node_lookup(c: &mut Criterion) {
+    let mut group = c.benchmark_group("evaluation/node_lookup");
+    for count in [64, 256, 1024] {
+        let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+        let ids: Vec<_> = (0..count)
+            .map(|_| draft.add_named_node("").unwrap())
+            .collect();
+        let layout = draft.finish().unwrap().prepare_pose().unwrap();
+        group.throughput(Throughput::Elements(count as u64));
+        group.bench_with_input(BenchmarkId::new("linear", count), &ids, |b, ids| {
+            b.iter(|| {
+                for id in ids {
+                    black_box(
+                        layout
+                            .nodes()
+                            .iter()
+                            .position(|node| node.id == black_box(*id)),
+                    );
+                }
+            });
+        });
+        group.bench_with_input(BenchmarkId::new("prepared", count), &ids, |b, ids| {
+            b.iter(|| {
+                for id in ids {
+                    black_box(layout.index(black_box(*id)));
+                }
+            });
+        });
+    }
+    group.finish();
+}
+
 fn projection(c: &mut Criterion) {
     let mesh: Mesh<'static> = Mesh::new(
         GeometryData::triangles(
@@ -128,5 +160,5 @@ fn node_math(c: &mut Criterion) {
     }
     group.finish();
 }
-criterion_group!(benches, poses, projection, node_math);
+criterion_group!(benches, poses, projection, node_math, node_lookup);
 criterion_main!(benches);

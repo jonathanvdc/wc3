@@ -670,3 +670,16 @@ fn affine_bone_corrections_follow_animated_origins_and_propagate_without_feedbac
     nodes[1].correction = Some(Mat4::from_cols_array(&[f32::NAN; 16]));
     assert!(PoseLayout::new(nodes).is_err());
 }
+
+#[test]
+fn prepared_pose_identity_lookup_rejects_duplicate_nodes() {
+    let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+    let first = draft.add_named_node("first").unwrap();
+    let second = draft.add_named_node("second").unwrap();
+    let layout = draft.finish().unwrap().prepare_pose().unwrap();
+    assert_eq!(layout.index(first), Some(0));
+    assert_eq!(layout.index(second), Some(1));
+    let mut duplicate = layout.nodes().to_vec();
+    duplicate[1].id = first;
+    assert!(PoseLayout::new(duplicate).is_err());
+}

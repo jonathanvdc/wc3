@@ -82,15 +82,12 @@ impl PoseContext<'_> {
         let mut visible = true;
         for &index in scratch.iter().rev() {
             let node = &self.nodes[index];
-            let pose = self
-                .overrides
-                .get(&node.id)
-                .copied()
-                .unwrap_or_else(|| node.sample(sample));
-            let pose = if self.overrides.contains_key(&node.id) {
-                pose
-            } else {
-                self.transition.map_or(pose, |view| view.blend(index, pose))
+            let pose = match self.overrides.get(&node.id) {
+                Some(pose) => *pose,
+                None => {
+                    let pose = node.sample(sample);
+                    self.transition.map_or(pose, |view| view.blend(index, pose))
+                }
             };
             evaluated = evaluate_pose(node, pose, evaluated, self.camera);
             visible &= node.sample_visibility(sample);
