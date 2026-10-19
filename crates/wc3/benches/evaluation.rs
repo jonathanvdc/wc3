@@ -79,12 +79,8 @@ fn node_lookup(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("linear", count), &ids, |b, ids| {
             b.iter(|| {
                 for id in ids {
-                    black_box(
-                        layout
-                            .nodes()
-                            .iter()
-                            .position(|node| node.id == black_box(*id)),
-                    );
+                    let id = black_box(*id);
+                    black_box(layout.nodes().iter().position(|node| node.id == id));
                 }
             });
         });

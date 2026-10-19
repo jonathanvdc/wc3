@@ -14,9 +14,7 @@ pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     nodes: &[semantic::NodeId],
     textures: &[semantic::Texture],
-    animation_source: &AnimationResolver<'a, 'data, D>,
-    clips: &[semantic::ClipId],
-    clocks: &[semantic::ClockId],
+    animation: &AnimationBindings<'_, 'a, 'data, D>,
     builder: &mut GraphBuilder<'a>,
     context: &mut Context,
 ) -> Result<(), Error>
@@ -24,6 +22,11 @@ where
     <D::Layout as native::records::SequenceLayout>::Timing: SequenceClock,
     <D::Layout as native::records::SkinSectionLayout>::Tail: SectionSorting,
 {
+    let AnimationBindings {
+        source: animation_source,
+        clips,
+        clocks,
+    } = *animation;
     let core = source.model.core();
     let mut profiles: Vec<_> = core
         .embedded_skins()

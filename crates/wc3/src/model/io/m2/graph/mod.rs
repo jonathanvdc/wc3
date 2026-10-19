@@ -23,6 +23,13 @@ pub(in super::super) type GraphBuilder<'a> = semantic::ModelBuilder<'a, M2Vocabu
 pub use export::plan;
 use semantic::{DynamicTrack, ImageResource, Property, SharedClock, Texture, Time};
 
+/// Native animation data and its resolved semantic playback identities.
+struct AnimationBindings<'view, 'source, 'data, D: Dialect> {
+    source: &'view AnimationResolver<'source, 'data, D>,
+    clips: &'view [semantic::ClipId],
+    clocks: &'view [semantic::ClockId],
+}
+
 /// Imports an M2 bundle without a canonical intermediate encoding.
 pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
@@ -387,25 +394,20 @@ where
             }
         }
     }
+    let animation = AnimationBindings {
+        source: &animation_source,
+        clips: &clips,
+        clocks: &clocks,
+    };
     geometry::import(
         source,
         &nodes,
         &textures,
-        &animation_source,
-        &clips,
-        &clocks,
+        &animation,
         &mut builder,
         &mut context,
     )?;
-    actors::import(
-        source,
-        &nodes,
-        &textures,
-        &animation_source,
-        &clips,
-        &clocks,
-        &mut builder,
-    )?;
+    actors::import(source, &nodes, &textures, &animation, &mut builder)?;
     let collision_positions = &core.collision_vertices;
     let collision_indices = &core.collision_indices;
     let collision_normals = &core.collision_normals;

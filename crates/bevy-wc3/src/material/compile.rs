@@ -222,6 +222,15 @@ fn compile_mdlx(
     pass.sort_far = declaration.sort_far_z;
     blend(&state.blend, &mut pass);
     let raster = &state.rasterization;
+    let options = raster.controls;
+    if options.wrap_u
+        || options.wrap_v
+        || options.unlit
+        || options.back_faces_for_shadows
+        || options.ambient_occlusion
+    {
+        pass.diagnostics.push("authored layer wrapping, Unlit, back-face shadow, or ambient-occlusion declarations require an additional interpreter".into());
+    }
     rasterization(
         &mut pass,
         declaration.two_sided || raster.faces,

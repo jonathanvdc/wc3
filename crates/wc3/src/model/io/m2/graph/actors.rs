@@ -31,15 +31,18 @@ pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     nodes: &[semantic::NodeId],
     textures: &[semantic::Texture],
-    animation_source: &AnimationResolver<'a, 'data, D>,
-    clips: &[semantic::ClipId],
-    clocks: &[semantic::ClockId],
+    animation: &AnimationBindings<'_, 'a, 'data, D>,
     builder: &mut GraphBuilder<'a>,
 ) -> Result<(), Error>
 where
     D::Layout: ParticleConversion + CameraConversion,
     <D::Layout as native::records::SequenceLayout>::Timing: SequenceClock,
 {
+    let AnimationBindings {
+        source: animation_source,
+        clips,
+        clocks,
+    } = *animation;
     let core = source.model.core();
     let tables = sequence_tables(source, &source.key)?;
     macro_rules! bind_field {

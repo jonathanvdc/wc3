@@ -31,8 +31,8 @@ Look-at cameras retain authored base positions, animated offsets, roll, and
 lens values. Field-of-view axis, role, visibility, and optical parameters remain
 independent in the semantic definition. Node cameras follow their carrying node
 and may supply an explicit target. Both own the same `PerspectiveProjection`;
-sampling converts its angle to vertical field of view using the current aspect ratio. Degenerate up
-directions have deterministic orthogonal fallbacks. Nonfinite views, invalid lens
+sampling converts its angle to vertical field of view using the current aspect
+ratio. Degenerate up directions have deterministic orthogonal fallbacks. Nonfinite views, invalid lens
 ranges, nonperspective projections, missing roots, and unsupported parents retain
 the previous view instead of writing invalid transforms.
 

@@ -13,7 +13,7 @@ pub(super) fn light<'a, V: FormatVersion>(
     encoder: &mut Encoder<'_, '_, '_>,
 ) -> Result<native::Light<'a, V>, Error> {
     let kind = match source.kind {
-        profile::LightKind::Omni => native::LightType::Omnidirectional,
+        profile::LightKind::Point => native::LightType::Omnidirectional,
         profile::LightKind::Directional => native::LightType::Directional,
         profile::LightKind::Ambient => native::LightType::Ambient,
         profile::LightKind::Unknown(value) => native::LightType::Unknown(value),

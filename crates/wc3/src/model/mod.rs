@@ -8,14 +8,14 @@
 //! # Navigate the graph
 //!
 //! A [`MeshInstance`](crate::model::MeshInstance) places a shared mesh at a node. Its [`Draw`](crate::model::Draw) values select
-//! geometry and rendering controls, while a [`Look`](crate::model::Look) assigns materials to those
+//! geometry and rendering properties, while a [`Look`](crate::model::Look) assigns materials to those
 //! draws. Material inputs reference shared image declarations and own their
 //! sampling and animated [`TextureTransform`](crate::model::TextureTransform) values. [`AttachedFeature`](crate::model::AttachedFeature) adds
 //! node-bound behavior; [`System`](crate::model::System) connects independently authored scene elements,
 //! such as physics bodies or world portals.
 //!
 //! [`profiles::Profile`](crate::model::profiles::Profile) selects the payloads allowed on these objects, including
-//! model metadata, controls, surfaces, effects, and event sources. Built-in
+//! model metadata, owner properties, surfaces, effects, and event sources. Built-in
 //! profiles describe game semantics; native dialects separately select file
 //! layouts. [`Model::widen`](crate::model::Model::widen) embeds a model into a containing profile without
 //! changing its meanings or IDs.

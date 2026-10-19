@@ -47,7 +47,7 @@ fn custom_trail_composition_validates_rates_without_native_payloads() {
             texture_slot: (),
         },
         rendering: (),
-        controls: (),
+        behavior: (),
     };
     let mut invalid = false;
     effect.visit_links(&mut |link| invalid |= matches!(link, Link::InvalidValue));

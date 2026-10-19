@@ -11,7 +11,7 @@ use crate::model::{
 use crate::model::{Axis, ChildModel, Socket};
 use crate::model::{EffectResourceId, PerspectiveProjection};
 use crate::model::{NodeCamera, SingleEmissionLight};
-use glam::{Vec2, Vec3};
+use glam::Vec3;
 use std::fmt::Debug;
 
 /// A vocabulary exposing the behavior of an attached feature without conversion.
@@ -265,7 +265,7 @@ light_ref!(AmbientDiffuseLight, |kind| kind, activation_ref);
 light_ref!(
     mdlx::Light,
     |kind| match kind {
-        mdlx::LightKind::Omni => IlluminationKind::Point,
+        mdlx::LightKind::Point => IlluminationKind::Point,
         mdlx::LightKind::Directional => IlluminationKind::Directional,
         mdlx::LightKind::Ambient => IlluminationKind::Ambient,
         mdlx::LightKind::Unknown(value) =>

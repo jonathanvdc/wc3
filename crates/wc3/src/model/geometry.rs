@@ -1,15 +1,6 @@
 //! Geometry, skin bindings, and placements use logical graph identities.
 
 use crate::model::common::packed_identity;
-use glam::{Quat, Vec2, Vec3, Vec4};
-/// Joint-group and weighted layered-model geometry.
-pub mod layered;
-
-/// Four-weight model display geometry.
-pub mod weighted_model;
-/// Static-world geometry with authored draw pools.
-pub mod world;
-
 use crate::model::common::AsULE;
 use crate::model::common::IntoPackedArray;
 use crate::model::profiles::{Profile, Universal};
@@ -21,6 +12,7 @@ use crate::model::{
     GeometryData, GeometryEdit, GeometrySchema, InfluenceRows, MeshId, NodeId, PackedArray,
     PrimitiveRange, PrimitiveSelection, Scope, SkinId,
 };
+use glam::{Quat, Vec2, Vec3, Vec4};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 

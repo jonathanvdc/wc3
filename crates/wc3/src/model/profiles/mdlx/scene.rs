@@ -79,7 +79,7 @@ pub struct Popcorn<'a> {
 pub enum LightKind {
     /// Point illumination.
     #[default]
-    Omni,
+    Point,
     /// Directional illumination.
     Directional,
     /// Ambient illumination.

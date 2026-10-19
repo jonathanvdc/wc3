@@ -75,7 +75,8 @@ and mesh tint, separate from Bevy's physical surface Fresnel. Common unshaded
 lighting and unfogged controls follow their Bevy equivalents. The independent
 native layer `Unlit`, U/V wrap, `BackFacesForShadows`, and `AmbientOcclusion`
 declarations are retained for native export but have no renderer interpretation
-yet; their game behavior remains unverified. Surface properties sample the
+yet. Compilation reports that these declarations require an additional interpreter;
+their game behavior remains unverified. Surface properties sample the
 destination directly during node-pose transitions.
 
 ## Passes and limits

@@ -12,7 +12,8 @@ pub use scene::*;
 mod vocabulary;
 pub use vocabulary::Mdlx;
 
-pub use crate::model::geometry::layered::*;
+mod geometry;
+pub use geometry::*;
 
 /// Image dependency declarations admitted by this profile.
 pub use crate::model::resources::MdlxImageResource as ImageResource;

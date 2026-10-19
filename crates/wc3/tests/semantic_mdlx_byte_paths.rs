@@ -1,4 +1,7 @@
 use mdx::{Read as _, Write as _};
+use native::emitters::{ParticleEmitter, PopcornEmitter};
+use native::geometry::Geoset;
+use native::scene::{Attachment, FaceFx, Node};
 use wc3::model::conversion::{ExportOptions, ImportOptions};
 use wc3::model::formats::mdlx::{self as native, mdx, FixedText};
 use wc3::model::{io, PathResource};
@@ -7,21 +10,18 @@ use wc3::model::{io, PathResource};
 fn semantic_roundtrip_preserves_non_utf8_effect_and_attachment_paths() {
     let mut source = native::Document::<native::V1000>::new();
     let path = b"Units\\\xffmodel.mdx";
-    let mut particle =
-        native::ParticleEmitter::new(native::Node::new("particle", 0).unwrap(), "").unwrap();
+    let mut particle = ParticleEmitter::new(Node::new("particle", 0).unwrap(), "").unwrap();
     particle.path.set_bytes(path).unwrap();
     source.set_particle_emitters([particle]);
-    let mut popcorn =
-        native::PopcornEmitter::new(native::Node::new("popcorn", 1).unwrap(), "", "").unwrap();
+    let mut popcorn = PopcornEmitter::new(Node::new("popcorn", 1).unwrap(), "", "").unwrap();
     popcorn.path.set_bytes(path).unwrap();
     source.set_popcorn_emitters([popcorn]);
-    let mut attachment =
-        native::Attachment::new(native::Node::new("attachment", 2).unwrap(), "", 7).unwrap();
+    let mut attachment = Attachment::new(Node::new("attachment", 2).unwrap(), "", 7).unwrap();
     // A full native field need not have a trailing NUL.
     let full_path = [0xff; 260];
     attachment.path.set_bytes(&full_path).unwrap();
     source.set_attachments([attachment]);
-    let mut face = native::FaceFx::new("face", "").unwrap();
+    let mut face = FaceFx::new("face", "").unwrap();
     face.path.set_bytes(path).unwrap();
     source.try_set_face_fx([face]).unwrap();
     let mut model = io::mdlx::import_owned(&source, &ImportOptions::default())
@@ -104,7 +104,7 @@ fn mismatched_native_primitive_tables_are_semantically_invalid() {
     bytes.splice(position + 12..position + 12, 4u32.to_le_bytes());
     let size = u32::from_le_bytes(bytes[..4].try_into().unwrap()) + 4;
     bytes[..4].copy_from_slice(&size.to_le_bytes());
-    let geoset = native::Geoset::<native::V800>::decode_mdx(&bytes).unwrap();
+    let geoset = Geoset::<native::V800>::decode_mdx(&bytes).unwrap();
     source.set_geosets([geoset]);
     let error = io::mdlx::import(&source, &ImportOptions::default()).unwrap_err();
     assert!(error.description.contains("matching lengths"));

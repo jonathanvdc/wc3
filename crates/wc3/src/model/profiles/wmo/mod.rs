@@ -12,7 +12,8 @@ pub use world::*;
 mod vocabulary;
 pub use vocabulary::Wmo;
 
-pub use crate::model::geometry::world::*;
+mod geometry;
+pub use geometry::*;
 
 /// Image dependency declarations admitted by this profile.
 pub use crate::model::resources::WorldImageResource as ImageResource;

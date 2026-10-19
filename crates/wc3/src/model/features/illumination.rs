@@ -85,7 +85,7 @@ impl From<mdlx::Light> for AmbientDiffuseLight {
     fn from(v: mdlx::Light) -> Self {
         Self {
             kind: match v.kind {
-                mdlx::LightKind::Omni => IlluminationKind::Point,
+                mdlx::LightKind::Point => IlluminationKind::Point,
                 mdlx::LightKind::Directional => IlluminationKind::Directional,
                 mdlx::LightKind::Ambient => IlluminationKind::Ambient,
                 mdlx::LightKind::Unknown(v) => {
@@ -124,7 +124,7 @@ impl TryFrom<AmbientDiffuseLight> for mdlx::Light {
     type Error = Box<AmbientDiffuseLight>;
     fn try_from(v: AmbientDiffuseLight) -> Result<Self, Self::Error> {
         let kind = match v.kind {
-            IlluminationKind::Point => mdlx::LightKind::Omni,
+            IlluminationKind::Point => mdlx::LightKind::Point,
             IlluminationKind::Directional => mdlx::LightKind::Directional,
             IlluminationKind::Ambient => mdlx::LightKind::Ambient,
             IlluminationKind::Unknown(UnknownIlluminationKind::Mdlx(raw)) => {

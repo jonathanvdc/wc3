@@ -33,7 +33,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             };
         }
         let kind = match source.light_type {
-            native::LightType::Omnidirectional => profile::LightKind::Omni,
+            native::LightType::Omnidirectional => profile::LightKind::Point,
             native::LightType::Directional => profile::LightKind::Directional,
             native::LightType::Ambient => profile::LightKind::Ambient,
             native::LightType::Unknown(value) => profile::LightKind::Unknown(value),

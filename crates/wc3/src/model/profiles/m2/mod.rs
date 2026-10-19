@@ -17,7 +17,8 @@ pub use crate::model::systems::model::*;
 mod vocabulary;
 pub use vocabulary::M2;
 
-pub use crate::model::geometry::weighted_model::*;
+mod geometry;
+pub use geometry::*;
 
 /// Image dependency declarations admitted by this profile.
 pub use crate::model::resources::M2ImageResource as ImageResource;
