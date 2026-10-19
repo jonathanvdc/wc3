@@ -39,51 +39,6 @@ where
     <[<D::Layout as native::records::BoneLayout>::RotationValue; 3] as zerovec::ule::AsULE>::ULE:
         Send + Sync,
 {
-    import_impl(source, options, None)
-}
-
-/// Imports only the requested native sequence indices and their alias targets.
-/// Shared-clock channels are always retained. Omitted clips and variation links are absent.
-/// An empty selection imports the static model and shared-clock animation only.
-pub fn import_selected<'a, 'data: 'a, D: Dialect>(
-    source: &'a Bundle<'data, D>,
-    options: &ImportOptions,
-    sequences: &[usize],
-) -> Result<Conversion<Model<'a, M2Vocabulary>>, Error>
-where
-    D::Layout: ParticleConversion + CameraConversion,
-    for<'v> <D::Layout as native::HeaderLayout>::Flipbooks<'v>: FlipbookField<'v, D::Layout>,
-    <D::Layout as native::records::SequenceLayout>::Timing: SequenceClock,
-    <D::Layout as native::records::BoneLayout>::RotationValue: RotationComponents + Send + Sync,
-    <D::Layout as native::records::BoneLayout>::NameCrc: NameCrcField,
-    <D::Layout as native::records::SequenceLayout>::BlendTime: BlendField,
-    <D::Layout as native::records::SkinSectionLayout>::Tail: SectionSorting,
-    <<D::Layout as native::records::BoneLayout>::RotationValue as zerovec::ule::AsULE>::ULE:
-        Send + Sync,
-    <[<D::Layout as native::records::BoneLayout>::RotationValue; 3] as zerovec::ule::AsULE>::ULE:
-        Send + Sync,
-{
-    import_impl(source, options, Some(sequences))
-}
-
-fn import_impl<'a, 'data: 'a, D: Dialect>(
-    source: &'a Bundle<'data, D>,
-    options: &ImportOptions,
-    selection: Option<&[usize]>,
-) -> Result<Conversion<Model<'a, M2Vocabulary>>, Error>
-where
-    D::Layout: ParticleConversion + CameraConversion,
-    for<'v> <D::Layout as native::HeaderLayout>::Flipbooks<'v>: FlipbookField<'v, D::Layout>,
-    <D::Layout as native::records::SequenceLayout>::Timing: SequenceClock,
-    <D::Layout as native::records::BoneLayout>::RotationValue: RotationComponents + Send + Sync,
-    <D::Layout as native::records::BoneLayout>::NameCrc: NameCrcField,
-    <D::Layout as native::records::SequenceLayout>::BlendTime: BlendField,
-    <D::Layout as native::records::SkinSectionLayout>::Tail: SectionSorting,
-    <<D::Layout as native::records::BoneLayout>::RotationValue as zerovec::ule::AsULE>::ULE:
-        Send + Sync,
-    <[<D::Layout as native::records::BoneLayout>::RotationValue; 3] as zerovec::ule::AsULE>::ULE:
-        Send + Sync,
-{
     let mut cores = source.model.cores();
     let core = cores
         .next()
@@ -216,42 +171,15 @@ where
             }
         })?)
     }
-    let mut selected = vec![selection.is_none(); tables.sequences.len()];
-    if let Some(indices) = selection {
-        for &index in indices {
-            let mut index = index;
-            let mut seen = HashSet::new();
-            loop {
-                let sequence = tables.sequences.get(index).ok_or_else(|| {
-                    Error::new(
-                        "m2.animation_selection",
-                        format!("native sequence index {index} is out of range"),
-                    )
-                })?;
-                if !seen.insert(index) {
-                    return Err(Error::new("m2.sequence.alias", "alias cycle"));
-                }
-                selected[index] = true;
-                if !sequence.flags.alias() {
-                    break;
-                }
-                index = sequence.alias_next as usize;
-            }
-        }
-    }
     let mut clips = Vec::new();
-    for (index, seq) in tables.sequences.iter().enumerate() {
-        if !selected[index] {
-            clips.push(None);
-            continue;
-        }
+    for seq in tables.sequences {
         let (_, duration) = seq.timing.window();
-        clips.push(Some(
+        clips.push(
             builder.add_clip(
                 semantic::Clip::named(format!("animation-{}-{}", seq.id, seq.variation_index))
                     .with_duration(Time::seconds(f64::from(duration) / 1000.)?),
             )?,
-        ))
+        )
     }
     family.animation_lookup = tables
         .lookup
@@ -263,6 +191,7 @@ where
                 clips
                     .get(i as usize)
                     .copied()
+                    .map(Some)
                     .ok_or_else(|| Error::new("m2.animation_lookup", "missing clip"))
             }
         })
@@ -307,9 +236,7 @@ where
     }
     for (index, sequence) in tables.sequences.iter().enumerate() {
         let (start, _) = sequence.timing.window();
-        let Some(id) = clips[index] else {
-            continue;
-        };
+        let id = clips[index];
         let mut flags = profile::values::SequenceFlags::from_bits_retain(sequence.flags.bits());
         flags.set_alias(false);
         builder.set_clip_controls(
@@ -317,10 +244,8 @@ where
             profile::SequenceControls {
                 alias: if sequence.flags.alias() {
                     Some(
-                        clips
+                        *clips
                             .get(sequence.alias_next as usize)
-                            .copied()
-                            .flatten()
                             .ok_or_else(|| Error::new("m2.sequence.alias", "missing clip"))?,
                     )
                 } else {
@@ -335,10 +260,11 @@ where
                 blend_time: sequence.blend_time.parts(),
                 bounds: bounds(sequence.bounding),
                 next_variation: if sequence.variation_next >= 0 {
-                    clips
-                        .get(sequence.variation_next as usize)
-                        .copied()
-                        .flatten()
+                    Some(
+                        *clips
+                            .get(sequence.variation_next as usize)
+                            .ok_or_else(|| Error::new("m2.sequence.next", "missing variation"))?,
+                    )
                 } else {
                     None
                 },
@@ -369,17 +295,16 @@ where
                 ),
             ] {
                 if let Some((curve, global)) =
-                    curve::<D, [f32; 3], [f32; 3]>(source, track, owner, Some(index), start, |v| v)?
+                    curve::<D, [f32; 3], [f32; 3]>(source, track, owner, index, start, |v| v)?
                 {
-                    animation::insert(
-                        &mut builder,
-                        Some(id),
+                    builder.add_track(
+                        id,
                         DynamicTrack::Vector3(bind(curve, global, target, &clocks)?),
                     )?
                 }
             }
             if let Some((curve, global)) =
-                curve(source, &bone.rotation, owner, Some(index), start, |v| {
+                curve(source, &bone.rotation, owner, index, start, |v| {
                     semantic::Quaternion(v.floats())
                 })?
             {
@@ -397,7 +322,7 @@ where
             }
         }
     }
-    if clips.iter().all(Option::is_none) {
+    if clips.is_empty() {
         for (index, bone) in bones.iter().enumerate() {
             for (target, track) in [
                 (
@@ -416,7 +341,7 @@ where
             ] {
                 if track.base.global_sequence != u16::MAX {
                     if let Some((c, g)) =
-                        curve::<D, [f32; 3], [f32; 3]>(source, track, owner, None, 0, |v| v)?
+                        curve::<D, [f32; 3], [f32; 3]>(source, track, owner, 0, 0, |v| v)?
                     {
                         animation::insert(
                             &mut builder,
@@ -427,7 +352,7 @@ where
                 }
             }
             if bone.rotation.base.global_sequence != u16::MAX {
-                if let Some((c, g)) = curve(source, &bone.rotation, owner, None, 0, |v| {
+                if let Some((c, g)) = curve(source, &bone.rotation, owner, 0, 0, |v| {
                     semantic::Quaternion(v.floats())
                 })? {
                     let rotation = builder
@@ -482,7 +407,7 @@ where
     }
     // Native aliases may precede their target and form chains. Resolve only after
     // every independently authored program has been imported.
-    for id in clips.iter().flatten().copied() {
+    for &id in &clips {
         let mut target = id;
         let mut seen = HashSet::new();
         while let Some(next) = builder.model().clip(target).unwrap().controls.alias {
