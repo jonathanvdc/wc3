@@ -3,16 +3,6 @@ use super::Mdlx;
 use crate::model::{Billboard, DynamicTrack, Error, Interpolation, Model, TimeSource, Transform};
 pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
     value.validate_animation_consumers()?;
-    if value.bounds().is_none()
-        && (!value.name().is_empty()
-            || !value.metadata().animation_file.is_empty()
-            || value.metadata().blend_time != 0.)
-    {
-        return Err(Error::new(
-            "model.info",
-            "Warcraft III model name, animation filename, and blend time require a model-info declaration with bounds",
-        ));
-    }
     let mut ordinary_selection = None;
     for (_, clip) in value.clips() {
         if clip.animations.iter().any(|id| {

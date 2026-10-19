@@ -20,6 +20,18 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
 ) -> Result<Plan<NativeModel<'a, T>>, Error> {
     asset.validate()?;
     let model = asset;
+    // These fields share the native MODL declaration with its mandatory extent.
+    // Their independent semantic authorship does not imply an authored bound.
+    if model.bounds().is_none()
+        && (!model.name().is_empty()
+            || !model.metadata().animation_file.is_empty()
+            || model.metadata().blend_time != 0.)
+    {
+        return Err(Error::new(
+            "model.info",
+            "the native model-info declaration requires bounds to encode the model name, animation filename, or blend time",
+        ));
+    }
     let mut context = Context::export(options);
     if model.systems().iter().next().is_some() {
         context.unsupported(
