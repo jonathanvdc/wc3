@@ -1023,9 +1023,9 @@ mod tests {
         assert_eq!(
             options.guild_palette,
             Some(GuildPalette {
-                background: [0.2, 0.4, 0.8],
-                emblem: [2., 0.5, 0.1],
-                border: [0.1, 0.2, 0.3],
+                background: Vec3::new(0.2, 0.4, 0.8),
+                emblem: Vec3::new(2., 0.5, 0.1),
+                border: Vec3::new(0.1, 0.2, 0.3),
             })
         );
         for value in [

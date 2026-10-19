@@ -144,6 +144,10 @@ fn animated_selection_retains_each_selected_images_sampler() {
         .unwrap()
         .value;
     assert_eq!(model.dependencies().images().len(), 1);
+    let selections = model.sampled_images();
+    assert_eq!(selections.len(), 2);
+    assert_eq!(selections[0].resource, selections[1].resource);
+    assert_ne!(selections[0].sampler.u, selections[1].sampler.u);
     let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -175,6 +179,11 @@ fn duplicate_native_texture_records_share_the_resource_and_are_deduplicated_on_e
         .unwrap()
         .value;
     assert_eq!(model.dependencies().images().len(), 1);
+    let material = model.materials().iter().next().unwrap().1;
+    let first = material.surface.steps[0].shader.inputs().binding.image;
+    let second = material.surface.steps[1].shader.inputs().binding.image;
+    assert_ne!(first, second);
+    assert_eq!(model.values()[first], model.values()[second]);
     let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
         .execute()

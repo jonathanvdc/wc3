@@ -436,7 +436,7 @@ fn track_constructors_copy_native_slices_without_changing_order() {
     });
     let hermite = Track::hermite(tangents.as_slice(), None).unwrap();
     let bezier = Track::bezier(tangents.to_vec(), None).unwrap();
-    assert_eq!(hermite.hermite_keys().unwrap().get(0).unwrap().frame, 0);
-    assert_eq!(bezier.bezier_keys().unwrap().get(0).unwrap().frame, 0);
+    assert_eq!(*hermite.hermite_keys().unwrap(), tangents);
+    assert_eq!(*bezier.bezier_keys().unwrap(), tangents);
     assert_eq!(tangents[0].frame, 100);
 }

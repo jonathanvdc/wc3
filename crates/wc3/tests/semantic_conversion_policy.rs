@@ -3,11 +3,11 @@ use wc3::model::profiles::{Mdlx, Universal};
 use wc3::model::{FeatureId, Model, ModelBuilder, NodeFeature, ParticleEmitter, ResourceLocator};
 
 fn source() -> (Model<'static>, FeatureId) {
-    let model = Model::<Mdlx>::empty("policy test").unwrap();
-    let mut model = model.widen::<Universal>();
+    let mut draft = Model::<Mdlx>::builder("policy test");
+    let node = draft.add_named_node("effect").unwrap();
+    let mut model = draft.finish().unwrap().widen::<Universal>();
     let feature = model
         .edit(|draft| {
-            let node = draft.add_named_node("effect")?;
             let resource =
                 draft.add_effect_resource(ResourceLocator::Path(b"effect.mdx".as_slice().into()));
             draft.add_feature(
@@ -53,10 +53,12 @@ fn dropping_one_selected_feature_does_not_authorize_other_losses() {
             Ok(())
         })
         .unwrap();
-    assert!(Policy::<Mdlx>::new()
-        .with_rule(DropUnsupportedFeatures::new([first]))
-        .plan(&source)
-        .is_err());
+    assert!(
+        Policy::<Mdlx>::new()
+            .with_rule(DropUnsupportedFeatures::new([first]))
+            .plan(&source)
+            .is_err()
+    );
     assert_eq!(source.features().len(), 2);
 }
 
@@ -158,7 +160,7 @@ fn selected_supported_features_are_preserved_without_loss_reports() {
 }
 
 fn fractional_light(visibility: f32, animated: bool) -> (Model<'static>, FeatureId) {
-    use wc3::model::profiles::{m2, M2};
+    use wc3::model::profiles::{M2, m2};
     use wc3::model::{Curve, DynamicTrack, Light, LightActivation, Time, TimeSource, Track};
     let mut draft = Model::<M2>::builder("fractional light");
     let light: m2::Light = draft.construct();
@@ -195,7 +197,7 @@ fn fractional_light(visibility: f32, animated: bool) -> (Model<'static>, Feature
 #[test]
 fn light_switch_approximation_obeys_its_explicit_error_bound() {
     use wc3::model::conversion::ConstantLightSwitch;
-    use wc3::model::profiles::{m2, M2};
+    use wc3::model::profiles::{M2, m2};
     let (source, feature) = fractional_light(0.75, false);
     let plan = Policy::<M2>::new()
         .with_rule(ConstantLightSwitch::new([feature], 0.5, 0.25).unwrap())
@@ -207,10 +209,12 @@ fn light_switch_approximation_obeys_its_explicit_error_bound() {
     assert!(*plan.draft().values().get(light.activation).unwrap());
     assert_eq!(plan.report().issues[0].kind, IssueKind::Approximated);
     assert!(plan.report().issues[0].description.contains("error 0.25"));
-    assert!(Policy::<M2>::new()
-        .with_rule(ConstantLightSwitch::new([feature], 0.5, 0.2).unwrap())
-        .plan(&source)
-        .is_err());
+    assert!(
+        Policy::<M2>::new()
+            .with_rule(ConstantLightSwitch::new([feature], 0.5, 0.2).unwrap())
+            .plan(&source)
+            .is_err()
+    );
     // The same rule can choose the other switch state with an explicit bound.
     let plan = Policy::<M2>::new()
         .with_rule(ConstantLightSwitch::new([feature], 0.8, 0.75).unwrap())
@@ -234,10 +238,12 @@ fn light_switch_rule_rejects_invalid_parameters_and_unbounded_inputs() {
         assert!(ConstantLightSwitch::new([], 0.5, tolerance).is_err());
     }
     let (source, feature) = fractional_light(1.5, false);
-    assert!(Policy::<M2>::new()
-        .with_rule(ConstantLightSwitch::new([feature], 0.5, 1.).unwrap())
-        .plan(&source)
-        .is_err());
+    assert!(
+        Policy::<M2>::new()
+            .with_rule(ConstantLightSwitch::new([feature], 0.5, 1.).unwrap())
+            .plan(&source)
+            .is_err()
+    );
     let (source, feature) = fractional_light(0.75, true);
     let error = Policy::<M2>::new()
         .with_rule(ConstantLightSwitch::new([feature], 0.5, 1.).unwrap())
@@ -296,8 +302,10 @@ fn selected_drop_checks_graph_dependent_feature_constraints() {
     };
     assert!(plan.draft().is_animated(light.diffuse.intensity));
     assert_eq!(plan.report().issues[0].kind, IssueKind::Dropped);
-    assert!(plan.report().issues[0]
-        .description
-        .contains("constant field of view"));
+    assert!(
+        plan.report().issues[0]
+            .description
+            .contains("constant field of view")
+    );
     assert!(source.feature(feature).is_some());
 }
