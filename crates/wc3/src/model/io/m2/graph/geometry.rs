@@ -13,7 +13,7 @@ pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     nodes: &[semantic::NodeId],
     textures: &[semantic::Texture],
-    clips: &[semantic::ClipId],
+    clips: &[Option<semantic::ClipId>],
     clocks: &[semantic::ClockId],
     builder: &mut GraphBuilder<'a>,
     context: &mut Context,
@@ -237,7 +237,7 @@ where
                             for (seq, clip) in animation::sequences(clips) {
                                 let (start, _) = tables
                                     .sequences
-                                    .get(seq)
+                                    .get(seq.unwrap_or(0))
                                     .map_or((0, 0), |s| s.timing.window());
                                 if let Some((c, g)) =
                                     curve(source, &color.color, &source.key, seq, start, |v| v)?
@@ -272,7 +272,7 @@ where
                             for (seq, clip) in animation::sequences(clips) {
                                 let (start, _) = tables
                                     .sequences
-                                    .get(seq)
+                                    .get(seq.unwrap_or(0))
                                     .map_or((0, 0), |s| s.timing.window());
                                 if let Some((c, g)) =
                                     curve(source, &weight.weight, &source.key, seq, start, |v| {
@@ -311,7 +311,7 @@ where
                             for (seq, clip) in animation::sequences(clips) {
                                 let (start, _) = tables
                                     .sequences
-                                    .get(seq)
+                                    .get(seq.unwrap_or(0))
                                     .map_or((0, 0), |s| s.timing.window());
                                 for (prop, track) in
                                     [(tr, &transform.translation), (sc, &transform.scaling)]

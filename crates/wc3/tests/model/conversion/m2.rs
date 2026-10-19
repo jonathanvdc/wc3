@@ -2064,3 +2064,107 @@ fn animation_categories_preserve_named_and_unknown_ids_through_conversion() {
         assert_eq!(exported.model.core().sequences[0].id, category.get());
     }
 }
+
+#[test]
+fn selected_import_keeps_alias_dependencies_and_shared_animation_without_mutating_source() {
+    let mut source = native_triangle();
+    let core = source.model.core_mut();
+    for index in 0..3 {
+        let mut flags = SequenceFlags::from_bits_retain(0x20);
+        flags.set_alias(index == 0);
+        core.sequences.push(m2::records::Sequence {
+            id: index,
+            timing: m2::records::LegacyTiming {
+                start: index as u32 * 1000,
+                end: (index as u32 + 1) * 1000,
+            },
+            flags,
+            alias_next: 1,
+            variation_next: if index == 1 { 2 } else { -1 },
+            ..Default::default()
+        });
+    }
+    core.sequence_lookup = ZeroVec::alloc_from_slice(&[0, 1, 2]);
+    core.global_sequences = ZeroVec::alloc_from_slice(&[1000]);
+    core.bones[0].translation = Track {
+        base: TrackBase {
+            timeline: LegacyTimeline {
+                ranges: ZeroVec::alloc_from_slice(&[[0, 0], [1, 1], [2, 2]]),
+                timestamps: ZeroVec::alloc_from_slice(&[0, 1000, 2000]),
+            },
+            ..Default::default()
+        },
+        values: LegacyValues::Values(ZeroVec::alloc_from_slice(&[
+            [1., 0., 0.],
+            [2., 0., 0.],
+            [3., 0., 0.],
+        ])),
+    };
+    core.bones[0].scale = Track {
+        base: TrackBase {
+            global_sequence: 0,
+            timeline: LegacyTimeline {
+                timestamps: ZeroVec::alloc_from_slice(&[0, 1000]),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        values: LegacyValues::Values(ZeroVec::alloc_from_slice(&[[1.; 3], [2.; 3]])),
+    };
+    for global in [u16::MAX, 0] {
+        core.events.push(m2::records::Event {
+            identifier: *b"$SND",
+            enabled: TrackBase {
+                global_sequence: global,
+                timeline: LegacyTimeline {
+                    ranges: if global == u16::MAX {
+                        ZeroVec::alloc_from_slice(&[[0, 0], [1, 1], [2, 2]])
+                    } else {
+                        ZeroVec::new()
+                    },
+                    timestamps: if global == u16::MAX {
+                        ZeroVec::alloc_from_slice(&[0, 1000, 2000])
+                    } else {
+                        ZeroVec::alloc_from_slice(&[50])
+                    },
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+    }
+    let before = source.model.encode_m2().unwrap();
+    assert_eq!(io::m2::find_sequence(&source, 1, 0).unwrap(), Some(1));
+    assert_eq!(io::m2::find_sequence(&source, 9, 0).unwrap(), None);
+    let selected = io::m2::import_selected(&source, &ImportOptions::default(), &[0])
+        .unwrap()
+        .value;
+    assert_eq!(selected.clips().len(), 2);
+    let clips: Vec<_> = selected.clips().iter().collect();
+    assert!(clips[0].1.controls.alias.is_some());
+    assert!(clips[1].1.controls.next_variation.is_none());
+    assert_eq!(selected.clip_tracks(clips[1].0).count(), 1);
+    assert_eq!(selected.global_tracks().count(), 1);
+    assert_eq!(selected.global_events().count(), 1);
+    assert_eq!(selected.clip_events(clips[1].0).count(), 1);
+    assert_eq!(selected.metadata().animation_lookup.len(), 3);
+    assert!(selected.metadata().animation_lookup[2].is_none());
+
+    let empty = io::m2::import_selected(&source, &ImportOptions::default(), &[])
+        .unwrap()
+        .value;
+    assert!(empty.clips().is_empty());
+    assert_eq!(empty.global_tracks().count(), 1);
+    assert_eq!(empty.global_events().count(), 1);
+    let all = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    assert_eq!(all.clips().len(), 3);
+    assert_eq!(source.model.encode_m2().unwrap(), before);
+    assert!(
+        io::m2::import_selected(&source, &ImportOptions::default(), &[99])
+            .unwrap_err()
+            .to_string()
+            .contains("native sequence index 99")
+    );
+}

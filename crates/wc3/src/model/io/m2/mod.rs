@@ -37,10 +37,24 @@ mod particles;
 pub use particles::ParticleConversion;
 use particles::{gravity_vector, gravity_word};
 mod graph;
-pub use graph::{import, plan};
+pub use graph::{import, import_selected, plan};
 fn failure(error: impl ToString) -> Error {
     Error::new("m2", error.to_string())
 }
 fn section_start<V: ModelLayout>(section: &SkinSection<V>) -> usize {
     (usize::from(section.level) << 16) | usize::from(section.index_start)
+}
+
+/// Finds a native sequence index by animation ID and variation, including inherited skeleton tables.
+/// The returned index can be passed to [`import_selected`].
+pub fn find_sequence<D: Dialect>(
+    source: &Bundle<'_, D>,
+    animation_id: u16,
+    variation: u16,
+) -> Result<Option<usize>, Error> {
+    let (owner, _) = source.bones().map_err(failure)?;
+    Ok(sequence_tables(source, owner)?
+        .sequences
+        .iter()
+        .position(|sequence| sequence.id == animation_id && sequence.variation_index == variation))
 }

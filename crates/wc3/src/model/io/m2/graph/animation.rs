@@ -9,7 +9,7 @@ pub(super) fn curve<'a, 'data: 'a, D: Dialect, T, U: CurveValue + 'a>(
     source: &'a Bundle<'data, D>,
     track: &'a Track<'data, T, D::Layout>,
     owner: &native::FileKey,
-    sequence: usize,
+    sequence: Option<usize>,
     start: u32,
     map: impl Fn(T) -> U + Clone + Send + Sync + 'a,
 ) -> Result<Option<(Curve<'a, U>, u16)>, Error>
@@ -39,7 +39,7 @@ pub(super) fn curve_in_stream<'a, 'data: 'a, D: Dialect, T, U: CurveValue + 'a>(
     track: &'a Track<'data, T, D::Layout>,
     owner: &native::FileKey,
     stream: [u8; 4],
-    sequence: usize,
+    sequence: Option<usize>,
     start: u32,
     map: impl Fn(T) -> U + Clone + Send + Sync + 'a,
 ) -> Result<Option<(Curve<'a, U>, u16)>, Error>
@@ -56,6 +56,10 @@ where
     }) {
         return Ok(None);
     }
+    let Some(sequence) = sequence.or_else(|| (track.base.global_sequence != u16::MAX).then_some(0))
+    else {
+        return Ok(None);
+    };
     let resolved = source
         .resolve_track(track, owner, stream, sequence)
         .map_err(failure)?;
@@ -349,7 +353,7 @@ pub(super) fn time_ms(time: Time, context: &mut Context) -> Result<u32, Error> {
 pub(in super::super) fn spline_curve<'a, 'data: 'a, D: Dialect, T: Value + CurveValue + 'a>(
     source: &'a Bundle<'data, D>,
     track: &'a native::records::SplineTrack<'data, T, D::Layout>,
-    sequence: usize,
+    sequence: Option<usize>,
     start: u32,
 ) -> Result<Option<(Curve<'a, T>, u16)>, Error>
 where
@@ -357,6 +361,10 @@ where
     T::ULE: Send + Sync,
     <[T; 3] as zerovec::ule::AsULE>::ULE: Send + Sync,
 {
+    let Some(sequence) = sequence.or_else(|| (track.base.global_sequence != u16::MAX).then_some(0))
+    else {
+        return Ok(None);
+    };
     let resolved = source
         .resolve_spline_track(track, &source.key, *b"AFM2", sequence)
         .map_err(failure)?;
@@ -489,17 +497,17 @@ where
     })
 }
 pub(in super::super) fn sequences(
-    clips: &[semantic::ClipId],
-) -> Vec<(usize, Option<semantic::ClipId>)> {
-    if clips.is_empty() {
-        vec![(0, None)]
+    clips: &[Option<semantic::ClipId>],
+) -> Vec<(Option<usize>, Option<semantic::ClipId>)> {
+    let selected: Vec<_> = clips
+        .iter()
+        .enumerate()
+        .filter_map(|(index, clip)| clip.map(|id| (Some(index), Some(id))))
+        .collect();
+    if selected.is_empty() {
+        vec![(None, None)]
     } else {
-        clips
-            .iter()
-            .copied()
-            .enumerate()
-            .map(|(i, id)| (i, Some(id)))
-            .collect()
+        selected
     }
 }
 pub(in super::super) fn insert<'a>(

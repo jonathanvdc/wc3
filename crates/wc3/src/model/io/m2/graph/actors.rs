@@ -28,7 +28,7 @@ pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     nodes: &[semantic::NodeId],
     textures: &[semantic::Texture],
-    clips: &[semantic::ClipId],
+    clips: &[Option<semantic::ClipId>],
     clocks: &[semantic::ClockId],
     builder: &mut GraphBuilder<'a>,
 ) -> Result<(), Error>
@@ -44,7 +44,7 @@ where
             for (seq, clip) in animation::sequences(clips) {
                 let (start, _) = tables
                     .sequences
-                    .get(seq)
+                    .get(seq.unwrap_or(0))
                     .map_or((0, 0), |s| s.timing.window());
                 if let Some((c, g)) = curve(source, $native, &source.key, seq, start, $map)? {
                     animation::insert(
@@ -76,7 +76,7 @@ where
         for (sequence, clip) in animation::sequences(clips) {
             let (start, _) = attachment_tables
                 .sequences
-                .get(sequence)
+                .get(sequence.unwrap_or(0))
                 .map_or((0, 0), |sequence| sequence.timing.window());
             if let Some((curve, global)) = animation::curve_in_stream(
                 source,
@@ -469,7 +469,7 @@ where
         for (seq, clip) in animation::sequences(clips) {
             let (start, _) = tables
                 .sequences
-                .get(seq)
+                .get(seq.unwrap_or(0))
                 .map_or((0, 0), |s| s.timing.window());
             for (property, track) in [
                 (position, &value.positions),
@@ -517,8 +517,16 @@ where
             identifier: value.identifier,
             data: value.data,
         });
-        let count = if global != u16::MAX { 1 } else { clips.len() };
-        for (seq, clip) in (0..count).map(|seq| (seq, clips.get(seq).copied())) {
+        let selections = if global != u16::MAX {
+            vec![(Some(0), None)]
+        } else {
+            animation::sequences(clips)
+                .into_iter()
+                .filter(|(_, clip)| clip.is_some())
+                .collect()
+        };
+        for (seq, clip) in selections {
+            let seq = seq.unwrap_or(0);
             let leaf = if global != u16::MAX || D::VERSION < 264 {
                 0
             } else {
