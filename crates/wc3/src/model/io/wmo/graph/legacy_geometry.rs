@@ -4,7 +4,7 @@ use crate::model::common::PackedArray;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::wmo::group::GroupChunk;
 use crate::model::formats::wmo::legacy::{Batch14, Batch16, LegacyGroupChunk};
-use crate::model::formats::wmo::records::{BatchFlags, CullingBox, GroupFlags, TriangleFlags2};
+use crate::model::formats::wmo::records::{CullingBox, GroupFlags, TriangleFlags2};
 use crate::model::formats::wmo::{Classic, Read, RecordLayout};
 use crate::model::io::wmo::graph::draw::{bind_draw, ImportedDrawControls};
 use crate::model::io::{materialize, owned};
@@ -41,7 +41,6 @@ pub(super) trait Batch: for<'data> Read<'data> + RecordLayout {
     fn first(&self) -> u32;
     fn count(&self) -> u16;
     fn material(&self) -> u8;
-    fn flags(&self) -> BatchFlags;
     fn bounds(&self) -> CullingBox;
     fn vertices(&self) -> [u32; 2];
     fn lightmap(&self) -> Option<u8> {
@@ -63,9 +62,6 @@ impl Batch for Batch14 {
     }
     fn material(&self) -> u8 {
         self.material
-    }
-    fn flags(&self) -> BatchFlags {
-        self.flags
     }
     fn bounds(&self) -> CullingBox {
         self.bounds
@@ -92,9 +88,6 @@ impl Batch for Batch16 {
     }
     fn material(&self) -> u8 {
         self.material
-    }
-    fn flags(&self) -> BatchFlags {
-        self.flags
     }
     fn bounds(&self) -> CullingBox {
         self.bounds
@@ -385,7 +378,6 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
                         ])),
                         lightmap_selector: row.lightmap(),
                         alignment: row.alignment(),
-                        unclassified: row.flags().bits().into(),
                         supplemental: row.supplemental(),
                         ..Default::default()
                     }),

@@ -35,7 +35,7 @@ fn write_model<'a, D: Dialect>(
     }
     let mut root = Root::<D>::new();
     let controls = model.metadata();
-    let mut flags = RootFlags(controls.options.unclassified.bits());
+    let mut flags = RootFlags(0);
     flags.set_no_vertex_attenuation(controls.options.no_vertex_attenuation);
     flags.set_unified_render_path(controls.options.skip_ambient_in_vertex_color);
     flags.set_liquid_type_database_id(controls.options.database_liquids);

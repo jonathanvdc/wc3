@@ -1,5 +1,4 @@
 //! Authoring controls owned by an individual world-surface draw.
-use crate::model::values::world::BatchFlags;
 use crate::model::{Bounds, Link, Texture, ValidateLinks};
 /// Illumination class of a world-surface draw.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -41,8 +40,6 @@ pub struct DrawControls {
     pub lightmap: Option<Texture>,
     /// Historical baked-light selector whose table interpretation remains unresolved.
     pub lightmap_selector: Option<u8>,
-    /// Batch behavior bits whose meanings remain unresolved.
-    pub unclassified: BatchFlags,
     /// Individual unresolved supplemental controls surrounding the draw selection.
     pub supplemental: [u16; 5],
     /// Historical alignment control whose meaning remains unresolved.

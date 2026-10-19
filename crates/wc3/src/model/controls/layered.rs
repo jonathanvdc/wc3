@@ -1,6 +1,5 @@
 //! Layered-model ownership, sequence bounds, and hierarchy controls.
 use super::BillboardFlags;
-use crate::model::values::layered::{NodeFlags, SequenceFlags};
 use crate::model::{Bounds, ClipId, FeatureId, Link, MeshId, ValidateLinks};
 use std::borrow::Cow;
 
@@ -37,8 +36,6 @@ pub struct Sequence {
     pub rarity: f32,
     /// Animation synchronization point.
     pub sync_point: u32,
-    /// Unresolved sequence behavior bits.
-    pub unclassified: SequenceFlags,
     /// Authored occupied bounds, or an explicitly empty extent.
     pub extent: Extent,
 }
@@ -65,8 +62,6 @@ pub struct Bone {
 /// Warcraft III authoring controls attached directly to one hierarchy node.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct NodeControls {
-    /// Native flag bits not mapped to explicit semantic fields.
-    pub unmapped_flags: NodeFlags,
     /// Original native billboard declarations. Export retains them only when their
     /// effective behavior agrees with the node's current semantic billboard.
     pub billboard_flags: BillboardFlags,

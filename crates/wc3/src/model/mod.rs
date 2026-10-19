@@ -83,7 +83,7 @@ mod geometry_schema;
 pub use geometry_schema::*;
 pub use profiles::wmo::WmoGeometry;
 mod geometry_domains;
-pub use geometry_domains::{ConnectivitySets, SurfaceTriangleControls, TriangleFlags};
+pub use geometry_domains::{ConnectivitySets, SurfaceTriangleControls};
 pub mod geometry;
 pub use geometry::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Bounds, Draw, Influence, Mesh,

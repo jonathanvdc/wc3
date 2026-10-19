@@ -864,19 +864,18 @@ fn region_selection_groups_are_rejected_before_native_export() {
 }
 
 #[test]
-fn logical_world_flag_words_keep_unknown_bits_through_native_output() {
+fn semantic_world_controls_drop_unclassified_bits() {
     let mut source = fixture::<wmo::Legion>();
     source.root.header_mut().tail.flags = r::RootFlags(0x8000);
     let asset = io::wmo::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    assert_eq!(asset.metadata().options.unclassified.bits(), 0x8000);
     let output = io::wmo::plan::<wmo::Legion>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
         .value;
-    assert_eq!(output.root.header().flags().bits(), 0x8000);
+    assert_eq!(output.root.header().flags().bits(), 0);
 }
 
 #[test]

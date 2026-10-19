@@ -460,8 +460,8 @@ pub fn compile_model_with_options(
         let message = match &feature.payload {
             NodeFeature::Particle(ParticleEmitter::MdlxEmitter1(_) | ParticleEmitter::MdlxEmitter2(_) | ParticleEmitter::M2(_)) => continue,
 
-            NodeFeature::GeometryAnimation(value) if value.mesh.is_some() && !value.drop_shadow && value.unclassified.bits() == 0 => continue,
-            NodeFeature::GeometryAnimation(_) => "geometry tint and opacity are rendered; orphan controllers, authored drop shadows, and unclassified geometry flags need application interpretation".to_string(),
+            NodeFeature::GeometryAnimation(value) if value.mesh.is_some() && !value.drop_shadow => continue,
+            NodeFeature::GeometryAnimation(_) => "geometry tint and opacity are rendered; orphan controllers and authored drop shadows need application interpretation".to_string(),
             NodeFeature::Camera(ModelCamera::Portable(_) | ModelCamera::Aimed(_))
             | NodeFeature::Attachment(Attachment::Socket(_)) => continue,
 

@@ -93,7 +93,6 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     longitude: a!(longitude),
                     latitude: a!(latitude),
                     text_resource: flags.emitter_uses_tga(),
-                    unclassified: Default::default(),
                 },
                 emission: ParticleEmission {
                     rate: a!(emission_rate),
@@ -178,7 +177,6 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                         unfogged: flags.unfogged(),
                     },
                     model_space: flags.model_space(),
-                    unclassified: Default::default(),
                 },
                 lifetime: ParticleLifetime {
                     duration: source.life_span,
@@ -306,7 +304,6 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     sort_far_z: flags.sort_prims_far_z(),
                     unfogged: flags.unfogged(),
                     scaling: flags.popcorn_scaling(),
-                    unclassified: Default::default(),
                 });
                 decoder.builder.set_feature(feature, payload)?;
             }

@@ -208,7 +208,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
     }
     let mut faces = Vec::new();
     for control in mesh.geometry.triangle_controls().iter() {
-        let mut flags = TriangleFlags2(control.unclassified.bits());
+        let mut flags = TriangleFlags2(0);
         flags.set_transition(control.transition);
         flags.set_no_camera_collision(control.no_camera_collision);
         flags.set_detail(control.detail);
@@ -318,13 +318,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
             let mut first = draw.first;
             while remaining != 0 {
                 let count = remaining.min(i16::MAX as u32 / 3);
-                let mut flags = BatchFlags(
-                    draw.controls
-                        .as_ref()
-                        .expect("shadow controls")
-                        .unclassified
-                        .bits(),
-                );
+                let mut flags = BatchFlags(0);
                 flags.set_large_material(material > u16::from(u8::MAX));
                 shadow_batches.push(crate::model::formats::wmo::records::ShadowBatch {
                     reserved_prefix: std::array::from_fn(|index| {
@@ -366,11 +360,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
                 minimum_vertex: minimum as u16,
                 maximum_vertex: maximum as u16,
                 material: material as u8,
-                flags: BatchFlags(
-                    draw.controls
-                        .as_ref()
-                        .map_or(0, |value| value.unclassified.bits()),
-                ),
+                flags: BatchFlags(0),
                 ..Default::default()
             };
             if let Some(controls) = &draw.controls {

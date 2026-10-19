@@ -1,5 +1,4 @@
 //! Editable Warcraft III effects and scene features.
-use crate::model::values::layered::{GeometryAnimationFlags, PopcornFlags};
 use crate::model::Construct;
 use crate::model::EffectResourceId;
 use crate::model::IndexedChildModel;
@@ -26,8 +25,6 @@ pub struct GeometryAnimation {
     pub use_color: bool,
     /// Enable authored shadow-drop behavior.
     pub drop_shadow: bool,
-    /// Behavior bits with unresolved meanings.
-    pub unclassified: GeometryAnimationFlags,
 }
 /// Resource-particle emitter parameters.
 pub type ParticleEmitter1 = MdlxParticleEmitter1;
@@ -77,8 +74,6 @@ pub struct Popcorn<'a> {
     pub unfogged: bool,
     /// Apply the authored popcorn scaling behavior.
     pub scaling: bool,
-    /// Emitter controls with unresolved meanings.
-    pub unclassified: PopcornFlags,
 }
 /// Illumination behavior.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

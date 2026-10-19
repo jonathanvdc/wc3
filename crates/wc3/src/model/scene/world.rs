@@ -2,9 +2,7 @@
 use crate::model::common::packed_identity;
 use crate::model::common::AsULE;
 use crate::model::controls::world::{DoodadSetId, GroupId, PortalId};
-use crate::model::values::world::{
-    AmbientFlags, FogFlags, GroupFlags, GroupFlags2, LightFlags, PortalFlags, WorldFlags,
-};
+use crate::model::values::world::{AmbientFlags, FogFlags, GroupFlags2, LightFlags};
 use crate::model::Construct;
 use crate::model::ModelResourceId;
 use crate::model::{ChildModelDefinition, WorldPlacementAppearance};
@@ -25,8 +23,6 @@ pub struct WorldOptions {
     pub database_liquids: bool,
     /// Preserve authored vertex RGB while fixing non-transition lighting alpha.
     pub vertex_color_alpha_only: bool,
-    /// Root controls with unresolved meanings.
-    pub unclassified: WorldFlags,
 }
 /// Visibility and lighting behavior of one world group.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -43,8 +39,6 @@ pub struct GroupOptions {
     pub sky: bool,
     /// Uses authored baked lighting for this group.
     pub baked_lighting: bool,
-    /// Group controls with unresolved meanings.
-    pub unclassified: GroupFlags,
     /// Supplemental group controls with unresolved meanings.
     pub supplemental: GroupFlags2,
 }
@@ -71,8 +65,6 @@ pub struct PortalConnection {
     pub skip_viewer: bool,
     /// Apply the portal's supplemental plane adjustment.
     pub adjusted_plane: bool,
-    /// Connection controls with unresolved meanings.
-    pub unclassified: PortalFlags,
 }
 /// Named set with explicit placement membership.
 #[derive(Clone, Debug, Default, PartialEq)]

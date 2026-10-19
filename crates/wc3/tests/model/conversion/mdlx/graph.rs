@@ -647,7 +647,7 @@ fn skinned_geometry_placement_edits_cannot_silently_disappear() {
 }
 
 #[test]
-fn logical_sequence_flag_words_keep_unknown_bits_through_native_output() {
+fn semantic_sequence_controls_drop_unclassified_bits() {
     let mut source = mdlx::Document::<mdlx::V800>::decode_mdl(include_str!(
         "../../../fixtures/mdl/quad_model.mdl"
     ))
@@ -656,24 +656,12 @@ fn logical_sequence_flag_words_keep_unknown_bits_through_native_output() {
     let asset = io::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    assert_eq!(
-        asset
-            .clips()
-            .iter()
-            .next()
-            .unwrap()
-            .1
-            .controls
-            .unclassified
-            .bits(),
-        0x8000_0000
-    );
     let output = io::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()
         .unwrap()
         .value;
-    assert_eq!(output.sequences().next().unwrap().flags.bits(), 0x8000_0000);
+    assert_eq!(output.sequences().next().unwrap().flags.bits(), 0);
 }
 
 #[test]

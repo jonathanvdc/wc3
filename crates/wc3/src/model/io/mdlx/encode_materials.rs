@@ -51,7 +51,7 @@ pub(super) fn write<'a, V: FormatVersion>(
     }
     let mut material = native::Material::<V>::new();
     material.priority_plane = declaration.priority_plane;
-    material.render_mode = native::MaterialRenderFlags(declaration.unclassified.bits());
+    material.render_mode = native::MaterialRenderFlags(0);
     material
         .render_mode
         .set_constant_color(declaration.constant_color);
@@ -110,8 +110,7 @@ pub(super) fn write<'a, V: FormatVersion>(
             )?;
             native::LayerFilterMode::None
         };
-        layer.shading_flags =
-            native::LayerShadingFlags(source.state.rasterization.controls.unclassified.bits());
+        layer.shading_flags = native::LayerShadingFlags(0);
         layer
             .shading_flags
             .set_unshaded(source.state.rasterization.lighting.unlit);

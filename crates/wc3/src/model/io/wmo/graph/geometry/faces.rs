@@ -17,16 +17,6 @@ pub(in crate::model::io::wmo::graph) fn face(
                 .ok_or_else(|| Error::new("world.face.material", "face material does not exist"))?,
         )
     };
-    let mut unknown = flags;
-    unknown.set_transition(false);
-    unknown.set_no_camera_collision(false);
-    unknown.set_detail(false);
-    unknown.set_collision(false);
-    unknown.set_hint(false);
-    unknown.set_render(false);
-    unknown.set_cull_objects(false);
-    unknown.set_collide_hit(false);
-    unknown.set_ground_type_entry(false);
     Ok(SurfaceTriangleControls {
         spatial_queries: false,
         material,
@@ -42,6 +32,5 @@ pub(in crate::model::io::wmo::graph) fn face(
         render: flags.render(),
         cull_objects: flags.cull_objects(),
         collide_hit: flags.collide_hit(),
-        unclassified: unknown.bits().into(),
     })
 }

@@ -5,19 +5,6 @@ use crate::model::profiles::Wmo;
 use crate::model::Model;
 
 pub(super) fn read(flags: GroupFlags, supplemental: u32) -> GroupOptions {
-    let mut unknown = flags;
-    unknown.set_exterior(false);
-    unknown.set_interior(false);
-    unknown.set_exterior_lit(false);
-    unknown.set_unreachable(false);
-    unknown.set_show_exterior_sky(false);
-    unknown.set_has_lightmap(false);
-    unknown.set_has_bsp(false);
-    unknown.set_has_vertex_colors(false);
-    unknown.set_has_lights(false);
-    unknown.set_lod(false);
-    unknown.set_has_doodads(false);
-    unknown.set_has_liquid(false);
     GroupOptions {
         exterior: flags.exterior(),
         interior: flags.interior(),
@@ -25,12 +12,11 @@ pub(super) fn read(flags: GroupFlags, supplemental: u32) -> GroupOptions {
         unreachable: flags.unreachable(),
         sky: flags.show_exterior_sky(),
         baked_lighting: flags.has_lightmap(),
-        unclassified: unknown.bits().into(),
         supplemental: supplemental.into(),
     }
 }
 pub(super) fn write(options: GroupOptions) -> GroupFlags {
-    let mut flags = GroupFlags(options.unclassified.bits());
+    let mut flags = GroupFlags(0);
     flags.set_exterior(options.exterior);
     flags.set_interior(options.interior);
     flags.set_exterior_lit(options.exterior_lit);
@@ -81,7 +67,7 @@ mod tests {
         flags.set_has_lightmap(true);
         flags.set_exterior(true);
         let options = read(flags, 9);
-        assert_eq!(options.unclassified.bits(), 1 << 31);
+        assert_eq!(write(options).bits() & (1 << 31), 0);
         assert!(options.baked_lighting);
         assert!(options.exterior);
         assert_eq!(options.supplemental.bits(), 9);

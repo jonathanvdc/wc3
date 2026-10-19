@@ -47,12 +47,6 @@ fn read_layers<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
             })
     };
     let flags = source.render_mode;
-    let mut unresolved = flags;
-    unresolved.set_constant_color(false);
-    unresolved.set_two_sided(false);
-    unresolved.set_sort_primitives_far_z(false);
-    unresolved.set_sort_primitives_near_z(false);
-    unresolved.set_full_resolution(false);
     let declaration = MaterialDeclaration {
         priority_plane: source.priority_plane,
         constant_color: flags.constant_color(),
@@ -60,18 +54,10 @@ fn read_layers<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
         sort_near_z: flags.sort_primitives_near_z(),
         sort_far_z: flags.sort_primitives_far_z(),
         full_resolution: flags.full_resolution(),
-        unclassified: unresolved.bits().into(),
     };
     let mut steps = Vec::with_capacity(source.layers.len());
     for layer in &source.layers {
         let flags = layer.shading_flags;
-        let mut unresolved = flags;
-        unresolved.set_unshaded(false);
-        unresolved.set_sphere_env_map(false);
-        unresolved.set_two_sided(false);
-        unresolved.set_unfogged(false);
-        unresolved.set_no_depth_test(false);
-        unresolved.set_no_depth_set(false);
         let fresnel = layer.try_fresnel().ok().map(|value| Fresnel {
             color: values.add(Vec3::from_array(
                 value.color.value().copied().unwrap_or_default(),
@@ -145,7 +131,6 @@ fn read_layers<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                 },
                 controls: LayerOptions {
                     sphere_environment: flags.sphere_env_map(),
-                    unclassified: unresolved.bits().into(),
                 },
             },
             ordering: (),

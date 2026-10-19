@@ -53,7 +53,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
             .map_err(|error| Error::new("clip.name", error.to_string()))?;
         sequence.flags.set_non_looping(!clip.is_looping());
         {
-            sequence.flags = SequenceFlags(metadata.unclassified.bits());
+            sequence.flags = SequenceFlags(0);
             sequence.flags.set_non_looping(!clip.is_looping());
             sequence.move_speed = metadata.move_speed;
             sequence.rarity = metadata.rarity;
@@ -149,7 +149,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
         let mut node = NativeNode::new(&source.name, node_ids[&id])
             .map_err(|error| Error::new("node.name", error.to_string()))?;
         node.parent_id = source.parent.map_or(u32::MAX, |parent| node_ids[&parent]);
-        node.flags = NodeFlags(source.controls.unmapped_flags.bits());
+        node.flags = NodeFlags(0);
         node.flags
             .set_dont_inherit_translation(!source.inheritance.translation);
         node.flags

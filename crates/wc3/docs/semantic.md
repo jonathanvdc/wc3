@@ -4,7 +4,10 @@ Use `wc3::model::Model` to work with hierarchy, geometry, materials, and animati
 as a checked graph. Use [native documents](models.md) instead when you need to
 preserve encoded records, unknown chunks, or file organization. A graph contains
 supported authoring values and can borrow compatible arrays from a native document;
-it does not keep that document as its backing representation.
+it does not keep that document as its backing representation. MDLX and WMO controls
+expose named behavior without residual `unclassified` or `unmapped_flags` fields.
+Native bits formerly stored in those fields are discarded during semantic import
+and are not reconstructed on export.
 
 The usual workflow is to [import](conversion.md), edit through a builder, then
 plan a native export or [evaluate the result](evaluation.md). This guide introduces

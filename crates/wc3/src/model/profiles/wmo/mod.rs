@@ -1,6 +1,6 @@
 //! World-model scene semantics independent of WMO chunk revisions.
 pub use crate::model::values::world::*;
-pub use crate::model::{SurfaceTriangleControls, TriangleFlags};
+pub use crate::model::SurfaceTriangleControls;
 mod region_lights;
 pub use region_lights::*;
 mod links;

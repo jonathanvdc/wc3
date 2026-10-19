@@ -7,7 +7,6 @@ pub(super) struct ImportState<'a> {
     pub sequences: Vec<(ClipId, Sequence)>,
     pub geometry: Vec<(MeshId, Geometry)>,
     pub bones: Vec<(NodeId, Bone)>,
-    pub node_controls: Vec<(NodeId, u32)>,
     pub bind_poses: Vec<(NodeId, [f32; 12])>,
     pub gliders: Vec<MeshId>,
 }

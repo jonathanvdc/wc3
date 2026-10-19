@@ -364,7 +364,6 @@ fn window(
             side: 1,
             skip_viewer: false,
             adjusted_plane: false,
-            unclassified: default(),
         });
     runtime.neighbors.entry(a).or_default().push(b);
 }
@@ -513,7 +512,6 @@ fn portal_traversal_budget_falls_back_to_all_groups() {
                     side: 0,
                     skip_viewer: false,
                     adjusted_plane: false,
-                    unclassified: default(),
                 });
         }
     }

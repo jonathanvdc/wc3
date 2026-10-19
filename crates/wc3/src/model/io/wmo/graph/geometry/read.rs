@@ -212,9 +212,6 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
                 } else {
                     Lighting::Exterior
                 };
-                let mut unknown = batch.flags;
-                unknown.set_large_material(false);
-                unknown.set_extended_vertices(false);
                 draws.push(bind_draw(
                     builder,
                     mesh_id,
@@ -254,7 +251,6 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
                             .culling_bounds()
                             .map(|values| bounds(values.map(|corner| corner.map(f32::from)))),
                         supplemental: batch.prefix.supplemental(),
-                        unclassified: unknown.bits().into(),
                         ..Default::default()
                     }),
                 )?);
@@ -281,8 +277,6 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
                 let material = *materials.get(usize::from(material)).ok_or_else(|| {
                     Error::new("world.shadow.material", "shadow pass material is absent")
                 })?;
-                let mut flags = row.flags;
-                flags.set_large_material(false);
                 draws.push(bind_draw(
                     builder,
                     mesh_id,
@@ -304,7 +298,6 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
                                 ])
                             }),
                         },
-                        unclassified: flags.bits().into(),
                         ..Default::default()
                     }),
                 )?);

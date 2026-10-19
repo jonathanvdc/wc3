@@ -129,13 +129,6 @@ pub(super) fn beta<'a>(
     let mut builder = ModelBuilder::<Wmo>::with_profile(ModelMetadata::default());
     let header = source.root.header();
     let flags = header.flags();
-    let mut unknown = flags;
-    unknown.set_no_vertex_attenuation(false);
-    unknown.set_unified_render_path(false);
-    unknown.set_liquid_type_database_id(false);
-    unknown.set_vertex_color_alpha_only(false);
-    unknown.set_default_max_lod(false);
-    unknown.set_has_group_lods(false);
     let skybox = skybox(&source.root).map(|value| builder.add_model_resource(value));
     builder.set_metadata(ModelMetadata {
         bounds: Some(super::bounds(header.bounds)),
@@ -148,7 +141,6 @@ pub(super) fn beta<'a>(
             skip_ambient_in_vertex_color: flags.unified_render_path(),
             database_liquids: flags.liquid_type_database_id(),
             vertex_color_alpha_only: flags.vertex_color_alpha_only(),
-            unclassified: unknown.bits().into(),
         },
     });
     let materials = materials::read(&source.root, &mut builder)?;

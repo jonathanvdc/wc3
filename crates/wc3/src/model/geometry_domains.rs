@@ -2,26 +2,7 @@
 use super::{MaterialId, PackedArray, Topology};
 use crate::model::common::packed_identity;
 use crate::model::common::AsULE;
-use bitfield::bitfield;
 use glam::Vec4;
-bitfield! {
-    /// Unresolved triangle flags retained alongside named authoring controls.
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-    pub struct TriangleFlags(u16);
-    /// Complete retained option word.
-    pub bits, _:15,0;
-}
-impl TriangleFlags {
-    /// Constructs an option word without discarding any unrecognized bits.
-    pub const fn from_bits_retain(bits: u16) -> Self {
-        Self(bits)
-    }
-}
-impl From<u16> for TriangleFlags {
-    fn from(bits: u16) -> Self {
-        Self::from_bits_retain(bits)
-    }
-}
 
 /// Authored world-triangle rendering and query behavior.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -54,8 +35,6 @@ pub struct SurfaceTriangleControls {
     pub cull_objects: bool,
     /// Participate in hit queries.
     pub collide_hit: bool,
-    /// Behavior bits with unresolved meanings.
-    pub unclassified: TriangleFlags,
 }
 
 /// Primary primitives and additional connectivity selected by draws.
@@ -101,15 +80,6 @@ impl<'data> ConnectivitySets<'data> {
     }
 }
 
-impl AsULE for TriangleFlags {
-    type ULE = <u16 as AsULE>::ULE;
-    fn to_unaligned(self) -> Self::ULE {
-        self.bits().to_unaligned()
-    }
-    fn from_unaligned(value: Self::ULE) -> Self {
-        Self::from_bits_retain(u16::from_unaligned(value))
-    }
-}
 type SurfaceRecord = (
     (
         bool,
@@ -120,7 +90,7 @@ type SurfaceRecord = (
         u8,
     ),
     (bool, bool, bool, bool, bool, bool),
-    (bool, bool, TriangleFlags),
+    (bool, bool),
 );
 impl AsULE for SurfaceTriangleControls {
     type ULE = <SurfaceRecord as AsULE>::ULE;
@@ -142,7 +112,7 @@ impl AsULE for SurfaceTriangleControls {
                 self.hint,
                 self.render,
             ),
-            (self.cull_objects, self.collide_hit, self.unclassified),
+            (self.cull_objects, self.collide_hit),
         )
             .to_unaligned()
     }
@@ -157,7 +127,7 @@ impl AsULE for SurfaceTriangleControls {
                 alignment,
             ),
             (transition, no_camera_collision, detail, collision, hint, render),
-            (cull_objects, collide_hit, unclassified),
+            (cull_objects, collide_hit),
         ) = SurfaceRecord::from_unaligned(value);
         Self {
             spatial_queries,
@@ -174,16 +144,15 @@ impl AsULE for SurfaceTriangleControls {
             render,
             cull_objects,
             collide_hit,
-            unclassified,
         }
     }
 }
 
-packed_identity!(TriangleFlags, SurfaceTriangleControls);
+packed_identity!(SurfaceTriangleControls);
 
 #[cfg(test)]
 mod tests {
-    use super::{SurfaceTriangleControls, TriangleFlags};
+    use super::SurfaceTriangleControls;
     use crate::model::common::PackedArray;
     use crate::model::Scope;
 
@@ -205,7 +174,6 @@ mod tests {
             render: true,
             cull_objects: true,
             collide_hit: true,
-            unclassified: TriangleFlags::from_bits_retain(u16::MAX),
         };
         let packed = PackedArray::alloc_from_slice(&[SurfaceTriangleControls::default(), record]);
         let parsed =

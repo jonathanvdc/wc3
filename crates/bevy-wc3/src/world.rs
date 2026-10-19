@@ -649,10 +649,7 @@ impl WorldRuntime {
                 }
                 // Unresolved plane adjustments and query flags remain open;
                 // authored side signs are not guessed from client conventions.
-                let clipped = if connection.adjusted_plane
-                    || connection.skip_viewer
-                    || connection.unclassified.bits() != 0
-                {
+                let clipped = if connection.adjusted_plane || connection.skip_viewer {
                     Some(planes.clone())
                 } else {
                     self.portal_indices

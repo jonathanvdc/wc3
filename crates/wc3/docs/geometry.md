@@ -55,10 +55,10 @@ Collision geometry also widens to `GeometryData`, retaining
 
 WMO also widens to `GeometryData`. Ordered color sets use vertex-domain `Color(n)`
 attributes, retaining even empty authored slots on empty geometry. Baked-light
-coordinates use `LightmapCoordinates`. `SurfaceTriangleControls` retain complete
-face behavior, including optional material references, query and rendering flags,
-and unresolved selectors and bits. Their material references participate in
-graph validation.
+coordinates use `LightmapCoordinates`. `SurfaceTriangleControls` retain named
+face behavior, including optional material references, query and rendering controls,
+and authored selectors. Unclassified native flag bits are discarded. Their material
+references participate in graph validation.
 
 WMO face controls, tangent pools, and supplemental strips keep their own domains
 and mesh-owned subset bindings. Publication validates these selections. Narrowing

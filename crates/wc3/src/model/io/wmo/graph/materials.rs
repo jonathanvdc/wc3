@@ -97,13 +97,6 @@ pub(super) fn read<'a, 'data: 'a>(
             });
         }
         let flags = row.flags;
-        let mut unclassified = flags;
-        unclassified.set_unlit(false);
-        unclassified.set_unfogged(false);
-        unclassified.set_two_sided(false);
-        unclassified.set_exterior_lit(false);
-        unclassified.set_clamp_s(false);
-        unclassified.set_clamp_t(false);
         let tail = row.tail.texture_slots();
         let extended = matches!(row.shader, 22..=24);
         let surface = profile::MaterialStep::from_native(
@@ -157,7 +150,6 @@ pub(super) fn read<'a, 'data: 'a>(
                         controls: RasterizationOptions {
                             exterior_lit: flags.exterior_lit(),
                             self_illuminated: false,
-                            unclassified: unclassified.bits().into(),
                         },
                     },
                     ordering: (),
@@ -420,13 +412,6 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
                     });
                 }
                 let flags = row.flags;
-                let mut unclassified = flags;
-                unclassified.set_unlit(false);
-                unclassified.set_unfogged(false);
-                unclassified.set_two_sided(false);
-                unclassified.set_exterior_lit(false);
-                unclassified.set_clamp_s(false);
-                unclassified.set_clamp_t(false);
                 let surface = profile::MaterialStep::from_native(
                     None,
                     profile::MaterialDeclaration {
@@ -445,7 +430,6 @@ pub(super) fn read_alpha<'view, 'data: 'view>(
                                 },
                                 controls: RasterizationOptions {
                                     exterior_lit: flags.exterior_lit(),
-                                    unclassified: unclassified.bits().into(),
                                     ..Default::default()
                                 },
                             },
@@ -500,7 +484,7 @@ pub(super) fn native_flags(
     value: profile::MaterialRasterization,
     inputs: &[&profile::ImageInput],
 ) -> Result<native::records::MaterialFlags, Error> {
-    let mut flags = native::records::MaterialFlags(value.controls.unclassified.bits());
+    let mut flags = native::records::MaterialFlags(0);
     flags.set_unlit(value.lighting.unlit);
     flags.set_unfogged(value.lighting.unfogged);
     flags.set_two_sided(value.faces);

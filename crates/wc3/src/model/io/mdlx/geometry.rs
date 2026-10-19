@@ -231,9 +231,6 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
             };
             let feature = decoder.builder.reserve_feature(placement);
 
-            let mut flags = source.flags;
-            flags.set_drop_shadow(false);
-            flags.set_color(false);
             {
                 let payload = profile::Node::GeometryAnimation(profile::GeometryAnimation {
                     mesh,
@@ -241,7 +238,6 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     color: decoder.bind(&source.color, "geometry::COLOR", |value| value.into())?,
                     use_color: source.flags.color(),
                     drop_shadow: source.flags.drop_shadow(),
-                    unclassified: flags.bits().into(),
                 });
                 decoder.builder.set_feature(feature, payload)?;
             }

@@ -3,7 +3,6 @@ use super::bindings::{Coordinates, TextureBinding};
 use super::state::{DepthState, Lighting, Operation, PassState, Rasterization};
 use crate::model::materials::state::BlendOperations;
 use crate::model::profiles::Unavailable;
-use crate::model::values::layered::{LayerFlags, MaterialFlags};
 use crate::model::TextureTransform;
 use crate::model::{Construct, PropertyValues};
 use crate::model::{Link, Property, Texture, ValidateLinks};
@@ -31,8 +30,6 @@ impl ValidateLinks for AlphaAdditiveEncoding {
 pub struct LayerOptions {
     /// Select sphere-environment sampling.
     pub sphere_environment: bool,
-    /// Preserve controls with unresolved meanings.
-    pub unclassified: LayerFlags,
 }
 /// A layered pass selects explicit depth operations, face selection, and common lighting.
 pub type Shading = Rasterization<DepthState<Operation, Operation>, bool, Lighting, LayerOptions>;
@@ -70,8 +67,6 @@ pub struct MaterialDeclaration {
     pub sort_far_z: bool,
     /// Request full-resolution sampling.
     pub full_resolution: bool,
-    /// Shader/draw flags with unresolved meanings.
-    pub unclassified: MaterialFlags,
 }
 
 /// Image and scalar inputs shared by the classic and default Reforged shaders.

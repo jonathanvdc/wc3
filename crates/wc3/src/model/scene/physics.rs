@@ -114,8 +114,6 @@ pub struct CollisionFilter {
     pub simulate_collision: bool,
     /// Keep the bone drive active during setup and deactivation.
     pub bone_driven: bool,
-    /// Authored controls with unresolved meanings.
-    pub unclassified: CollisionFlags,
 }
 /// Kinematic following and ragdoll grouping behavior.
 #[derive(Clone, Debug, Default)]
@@ -248,19 +246,6 @@ pub struct Joint {
 }
 
 use bitfield::bitfield;
-bitfield! {
-    /// Retained unresolved collision-filter options.
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-    pub struct CollisionFlags(u32);
-    /// Complete retained flag word.
-    pub bits, _:31,0;
-}
-impl CollisionFlags {
-    /// Retains all authored option bits.
-    pub const fn from_bits_retain(bits: u32) -> Self {
-        Self(bits)
-    }
-}
 bitfield! {
     /// Independently selectable environmental force channels.
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

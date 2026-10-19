@@ -167,40 +167,6 @@ where
             })
         })
         .collect::<Result<_, _>>()?;
-    for (source, id) in source_nodes.iter().zip(&ids) {
-        native_profile
-            .node_controls
-            .push((*id, source.flags.bits() & !0x7fff));
-    }
-    for emitter in source.particle_emitters() {
-        if let Some((_, bits)) = native_profile
-            .node_controls
-            .iter_mut()
-            .find(|(id, _)| *id == identity[&emitter.node.object_id])
-        {
-            *bits &= !emitter.flags().bits();
-        }
-    }
-    for emitter in source.particle_emitters2() {
-        if let Some((_, bits)) = native_profile
-            .node_controls
-            .iter_mut()
-            .find(|(id, _)| *id == identity[&emitter.node.object_id])
-        {
-            *bits &= !emitter.flags().bits();
-        }
-    }
-    if let Ok(emitters) = source.try_popcorn_emitters() {
-        for emitter in emitters {
-            if let Some((_, bits)) = native_profile
-                .node_controls
-                .iter_mut()
-                .find(|(id, _)| *id == identity[&emitter.node.object_id])
-            {
-                *bits &= !emitter.flags().bits();
-            }
-        }
-    }
     if let Some(info) = source.model_info() {
         native_profile.metadata.animation_file =
             Cow::Owned(info.animation_file_name.text().into_owned());
@@ -219,15 +185,12 @@ where
         let id = builder.add_clip(clip)?;
         let start = f64::from(sequence.interval[0]) / 1000.;
         clips.push((id, start));
-        let mut flags = sequence.flags;
-        flags.set_non_looping(false);
         native_profile.sequences.push((
             id,
             profile::Sequence {
                 move_speed: sequence.move_speed,
                 rarity: sequence.rarity,
                 sync_point: sequence.sync_point,
-                unclassified: flags.bits().into(),
                 extent: super::extents::read(sequence.extent)?,
             },
         ));
@@ -324,12 +287,6 @@ where
                 y: source_node.flags.billboard_lock_y(),
                 z: source_node.flags.billboard_lock_z(),
             },
-            unmapped_flags: native_profile
-                .node_controls
-                .iter()
-                .find(|(key, _)| *key == id)
-                .map_or(0, |(_, value)| *value)
-                .into(),
             bone: native_profile
                 .bones
                 .iter()

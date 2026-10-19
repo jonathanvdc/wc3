@@ -2,7 +2,6 @@
 use super::state::{Lighting, Rasterization};
 use crate::model::materials::state::BlendOperations;
 use crate::model::profiles::Unavailable;
-use crate::model::values::world::MaterialFlags;
 use crate::model::{Link, ValidateLinks};
 
 /// World-model blend operations, including operations absent from other formats.
@@ -14,8 +13,6 @@ pub struct RasterizationOptions {
     pub exterior_lit: bool,
     /// Enable the authored self-illumination color.
     pub self_illuminated: bool,
-    /// Preserve controls with unresolved meanings.
-    pub unclassified: MaterialFlags,
 }
 /// World rasterization selects no independent depth program.
 pub type MaterialRasterization = Rasterization<(), bool, Lighting, RasterizationOptions>;

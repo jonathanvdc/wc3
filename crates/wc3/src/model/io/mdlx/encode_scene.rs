@@ -64,7 +64,7 @@ pub(super) fn write<'a, T: Dialect>(
                     |v| Ok(v.to_array()),
                     "geometry_animation.color",
                 )?;
-                record.flags = native::GeosetAnimationFlags(source.unclassified.bits());
+                record.flags = native::GeosetAnimationFlags(0);
                 record.flags.set_color(source.use_color);
                 record.flags.set_drop_shadow(source.drop_shadow);
                 indices.push(animations.len() as u32);
@@ -506,7 +506,6 @@ fn camera_anchor_only(model: &Model<'_, Mdlx>, id: NodeId) -> bool {
         && node.inheritance == Inheritance::default()
         && node.billboard == Billboard::None
         && !node.camera_anchored
-        && node.controls.unmapped_flags.bits() == 0
         && node.controls.bone.is_none()
         && node.controls.billboard_flags == Default::default()
         && rest.rotation == Quat::IDENTITY

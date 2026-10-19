@@ -198,16 +198,13 @@ pub(super) fn write<'a, B: Batch>(
         .triangle_controls()
         .iter()
         .map(|face| {
-            if face.ground_type_selector.is_some()
-                || face.ground_type.is_some()
-                || face.unclassified.bits() > u16::from(u8::MAX)
-            {
+            if face.ground_type_selector.is_some() || face.ground_type.is_some() {
                 context.unsupported(
                     "world.face",
-                    "historical face has no extended query selectors or wide behavior controls",
+                    "historical face has no extended query selectors",
                 )?;
             }
-            let mut flags = TriangleFlags(face.unclassified.bits() as u8);
+            let mut flags = TriangleFlags(0);
             flags.set_transition(face.transition);
             flags.set_no_camera_collision(face.no_camera_collision);
             flags.set_detail(face.detail);
@@ -339,7 +336,7 @@ pub(super) fn write<'a, B: Batch>(
                 minimum,
                 maximum,
                 material,
-                flags: BatchFlags(control.unclassified.bits()),
+                flags: BatchFlags(0),
                 lightmap: control.lightmap_selector,
                 alignment: control.alignment,
                 supplemental: control.supplemental,

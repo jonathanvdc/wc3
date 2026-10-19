@@ -97,9 +97,6 @@ impl ColorAdjustment {
                 transition_end = transition_end.max(last.saturating_add(1));
             }
         }
-        if transition_end > 0 && region.options.unclassified.bits() & 0x400 != 0 {
-            transition_end = mesh.positions().len();
-        }
         transition_end = transition_end.min(mesh.positions().len());
         let mut portals = Vec::new();
         let mut uncertain = false;
@@ -120,10 +117,7 @@ impl ColorAdjustment {
         }
         if !metadata.options.no_vertex_attenuation && transition_end > 0 {
             for connection in &region.portals {
-                if connection.adjusted_plane
-                    || !matches!(connection.side, -1 | 1)
-                    || connection.unclassified.bits() != 0
-                {
+                if connection.adjusted_plane || !matches!(connection.side, -1 | 1) {
                     uncertain = true;
                     break;
                 }

@@ -2,7 +2,6 @@
 
 use crate::model::materials::mdlx::Blend;
 use crate::model::scene::keyframed::Frames;
-use crate::model::values::layered::{Particle2Flags, ParticleFlags as ModelParticleFlags};
 use crate::model::values::model::{
     ParticleBlend, ParticleFlags as AgeDrivenFlags, ParticleGenerator, ParticleHeadTail,
 };
@@ -88,8 +87,6 @@ pub struct MdlxParticle1Details {
     pub latitude: Property<f32>,
     /// Interpret the resource as a text image.
     pub text_resource: bool,
-    /// Emitter controls with unresolved meanings.
-    pub unclassified: ModelParticleFlags,
 }
 
 /// Simulation-specific controls composed with common emission, motion and lifetime.
@@ -97,8 +94,6 @@ pub struct MdlxParticle1Details {
 pub struct MdlxParticle2Details {
     /// Model-space rather than world-space simulation.
     pub model_space: bool,
-    /// Emitter controls with unresolved meanings.
-    pub unclassified: Particle2Flags,
 
     /// Rendering controls.
     pub rendering: MdlxParticle2Rendering,

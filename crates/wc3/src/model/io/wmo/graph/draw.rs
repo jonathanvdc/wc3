@@ -1,7 +1,7 @@
 //! Native batch declarations are separated into mesh selections and instance behavior.
 use super::super::Error;
 use crate::model::profiles::{
-    wmo::{BatchFlags, DrawControls, Lighting, Pass},
+    wmo::{DrawControls, Lighting, Pass},
     Wmo,
 };
 use crate::model::{
@@ -27,8 +27,6 @@ pub(crate) struct ImportedDrawControls {
     pub strip: Option<StripWindow>,
     /// Optional tangent vectors selected from the owning geometry's tangent pool.
     pub tangents: Option<TangentWindow>,
-    /// Batch behavior bits whose meanings remain unresolved.
-    pub unclassified: BatchFlags,
     /// Individual unresolved supplemental controls surrounding the draw selection.
     pub supplemental: [u16; 5],
     /// Historical alignment control whose meaning remains unresolved.
@@ -98,7 +96,6 @@ pub(crate) fn bind_draw(
                 bounds: value.bounds,
                 lightmap: value.lightmap,
                 lightmap_selector: value.lightmap_selector,
-                unclassified: value.unclassified,
                 supplemental: value.supplemental,
                 alignment: value.alignment,
             })

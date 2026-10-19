@@ -181,9 +181,6 @@ impl RuntimeAtlasParticles {
                 diagnostic("Unknown staged sprite head/tail selection is not rendered");
                 continue;
             }
-            if details.unclassified.bits() != 0 {
-                diagnostic("Additional staged sprite flag bits are retained without a visual interpretation");
-            }
             if definition.emission.trigger {
                 diagnostic("Keyed sprite emission processes at most 4096 crossed key occurrences per update; extreme clock jumps are bounded");
             }

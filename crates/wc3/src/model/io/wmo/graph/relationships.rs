@@ -201,9 +201,6 @@ pub(super) fn read_fields<'a, 'data: 'a, D: Dialect>(
                 .get(index)
                 .ok_or_else(|| Error::new("world.group.portal", "portal range exceeds table"))?
                 .map_err(|error| Error::new("world.group.portal", error.to_string()))?;
-            let mut unknown = row.flags;
-            unknown.set_skip_viewer_queries(false);
-            unknown.set_plane_adjustment(false);
             group.portals.push(profile::PortalConnection {
                 portal: profile::PortalId {
                     system: owner,
@@ -216,7 +213,6 @@ pub(super) fn read_fields<'a, 'data: 'a, D: Dialect>(
                 side: row.side,
                 skip_viewer: row.flags.skip_viewer_queries(),
                 adjusted_plane: row.flags.plane_adjustment(),
-                unclassified: unknown.bits().into(),
             });
         }
     }
@@ -351,7 +347,7 @@ pub(super) fn write<'a, D: Dialect>(
     }
     group.portal_window(portals.len(), source.portals.len())?;
     for source in &source.portals {
-        let mut flags = PortalFlags(source.unclassified.bits());
+        let mut flags = PortalFlags(0);
         flags.set_skip_viewer_queries(source.skip_viewer);
         flags.set_plane_adjustment(source.adjusted_plane);
         portals.push(PortalRef {

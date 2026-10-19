@@ -178,7 +178,7 @@ fn beta_model<'a>(
     if let Some(bounds) = model.bounds() {
         root.header_mut().bounds = [(bounds.minimum).to_array(), (bounds.maximum).to_array()];
     }
-    let mut flags = RootFlags(controls.options.unclassified.bits());
+    let mut flags = RootFlags(0);
     flags.set_no_vertex_attenuation(controls.options.no_vertex_attenuation);
     flags.set_unified_render_path(controls.options.skip_ambient_in_vertex_color);
     flags.set_liquid_type_database_id(controls.options.database_liquids);

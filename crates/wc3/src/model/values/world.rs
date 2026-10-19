@@ -1,42 +1,6 @@
 //! Independent option words retain unresolved bits without assigning new meanings.
 use bitfield::bitfield;
 bitfield! {
-    /// Unresolved world flags retained alongside named authoring controls.
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-    pub struct WorldFlags(u16);
-    /// Complete retained option word.
-    pub bits, _:15,0;
-}
-impl WorldFlags {
-    /// Constructs an option word without discarding any unrecognized bits.
-    pub const fn from_bits_retain(bits: u16) -> Self {
-        Self(bits)
-    }
-}
-impl From<u16> for WorldFlags {
-    fn from(bits: u16) -> Self {
-        Self::from_bits_retain(bits)
-    }
-}
-bitfield! {
-    /// Unresolved group flags retained alongside named authoring controls.
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-    pub struct GroupFlags(u32);
-    /// Complete retained option word.
-    pub bits, _:31,0;
-}
-impl GroupFlags {
-    /// Constructs an option word without discarding any unrecognized bits.
-    pub const fn from_bits_retain(bits: u32) -> Self {
-        Self(bits)
-    }
-}
-impl From<u32> for GroupFlags {
-    fn from(bits: u32) -> Self {
-        Self::from_bits_retain(bits)
-    }
-}
-bitfield! {
     /// Unresolved group flags2 retained alongside named authoring controls.
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
     pub struct GroupFlags2(u32);
@@ -51,24 +15,6 @@ impl GroupFlags2 {
 }
 impl From<u32> for GroupFlags2 {
     fn from(bits: u32) -> Self {
-        Self::from_bits_retain(bits)
-    }
-}
-bitfield! {
-    /// Unresolved portal flags retained alongside named authoring controls.
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-    pub struct PortalFlags(u16);
-    /// Complete retained option word.
-    pub bits, _:15,0;
-}
-impl PortalFlags {
-    /// Constructs an option word without discarding any unrecognized bits.
-    pub const fn from_bits_retain(bits: u16) -> Self {
-        Self(bits)
-    }
-}
-impl From<u16> for PortalFlags {
-    fn from(bits: u16) -> Self {
         Self::from_bits_retain(bits)
     }
 }
@@ -141,42 +87,6 @@ impl AmbientFlags {
 }
 impl From<u32> for AmbientFlags {
     fn from(bits: u32) -> Self {
-        Self::from_bits_retain(bits)
-    }
-}
-bitfield! {
-    /// Unresolved material flags retained alongside named authoring controls.
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-    pub struct MaterialFlags(u32);
-    /// Complete retained option word.
-    pub bits, _:31,0;
-}
-impl MaterialFlags {
-    /// Constructs an option word without discarding any unrecognized bits.
-    pub const fn from_bits_retain(bits: u32) -> Self {
-        Self(bits)
-    }
-}
-impl From<u32> for MaterialFlags {
-    fn from(bits: u32) -> Self {
-        Self::from_bits_retain(bits)
-    }
-}
-bitfield! {
-    /// Unresolved batch flags retained alongside named authoring controls.
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-    pub struct BatchFlags(u8);
-    /// Complete retained option word.
-    pub bits, _:7,0;
-}
-impl BatchFlags {
-    /// Constructs an option word without discarding any unrecognized bits.
-    pub const fn from_bits_retain(bits: u8) -> Self {
-        Self(bits)
-    }
-}
-impl From<u8> for BatchFlags {
-    fn from(bits: u8) -> Self {
         Self::from_bits_retain(bits)
     }
 }

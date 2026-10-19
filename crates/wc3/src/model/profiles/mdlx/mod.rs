@@ -1,6 +1,5 @@
 //! Warcraft III authoring semantics, independent of a particular MDX dialect.
 /// Typed animated destinations for Warcraft III features and material layers.
-pub use crate::model::values::layered::*;
 mod links;
 mod scene;
 mod validation;

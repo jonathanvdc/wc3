@@ -187,7 +187,6 @@ fn authored_context(
             side,
             adjusted_plane: adjusted,
             skip_viewer: false,
-            unclassified: SlotConstruct::construct(&mut slot_values),
         }],
         ..SlotConstruct::construct(&mut slot_values)
     })));

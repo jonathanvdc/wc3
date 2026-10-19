@@ -12,7 +12,7 @@ Different paths into the same room retain their separate windows; cycles are
 bounded without discarding other entrance paths.
 
 Exterior and unclassified groups remain visible. Unknown or exterior starting
-groups, unresolved portal controls, malformed polygons and traversal work limits
+groups, authored portal adjustments, malformed polygons and traversal work limits
 fall back conservatively. Native portal-side conventions, supplemental plane
 adjustments and occluder planes are not interpreted; this is geometric window
 culling rather than a complete native visibility implementation. Applications own
@@ -26,8 +26,10 @@ identity for an application material provider; the renderer does not infer a sha
 from an external liquid-type database. Environment sampling exposes regional fog and
 ambient weights without changing global Bevy lighting or fog. [WMO surfaces](wmo-materials.md)
 interpret baked vertex lighting, draw lighting classes and root/region ambient
-contributions independently of those application-owned scene resources. Native regional
-lighting fidelity remains unverified.
+contributions independently of those application-owned scene resources. Regional
+transition lighting uses the authored transition draw ranges. Unclassified native
+flag bits are discarded by semantic import and do not affect portal traversal or
+expand those ranges. Native regional lighting fidelity remains unverified.
 
 
 See [WMO materials](wmo-materials.md) for surface and vertex-light interpretation,
