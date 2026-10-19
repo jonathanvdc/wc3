@@ -505,12 +505,14 @@ fn native_export_uses_one_material_declaration_for_all_steps() {
 fn known_shader_header_requires_matching_steps_for_layout_normalization() {
     let mut model = native_model::<native::V1000>("Shader_HD_DefaultUnit", &[None], false);
     let id = model.materials().iter().next().unwrap().0;
-    model.edit(|builder| {
-        let mut material = builder.model().material(id).unwrap().clone();
-        let inputs = material.surface.steps[0].shader.inputs().clone();
-        material.surface.steps[0].shader = Shader::Classic(inputs);
-        builder.set_material(id, material)
-    }).unwrap();
+    model
+        .edit(|builder| {
+            let mut material = builder.model().material(id).unwrap().clone();
+            let inputs = material.surface.steps[0].shader.inputs().clone();
+            material.surface.steps[0].shader = Shader::Classic(inputs);
+            builder.set_material(id, material)
+        })
+        .unwrap();
     let error = export::<native::V1800>(&model).unwrap_err();
     assert_eq!(error.path, "material.shader");
 }

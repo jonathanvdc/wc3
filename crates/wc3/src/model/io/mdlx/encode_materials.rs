@@ -67,8 +67,14 @@ pub(super) fn write<'a, V: FormatVersion>(
         if !shader_name.is_empty() {
             let known_selection = !source.steps.is_empty()
                 && match shader_name {
-                    "Shader_HD_DefaultUnit" => source.steps.iter().all(|step| matches!(step.shader, Shader::ReforgedDefault(_))),
-                    "Shader_SD_FixedFunction" => source.steps.iter().all(|step| matches!(step.shader, Shader::Classic(_))),
+                    "Shader_HD_DefaultUnit" => source
+                        .steps
+                        .iter()
+                        .all(|step| matches!(step.shader, Shader::ReforgedDefault(_))),
+                    "Shader_SD_FixedFunction" => source
+                        .steps
+                        .iter()
+                        .all(|step| matches!(step.shader, Shader::Classic(_))),
                     _ => false,
                 };
             if known_selection {
@@ -78,7 +84,9 @@ pub(super) fn write<'a, V: FormatVersion>(
                     "encoded the known material shader selection through the destination's per-layer selectors",
                 );
             } else {
-                encoder.context.unsupported(format!("{path}.shader"), error.to_string())?;
+                encoder
+                    .context
+                    .unsupported(format!("{path}.shader"), error.to_string())?;
             }
         }
     }
