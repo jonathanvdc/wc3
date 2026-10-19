@@ -1,4 +1,5 @@
-use wc3::model::common::IntoZeroVec;
+use glam::Vec3;
+use wc3::model::IntoPackedArray;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 #[path = "mdlx/graph.rs"]
 mod graph;
@@ -262,7 +263,7 @@ fn unknown_blocks_are_rejected_or_dropped_before_authoring_edits() {
                 .iter()
                 .map(|position| position.map(|value| value + 1.))
                 .collect::<Vec<_>>())
-            .into_zero_vec(),
+            .into_packed_array(),
         )
         .unwrap();
     imported
@@ -316,10 +317,10 @@ fn spline_keys_materialize_once_and_remain_editable() {
     assert!(matches!(track.clock, TimeSource::Shared(_)));
     assert!(track.curve.values().is_owned());
     let mut values = track.curve.values().to_vec();
-    values[1] = [3.; 3];
+    values[1] = Vec3::from_array([3.; 3]);
     track.curve = wc3::model::Curve::hermite(
         track.curve.times().to_vec(),
-        (values).into_zero_vec(),
+        (values).into_packed_array(),
         track.curve.hermite_derivatives().unwrap().incoming.clone(),
         track.curve.hermite_derivatives().unwrap().outgoing.clone(),
     )

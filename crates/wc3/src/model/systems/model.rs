@@ -1,7 +1,9 @@
 //! Model collision, customization matrices, and physics systems.
 use super::model_physics::Physics;
 use crate::model::BoneOverrideResourceId;
-use crate::model::{Bounds, Link, NodeId, ValidateLinks, ZeroVec};
+use crate::model::{Bounds, Link, NodeId, PackedArray, ValidateLinks};
+use glam::Mat4;
+use glam::Vec3;
 /// Sparse per-bone transform override supplied by a companion asset.
 #[derive(Clone, Debug)]
 pub struct BoneOverride<'a> {
@@ -11,7 +13,7 @@ pub struct BoneOverride<'a> {
     pub bones: Vec<NodeId>,
     /// Native parent-axis affine corrections around each freshly animated joint origin.
     /// Raw matrix columns retain translation in the fourth vector; these are not complete poses.
-    pub transforms: ZeroVec<'a, [[f32; 4]; 4]>,
+    pub transforms: PackedArray<'a, Mat4>,
 }
 /// Independent authoring systems that can coexist in one logical model.
 #[derive(Clone, Debug)]
@@ -27,11 +29,11 @@ pub enum System<'a> {
 #[derive(Clone, Debug)]
 pub struct Collision<'a> {
     /// Collision vertices in model coordinates.
-    pub positions: ZeroVec<'a, [f32; 3]>,
+    pub positions: PackedArray<'a, Vec3>,
     /// Collision face connectivity.
-    pub triangles: ZeroVec<'a, [u32; 3]>,
+    pub triangles: PackedArray<'a, [u32; 3]>,
     /// Per-face collision normals.
-    pub normals: ZeroVec<'a, [f32; 3]>,
+    pub normals: PackedArray<'a, Vec3>,
     /// Conservative collision bounds.
     pub bounds: Bounds,
 }
@@ -56,7 +58,6 @@ impl ValidateLinks for System<'_> {
                         .positions
                         .iter()
                         .chain(value.normals.iter())
-                        .flatten()
                         .any(|x| !x.is_finite())
                 {
                     v(Link::InvalidValue)
@@ -66,12 +67,7 @@ impl ValidateLinks for System<'_> {
                 for value in values {
                     value.visit_links(v);
                     if value.bones.len() != value.transforms.len()
-                        || value
-                            .transforms
-                            .iter()
-                            .flatten()
-                            .flatten()
-                            .any(|x| !x.is_finite())
+                        || value.transforms.iter().any(|x| !x.is_finite())
                     {
                         v(Link::InvalidValue)
                     }

@@ -1,5 +1,6 @@
 //! Appearance evaluated against normalized particle age.
 use crate::model::Curve;
+use glam::{Vec2, Vec3};
 /// Appearance evaluated against normalized particle age rather than a model clip.
 #[derive(Clone, Debug, Default)]
 pub struct M2ParticleAppearance<'a> {
@@ -7,13 +8,13 @@ pub struct M2ParticleAppearance<'a> {
     pub legacy_atlas: Option<LegacyAtlas>,
 
     /// RGB multiplier over normalized age.
-    pub color: Option<Curve<'a, [f32; 3]>>,
+    pub color: Option<Curve<'a, Vec3>>,
     /// Opacity fraction over normalized age.
     pub alpha: Option<Curve<'a, f32>>,
     /// Two-dimensional particle scale over normalized age.
-    pub scale: Option<Curve<'a, [f32; 2]>>,
+    pub scale: Option<Curve<'a, Vec2>>,
     /// Per-axis random scale variation.
-    pub scale_variation: [f32; 2],
+    pub scale_variation: Vec2,
     /// Head and tail flipbook cell curves.
     pub head_uv: Option<Curve<'a, u16>>,
     /// Tail flipbook cell curve.

@@ -37,7 +37,7 @@
 //! [`io`](crate::model::io) imports documents and plans exports with policies from [`conversion`](crate::model::conversion).
 //! Use [`formats`](crate::model::formats) directly for native record edits and preservation of unknown
 //! source data. Checked models retain supported meanings rather than source-file
-//! layouts. Their fixed-width [`ZeroVec`](crate::model::ZeroVec) arrays can borrow compatible native
+//! layouts. Their fixed-width [`PackedArray`](crate::model::PackedArray) arrays can borrow compatible native
 //! storage; [`ValueGroups`](crate::model::ValueGroups) stores variable-length rows as elements and offsets.
 
 mod error;
@@ -49,10 +49,9 @@ pub use error::Error;
 mod ids;
 pub use ids::*;
 mod value_groups;
-pub use crate::model::common::ZeroVec;
+pub use crate::model::common::{IntoPackedArray, PackedArray, PackedValue};
+pub use glam::{Mat3, Mat4, Quat, Vec2, Vec3, Vec4};
 pub use value_groups::ValueGroups;
-mod rotation;
-pub use rotation::*;
 pub mod animation;
 pub use animation::{
     curves::*, Animation, AnimationProgram, AnimationSample, Clip, Construct, DynamicTrack,

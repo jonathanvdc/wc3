@@ -1,3 +1,4 @@
+use bevy::math::Vec3;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -19,7 +20,7 @@ pub struct BoneIdentity {
     /// Authored name, useful for explicit application mappings.
     pub name: String,
     /// Native model-space bone pivot, retained for ambiguous or missing checksum matching.
-    pub pivot: [f32; 3],
+    pub pivot: Vec3,
 }
 /// One draw classified by its native skin-section selection group.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -160,11 +161,7 @@ impl CharacterCatalog {
                     .into_iter()
                     .filter(|parent| {
                         parent.name_crc == bone.name_crc
-                            && parent
-                                .pivot
-                                .iter()
-                                .zip(bone.pivot)
-                                .all(|(a, b)| (a - b).abs() <= 1e-5)
+                            && parent.pivot.abs_diff_eq(bone.pivot, 1e-5)
                     })
                     .collect()
             };

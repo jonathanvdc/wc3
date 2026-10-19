@@ -1,6 +1,7 @@
 //! World-group fields borrowed directly into the static authoring vocabulary.
 use super::bounds;
 use super::face;
+use crate::model::common::PackedArray;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::wmo::group::GroupChunk;
 use crate::model::formats::wmo::records::{BatchMetadata, HeaderTailMetadata, TriangleFlags2};
@@ -12,7 +13,7 @@ use crate::model::io::{materialize, owned};
 use crate::model::profiles::wmo::{Group as LogicalGroup, Lighting, WorldSystem};
 use crate::model::profiles::Wmo;
 use crate::model::{MaterialId, Mesh, MeshInstance, ModelBuilder, WmoGeometry};
-use zerovec::ZeroVec;
+use glam::Vec4;
 pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
     source: &'a Group<'_, D>,
     group_root: (GroupKey, &'a crate::model::formats::wmo::Root<'_, D>),
@@ -23,25 +24,25 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
     context: &mut Context,
 ) -> Result<crate::model::InstanceId, Error> {
     let (key, root) = group_root;
-    let mut positions = ZeroVec::new();
-    let mut normals = ZeroVec::new();
-    let mut indices = ZeroVec::new();
+    let mut positions = PackedArray::new();
+    let mut normals = PackedArray::new();
+    let mut indices = PackedArray::new();
     let mut coordinates = Vec::new();
     let mut colors = Vec::new();
-    let mut strip_indices = ZeroVec::new();
-    let mut tangent_vectors = ZeroVec::new();
+    let mut strip_indices = PackedArray::new();
+    let mut tangent_vectors = PackedArray::new();
     for chunk in source.chunks() {
         match chunk {
             GroupChunk::Positions(values) => {
-                positions = ZeroVec::parse_bytes(values.as_bytes())
+                positions = PackedArray::parse_bytes(values.as_bytes())
                     .map_err(|error| Error::new("world.positions", error.to_string()))?
             }
             GroupChunk::Normals(values) => {
-                normals = ZeroVec::parse_bytes(values.as_bytes())
+                normals = PackedArray::parse_bytes(values.as_bytes())
                     .map_err(|error| Error::new("world.normals", error.to_string()))?
             }
             GroupChunk::TextureCoordinates(values) => coordinates.push(
-                ZeroVec::parse_bytes(values.as_bytes())
+                PackedArray::parse_bytes(values.as_bytes())
                     .map_err(|error| Error::new("world.coordinates", error.to_string()))?,
             ),
             GroupChunk::VertexColors(values) | GroupChunk::VertexColors2(values) => {
@@ -50,7 +51,7 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
                         .get(index)
                         .expect("checked color index")
                         .expect("validated color record");
-                    [r, g, b, a].map(|component| f32::from(component) / 255.)
+                    Vec4::from_array([r, g, b, a].map(|component| f32::from(component) / 255.))
                 }))
             }
             GroupChunk::StripIndices(rows) => {
@@ -59,7 +60,7 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
                 })
             }
             GroupChunk::Tangents(rows) => {
-                tangent_vectors = ZeroVec::parse_bytes(rows.tangents.as_bytes())
+                tangent_vectors = PackedArray::parse_bytes(rows.tangents.as_bytes())
                     .map_err(|error| Error::new("world.tangents", error.to_string()))?
             }
             GroupChunk::TangentsUnresolved(bytes) => {
@@ -80,7 +81,7 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
                 let bytes = bytes.get(prefix..).ok_or_else(|| {
                     Error::new("world.tangents", "batch map exceeds tangent payload")
                 })?;
-                tangent_vectors = ZeroVec::parse_bytes(bytes)
+                tangent_vectors = PackedArray::parse_bytes(bytes)
                     .map_err(|error| Error::new("world.tangents", error.to_string()))?;
             }
             GroupChunk::Indices(values) => {
@@ -321,13 +322,16 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
     for chunk in source.chunks() {
         match chunk {
             GroupChunk::TerrainCutPlanes(rows) => {
-                region.terrain_cut_planes = materialize(rows.len(), move |index| {
-                    let row = rows
-                        .get(index)
-                        .expect("checked plane index")
-                        .expect("validated plane");
-                    [row.normal[0], row.normal[1], row.normal[2], row.distance]
-                })
+                region.terrain_cut_planes = PackedArray::from_storage(
+                    (materialize(rows.len(), move |index| {
+                        let row = rows
+                            .get(index)
+                            .expect("checked plane index")
+                            .expect("validated plane");
+                        [row.normal[0], row.normal[1], row.normal[2], row.distance]
+                    }))
+                    .into_storage(),
+                )
             }
             GroupChunk::AmbientOverride(color) => {
                 region.ambient_override = Some(super::rgba(*color))

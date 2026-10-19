@@ -1,7 +1,8 @@
 //! Mathematical value domains and interpolation capabilities.
-use crate::model::{Link, Quaternion, Texture, ValidateLinks as _};
+use crate::model::common::PackedValue;
+use crate::model::{Link, Quat, Texture, ValidateLinks as _};
+use glam::{Vec2, Vec3, Vec4};
 use std::fmt::Debug;
-use zerovec::ule::AsULE;
 
 mod private {
     pub trait Domain {}
@@ -62,10 +63,10 @@ impl private::RotationDomain for RotationDomain {}
 ///
 /// The associated types distinguish derivatives and control points from key values.
 /// Native adapters use the conversion methods when decoding format-specific controls.
-pub trait CurveValue: AsULE + Clone + Send + Sync + Debug + 'static {
+pub trait CurveValue: PackedValue + Clone + Send + Sync + Debug + 'static {
     /// Interpolation domain, which determines all constructor capabilities.
     type Domain: CurveDomain;
-    /// Hermite derivative domain. Quaternion derivatives are component vectors.
+    /// Hermite derivative domain. Quat derivatives are component vectors.
     type Derivative: CurveValue;
     /// Bezier control-point domain, which need not be a valid key value.
     type ControlPoint: CurveValue;
@@ -119,6 +120,9 @@ macro_rules! value_domain {
         }
     };
 }
+value_domain!(Vec2, ContinuousDomain, |v: &Vec2| v.is_finite());
+value_domain!(Vec3, ContinuousDomain, |v: &Vec3| v.is_finite());
+value_domain!(Vec4, ContinuousDomain, |v: &Vec4| v.is_finite());
 value_domain!(f32, ContinuousDomain, |v: &f32| v.is_finite());
 value_domain!(f64, ContinuousDomain, |v: &f64| v.is_finite());
 value_domain!(u32, NumericDomain, |_: &u32| true);
@@ -155,24 +159,30 @@ array_domain!(f32, ContinuousDomain, |v: &[f32; N]| v
     .all(|v| v.is_finite()));
 array_domain!(u32, NumericDomain, |_: &[u32; N]| true);
 array_domain!(u8, NumericDomain, |_: &[u8; N]| true);
-impl CurveValue for Quaternion {
+impl CurveValue for Quat {
     type Domain = RotationDomain;
-    type Derivative = [f32; 4];
-    type ControlPoint = [f32; 4];
+    type Derivative = Vec4;
+    type ControlPoint = Vec4;
     fn is_valid(&self) -> bool {
-        self.is_rotation()
+        self.is_finite()
+            && self
+                .to_array()
+                .iter()
+                .map(|v| f64::from(*v).powi(2))
+                .sum::<f64>()
+                > 0.
     }
     fn into_derivative(self) -> Self::Derivative {
-        self.0
+        Vec4::from_array(self.to_array())
     }
     fn into_control_point(self) -> Self::ControlPoint {
-        self.0
+        Vec4::from_array(self.to_array())
     }
     fn derivative_value(value: Self::Derivative) -> Self {
-        Self(value)
+        Self::from_array(value.to_array())
     }
     fn control_point_value(value: Self::ControlPoint) -> Self {
-        Self(value)
+        Self::from_array(value.to_array())
     }
 }
 macro_rules! resource_domain {

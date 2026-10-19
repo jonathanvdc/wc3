@@ -1,22 +1,21 @@
-use crate::model::ModelMetadata;
-use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-
 use super::*;
+use crate::model::ModelMetadata;
 use crate::model::{Clip, Curve, ModelBuilder, SharedClock};
+use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
+use glam::Vec3;
 use std::ptr::eq;
 fn time(seconds: f64) -> Time {
     Time::seconds(seconds).unwrap()
 }
-fn dynamic_track(
-    property: Property<[f32; 3]>,
-    clock: TimeSource,
-    end: f32,
-) -> DynamicTrack<'static> {
+fn dynamic_track(property: Property<Vec3>, clock: TimeSource, end: f32) -> DynamicTrack<'static> {
     DynamicTrack::Vector3(Track {
         target: property,
         curve: Curve::linear(
             [time(0.), time(1.), time(2.)],
-            [[0.; 3], [end / 2.; 3], [end; 3]],
+            ([[0.; 3], [end / 2.; 3], [end; 3]])
+                .into_iter()
+                .map(Vec3::from_array)
+                .collect::<Vec<_>>(),
         )
         .unwrap(),
         clock,
@@ -33,7 +32,14 @@ fn frozen_shared_clock_keeps_authored_origin_without_a_loop_period() {
     builder
         .add_global_track(DynamicTrack::Vector3(Track {
             target: node_translation,
-            curve: Curve::linear([time(0.), time(2.)], [[3.; 3], [9.; 3]]).unwrap(),
+            curve: Curve::linear(
+                [time(0.), time(2.)],
+                ([[3.; 3], [9.; 3]])
+                    .into_iter()
+                    .map(Vec3::from_array)
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap(),
             clock: TimeSource::Shared(clock),
         }))
         .unwrap();
@@ -50,7 +56,10 @@ fn frozen_shared_clock_keeps_authored_origin_without_a_loop_period() {
                 ..SlotConstruct::construct(&mut slot_values)
             })
             .unwrap();
-        assert_eq!(sampled.override_value(&node_translation), Some([3.; 3]));
+        assert_eq!(
+            sampled.override_value(&node_translation),
+            Some(Vec3::from_array([3.; 3]))
+        );
         let track = sampled.track(&node_translation).unwrap();
         assert_eq!(track.time, time(0.));
         assert_eq!(track.period, None);
@@ -107,9 +116,18 @@ fn composed_programs_share_clocks_and_keep_property_owners_disjoint() {
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
-    assert_eq!(sampled.override_value(&node_translation), Some([1.; 3]));
-    assert_eq!(sampled.override_value(&extra_translation), Some([2.; 3]));
-    assert_eq!(sampled.override_value(&extra_scale), Some([3.; 3]));
+    assert_eq!(
+        sampled.override_value(&node_translation),
+        Some(Vec3::from_array([1.; 3]))
+    );
+    assert_eq!(
+        sampled.override_value(&extra_translation),
+        Some(Vec3::from_array([2.; 3]))
+    );
+    assert_eq!(
+        sampled.override_value(&extra_scale),
+        Some(Vec3::from_array([3.; 3]))
+    );
     assert!(host
         .compose(&part, &[(clip, part_clip), (clip, part_clip)], |_| true)
         .is_err());
@@ -162,14 +180,26 @@ fn event_boundary_override_keeps_own_clock_end_and_other_clock_start() {
     let end = sampled
         .at_times(time(2.), time(2.))
         .at_occurrence(TimeSource::Animation, time(2.));
-    assert_eq!(end.override_value(&node_translation), Some([4.; 3]));
-    assert_eq!(end.override_value(&node_scale), Some([0.; 3]));
+    assert_eq!(
+        end.override_value(&node_translation),
+        Some(Vec3::from_array([4.; 3]))
+    );
+    assert_eq!(
+        end.override_value(&node_scale),
+        Some(Vec3::from_array([0.; 3]))
+    );
     assert_eq!(end.track(&node_translation).unwrap().time, time(2.));
     let shared_end = sampled
         .at_times(time(2.), time(2.))
         .at_occurrence(TimeSource::Shared(clock), time(2.));
-    assert_eq!(shared_end.override_value(&node_translation), Some([0.; 3]));
-    assert_eq!(shared_end.override_value(&node_scale), Some([8.; 3]));
+    assert_eq!(
+        shared_end.override_value(&node_translation),
+        Some(Vec3::from_array([0.; 3]))
+    );
+    assert_eq!(
+        shared_end.override_value(&node_scale),
+        Some(Vec3::from_array([8.; 3]))
+    );
 }
 #[test]
 fn alias_local_clock_and_owned_program_survive_source_drop() {
@@ -208,7 +238,7 @@ fn alias_local_clock_and_owned_program_survive_source_drop() {
             .animation_sample(sample)
             .unwrap()
             .override_value(&property),
-        Some([2.; 3])
+        Some(Vec3::from_array([2.; 3]))
     );
     let program = AnimationProgram::compile(&model);
     drop(model);
@@ -217,7 +247,10 @@ fn alias_local_clock_and_owned_program_survive_source_drop() {
         panic!("owned programs must use indexed selection")
     };
     assert_eq!(selection.iter().count(), 1);
-    assert_eq!(sampled.override_value(&property), Some([2.; 3]));
+    assert_eq!(
+        sampled.override_value(&property),
+        Some(Vec3::from_array([2.; 3]))
+    );
 }
 #[test]
 fn independent_clocks_are_explicit() {
@@ -249,8 +282,14 @@ fn independent_clocks_are_explicit() {
         ..SlotConstruct::construct(&mut slot_values)
     };
     let selected = model.animation_sample(sample).unwrap();
-    assert_eq!(selected.override_value(&translation), Some([2.; 3]));
-    assert_eq!(selected.override_value(&scale), Some([2.; 3]));
+    assert_eq!(
+        selected.override_value(&translation),
+        Some(Vec3::from_array([2.; 3]))
+    );
+    assert_eq!(
+        selected.override_value(&scale),
+        Some(Vec3::from_array([2.; 3]))
+    );
     assert_eq!(selected.animated(&fallback), 7.);
     let program = AnimationProgram::compile(&model);
     assert_eq!(
@@ -272,7 +311,10 @@ fn indexed_empty_override_falls_back_and_timeline_keys_are_bounded() {
             clock: TimeSource::Animation,
             curve: Curve::linear(
                 [time(0.), time(1.), time(4.)],
-                [[0.; 3], [2.; 3], [100.; 3]],
+                ([[0.; 3], [2.; 3], [100.; 3]])
+                    .into_iter()
+                    .map(Vec3::from_array)
+                    .collect::<Vec<_>>(),
             )
             .unwrap(),
         }))
@@ -281,7 +323,7 @@ fn indexed_empty_override_falls_back_and_timeline_keys_are_bounded() {
         tracks: vec![DynamicTrack::Vector3(Track {
             target: property,
             clock: TimeSource::Animation,
-            curve: Curve::step(Vec::<Time>::new(), Vec::<[f32; 3]>::new()).unwrap(),
+            curve: Curve::step(Vec::<Time>::new(), Vec::<Vec3>::new()).unwrap(),
         })],
         ..Default::default()
     });
@@ -307,14 +349,14 @@ fn indexed_empty_override_falls_back_and_timeline_keys_are_bounded() {
     };
     assert_eq!(
         program.sample(sample).unwrap().override_value(&property),
-        Some([2.; 3])
+        Some(Vec3::from_array([2.; 3]))
     );
     assert_eq!(
         model
             .animation_sample(sample)
             .unwrap()
             .override_value(&property),
-        Some([2.; 3])
+        Some(Vec3::from_array([2.; 3]))
     );
 }
 #[test]
@@ -354,12 +396,18 @@ fn retiming_borrows_indexed_programmes_and_preserves_alias_clock_policy() {
     let original = selected.track(&property).unwrap();
     let retimed = selected.at_times(time(2.25), time(100.));
     assert!(eq(retimed.selection, &selected));
-    assert_eq!(retimed.override_value(&property), Some([0.5; 3]));
+    assert_eq!(
+        retimed.override_value(&property),
+        Some(Vec3::from_array([0.5; 3]))
+    );
     let effective = retimed.track(&property).unwrap();
     assert!(eq(original.track, effective.track));
     assert_eq!(effective.time, time(0.25));
     assert_eq!(effective.period, Some(time(1.)));
-    assert_eq!(selected.override_value(&property), Some([0.2; 3]));
+    assert_eq!(
+        selected.override_value(&property),
+        Some(Vec3::from_array([0.2; 3]))
+    );
 }
 #[test]
 fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
@@ -379,7 +427,10 @@ fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
             clock: TimeSource::Animation,
             curve: Curve::linear(
                 [time(9.), time(10.), time(12.), time(13.)],
-                [[90.; 3], [2.; 3], [6.; 3], [130.; 3]],
+                ([[90.; 3], [2.; 3], [6.; 3], [130.; 3]])
+                    .into_iter()
+                    .map(Vec3::from_array)
+                    .collect::<Vec<_>>(),
             )
             .unwrap(),
         }))
@@ -391,7 +442,7 @@ fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
         tracks: vec![DynamicTrack::Vector3(Track {
             target: translation,
             clock: TimeSource::Animation,
-            curve: Curve::step(Vec::<Time>::new(), Vec::<[f32; 3]>::new()).unwrap(),
+            curve: Curve::step(Vec::<Time>::new(), Vec::<Vec3>::new()).unwrap(),
         })],
         ..Default::default()
     });
@@ -416,8 +467,14 @@ fn retimed_timeline_and_shared_clocks_keep_offsets_intervals_and_fallback() {
         })
         .unwrap();
     let retimed = selected.at_times(time(3.5), time(5.));
-    assert_eq!(retimed.override_value(&translation), Some([5.; 3]));
-    assert_eq!(retimed.override_value(&scale), Some([4.; 3]));
+    assert_eq!(
+        retimed.override_value(&translation),
+        Some(Vec3::from_array([5.; 3]))
+    );
+    assert_eq!(
+        retimed.override_value(&scale),
+        Some(Vec3::from_array([4.; 3]))
+    );
     let track = retimed.track(&translation).unwrap();
     assert_eq!(track.origin, time(10.));
     assert_eq!(track.period, Some(time(2.)));

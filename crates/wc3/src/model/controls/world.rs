@@ -4,8 +4,9 @@ use crate::model::scene::world::{
 };
 use crate::model::values::world::GroupFlags2;
 use crate::model::Bounds;
-use crate::model::{FeatureId, InstanceId, ZeroVec};
+use crate::model::{FeatureId, InstanceId, PackedArray};
 use crate::model::{Link, ModelResourceId, ValidateLinks};
+use glam::{Vec3, Vec4};
 use std::borrow::Cow;
 
 /// Identity of a world group in its owning world system.
@@ -58,7 +59,7 @@ pub struct Group<'a> {
     /// Catalog visibility and illumination controls.
     pub options: GroupOptions,
     /// Catalog minimum and maximum bounds.
-    pub bounds: [[f32; 3]; 2],
+    pub bounds: [Vec3; 2],
     /// Supplemental catalog flags when authored.
     pub supplemental: Option<GroupFlags2>,
     /// Catalog detail-level selection when authored.
@@ -98,7 +99,7 @@ pub struct RegionControls<'a> {
     /// Independently authored embedded baked-light images.
     pub lightmap_images: Vec<crate::model::Texture>,
     /// Baked-light texel rectangles; selector relationships are not inferred.
-    pub lightmap_rectangles: ZeroVec<'a, [u8; 4]>,
+    pub lightmap_rectangles: PackedArray<'a, [u8; 4]>,
     /// Historical interior vertex/draw windows, retained as individual numeric selections.
     pub interior_windows: Option<[[u16; 4]; 4]>,
     /// Historical exterior vertex/draw windows, retained as individual numeric selections.
@@ -116,7 +117,7 @@ pub struct RegionControls<'a> {
     /// Additional region control words whose meanings are unresolved.
     pub supplemental_controls: Vec<u32>,
     /// Authored terrain-cutting planes in world coordinates.
-    pub terrain_cut_planes: ZeroVec<'a, [f32; 4]>,
+    pub terrain_cut_planes: PackedArray<'a, Vec4>,
     /// Optional region ambient color override in RGBA order.
     pub ambient_override: Option<[u8; 4]>,
     /// Optional detail-doodad layer selection.
@@ -126,13 +127,13 @@ pub struct RegionControls<'a> {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct AuxiliaryGeometry<'a> {
     /// Index selections into the auxiliary geometry stream.
-    pub indices: ZeroVec<'a, u16>,
+    pub indices: PackedArray<'a, u16>,
     /// Three-component authored auxiliary values.
-    pub values: ZeroVec<'a, [f32; 3]>,
+    pub values: PackedArray<'a, Vec3>,
     /// Start/count selections associated with vertices.
-    pub vertex_windows: ZeroVec<'a, [u16; 2]>,
+    pub vertex_windows: PackedArray<'a, [u16; 2]>,
     /// Start/count selections associated with planes.
-    pub plane_windows: ZeroVec<'a, [u16; 2]>,
+    pub plane_windows: PackedArray<'a, [u16; 2]>,
 }
 
 /// Complete static world authoring data.
@@ -143,9 +144,9 @@ pub struct WorldSystem<'a> {
     /// Portal boundary polygons and culling planes.
     pub portals: Vec<Portal<'a>>,
     /// Visibility vertex runs retained as logical polygons.
-    pub visibility: Vec<ZeroVec<'a, [f32; 3]>>,
+    pub visibility: Vec<PackedArray<'a, Vec3>>,
     /// Occluder plane equations.
-    pub occluders: ZeroVec<'a, [f32; 4]>,
+    pub occluders: PackedArray<'a, Vec4>,
     /// Doodad sets and their explicit membership.
     pub doodad_sets: Vec<DoodadSet<'a>>,
     /// Spherical and plane-bounded fog volumes.

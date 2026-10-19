@@ -7,6 +7,7 @@ use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::profiles::mdlx as profile;
 use crate::model::PhotographicControls;
 use crate::model::{LightEmission, NodeId, VisibleLight};
+use glam::{Vec2, Vec3};
 use std::collections::BTreeMap;
 
 pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
@@ -26,7 +27,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                 decoder.bind(
                     &source.$field,
                     concat!("light.", stringify!($field)),
-                    |value| value,
+                    |value| value.into(),
                 )?
             };
         }
@@ -84,25 +85,25 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
     let mut camera_nodes = Vec::new();
     for source in source.cameras() {
         let node = decoder.builder.new_node(S::text(source.name.text()));
-        decoder
-            .builder
-            .values_mut()
-            .set(node.transform.translation, source.position)?;
+        decoder.builder.values_mut().set(
+            node.transform.translation,
+            Vec3::from_array(source.position),
+        )?;
         let id = decoder.builder.add_node(node)?;
         camera_nodes.push(id);
         let feature = decoder.builder.reserve_feature(id);
 
         let eye_offset = decoder.track(
             source.translation.as_ref(),
-            [0.; 3],
+            Vec3::ZERO,
             "camera::EYE_OFFSET",
-            |value| value,
+            |value| value.into(),
         )?;
         let target_offset = decoder.track(
             source.target_translation.as_ref(),
-            [0.; 3],
+            Vec3::ZERO,
             "camera::TARGET_OFFSET",
-            |value| value,
+            |value| value.into(),
         )?;
         macro_rules! optional {
             ($field:ident) => {
@@ -111,7 +112,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                         source.$field.as_ref(),
                         0.,
                         concat!("camera.", stringify!($field)),
-                        |value| value,
+                        |value| value.into(),
                     )?)
                 } else {
                     None
@@ -121,10 +122,10 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         {
             let payload = profile::Node::Camera(profile::Camera {
                 eye_offset,
-                target: source.target_position,
+                target: Vec3::from_array(source.target_position),
                 target_offset,
                 field_of_view: source.field_of_view,
-                clipping: [source.near_clip, source.far_clip],
+                clipping: Vec2::from_array([source.near_clip, source.far_clip]),
                 roll: decoder.track(source.rotation.as_ref(), 0., "camera::ROLL", |value| value)?,
                 convention: PhotographicControls {
                     visibility: decoder.track(

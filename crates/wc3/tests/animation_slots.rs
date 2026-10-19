@@ -1,8 +1,9 @@
+use glam::Vec3;
 use wc3::model::profiles::{Mdlx, Universal};
 use wc3::model::ModelMetadata;
 use wc3::model::{
     AnimationProgram, AnimationSample, Clip, Curve, DynamicTrack, Model, PoseInputs, PropertyValue,
-    PropertyValues, Quaternion, Time, TimeSource, Track,
+    PropertyValues, Quat, Time, TimeSource, Track,
 };
 
 fn time(seconds: f64) -> Time {
@@ -13,16 +14,16 @@ fn time(seconds: f64) -> Time {
 fn types_select_independent_subtables_and_copies_share_slots() {
     let mut values = PropertyValues::default();
     let scalar = values.add(2f32);
-    let rotation = values.add(Quaternion::IDENTITY);
-    let vector = values.add([1f32; 3]);
+    let rotation = values.add(Quat::IDENTITY);
+    let vector = values.add(Vec3::ONE);
     assert_ne!(scalar.slot(), vector.slot());
-    assert_eq!(values[vector], [1.; 3]);
+    assert_eq!(values[vector], Vec3::ONE);
     let shared = scalar;
     values.set(shared, 7.).unwrap();
     assert_eq!(values[scalar], 7.);
-    assert_eq!(values[rotation], Quaternion::IDENTITY);
+    assert_eq!(values[rotation], Quat::IDENTITY);
     assert_eq!(f32::table(&values).len(), 1);
-    assert_eq!(Quaternion::table(&values).len(), 1);
+    assert_eq!(Quat::table(&values).len(), 1);
     let foreign = PropertyValues::default().add(3f32);
     assert!(values.get(foreign).is_none());
     assert!(values.set(foreign, 4.).is_err());
@@ -40,7 +41,14 @@ fn two_nodes_can_consume_the_same_animated_translation() {
     draft
         .add_global_track(DynamicTrack::Vector3(Track {
             target: translation,
-            curve: Curve::linear([time(0.), time(1.)], [[0.; 3], [4.; 3]]).unwrap(),
+            curve: Curve::linear(
+                [time(0.), time(1.)],
+                ([[0.; 3], [4.; 3]])
+                    .into_iter()
+                    .map(Vec3::from_array)
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap(),
             clock: TimeSource::Animation,
         }))
         .unwrap();
@@ -111,7 +119,7 @@ fn foreign_and_removed_consumer_slots_are_rejected() {
     let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let node = draft.add_named_node("node").unwrap();
     let mut definition = draft.model().node(node).unwrap().clone();
-    definition.transform.translation = PropertyValues::default().add([0f32; 3]);
+    definition.transform.translation = PropertyValues::default().add(Vec3::from_array([0f32; 3]));
     draft.set_node(node, definition).unwrap();
     assert!(draft.finish().is_err());
     let mut draft = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
@@ -150,19 +158,22 @@ fn profile_mapping_preserves_slot_identities_and_constants() {
     let mut draft = Model::<Mdlx>::builder("mapping");
     let node = draft.add_named_node("bone").unwrap();
     let translation = draft.model().node(node).unwrap().transform.translation;
-    draft.values_mut().set(translation, [2.; 3]).unwrap();
+    draft
+        .values_mut()
+        .set(translation, Vec3::from_array([2.; 3]))
+        .unwrap();
     let universal = draft.finish().unwrap().widen::<Universal>();
     assert_eq!(
         universal.node(node).unwrap().transform.translation,
         translation
     );
-    assert_eq!(universal.values()[translation], [2.; 3]);
+    assert_eq!(universal.values()[translation], Vec3::from_array([2.; 3]));
     let native = universal.try_narrow::<Mdlx>().unwrap();
     assert_eq!(
         native.node(node).unwrap().transform.translation,
         translation
     );
-    assert_eq!(native.values()[translation], [2.; 3]);
+    assert_eq!(native.values()[translation], Vec3::from_array([2.; 3]));
 }
 
 #[test]
@@ -171,7 +182,7 @@ fn importing_conflicting_slots_is_atomic() {
     let shared = draft.add_value(1f32);
     let mut source = draft.model().values().clone();
     source.set(shared, 2.).unwrap();
-    let extra = source.add([3f32; 3]);
+    let extra = source.add(Vec3::splat(3.));
     assert!(draft.import_values(&source).is_err());
     assert_eq!(draft.model().values()[shared], 1.);
     assert!(draft.model().values().get(extra).is_none());
@@ -209,13 +220,19 @@ fn prepared_nodes_read_static_slots_from_the_supplied_instance_table() {
     let layout = model.prepare_pose().unwrap();
     let mut instance = model.values().clone();
     instance
-        .set(node.transform.translation, [4., 5., 6.])
+        .set(node.transform.translation, Vec3::from_array([4., 5., 6.]))
         .unwrap();
     instance.set(node.visible, false).unwrap();
     let prepared = &layout.nodes()[layout.index(id).unwrap()];
-    assert_eq!(prepared.sample(&instance).translation, [4., 5., 6.]);
+    assert_eq!(
+        prepared.sample(&instance).translation,
+        Vec3::from_array([4., 5., 6.])
+    );
     assert!(!prepared.sample_visibility(&instance));
-    assert_eq!(model.values()[node.transform.translation], [0.; 3]);
+    assert_eq!(
+        model.values()[node.transform.translation],
+        Vec3::from_array([0.; 3])
+    );
 }
 
 #[test]

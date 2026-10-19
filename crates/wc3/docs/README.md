@@ -12,7 +12,7 @@ native-document guides below when you need direct access to encoded records.
 
 | Task | Guide |
 | --- | --- |
-| Understand IDs, resources, profiles, and checked edits | [Model graphs](semantic.md) |
+| Understand IDs, math values, packed storage, and checked edits | [Model graphs](semantic.md) |
 | Import a native asset or plan an export | [Import and export](conversion.md) |
 | Change streams, skinning, or draw subsets | [Geometry](geometry.md) |
 | Edit shader steps and texture inputs | [Materials](materials.md) |

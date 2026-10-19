@@ -1,11 +1,13 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use glam::Quat;
+use glam::Vec3;
 use std::hint::black_box;
+use wc3::model::common::PackedArray;
 use wc3::model::profiles::Universal;
 use wc3::model::ModelMetadata;
 use wc3::model::{
     AnimationProgram, AnimationSample, Curve, DynamicTrack, EvaluatedPose, GeometryData, Mesh,
-    Model, ModelPose, PoseBehavior, PoseInputs, Quaternion, Time, TimeSource, Track, Transform,
+    Model, ModelPose, PoseBehavior, PoseInputs, Time, TimeSource, Track, Transform,
     TransformSemantics,
 };
 
@@ -19,7 +21,10 @@ fn poses(c: &mut Criterion) {
             node.parent = parent;
             builder
                 .values_mut()
-                .set(node.transform.translation, [0.1, 0.2, 0.3])
+                .set(
+                    node.transform.translation,
+                    Vec3::from_array([0.1, 0.2, 0.3]),
+                )
                 .unwrap();
             let rotation = node.transform.rotation;
             let id = builder.add_node(node).unwrap();
@@ -29,7 +34,7 @@ fn poses(c: &mut Criterion) {
                     clock: TimeSource::Animation,
                     curve: Curve::linear(
                         [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
-                        [Quaternion::IDENTITY, Quaternion([0., 0., 0.1, 0.995])],
+                        [Quat::IDENTITY, Quat::from_array([0., 0., 0.1, 0.995])],
                     )
                     .unwrap(),
                 }))
@@ -65,7 +70,7 @@ fn poses(c: &mut Criterion) {
 fn projection(c: &mut Criterion) {
     let mesh: Mesh<'static> = Mesh::new(
         GeometryData::triangles(
-            (0..1024)
+            ((0..1024)
                 .flat_map(|i| {
                     [
                         [i as f32, 0., 0.],
@@ -73,7 +78,10 @@ fn projection(c: &mut Criterion) {
                         [i as f32, 1., 0.],
                     ]
                 })
-                .collect::<Vec<_>>(),
+                .collect::<Vec<_>>())
+            .into_iter()
+            .map(Vec3::from_array)
+            .collect::<PackedArray<_>>(),
             (0..1024)
                 .map(|i| [i * 3, i * 3 + 1, i * 3 + 2])
                 .collect::<Vec<_>>(),
@@ -99,9 +107,9 @@ fn node_math(c: &mut Criterion) {
             ..Default::default()
         };
         let local = Transform {
-            translation: [0.2, -0.1, 0.3],
-            pivot: [0.1, 0.2, 0.3],
-            rotation: Quaternion(Quat::from_rotation_z(0.01).to_array()),
+            translation: Vec3::from_array([0.2, -0.1, 0.3]),
+            pivot: Vec3::from_array([0.1, 0.2, 0.3]),
+            rotation: Quat::from_array(Quat::from_rotation_z(0.01).to_array()),
             ..Default::default()
         };
         group.bench_function(name, |b| {

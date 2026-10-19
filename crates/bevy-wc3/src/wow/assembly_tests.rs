@@ -2,7 +2,10 @@ use super::*;
 use crate::assembly::{Atlas, PixelRect, RgbaImage, TextureLayer, TextureReplacement};
 use crate::material::native_fixtures::m2::{Material as M2Material, TextureUnit};
 use crate::wow::ModelPart as EquipmentPart;
+use bevy::math::Mat4;
+use bevy::math::Vec3;
 use std::collections::HashMap;
+use wc3::model::common::PackedArray;
 use wc3::model::controls::model::BoneControls;
 use wc3::model::materials::bindings::ImageSelection;
 use wc3::model::materials::program::MaterialStep;
@@ -44,9 +47,14 @@ fn model(name: &str, geosets: &[u16]) -> (Model<'static>, NodeId) {
     texture.resource = builder.add_image_resource(ImageResource::replaceable(1));
 
     for geoset in geosets {
-        let mut geometry =
-            GeometryData::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]])
-                .unwrap();
+        let mut geometry = GeometryData::triangles(
+            ([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]])
+                .into_iter()
+                .map(Vec3::from_array)
+                .collect::<PackedArray<_>>(),
+            [[0, 1, 2]],
+        )
+        .unwrap();
         geometry.influences =
             GeometryInfluences::Variable(ValueGroups::from_rows((0..3).map(|_| {
                 (0..8).map(|i| Influence {
@@ -69,7 +77,7 @@ fn model(name: &str, geosets: &[u16]) -> (Model<'static>, NodeId) {
                         contribution: slot_values.add(1.),
                         ..SlotConstruct::construct(&mut slot_values)
                     }],
-                    color: slot_values.add([1.; 3]),
+                    color: slot_values.add(Vec3::from_array([1.; 3])),
                     opacity: slot_values.add(1.),
                     ..SlotConstruct::construct(&mut slot_values)
                 }),
@@ -359,7 +367,7 @@ fn rigid_equipment_mounts_at_the_attachment_feature_and_preserves_its_pivot() {
 
     let (mut body, joint) = model("body", &[401]);
     let mut node = body.node(joint).unwrap().clone();
-    node.transform.pivot = [1., 2., 3.];
+    node.transform.pivot = Vec3::from_array([1., 2., 3.]);
     let point = body
         .edit(|builder| {
             let edit_result = (|| {
@@ -413,12 +421,18 @@ fn selected_native_bone_resources_are_checked_and_retained_in_compiled_pose() {
             BoneOverride {
                 resource: Some(first),
                 bones: vec![joint],
-                transforms: [correction.to_cols_array_2d()].into_iter().collect(),
+                transforms: [correction.to_cols_array_2d()]
+                    .into_iter()
+                    .map(|v| Mat4::from_cols_array_2d(&v))
+                    .collect(),
             },
             BoneOverride {
                 resource: Some(second),
                 bones: vec![joint],
-                transforms: [correction.to_cols_array_2d()].into_iter().collect(),
+                transforms: [correction.to_cols_array_2d()]
+                    .into_iter()
+                    .map(|v| Mat4::from_cols_array_2d(&v))
+                    .collect(),
             },
         ])))?;
         Ok(())

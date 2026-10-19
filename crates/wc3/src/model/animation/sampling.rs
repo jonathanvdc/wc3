@@ -3,8 +3,9 @@ use super::curves::{CurveValue, SampleValue};
 use crate::model::profiles::Profile;
 use crate::model::{
     AnimationId, ClipId, ClockId, DynamicTrack, Error, Model, Property, PropertyValue,
-    PropertyValues, Quaternion, Texture, Time, TimeSource, Track, ValueSlot,
+    PropertyValues, Quat, Texture, Time, TimeSource, Track, ValueSlot,
 };
+use glam::{Vec2, Vec3, Vec4};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -91,9 +92,9 @@ macro_rules! track_value {
     )* };
 }
 track_value! {
-    [u32; 4] => Unsigned4, [u8; 4] => Bytes4, Quaternion => Rotation,
-    f32 => Scalar, [f32; 2] => Vector2, [f32; 3] => Vector3,
-    [f32; 4] => Vector4, u32 => Unsigned, i32 => Signed,
+    [u32; 4] => Unsigned4, [u8; 4] => Bytes4, Quat => Rotation,
+    f32 => Scalar, Vec2 => Vector2, Vec3 => Vector3,
+    Vec4 => Vector4, u32 => Unsigned, i32 => Signed,
     u16 => Unsigned16, u8 => Byte, bool => Boolean,
     Texture => Texture, Option<Texture> => OptionalTexture,
 }

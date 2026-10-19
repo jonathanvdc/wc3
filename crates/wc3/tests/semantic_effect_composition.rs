@@ -1,3 +1,4 @@
+use glam::Vec3;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
@@ -40,7 +41,7 @@ fn custom_trail_composition_validates_rates_without_native_payloads() {
         lifetime: 2.0,
         geometry: TrailGeometry::construct(&mut slot_values),
         appearance: TrailAppearance {
-            color: slot_values.add([1.0; 3]),
+            color: slot_values.add(Vec3::from_array([1.0; 3])),
             opacity: slot_values.add(1.0),
             atlas: [1_u32; 2],
             texture_slot: (),

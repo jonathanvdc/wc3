@@ -1,5 +1,6 @@
 //! Native world vertex-light preparation, leaving semantic source arrays intact.
 use bevy::math::Vec3;
+use bevy::math::Vec4;
 use std::sync::Arc;
 use wc3::model::controls::{world_draw::Lighting, DrawControls, InstanceControls};
 use wc3::model::systems::{ModelMetadata, System};
@@ -145,7 +146,7 @@ impl ColorAdjustment {
                 };
                 let normal = Vec3::new(portal.plane[0], portal.plane[1], portal.plane[2]);
                 let length = normal.length();
-                let vertices: Vec<_> = portal.vertices.iter().map(Vec3::from_array).collect();
+                let vertices: Vec<_> = portal.vertices.iter().collect();
                 let area = vertices
                     .iter()
                     .zip(vertices.iter().cycle().skip(1))
@@ -178,11 +179,7 @@ impl ColorAdjustment {
                 mesh.positions()
                     .iter()
                     .take(transition_end)
-                    .map(|position| {
-                        Some(byte(
-                            portal_blend(Vec3::from_array(position), &portals) * 255.,
-                        ))
-                    })
+                    .map(|position| Some(byte(portal_blend(position, &portals) * 255.)))
                     .collect::<Vec<_>>()
                     .into()
             };
@@ -203,8 +200,8 @@ impl ColorAdjustment {
     pub(crate) fn diagnostic(&self) -> Option<&'static str> {
         self.diagnostic
     }
-    pub(crate) fn color(&self, vertex: usize, raw: [f32; 4]) -> [f32; 4] {
-        let mut channels = raw.map(|value| byte(value * 255.));
+    pub(crate) fn color(&self, vertex: usize, raw: Vec4) -> Vec4 {
+        let mut channels = raw.to_array().map(|value| byte(value * 255.));
         let transition = vertex < self.transition_end;
         if let Some(Some(alpha)) = self.portal_alpha.get(vertex) {
             for channel in &mut channels[..3] {
@@ -232,7 +229,7 @@ impl ColorAdjustment {
         if self.force_exterior {
             channels[3] = 255;
         }
-        channels.map(|channel| f32::from(channel) / 255.)
+        Vec4::from_array(channels.map(|channel| f32::from(channel) / 255.))
     }
 }
 

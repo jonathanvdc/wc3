@@ -60,8 +60,8 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
     let header = output.header_mut();
     header.name_offset = names.0;
     header.descriptive_name_offset = names.1;
-    header.bounds_minimum = mesh.bounds.minimum;
-    header.bounds_maximum = mesh.bounds.maximum;
+    header.bounds_minimum = (mesh.bounds.minimum).to_array();
+    header.bounds_maximum = (mesh.bounds.maximum).to_array();
     header.unique_id = region.area_id;
     header.reserved_batch_count = region.batch_control;
     if region.supplemental_controls.len() > 1
@@ -134,18 +134,28 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
     }
     append_group(
         &mut output,
-        GroupChunk::Positions(super::encode::array(&mesh.positions().to_vec())?),
+        GroupChunk::Positions(super::encode::array(
+            &mesh
+                .positions()
+                .iter()
+                .map(|v| v.to_array())
+                .collect::<Vec<_>>(),
+        )?),
     )?;
     if let Some(normals) = mesh.normals() {
         append_group(
             &mut output,
-            GroupChunk::Normals(super::encode::array(&normals.to_vec())?),
+            GroupChunk::Normals(super::encode::array(
+                &normals.iter().map(|v| v.to_array()).collect::<Vec<_>>(),
+            )?),
         )?;
     }
     for set in mesh.texture_coordinates() {
         append_group(
             &mut output,
-            GroupChunk::TextureCoordinates(super::encode::array(&set.to_vec())?),
+            GroupChunk::TextureCoordinates(super::encode::array(
+                &set.iter().map(|v| v.to_array()).collect::<Vec<_>>(),
+            )?),
         )?;
     }
     for set in mesh.geometry.color_sets() {
@@ -153,7 +163,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
             .iter()
             .map(|rgba| {
                 let mut values = [0u8; 4];
-                for (target, source) in values.iter_mut().zip(rgba) {
+                for (target, source) in values.iter_mut().zip(rgba.to_array()) {
                     let rounded = (source.clamp(0., 1.) * 255.).round() as u8;
                     let error = (source - f32::from(rounded) / 255.).abs();
                     if error != 0. {
@@ -367,12 +377,12 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
                 batch.prefix.set_supplemental(controls.supplemental);
                 if let Some(bounds) = controls.bounds {
                     let corners = [bounds.minimum, bounds.maximum]
-                        .map(|corner| corner.map(|value| value.round() as i16));
+                        .map(|corner| corner.to_array().map(|value| value.round() as i16));
                     let error = [bounds.minimum, bounds.maximum]
                         .iter()
-                        .flatten()
+                        .flat_map(|v| v.to_array())
                         .zip(corners.iter().flatten())
-                        .map(|(source, value)| (*source - f32::from(*value)).abs())
+                        .map(|(source, value)| (source - f32::from(*value)).abs())
                         .fold(0f32, f32::max);
                     context.approximate(
                         "world.draw.bounds",
@@ -491,7 +501,14 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
             &mut output,
             GroupChunk::Tangents(crate::model::formats::wmo::group::Tangents {
                 first_tangent: super::encode::array(&tangent_starts)?,
-                tangents: super::encode::array(&mesh.geometry.tangent_vectors().to_vec())?,
+                tangents: super::encode::array(
+                    &mesh
+                        .geometry
+                        .tangent_vectors()
+                        .iter()
+                        .map(|v| v.to_array())
+                        .collect::<Vec<_>>(),
+                )?,
             }),
         )?;
     }

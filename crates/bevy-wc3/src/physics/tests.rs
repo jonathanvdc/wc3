@@ -1,11 +1,12 @@
 use super::*;
+use bevy::math::Mat4;
+use bevy::math::Vec3;
 use std::f64::consts::FRAC_PI_2;
 use wc3::model::systems::model_physics::Spring;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{ModelMount, MountTarget};
-use wc3::model::{Node, Quaternion};
-
+use wc3::model::{Node, Quat};
 fn fixture(dynamic: usize) -> (PhysicsDefinition, Vec<Mat4>) {
     let mut slot_values = SlotValues::default();
     let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
@@ -136,16 +137,16 @@ fn distance_joint_preserves_anchor_separation_and_override_authority() {
             body_a: definition.bodies[0].info.body.node,
             body_b: definition.bodies[1].info.body.node,
             frame_a: Frame {
-                axis_x: Vec3::X.to_array(),
-                axis_y: Vec3::Y.to_array(),
-                axis_z: Vec3::Z.to_array(),
-                origin: [0.; 3],
+                axis_x: Vec3::X,
+                axis_y: Vec3::Y,
+                axis_z: Vec3::Z,
+                origin: Vec3::from_array([0.; 3]),
             },
             frame_b: Frame {
-                axis_x: Vec3::X.to_array(),
-                axis_y: Vec3::Y.to_array(),
-                axis_z: Vec3::Z.to_array(),
-                origin: [0.; 3],
+                axis_x: Vec3::X,
+                axis_y: Vec3::Y,
+                axis_z: Vec3::Z,
+                origin: Vec3::from_array([0.; 3]),
             },
             constraint: Constraint::Distance {
                 distance: 1.,
@@ -225,7 +226,7 @@ fn runtime_simulates_rest_rig_and_restores_authored_pose_when_disabled() {
                 .with_parent(bone)
                 .with_transform(
                     ModelTransform {
-                        translation: [0., 0., 1.],
+                        translation: Vec3::from_array([0., 0., 1.]),
                         ..SlotConstruct::construct(&mut slot_values)
                     },
                     &mut slot_values,
@@ -302,7 +303,7 @@ fn runtime_simulates_rest_rig_and_restores_authored_pose_when_disabled() {
         .insert(
             bone,
             ModelTransform {
-                translation: [0., 0., 3.],
+                translation: Vec3::from_array([0., 0., 3.]),
                 ..SlotConstruct::construct(&mut slot_values)
             },
         );
@@ -338,10 +339,10 @@ fn composition_remaps_parent_bodies_and_constraints_to_shared_host_body() {
     let host_id = host.bodies[0].info.body.node;
     part.bodies[1].info.body.parent_body = Some(part.bodies[0].info.body.node);
     let frame = Frame {
-        axis_x: Vec3::X.to_array(),
-        axis_y: Vec3::Y.to_array(),
-        axis_z: Vec3::Z.to_array(),
-        origin: [0.; 3],
+        axis_x: Vec3::X,
+        axis_y: Vec3::Y,
+        axis_z: Vec3::Z,
+        origin: Vec3::from_array([0.; 3]),
     };
     let authored = Joint {
         body_a: part.bodies[0].info.body.node,
@@ -407,7 +408,7 @@ fn composition_body_offset_includes_rest_correction_anchors() {
         channels: SlotConstruct::construct(&mut slot_values),
         parent,
         rest: ModelTransform {
-            translation: [x, 0., 0.],
+            translation: Vec3::from_array([x, 0., 0.]),
             ..SlotConstruct::construct(&mut slot_values)
         },
         inheritance: SlotConstruct::construct(&mut slot_values),
@@ -465,10 +466,10 @@ fn offset_mass_center_creates_gravity_torque_about_pinned_body_origin() {
     definition.bodies[1].center = Vec3::new(1., 0., -1.);
     authored[1] = Mat4::IDENTITY;
     let frame = Frame {
-        axis_x: Vec3::X.to_array(),
-        axis_y: Vec3::Y.to_array(),
-        axis_z: Vec3::Z.to_array(),
-        origin: [0.; 3],
+        axis_x: Vec3::X,
+        axis_y: Vec3::Y,
+        axis_z: Vec3::Z,
+        origin: Vec3::from_array([0.; 3]),
     };
     definition.joints.push(JointDefinition {
         a: 0,
@@ -630,7 +631,9 @@ fn mounted_physics_inherits_forces_through_current_frame_carrier_rotation() {
         .insert(
             carrier,
             ModelTransform {
-                rotation: Quaternion(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2).to_array()),
+                rotation: Quat::from_array(
+                    Quat::from_rotation_y(std::f32::consts::FRAC_PI_2).to_array(),
+                ),
                 ..SlotConstruct::construct(&mut slot_values)
             },
         );
@@ -768,10 +771,13 @@ fn ragdoll_and_private_world_equipment_preserve_domain_and_simulate_authored_cha
                 attachment_host: index == 0,
                 ragdoll_root: index == 0,
                 shapes: vec![Shape {
-                    transform: Mat4::IDENTITY.to_cols_array_2d(),
+                    transform: Mat4::IDENTITY,
                     geometry: ShapeGeometry::Capsule {
                         radius: 0.03,
-                        endpoints: [[0.05, 0., 0.], [0.05, 0., -0.19]],
+                        endpoints: [
+                            Vec3::from_array([0.05, 0., 0.]),
+                            Vec3::from_array([0.05, 0., -0.19]),
+                        ],
                     },
                     friction: 0.,
                     restitution: 0.,
@@ -783,10 +789,10 @@ fn ragdoll_and_private_world_equipment_preserve_domain_and_simulate_authored_cha
             });
         }
         let frame = Frame {
-            axis_x: [-1., 0., 0.],
-            axis_y: [0., 1., 0.],
-            axis_z: [0., 0., -1.],
-            origin: [0.; 3],
+            axis_x: Vec3::from_array([-1., 0., 0.]),
+            axis_y: Vec3::from_array([0., 1., 0.]),
+            axis_z: Vec3::from_array([0., 0., -1.]),
+            origin: Vec3::from_array([0.; 3]),
         };
         let joints = [(0, 1), (1, 2), (0, 3), (3, 4), (0, 5), (5, 6), (0, 7)]
             .into_iter()

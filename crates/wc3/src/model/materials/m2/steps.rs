@@ -5,6 +5,7 @@ use crate::model::profiles::SurfacePayload;
 use crate::model::values::model::{BatchFlags, BlendMode};
 use crate::model::{Construct, PropertyValues};
 use crate::model::{Error, Link, Property, ValidateLinks};
+use glam::Vec3;
 use std::borrow::Cow;
 
 /// Shared M2 draw declarations and animated surface multipliers.
@@ -15,7 +16,7 @@ pub struct MaterialDeclaration<'a> {
     /// Framebuffer composition, rasterization, and pass priority.
     pub state: PassState<BlendMode, ModelRasterization, i8>,
     /// Animated RGB multiplier.
-    pub color: Property<[f32; 3]>,
+    pub color: Property<Vec3>,
     /// Animated opacity multiplier.
     pub opacity: Property<f32>,
     /// Optional authoring label, independent of shader selection.

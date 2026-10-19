@@ -17,6 +17,7 @@ use crate::model::{
     MdlxParticle2Shape, ParticleEmission, ParticleLifetime, ParticleMotion,
 };
 use crate::model::{MdlxRibbonControls, MdlxRibbonRendering, TrailAppearance, TrailGeometry};
+use glam::Vec3;
 use std::collections::BTreeMap;
 
 pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
@@ -54,7 +55,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                 decoder.bind(
                     &source.$field,
                     concat!("particle.", stringify!($field)),
-                    |value| value,
+                    |value| value.into(),
                 )?
             };
         }
@@ -128,7 +129,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                 decoder.bind(
                     &source.$field,
                     concat!("particle2.", stringify!($field)),
-                    |value| value,
+                    |value| value.into(),
                 )?
             };
         }
@@ -196,9 +197,9 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                 },
                 appearance: MdlxParticle2Appearance {
                     middle_time: source.time,
-                    colors: source.segment_colors,
+                    colors: (source.segment_colors).map(Vec3::from_array),
                     alpha: source.alpha,
-                    scale: source.particle_scaling,
+                    scale: Vec3::from_array(source.particle_scaling),
                     uv_intervals: source.uv_animations,
                 },
             });
@@ -214,7 +215,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                 decoder.bind(
                     &source.$field,
                     concat!("ribbon.", stringify!($field)),
-                    |value| value,
+                    |value| value.into(),
                 )?
             };
         }
@@ -265,7 +266,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     decoder.bind(
                         &source.$field,
                         concat!("popcorn.", stringify!($field)),
-                        |value| value,
+                        |value| value.into(),
                     )?
                 };
             }
@@ -369,13 +370,21 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         let id = node(source.node.object_id)?;
         let feature = decoder.builder.reserve_feature(id);
         let shape = match source.geometry {
-            native::CollisionGeometry::Box(vertices) => profile::Collision::Box(vertices),
-            native::CollisionGeometry::Plane(vertices) => profile::Collision::Plane(vertices),
-            native::CollisionGeometry::Sphere(center, radius) => {
-                profile::Collision::Sphere { center, radius }
+            native::CollisionGeometry::Box(vertices) => {
+                profile::Collision::Box((vertices).map(Vec3::from_array))
             }
+            native::CollisionGeometry::Plane(vertices) => {
+                profile::Collision::Plane((vertices).map(Vec3::from_array))
+            }
+            native::CollisionGeometry::Sphere(center, radius) => profile::Collision::Sphere {
+                center: Vec3::from_array(center),
+                radius,
+            },
             native::CollisionGeometry::Cylinder(endpoints, radius) => {
-                profile::Collision::Cylinder { endpoints, radius }
+                profile::Collision::Cylinder {
+                    endpoints: endpoints.map(Vec3::from_array),
+                    radius,
+                }
             }
         };
         {

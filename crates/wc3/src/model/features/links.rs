@@ -65,12 +65,18 @@ impl NodeFeature<'_> {
             }
             Self::Attachment(value) => value.visit_links(visitor),
             Self::Light(Light::World(value)) => {
-                if value.attenuation.iter().any(|value| !value.is_finite()) {
+                if value
+                    .attenuation
+                    .to_array()
+                    .iter()
+                    .any(|value| !value.is_finite())
+                {
                     visitor(Link::InvalidValue);
                 }
                 if value.directional_terms.as_ref().is_some_and(|terms| {
                     terms.iter().any(|(direction, scalar)| {
-                        !scalar.is_finite() || direction.iter().any(|value| !value.is_finite())
+                        !scalar.is_finite()
+                            || direction.to_array().iter().any(|value| !value.is_finite())
                     })
                 }) {
                     visitor(Link::InvalidValue);
@@ -85,7 +91,11 @@ impl NodeFeature<'_> {
             Self::Light(Light::Point(value)) => {
                 if !value.intensity.is_finite()
                     || !value.scalar_control.is_finite()
-                    || value.attenuation.iter().any(|value| !value.is_finite())
+                    || value
+                        .attenuation
+                        .to_array()
+                        .iter()
+                        .any(|value| !value.is_finite())
                 {
                     visitor(Link::InvalidValue);
                 }
@@ -99,9 +109,10 @@ impl NodeFeature<'_> {
                 if !value.intensity.is_finite()
                     || value
                         .attenuation
+                        .to_array()
                         .iter()
-                        .chain(&value.orientation)
-                        .chain(&value.flicker)
+                        .chain(&value.orientation.to_array())
+                        .chain(&value.flicker.to_array())
                         .any(|value| !value.is_finite())
                 {
                     visitor(Link::InvalidValue);

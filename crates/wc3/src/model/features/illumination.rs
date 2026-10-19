@@ -2,6 +2,7 @@
 use crate::model::profiles::{m2, mdlx, wmo};
 use crate::model::Construct;
 use crate::model::{scene, Link, Property, ValidateLinks};
+use glam::Vec3;
 use m2::values::LightKind as ActorLightKind;
 /// Complete illumination models.
 #[derive(Clone, Debug)]
@@ -40,7 +41,7 @@ pub enum UnknownIlluminationKind {
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct LightEmission {
     /// RGB emission color.
-    pub color: Property<[f32; 3]>,
+    pub color: Property<Vec3>,
     /// Emission intensity multiplier.
     pub intensity: Property<f32>,
 }

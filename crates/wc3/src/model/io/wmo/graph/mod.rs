@@ -1,5 +1,6 @@
 //! Direct typed world-model authoring graph codecs.
 use crate::model::Model;
+use glam::Vec3;
 mod alpha_materials;
 mod draw;
 mod encode;
@@ -200,7 +201,7 @@ pub(super) fn import<'a, D: Dialect>(
                     } else {
                         relationships::name(&source.root, row.name_offset as u32)?
                     };
-                    group.bounds = row.bounds;
+                    group.bounds = (row.bounds).map(Vec3::from_array);
                     let flags = row.flags;
                     group.options = group_flags::read(flags, 0);
                 }
@@ -230,8 +231,8 @@ fn rgba([b, g, r, a]: [u8; 4]) -> [u8; 4] {
 }
 fn bounds([minimum, maximum]: [[f32; 3]; 2]) -> Bounds {
     Bounds {
-        minimum,
-        maximum,
+        minimum: Vec3::from_array(minimum),
+        maximum: Vec3::from_array(maximum),
         sphere_radius: minimum
             .iter()
             .zip(maximum)

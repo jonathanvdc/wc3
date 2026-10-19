@@ -1,6 +1,6 @@
 use super::*;
 use crate::model::common::Borrowed as _;
-use crate::model::Quaternion;
+use crate::model::Quat;
 
 #[test]
 fn native_sampling_directives_cannot_bypass_value_capabilities() {
@@ -30,11 +30,11 @@ fn native_sampling_directives_cannot_bypass_value_capabilities() {
 
 #[test]
 fn native_quaternion_controls_round_trip_without_rotation_validation() {
-    let controls = [Quaternion([0.; 4])];
+    let controls = [Quat::from_array([0.; 4])];
     for mode in [Interpolation::Hermite, Interpolation::Bezier] {
         let curve = Curve::from_spline_samples(
             [Time::default()],
-            [Quaternion::IDENTITY],
+            [Quat::IDENTITY],
             controls,
             controls,
             mode,
@@ -50,10 +50,10 @@ fn native_quaternion_controls_round_trip_without_rotation_validation() {
 
 #[test]
 fn packed_curve_arrays_borrow_and_detach_without_changing_keys() {
-    use zerovec::ZeroVec;
+    use crate::model::common::PackedArray;
     let times =
-        ZeroVec::alloc_from_slice(&[Time::seconds(-0.5).unwrap(), Time::seconds(1.).unwrap()]);
-    let values = ZeroVec::alloc_from_slice(&[2f32, 4.]);
+        PackedArray::alloc_from_slice(&[Time::seconds(-0.5).unwrap(), Time::seconds(1.).unwrap()]);
+    let values = PackedArray::alloc_from_slice(&[2f32, 4.]);
     let curve = Curve::linear(times.as_borrowed(), values.as_borrowed()).unwrap();
     assert_eq!(curve.times().as_bytes().as_ptr(), times.as_bytes().as_ptr());
     assert_eq!(
@@ -65,8 +65,8 @@ fn packed_curve_arrays_borrow_and_detach_without_changing_keys() {
 
 #[test]
 fn packed_time_cannot_bypass_finite_curve_validation() {
-    use zerovec::ZeroVec;
+    use crate::model::common::PackedArray;
     let bytes = f64::NAN.to_le_bytes();
-    let times = ZeroVec::<Time>::parse_bytes(&bytes).unwrap();
+    let times = PackedArray::<Time>::parse_bytes(&bytes).unwrap();
     assert!(Curve::step(times, [1f32]).is_err());
 }

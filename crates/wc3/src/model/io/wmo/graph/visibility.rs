@@ -1,7 +1,9 @@
 //! Portal polygons, authored separating planes, and historical visibility regions.
+use crate::model::common::PackedArray;
 use crate::model::conversion::Error;
 use crate::model::io::materialize;
 use crate::model::profiles::wmo as profile;
+use glam::Vec4;
 
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::formats::wmo::Dialect;
@@ -33,13 +35,16 @@ pub(super) fn read<'a, 'data: 'a>(
                     ));
                 }
                 world.portals.push(profile::Portal {
-                    vertices: materialize(count, move |index| {
-                        source
-                            .get(start + index)
-                            .expect("checked portal index")
-                            .expect("validated portal vertex")
-                    }),
-                    plane: row.plane,
+                    vertices: PackedArray::from_storage(
+                        (materialize(count, move |index| {
+                            source
+                                .get(start + index)
+                                .expect("checked portal index")
+                                .expect("validated portal vertex")
+                        }))
+                        .into_storage(),
+                    ),
+                    plane: Vec4::from_array(row.plane),
                     adjustment: None,
                 });
             }
@@ -83,17 +88,22 @@ pub(super) fn read<'a, 'data: 'a>(
                             "visibility range exceeds table",
                         ));
                     }
-                    world.visibility.push(materialize(count, move |index| {
-                        source
-                            .get(start + index)
-                            .expect("checked visibility vertex")
-                            .expect("validated visibility vertex")
-                    }));
+                    world.visibility.push(PackedArray::from_storage(
+                        (materialize(count, move |index| {
+                            source
+                                .get(start + index)
+                                .expect("checked visibility vertex")
+                                .expect("validated visibility vertex")
+                        }))
+                        .into_storage(),
+                    ));
                 }
             }
             RootChunk::ConvexPlanes(rows) => {
-                world.occluders = ZeroVec::parse_bytes(rows.as_bytes())
-                    .map_err(|error| Error::new("world.occluders", error.to_string()))?
+                world.occluders = PackedArray::from_storage(
+                    ZeroVec::parse_bytes(rows.as_bytes())
+                        .map_err(|error| Error::new("world.occluders", error.to_string()))?,
+                )
             }
             _ => {}
         }
@@ -117,7 +127,7 @@ pub(super) fn write<'a, D: Dialect>(
         portals.push(Portal {
             start_vertex: capacity(vertices.len())?,
             vertex_count: capacity(portal.vertices.len())?,
-            plane: portal.plane,
+            plane: (portal.plane).to_array(),
         });
         vertices.extend(portal.vertices.iter());
         if let Some(unknown) = portal.adjustment {
@@ -131,7 +141,9 @@ pub(super) fn write<'a, D: Dialect>(
     if !portals.is_empty() {
         super::encode::append(
             root,
-            RootChunk::PortalVertices(super::encode::array(&vertices)?),
+            RootChunk::PortalVertices(super::encode::array(
+                &vertices.iter().map(|v| v.to_array()).collect::<Vec<_>>(),
+            )?),
         )?;
         super::encode::append(root, RootChunk::Portals(super::encode::array(&portals)?))?;
     }
@@ -157,7 +169,9 @@ pub(super) fn write<'a, D: Dialect>(
     if !blocks.is_empty() {
         super::encode::append(
             root,
-            RootChunk::VisibleVertices(super::encode::array(&visible)?),
+            RootChunk::VisibleVertices(super::encode::array(
+                &visible.iter().map(|v| v.to_array()).collect::<Vec<_>>(),
+            )?),
         )?;
         super::encode::append(
             root,
@@ -167,9 +181,7 @@ pub(super) fn write<'a, D: Dialect>(
     if !source.occluders.is_empty() {
         super::encode::append(
             root,
-            RootChunk::ConvexPlanes(super::encode::array(
-                &source.occluders.iter().collect::<Vec<_>>(),
-            )?),
+            RootChunk::ConvexPlanes(super::encode::array(&source.occluders.storage().to_vec())?),
         )?;
     }
     Ok(())

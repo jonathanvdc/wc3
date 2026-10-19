@@ -1,23 +1,24 @@
 //! Adapter extraction moves canonical attributes into constrained stream owners.
 use super::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, Error,
-    GeometryData, GeometryInfluences, GeometryKind, GeometryPools, GeometrySchema,
-    SurfaceTriangleControls, Topology, ZeroVec,
+    GeometryData, GeometryInfluences, GeometryKind, GeometryPools, GeometrySchema, PackedArray,
+    SurfaceTriangleControls, Topology,
 };
+use glam::{Vec2, Vec3, Vec4};
 
 #[derive(Clone, Debug)]
 pub(crate) struct GeometryParts<'data> {
     pub kind: GeometryKind,
     pub strip_set: bool,
-    pub positions: ZeroVec<'data, [f32; 3]>,
-    pub normals: ZeroVec<'data, [f32; 3]>,
-    pub tangents: ZeroVec<'data, [f32; 4]>,
-    pub colors: ZeroVec<'data, [f32; 4]>,
-    pub texture_coordinates: Vec<ZeroVec<'data, [f32; 2]>>,
+    pub positions: PackedArray<'data, Vec3>,
+    pub normals: PackedArray<'data, Vec3>,
+    pub tangents: PackedArray<'data, Vec4>,
+    pub colors: PackedArray<'data, Vec4>,
+    pub texture_coordinates: Vec<PackedArray<'data, Vec2>>,
     pub topology: Topology<'data>,
     pub influences: GeometryInfluences<'data>,
     pub attributes: Vec<Attribute<'data>>,
-    pub surface_triangles: ZeroVec<'data, SurfaceTriangleControls>,
+    pub surface_triangles: PackedArray<'data, SurfaceTriangleControls>,
     pub pools: GeometryPools<'data>,
 }
 impl Default for GeometryParts<'_> {
@@ -25,15 +26,15 @@ impl Default for GeometryParts<'_> {
         Self {
             kind: GeometryKind::Display,
             strip_set: false,
-            positions: ZeroVec::default(),
-            normals: ZeroVec::default(),
-            tangents: ZeroVec::default(),
-            colors: ZeroVec::default(),
+            positions: PackedArray::default(),
+            normals: PackedArray::default(),
+            tangents: PackedArray::default(),
+            colors: PackedArray::default(),
             texture_coordinates: Vec::new(),
-            topology: Topology::Triangles(ZeroVec::default()),
+            topology: Topology::Triangles(PackedArray::default()),
             influences: GeometryInfluences::None,
             attributes: Vec::new(),
-            surface_triangles: ZeroVec::default(),
+            surface_triangles: PackedArray::default(),
             pools: GeometryPools::default(),
         }
     }

@@ -6,9 +6,10 @@ use crate::model::materials::mdlx::AlphaAdditiveEncoding;
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
 use crate::model::{
-    Axis, Billboard, FeatureId, Inheritance, MaterialId, MeshId, Model, NodeId, Quaternion, Texture,
+    Axis, Billboard, FeatureId, Inheritance, MaterialId, MeshId, Model, NodeId, Quat, Texture,
 };
 use crate::model::{MdlxImageResource, MdlxParticle1Resource, PathResource};
+use glam::Vec3;
 use native::scene::Node;
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::from_utf8;
@@ -58,7 +59,11 @@ pub(super) fn write<'a, T: Dialect>(
             for mesh in targets {
                 let mut record = native::GeosetAnimation::new(mesh);
                 record.alpha = encoder.value(&source.opacity, Ok, "geometry_animation.opacity")?;
-                record.color = encoder.value(&source.color, Ok, "geometry_animation.color")?;
+                record.color = encoder.value(
+                    &source.color,
+                    |v| Ok(v.to_array()),
+                    "geometry_animation.color",
+                )?;
                 record.flags = native::GeosetAnimationFlags(source.unclassified.bits());
                 record.flags.set_color(source.use_color);
                 record.flags.set_drop_shadow(source.drop_shadow);
@@ -175,9 +180,9 @@ pub(super) fn write<'a, T: Dialect>(
                 record.columns = source.details.rendering.atlas[1];
                 record.tail_length = source.details.rendering.tail_length;
                 record.time = source.appearance.middle_time;
-                record.segment_colors = source.appearance.colors;
+                record.segment_colors = (source.appearance.colors).map(|v| v.to_array());
                 record.alpha = source.appearance.alpha;
-                record.particle_scaling = source.appearance.scale;
+                record.particle_scaling = (source.appearance.scale).to_array();
                 record.uv_animations = source.appearance.uv_intervals;
                 record.texture_id = source
                     .details
@@ -239,7 +244,11 @@ pub(super) fn write<'a, T: Dialect>(
                 record.height_below =
                     encoder.value(&source.geometry.height_below, Ok, "ribbon.height_below")?;
                 record.alpha = encoder.value(&source.appearance.opacity, Ok, "ribbon.opacity")?;
-                record.color = encoder.value(&source.appearance.color, Ok, "ribbon.color")?;
+                record.color = encoder.value(
+                    &source.appearance.color,
+                    |v| Ok(v.to_array()),
+                    "ribbon.color",
+                )?;
                 record.texture_slot =
                     encoder.value(&source.appearance.texture_slot, Ok, "ribbon.texture_slot")?;
                 record.life_span = source.lifetime;
@@ -275,7 +284,8 @@ pub(super) fn write<'a, T: Dialect>(
                 record.emission_rate =
                     encoder.value(&source.emission_rate, Ok, "popcorn.emission_rate")?;
                 record.speed = encoder.value(&source.speed, Ok, "popcorn.speed")?;
-                record.color = encoder.value(&source.color, Ok, "popcorn.color")?;
+                record.color =
+                    encoder.value(&source.color, |v| Ok(v.to_array()), "popcorn.color")?;
                 record.alpha = encoder.value(&source.opacity, Ok, "popcorn.opacity")?;
                 record.replaceable_id = source.replaceable;
                 record.visibility = super::encode_helpers::visibility(
@@ -318,16 +328,20 @@ pub(super) fn write<'a, T: Dialect>(
             profile::Node::CollisionShape(source) => {
                 let record = match source {
                     profile::Collision::Box(points) => {
-                        native::CollisionShape::new_box(node, *points)
+                        native::CollisionShape::new_box(node, (*points).map(|v| v.to_array()))
                     }
                     profile::Collision::Plane(points) => {
-                        native::CollisionShape::new_plane(node, *points)
+                        native::CollisionShape::new_plane(node, (*points).map(|v| v.to_array()))
                     }
                     profile::Collision::Sphere { center, radius } => {
-                        native::CollisionShape::new_sphere(node, *center, *radius)
+                        native::CollisionShape::new_sphere(node, (*center).to_array(), *radius)
                     }
                     profile::Collision::Cylinder { endpoints, radius } => {
-                        native::CollisionShape::new_cylinder(node, *endpoints, *radius)
+                        native::CollisionShape::new_cylinder(
+                            node,
+                            (*endpoints).map(|v| v.to_array()),
+                            *radius,
+                        )
                     }
                     profile::Collision::Unknown { .. } => {
                         encoder.context.unsupported(
@@ -495,9 +509,9 @@ fn camera_anchor_only(model: &Model<'_, Mdlx>, id: NodeId) -> bool {
         && node.controls.unmapped_flags.bits() == 0
         && node.controls.bone.is_none()
         && node.controls.billboard_flags == Default::default()
-        && rest.rotation == Quaternion::IDENTITY
-        && rest.scale == [1.; 3]
-        && rest.pivot == [0.; 3]
+        && rest.rotation == Quat::IDENTITY
+        && rest.scale == Vec3::from_array([1.; 3])
+        && rest.pivot == Vec3::from_array([0.; 3])
         && !model.is_animated(node.transform.translation)
         && !model.is_animated(node.transform.rotation)
         && !model.is_animated(node.transform.scale)

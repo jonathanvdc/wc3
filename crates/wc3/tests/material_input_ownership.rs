@@ -1,3 +1,4 @@
+use glam::Vec3;
 use wc3::model::conversion::{ExportOptions, ImportOptions};
 use wc3::model::formats::mdlx::{
     self,
@@ -78,7 +79,7 @@ fn shared_native_inputs_import_as_independent_values_and_export_as_interned_tabl
         .binding
         .coordinates
         .transform
-        .scale = slot_values.add([2., 1., 1.]);
+        .scale = slot_values.add(Vec3::from_array([2., 1., 1.]));
     model
         .edit(|draft| {
             draft.import_values(&slot_values)?;
@@ -102,7 +103,7 @@ fn shared_native_inputs_import_as_independent_values_and_export_as_interned_tabl
             .coordinates
             .transform
             .scale],
-        [1.; 3]
+        Vec3::from_array([1.; 3])
     );
     let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
@@ -211,7 +212,7 @@ fn sampling_a_material_freezes_its_owned_coordinate_animation() {
                 .coordinates
                 .transform
                 .translation],
-            [0.25, 0., 0.]
+            Vec3::from_array([0.25, 0., 0.])
         );
     }
 }

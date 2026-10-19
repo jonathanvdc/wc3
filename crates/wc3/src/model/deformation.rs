@@ -1,15 +1,16 @@
 //! CPU deformation shared with renderer snapshot adapters.
 use crate::model::{Bounds, Error, ProjectedGeometry, SkinWeights};
+use glam::Vec4;
 use glam::{Mat4, Vec3};
 
 /// Borrowed editable geometry streams. Other application attributes remain untouched.
 pub struct DeformableGeometry<'a> {
     /// Positions to deform.
-    pub positions: &'a mut [[f32; 3]],
+    pub positions: &'a mut [Vec3],
     /// Optional normals, empty when absent.
-    pub normals: &'a mut [[f32; 3]],
+    pub normals: &'a mut [Vec3],
     /// Optional tangents and handedness, empty when absent.
-    pub tangents: &'a mut [[f32; 4]],
+    pub tangents: &'a mut [Vec4],
 }
 impl DeformableGeometry<'_> {
     /// Applies one affine matrix per vertex. Normals use inverse transpose;
@@ -30,14 +31,12 @@ impl DeformableGeometry<'_> {
             .positions
             .iter()
             .zip(transforms)
-            .any(|(p, m)| !m.transform_point3(Vec3::from_array(*p)).is_finite())
+            .any(|(p, m)| !m.transform_point3(*p).is_finite())
         {
             return Err(Error::new("geometry.deform", "nonfinite posed positions"));
         }
         for (position, matrix) in self.positions.iter_mut().zip(transforms) {
-            *position = matrix
-                .transform_point3(Vec3::from_array(*position))
-                .to_array();
+            *position = matrix.transform_point3(*position);
         }
         for (normal, matrix) in self.normals.iter_mut().zip(transforms) {
             *normal = if matrix.determinant().abs() <= 1e-12 {
@@ -46,18 +45,16 @@ impl DeformableGeometry<'_> {
                 matrix
                     .inverse()
                     .transpose()
-                    .transform_vector3(Vec3::from_array(*normal))
+                    .transform_vector3(*normal)
                     .normalize_or_zero()
-            }
-            .to_array();
+            };
         }
         for (tangent, matrix) in self.tangents.iter_mut().zip(transforms) {
             let sign = if matrix.determinant() < 0. { -1. } else { 1. };
             *tangent = matrix
-                .transform_vector3(Vec3::from_slice(&tangent[..3]))
+                .transform_vector3(tangent.truncate())
                 .normalize_or_zero()
-                .extend(tangent[3] * sign)
-                .to_array();
+                .extend(tangent[3] * sign);
         }
         Ok(())
     }
@@ -133,14 +130,14 @@ impl ProjectedGeometry {
 }
 impl Bounds {
     /// Computes an axis-aligned box and a conservative sphere around its center.
-    pub fn from_positions(positions: &[[f32; 3]]) -> Result<Option<Self>, Error> {
+    pub fn from_positions(positions: &[Vec3]) -> Result<Option<Self>, Error> {
         if positions.is_empty() {
             return Ok(None);
         }
         let mut min = Vec3::splat(f32::INFINITY);
         let mut max = Vec3::splat(f32::NEG_INFINITY);
         for position in positions {
-            let point = Vec3::from_array(*position);
+            let point = *position;
             if !point.is_finite() {
                 return Err(Error::new("geometry.bounds", "nonfinite position"));
             }
@@ -152,8 +149,8 @@ impl Bounds {
             return Err(Error::new("geometry.bounds", "bounding radius exceeds f32"));
         }
         Ok(Some(Self {
-            minimum: min.to_array(),
-            maximum: max.to_array(),
+            minimum: min,
+            maximum: max,
             sphere_radius: radius,
         }))
     }

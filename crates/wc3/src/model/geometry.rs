@@ -1,5 +1,7 @@
 //! Geometry, skin bindings, and placements use logical graph identities.
 
+use crate::model::common::packed_identity;
+use glam::{Quat, Vec2, Vec3, Vec4};
 /// Joint-group and weighted layered-model geometry.
 pub mod layered;
 
@@ -9,15 +11,15 @@ pub mod weighted_model;
 pub mod world;
 
 use crate::model::common::AsULE;
-use crate::model::common::IntoZeroVec;
+use crate::model::common::IntoPackedArray;
 use crate::model::profiles::{Profile, Universal};
 use crate::model::BindingSchema as _;
 use crate::model::TextureCoordinates;
 use crate::model::{BindMatrices, IdentityBinding, SurfaceTriangleControls};
 use crate::model::{
     ConnectivityId, ConnectivitySets, DrawId, DrawSubset, DrawSubsetId, DrawSubsets, Error,
-    GeometryData, GeometryEdit, GeometrySchema, InfluenceRows, MeshId, NodeId, PrimitiveRange,
-    PrimitiveSelection, Scope, SkinId, ZeroVec,
+    GeometryData, GeometryEdit, GeometrySchema, InfluenceRows, MeshId, NodeId, PackedArray,
+    PrimitiveRange, PrimitiveSelection, Scope, SkinId,
 };
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -26,9 +28,9 @@ use std::collections::BTreeMap;
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Bounds {
     /// Minimum coordinates.
-    pub minimum: [f32; 3],
+    pub minimum: Vec3,
     /// Maximum coordinates.
-    pub maximum: [f32; 3],
+    pub maximum: Vec3,
     /// Radius about the bounds' center.
     pub sphere_radius: f32,
 }
@@ -36,10 +38,16 @@ impl Bounds {
     pub(crate) fn validate(&self) -> Result<(), Error> {
         if self
             .minimum
+            .to_array()
             .iter()
-            .chain(&self.maximum)
+            .chain(&self.maximum.to_array())
             .any(|x| !x.is_finite())
-            || self.minimum.iter().zip(self.maximum).any(|(a, b)| *a > b)
+            || self
+                .minimum
+                .to_array()
+                .iter()
+                .zip(self.maximum.to_array())
+                .any(|(a, b)| *a > b)
             || !self.sphere_radius.is_finite()
             || self.sphere_radius < 0.
         {
@@ -66,20 +74,20 @@ pub enum Topology<'a> {
     /// Ordered groups containing different primitive families.
     Mixed(Vec<Topology<'a>>),
     /// Triangle primitives.
-    Triangles(ZeroVec<'a, [u32; 3]>),
+    Triangles(PackedArray<'a, [u32; 3]>),
     /// Polygon face corners with one face-offset boundary per polygon plus a final boundary.
     Polygons {
         /// Vertex index of each corner.
-        corners: ZeroVec<'a, u32>,
+        corners: PackedArray<'a, u32>,
         /// Face boundaries in the corner array.
-        offsets: ZeroVec<'a, u32>,
+        offsets: PackedArray<'a, u32>,
     },
     /// Line primitives.
-    Lines(ZeroVec<'a, [u32; 2]>),
+    Lines(PackedArray<'a, [u32; 2]>),
     /// Triangle-strip indices, retaining their authored index order.
-    TriangleStrip(ZeroVec<'a, u32>),
+    TriangleStrip(PackedArray<'a, u32>),
     /// Point primitives.
-    Points(ZeroVec<'a, u32>),
+    Points(PackedArray<'a, u32>),
 }
 /// Which logical geometry elements carry an attribute.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -129,31 +137,31 @@ pub enum AttributeSemantic<'a> {
 #[derive(Clone, Debug)]
 pub enum AttributeValues<'a> {
     /// Complete typed surface records, including material relationships.
-    SurfaceControls(ZeroVec<'a, SurfaceTriangleControls>),
+    SurfaceControls(PackedArray<'a, SurfaceTriangleControls>),
     /// Logical boolean attributes.
-    Boolean(ZeroVec<'a, bool>),
+    Boolean(PackedArray<'a, bool>),
     /// Three exact byte components.
-    Byte3(ZeroVec<'a, [u8; 3]>),
+    Byte3(PackedArray<'a, [u8; 3]>),
     /// Four exact byte components.
-    Byte4(ZeroVec<'a, [u8; 4]>),
+    Byte4(PackedArray<'a, [u8; 4]>),
     /// Exact unsigned sixteen-bit values.
-    U16(ZeroVec<'a, u16>),
+    U16(PackedArray<'a, u16>),
     /// Four exact unsigned integer components.
-    Unsigned4(ZeroVec<'a, [u32; 4]>),
-    /// Quaternion components, distinguished from arbitrary four-vectors.
-    Quaternion(ZeroVec<'a, [f32; 4]>),
+    Unsigned4(PackedArray<'a, [u32; 4]>),
+    /// Quat components, distinguished from arbitrary four-vectors.
+    Quaternion(PackedArray<'a, Quat>),
     /// Scalar floating-point values.
-    Scalar(ZeroVec<'a, f32>),
+    Scalar(PackedArray<'a, f32>),
     /// Two-component floating-point vectors.
-    Vector2(ZeroVec<'a, [f32; 2]>),
+    Vector2(PackedArray<'a, Vec2>),
     /// Three-component floating-point vectors.
-    Vector3(ZeroVec<'a, [f32; 3]>),
+    Vector3(PackedArray<'a, Vec3>),
     /// Four-component values without implied quaternion meaning.
-    Vector4(ZeroVec<'a, [f32; 4]>),
+    Vector4(PackedArray<'a, Vec4>),
     /// Exact unsigned integers.
-    Unsigned(ZeroVec<'a, u32>),
+    Unsigned(PackedArray<'a, u32>),
     /// Exact signed integers.
-    Signed(ZeroVec<'a, i32>),
+    Signed(PackedArray<'a, i32>),
 }
 impl AttributeValues<'_> {
     /// Number of domain elements carrying a value.
@@ -335,15 +343,15 @@ impl<'a, P: Profile> Mesh<'a, P> {
         P::mesh_skin(&self.controls)
     }
     /// Borrows model-space vertex positions without decoding the entire stream.
-    pub fn positions(&self) -> &ZeroVec<'a, [f32; 3]> {
+    pub fn positions(&self) -> &PackedArray<'a, Vec3> {
         self.geometry.positions()
     }
     /// Borrows authored vertex normals when present.
-    pub fn normals(&self) -> Option<&ZeroVec<'a, [f32; 3]>> {
+    pub fn normals(&self) -> Option<&PackedArray<'a, Vec3>> {
         self.geometry.normals()
     }
     /// Borrows authored vertex tangents when present.
-    pub fn tangents(&self) -> Option<&ZeroVec<'a, [f32; 4]>> {
+    pub fn tangents(&self) -> Option<&PackedArray<'a, Vec4>> {
         self.geometry.tangents()
     }
     /// Borrows ordered texture-coordinate streams.
@@ -351,7 +359,7 @@ impl<'a, P: Profile> Mesh<'a, P> {
         self.geometry.texture_coordinates()
     }
     /// Borrows authored vertex colors when present.
-    pub fn colors(&self) -> Option<&ZeroVec<'a, [f32; 4]>> {
+    pub fn colors(&self) -> Option<&PackedArray<'a, Vec4>> {
         self.geometry.colors()
     }
     /// Borrows additional attributes permitted by this geometry vocabulary.
@@ -556,13 +564,13 @@ impl<'a, P: Profile> MeshInstance<'a, P> {
 impl<'a> Mesh<'a> {
     /// Creates an unrestricted triangle mesh; publication validates the arrays.
     pub fn triangles(
-        positions: impl IntoZeroVec<'a, [f32; 3]>,
-        triangles: impl IntoZeroVec<'a, [u32; 3]>,
+        positions: impl IntoPackedArray<'a, Vec3>,
+        triangles: impl IntoPackedArray<'a, [u32; 3]>,
     ) -> Self {
         Self::new(GeometryData {
-            positions: positions.into_zero_vec(),
+            positions: positions.into_packed_array(),
             connectivity: ConnectivitySets::new(
-                Topology::Triangles(triangles.into_zero_vec()),
+                Topology::Triangles(triangles.into_packed_array()),
                 Vec::new(),
             ),
             ..GeometryData::default()
@@ -602,14 +610,21 @@ impl AsULE for NodeInfluence {
 impl AsULE for Bounds {
     type ULE = <([f32; 3], [f32; 3], f32) as AsULE>::ULE;
     fn to_unaligned(self) -> Self::ULE {
-        (self.minimum, self.maximum, self.sphere_radius).to_unaligned()
+        (
+            self.minimum.to_array(),
+            self.maximum.to_array(),
+            self.sphere_radius,
+        )
+            .to_unaligned()
     }
     fn from_unaligned(value: Self::ULE) -> Self {
         let (minimum, maximum, sphere_radius) = <([f32; 3], [f32; 3], f32)>::from_unaligned(value);
         Self {
-            minimum,
-            maximum,
+            minimum: Vec3::from_array(minimum),
+            maximum: Vec3::from_array(maximum),
             sphere_radius,
         }
     }
 }
+
+packed_identity!(Bounds, Influence, NodeInfluence);

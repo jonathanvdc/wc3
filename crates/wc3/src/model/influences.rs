@@ -1,6 +1,6 @@
 //! Owned geometry distributions preserve slot structure and blending interpretation.
 use super::vertex_geometry::RemapStreams;
-use super::{Error, Influence, InfluenceRows, JointInfluences, ZeroVec};
+use super::{Error, Influence, InfluenceRows, JointInfluences, PackedArray};
 use crate::model::ValueGroups;
 
 /// Authored joint distributions in the shared geometry representation.
@@ -12,9 +12,9 @@ pub enum GeometryInfluences<'data> {
     /// Variable-length normalized weighted rows.
     Variable(ValueGroups<'data, Influence>),
     /// Three ordered weighted slots, including zero-weight slots.
-    Three(ZeroVec<'data, [Influence; 3]>),
+    Three(PackedArray<'data, [Influence; 3]>),
     /// Four ordered weighted slots, including zero-weight slots.
-    Four(ZeroVec<'data, [Influence; 4]>),
+    Four(PackedArray<'data, [Influence; 4]>),
     /// Equal blending among ordered joints, without inferred explicit weights.
     MatrixGroups(ValueGroups<'data, u32>),
 }

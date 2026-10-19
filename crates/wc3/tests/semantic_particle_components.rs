@@ -1,4 +1,6 @@
+use glam::Vec3;
 use std::borrow::Cow;
+use wc3::model::common::Borrowed as _;
 use wc3::model::profiles::mdlx;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
@@ -6,7 +8,7 @@ use wc3::model::{
     MdlxParticle2Appearance, MdlxParticle2Details, MdlxParticle2Rendering, ParticleEmission,
     ParticleLifetime, ParticleMotion,
 };
-use wc3::model::{ParticleEmitter, ZeroVec};
+use wc3::model::{PackedArray, ParticleEmitter};
 
 #[test]
 fn model_particles_share_editable_rate_speed_and_lifetime() {
@@ -71,7 +73,11 @@ fn atlas_appearance_and_rendering_survive_composition() {
             ..SlotConstruct::construct(&mut slot_values)
         },
         appearance: MdlxParticle2Appearance {
-            colors: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            colors: [
+                Vec3::from_array([1.0, 0.0, 0.0]),
+                Vec3::from_array([0.0, 1.0, 0.0]),
+                Vec3::from_array([0.0, 0.0, 1.0]),
+            ],
             alpha: [17, 128, 255],
             uv_intervals: [[1, 3, 2]; 4],
             ..SlotConstruct::construct(&mut slot_values)
@@ -113,7 +119,7 @@ use wc3::model::profiles::m2;
 #[test]
 fn age_driven_roundtrip_preserves_borrowed_spline_and_common_randomness() {
     let mut slot_values = SlotValues::default();
-    let spline = ZeroVec::alloc_from_slice(&[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]);
+    let spline = PackedArray::alloc_from_slice(&[Vec3::new(1., 2., 3.), Vec3::new(4., 5., 6.)]);
     let source = m2::ParticleEmitter {
         details: M2ParticleDetails {
             id: SlotConstruct::construct(&mut slot_values),
@@ -140,7 +146,7 @@ fn age_driven_roundtrip_preserves_borrowed_spline_and_common_randomness() {
                 area_width: SlotConstruct::construct(&mut slot_values),
                 area_length: SlotConstruct::construct(&mut slot_values),
                 z_source: SlotConstruct::construct(&mut slot_values),
-                spline: spline.as_slice().as_zerovec(),
+                spline: spline.as_borrowed(),
             },
             twinkle_speed: SlotConstruct::construct(&mut slot_values),
             twinkle_percent: SlotConstruct::construct(&mut slot_values),

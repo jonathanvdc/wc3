@@ -1,5 +1,6 @@
 //! Region-local point illumination and authored flicker programs.
 use crate::model::{FeatureId, Texture};
+use glam::{Vec2, Vec3};
 /// A point light whose activation belongs to a region rather than the root actor table.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PointLight {
@@ -8,7 +9,7 @@ pub struct PointLight {
     /// Intensity multiplier.
     pub intensity: f32,
     /// Start and end attenuation distances.
-    pub attenuation: [f32; 2],
+    pub attenuation: Vec2,
     /// Unresolved authored header control.
     pub control: u32,
     /// Unresolved floating-point control.
@@ -26,11 +27,11 @@ pub struct PointProgram {
     /// Intensity multiplier.
     pub intensity: f32,
     /// Attenuation start and end distances.
-    pub attenuation: [f32; 2],
+    pub attenuation: Vec2,
     /// Authored Euler orientation, in radians; axis ordering remains unspecified.
-    pub orientation: [f32; 3],
+    pub orientation: Vec3,
     /// Flicker variation and speed.
-    pub flicker: [f32; 2],
+    pub flicker: Vec2,
     /// Flicker behavior.
     pub mode: super::world::Flicker,
     /// Optional projected-light cookie.

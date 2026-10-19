@@ -1,5 +1,6 @@
 //! Public bundle checks using independently assembled animation streams and
 //! explicit document identities, including aliases and inherited skeletons.
+use glam::Vec3;
 use std::borrow::Cow;
 use wc3::model::formats::m2::records::{Interpolation, ModelFlags, SequenceFlags};
 
@@ -869,7 +870,10 @@ fn skeleton_attachments_keep_parent_bones_and_use_the_afsa_activation_stream() {
         .value;
     let (_feature_id, feature) = imported.features().iter().find(|(_,feature)| matches!(&feature.payload,semantic::profiles::m2::ActorKind::Attachment(value) if value.identity == 6)).unwrap();
     let node = imported.node(feature.node).unwrap();
-    assert_eq!(imported.values()[node.transform.translation], [1., 2., 3.]);
+    assert_eq!(
+        imported.values()[node.transform.translation],
+        Vec3::from_array([1., 2., 3.])
+    );
     assert_eq!(node.parent, Some(imported.nodes().iter().next().unwrap().0));
     let clip = imported.clips().iter().next().unwrap().0;
     let semantic::profiles::m2::ActorKind::Attachment(attachment) = &feature.payload else {

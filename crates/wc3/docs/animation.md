@@ -67,7 +67,7 @@ error. Widening and narrowing retain existing slot identities and may allocate
 additional constants required by the destination payload.
 
 ```rust
-use wc3::model::{DynamicTrack, TimeSource, Curve, Model, ModelMetadata, Time, Track};
+use wc3::model::{DynamicTrack, TimeSource, Curve, Model, ModelMetadata, Time, Track, Vec3};
 use wc3::model::profiles::Universal;
 let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
 let node = builder.new_node("Root");
@@ -78,11 +78,11 @@ builder.add_global_track(DynamicTrack::Vector3(Track {
     clock: TimeSource::Animation,
     curve: Curve::linear(
         [Time::seconds(0.)?, Time::seconds(1.)?],
-        [[0., 0., 0.], [1., 0., 0.]],
+        [Vec3::ZERO, Vec3::X],
     )?,
 }))?;
 let model = builder.finish()?;
-assert_eq!(model.values()[translation], [0., 0., 0.]);
+assert_eq!(model.values()[translation], Vec3::ZERO);
 # Ok::<(), wc3::model::Error>(())
 ```
 
@@ -115,8 +115,8 @@ rescale them to derivatives per second or infer a new quaternion spline conventi
 Native adapters check decoded sampling directives against these capabilities
 and translate component layouts without changing the interpolation mode.
 
-The array constructors accept separate `ZeroVec` arrays for times, values, and
-controls through `IntoZeroVec`. Existing encoded arrays move unchanged; native
+The array constructors accept separate `PackedArray` arrays for times, values, and
+controls through `IntoPackedArray`. Existing encoded arrays move unchanged; native
 slices, arrays, and vectors are encoded into owned storage. Typed `ValueKeyframe`,
 `HermiteKeyframe`, `BezierKeyframe`, and `TcbKeyframe` records provide a convenient
 authoring interface through the corresponding `*_keys` constructors. Those
@@ -124,17 +124,17 @@ constructors materialize separate encoded arrays from the interleaved records.
 For example, a quaternion Hermite curve can carry zero derivatives explicitly:
 
 ```rust
-use wc3::model::{Curve, HermiteKeyframe, Quaternion, Time};
+use wc3::model::{Curve, HermiteKeyframe, Quat, Time, Vec4};
 
 let keys = [HermiteKeyframe {
     time: Time::seconds(0.)?,
-    value: Quaternion::IDENTITY,
-    incoming: [0.; 4],
-    outgoing: [0.; 4],
+    value: Quat::IDENTITY,
+    incoming: Vec4::ZERO,
+    outgoing: Vec4::ZERO,
 }];
 let curve = Curve::hermite_keys(keys)?;
 assert!(curve.values().is_owned());
-assert_eq!(curve.hermite_derivatives().unwrap().incoming.get(0), Some([0.; 4]));
+assert_eq!(curve.hermite_derivatives().unwrap().incoming.get(0), Some(Vec4::ZERO));
 Ok::<(), wc3::model::Error>(())
 ```
 

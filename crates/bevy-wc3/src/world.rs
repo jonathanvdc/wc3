@@ -1,5 +1,6 @@
 //! Owned static-world catalogs, conservative visibility, and authored liquid meshes.
 use bevy::asset::RenderAssetUsages;
+use bevy::math::Vec3;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -124,7 +125,7 @@ pub struct WorldGroup {
     /// Associated geometry placements, across authored detail levels.
     pub instances: Arc<[InstanceId]>,
     /// Conservative bounds, before the model coordinate-frame transform.
-    pub bounds: [[f32; 3]; 2],
+    pub bounds: [Vec3; 2],
     /// Authored interior/exterior and baked-light controls.
     pub options: GroupOptions,
     /// Supplemental authored detail-level selection, when provided.
@@ -137,9 +138,9 @@ pub struct WorldPortal {
     /// Semantic portal identity.
     pub id: PortalId,
     /// Boundary polygon in model coordinates.
-    pub vertices: Arc<[[f32; 3]]>,
+    pub vertices: Arc<[Vec3]>,
     /// Authored plane equation.
-    pub plane: [f32; 4],
+    pub plane: Vec4,
     /// Unresolved supplemental adjustment retained without applying a guess.
     pub adjustment: Option<[u32; 3]>,
 }
@@ -225,9 +226,9 @@ pub struct WorldLiquid {
     /// Authored surface material, when supplied by the asset.
     pub material: Option<MaterialId>,
     /// Original model-space origin; vertex heights are absolute elevations.
-    pub position: [f32; 3],
+    pub position: Vec3,
     /// Native WMO horizontal grid spacing used by the generated mesh.
-    pub grid_spacing: [f32; 2],
+    pub grid_spacing: Vec2,
     /// Original per-vertex flow or magma coordinate declarations.
     pub vertices: Arc<[LiquidVertex]>,
     /// Authored tile visibility and category bytes.
@@ -244,9 +245,9 @@ pub struct WorldEnvironment {
     /// Ambient-light regions in stable authored order.
     pub ambients: Arc<[Ambient]>,
     /// Authored visibility boundary polygons for application culling solvers.
-    pub visibility_polygons: Arc<[Arc<[[f32; 3]]>]>,
+    pub visibility_polygons: Arc<[Arc<[Vec3]>]>,
     /// Authored occluder plane equations.
-    pub occluders: Arc<[[f32; 4]]>,
+    pub occluders: Arc<[Vec4]>,
 }
 
 /// Authored regional influences for an application's fog/lighting integration.
@@ -508,11 +509,11 @@ impl WorldRuntime {
                     dimensions: liquid.dimensions,
                     material: liquid.material,
                     position: liquid.position,
-                    grid_spacing: [25.0 / 6.0; 2],
+                    grid_spacing: Vec2::splat(25.0 / 6.0),
                     vertices: liquid.vertices.iter().collect::<Vec<_>>().into(),
                     tiles: liquid.tiles.iter().collect::<Vec<_>>().into(),
                 });
-                if let Some(mesh) = liquid_mesh(liquid, [25.0 / 6.0; 2])? {
+                if let Some(mesh) = liquid_mesh(liquid, Vec2::splat(25.0 / 6.0))? {
                     liquids.push(WorldLiquidMesh {
                         instance,
                         node: placement.node,
@@ -728,11 +729,11 @@ impl WorldRuntime {
 const PORTAL_EPSILON: f32 = 1.0e-5;
 
 /// None means malformed/ambiguous geometry; Some(empty) means safely clipped out.
-fn portal_window(vertices: &[[f32; 3]], eye: Vec3, planes: &[Vec4]) -> Option<Vec<Vec3>> {
+fn portal_window(vertices: &[Vec3], eye: Vec3, planes: &[Vec4]) -> Option<Vec<Vec3>> {
     if vertices.len() < 3 || vertices.len() > 64 {
         return None;
     }
-    let mut polygon: Vec<_> = vertices.iter().copied().map(Vec3::from_array).collect();
+    let mut polygon: Vec<_> = vertices.to_vec();
     if polygon.iter().any(|point| !point.is_finite()) {
         return None;
     }
@@ -872,7 +873,7 @@ impl WorldVisibility {
 pub fn world_volume_weight(volume: &Volume, position: Vec3) -> f32 {
     match volume {
         Volume::Sphere { center, radii } => {
-            let distance = position.distance(Vec3::from_array(*center));
+            let distance = position.distance(*center);
             if distance <= radii[0] {
                 1.
             } else if radii[1] <= radii[0] {
@@ -903,11 +904,16 @@ pub fn world_volume_weight(volume: &Volume, position: Vec3) -> f32 {
     }
 }
 
-fn liquid_mesh(liquid: &Liquid<'_>, spacing: [f32; 2]) -> Result<Option<Mesh>, ModelError> {
+fn liquid_mesh(liquid: &Liquid<'_>, spacing: Vec2) -> Result<Option<Mesh>, ModelError> {
     if spacing
+        .to_array()
         .iter()
         .any(|value| !value.is_finite() || *value <= 0.)
-        || liquid.position.iter().any(|value| !value.is_finite())
+        || liquid
+            .position
+            .to_array()
+            .iter()
+            .any(|value| !value.is_finite())
         || liquid
             .vertices
             .iter()

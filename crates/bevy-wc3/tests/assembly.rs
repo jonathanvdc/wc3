@@ -1,3 +1,5 @@
+use bevy::math::Vec2;
+use bevy::math::Vec3;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
 use bevy_wc3::assembly::{
@@ -27,8 +29,11 @@ fn model(textured: bool) -> (Model<'static>, NodeId, Option<Texture>) {
     let node = builder.add_named_node("mounting frame").unwrap();
     let texture = textured.then(|| builder.add_file_texture("original.png").unwrap());
     let mut geometry =
-        GeometryData::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]).unwrap();
-    geometry.set_texture_coordinates(vec![[[0., 0.], [1., 0.], [0., 1.]].into_iter().collect()]);
+        GeometryData::triangles([Vec3::ZERO, Vec3::X, Vec3::Y], [[0, 1, 2]]).unwrap();
+    geometry.set_texture_coordinates(vec![[[0., 0.], [1., 0.], [0., 1.]]
+        .into_iter()
+        .map(Vec2::from_array)
+        .collect()]);
     let mut mesh = ModelMesh::new(geometry);
     let subset = mesh.add_primary_subset(0, 1);
     let mesh = builder.add_mesh(mesh).unwrap();
@@ -117,7 +122,7 @@ impl Resolver<Configuration> for Workshop {
                 source,
                 PartBinding::Mounted(ModelMount {
                     transform: ModelTransform {
-                        translation: offset.to_array(),
+                        translation: offset,
                         ..Default::default()
                     },
                     ..ModelMount::new(MountTarget::Node(self.mounting_frame))

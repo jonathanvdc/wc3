@@ -27,7 +27,7 @@ fn anchor(
         })?;
     Ok((
         parent as u32,
-        value.transform.defaults(model.values()).translation,
+        (value.transform.defaults(model.values()).translation).to_array(),
     ))
 }
 pub(super) fn export<V>(
@@ -76,7 +76,14 @@ where
             profile::ActorKind::Light(value) => {
                 let placement = model.node(attached.node).unwrap();
                 let (bone, position) = if placement.parent.is_none() {
-                    (-1, placement.transform.defaults(model.values()).translation)
+                    (
+                        -1,
+                        placement
+                            .transform
+                            .defaults(model.values())
+                            .translation
+                            .to_array(),
+                    )
                 } else {
                     let (b, p) = anchor(model, attached.node, nodes)?;
                     (
@@ -95,7 +102,7 @@ where
                         starts,
                         globals,
                         context,
-                        |v, _| Ok(v),
+                        |v, _| Ok(v.to_array()),
                     )?,
                     ambient_intensity: animated(
                         model,
@@ -111,7 +118,7 @@ where
                         starts,
                         globals,
                         context,
-                        |v, _| Ok(v),
+                        |v, _| Ok(v.to_array()),
                     )?,
                     diffuse_intensity: animated(
                         model,
@@ -203,7 +210,7 @@ where
                         starts,
                         globals,
                         context,
-                        |v, _| Ok(v),
+                        |v, _| Ok(v.to_array()),
                     )?,
                     alpha: animated(
                         model,
@@ -264,8 +271,9 @@ where
                 let placement = model.node(attached.node).unwrap();
                 let mut camera = native::records::Camera::<V>::new();
                 camera.kind = CameraKind::from_raw(value.convention.raw());
-                camera.position_base = placement.transform.defaults(model.values()).translation;
-                camera.target_position_base = value.target;
+                camera.position_base =
+                    (placement.transform.defaults(model.values()).translation).to_array();
+                camera.target_position_base = (value.target).to_array();
                 camera.near_clip = value.clipping[0];
                 camera.far_clip = value.clipping[1];
                 camera.positions = animated_spline(
@@ -274,7 +282,7 @@ where
                     starts,
                     globals,
                     context,
-                    |v, _| Ok(v),
+                    |v, _| Ok(v.to_array()),
                 )?;
                 camera.target_positions = animated_spline(
                     model,
@@ -282,7 +290,7 @@ where
                     starts,
                     globals,
                     context,
-                    |v, _| Ok(v),
+                    |v, _| Ok(v.to_array()),
                 )?;
                 camera.roll =
                     animated_spline(model, &value.roll, starts, globals, context, |v, _| Ok(v))?;
@@ -393,7 +401,7 @@ where
                     starts,
                     globals,
                     context,
-                    |v, c| gravity_word(v, packed, c, "m2.particle.gravity"),
+                    |v, c| gravity_word((v).to_array(), packed, c, "m2.particle.gravity"),
                 )?;
                 let required = V::required_flags(&particle);
                 core.flags = ModelFlags::from_bits_retain(core.flags.bits() | required.bits());

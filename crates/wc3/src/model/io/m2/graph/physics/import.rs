@@ -2,6 +2,7 @@
 use super::super::overrides::resource;
 use super::*;
 use crate::model::io::materialize;
+use glam::Vec3;
 use profile::{
     values::{PhysicsBodyKind, PhysicsKind},
     Body, Physics, Vegetation,
@@ -43,7 +44,7 @@ pub(in super::super) fn import<'a, 'data: 'a, D: Dialect>(
                 .with_parent(bone)
                 .with_transform(
                     Transform {
-                        translation: body.position,
+                        translation: Vec3::from_array(body.position),
                         ..Transform::default()
                     },
                     builder.values_mut(),

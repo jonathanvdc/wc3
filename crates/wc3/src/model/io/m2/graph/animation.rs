@@ -3,6 +3,7 @@ use super::*;
 use crate::model::io::animation::crop;
 use crate::model::io::materialize;
 use crate::model::PropertyValue;
+use glam::{Vec2, Vec3, Vec4};
 use semantic::{Curve, CurveValue, Time, TimeSource};
 
 pub(super) fn curve<'a, 'data: 'a, D: Dialect, T, U: CurveValue + 'a>(
@@ -176,7 +177,7 @@ pub(in super::super) trait ChannelValue: PropertyValue + CurveValue {
 macro_rules! channel_value {($($ty:ty=>$variant:ident),*)=>{$(impl ChannelValue for $ty{fn channel<'v,'data>(value:&'v semantic::DynamicTrack<'data>)->Option<&'v semantic::Track<'data,Self>>{if let semantic::DynamicTrack::$variant(value)=value{Some(value)}else{None}}})*};}
 channel_value!(u32=>Unsigned,i32=>Signed,u16=>Unsigned16,u8=>Byte,bool=>Boolean);
 macro_rules! float_channel {($($ty:ty=>$variant:ident),*)=>{$(impl ChannelValue for $ty{fn channel<'v,'data>(value:&'v semantic::DynamicTrack<'data>)->Option<&'v semantic::Track<'data,Self>>{if let semantic::DynamicTrack::$variant(value)=value{Some(value)}else{None}}fn restrict<'a>(track:&semantic::Track<'a,Self>,start:Time,end:Time)->Result<semantic::Track<'a,Self>,Error>{if track.curve.times().iter().any(|t|t<start||t>end){crop(track,start,end)}else{Ok(track.clone())}}})*};}
-float_channel!(f32=>Scalar,[f32;2]=>Vector2,[f32;3]=>Vector3,[f32;4]=>Vector4,semantic::Quaternion=>Rotation);
+float_channel!(f32=>Scalar,Vec2 =>Vector2,Vec3 =>Vector3,Vec4 =>Vector4,semantic::Quat=>Rotation);
 pub(super) fn encode<V: ModelLayout, U: ChannelValue, T: Value>(
     model: &Graph<'_>,
     target: &Property<U>,
@@ -349,12 +350,13 @@ pub(super) fn time_ms(time: Time, context: &mut Context) -> Result<u32, Error> {
     Ok(rounded as u32)
 }
 
-pub(in super::super) fn spline_curve<'a, 'data: 'a, D: Dialect, T: Value + CurveValue + 'a>(
+pub(in super::super) fn spline_curve<'a, 'data: 'a, D: Dialect, T: Value + 'a, U: CurveValue + 'a>(
     source: &AnimationResolver<'a, 'data, D>,
     track: &'a native::records::SplineTrack<'data, T, D::Layout>,
     sequence: usize,
     start: u32,
-) -> Result<Option<(Curve<'a, T>, u16)>, Error>
+    map: impl Fn(T) -> U + Clone,
+) -> Result<Option<(Curve<'a, U>, u16)>, Error>
 where
     [T; 3]: Value,
     T::ULE: Send + Sync,
@@ -403,7 +405,8 @@ where
     });
     let a = values.clone();
     let b = values.clone();
-    let keys = materialize(len, move |i| values.get(first + i).unwrap()[0]);
+    let key_map = map.clone();
+    let keys = materialize(len, move |i| key_map(values.get(first + i).unwrap()[0]));
     let interpolation = match track.base.interpolation {
         NativeInterpolation::Step => semantic::Interpolation::Step,
         NativeInterpolation::Linear => semantic::Interpolation::Linear,
@@ -418,8 +421,8 @@ where
         Curve::from_spline_samples(
             timestamps,
             keys,
-            materialize(len, move |i| a.get(first + i).unwrap()[1]),
-            materialize(len, move |i| b.get(first + i).unwrap()[2]),
+            materialize(len, |i| map(a.get(first + i).unwrap()[1])),
+            materialize(len, |i| map(b.get(first + i).unwrap()[2])),
             interpolation,
         )?
     } else {

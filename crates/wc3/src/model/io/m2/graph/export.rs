@@ -4,6 +4,7 @@ use super::*;
 use crate::model::M2ImageResource;
 use crate::model::TimeSource;
 use crate::model::{Billboard, TransformSemantics};
+use glam::Vec3;
 use zerovec::ZeroVec;
 
 /// Plans a typed M2 bundle, checking index limits, curves and resource identities.
@@ -59,8 +60,15 @@ where
     for (_, system) in model.systems() {
         if let profile::System::Collision(collision) = system {
             core.collision = native_bounds(collision.bounds);
-            core.collision_vertices =
-                ZeroVec::alloc_from_slice(&collision.positions.iter().collect::<Vec<_>>());
+            core.collision_vertices = ZeroVec::alloc_from_slice(
+                &collision
+                    .positions
+                    .iter()
+                    .collect::<Vec<_>>()
+                    .iter()
+                    .map(|v| v.to_array())
+                    .collect::<Vec<_>>(),
+            );
             let normals = if collision.normals.is_empty() {
                 collision
                     .triangles
@@ -84,7 +92,7 @@ where
                     })
                     .collect::<Vec<_>>()
             } else {
-                collision.normals.iter().collect()
+                collision.normals.iter().map(|v| v.to_array()).collect()
             };
             core.collision_normals = ZeroVec::alloc_from_slice(&normals);
             core.collision_indices = ZeroVec::alloc_from_slice(
@@ -131,12 +139,12 @@ where
                     .values()
                     .get(node.transform.rotation)
                     .expect("validated slot")
-                    != semantic::Quaternion::default()
+                    != semantic::Quat::default()
                 || *model
                     .values()
                     .get(node.transform.scale)
                     .expect("validated slot")
-                    != [1.; 3])
+                    != Vec3::from_array([1.; 3]))
                 && !nodes.contains(&attached.node)
             {
                 nodes.push(attached.node);
@@ -265,7 +273,7 @@ where
             .ok_or_else(|| Error::new("m2.bone", "missing node"))?;
         let data = bone_controls.get(id).copied();
         let mut bone = Bone::<D::Layout>::new();
-        bone.pivot = node.transform.pivot;
+        bone.pivot = (node.transform.pivot).to_array();
         bone.parent_bone_id = node
             .parent
             .map(|p| {
@@ -316,7 +324,7 @@ where
             &starts,
             &mut globals,
             &mut context,
-            |v, _| Ok(v),
+            |v, _| Ok(v.to_array()),
         )?;
         bone.scale = encode(
             model,
@@ -324,7 +332,7 @@ where
             &starts,
             &mut globals,
             &mut context,
-            |v, _| Ok(v),
+            |v, _| Ok(v.to_array()),
         )?;
         bone.rotation = encode(
             model,
@@ -332,20 +340,21 @@ where
             &starts,
             &mut globals,
             &mut context,
-            |v, c| RotationComponents::encode(v.components(), c, "m2.bone.rotation"),
+            |v, c| RotationComponents::encode(v.to_array(), c, "m2.bone.rotation"),
         )?;
         if *model
             .values()
             .get(node.transform.translation)
             .expect("validated slot")
-            != [0.; 3]
+            != Vec3::from_array([0.; 3])
         {
             ensure_constant(
                 &mut bone.translation,
-                *model
+                (*model
                     .values()
                     .get(node.transform.translation)
-                    .expect("validated slot"),
+                    .expect("validated slot"))
+                .to_array(),
                 &mut globals,
             )
         }
@@ -353,14 +362,15 @@ where
             .values()
             .get(node.transform.scale)
             .expect("validated slot")
-            != [1.; 3]
+            != Vec3::from_array([1.; 3])
         {
             ensure_constant(
                 &mut bone.scale,
-                *model
+                (*model
                     .values()
                     .get(node.transform.scale)
-                    .expect("validated slot"),
+                    .expect("validated slot"))
+                .to_array(),
                 &mut globals,
             )
         }
@@ -368,7 +378,7 @@ where
             .values()
             .get(node.transform.rotation)
             .expect("validated slot")
-            != semantic::Quaternion::default()
+            != semantic::Quat::default()
         {
             ensure_constant(
                 &mut bone.rotation,
@@ -377,7 +387,7 @@ where
                         .values()
                         .get(node.transform.rotation)
                         .expect("validated slot")
-                        .components(),
+                        .to_array(),
                     &mut context,
                     "m2.bone.rotation",
                 )?,
@@ -435,8 +445,8 @@ where
 }
 fn native_bounds(value: semantic::Bounds) -> native::records::Extent {
     native::records::Extent {
-        minimum: value.minimum,
-        maximum: value.maximum,
+        minimum: (value.minimum).to_array(),
+        maximum: (value.maximum).to_array(),
         radius: value.sphere_radius,
     }
 }

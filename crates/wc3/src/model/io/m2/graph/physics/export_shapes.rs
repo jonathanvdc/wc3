@@ -1,5 +1,7 @@
 //! Rebuilds fixture tables and half-edge connectivity from logical geometry.
 use super::*;
+use glam::Mat4;
+use glam::Vec3;
 use native::companions::{
     PhysicsBox, PhysicsCapsule, PhysicsEdge, PhysicsShape, PhysicsShape2, PhysicsSphere, Polytope,
     PolytopeHeader,
@@ -29,30 +31,30 @@ impl Geometry {
                 let index = self.boxes.len();
                 self.boxes.push(PhysicsBox {
                     frame: native_frame(profile::Frame {
-                        axis_x: shape.transform[0][..3].try_into().unwrap(),
-                        axis_y: shape.transform[1][..3].try_into().unwrap(),
-                        axis_z: shape.transform[2][..3].try_into().unwrap(),
-                        origin: shape.transform[3][..3].try_into().unwrap(),
+                        axis_x: shape.transform.x_axis.truncate(),
+                        axis_y: shape.transform.y_axis.truncate(),
+                        axis_z: shape.transform.z_axis.truncate(),
+                        origin: shape.transform.w_axis.truncate(),
                     }),
-                    half_extents: *extents,
+                    half_extents: (*extents).to_array(),
                 });
                 (PhysicsShapeKind::Box, index)
             }
             ShapeGeometry::Sphere(radius) => {
-                let scale = uniform_scale(shape.transform)?;
+                let scale = uniform_scale(shape.transform.to_cols_array_2d())?;
                 let index = self.spheres.len();
                 self.spheres.push(PhysicsSphere {
-                    position: shape.transform[3][..3].try_into().unwrap(),
+                    position: shape.transform.w_axis.truncate().to_array(),
                     radius: radius * scale,
                 });
                 (PhysicsShapeKind::Sphere, index)
             }
             ShapeGeometry::Capsule { radius, endpoints } => {
-                let scale = uniform_scale(shape.transform)?;
+                let scale = uniform_scale(shape.transform.to_cols_array_2d())?;
                 let index = self.capsules.len();
                 self.capsules.push(PhysicsCapsule {
-                    position1: point(shape.transform, endpoints[0]),
-                    position2: point(shape.transform, endpoints[1]),
+                    position1: point(shape.transform.to_cols_array_2d(), endpoints[0].to_array()),
+                    position2: point(shape.transform.to_cols_array_2d(), endpoints[1].to_array()),
                     radius: radius * scale,
                 });
                 (PhysicsShapeKind::Capsule, index)
@@ -62,7 +64,7 @@ impl Geometry {
                 planes,
                 faces,
             } => {
-                if shape.transform != identity() {
+                if shape.transform != Mat4::from_cols_array_2d(&identity()) {
                     return Err(Error::new(
                         "physics.polytope.transform",
                         "native polytope export requires geometry in fixture coordinates",
@@ -156,22 +158,30 @@ impl Geometry {
                 let measured = if let Some(mass) = shape.mass_properties {
                     mass
                 } else {
-                    let hull = hull::hull(points.clone())?;
+                    let hull = hull::hull(points.iter().map(|v| v.to_array()).collect())?;
                     profile::MassProperties {
-                        centroid: hull.header.centroid,
+                        centroid: Vec3::from_array(hull.header.centroid),
                         volume: hull.header.volume,
                         surface_area: hull.header.surface_area,
                     }
                 };
                 self.polytopes.push(Polytope {
                     header: PolytopeHeader {
-                        centroid: measured.centroid,
+                        centroid: (measured.centroid).to_array(),
                         volume: measured.volume,
                         surface_area: measured.surface_area,
                         ..Default::default()
                     },
-                    vertices: ZeroVec::alloc_from_slice(&points),
-                    planes: ZeroVec::alloc_from_slice(&planes.to_vec()),
+                    vertices: ZeroVec::alloc_from_slice(
+                        &points.iter().map(|v| v.to_array()).collect::<Vec<_>>(),
+                    ),
+                    planes: ZeroVec::alloc_from_slice(
+                        &planes
+                            .to_vec()
+                            .iter()
+                            .map(|v| v.to_array())
+                            .collect::<Vec<_>>(),
+                    ),
                     face_first_edge: ZeroVec::alloc_from_slice(&first),
                     edges,
                 });

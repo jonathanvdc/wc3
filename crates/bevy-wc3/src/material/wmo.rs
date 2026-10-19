@@ -4,6 +4,7 @@ use super::compile::{blend, image_role_with_sampler, rasterization};
 use super::{Blend, SurfacePass};
 use crate::ModelError;
 use bevy::math::Affine2;
+use bevy::math::Vec2;
 use bevy::prelude::*;
 use wc3::model::materials::wmo as wmo_shader;
 use wc3::model::materials::{state::BlendOperations, wmo::WorldBlend};
@@ -66,10 +67,10 @@ pub(super) fn compile_wmo(
         }
         pass.animation.uv_scroll = declaration.uv_scroll;
         if count == 1 {
-            pass.animation.uv_scroll[1] = [0.; 2];
+            pass.animation.uv_scroll[1] = Vec2::ZERO;
         }
         if secondary.is_none() && count > 1 {
-            pass.animation.uv_scroll[1] = [0.; 2];
+            pass.animation.uv_scroll[1] = Vec2::ZERO;
             if third.is_some() {
                 pass.animation.third_uv_scroll = declaration.uv_scroll[1];
             }
@@ -140,7 +141,7 @@ fn world_image(
 
 /// Adds authored model-time translation after the input texture transform.
 /// Clamp addressing deliberately keeps offsets outside the unit square.
-pub(super) fn scrolling_transform(base: Affine2, velocity: [f32; 2], seconds: f32) -> Affine2 {
+pub(super) fn scrolling_transform(base: Affine2, velocity: Vec2, seconds: f32) -> Affine2 {
     Affine2 {
         translation: base.translation + Vec2::new(velocity[0] * seconds, velocity[1] * seconds),
         ..base

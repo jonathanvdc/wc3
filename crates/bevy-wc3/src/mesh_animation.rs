@@ -1,4 +1,5 @@
 //! Bevy material sharing and transport for shared geometry appearance evaluation.
+use bevy::math::Vec4;
 use bevy::prelude::*;
 pub(super) use wc3::model::MeshAppearance as MeshAnimation;
 use wc3::model::MeshId;
@@ -14,14 +15,14 @@ pub(super) fn state(value: &MeshAnimation, mesh: MeshId) -> MeshMaterialState {
         MeshMaterialState::Property(mesh)
     } else {
         let rgba = value.defaults();
-        if rgba == [1.; 4] {
+        if rgba == Vec4::from_array([1.; 4]) {
             MeshMaterialState::Plain
         } else {
-            MeshMaterialState::Constant(rgba.map(f32::to_bits))
+            MeshMaterialState::Constant(rgba.to_array().map(f32::to_bits))
         }
     }
 }
-pub(super) fn multiply(color: Color, tint: [f32; 4]) -> Color {
+pub(super) fn multiply(color: Color, tint: Vec4) -> Color {
     let color = color.to_linear();
     Color::linear_rgba(
         color.red * tint[0],

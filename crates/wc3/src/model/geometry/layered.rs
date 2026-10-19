@@ -1,21 +1,22 @@
 //! Geometry streams and connectivity available to this model family.
-use crate::model::common::IntoZeroVec;
+use crate::model::common::IntoPackedArray;
 use crate::model::geometry_edit::{check_edit, remap_values};
 use crate::model::geometry_schema::{present, validate_geometry};
 use crate::model::vertex_geometry::RemapStreams;
 use crate::model::vertex_geometry::{GeometryStreams, VertexStreams};
 use crate::model::TextureCoordinates;
 use crate::model::{
-    Attribute, Error, GeometrySchema, InfluenceRows, JointInfluences, Link, Topology,
-    ValidateLinks, ZeroVec,
+    Attribute, Error, GeometrySchema, InfluenceRows, JointInfluences, Link, PackedArray, Topology,
+    ValidateLinks,
 };
 use crate::model::{GeometryData, GeometryKind, GeometryParts, VertexData};
 use crate::model::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
+use glam::{Vec2, Vec3, Vec4};
 type MdlxStreams<'data> = VertexStreams<
     'data,
     JointInfluences<'data>,
-    Vec<ZeroVec<'data, [f32; 2]>>,
-    ZeroVec<'data, [f32; 4]>,
+    Vec<PackedArray<'data, Vec2>>,
+    PackedArray<'data, Vec4>,
     (),
 >;
 
@@ -37,20 +38,20 @@ impl<'data> MdlxGeometry<'data> {
     }
     /// Creates checked triangle geometry without materializing borrowed arrays.
     pub fn triangles(
-        positions: impl IntoZeroVec<'data, [f32; 3]>,
-        triangles: impl IntoZeroVec<'data, [u32; 3]>,
+        positions: impl IntoPackedArray<'data, Vec3>,
+        triangles: impl IntoPackedArray<'data, [u32; 3]>,
     ) -> Result<Self, Error> {
         let geometry = Self {
             streams: VertexStreams {
                 vertices: VertexData {
                     colors: (),
-                    positions: positions.into_zero_vec(),
-                    normals: ZeroVec::default(),
-                    tangents: ZeroVec::default(),
+                    positions: positions.into_packed_array(),
+                    normals: PackedArray::default(),
+                    tangents: PackedArray::default(),
                     texture_coordinates: Vec::new(),
                     extras: (),
                 },
-                topology: Topology::Triangles(triangles.into_zero_vec()),
+                topology: Topology::Triangles(triangles.into_packed_array()),
                 influences: JointInfluences::None,
             },
         };
@@ -59,13 +60,13 @@ impl<'data> MdlxGeometry<'data> {
     }
     /// Creates ordered triangle groups without flattening their borrowed indices.
     pub fn triangle_groups(
-        positions: impl IntoZeroVec<'data, [f32; 3]>,
-        groups: Vec<ZeroVec<'data, [u32; 3]>>,
+        positions: impl IntoPackedArray<'data, Vec3>,
+        groups: Vec<PackedArray<'data, [u32; 3]>>,
     ) -> Result<Self, Error> {
         let geometry = Self {
             streams: VertexStreams {
                 vertices: VertexData {
-                    positions: positions.into_zero_vec(),
+                    positions: positions.into_packed_array(),
                     extras: (),
                     ..Self::default().streams.vertices
                 },
@@ -79,34 +80,34 @@ impl<'data> MdlxGeometry<'data> {
     /// Replaces vertex positions while preserving the remaining authored streams.
     pub fn with_positions(
         mut self,
-        positions: impl IntoZeroVec<'data, [f32; 3]>,
+        positions: impl IntoPackedArray<'data, Vec3>,
     ) -> Result<Self, Error> {
-        self.streams.positions = positions.into_zero_vec();
+        self.streams.positions = positions.into_packed_array();
         self.validate()?;
         Ok(self)
     }
     /// Supplies a vertex-normal stream, preserving its borrowed storage.
     pub fn with_normals(
         mut self,
-        normals: impl IntoZeroVec<'data, [f32; 3]>,
+        normals: impl IntoPackedArray<'data, Vec3>,
     ) -> Result<Self, Error> {
-        self.streams.normals = normals.into_zero_vec();
+        self.streams.normals = normals.into_packed_array();
         self.validate()?;
         Ok(self)
     }
     /// Supplies tangents; the chosen native version must support their encoding.
     pub fn with_tangents(
         mut self,
-        tangents: impl IntoZeroVec<'data, [f32; 4]>,
+        tangents: impl IntoPackedArray<'data, Vec4>,
     ) -> Result<Self, Error> {
-        self.streams.tangents = tangents.into_zero_vec();
+        self.streams.tangents = tangents.into_packed_array();
         self.validate()?;
         Ok(self)
     }
     /// Supplies ordered texture-coordinate sets.
     pub fn with_texture_coordinates(
         mut self,
-        coordinates: Vec<ZeroVec<'data, [f32; 2]>>,
+        coordinates: Vec<PackedArray<'data, Vec2>>,
     ) -> Result<Self, Error> {
         self.streams.texture_coordinates = coordinates;
         self.validate()?;
@@ -166,19 +167,19 @@ impl<'data> GeometrySchema<'data> for MdlxGeometry<'data> {
         Ok(result)
     }
 
-    fn positions(&self) -> &ZeroVec<'data, [f32; 3]> {
+    fn positions(&self) -> &PackedArray<'data, Vec3> {
         &self.streams.positions
     }
-    fn normals(&self) -> Option<&ZeroVec<'data, [f32; 3]>> {
+    fn normals(&self) -> Option<&PackedArray<'data, Vec3>> {
         present(&self.streams.normals)
     }
-    fn tangents(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
+    fn tangents(&self) -> Option<&PackedArray<'data, Vec4>> {
         present(&self.streams.tangents)
     }
     fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
         TextureCoordinates::Slice(&self.streams.texture_coordinates)
     }
-    fn colors(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
+    fn colors(&self) -> Option<&PackedArray<'data, Vec4>> {
         None
     }
     fn attributes(&self) -> &[Attribute<'data>] {
@@ -229,13 +230,13 @@ impl Default for MdlxGeometry<'_> {
             streams: VertexStreams {
                 vertices: VertexData {
                     colors: (),
-                    positions: ZeroVec::default(),
-                    normals: ZeroVec::default(),
-                    tangents: ZeroVec::default(),
+                    positions: PackedArray::default(),
+                    normals: PackedArray::default(),
+                    tangents: PackedArray::default(),
                     texture_coordinates: Vec::new(),
                     extras: (),
                 },
-                topology: Topology::Triangles(ZeroVec::default()),
+                topology: Topology::Triangles(PackedArray::default()),
                 influences: JointInfluences::None,
             },
         }
@@ -255,13 +256,13 @@ impl<'data> From<MdlxGeometry<'data>> for GeometryData<'data> {
         } = value.streams;
         GeometryParts {
             strip_set: false,
-            surface_triangles: ZeroVec::default(),
+            surface_triangles: PackedArray::default(),
             pools: Default::default(),
             kind: GeometryKind::Display,
             positions: vertices.positions,
             normals: vertices.normals,
             tangents: vertices.tangents,
-            colors: ZeroVec::default(),
+            colors: PackedArray::default(),
             texture_coordinates: vertices.texture_coordinates,
             attributes: Vec::new(),
             topology,

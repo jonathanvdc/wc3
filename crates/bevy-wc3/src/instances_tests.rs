@@ -3,11 +3,11 @@ use super::*;
 use crate::image_replacements::refresh_image_replacements;
 use crate::{CoordinatePolicy, ImageReplacements};
 use bevy::asset::uuid::Uuid;
+use bevy::math::{Quat, Vec3};
 use wc3::model::ModelBuilder;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{NodeId, Transform as ModelTransform};
-
 fn fixture() -> (ModelAsset, NodeId) {
     let slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
@@ -268,7 +268,7 @@ fn separately_decoded_replacement_rebinds_clip_and_pose_scoped_identities() {
         .resource_mut::<Assets<ModelAsset>>()
         .add(new_asset);
     let pose = ModelTransform {
-        translation: [4., 5., 6.],
+        translation: Vec3::from_array([4., 5., 6.]),
         ..SlotConstruct::construct(&mut slot_values)
     };
     let root = app

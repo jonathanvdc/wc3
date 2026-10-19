@@ -3,7 +3,7 @@ use super::encode_animation::{frame_at, Encoder};
 use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::profiles::mdlx as profile;
-use crate::model::{EventSourceId, MeshId, Property, Quaternion, TextureTransform, TimeSource};
+use crate::model::{EventSourceId, MeshId, Property, Quat, TextureTransform, TimeSource};
 use native::animation::Track;
 use native::scene::Node;
 use std::collections::{BTreeMap, HashSet};
@@ -147,16 +147,21 @@ pub(super) fn texture_transform<'a>(
     Ok(native::TextureAnimation {
         translation: encoder.optional(
             source.translation,
-            Ok,
+            |v| Ok(v.to_array()),
             [0.; 3],
             "texture_transform.translation",
         )?,
         rotation: encoder.optional(
             source.rotation,
-            |value: Quaternion| Ok(value.components()),
-            Quaternion::default().components(),
+            |value: Quat| Ok(value.to_array()),
+            Quat::default().to_array(),
             "texture_transform.rotation",
         )?,
-        scaling: encoder.optional(source.scale, Ok, [1.; 3], "texture_transform.scale")?,
+        scaling: encoder.optional(
+            source.scale,
+            |v| Ok(v.to_array()),
+            [1.; 3],
+            "texture_transform.scale",
+        )?,
     })
 }

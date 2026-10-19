@@ -9,6 +9,7 @@ use crate::pose::local_transform;
 use crate::pose::{evaluate_pose, EvaluatedPose};
 use crate::{ModelError, PartBinding::*};
 use bevy::camera::primitives::Aabb;
+use bevy::math::Vec4;
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -17,7 +18,7 @@ use wc3::model::profiles::Universal;
 use wc3::model::ModelMetadata;
 use wc3::model::{
     AnimatedTransform, AnimationProgram, Billboard, ClipId, DrawId, Inheritance, InstanceId, Model,
-    ModelMount, MountTarget, NodeId, Quaternion, Transform as ModelTransform,
+    ModelMount, MountTarget, NodeId, Quat, Transform as ModelTransform,
 };
 
 /// Geometry choices independent of animation, materials, and automatic LOD.
@@ -133,9 +134,9 @@ fn transform(matrix: Mat4) -> Result<ModelTransform, ModelError> {
         ));
     }
     Ok(ModelTransform {
-        translation: translation.to_array(),
-        rotation: Quaternion(rotation.to_array()),
-        scale: scale.to_array(),
+        translation,
+        rotation: Quat::from_array(rotation.to_array()),
+        scale,
         ..Default::default()
     })
 }
@@ -381,34 +382,33 @@ impl CompiledModel {
             // Only frames used by extra bones, geometry, or features are created.
             // Their identities remain source-local; the actual skin uses host joints.
             let mut anchors = HashMap::new();
-            let mut anchor =
-                |index: usize, nodes: &mut Vec<RuntimeNode>| -> Result<usize, ModelError> {
-                    if let Some(&existing) = anchors.get(&index) {
-                        return Ok(existing);
-                    }
-                    let host = mapped[&index];
-                    finite_frame(host_rest[host])?;
-                    let mut node = source.nodes[index].clone();
-                    node.parent = Some(host);
-                    node.rest = transform(host_rest[host].inverse() * frame * source_rest[index])?;
-                    let pivot = Vec3::from_array(source.nodes[index].rest.pivot);
-                    let rotation = Quat::from_array(node.rest.rotation.0);
-                    let scale = Vec3::from_array(node.rest.scale);
-                    node.rest.translation = (Vec3::from_array(node.rest.translation) - pivot
-                        + rotation * (scale * pivot))
-                        .to_array();
-                    node.rest.pivot = pivot.to_array();
-                    node.transform = AnimatedTransform::new(node.rest, identities.values_mut());
-                    node.visibility = identities.add_value(node.visible);
-                    node.channels = Default::default();
-                    node.billboard = Billboard::None;
-                    node.camera_anchored = false;
-                    node.inheritance = Inheritance::default();
-                    let output = nodes.len();
-                    nodes.push(node);
-                    anchors.insert(index, output);
-                    Ok(output)
-                };
+            let mut anchor = |index: usize,
+                              nodes: &mut Vec<RuntimeNode>|
+             -> Result<usize, ModelError> {
+                if let Some(&existing) = anchors.get(&index) {
+                    return Ok(existing);
+                }
+                let host = mapped[&index];
+                finite_frame(host_rest[host])?;
+                let mut node = source.nodes[index].clone();
+                node.parent = Some(host);
+                node.rest = transform(host_rest[host].inverse() * frame * source_rest[index])?;
+                let pivot = source.nodes[index].rest.pivot;
+                let rotation = Quat::from_array(node.rest.rotation.to_array());
+                let scale = node.rest.scale;
+                node.rest.translation = node.rest.translation - pivot + rotation * (scale * pivot);
+                node.rest.pivot = pivot;
+                node.transform = AnimatedTransform::new(node.rest, identities.values_mut());
+                node.visibility = identities.add_value(node.visible);
+                node.channels = Default::default();
+                node.billboard = Billboard::None;
+                node.camera_anchored = false;
+                node.inheritance = Inheritance::default();
+                let output = nodes.len();
+                nodes.push(node);
+                anchors.insert(index, output);
+                Ok(output)
+            };
             for (index, node) in source.nodes.iter().enumerate() {
                 if mapped.contains_key(&index) {
                     continue;

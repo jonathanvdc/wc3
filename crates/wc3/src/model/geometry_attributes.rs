@@ -1,6 +1,7 @@
 //! Canonical typed attributes, keyed by their meaning and correspondence domain.
 use super::geometry_edit::remap_attribute;
-use super::{Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Error, ZeroVec};
+use super::{Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Error, PackedArray};
+use glam::{Vec2, Vec3, Vec4};
 use std::ops::Index;
 use std::slice::Iter;
 use std::sync::LazyLock;
@@ -145,7 +146,7 @@ impl<'data> GeometryAttributes<'data> {
         &self,
         semantic: &AttributeSemantic<'_>,
         domain: AttributeDomain,
-    ) -> Option<&ZeroVec<'data, [f32; 3]>> {
+    ) -> Option<&PackedArray<'data, Vec3>> {
         match &self.get(semantic, domain)?.values {
             AttributeValues::Vector3(values) => Some(values),
             _ => None,
@@ -156,7 +157,7 @@ impl<'data> GeometryAttributes<'data> {
         &self,
         semantic: &AttributeSemantic<'_>,
         domain: AttributeDomain,
-    ) -> Option<&ZeroVec<'data, [f32; 4]>> {
+    ) -> Option<&PackedArray<'data, Vec4>> {
         match &self.get(semantic, domain)?.values {
             AttributeValues::Vector4(values) => Some(values),
             _ => None,
@@ -202,7 +203,7 @@ impl<'data> Index<usize> for GeometryAttributes<'data> {
 #[derive(Clone, Copy, Debug)]
 pub enum TextureCoordinates<'view, 'data> {
     /// Fixed or contiguous profile-owned slots.
-    Slice(&'view [ZeroVec<'data, [f32; 2]>]),
+    Slice(&'view [PackedArray<'data, Vec2>]),
     /// Slots stored as typed vertex attributes.
     Attributes(&'view GeometryAttributes<'data>),
 }
@@ -228,7 +229,7 @@ impl<'view, 'data> TextureCoordinates<'view, 'data> {
         self.len() == 0
     }
     /// Inspects an authored slot.
-    pub fn get(self, index: usize) -> Option<&'view ZeroVec<'data, [f32; 2]>> {
+    pub fn get(self, index: usize) -> Option<&'view PackedArray<'data, Vec2>> {
         match self {
             Self::Slice(values) => values.get(index),
             Self::Attributes(values) => {
@@ -249,27 +250,27 @@ impl<'view, 'data> TextureCoordinates<'view, 'data> {
         }
     }
     /// Visits slots in ascending order, exposing gaps as empty streams.
-    pub fn iter(self) -> impl ExactSizeIterator<Item = &'view ZeroVec<'data, [f32; 2]>> {
+    pub fn iter(self) -> impl ExactSizeIterator<Item = &'view PackedArray<'data, Vec2>> {
         (0..self.len()).map(move |index| self.get(index).expect("validated UV slots"))
     }
     /// Clones streams, preserving borrowed buffers and copying owned encoded storage.
-    pub fn to_vec(self) -> Vec<ZeroVec<'data, [f32; 2]>> {
+    pub fn to_vec(self) -> Vec<PackedArray<'data, Vec2>> {
         self.iter().cloned().collect()
     }
 }
 impl<'data> Index<usize> for TextureCoordinates<'_, 'data> {
-    type Output = ZeroVec<'data, [f32; 2]>;
+    type Output = PackedArray<'data, Vec2>;
     fn index(&self, index: usize) -> &Self::Output {
         self.get(index).expect("UV slot")
     }
 }
-impl<'view, 'data> From<&'view [ZeroVec<'data, [f32; 2]>]> for TextureCoordinates<'view, 'data> {
-    fn from(value: &'view [ZeroVec<'data, [f32; 2]>]) -> Self {
+impl<'view, 'data> From<&'view [PackedArray<'data, Vec2>]> for TextureCoordinates<'view, 'data> {
+    fn from(value: &'view [PackedArray<'data, Vec2>]) -> Self {
         Self::Slice(value)
     }
 }
 
-static EMPTY_UV: LazyLock<ZeroVec<'static, [f32; 2]>> = LazyLock::new(ZeroVec::default);
+static EMPTY_UV: LazyLock<PackedArray<'static, Vec2>> = LazyLock::new(PackedArray::default);
 
 /// Ordered borrowed traversal of UV slots.
 pub struct TextureCoordinateIter<'view, 'data> {
@@ -277,7 +278,7 @@ pub struct TextureCoordinateIter<'view, 'data> {
     index: usize,
 }
 impl<'view, 'data> Iterator for TextureCoordinateIter<'view, 'data> {
-    type Item = &'view ZeroVec<'data, [f32; 2]>;
+    type Item = &'view PackedArray<'data, Vec2>;
     fn next(&mut self) -> Option<Self::Item> {
         let value = self.streams.get(self.index)?;
         self.index += 1;
@@ -290,7 +291,7 @@ impl<'view, 'data> Iterator for TextureCoordinateIter<'view, 'data> {
 }
 impl ExactSizeIterator for TextureCoordinateIter<'_, '_> {}
 impl<'view, 'data> IntoIterator for TextureCoordinates<'view, 'data> {
-    type Item = &'view ZeroVec<'data, [f32; 2]>;
+    type Item = &'view PackedArray<'data, Vec2>;
     type IntoIter = TextureCoordinateIter<'view, 'data>;
     fn into_iter(self) -> Self::IntoIter {
         TextureCoordinateIter {
@@ -299,15 +300,15 @@ impl<'view, 'data> IntoIterator for TextureCoordinates<'view, 'data> {
         }
     }
 }
-impl<'view, 'data, const N: usize> From<&'view [ZeroVec<'data, [f32; 2]>; N]>
+impl<'view, 'data, const N: usize> From<&'view [PackedArray<'data, Vec2>; N]>
     for TextureCoordinates<'view, 'data>
 {
-    fn from(value: &'view [ZeroVec<'data, [f32; 2]>; N]) -> Self {
+    fn from(value: &'view [PackedArray<'data, Vec2>; N]) -> Self {
         Self::Slice(value)
     }
 }
-impl<'view, 'data> From<&'view Vec<ZeroVec<'data, [f32; 2]>>> for TextureCoordinates<'view, 'data> {
-    fn from(value: &'view Vec<ZeroVec<'data, [f32; 2]>>) -> Self {
+impl<'view, 'data> From<&'view Vec<PackedArray<'data, Vec2>>> for TextureCoordinates<'view, 'data> {
+    fn from(value: &'view Vec<PackedArray<'data, Vec2>>) -> Self {
         Self::Slice(value)
     }
 }

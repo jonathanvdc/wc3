@@ -1,3 +1,5 @@
+use glam::Vec3;
+use wc3::model::common::PackedArray;
 use wc3::model::common::{IntoZeroVec, ZeroVec};
 use wc3::model::profiles::{Mdlx, Narrows, Universal};
 use wc3::model::ValueGroups;
@@ -8,18 +10,32 @@ use wc3::model::{
 
 #[test]
 fn general_geometry_projects_only_when_its_full_domain_is_supported() {
-    let mut general = GeometryData::triangles(vec![[0.; 3]], vec![[0, 0, 0]]).unwrap();
+    let mut general = GeometryData::triangles(
+        (vec![[0.; 3]])
+            .into_iter()
+            .map(Vec3::from_array)
+            .collect::<PackedArray<_>>(),
+        vec![[0, 0, 0]],
+    )
+    .unwrap();
     assert!(<Mdlx as Narrows<Universal>>::geometry(general.clone()).is_ok());
     general
         .attributes
         .insert(Attribute {
             semantic: AttributeSemantic::Named("custom".into()),
             domain: AttributeDomain::Vertex,
-            values: AttributeValues::Unsigned(vec![23].into_zero_vec()),
+            values: AttributeValues::Unsigned(PackedArray::from_storage(vec![23].into_zero_vec())),
         })
         .unwrap();
     assert!(<Mdlx as Narrows<Universal>>::geometry(general).is_err());
-    let mut general = GeometryData::triangles(vec![[0.; 3]], vec![[0, 0, 0]]).unwrap();
+    let mut general = GeometryData::triangles(
+        (vec![[0.; 3]])
+            .into_iter()
+            .map(Vec3::from_array)
+            .collect::<PackedArray<_>>(),
+        vec![[0, 0, 0]],
+    )
+    .unwrap();
     general.influences = GeometryInfluences::Variable(
         vec![vec![Influence {
             joint: 2,
@@ -51,20 +67,22 @@ fn remapping_keeps_each_influence_domain_and_custom_attribute_correspondence() {
     for influences in [
         GeometryInfluences::None,
         GeometryInfluences::Variable(ValueGroups::from_rows(variable)),
-        GeometryInfluences::Three(ZeroVec::alloc_from_slice(&three)),
-        GeometryInfluences::Four(ZeroVec::alloc_from_slice(&four)),
+        GeometryInfluences::Three(PackedArray::from_storage(ZeroVec::alloc_from_slice(&three))),
+        GeometryInfluences::Four(PackedArray::from_storage(ZeroVec::alloc_from_slice(&four))),
         GeometryInfluences::MatrixGroups(ValueGroups::from_rows(groups)),
     ] {
         let data = GeometryData {
-            positions: ZeroVec::alloc_from_slice(&positions),
+            positions: PackedArray::from_storage(ZeroVec::alloc_from_slice(&positions)),
             connectivity: ConnectivitySets::new(
-                Topology::Triangles(vec![[0, 1, 2]].into_zero_vec()),
+                Topology::Triangles(PackedArray::from_storage(vec![[0, 1, 2]].into_zero_vec())),
                 Vec::new(),
             ),
             attributes: vec![Attribute {
                 semantic: AttributeSemantic::Named("custom".into()),
                 domain: AttributeDomain::Vertex,
-                values: AttributeValues::Unsigned(ZeroVec::alloc_from_slice(&custom)),
+                values: AttributeValues::Unsigned(PackedArray::from_storage(
+                    ZeroVec::alloc_from_slice(&custom),
+                )),
             }]
             .try_into()
             .unwrap(),
@@ -75,7 +93,9 @@ fn remapping_keeps_each_influence_domain_and_custom_attribute_correspondence() {
             .edited(GeometryEdit {
                 remap: Some(VertexRemap {
                     new_to_old: vec![2, 0, 1, 0],
-                    topology: Topology::Triangles(vec![[3, 2, 0]].into_zero_vec()),
+                    topology: Topology::Triangles(PackedArray::from_storage(
+                        vec![[3, 2, 0]].into_zero_vec(),
+                    )),
                 }),
                 ..Default::default()
             })

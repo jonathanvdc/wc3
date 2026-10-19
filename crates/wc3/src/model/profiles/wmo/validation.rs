@@ -3,29 +3,31 @@ use super::{Volume, WorldSystem};
 use crate::model::Model;
 use crate::model::TimeSource;
 use crate::model::{Bounds, Error};
+use glam::Vec3;
 
 impl WorldSystem<'_> {
     /// Checks portal, group, volume, set, and liquid relationships without a codec context.
     pub fn validate(&self) -> Result<(), Error> {
         let volume_valid = |volume: &Volume| match volume {
             Volume::Sphere { center, radii } => {
-                center.iter().chain(radii).all(|v| v.is_finite())
+                center
+                    .to_array()
+                    .iter()
+                    .chain(&radii.to_array())
+                    .all(|v| v.is_finite())
                     && radii[0] >= 0.
                     && radii[1] >= radii[0]
             }
             Volume::Planes { planes, fade } => {
-                planes.iter().flatten().all(|v| v.is_finite()) && fade.is_finite() && *fade >= 0.
+                planes.iter().all(|v| v.is_finite()) && fade.is_finite() && *fade >= 0.
             }
         };
         for group in &self.groups {
-            if group
-                .bounds
-                .iter()
-                .flatten()
-                .any(|value| !value.is_finite())
+            if group.bounds.iter().any(|value| !value.is_finite())
                 || group.bounds[0]
+                    .to_array()
                     .iter()
-                    .zip(group.bounds[1])
+                    .zip(group.bounds[1].to_array())
                     .any(|(low, high)| *low > high)
             {
                 return Err(Error::new(
@@ -38,8 +40,8 @@ impl WorldSystem<'_> {
             if portal
                 .vertices
                 .iter()
-                .flatten()
-                .chain(portal.plane)
+                .flat_map(|v| v.to_array())
+                .chain(portal.plane.to_array())
                 .any(|value| !value.is_finite())
             {
                 return Err(Error::new(
@@ -51,12 +53,8 @@ impl WorldSystem<'_> {
         if self
             .visibility
             .iter()
-            .any(|polygon| polygon.iter().flatten().any(|value| !value.is_finite()))
-            || self
-                .occluders
-                .iter()
-                .flatten()
-                .any(|value| !value.is_finite())
+            .any(|polygon| polygon.iter().any(|value| !value.is_finite()))
+            || self.occluders.iter().any(|value| !value.is_finite())
         {
             return Err(Error::new(
                 "world.visibility",
@@ -133,7 +131,7 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
             || node.billboard != Billboard::None
             || value.values().get(node.visible) != Some(&true)
             || node.camera_anchored
-            || node.transform.defaults(value.values()).pivot != [0.; 3]
+            || node.transform.defaults(value.values()).pivot != Vec3::from_array([0.; 3])
         {
             return Err(Error::new(
                 "world.nodes",
@@ -192,7 +190,7 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
                         "static world lights use constant properties or authored flicker programs",
                     ));
                 }
-                if node.transform.defaults(value.values()).scale != [1.; 3]
+                if node.transform.defaults(value.values()).scale != Vec3::from_array([1.; 3])
                     || (light.modern.is_some()
                         && node.transform.defaults(value.values()).rotation != Default::default())
                 {
@@ -216,7 +214,7 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
             }
             super::Node::PointLight(_) | super::Node::LightProgram(_) => {
                 if node.transform.defaults(value.values()).rotation != Default::default()
-                    || node.transform.defaults(value.values()).scale != [1.; 3]
+                    || node.transform.defaults(value.values()).scale != Vec3::from_array([1.; 3])
                 {
                     return Err(Error::new(
                         "world.region.light.transform",
@@ -263,8 +261,9 @@ pub(super) fn resources(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
 fn aabb_bounds(bounds: Bounds, path: &str) -> Result<(), Error> {
     let radius = bounds
         .minimum
+        .to_array()
         .iter()
-        .zip(bounds.maximum)
+        .zip(bounds.maximum.to_array())
         .map(|(low, high)| ((high - low) / 2.).powi(2))
         .sum::<f32>()
         .sqrt();

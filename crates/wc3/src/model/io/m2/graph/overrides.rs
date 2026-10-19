@@ -2,6 +2,7 @@
 use super::*;
 use crate::model::io::materialize;
 use crate::model::M2ResourceLocator;
+use glam::Mat4;
 use std::str::from_utf8;
 use zerovec::ZeroVec;
 pub(super) fn import<'a, 'data: 'a, D: Dialect>(
@@ -32,9 +33,7 @@ pub(super) fn import<'a, 'data: 'a, D: Dialect>(
                     })
                     .collect::<Result<_, _>>()?,
                 transforms: materialize(file.matrices.len(), move |i| {
-                    std::array::from_fn(|row| {
-                        std::array::from_fn(|column| file.matrices[i].values[row * 4 + column])
-                    })
+                    Mat4::from_cols_array(&file.matrices[i].values)
                 }),
             })
         }
@@ -80,7 +79,7 @@ pub(super) fn export<D: ExportDialect>(
             .transforms
             .iter()
             .map(|m| native::companions::BoneMatrix {
-                values: std::array::from_fn(|i| m[i / 4][i % 4]),
+                values: m.to_cols_array(),
             })
             .collect();
         bundle.insert(

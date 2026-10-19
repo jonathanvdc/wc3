@@ -2,6 +2,7 @@
 use super::super::events::EventTraversal;
 use super::super::pose::PoseContext;
 use super::emission::EffectChange;
+use bevy::math::Vec3;
 use bevy::prelude::*;
 use wc3::model::{AnimationSample, SampledAnimation};
 #[derive(Clone, Copy)]
@@ -24,9 +25,9 @@ pub(crate) struct EffectFrame<'a, 'view, 'data> {
 impl EffectFrame<'_, '_, '_> {
     /// Current pivot-local feature frame, separate from the geometry skin matrix.
     pub fn feature_matrix(&self, index: usize) -> Mat4 {
-        let pivot = self.pose.map_or(Vec3::ZERO, |pose| {
-            Vec3::from_array(pose.nodes[index].rest.pivot)
-        });
+        let pivot = self
+            .pose
+            .map_or(Vec3::ZERO, |pose| pose.nodes[index].rest.pivot);
         self.node_poses[index] * Mat4::from_translation(pivot)
     }
 }

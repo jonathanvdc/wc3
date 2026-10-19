@@ -4,6 +4,7 @@ pub mod m2 {
     pub use wc3::model::materials::m2::*;
     use wc3::model::materials::state::PassState;
     use wc3::model::values::model::{BatchFlags, BlendMode};
+    use wc3::model::Vec3;
     use wc3::model::{Error, MaterialSurface, Property};
     #[derive(Clone, Debug, wc3::model::Construct)]
     pub struct MaterialFixture<'a> {
@@ -14,7 +15,7 @@ pub mod m2 {
         /// Color composition, rasterization, and authored pass ordering.
         pub state: PassState<BlendMode, ModelRasterization, i8>,
         /// Animated surface color multiplier.
-        pub color: Property<[f32; 3]>,
+        pub color: Property<Vec3>,
         /// Animated surface opacity multiplier.
         pub opacity: Property<f32>,
         /// External colours used by legacy guild shader programmes.
@@ -71,6 +72,7 @@ pub mod wmo {
     use wc3::model::materials::bindings::TextureBinding;
     use wc3::model::materials::state::PassState;
     pub use wc3::model::materials::wmo::*;
+    use wc3::model::Vec2;
     use wc3::model::{Error, MaterialSurface, Texture};
     #[derive(Clone, Debug, Default, PartialEq)]
     pub struct MaterialFixture<'a> {
@@ -91,7 +93,7 @@ pub mod wmo {
         /// External terrain-type identifier.
         pub ground_type: u32,
         /// UV scroll velocity for the first two texture slots.
-        pub uv_scroll: [[f32; 2]; 2],
+        pub uv_scroll: [Vec2; 2],
         /// Optional extended shader overrides.
         pub shader_overrides: Option<ShaderOverrides>,
         /// Historical additional material color in RGBA order.

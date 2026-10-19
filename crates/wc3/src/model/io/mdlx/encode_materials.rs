@@ -154,7 +154,11 @@ pub(super) fn write<'a, V: FormatVersion>(
         }
         if let Some(source) = source.shader.fresnel() {
             let value = native::materials::LayerFresnel {
-                color: encoder.value(&source.color, Ok, &format!("{path}.fresnel.color"))?,
+                color: encoder.value(
+                    &source.color,
+                    |v| Ok(v.to_array()),
+                    &format!("{path}.fresnel.color"),
+                )?,
                 opacity: encoder.value(&source.opacity, Ok, &format!("{path}.fresnel.opacity"))?,
                 team_color: encoder.value(
                     &source.team_color,

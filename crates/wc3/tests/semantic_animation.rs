@@ -1,7 +1,9 @@
+use glam::Vec4;
+use wc3::model::common::PackedArray;
 use wc3::model::common::ZeroVec;
 use wc3::model::{
-    BezierKeyframe, ContinuousDomain, Curve, CurveValue, HermiteKeyframe, Interpolation,
-    Quaternion, TcbKeyframe, TcbParameters, Time, ValueKeyframe,
+    BezierKeyframe, ContinuousDomain, Curve, CurveValue, HermiteKeyframe, Interpolation, Quat,
+    TcbKeyframe, TcbParameters, Time, ValueKeyframe,
 };
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use zerovec::ule::AsULE;
@@ -20,7 +22,7 @@ fn separate_spline_arrays_retain_encoded_borrowed_storage() {
     let encoded_values = ZeroVec::alloc_from_slice(&values);
     let encoded_incoming = ZeroVec::alloc_from_slice(&incoming);
     let encoded_outgoing = ZeroVec::alloc_from_slice(&outgoing);
-    let curve = Curve::hermite(
+    let curve: Curve<f32> = Curve::hermite(
         encoded_times.as_slice().as_zerovec(),
         encoded_values.as_slice().as_zerovec(),
         encoded_incoming.as_slice().as_zerovec(),
@@ -48,23 +50,29 @@ fn separate_spline_arrays_retain_encoded_borrowed_storage() {
 fn typed_keyframes_materialize_separate_encoded_arrays() {
     let keys = [HermiteKeyframe {
         time: time(0.),
-        value: Quaternion::IDENTITY,
-        incoming: [0.; 4],
-        outgoing: [0.; 4],
+        value: Quat::IDENTITY,
+        incoming: Vec4::from_array([0.; 4]),
+        outgoing: Vec4::from_array([0.; 4]),
     }];
     let curve = Curve::hermite_keys(keys).unwrap();
     assert!(curve.values().is_owned());
-    assert_eq!(curve.values().get(0), Some(Quaternion::IDENTITY));
+    assert_eq!(curve.values().get(0), Some(Quat::IDENTITY));
     assert_eq!(
         curve.hermite_derivatives().unwrap().incoming.get(0),
-        Some([0.; 4])
+        Some(Vec4::from_array([0.; 4]))
     );
-    assert!(Curve::step([time(0.)], [Quaternion([0.; 4])]).is_err());
+    assert!(Curve::step([time(0.)], [Quat::from_array([0.; 4])]).is_err());
     assert!(Curve::hermite(
         [time(0.)],
-        [Quaternion::IDENTITY],
-        [[f32::NAN; 4]],
-        [[0.; 4]]
+        [Quat::IDENTITY],
+        ([[f32::NAN; 4]])
+            .into_iter()
+            .map(Vec4::from_array)
+            .collect::<PackedArray<_>>(),
+        ([[0.; 4]])
+            .into_iter()
+            .map(Vec4::from_array)
+            .collect::<PackedArray<_>>()
     )
     .is_err());
 }
@@ -73,16 +81,16 @@ fn typed_keyframes_materialize_separate_encoded_arrays() {
 fn bezier_controls_and_tcb_parameters_keep_their_authored_domains() {
     let curve = Curve::bezier_keys([BezierKeyframe {
         time: time(0.),
-        value: Quaternion::IDENTITY,
-        incoming: [0.; 4],
-        outgoing: [0., 0., 0., 2.],
+        value: Quat::IDENTITY,
+        incoming: Vec4::from_array([0.; 4]),
+        outgoing: Vec4::from_array([0., 0., 0., 2.]),
     }])
     .unwrap();
     assert_eq!(curve.interpolation(), Interpolation::Bezier);
     assert!(curve.hermite_derivatives().is_none());
     assert_eq!(
         curve.bezier_controls().unwrap().outgoing.get(0),
-        Some([0., 0., 0., 2.])
+        Some(Vec4::from_array([0., 0., 0., 2.]))
     );
     let parameters = TcbParameters {
         tension: 0.1,
@@ -124,7 +132,7 @@ fn constructors_check_order_cardinality_and_finite_controls() {
 fn spherical_keyframes_and_discrete_keys_select_their_shapes() {
     let keys = [ValueKeyframe {
         time: time(0.),
-        value: Quaternion::IDENTITY,
+        value: Quat::IDENTITY,
     }];
     assert_eq!(
         Curve::slerp_keys(keys.clone()).unwrap().interpolation(),
@@ -152,6 +160,15 @@ impl AsULE for Probability {
     }
     fn from_unaligned(value: Self::ULE) -> Self {
         Self(f32::from_unaligned(value))
+    }
+}
+impl wc3::model::PackedValue for Probability {
+    type Storage = Self;
+    fn pack(self) -> Self {
+        self
+    }
+    fn unpack(value: Self) -> Self {
+        value
     }
 }
 impl CurveValue for Probability {

@@ -7,9 +7,10 @@ use crate::model::formats::mdlx::{
 };
 use crate::model::profiles::Mdlx;
 use crate::model::{
-    ClockId, CurveValue, DynamicTrack, ModelBuilder, Property, PropertyValue, Quaternion, Texture,
+    ClockId, CurveValue, DynamicTrack, ModelBuilder, Property, PropertyValue, Quat, Texture,
     TimeSource, Track,
 };
+use glam::{Vec2, Vec3, Vec4};
 
 pub(super) trait Value: CurveValue + PropertyValue {
     fn kind() -> &'static str;
@@ -29,8 +30,8 @@ macro_rules! value {
         }
     )*};
 }
-value!(f32 => Scalar, [f32; 2] => Vector2, [f32; 3] => Vector3, [f32; 4] => Vector4,
-    u32 => Unsigned, i32 => Signed, Texture => Texture, Option<Texture> => OptionalTexture, Quaternion => Rotation);
+value!(f32 => Scalar, Vec2 => Vector2, Vec3 => Vector3, Vec4 => Vector4,
+    u32 => Unsigned, i32 => Signed, Texture => Texture, Option<Texture> => OptionalTexture, Quat => Rotation);
 
 pub(super) struct Decoder<'a, 'b> {
     pub builder: &'b mut ModelBuilder<'a, Mdlx>,

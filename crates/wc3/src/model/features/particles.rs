@@ -6,11 +6,12 @@ use crate::model::values::layered::{Particle2Flags, ParticleFlags as ModelPartic
 use crate::model::values::model::{
     ParticleBlend, ParticleFlags as AgeDrivenFlags, ParticleGenerator, ParticleHeadTail,
 };
+use glam::{Vec2, Vec3, Vec4};
 
 use crate::model::Construct;
 use crate::model::ImageResourceId;
 use crate::model::ModelResourceId;
-use crate::model::{Link, Property, Texture, ValidateLinks, ZeroVec};
+use crate::model::{Link, PackedArray, Property, Texture, ValidateLinks};
 /// Common emission controls.
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ParticleEmission<R, T, A, V = f32> {
@@ -117,23 +118,23 @@ pub struct M2ParticleDetails<'a> {
     /// Twinkle visibility fraction.
     pub twinkle_percent: f32,
     /// Twinkle scale range.
-    pub twinkle_scale: [f32; 2],
+    pub twinkle_scale: Vec2,
     /// Multiplier for velocity inherited from the carrying node.
     pub inherit_velocity: f32,
     /// Exponential velocity damping coefficient.
     pub drag: f32,
     /// Billboard initial angle, variation, angular speed, speed variation.
-    pub spin: [f32; 4],
+    pub spin: Vec4,
     /// Minimum angular-velocity vector for model particles.
-    pub tumble_minimum: [f32; 3],
+    pub tumble_minimum: Vec3,
     /// Maximum angular-velocity vector for model particles.
-    pub tumble_maximum: [f32; 3],
+    pub tumble_maximum: Vec3,
     /// Static wind vector.
-    pub wind: [f32; 3],
+    pub wind: Vec3,
     /// Wind timing parameter whose response interpretation is unresolved.
     pub wind_time: f32,
     /// Two follow-speed and follow-scale parameter pairs.
-    pub follow: [[f32; 2]; 2],
+    pub follow: [Vec2; 2],
 
     /// Rendering controls.
     pub rendering: M2ParticleRendering,
@@ -147,11 +148,11 @@ pub struct MdlxParticle2Appearance {
     /// Lifetime fraction at the middle appearance stage.
     pub middle_time: f32,
     /// RGB colors at the three lifetime stages.
-    pub colors: [[f32; 3]; 3],
+    pub colors: [Vec3; 3],
     /// Opacity at the three lifetime stages.
     pub alpha: [u8; 3],
     /// Scale at the three lifetime stages.
-    pub scale: [f32; 3],
+    pub scale: Vec3,
     /// Start, end, and repeat counts for head/lifespan/decay/tail atlas animations.
     pub uv_intervals: [[u32; 3]; 4],
 }
@@ -213,7 +214,7 @@ pub struct M2ParticleRendering {
     /// Render head, tail, or both.
     pub head_tail: ParticleHeadTail,
     /// Per-layer UV scales.
-    pub texture_scale: [f32; 2],
+    pub texture_scale: Vec2,
     /// Tile rotation or signed ordering parameter.
     pub texture_tile_rotation: i16,
     /// Atlas rows and columns.
@@ -241,7 +242,7 @@ pub struct M2ParticleShape<'a> {
     /// Z coordinate of the source point for aimed emission.
     pub z_source: Property<f32>,
     /// Emission path in model coordinates.
-    pub spline: ZeroVec<'a, [f32; 3]>,
+    pub spline: PackedArray<'a, Vec3>,
 }
 
 mod age;
@@ -267,7 +268,7 @@ pub type MdlxParticleEmitter2 = ParticleComposition<
 /// Curve-driven age appearance and vector-gravity simulation.
 pub type M2ParticleEmitter<'a> = ParticleComposition<
     ParticleEmission<Property<f32>, (), Property<bool>>,
-    ParticleMotion<Property<f32>, Property<f32>, Property<[f32; 3]>>,
+    ParticleMotion<Property<f32>, Property<f32>, Property<Vec3>>,
     ParticleLifetime<Property<f32>, f32>,
     M2ParticleAppearance<'a>,
     M2ParticleDetails<'a>,

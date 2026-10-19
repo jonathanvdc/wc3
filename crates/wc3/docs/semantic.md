@@ -59,6 +59,31 @@ Collections such as `nodes()`, `meshes()`, and `materials()` support `get(id)`,
 `contains_key(id)`, `len()`, and `is_empty()`. Iterate `(Id, &value)` pairs in stable
 identity order with `iter()`, or use `keys()` and `values()` for one side.
 
+## Mathematical values and storage
+
+Mathematical values use glam types, re-exported from `wc3::model`: `Vec2` for
+UVs, `Vec3` for positions, directions, and RGB components, `Vec4` for RGBA and
+component controls, and `Quat` for rotations. Color space and native channel order
+remain explicit interpretation at the format and rendering boundaries.
+
+Fixed-width collections use `PackedArray<'data, T>`. Its `PackedValue` mapping
+keeps the encoded representation separate from the aligned mathematical value:
+`PackedArray<Vec3>` stores three little-endian floats per element and decodes one
+`Vec3` at a time through `get` or `iter`. Compatible native arrays borrow their
+encoded storage without allocating an aligned vector collection. Keep that source
+alive while using the graph. `from_storage` and `into_storage` bridge native
+`ZeroVec` buffers without rebuilding them; parsing bytes checks their packed
+representation, while model publication checks semantic validity.
+
+`IntoPackedArray` accepts existing packed arrays, arrays, vectors, and slices of
+semantic values. Cloning a borrowed array retains its buffer; cloning an owned
+array copies it. `into_owned` copies borrowed buffers and moves owned ones.
+`set` and `for_each_mut` copy a borrowed buffer on its first edit and then reuse
+owned storage. Variable-length rows use `ValueGroups`, a packed element array
+with encoded row offsets. These storage rules apply independently of graph
+identity and transactional validation.
+
+
 ## Declare resources once
 
 `dependencies()` groups external images, models, effects, physics, and bone
@@ -127,11 +152,6 @@ uses the explicitly selected look or the default; there is no fallback material
 on geometry. `add_instance_with_materials` adds a placement and extends the default
 look with its draw assignments.
 
-Fixed-width arrays use `ZeroVec`; compatible native arrays can borrow their
-encoded storage. Keep that source alive while using the graph. Cloning a borrowed
-array retains its buffer, while cloning an owned array copies it. Variable-length
-rows use `ValueGroups`, a flat array with encoded row offsets. These storage rules
-apply independently of graph identity and transactional validation.
 
 ## Continue with a task
 

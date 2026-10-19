@@ -1,11 +1,11 @@
 use super::*;
 use crate::material::native_fixtures::m2;
+use bevy::math::{Vec3, Vec4};
 use naga::front::wgsl::parse_str;
 use naga::valid::{Capabilities, ValidationFlags, Validator};
 use wc3::model::values::model::BatchFlags;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-
 fn surface(
     slot_values: &mut SlotValues,
     shader: u16,
@@ -13,7 +13,7 @@ fn surface(
 ) -> m2::Material<'static> {
     m2::Material {
         shader,
-        color: slot_values.add([0.25, 0.5, 0.75]),
+        color: slot_values.add(Vec3::from_array([0.25, 0.5, 0.75])),
         opacity: slot_values.add(0.8),
         textures: coordinates
             .iter()
@@ -93,7 +93,7 @@ fn generated_inputs_ignore_authored_transforms_but_uv_inputs_keep_them() {
     let mut slot_values = SlotValues::default();
     let mut shader = surface(&mut slot_values, 0x8000, &[0, 0]);
     for input in &mut shader.textures {
-        input.coordinates.transform.translation = slot_values.add([0.3, 0.7, 0.]);
+        input.coordinates.transform.translation = slot_values.add(Vec3::from_array([0.3, 0.7, 0.]));
     }
     let pass = compile(&shader, &slot_values);
     assert!(pass.animation.transform.is_some());
@@ -164,7 +164,8 @@ fn shared_composition_shader_parses_and_validates() {
 fn third_coordinates_keep_their_own_source_and_transform() {
     let mut slot_values = SlotValues::default();
     let mut shader = surface(&mut slot_values, 0x8014, &[0, -1, 1]);
-    shader.textures[2].coordinates.transform.translation = slot_values.add([0.2, 0.4, 0.]);
+    shader.textures[2].coordinates.transform.translation =
+        slot_values.add(Vec3::from_array([0.2, 0.4, 0.]));
     let pass = compile(&shader, &slot_values);
     assert_eq!(pass.third_coordinate, Some(1));
     assert_ne!(pass.state.combiner.third_transform, Mat3::IDENTITY);
@@ -222,9 +223,9 @@ fn legacy_surplus_bindings_use_the_established_two_input_equation_with_diagnosti
 fn legacy_guild_programmes_use_external_palettes_and_reject_six_input_layouts() {
     let mut slot_values = SlotValues::default();
     let palette = m2::GuildPalette {
-        background: [0.2, 0.3, 0.4],
-        emblem: [0.5, 0.6, 0.7],
-        border: [0.8, 0.9, 1.],
+        background: Vec3::from_array([0.2, 0.3, 0.4]),
+        emblem: Vec3::from_array([0.5, 0.6, 0.7]),
+        border: Vec3::from_array([0.8, 0.9, 1.]),
     };
     for (index, mode, coordinates) in [
         (26, 24, vec![0, 1, 0]),

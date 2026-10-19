@@ -7,9 +7,9 @@ use std::collections::HashSet;
 use std::fs;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
+use wc3::model::common::ZeroVec;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-
 fn app(directory: &Path) -> App {
     app_with_resolver(directory, Arc::new(PathResolver))
 }
@@ -215,7 +215,6 @@ fn write_animated_m2(directory: &Path) {
         Material, MaterialFlags, Sequence, SequenceFlags, SkinSection, Texture, TextureFlags,
         TextureSource, Track, TrackBase, Vertex,
     };
-    use wc3::model::ZeroVec;
     let mut native = m2::Document::<m2::Flat<m2::V256>>::new();
     let core = native.core_mut();
     core.name = ZeroVec::alloc_from_slice(b"Universal animated triangle\0");

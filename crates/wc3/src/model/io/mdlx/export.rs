@@ -1,9 +1,6 @@
 //! Native Warcraft III export planning over independent logical models.
 use super::billboard;
-use super::encode_animation::{Encoder, unsigned_frame};
-use crate::model::MdlxImageResource;
-use crate::model::Model;
-use crate::model::TransformSemantics;
+use super::encode_animation::{unsigned_frame, Encoder};
 use crate::model::conversion::{Context, Error, ExportOptions, Plan};
 use crate::model::formats::mdlx::mdx::FixedText;
 use crate::model::formats::mdlx::scene::{Node as NativeNode, NodeFlags};
@@ -11,7 +8,10 @@ use crate::model::formats::mdlx::{
     Dialect, Document as NativeModel, ModelInfo, Sequence, SequenceFlags, Texture, TextureFlags,
 };
 use crate::model::profiles::Mdlx;
-use crate::model::{AddressMode, Billboard, NodeId, Quaternion};
+use crate::model::MdlxImageResource;
+use crate::model::Model;
+use crate::model::TransformSemantics;
+use crate::model::{AddressMode, Billboard, NodeId, Quat};
 use std::collections::BTreeMap;
 
 pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
@@ -169,7 +169,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
         let flags = billboard::encode(
             source.billboard,
             source.controls.billboard_flags,
-            &mut encoder.context,
+            encoder.context,
         )?;
         node.flags.set_billboarded(flags.enabled);
         node.flags.set_billboard_lock_x(flags.x);
@@ -183,21 +183,26 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
         }
         node.translation = encoder.optional(
             source.transform.translation,
-            Ok,
+            |v| Ok(v.to_array()),
             [0.; 3],
             "node.translation",
         )?;
         node.rotation = encoder.optional(
             source.transform.rotation,
-            |value: Quaternion| Ok(value.components()),
-            Quaternion::default().components(),
+            |value: Quat| Ok(value.to_array()),
+            Quat::default().to_array(),
             "node.rotation",
         )?;
-        node.scaling = encoder.optional(source.transform.scale, Ok, [1.; 3], "node.scale")?;
+        node.scaling = encoder.optional(
+            source.transform.scale,
+            |v| Ok(v.to_array()),
+            [1.; 3],
+            "node.scale",
+        )?;
         pivots.push(source.transform.pivot);
         nodes.insert(id, node);
     }
-    result.set_pivot_points(&pivots);
+    result.set_pivot_points(&pivots.iter().map(|v| v.to_array()).collect::<Vec<_>>());
     let meshes = super::encode_geometry::write(
         &mut result,
         &mut encoder,
@@ -216,8 +221,8 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     if let Some(bounds) = model.bounds() {
         let mut info = ModelInfo::new(model.name())
             .map_err(|error| Error::new("model.name", error.to_string()))?;
-        info.minimum_extent = bounds.minimum;
-        info.maximum_extent = bounds.maximum;
+        info.minimum_extent = (bounds.minimum).to_array();
+        info.maximum_extent = (bounds.maximum).to_array();
         info.bounds_radius = bounds.sphere_radius;
         {
             let metadata = model.metadata();

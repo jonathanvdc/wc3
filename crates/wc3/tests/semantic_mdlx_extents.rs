@@ -1,3 +1,4 @@
+use glam::Vec3;
 use wc3::model::conversion::{ExportOptions, ImportOptions};
 use wc3::model::formats::mdlx::animation::Sequence;
 use wc3::model::formats::mdlx::geometry::{Geoset, GeosetExtent};
@@ -6,7 +7,6 @@ use wc3::model::formats::mdlx::scene::Node;
 use wc3::model::formats::mdlx::{Document, V800};
 use wc3::model::profiles::mdlx::Extent;
 use wc3::model::{io, Bounds};
-
 fn empty() -> GeosetExtent {
     GeosetExtent {
         bounds_radius: 0.,
@@ -58,8 +58,8 @@ fn native_empty_extents_remain_distinct_from_finite_point_bounds_and_roundtrip()
         mesh.controls.unassigned_bounds,
         vec![
             Extent::Bounds(Bounds {
-                minimum: [-2.; 3],
-                maximum: [2.; 3],
+                minimum: Vec3::from_array([-2.; 3]),
+                maximum: Vec3::from_array([2.; 3]),
                 sphere_radius: 4.
             }),
             Extent::Empty

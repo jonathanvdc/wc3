@@ -3,6 +3,7 @@ use super::super::overrides::file_key;
 use super::*;
 use export_joints::Constraints;
 use export_shapes::Geometry;
+use glam::Vec3;
 use native::companions::{PhysicsBody4, PhysicsVegetation};
 use native::records::{PhysicsAttachment, PhysicsBodyKind, PhysicsKind};
 use native::ZeroVec;
@@ -45,9 +46,9 @@ fn export_one<D: ExportDialect>(
         let node = model
             .node(body.node)
             .ok_or_else(|| Error::new("physics.body.node", "placement is absent"))?;
-        if node.transform.defaults(model.values()).rotation != semantic::Quaternion::IDENTITY
-            || node.transform.defaults(model.values()).scale != [1.; 3]
-            || node.transform.defaults(model.values()).pivot != [0.; 3]
+        if node.transform.defaults(model.values()).rotation != semantic::Quat::IDENTITY
+            || node.transform.defaults(model.values()).scale != Vec3::from_array([1.; 3])
+            || node.transform.defaults(model.values()).pivot != Vec3::from_array([0.; 3])
         {
             return Err(Error::new(
                 "physics.body.transform",
@@ -83,7 +84,7 @@ fn export_one<D: ExportDialect>(
             body_type: PhysicsBodyKind::from_raw(body.kind.raw()),
             bone_index: u16::try_from(bone)
                 .map_err(|_| Error::new("physics.body.bone", "bone index exceeds native range"))?,
-            position: node.transform.defaults(model.values()).translation,
+            position: (node.transform.defaults(model.values()).translation).to_array(),
             shape_index: i32::try_from(first).map_err(|_| {
                 Error::new("physics.body.shapes", "shape start exceeds native range")
             })?,

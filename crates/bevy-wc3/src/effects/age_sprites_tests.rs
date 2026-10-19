@@ -1,4 +1,5 @@
 use super::*;
+use bevy::math::{Quat, Vec2, Vec3};
 use std::f32::consts::TAU;
 use wc3::model::profiles::Universal;
 use wc3::model::ModelMetadata;
@@ -18,7 +19,7 @@ fn emitter(slot_values: &mut SlotValues) -> Emitter {
         controls: Some(AgeDrivenControls {
             activation: slot_values.add(true),
             speed_variation: slot_values.add(0.1),
-            gravity: slot_values.add([0.; 3]),
+            gravity: slot_values.add(Vec3::from_array([0.; 3])),
             lifespan_variation: 0.,
             vertical: slot_values.add(0.5),
             horizontal: slot_values.add(TAU),
@@ -33,7 +34,7 @@ fn emitter(slot_values: &mut SlotValues) -> Emitter {
         drag: 0.,
         wind: Vec3::ZERO,
         inherit_velocity: 0.,
-        follow: [[0.; 2]; 2],
+        follow: [Vec2::ZERO; 2],
         spin: [0.; 4],
         appearance: M2ParticleAppearance::default(),
         atlas: [1, 1],
@@ -256,7 +257,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
 fn emitter_follow_interpolates_speed_knots_and_preserves_local_motion() {
     let mut slot_values = SlotValues::default();
     let mut emitter = emitter(&mut slot_values);
-    emitter.follow = [[2., 0.25], [6., 0.75]];
+    emitter.follow = [Vec2::new(2., 0.25), Vec2::new(6., 0.75)];
     let translated = |distance| Mat4::from_translation(Vec3::X * distance);
     assert_eq!(
         emitter.follow_displacement(Mat4::IDENTITY, translated(1.), 1.),
@@ -285,7 +286,7 @@ fn emitter_follow_interpolates_speed_knots_and_preserves_local_motion() {
         Vec3::ZERO
     );
     emitter.flags.set_attached(false);
-    emitter.follow = [[2., 0.5], [2., 0.5]];
+    emitter.follow = [Vec2::new(2., 0.5); 2];
     assert_eq!(
         emitter.follow_displacement(Mat4::IDENTITY, translated(4.), 1.),
         Vec3::X * 2.
@@ -296,7 +297,7 @@ fn emitter_follow_interpolates_speed_knots_and_preserves_local_motion() {
 fn world_particles_follow_only_translation_after_their_birth() {
     let mut slot_values = SlotValues::default();
     let mut emitter = emitter(&mut slot_values);
-    emitter.follow = [[0., 0.5], [1., 0.5]];
+    emitter.follow = [Vec2::new(0., 0.5), Vec2::new(1., 0.5)];
     emitter.rate = slot_values.add(2.);
     emitter.speed = slot_values.add(0.);
     let prior_birth = emitter
@@ -373,7 +374,7 @@ fn semantic_gravity_is_independent_of_the_emitter_bone_and_scalar_packing_flags(
     let mut slot_values = SlotValues::default();
     let mut emitter = emitter(&mut slot_values);
     emitter.flags.set_packed_gravity(true);
-    emitter.controls.as_mut().unwrap().gravity = slot_values.add([1., -2., 3.]);
+    emitter.controls.as_mut().unwrap().gravity = slot_values.add(Vec3::from_array([1., -2., 3.]));
     let node =
         Mat4::from_scale_rotation_translation(Vec3::splat(4.), Quat::from_rotation_x(1.2), Vec3::X);
     let basis = Mat4::from_rotation_y(0.7);
@@ -466,16 +467,16 @@ fn bone_size_inheritance_is_opt_in_and_uniform() {
     let mut emitter = emitter(&mut slot_values);
     let basis = Mat4::from_scale(Vec3::splat(2.));
     let node = basis * Mat4::from_scale(Vec3::new(3., 7., 9.));
-    assert_eq!(emitter.particle_scale(node, basis), [2.; 2]);
+    assert_eq!(emitter.particle_scale(node, basis), Vec2::splat(2.));
     emitter.flags.set_inherit_bone_scale(true);
-    assert_eq!(emitter.particle_scale(node, basis), [6.; 2]);
+    assert_eq!(emitter.particle_scale(node, basis), Vec2::splat(6.));
 }
 
 #[test]
 fn native_uniform_scale_variation_preserves_aspect_ratio() {
     let mut slot_values = SlotValues::default();
     let mut emitter = emitter(&mut slot_values);
-    emitter.appearance.scale_variation = [0.4, 0.9];
+    emitter.appearance.scale_variation = Vec2::from_array([0.4, 0.9]);
     for seed in 0..16 {
         let birth = emitter
             .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, seed)

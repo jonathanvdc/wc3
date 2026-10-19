@@ -1,11 +1,12 @@
 use crate::model::common::Borrowed as _;
+use crate::model::common::PackedArray;
 use crate::model::profiles::Universal;
 use crate::model::ModelMetadata;
 use crate::model::PathResource;
 use crate::model::PropertyValues as SlotValues;
 use crate::model::TimeSource;
 use crate::model::*;
-use zerovec::ZeroVec;
+use glam::Vec3;
 #[test]
 fn foreign_graph_handles_are_rejected() {
     let mut first = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
@@ -45,7 +46,7 @@ fn forward_parents_are_resolved_and_cycles_rejected() {
 #[test]
 fn borrowing_survives_graph_construction_and_clone() {
     let slot_values = SlotValues::default();
-    let positions = ZeroVec::alloc_from_slice(&[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]);
+    let positions = PackedArray::alloc_from_slice(&[Vec3::ZERO, Vec3::X, Vec3::Y]);
     let faces = [[0, 1, 2]];
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let id = builder
@@ -68,7 +69,13 @@ fn invalid_geometry_never_enters_a_published_model() {
     let slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     builder
-        .add_mesh(Mesh::triangles([[0., 0., 0.]], [[0, 1, 2]]))
+        .add_mesh(Mesh::triangles(
+            ([[0., 0., 0.]])
+                .into_iter()
+                .map(Vec3::from_array)
+                .collect::<PackedArray<_>>(),
+            [[0, 1, 2]],
+        ))
         .unwrap();
     assert!({
         builder.import_values(&slot_values).unwrap();
@@ -108,7 +115,10 @@ fn complete_material_looks_resolve_independently() {
     let node = builder.add_named_node("root").unwrap();
     let mesh = builder
         .add_mesh(Mesh::triangles(
-            [[0f32; 3], [1., 0., 0.], [0., 1., 0.]],
+            ([[0f32; 3], [1., 0., 0.], [0., 1., 0.]])
+                .into_iter()
+                .map(Vec3::from_array)
+                .collect::<PackedArray<_>>(),
             [[0, 1, 2]],
         ))
         .unwrap();
@@ -170,7 +180,7 @@ fn complete_material_looks_resolve_independently() {
 fn typed_vocabulary_widening_preserves_ids_and_borrowed_storage() {
     let slot_values = SlotValues::default();
     use crate::model::profiles::{Mdlx, Universal};
-    let positions = ZeroVec::alloc_from_slice(&[[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]);
+    let positions = PackedArray::alloc_from_slice(&[Vec3::ZERO, Vec3::X, Vec3::Y]);
     let faces = [[0, 1, 2]];
     let mut builder = ModelBuilder::<Mdlx>::with_profile("typed triangle");
     let geometry = MdlxGeometry::triangles(positions.as_borrowed(), faces.as_slice()).unwrap();
@@ -282,7 +292,14 @@ fn native_identity_bindings_widen_without_allocating_matrices() {
         UniversalBinding::Identity(_)
     ));
     assert_eq!(
-        universal.skin(skin).unwrap().inverse_bind().get(0).unwrap()[0],
+        universal
+            .skin(skin)
+            .unwrap()
+            .inverse_bind()
+            .get(0)
+            .unwrap()
+            .x_axis
+            .to_array(),
         [1., 0., 0., 0.]
     );
 }
@@ -295,8 +312,15 @@ fn absolute_timeline_does_not_require_a_playback_clip() {
     builder
         .add_global_track(DynamicTrack::Vector3(Track {
             target: builder.model().node(node).unwrap().transform.translation,
-            curve: Curve::from_samples([Time::default()], [[1., 2., 3.]], Interpolation::Step)
-                .unwrap(),
+            curve: Curve::from_samples(
+                [Time::default()],
+                ([[1., 2., 3.]])
+                    .into_iter()
+                    .map(Vec3::from_array)
+                    .collect::<Vec<_>>(),
+                Interpolation::Step,
+            )
+            .unwrap(),
             clock: TimeSource::Animation,
         }))
         .unwrap();
@@ -317,7 +341,7 @@ fn absolute_timeline_does_not_require_a_playback_clip() {
 
 #[test]
 fn tcb_curves_preserve_authoring_parameters_and_check_cardinality() {
-    let parameters = ZeroVec::alloc_from_slice(&[TcbParameters {
+    let parameters = PackedArray::alloc_from_slice(&[TcbParameters {
         tension: 0.3,
         continuity: -0.2,
         bias: 0.1,

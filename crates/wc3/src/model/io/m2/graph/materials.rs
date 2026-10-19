@@ -38,7 +38,7 @@ where
                     starts,
                     globals,
                     context,
-                    |v, _| Ok(v),
+                    |v, _| Ok(v.to_array()),
                 )?,
                 alpha: animated(
                     model,
@@ -70,7 +70,7 @@ where
                         starts,
                         globals,
                         context,
-                        |v, _| Ok(v),
+                        |v, _| Ok(v.to_array()),
                     )?,
                     rotation: animated(
                         model,
@@ -78,7 +78,7 @@ where
                         starts,
                         globals,
                         context,
-                        |v, _| Ok(v.components()),
+                        |v, _| Ok(v.to_array()),
                     )?,
                     scaling: animated(
                         model,
@@ -86,7 +86,7 @@ where
                         starts,
                         globals,
                         context,
-                        |v, _| Ok(v),
+                        |v, _| Ok(v.to_array()),
                     )?,
                 };
                 let index = core

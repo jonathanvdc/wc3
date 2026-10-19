@@ -3,6 +3,7 @@ use crate::model::features::IndexedChildModel;
 use crate::model::Construct;
 use crate::model::{EffectResourceId, ModelResourceId};
 use crate::model::{Link, Property, ValidateLinks};
+use glam::{Vec2, Vec3};
 /// A portable feature attached to a graph hierarchy node.
 #[derive(Clone, Debug)]
 pub enum Feature {
@@ -57,9 +58,9 @@ pub struct Camera {
     /// Authored field of view in radians.
     pub field_of_view: Property<f32>,
     /// Near and far clipping distance.
-    pub clipping: [f32; 2],
+    pub clipping: Vec2,
     /// Aim point in model coordinates.
-    pub target: Option<Property<[f32; 3]>>,
+    pub target: Option<Property<Vec3>>,
     /// Depth-of-field focus distance.
     pub focus_distance: Option<Property<f32>>,
     /// Photographic focal length.
@@ -88,7 +89,7 @@ pub struct Light {
     /// Illumination behavior.
     pub kind: LightKind,
     /// Animated RGB color.
-    pub color: Property<[f32; 3]>,
+    pub color: Property<Vec3>,
     /// Animated intensity multiplier.
     pub intensity: Property<f32>,
     /// Range-attenuation start and end.

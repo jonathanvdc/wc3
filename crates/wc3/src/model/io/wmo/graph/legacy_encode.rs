@@ -14,7 +14,7 @@ use crate::model::formats::wmo::Classic;
 use crate::model::profiles::wmo::{Group as WorldGroup, RegionControls, WorldSystem};
 use crate::model::profiles::Wmo;
 use crate::model::WorldModelResource;
-use crate::model::{InstanceId, Model, Quaternion};
+use crate::model::{InstanceId, Model, Quat};
 use std::collections::BTreeMap;
 
 pub(super) fn alpha<'a>(
@@ -48,7 +48,7 @@ fn alpha_model<'a>(
     for (_, feature) in model.features() {
         if let crate::model::profiles::wmo::Node::Light(light) = &feature.payload {
             let node = model.node(feature.node).expect("validated light anchor");
-            if node.transform.defaults(model.values()).rotation != Quaternion::default()
+            if node.transform.defaults(model.values()).rotation != Quat::default()
                 || light.modern.is_some()
             {
                 context.unsupported(
@@ -85,8 +85,8 @@ fn alpha_model<'a>(
         group.header.flags = body.flags;
         group.header.name_offset = names.regions[&instance_id].0;
         group.header.descriptive_name_offset = names.regions[&instance_id].1;
-        group.header.bounds_minimum = mesh.bounds.minimum;
-        group.header.bounds_maximum = mesh.bounds.maximum;
+        group.header.bounds_minimum = (mesh.bounds.minimum).to_array();
+        group.header.bounds_maximum = (mesh.bounds.maximum).to_array();
         group.header.unique_id = i32::from_ne_bytes(region.area_id.to_ne_bytes());
         group.header.liquid_type = liquid_type(region)?;
         group.header.fog_indices = fogs(region)?;
@@ -133,7 +133,7 @@ fn alpha_model<'a>(
             group,
             GroupInfo14 {
                 flags: super::group_flags::catalog(model, catalog),
-                bounds: catalog.bounds,
+                bounds: (catalog.bounds).map(|v| v.to_array()),
                 name_offset: i32::try_from(names.catalog[index]).map_err(error)?,
                 ..Default::default()
             },
@@ -176,7 +176,7 @@ fn beta_model<'a>(
     root.header_mut().ambient_color = super::rgba(controls.ambient);
     root.header_mut().group_count = u32::try_from(world.groups.len()).map_err(error)?;
     if let Some(bounds) = model.bounds() {
-        root.header_mut().bounds = [bounds.minimum, bounds.maximum];
+        root.header_mut().bounds = [(bounds.minimum).to_array(), (bounds.maximum).to_array()];
     }
     let mut flags = RootFlags(controls.options.unclassified.bits());
     flags.set_no_vertex_attenuation(controls.options.no_vertex_attenuation);
@@ -199,7 +199,7 @@ fn beta_model<'a>(
         .map(|(index, group)| {
             Ok(GroupInfo {
                 flags: super::group_flags::catalog(model, group),
-                bounds: group.bounds,
+                bounds: (group.bounds).map(|v| v.to_array()),
                 name_offset: i32::try_from(names.catalog[index]).map_err(error)?,
             })
         })
@@ -230,8 +230,8 @@ fn beta_model<'a>(
         group.header.flags = body.flags;
         group.header.name_offset = names.regions[&instance_id].0;
         group.header.descriptive_name_offset = names.regions[&instance_id].1;
-        group.header.bounds_minimum = mesh.bounds.minimum;
-        group.header.bounds_maximum = mesh.bounds.maximum;
+        group.header.bounds_minimum = (mesh.bounds.minimum).to_array();
+        group.header.bounds_maximum = (mesh.bounds.maximum).to_array();
         group.header.unique_id = i32::from_ne_bytes(region.area_id.to_ne_bytes());
         group.header.liquid_type = liquid_type(region)?;
         group.header.fog_indices = fogs(region)?;

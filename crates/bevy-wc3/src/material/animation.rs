@@ -4,6 +4,7 @@ use super::wmo::scrolling_transform;
 use super::{HdAnimation, ModelMaterial, SurfaceAnimation};
 use crate::animation_targets::AnimationTargets;
 use bevy::math::Affine2;
+use bevy::math::{Vec3, Vec4};
 use bevy::prelude::*;
 use std::array::from_fn;
 use wc3::model::{Property, PropertyValue, SampledAnimation, ValueSample};
@@ -70,7 +71,7 @@ impl HdAnimation {
         );
         let (color, opacity, team) = self.fresnel.as_ref().map_or(([1.; 3], 0., 0.), |value| {
             (
-                sample.animated(&value.color),
+                (sample.animated(&value.color)).to_array(),
                 sample.animated(&value.opacity),
                 sample.animated(&value.team_color),
             )
@@ -156,8 +157,7 @@ impl SurfaceAnimation {
 
     /// Procedural material motion needs clock updates even without any channels.
     pub(crate) fn uses_shared_time(&self) -> bool {
-        self.uv_scroll.iter().flatten().any(|v| *v != 0.)
-            || self.third_uv_scroll.iter().any(|v| *v != 0.)
+        self.uv_scroll.iter().any(|v| *v != Vec2::ZERO) || self.third_uv_scroll != Vec2::ZERO
     }
 
     pub(crate) fn with_mesh(
@@ -198,7 +198,7 @@ impl SurfaceAnimation {
         material: &mut ModelMaterial,
     ) -> bool {
         let mut changed = self.apply(sample, &mut material.base);
-        if self.secondary_transform.is_some() || self.uv_scroll[1] != [0.; 2] {
+        if self.secondary_transform.is_some() || self.uv_scroll[1] != Vec2::ZERO {
             let base = self
                 .secondary_transform
                 .as_ref()
@@ -210,7 +210,7 @@ impl SurfaceAnimation {
             ));
             changed |= replace(&mut material.extension.combiner.uv_transform, next);
         }
-        if self.third_transform.is_some() || self.third_uv_scroll != [0.; 2] {
+        if self.third_transform.is_some() || self.third_uv_scroll != Vec2::ZERO {
             let base = self
                 .third_transform
                 .as_ref()
@@ -266,17 +266,17 @@ impl SurfaceAnimation {
             let tint = self
                 .mesh
                 .as_ref()
-                .map_or([1.; 4], |mesh| mesh.sample(sample));
+                .map_or([1.; 4], |mesh| (mesh.sample(sample)).to_array());
             let rgba = SurfaceColor {
                 color: self.color.as_ref(),
                 rgba: self.rgba.as_ref(),
                 opacity: self.opacity.as_ref(),
                 weight: self.weight.as_ref(),
                 pass_weights: &self.pass_weights,
-                fallback: current.to_f32_array(),
+                fallback: Vec4::from_array(current.to_f32_array()),
                 unweighted_opacity: self.unweighted_opacity,
             }
-            .sample(sample, tint);
+            .sample(sample, Vec4::from_array(tint));
             let next = Color::linear_rgba(rgba[0], rgba[1], rgba[2], rgba[3]);
             if material.base_color != next {
                 material.base_color = next;
@@ -300,7 +300,7 @@ impl SurfaceAnimation {
                 changed = true;
             }
         }
-        if self.transform.is_some() || self.uv_scroll[0] != [0.; 2] {
+        if self.transform.is_some() || self.uv_scroll[0] != Vec2::ZERO {
             let next = self
                 .transform
                 .as_ref()
@@ -308,7 +308,7 @@ impl SurfaceAnimation {
                     if self.centered_transform {
                         layered_uv(
                             sample.animated(&transform.translation),
-                            sample.animated(&transform.rotation).0,
+                            sample.animated(&transform.rotation),
                             sample.animated(&transform.scale),
                         )
                     } else {
@@ -356,6 +356,6 @@ impl SurfaceAnimation {
 fn sampled_transform(sample: &SampledAnimation<'_, '_>, transform: &TextureTransform) -> Affine2 {
     transform.affine(sample, false)
 }
-pub(super) fn layered_uv(translation: [f32; 3], rotation: [f32; 4], scale: [f32; 3]) -> Affine2 {
+pub(super) fn layered_uv(translation: Vec3, rotation: Quat, scale: Vec3) -> Affine2 {
     TextureTransform::centered_affine(translation, rotation, scale)
 }

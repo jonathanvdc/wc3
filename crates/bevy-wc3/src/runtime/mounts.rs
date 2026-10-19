@@ -306,7 +306,7 @@ mod camera_tests {
     use bevy::ecs::world::CommandQueue;
     use wc3::model::profiles::Universal;
     use wc3::model::{
-        Billboard, Model, ModelMount, MountTarget, Node, Quaternion, Transform as ModelTransform,
+        Billboard, Model, ModelMount, MountTarget, Node, Quat, Transform as ModelTransform,
     };
     use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
@@ -319,7 +319,7 @@ mod camera_tests {
                 Node::named("carrier", &mut slot_values)
                     .with_transform(
                         ModelTransform {
-                            rotation: Quaternion(Quat::from_rotation_y(1.).to_array()),
+                            rotation: Quat::from_array(Quat::from_rotation_y(1.).to_array()),
                             ..SlotConstruct::construct(&mut slot_values)
                         },
                         &mut slot_values,

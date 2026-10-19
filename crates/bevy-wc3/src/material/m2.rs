@@ -171,9 +171,9 @@ pub(super) fn compile_m2(
     if let Some(program) = supported {
         pass.state.combiner.mode = program.mode;
         let palette = surface.guild_palette().unwrap_or_default();
-        pass.state.combiner.guild_background = Vec3::from_array(palette.background).extend(1.);
-        pass.state.combiner.guild_emblem = Vec3::from_array(palette.emblem).extend(1.);
-        pass.state.combiner.guild_border = Vec3::from_array(palette.border).extend(1.);
+        pass.state.combiner.guild_background = palette.background.extend(1.);
+        pass.state.combiner.guild_emblem = palette.emblem.extend(1.);
+        pass.state.combiner.guild_border = palette.border.extend(1.);
         pass.state.combiner.clip.y = if program.edge_fade { 1. } else { 0. };
         pass.state.combiner.coordinates.z = program.inputs as u32;
         if program.inputs < inputs.len() {

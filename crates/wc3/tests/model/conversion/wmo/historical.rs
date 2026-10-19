@@ -1,4 +1,5 @@
-use wc3::model::common::{IntoZeroVec, ZeroVec};
+use wc3::model::common::PackedArray;
+use wc3::model::common::ZeroVec;
 use wc3::model::conversion::{ExportOptions, ImportOptions};
 use wc3::model::formats::wmo::codec::Array;
 use wc3::model::formats::wmo::group::GroupChunk;
@@ -11,6 +12,7 @@ use wc3::model::formats::wmo::root::RootChunk;
 use wc3::model::formats::wmo::{Classic, FileKey};
 use wc3::model::io;
 use wc3::model::Draw;
+use wc3::model::IntoPackedArray;
 
 fn triangle<B>() -> Vec<LegacyGroupChunk<'static, B>> {
     vec![
@@ -159,7 +161,7 @@ fn alpha_direct_geometry_and_lighting_controls_survive_edits() {
     positions[0][0] = 0.5;
     mesh.geometry = mesh
         .geometry
-        .with_positions((positions).into_zero_vec())
+        .with_positions((positions).into_packed_array())
         .unwrap();
     asset.edit(|builder| builder.set_mesh(id, mesh)).unwrap();
     let output = io::wmo::plan::<io::wmo::V14>(&asset, &ExportOptions::default())
@@ -249,7 +251,9 @@ fn historical_multiple_placements_relocate_lighting_windows() {
                 .iter()
                 .map(|point| [point[0] + 2., point[1], point[2]])
                 .collect::<ZeroVec<_>>();
-            mesh.geometry = mesh.geometry.with_positions(positions)?;
+            mesh.geometry = mesh
+                .geometry
+                .with_positions(PackedArray::from_storage(positions))?;
             placement.mesh = builder.add_mesh(mesh)?;
             let materials = placement
                 .draws

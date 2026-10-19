@@ -24,8 +24,8 @@ impl Constraints {
             Constraint::Spherical { friction_torque } => {
                 let index = self.spherical.len();
                 self.spherical.push(PhysicsSpherical {
-                    anchor_a: joint.frame_a.origin,
-                    anchor_b: joint.frame_b.origin,
+                    anchor_a: (joint.frame_a.origin).to_array(),
+                    anchor_b: (joint.frame_b.origin).to_array(),
                     friction_torque,
                 });
                 (PhysicsJointKind::Spherical, index)
@@ -129,8 +129,8 @@ impl Constraints {
                 }
                 let index = self.distance.len();
                 self.distance.push(PhysicsDistance {
-                    anchor_a: joint.frame_a.origin,
-                    anchor_b: joint.frame_b.origin,
+                    anchor_a: (joint.frame_a.origin).to_array(),
+                    anchor_b: (joint.frame_b.origin).to_array(),
                     distance,
                 });
                 (PhysicsJointKind::Distance, index)

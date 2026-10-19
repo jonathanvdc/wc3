@@ -1,5 +1,7 @@
 //! Collision geometry and body constraints with logical identities.
-use crate::model::{Id, NodeId, Property, ZeroVec};
+use crate::model::{Id, NodeId, PackedArray, Property};
+use glam::Mat4;
+use glam::{Vec2, Vec3};
 /// Identity marker for collision geometry.
 pub enum ShapeObject {}
 /// Collision geometry identity scoped to one simulation system.
@@ -16,7 +18,7 @@ pub type JointId = Id<JointObject>;
 #[derive(Clone, Debug)]
 pub enum Geometry<'a> {
     /// Box half dimensions.
-    Box([f32; 3]),
+    Box(Vec3),
     /// Sphere radius.
     Sphere(f32),
     /// Capsule radius and cap-center separation.
@@ -26,7 +28,7 @@ pub enum Geometry<'a> {
         /// Cap-center separation.
         length: f32,
         /// Explicit authored cap centers, when present.
-        centers: ZeroVec<'a, [f32; 3]>,
+        centers: PackedArray<'a, Vec3>,
     },
     /// Cylinder radius and length.
     Cylinder {
@@ -36,30 +38,30 @@ pub enum Geometry<'a> {
         length: f32,
     },
     /// Convex hull points.
-    ConvexHull(ZeroVec<'a, [f32; 3]>),
+    ConvexHull(PackedArray<'a, Vec3>),
     /// Triangle-mesh collision positions and primitives.
     Triangles {
         /// Local positions.
-        positions: ZeroVec<'a, [f32; 3]>,
+        positions: PackedArray<'a, Vec3>,
         /// Triangle vertex indices.
-        triangles: ZeroVec<'a, [u32; 3]>,
+        triangles: PackedArray<'a, [u32; 3]>,
     },
     /// Authored collision category with unresolved geometry semantics.
     Unknown {
         /// Source category selector.
         kind: u32,
         /// Authored half extents.
-        half_extents: [f32; 3],
+        half_extents: Vec3,
         /// Authored radius.
         radius: f32,
         /// Authored length.
         length: f32,
         /// Authored shape points.
-        points: ZeroVec<'a, [f32; 3]>,
+        points: PackedArray<'a, Vec3>,
         /// Authored collision vertices.
-        vertices: ZeroVec<'a, [f32; 3]>,
+        vertices: PackedArray<'a, Vec3>,
         /// Authored triangle indices.
-        triangles: ZeroVec<'a, [u32; 3]>,
+        triangles: PackedArray<'a, [u32; 3]>,
     },
 }
 /// Physical density, contact friction, and rebound response.
@@ -78,7 +80,7 @@ pub struct Shape<'a> {
     /// Collision geometry.
     pub geometry: Geometry<'a>,
     /// Local-to-body transform.
-    pub transform: [[f32; 4]; 4],
+    pub transform: Mat4,
     /// Contact response.
     pub material: ContactMaterial,
     /// Profile-specific contact callback categories with unresolved meanings.
@@ -139,7 +141,7 @@ pub struct Body {
     /// Collision shapes attached to the body.
     pub shapes: Vec<ShapeId>,
     /// Translational and rotational damping coefficients.
-    pub damping: [f32; 2],
+    pub damping: Vec2,
     /// Inertia multiplier.
     pub inertia_scale: f32,
     /// Gravity multiplier.
@@ -212,13 +214,13 @@ pub struct Joint {
     /// Constraint kind.
     pub kind: JointKind,
     /// Constraint frames relative to each body's node.
-    pub frames: [[[f32; 4]; 4]; 2],
+    pub frames: [Mat4; 2],
     /// Permit collision between connected bodies.
     pub collide_connected: bool,
     /// Enable authored motion limits.
     pub limit_enabled: bool,
     /// Lower and upper angular or translational limits.
-    pub limits: [f32; 2],
+    pub limits: Vec2,
     /// Cone angular limit.
     pub cone: f32,
     /// Joint friction model.
@@ -226,13 +228,13 @@ pub struct Joint {
     /// Friction strength.
     pub friction_amount: f32,
     /// Angular spring frequency and damping.
-    pub angular_spring: [f32; 2],
+    pub angular_spring: Vec2,
     /// Linear spring frequency and damping.
-    pub linear_spring: [f32; 2],
+    pub linear_spring: Vec2,
     /// Resting separation of a distance joint.
     pub rest_length: f32,
     /// Breaking force and torque thresholds; zero disables the corresponding break condition.
-    pub breaking: [f32; 2],
+    pub breaking: Vec2,
     /// Optional authored motor behavior.
     pub motor: Option<Motor>,
     /// Motor force or torque limit.

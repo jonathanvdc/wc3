@@ -1,6 +1,7 @@
 //! Static world geometry with the authored world-model stream vocabulary.
-use crate::model::common::IntoZeroVec;
+use crate::model::common::IntoPackedArray;
 use crate::model::TextureCoordinates;
+use glam::{Vec2, Vec3, Vec4};
 use std::collections::BTreeMap;
 
 use crate::model::geometry_edit::check_edit;
@@ -10,18 +11,18 @@ use crate::model::VertexData;
 use crate::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, DrawSubsetCapabilities, Error,
     GeometryData, GeometryInfluences, GeometryKind, GeometryParts, GeometryPools, GeometrySchema,
-    InfluenceRows, Link, SurfaceTriangleControls, Topology, ValidateLinks, ZeroVec,
+    InfluenceRows, Link, PackedArray, SurfaceTriangleControls, Topology, ValidateLinks,
 };
 use crate::model::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 
 type WmoStreams<'data> = VertexStreams<
     'data,
     (),
-    Vec<ZeroVec<'data, [f32; 2]>>,
+    Vec<PackedArray<'data, Vec2>>,
     (),
-    Vec<ZeroVec<'data, [f32; 4]>>,
-    ZeroVec<'data, [f32; 3]>,
-    ZeroVec<'data, [f32; 2]>,
+    Vec<PackedArray<'data, Vec4>>,
+    PackedArray<'data, Vec3>,
+    PackedArray<'data, Vec2>,
 >;
 
 /// Static triangle geometry for a world model.
@@ -33,33 +34,33 @@ type WmoStreams<'data> = VertexStreams<
 pub struct WmoGeometry<'data> {
     streams: WmoStreams<'data>,
     pools: GeometryPools<'data>,
-    triangle_controls: ZeroVec<'data, SurfaceTriangleControls>,
+    triangle_controls: PackedArray<'data, SurfaceTriangleControls>,
 }
 impl<'data> WmoGeometry<'data> {
     /// Replaces positions while checking all geometry stream relationships.
-    pub fn with_positions(mut self, positions: ZeroVec<'data, [f32; 3]>) -> Result<Self, Error> {
+    pub fn with_positions(mut self, positions: PackedArray<'data, Vec3>) -> Result<Self, Error> {
         self.streams.positions = positions;
         self.validate()?;
         Ok(self)
     }
     /// Creates checked triangle geometry while retaining borrowed arrays.
     pub fn triangles(
-        positions: impl IntoZeroVec<'data, [f32; 3]>,
-        triangles: impl IntoZeroVec<'data, [u32; 3]>,
+        positions: impl IntoPackedArray<'data, Vec3>,
+        triangles: impl IntoPackedArray<'data, [u32; 3]>,
     ) -> Result<Self, Error> {
-        let triangles = triangles.into_zero_vec();
+        let triangles = triangles.into_packed_array();
         let triangle_controls = (0..triangles.len())
             .map(|_| SurfaceTriangleControls::default())
             .collect();
         let geometry = Self {
             streams: VertexStreams {
                 vertices: VertexData {
-                    positions: positions.into_zero_vec(),
-                    normals: ZeroVec::default(),
+                    positions: positions.into_packed_array(),
+                    normals: PackedArray::default(),
                     texture_coordinates: Vec::new(),
                     colors: Vec::new(),
                     tangents: (),
-                    extras: ZeroVec::default(),
+                    extras: PackedArray::default(),
                 },
                 topology: Topology::Triangles(triangles),
                 influences: (),
@@ -73,75 +74,75 @@ impl<'data> WmoGeometry<'data> {
     /// Sets per-triangle rendering, collision, and query behavior.
     pub fn with_triangle_controls(
         mut self,
-        controls: ZeroVec<'data, SurfaceTriangleControls>,
+        controls: PackedArray<'data, SurfaceTriangleControls>,
     ) -> Result<Self, Error> {
         self.triangle_controls = controls;
         self.validate()?;
         Ok(self)
     }
     /// Sets shared strip connectivity selected by individual draw windows.
-    pub fn with_strip_indices(mut self, indices: ZeroVec<'data, u32>) -> Result<Self, Error> {
+    pub fn with_strip_indices(mut self, indices: PackedArray<'data, u32>) -> Result<Self, Error> {
         self.pools.triangle_strip_indices = indices;
         self.validate()?;
         Ok(self)
     }
     /// Reads shared strip connectivity selected by individual draw windows.
-    pub fn strip_indices(&self) -> &ZeroVec<'data, u32> {
+    pub fn strip_indices(&self) -> &PackedArray<'data, u32> {
         &self.pools.triangle_strip_indices
     }
     /// Sets the shared tangent-vector pool selected by individual draws.
-    pub fn with_tangent_vectors(mut self, values: ZeroVec<'data, [f32; 4]>) -> Result<Self, Error> {
+    pub fn with_tangent_vectors(mut self, values: PackedArray<'data, Vec4>) -> Result<Self, Error> {
         self.pools.tangent_vectors = values;
         self.validate()?;
         Ok(self)
     }
     /// Reads the shared tangent-vector pool selected by individual draws.
-    pub fn tangent_vectors(&self) -> &ZeroVec<'data, [f32; 4]> {
+    pub fn tangent_vectors(&self) -> &PackedArray<'data, Vec4> {
         &self.pools.tangent_vectors
     }
     /// Sets the independently authored baked-light coordinate stream.
     pub fn with_lightmap_coordinates(
         mut self,
-        coordinates: ZeroVec<'data, [f32; 2]>,
+        coordinates: PackedArray<'data, Vec2>,
     ) -> Result<Self, Error> {
         self.streams.extras = coordinates;
         self.validate()?;
         Ok(self)
     }
     /// Reads the independently authored baked-light coordinate stream.
-    pub fn lightmap_coordinates(&self) -> &ZeroVec<'data, [f32; 2]> {
+    pub fn lightmap_coordinates(&self) -> &PackedArray<'data, Vec2> {
         &self.streams.extras
     }
     /// Reads per-triangle controls in connectivity order.
-    pub fn triangle_controls(&self) -> &ZeroVec<'data, SurfaceTriangleControls> {
+    pub fn triangle_controls(&self) -> &PackedArray<'data, SurfaceTriangleControls> {
         &self.triangle_controls
     }
     /// Sets authored vertex normals.
     pub fn with_normals(
         mut self,
-        normals: impl IntoZeroVec<'data, [f32; 3]>,
+        normals: impl IntoPackedArray<'data, Vec3>,
     ) -> Result<Self, Error> {
-        self.streams.normals = normals.into_zero_vec();
+        self.streams.normals = normals.into_packed_array();
         self.validate()?;
         Ok(self)
     }
     /// Sets ordered texture-coordinate streams.
     pub fn with_texture_coordinates(
         mut self,
-        coordinates: Vec<ZeroVec<'data, [f32; 2]>>,
+        coordinates: Vec<PackedArray<'data, Vec2>>,
     ) -> Result<Self, Error> {
         self.streams.texture_coordinates = coordinates;
         self.validate()?;
         Ok(self)
     }
     /// Sets ordered vertex-color streams, including independent lighting sets.
-    pub fn with_color_sets(mut self, colors: Vec<ZeroVec<'data, [f32; 4]>>) -> Result<Self, Error> {
+    pub fn with_color_sets(mut self, colors: Vec<PackedArray<'data, Vec4>>) -> Result<Self, Error> {
         self.streams.colors = colors;
         self.validate()?;
         Ok(self)
     }
     /// Reads all independently authored vertex-color sets.
-    pub fn color_sets(&self) -> &[ZeroVec<'data, [f32; 4]>] {
+    pub fn color_sets(&self) -> &[PackedArray<'data, Vec4>] {
         &self.streams.colors
     }
 }
@@ -154,13 +155,13 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
             tangent_bindings: true,
         }
     }
-    fn surface_triangles(&self) -> Option<&ZeroVec<'data, SurfaceTriangleControls>> {
+    fn surface_triangles(&self) -> Option<&PackedArray<'data, SurfaceTriangleControls>> {
         Some(&self.triangle_controls)
     }
-    fn strip_indices(&self) -> Option<&ZeroVec<'data, u32>> {
+    fn strip_indices(&self) -> Option<&PackedArray<'data, u32>> {
         Some(&self.pools.triangle_strip_indices)
     }
-    fn tangent_pool(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
+    fn tangent_pool(&self) -> Option<&PackedArray<'data, Vec4>> {
         Some(&self.pools.tangent_vectors)
     }
     fn edit_capabilities(&self) -> GeometryEditCapabilities {
@@ -207,19 +208,19 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
         Ok(result)
     }
 
-    fn positions(&self) -> &ZeroVec<'data, [f32; 3]> {
+    fn positions(&self) -> &PackedArray<'data, Vec3> {
         &self.streams.positions
     }
-    fn normals(&self) -> Option<&ZeroVec<'data, [f32; 3]>> {
+    fn normals(&self) -> Option<&PackedArray<'data, Vec3>> {
         (!self.streams.normals.is_empty()).then_some(&self.streams.normals)
     }
-    fn tangents(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
+    fn tangents(&self) -> Option<&PackedArray<'data, Vec4>> {
         None
     }
     fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
         TextureCoordinates::Slice(&self.streams.texture_coordinates)
     }
-    fn colors(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
+    fn colors(&self) -> Option<&PackedArray<'data, Vec4>> {
         self.streams.colors.first()
     }
     fn attributes(&self) -> &[Attribute<'data>] {
@@ -238,12 +239,7 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
             .triangle_strip_indices
             .iter()
             .any(|index| index as usize >= self.streams.positions.len())
-            || !self
-                .pools
-                .tangent_vectors
-                .iter()
-                .flatten()
-                .all(f32::is_finite)
+            || !self.pools.tangent_vectors.iter().all(|v| v.is_finite())
         {
             return Err(Error::new(
                 "geometry.draw_streams",
@@ -260,7 +256,7 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
         }
         if !self.streams.extras.is_empty()
             && (self.streams.extras.len() != self.streams.positions.len()
-                || !self.streams.extras.iter().flatten().all(f32::is_finite))
+                || !self.streams.extras.iter().all(|v| v.is_finite()))
         {
             return Err(Error::new(
                 "geometry.lightmap_coordinates",
@@ -268,8 +264,7 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
             ));
         }
         for colors in &self.streams.colors {
-            if colors.len() != self.streams.positions.len()
-                || !colors.iter().flatten().all(f32::is_finite)
+            if colors.len() != self.streams.positions.len() || !colors.iter().all(|v| v.is_finite())
             {
                 return Err(Error::new(
                     "geometry.colors",
@@ -286,18 +281,18 @@ impl Default for WmoGeometry<'_> {
         Self {
             streams: VertexStreams {
                 vertices: VertexData {
-                    positions: ZeroVec::default(),
-                    normals: ZeroVec::default(),
+                    positions: PackedArray::default(),
+                    normals: PackedArray::default(),
                     texture_coordinates: Vec::new(),
                     colors: Vec::new(),
                     tangents: (),
-                    extras: ZeroVec::default(),
+                    extras: PackedArray::default(),
                 },
-                topology: Topology::Triangles(ZeroVec::default()),
+                topology: Topology::Triangles(PackedArray::default()),
                 influences: (),
             },
             pools: GeometryPools::default(),
-            triangle_controls: ZeroVec::default(),
+            triangle_controls: PackedArray::default(),
         }
     }
 }

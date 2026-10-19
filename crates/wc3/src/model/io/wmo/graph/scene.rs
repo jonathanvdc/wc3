@@ -8,7 +8,8 @@ use crate::model::profiles::Wmo;
 use crate::model::WorldImageResource;
 use crate::model::WorldPlacementAppearance;
 use crate::model::{ColorSpace, ImageResource, Sampler, Texture};
-use crate::model::{FeatureId, ModelBuilder, Quaternion};
+use crate::model::{FeatureId, ModelBuilder, Quat};
+use glam::{Vec2, Vec3, Vec4};
 use std::borrow::Cow;
 
 pub(super) struct Identities {
@@ -37,10 +38,10 @@ pub(super) fn read<'a, 'data: 'a>(
         let node = builder.new_node(format!("Light {ordinal}"));
         builder
             .values_mut()
-            .set(node.transform.translation, row.position)?;
+            .set(node.transform.translation, Vec3::from_array(row.position))?;
         builder
             .values_mut()
-            .set(node.transform.rotation, Quaternion(row.rotation))?;
+            .set(node.transform.rotation, Quat::from_array(row.rotation))?;
         let id = builder.add_node(node)?;
         let feature_id = {
             let node = id;
@@ -52,12 +53,14 @@ pub(super) fn read<'a, 'data: 'a>(
                     LightKind::Ambient => profile::LightKind::Ambient,
                     LightKind::Unknown(value) => profile::LightKind::Unknown(i32::from(value)),
                 },
-                color: builder.add_value(rgba(row.color).map(|value| f32::from(value) / 255.)),
+                color: builder.add_value(Vec4::from_array(
+                    rgba(row.color).map(|value| f32::from(value) / 255.),
+                )),
                 intensity: builder.add_value(row.intensity),
                 use_attenuation: row.use_attenuation != 0,
-                attenuation: [row.attenuation_start, row.attenuation_end],
+                attenuation: Vec2::from_array([row.attenuation_start, row.attenuation_end]),
                 controls: u32::from_le_bytes([row.padding[0], row.padding[1], 0, 0]).into(),
-                cone: [0.; 2],
+                cone: Vec2::from_array([0.; 2]),
                 modern: None,
                 directional_terms: None,
             }));
@@ -73,7 +76,7 @@ pub(super) fn read<'a, 'data: 'a>(
                 let node = builder.new_node(format!("Modern light {}", row.light_index));
                 builder
                     .values_mut()
-                    .set(node.transform.translation, row.position)?;
+                    .set(node.transform.translation, Vec3::from_array(row.position))?;
                 let id = builder.add_node(node)?;
                 let cookie = if row.cookie_file_id == 0 {
                     None
@@ -97,15 +100,16 @@ pub(super) fn read<'a, 'data: 'a>(
                             NewLightKind::Spot => profile::LightKind::Spot,
                             NewLightKind::Unknown(value) => profile::LightKind::Unknown(value),
                         },
-                        color: builder
-                            .add_value(rgba(row.inner_color).map(|value| f32::from(value) / 255.)),
+                        color: builder.add_value(Vec4::from_array(
+                            rgba(row.inner_color).map(|value| f32::from(value) / 255.),
+                        )),
                         intensity: builder.add_value(row.intensity),
                         use_attenuation: true,
-                        attenuation: [row.attenuation_start, row.attenuation_end],
-                        cone: [row.inner_angle, row.outer_angle],
+                        attenuation: Vec2::from_array([row.attenuation_start, row.attenuation_end]),
+                        cone: Vec2::from_array([row.inner_angle, row.outer_angle]),
                         controls: (flags.bits() as u32).into(),
                         modern: Some(profile::ModernLight {
-                            orientation: row.rotation,
+                            orientation: Vec3::from_array(row.rotation),
                             id: row.light_index,
                             doodad_set: if row.doodad_set == 0 {
                                 None
@@ -120,8 +124,11 @@ pub(super) fn read<'a, 'data: 'a>(
                             blend_colors: row.flags.blend_colors(),
                             shadows: row.flags.cast_shadows(),
                             outer_color: rgba(row.outer_color),
-                            color_blend: [row.blend_start, row.blend_end],
-                            flicker_parameters: [row.flicker_intensity, row.flicker_speed],
+                            color_blend: Vec2::from_array([row.blend_start, row.blend_end]),
+                            flicker_parameters: Vec2::from_array([
+                                row.flicker_intensity,
+                                row.flicker_speed,
+                            ]),
                             flicker: match row.flicker_mode {
                                 FlickerMode::Off => profile::Flicker::Off,
                                 FlickerMode::Sine => profile::Flicker::Sine,
@@ -133,7 +140,7 @@ pub(super) fn read<'a, 'data: 'a>(
                             falloff: row.falloff,
                             scale: half(row.scale_half),
                             intensity_multiplier: half(row.intensity_multiplier_half),
-                            vector_control: row.unknown_vector,
+                            vector_control: Vec3::from_array(row.unknown_vector),
                             controls: [
                                 row.gap0,
                                 row.gap1,
@@ -172,8 +179,10 @@ pub(super) fn read<'a, 'data: 'a>(
                     .payload;
                 let mut payload = payload.clone();
                 if let profile::Node::Light(light) = &mut payload {
-                    light.directional_terms =
-                        Some(row.terms.map(|term| (term.direction, term.value)));
+                    light.directional_terms = Some(
+                        row.terms
+                            .map(|term| (Vec3::from_array(term.direction), term.value)),
+                    );
                 }
                 builder.set_feature(id, payload)?;
             }
@@ -219,13 +228,13 @@ pub(super) fn read<'a, 'data: 'a>(
                 let node = builder.new_node(format!("Doodad {ordinal}"));
                 builder
                     .values_mut()
-                    .set(node.transform.translation, row.position)?;
+                    .set(node.transform.translation, Vec3::from_array(row.position))?;
                 builder
                     .values_mut()
-                    .set(node.transform.rotation, Quaternion(row.rotation))?;
+                    .set(node.transform.rotation, Quat::from_array(row.rotation))?;
                 builder
                     .values_mut()
-                    .set(node.transform.scale, [row.scale; 3])?;
+                    .set(node.transform.scale, Vec3::from_array([row.scale; 3]))?;
                 let id = builder.add_node(node)?;
                 let flags = row.name_and_flags.flags();
                 let light = if flags.has_light_reference() {

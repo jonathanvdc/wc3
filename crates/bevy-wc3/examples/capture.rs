@@ -6,6 +6,7 @@ use bevy::camera::{RenderTarget, ShadowLodOrigin};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
+use bevy::math::Vec3;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
@@ -391,9 +392,9 @@ fn parse_guild_palette(value: &str) -> CaptureResult<GuildPalette> {
         .try_into()
         .map_err(|_| "guild palette requires background:emblem:border RGB triples")?;
     Ok(GuildPalette {
-        background: background.to_array(),
-        emblem: emblem.to_array(),
-        border: border.to_array(),
+        background,
+        emblem,
+        border,
     })
 }
 

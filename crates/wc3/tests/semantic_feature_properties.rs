@@ -1,3 +1,4 @@
+use glam::Vec2;
 use wc3::model::profiles::{m2, mdlx, Mdlx, Universal, M2};
 use wc3::model::ModelMetadata;
 use wc3::model::{
@@ -34,7 +35,7 @@ fn a_fov_slot_keeps_its_diagonal_camera_convention() {
     let mut draft = Model::<M2>::builder("diagonal camera");
     let mut camera: m2::Camera = draft.construct();
     camera.convention = m2::values::CameraKind::Unknown(0);
-    camera.clipping = [0.1, 100.];
+    camera.clipping = Vec2::from_array([0.1, 100.]);
     let fov = camera.field_of_view;
     let node = draft.add_named_node("camera").unwrap();
     let feature = draft

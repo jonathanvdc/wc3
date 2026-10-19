@@ -1,7 +1,9 @@
 use super::plan::plan;
 use super::*;
+use bevy::math::Vec3;
 use bevy::prelude::{Assets, Image};
 use std::collections::HashSet;
+use wc3::model::common::PackedArray;
 use wc3::model::profiles::mdlx::Material as MdlxMaterial;
 use wc3::model::profiles::Universal;
 use wc3::model::ModelBuilder;
@@ -23,9 +25,14 @@ fn model() -> (Model<'static>, Vec<(InstanceId, DrawId)>) {
         .unwrap();
     let mut ids = Vec::new();
     for _ in 0..2 {
-        let geometry =
-            GeometryData::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]])
-                .unwrap();
+        let geometry = GeometryData::triangles(
+            ([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]])
+                .into_iter()
+                .map(Vec3::from_array)
+                .collect::<PackedArray<_>>(),
+            [[0, 1, 2]],
+        )
+        .unwrap();
         let mut mesh = Mesh::new(geometry);
         let subset = mesh.add_primary_subset(0, 1);
         let mesh = builder.add_mesh(mesh).unwrap();
@@ -207,7 +214,7 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
                             .binding
                             .coordinates
                             .transform
-                            .translation = slot_values.add([0.25, 0., 0.]);
+                            .translation = slot_values.add(Vec3::from_array([0.25, 0., 0.]));
                         layer
                     })
                     .collect::<Vec<_>>();

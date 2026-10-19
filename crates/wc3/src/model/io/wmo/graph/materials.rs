@@ -13,6 +13,7 @@ use crate::model::WorldImageResource;
 use crate::model::{
     AddressMode, ImageResource, ImageResourceId, Material, MaterialId, ModelBuilder, Sampler,
 };
+use glam::Vec2;
 use native::records::{BlendMode, MaterialTailField};
 use native::root::RootChunk;
 use std::borrow::Cow;
@@ -114,7 +115,12 @@ pub(super) fn read<'a, 'data: 'a>(
                 ground_type: row.ground_type,
                 uv_scroll: scroll
                     .get(index)
-                    .map_or([[0.; 2]; 2], |value| [value.speed0, value.speed1]),
+                    .map_or([Vec2::from_array([0.; 2]); 2], |value| {
+                        [
+                            Vec2::from_array(value.speed0),
+                            Vec2::from_array(value.speed1),
+                        ]
+                    }),
                 shader_overrides: extensions.get(index).map(|value| profile::ShaderOverrides {
                     color: color(value.color),
                     texture_override: u64::from(value.override_key[0])
@@ -283,8 +289,8 @@ pub(super) fn write<'a, D: Dialect>(
             }
         }
         scrolls.push(native::records::MaterialUvAnimation {
-            speed0: source.uv_scroll[0],
-            speed1: source.uv_scroll[1],
+            speed0: (source.uv_scroll[0]).to_array(),
+            speed1: (source.uv_scroll[1]).to_array(),
         });
         extensions.push(source.shader_overrides.as_ref().map_or_else(
             native::records::MaterialExtension::default,

@@ -4,6 +4,7 @@ use crate::model::materials::bindings::TextureBinding;
 use crate::model::materials::state::PassState;
 use crate::model::profiles::SurfacePayload;
 use crate::model::{Error, ImageResourceId, Link, Sampler, ValidateLinks};
+use glam::Vec2;
 use std::borrow::Cow;
 
 /// A world shader image input with complete, independently owned address behavior.
@@ -24,7 +25,7 @@ pub struct MaterialDeclaration<'a> {
     /// External terrain-type identifier.
     pub ground_type: u32,
     /// UV scroll velocity for the first two texture slots.
-    pub uv_scroll: [[f32; 2]; 2],
+    pub uv_scroll: [Vec2; 2],
     /// Optional extended shader overrides.
     pub shader_overrides: Option<ShaderOverrides>,
     /// Historical additional material color in RGBA order.
@@ -674,13 +675,7 @@ impl ValidateLinks for MaterialStep<'_> {
         for input in self.inputs() {
             input.visit_links(visitor);
         }
-        if self
-            .declaration()
-            .uv_scroll
-            .iter()
-            .flatten()
-            .any(|v| !v.is_finite())
-        {
+        if self.declaration().uv_scroll.iter().any(|v| !v.is_finite()) {
             visitor(Link::InvalidValue);
         }
     }

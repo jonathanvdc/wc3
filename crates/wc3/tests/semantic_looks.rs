@@ -1,3 +1,5 @@
+use glam::Vec3;
+use wc3::model::common::PackedArray;
 use wc3::model::io::geometry;
 use wc3::model::profiles::{Mdlx, Universal};
 use wc3::model::ModelMetadata;
@@ -11,7 +13,10 @@ fn fixture() -> (Model<'static>, InstanceId, [DrawId; 2], [MaterialId; 2]) {
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("placement").unwrap();
     let mut mesh = Mesh::triangles(
-        vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
+        (vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]])
+            .into_iter()
+            .map(Vec3::from_array)
+            .collect::<PackedArray<_>>(),
         vec![[0, 1, 2]],
     );
     let subset = mesh.add_primary_subset(0, 1);
@@ -246,7 +251,13 @@ fn mismatched_material_count_leaves_the_builder_unchanged() {
     let mut draft = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = draft.add_named_node("placement").unwrap();
     let mesh = draft
-        .add_mesh(Mesh::triangles(vec![[0.; 3]; 3], vec![[0, 1, 2]]))
+        .add_mesh(Mesh::triangles(
+            (vec![[0.; 3]; 3])
+                .into_iter()
+                .map(Vec3::from_array)
+                .collect::<PackedArray<_>>(),
+            vec![[0, 1, 2]],
+        ))
         .unwrap();
     let subset = draft.add_primary_subset(mesh, 0, 1).unwrap();
     let mut instance = MeshInstance::new(node, mesh);
@@ -270,7 +281,16 @@ fn draw_and_look_identities_survive_widening_and_exact_narrowing() {
     use wc3::model::MdlxGeometry;
     let mut draft = Model::<Mdlx>::builder("typed draw");
     let node = draft.add_named_node("placement").unwrap();
-    let mut mesh = Mesh::new(MdlxGeometry::triangles(vec![[0.; 3]; 3], vec![[0, 1, 2]]).unwrap());
+    let mut mesh = Mesh::new(
+        MdlxGeometry::triangles(
+            (vec![[0.; 3]; 3])
+                .into_iter()
+                .map(Vec3::from_array)
+                .collect::<PackedArray<_>>(),
+            vec![[0, 1, 2]],
+        )
+        .unwrap(),
+    );
     let subset = mesh.add_primary_subset(0, 1);
     let mesh = draft.add_mesh(mesh).unwrap();
     let material = draft

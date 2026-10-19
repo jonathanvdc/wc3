@@ -76,7 +76,13 @@ fn common_mesh_targets_override_feature_values_and_equal_constants_share_keys() 
             builder.add_global_track(DynamicTrack::Vector3(Track {
                 target: definition.color,
                 clock: TimeSource::Animation,
-                curve: Curve::linear([time(0.), time(1.)], [[0.2, 0.4, 0.6], [0.4, 0.6, 0.8]])?,
+                curve: Curve::linear(
+                    [time(0.), time(1.)],
+                    ([[0.2, 0.4, 0.6], [0.4, 0.6, 0.8]])
+                        .into_iter()
+                        .map(Vec3::from_array)
+                        .collect::<Vec<_>>(),
+                )?,
             }))?;
             builder.add_global_track(DynamicTrack::Scalar(Track {
                 target: definition.opacity,

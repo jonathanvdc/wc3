@@ -4,6 +4,7 @@ use crate::model::materials::m2::rasterization;
 use crate::model::materials::state::PassState;
 use crate::model::LightEmission;
 use crate::model::{Axis, M2RibbonControls, M2RibbonRendering, TrailAppearance, TrailGeometry};
+use glam::{Vec2, Vec3};
 fn placement<'a>(
     builder: &mut GraphBuilder<'a>,
     nodes: &[semantic::NodeId],
@@ -14,7 +15,7 @@ fn placement<'a>(
     let mut node = builder.new_node(name);
     builder
         .values_mut()
-        .set(node.transform.translation, position)?;
+        .set(node.transform.translation, Vec3::from_array(position))?;
     if let Some(bone) = bone {
         node.parent = Some(
             *nodes
@@ -47,9 +48,14 @@ where
                     .sequences
                     .get(seq)
                     .map_or((0, 0), |s| s.timing.window());
-                if let Some((c, g)) =
-                    curve(animation_source, $native, &source.key, seq, start, $map)?
-                {
+                if let Some((c, g)) = curve(
+                    animation_source,
+                    $native,
+                    &source.key,
+                    seq,
+                    start,
+                    move |v| ($map)(v).into(),
+                )? {
                     animation::insert(
                         builder,
                         clip,
@@ -115,11 +121,15 @@ where
         let light = profile::Light {
             kind: profile::values::LightKind::from_raw(value.kind.raw()),
             ambient: LightEmission {
-                color: builder.add_value(initial(&value.ambient_color).unwrap_or([0.; 3])),
+                color: builder.add_value(Vec3::from_array(
+                    initial(&value.ambient_color).unwrap_or([0.; 3]),
+                )),
                 intensity: builder.add_value(initial(&value.ambient_intensity).unwrap_or(0.)),
             },
             diffuse: LightEmission {
-                color: builder.add_value(initial(&value.diffuse_color).unwrap_or([0.; 3])),
+                color: builder.add_value(Vec3::from_array(
+                    initial(&value.diffuse_color).unwrap_or([0.; 3]),
+                )),
                 intensity: builder.add_value(initial(&value.diffuse_intensity).unwrap_or(0.)),
             },
             attenuation: [
@@ -259,7 +269,8 @@ where
                 materials,
             },
             appearance: TrailAppearance {
-                color: builder.add_value(initial(&value.color).unwrap_or([1.; 3])),
+                color: builder
+                    .add_value(Vec3::from_array(initial(&value.color).unwrap_or([1.; 3]))),
                 opacity: builder
                     .add_value(f32::from(initial(&value.alpha).unwrap_or(32767)) / 32767.),
                 atlas: [value.texture_rows, value.texture_columns],
@@ -468,10 +479,10 @@ where
                 clocks,
                 builder,
             )?,
-            clipping: [value.near_clip, value.far_clip],
-            target: value.target_position_base,
-            eye_offset: builder.add_value([0.; 3]),
-            target_offset: builder.add_value([0.; 3]),
+            clipping: Vec2::from_array([value.near_clip, value.far_clip]),
+            target: Vec3::from_array(value.target_position_base),
+            eye_offset: builder.add_value(Vec3::from_array([0.; 3])),
+            target_offset: builder.add_value(Vec3::from_array([0.; 3])),
             roll: builder.add_value(0.),
         };
         let position = camera.eye_offset;
@@ -486,7 +497,8 @@ where
                 (position, &value.positions),
                 (target, &value.target_positions),
             ] {
-                if let Some((c, g)) = animation::spline_curve(animation_source, track, seq, start)?
+                if let Some((c, g)) =
+                    animation::spline_curve(animation_source, track, seq, start, Vec3::from_array)?
                 {
                     animation::insert(
                         builder,
@@ -496,7 +508,7 @@ where
                 }
             }
             if let Some((c, g)) =
-                animation::spline_curve(animation_source, &value.roll, seq, start)?
+                animation::spline_curve(animation_source, &value.roll, seq, start, |v| v)?
             {
                 animation::insert(
                     builder,

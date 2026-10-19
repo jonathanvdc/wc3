@@ -1,5 +1,6 @@
 use super::super::textures::TextureRole;
 use super::*;
+use bevy::math::{Quat, Vec2, Vec3, Vec4};
 use std::array::from_fn;
 use wc3::model::materials::state::{BlendOperations, Lighting, Operation};
 use wc3::model::materials::MaterialSurface;
@@ -8,7 +9,6 @@ use wc3::model::profiles::Universal;
 use wc3::model::ModelMetadata;
 use wc3::model::{AnimationSample, ColorSpace, Material, ModelBuilder, Texture};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-
 #[test]
 fn default_extension_preserves_base_blend_and_depth_while_authored_pass_overrides() {
     let default = ModelMaterialKey::from(&ModelMaterialExtension::default());
@@ -111,7 +111,7 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
         .collect();
     hd.inputs.emissive_gain = Some(slot_values.add(2.));
     hd.fresnel = Some(mdlx::Fresnel {
-        color: slot_values.add([0.2, 0.4, 0.8]),
+        color: slot_values.add(Vec3::from_array([0.2, 0.4, 0.8])),
         opacity: slot_values.add(0.5),
         team_color: slot_values.add(0.3),
     });
@@ -235,9 +235,9 @@ fn unknown_layer_shader_does_not_infer_hd_data_roles() {
 #[test]
 fn layered_uv_rotation_and_scale_use_center_pivot() {
     let transform = layered_uv(
-        [0.; 3],
-        Quat::from_rotation_z(std::f32::consts::FRAC_PI_2).to_array(),
-        [2., 2., 1.],
+        Vec3::ZERO,
+        Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+        Vec3::new(2., 2., 1.),
     );
     assert!((transform.transform_point2(Vec2::splat(0.5)) - Vec2::splat(0.5)).length() < 1e-6);
     assert!((transform.transform_point2(Vec2::new(1., 0.5)) - Vec2::new(0.5, 1.5)).length() < 1e-6);
@@ -325,7 +325,7 @@ fn sampling_static_bindings_does_not_request_repeated_asset_writes() {
     let mut slot_values = SlotValues::default();
     let mut material = StandardMaterial::default();
     let animation = SurfaceAnimation {
-        color: Some(slot_values.add([0.25, 0.5, 0.75])),
+        color: Some(slot_values.add(Vec3::from_array([0.25, 0.5, 0.75]))),
         opacity: Some(slot_values.add(0.6)),
         weight: Some(slot_values.add(0.5)),
         ..SlotConstruct::construct(&mut slot_values)
@@ -398,9 +398,9 @@ fn unknown_blending_does_not_silently_claim_opaque_support() {
 #[test]
 fn live_guild_palette_updates_uniforms_without_changing_pipeline_identity() {
     let palette = GuildPalette {
-        background: [0.2, 0.4, 0.8],
-        emblem: [2., 0.5, 0.1],
-        border: [0.1, 0.2, 0.3],
+        background: Vec3::from_array([0.2, 0.4, 0.8]),
+        emblem: Vec3::from_array([2., 0.5, 0.1]),
+        border: Vec3::from_array([0.1, 0.2, 0.3]),
     };
     let mut material = ModelMaterialExtension::default();
     assert_eq!(material.guild_palette(), None);
@@ -434,12 +434,12 @@ fn m2_material_program_compiles_steps_in_order_with_independent_controls() {
 
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let mut first = DiffuseMaterialStep::construct(&mut slot_values);
-    first.declaration.color = slot_values.add([1., 0., 0.]);
+    first.declaration.color = slot_values.add(Vec3::from_array([1., 0., 0.]));
     first.declaration.opacity = slot_values.add(0.25);
     first.declaration.state.ordering = 3;
     first.diffuse.contribution = slot_values.add(1.);
     let mut second = DiffuseMaterialStep::construct(&mut slot_values);
-    second.declaration.color = slot_values.add([0., 1., 0.]);
+    second.declaration.color = slot_values.add(Vec3::from_array([0., 1., 0.]));
     second.declaration.opacity = slot_values.add(0.75);
     second.declaration.state.ordering = -2;
     second.diffuse.contribution = slot_values.add(1.);

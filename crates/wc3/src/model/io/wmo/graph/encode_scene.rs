@@ -59,12 +59,12 @@ pub(super) fn write<'a, D: Dialect>(
                     )?;
                 }
                 let color = color(
-                    *model.values().get(source.color).expect("validated slot"),
+                    (*model.values().get(source.color).expect("validated slot")).to_array(),
                     context,
                 )?;
                 if let Some(extra) = &source.modern {
                     if node.transform.defaults(model.values()).rotation
-                        != crate::model::Quaternion::default()
+                        != crate::model::Quat::default()
                     {
                         context.unsupported("world.light.rotation","native modern light Euler axis order is not established for quaternion translation")?;
                     }
@@ -106,8 +106,8 @@ pub(super) fn write<'a, D: Dialect>(
                             })
                         })?,
                         inner_color: color,
-                        position: node.transform.defaults(model.values()).translation,
-                        rotation: extra.orientation,
+                        position: (node.transform.defaults(model.values()).translation).to_array(),
+                        rotation: (extra.orientation).to_array(),
                         attenuation_start: source.attenuation[0],
                         attenuation_end: source.attenuation[1],
                         intensity: *model
@@ -129,7 +129,7 @@ pub(super) fn write<'a, D: Dialect>(
                                 records::FlickerMode::Unknown(value)
                             }
                         },
-                        unknown_vector: extra.vector_control,
+                        unknown_vector: (extra.vector_control).to_array(),
                         gap1: extra.controls[1],
                         cookie_file_id: cookie,
                         gap2: extra.controls[2..].try_into().expect("five controls"),
@@ -171,8 +171,10 @@ pub(super) fn write<'a, D: Dialect>(
                     );
                     if let Some(terms) = source.directional_terms {
                         extensions.push(records::LightExtension {
-                            terms: terms
-                                .map(|(direction, value)| records::LightTerm { direction, value }),
+                            terms: terms.map(|(direction, value)| records::LightTerm {
+                                direction: direction.to_array(),
+                                value,
+                            }),
                             light_index: u8::try_from(lights.len()).map_err(|_| {
                                 Error::new(
                                     "world.light.extension",
@@ -187,16 +189,12 @@ pub(super) fn write<'a, D: Dialect>(
                         use_attenuation: u8::from(source.use_attenuation),
                         padding: [padding[0], padding[1]],
                         color,
-                        position: node.transform.defaults(model.values()).translation,
+                        position: (node.transform.defaults(model.values()).translation).to_array(),
                         intensity: *model
                             .values()
                             .get(source.intensity)
                             .expect("validated slot"),
-                        rotation: node
-                            .transform
-                            .defaults(model.values())
-                            .rotation
-                            .components(),
+                        rotation: node.transform.defaults(model.values()).rotation.to_array(),
                         attenuation_start: source.attenuation[0],
                         attenuation_end: source.attenuation[1],
                     });
@@ -292,12 +290,8 @@ pub(super) fn write<'a, D: Dialect>(
                 multipliers.push(source.appearance.color_multiplier);
                 doodads.push(records::DoodadDef {
                     name_and_flags: reference,
-                    position: node.transform.defaults(model.values()).translation,
-                    rotation: node
-                        .transform
-                        .defaults(model.values())
-                        .rotation
-                        .components(),
+                    position: (node.transform.defaults(model.values()).translation).to_array(),
+                    rotation: node.transform.defaults(model.values()).rotation.to_array(),
                     scale: node.transform.defaults(model.values()).scale[0],
                     color,
                 });

@@ -10,6 +10,7 @@ use crate::model::profiles::Wmo;
 use crate::model::PropertyValues;
 use crate::model::WorldImageResource;
 use crate::model::{ColorSpace, FeatureId, Model, ModelBuilder, Node, Sampler, Texture};
+use glam::{Vec2, Vec3};
 use std::collections::BTreeMap;
 pub(super) fn read<'a, D: Dialect>(
     source: &'a Group<'_, D>,
@@ -23,14 +24,14 @@ pub(super) fn read<'a, D: Dialect>(
                 let node = builder.new_node("Region point light");
                 builder
                     .values_mut()
-                    .set(node.transform.translation, row.position)?;
+                    .set(node.transform.translation, Vec3::from_array(row.position))?;
                 let node = builder.add_node(node)?;
                 region.point_lights.push(builder.add_feature(
                     node,
                     wmo::Node::PointLight(wmo::PointLight {
                         color: rgba(row.color_bgra),
                         intensity: row.intensity,
-                        attenuation: [row.attenuation_start, row.attenuation_end],
+                        attenuation: Vec2::from_array([row.attenuation_start, row.attenuation_end]),
                         control: row.reserved_header,
                         scalar_control: row.reserved_float,
                         trailing_controls: row.reserved_tail,
@@ -66,7 +67,7 @@ pub(super) fn read<'a, D: Dialect>(
                 let node = builder.new_node("Region point-light program");
                 builder
                     .values_mut()
-                    .set(node.transform.translation, row.position)?;
+                    .set(node.transform.translation, Vec3::from_array(row.position))?;
                 let node = builder.add_node(node)?;
                 region.point_programs.push(builder.add_feature(
                     node,
@@ -74,9 +75,9 @@ pub(super) fn read<'a, D: Dialect>(
                         light,
                         color: rgba(row.color_bgra),
                         intensity: row.intensity,
-                        attenuation: [row.attenuation_start, row.attenuation_end],
-                        orientation: row.rotation,
-                        flicker: [row.flicker_intensity, row.flicker_speed],
+                        attenuation: Vec2::from_array([row.attenuation_start, row.attenuation_end]),
+                        orientation: Vec3::from_array(row.rotation),
+                        flicker: Vec2::from_array([row.flicker_intensity, row.flicker_speed]),
                         mode: decode_flicker(row.flicker_mode),
                         cookie,
                         controls: row.reserved,
@@ -142,7 +143,7 @@ pub(super) fn write<'a, D: Dialect>(
         points.push(records::PointLight {
             reserved_header: source.control,
             color_bgra: rgba(source.color),
-            position: node.transform.defaults(model.values()).translation,
+            position: (node.transform.defaults(model.values()).translation).to_array(),
             intensity: source.intensity,
             attenuation_start: source.attenuation[0],
             attenuation_end: source.attenuation[1],
@@ -177,11 +178,11 @@ pub(super) fn write<'a, D: Dialect>(
                 )
             })?,
             color_bgra: rgba(source.color),
-            position: node.transform.defaults(model.values()).translation,
+            position: (node.transform.defaults(model.values()).translation).to_array(),
             attenuation_start: source.attenuation[0],
             attenuation_end: source.attenuation[1],
             intensity: source.intensity,
-            rotation: source.orientation,
+            rotation: (source.orientation).to_array(),
             flicker_intensity: source.flicker[0],
             flicker_speed: source.flicker[1],
             flicker_mode: flicker(source.mode),
@@ -242,7 +243,7 @@ fn sets(
 fn absolute(node: &Node<'_, Wmo>, values: &PropertyValues) -> Result<(), Error> {
     if node.parent.is_some()
         || node.transform.defaults(values).rotation != Default::default()
-        || node.transform.defaults(values).scale != [1.; 3]
+        || node.transform.defaults(values).scale != Vec3::from_array([1.; 3])
     {
         return Err(Error::new(
             "world.region.light.transform",

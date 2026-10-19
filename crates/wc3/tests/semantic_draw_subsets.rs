@@ -1,4 +1,6 @@
+use glam::Vec3;
 use wc3::model::common::IntoZeroVec;
+use wc3::model::common::PackedArray;
 use wc3::model::conversion::{Context, ExportOptions};
 use wc3::model::io::geometry;
 use wc3::model::ModelMetadata;
@@ -10,7 +12,10 @@ use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 fn mesh() -> Mesh<'static> {
     Mesh::triangles(
-        vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [1., 1., 0.]],
+        (vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [1., 1., 0.]])
+            .into_iter()
+            .map(Vec3::from_array)
+            .collect::<PackedArray<_>>(),
         vec![[0, 1, 2], [2, 1, 3]],
     )
 }
@@ -89,7 +94,9 @@ fn strip_selections_use_their_own_faces_and_explicit_index_counting() {
         .unwrap();
     let mut source = mesh();
     let strip = source
-        .add_connectivity(Topology::TriangleStrip(vec![0, 1, 2, 3].into_zero_vec()))
+        .add_connectivity(Topology::TriangleStrip(PackedArray::from_storage(
+            vec![0, 1, 2, 3].into_zero_vec(),
+        )))
         .unwrap();
     let subset = source.add_subset(DrawSubset::new(PrimitiveSelection {
         connectivity: strip,
@@ -100,7 +107,9 @@ fn strip_selections_use_their_own_faces_and_explicit_index_counting() {
         .insert(Attribute {
             semantic: AttributeSemantic::Normal,
             domain: AttributeDomain::ConnectivityFace(strip),
-            values: AttributeValues::Vector3(vec![[0., 0., 1.], [0., 0., -1.]].into_zero_vec()),
+            values: AttributeValues::Vector3(PackedArray::from_storage(
+                vec![[0., 0., 1.], [0., 0., -1.]].into_zero_vec(),
+            )),
         })
         .unwrap();
     let mesh = builder.add_mesh(source).unwrap();
@@ -127,11 +136,11 @@ fn strip_selections_use_their_own_faces_and_explicit_index_counting() {
     );
     assert_eq!(
         projected[0].mesh.normals().unwrap().get(0),
-        Some([0., 0., 1.])
+        Some(Vec3::from_array([0., 0., 1.]))
     );
     assert_eq!(
         projected[0].mesh.normals().unwrap().get(3),
-        Some([0., 0., -1.])
+        Some(Vec3::from_array([0., 0., -1.]))
     );
     assert_eq!(projected[0].mesh.topology().primitive_count(), 2);
 }
@@ -198,7 +207,9 @@ fn range_domains_and_connectivity_attribute_cardinality_are_checked() {
         .insert(Attribute {
             semantic: AttributeSemantic::Normal,
             domain: AttributeDomain::ConnectivityFace(connectivity),
-            values: AttributeValues::Vector3(vec![[0.; 3]].into_zero_vec()),
+            values: AttributeValues::Vector3(PackedArray::from_storage(
+                vec![[0.; 3]].into_zero_vec(),
+            )),
         })
         .unwrap();
     builder.add_mesh(source).unwrap();
@@ -214,7 +225,14 @@ fn constrained_profiles_reject_unsupported_subset_bindings() {
     let slot_values = SlotValues::default();
     use wc3::model::profiles::Mdlx;
     use wc3::model::{MdlxGeometry, Model};
-    let geometry = MdlxGeometry::triangles(vec![[0.; 3]; 3], vec![[0, 1, 2]]).unwrap();
+    let geometry = MdlxGeometry::triangles(
+        (vec![[0.; 3]; 3])
+            .into_iter()
+            .map(Vec3::from_array)
+            .collect::<PackedArray<_>>(),
+        vec![[0, 1, 2]],
+    )
+    .unwrap();
     let mut mesh = Mesh::<Mdlx>::new(geometry);
     let subset = mesh.add_primary_subset(0, 1);
     let mut definition = mesh.subset(subset).unwrap().clone();

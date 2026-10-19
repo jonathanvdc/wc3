@@ -4,6 +4,7 @@ use super::pose::{evaluate_pose, EvaluatedPose};
 use super::CompiledModel;
 use crate::compiled::RuntimeSkin;
 use bevy::camera::primitives::Aabb;
+use bevy::math::Vec3;
 use bevy::mesh::{MeshVertexAttribute, VertexAttributeValues};
 use bevy::prelude::*;
 use std::sync::Arc;
@@ -60,8 +61,8 @@ pub(super) fn rest_bounds(model: &CompiledModel, authored: Option<Bounds>) -> Op
     let mut min = Vec3::splat(f32::INFINITY);
     let mut max = Vec3::splat(f32::NEG_INFINITY);
     if let Some(bounds) = authored {
-        let lo = Vec3::from_array(bounds.minimum);
-        let hi = Vec3::from_array(bounds.maximum);
+        let lo = bounds.minimum;
+        let hi = bounds.maximum;
         if lo.is_finite() && hi.is_finite() && lo.cmple(hi).all() {
             for x in [lo.x, hi.x] {
                 for y in [lo.y, hi.y] {

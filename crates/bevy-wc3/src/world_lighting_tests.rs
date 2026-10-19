@@ -1,8 +1,9 @@
 use super::*;
+use bevy::math::{Vec3, Vec4};
+use wc3::model::common::PackedArray;
 use wc3::model::ModelBuilder;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-
 fn policy() -> ColorAdjustment {
     ColorAdjustment {
         base: [20, 40, 60],
@@ -25,12 +26,15 @@ fn bytes(value: [f32; 4]) -> [u8; 4] {
 fn transition_fixup_subtracts_ambient_without_unsigned_wrap() {
     let policy = policy();
     assert_eq!(
-        bytes(policy.color(0, rgba([100, 100, 100, 0]))),
+        bytes((policy.color(0, Vec4::from_array(rgba([100, 100, 100, 0])))).to_array()),
         [40, 30, 20, 0]
     );
-    assert_eq!(bytes(policy.color(0, rgba([10, 20, 30, 0]))), [0, 0, 0, 0]);
     assert_eq!(
-        bytes(policy.color(0, rgba([100, 100, 100, 255]))),
+        bytes((policy.color(0, Vec4::from_array(rgba([10, 20, 30, 0])))).to_array()),
+        [0, 0, 0, 0]
+    );
+    assert_eq!(
+        bytes((policy.color(0, Vec4::from_array(rgba([100, 100, 100, 255])))).to_array()),
         [0, 0, 0, 255]
     );
 }
@@ -38,17 +42,17 @@ fn transition_fixup_subtracts_ambient_without_unsigned_wrap() {
 fn nontransition_rgb_uses_authored_alpha_before_lighting_class_replaces_it() {
     let mut policy = policy();
     assert_eq!(
-        bytes(policy.color(1, rgba([100, 100, 100, 64]))),
+        bytes((policy.color(1, Vec4::from_array(rgba([100, 100, 100, 64])))).to_array()),
         [90, 80, 70, 0]
     );
     policy.exterior = true;
     assert_eq!(
-        bytes(policy.color(1, rgba([100, 100, 100, 64]))),
+        bytes((policy.color(1, Vec4::from_array(rgba([100, 100, 100, 64])))).to_array()),
         [90, 80, 70, 255]
     );
     policy.force_exterior = true;
     assert_eq!(
-        bytes(policy.color(0, rgba([100, 100, 100, 0]))),
+        bytes((policy.color(0, Vec4::from_array(rgba([100, 100, 100, 0])))).to_array()),
         [40, 30, 20, 255]
     );
 }
@@ -57,11 +61,11 @@ fn alpha_only_preserves_rgb_and_transition_alpha_but_sets_other_alpha() {
     let mut policy = policy();
     policy.alpha_only = true;
     assert_eq!(
-        bytes(policy.color(0, rgba([100, 120, 140, 80]))),
+        bytes((policy.color(0, Vec4::from_array(rgba([100, 120, 140, 80])))).to_array()),
         [100, 120, 140, 80]
     );
     assert_eq!(
-        bytes(policy.color(1, rgba([100, 120, 140, 80]))),
+        bytes((policy.color(1, Vec4::from_array(rgba([100, 120, 140, 80])))).to_array()),
         [100, 120, 140, 0]
     );
 }
@@ -96,9 +100,15 @@ fn portal_fixup_precedes_rgb_normalization_and_keeps_source_index() {
     policy.base = [0; 3];
     policy.portal_alpha = Arc::from([Some(128)]);
     let raw = rgba([200, 160, 120, 17]);
-    assert_eq!(bytes(policy.color(0, raw)), [25, 20, 15, 128]);
+    assert_eq!(
+        bytes((policy.color(0, Vec4::from_array(raw))).to_array()),
+        [25, 20, 15, 128]
+    );
     assert_eq!(raw, rgba([200, 160, 120, 17]));
-    assert_ne!(policy.color(1, raw), policy.color(0, raw));
+    assert_ne!(
+        policy.color(1, Vec4::from_array(raw)),
+        policy.color(0, Vec4::from_array(raw))
+    );
 }
 
 fn authored_context(
@@ -124,11 +134,18 @@ fn authored_context(
     }));
     let node = Node::named("group", &mut slot_values);
     slot_values
-        .set(node.transform.translation, translation)
+        .set(node.transform.translation, Vec3::from_array(translation))
         .unwrap();
     let node = builder.add_node(node).unwrap();
     let mut mesh = Mesh::new(
-        GeometryData::triangles([[0., 0., 0.], [0., 0., 2.], [0., 1., 0.]], [[0, 1, 2]]).unwrap(),
+        GeometryData::triangles(
+            ([[0., 0., 0.], [0., 0., 2.], [0., 1., 0.]])
+                .into_iter()
+                .map(Vec3::from_array)
+                .collect::<PackedArray<_>>(),
+            [[0, 1, 2]],
+        )
+        .unwrap(),
     );
     let subset = mesh.add_subset(DrawSubset::new(PrimitiveSelection {
         connectivity: mesh.subsets.primary(),
@@ -147,8 +164,9 @@ fn authored_context(
             portals: vec![Portal {
                 vertices: [[-1., -1., 0.], [1., -1., 0.], [1., 1., 0.], [-1., 1., 0.]]
                     .into_iter()
+                    .map(Vec3::from_array)
                     .collect(),
-                plane: [0., 0., 1., 0.],
+                plane: Vec4::from_array([0., 0., 1., 0.]),
                 ..SlotConstruct::construct(&mut slot_values)
             }],
             ..SlotConstruct::construct(&mut slot_values)
@@ -189,8 +207,11 @@ fn constructor_uses_authored_transition_draws_and_portal_connectivity() {
     assert_eq!(policy.transition_end, 3);
     assert!(policy.diagnostic().is_none());
     let raw = rgba([200, 160, 120, 17]);
-    assert_eq!(bytes(policy.color(0, raw)), [0, 0, 0, 255]);
-    let second = bytes(policy.color(1, raw));
+    assert_eq!(
+        bytes((policy.color(0, Vec4::from_array(raw))).to_array()),
+        [0, 0, 0, 255]
+    );
+    let second = bytes((policy.color(1, Vec4::from_array(raw))).to_array());
     assert_eq!(second[3], 178); // 0.7 * 255 rounds to nearest even.
     assert_eq!(second[0], 60);
 }
@@ -205,6 +226,9 @@ fn ambiguous_portals_or_transformed_groups_keep_authored_transition_values() {
         let policy = ColorAdjustment::new(&model, &instance).unwrap();
         assert!(policy.diagnostic().is_some());
         let raw = rgba([200, 160, 120, 17]);
-        assert_eq!(bytes(policy.color(0, raw)), [200, 160, 120, 17]);
+        assert_eq!(
+            bytes((policy.color(0, Vec4::from_array(raw))).to_array()),
+            [200, 160, 120, 17]
+        );
     }
 }

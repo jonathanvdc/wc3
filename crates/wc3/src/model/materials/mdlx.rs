@@ -7,6 +7,7 @@ use crate::model::values::layered::{LayerFlags, MaterialFlags};
 use crate::model::TextureTransform;
 use crate::model::{Construct, PropertyValues};
 use crate::model::{Link, Property, Texture, ValidateLinks};
+use glam::Vec3;
 use std::borrow::Cow;
 
 /// Blending performed by a Warcraft III material layer.
@@ -48,7 +49,7 @@ pub struct TextureSlot {
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct Fresnel {
     /// Edge color in RGB order.
-    pub color: Property<[f32; 3]>,
+    pub color: Property<Vec3>,
     /// Edge opacity.
     pub opacity: Property<f32>,
     /// Amount of team-color contribution.

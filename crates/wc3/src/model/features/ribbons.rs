@@ -2,6 +2,7 @@
 use crate::model::profiles::m2;
 use crate::model::{Axis, MaterialId, Property, Texture};
 use crate::model::{Construct, PropertyValues};
+use glam::Vec3;
 
 /// A persistent trail assembled from successive cross sections.
 #[derive(Clone, Debug, Construct, PartialEq)]
@@ -43,7 +44,7 @@ impl Construct for TrailGeometry {
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct TrailAppearance<S, A = u32> {
     /// RGB tint.
-    pub color: Property<[f32; 3]>,
+    pub color: Property<Vec3>,
     /// Opacity multiplier.
     pub opacity: Property<f32>,
     /// Atlas rows and columns; export checks the destination's integer width.

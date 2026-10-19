@@ -3,12 +3,18 @@
 //! [`binary`](crate::model::common::binary) supplies bounded address spaces, sequential cursors, and output
 //! buffers. [`EncodedArray`](crate::model::common::EncodedArray) retains fixed records in borrowed encoded storage
 //! until editing requires ownership; format adapters supply their record layouts
-//! and codecs. [`ZeroVec`] serves unaligned scalar arrays directly.
+//! and codecs. Native codecs use [`ZeroVec`] for unaligned scalar arrays.
+//! [`PackedArray`] exposes semantic values through [`PackedValue`], retaining
+//! compatible packed storage independently of glam's aligned memory layout.
 //!
 //! Native modules retain their own read/write traits, diagnostics, references,
 //! layout selection, and validation. Sharing storage preserves each native
 //! format's addressing and layout rules.
 use std::array::from_fn;
+
+mod packed;
+pub(crate) use packed::packed_identity;
+pub use packed::{IntoPackedArray, PackedArray, PackedValue};
 
 mod ownership;
 pub use ownership::{Borrowed, Detached, IntoOwned};

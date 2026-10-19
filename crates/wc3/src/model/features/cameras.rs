@@ -3,6 +3,7 @@ use crate::model::features::{FromFeature, TryFromFeature};
 use crate::model::profiles::{m2, mdlx};
 use crate::model::{scene, Link, Property, ValidateLinks};
 use crate::model::{Construct, PropertyValues};
+use glam::{Vec2, Vec3};
 use m2::values::CameraKind;
 /// Complete authored camera models.
 #[derive(Clone, Debug)]
@@ -16,15 +17,15 @@ pub enum Camera {
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct AimedCamera<F = Property<f32>, C = CameraConvention> {
     /// Eye displacement from the carrying node's rest translation.
-    pub eye_offset: Property<[f32; 3]>,
+    pub eye_offset: Property<Vec3>,
     /// Base model-space look-at target.
-    pub target: [f32; 3],
+    pub target: Vec3,
     /// Displacement from the base target.
-    pub target_offset: Property<[f32; 3]>,
+    pub target_offset: Property<Vec3>,
     /// Field of view in radians, interpreted by the projection convention.
     pub field_of_view: F,
     /// Near and far clipping distance.
-    pub clipping: [f32; 2],
+    pub clipping: Vec2,
     /// Roll angle in radians.
     pub roll: Property<f32>,
     /// Explicit projection and authored optional controls.

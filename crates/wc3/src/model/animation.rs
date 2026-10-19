@@ -1,7 +1,9 @@
 //! Typed curves and property destinations, independent of file clocks and track numbers.
 
+use crate::model::common::packed_identity;
 use crate::model::profiles::{Profile, Universal};
-use crate::model::{AnimationId, ClockId, Error, EventId, EventSourceId, Quaternion, Texture};
+use crate::model::{AnimationId, ClockId, Error, EventId, EventSourceId, Quat, Texture};
+use glam::{Vec2, Vec3, Vec4};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use zerovec::ule::AsULE;
@@ -96,16 +98,16 @@ pub enum DynamicTrack<'a> {
     Unsigned4(Track<'a, [u32; 4]>),
     /// Four byte components.
     Bytes4(Track<'a, [u8; 4]>),
-    /// Quaternion rotation, including angular interpolation for linear curves.
-    Rotation(Track<'a, Quaternion>),
+    /// Quat rotation, including angular interpolation for linear curves.
+    Rotation(Track<'a, Quat>),
     /// Float scalar.
     Scalar(Track<'a, f32>),
     /// Two float components.
-    Vector2(Track<'a, [f32; 2]>),
+    Vector2(Track<'a, Vec2>),
     /// Three float components.
-    Vector3(Track<'a, [f32; 3]>),
+    Vector3(Track<'a, Vec3>),
     /// Four float components.
-    Vector4(Track<'a, [f32; 4]>),
+    Vector4(Track<'a, Vec4>),
     /// Unsigned scalar.
     Unsigned(Track<'a, u32>),
     /// Signed scalar.
@@ -243,3 +245,5 @@ impl AsULE for Time {
         Self(f64::from_unaligned(value))
     }
 }
+
+packed_identity!(Time);

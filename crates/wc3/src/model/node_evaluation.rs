@@ -82,10 +82,10 @@ impl Transform {
     /// Render integrations can publish local TRS without constructing a matrix.
     #[inline]
     pub fn local_components(self) -> (Vec3, Quat, Vec3) {
-        let rotation = Quat::from_array(self.rotation.0).normalize();
-        let scale = Vec3::from_array(self.scale);
-        let pivot = Vec3::from_array(self.pivot);
-        let translation = Vec3::from_array(self.translation) + pivot - rotation * (scale * pivot);
+        let rotation = self.rotation.normalize();
+        let scale = self.scale;
+        let pivot = self.pivot;
+        let translation = self.translation + pivot - rotation * (scale * pivot);
         (translation, rotation, scale)
     }
 
@@ -93,21 +93,14 @@ impl Transform {
     /// The destination pivot is retained. The weight is clamped to the unit interval.
     #[inline]
     pub fn blend(self, destination: Self, weight: f32) -> Self {
-        use crate::model::Quaternion;
         let t = weight.clamp(0., 1.);
         Self {
-            translation: Vec3::from_array(self.translation)
-                .lerp(Vec3::from_array(destination.translation), t)
-                .to_array(),
-            rotation: Quaternion(
-                Quat::from_array(self.rotation.0)
-                    .normalize()
-                    .slerp(Quat::from_array(destination.rotation.0).normalize(), t)
-                    .to_array(),
-            ),
-            scale: Vec3::from_array(self.scale)
-                .lerp(Vec3::from_array(destination.scale), t)
-                .to_array(),
+            translation: self.translation.lerp(destination.translation, t),
+            rotation: self
+                .rotation
+                .normalize()
+                .slerp(destination.rotation.normalize(), t),
+            scale: self.scale.lerp(destination.scale, t),
             pivot: destination.pivot,
         }
     }
@@ -174,15 +167,15 @@ fn evaluate_pose(
         };
     let mut result = EvaluatedPose {
         matrix: inherited * pose.to_matrix(),
-        rotation: (rotation * Quat::from_array(pose.rotation.0).normalize()).normalize(),
-        scale: scale * Vec3::from_array(pose.scale),
+        rotation: (rotation * pose.rotation.normalize()).normalize(),
+        scale: scale * pose.scale,
         motion: if node.inheritance.translation {
             parent.motion
         } else {
             Vec3::ZERO
-        } + inherited.transform_vector3(Vec3::from_array(pose.translation)),
+        } + inherited.transform_vector3(pose.translation),
         anchor: parent.anchor,
-        pivot: Vec3::from_array(pose.pivot),
+        pivot: pose.pivot,
     };
     if let Some(camera) =
         camera.filter(|_| node.camera_anchored || node.billboard != Billboard::None)
@@ -198,7 +191,7 @@ fn evaluate_pose(
                 if scale == BillboardScale::BasisLengths {
                     result.scale = basis_lengths(result.matrix).copysign(result.scale);
                 }
-                target * facing_frame(frame) * Quat::from_array(pose.rotation.0).normalize()
+                target * facing_frame(frame) * pose.rotation.normalize()
             }
             Billboard::Axial(axis) => {
                 let correction = axial_rotation(axis, result.rotation, target, &mut result.scale);
@@ -226,13 +219,13 @@ fn evaluate_pivot_local(
     parent: EvaluatedPose,
     camera: Option<Affine3A>,
 ) -> EvaluatedPose {
-    let pivot = Vec3::from_array(pose.pivot);
+    let pivot = pose.pivot;
     let parent_frame = parent.matrix * Mat4::from_translation(parent.pivot);
-    let authored_translation = Vec3::from_array(pose.translation);
+    let authored_translation = pose.translation;
     let mut local = LocalPose {
         translation: pivot - parent.pivot + authored_translation,
-        rotation: Quat::from_array(pose.rotation.0).normalize(),
-        scale: Vec3::from_array(pose.scale),
+        rotation: pose.rotation.normalize(),
+        scale: pose.scale,
     };
     let mut motion = parent.motion;
     let mut anchor = parent.anchor;
@@ -259,7 +252,7 @@ fn evaluate_pivot_local(
                 local.rotation = parent.rotation.inverse()
                     * camera_rotation
                     * facing_frame(frame)
-                    * Quat::from_array(pose.rotation.0).normalize();
+                    * pose.rotation.normalize();
                 if let Some(before) = before {
                     // Rescale each corrected basis to its pre-facing length. This also
                     // handles shear in a pivot-local parent without decomposing it.

@@ -3,6 +3,7 @@ use super::child_coordinates::{ChildCoordinates, CoordinatePolicy};
 use super::runtime::{ModelDraw, ModelNode};
 use super::world::WorldLiquidSurface;
 use super::{ModelAsset, ModelInstance, ModelRig, Playback};
+use bevy::math::{Quat, Vec3};
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
@@ -90,7 +91,7 @@ pub struct ModelLight {
     pub enabled: bool,
     /// Current ambient RGB contribution, retained for application integration.
     /// Bevy's global scene ambient resource is never modified by this renderer.
-    pub ambient_color: [f32; 3],
+    pub ambient_color: Vec3,
     /// Current ambient multiplier after activation.
     pub ambient_intensity: f32,
 }
@@ -331,7 +332,7 @@ impl RuntimeFeatures {
                 ModelLight {
                     definition: definition.clone(),
                     enabled: true,
-                    ambient_color: [0.; 3],
+                    ambient_color: Vec3::ZERO,
                     ambient_intensity: 0.,
                 },
                 Transform::default(),
@@ -433,7 +434,7 @@ impl RuntimeFeatures {
                         if light.kind == LightKind::Ambient {
                             sample.animated(&light.color)
                         } else {
-                            [0.; 3]
+                            Vec3::from_array([0.; 3])
                         },
                         if light.kind == LightKind::Ambient {
                             sample.animated(&light.intensity)
@@ -476,7 +477,7 @@ impl RuntimeFeatures {
                         let intensity = sample.animated(&light.intensity) * multiplier;
                         let ambient = light.kind == WorldLightKind::Ambient;
                         (
-                            [color[0], color[1], color[2]],
+                            Vec3::new(color[0], color[1], color[2]),
                             if ambient { 0. } else { intensity },
                             if light.use_attenuation {
                                 light.attenuation[1]
@@ -486,25 +487,25 @@ impl RuntimeFeatures {
                             1.,
                             modern.is_some_and(|value| value.shadows),
                             if ambient {
-                                [color[0], color[1], color[2]]
+                                Vec3::new(color[0], color[1], color[2])
                             } else {
-                                [0.; 3]
+                                Vec3::ZERO
                             },
                             if ambient { intensity } else { 0. },
-                            light.cone,
+                            light.cone.to_array(),
                         )
                     }
                     SemanticLight::Point(light) => (
-                        [
-                            light.color[0] as f32 / 255.,
-                            light.color[1] as f32 / 255.,
-                            light.color[2] as f32 / 255.,
-                        ],
+                        Vec3::new(
+                            light.color[0] as f32,
+                            light.color[1] as f32,
+                            light.color[2] as f32,
+                        ) / 255.,
                         light.intensity,
                         light.attenuation[1],
                         1.,
                         false,
-                        [0.; 3],
+                        Vec3::ZERO,
                         0.,
                         [0.; 2],
                     ),
@@ -590,9 +591,8 @@ impl RuntimeFeatures {
         let (_, definition) = self.cameras.iter().find(|(id, _)| id.id == feature)?;
         let (eye, target, fov, clipping, roll, visibility, diagonal) = match definition {
             CameraDefinition::Aimed(camera) => {
-                let offset = Vec3::from(sample.animated(&camera.eye_offset));
-                let target =
-                    Vec3::from(camera.target) + Vec3::from(sample.animated(&camera.target_offset));
+                let offset = sample.animated(&camera.eye_offset);
+                let target = camera.target + sample.animated(&camera.target_offset);
                 let (visibility, diagonal) = match &camera.convention {
                     CameraConvention::Vertical(controls) => {
                         (sample.animated(&controls.visibility), false)
@@ -614,7 +614,7 @@ impl RuntimeFeatures {
                 let target = camera
                     .target
                     .as_ref()
-                    .map(|v| Vec3::from(sample.animated(v)))
+                    .map(|v| sample.animated(v))
                     .unwrap_or_else(|| eye + node.transform_vector3(-Vec3::Z));
                 (
                     eye,
@@ -638,7 +638,7 @@ impl RuntimeFeatures {
             target,
             up: Quat::from_axis_angle(direction, roll) * model_up,
             vertical_field_of_view: fov,
-            clipping,
+            clipping: clipping.to_array(),
             visibility,
         })
     }

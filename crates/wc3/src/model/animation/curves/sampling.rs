@@ -1,6 +1,7 @@
 //! Evaluation of checked semantic curves without a rendering dependency.
 use super::{Curve, CurveShape, CurveValue, TcbParameters};
-use crate::model::{Quaternion, Texture, Time};
+use crate::model::{Quat, Texture, Time};
+use glam::{Vec2, Vec3, Vec4};
 use std::array::from_fn;
 use std::ops::RangeInclusive;
 
@@ -43,6 +44,16 @@ macro_rules! arrays {
     )*};
 }
 arrays!(f32, u32, u8);
+macro_rules! vectors {
+    ($($ty:ty),*) => {$ (
+        impl SampleValue for $ty {
+            fn weighted(values: &[(Self, f64)]) -> Self {
+                Self::from_array(from_fn(|i| values.iter().map(|(v,w)| f64::from(v[i]) * w).sum::<f64>() as f32))
+            }
+        }
+    )*};
+}
+vectors!(Vec2, Vec3, Vec4);
 macro_rules! discrete {
     ($($ty:ty),*) => {$ (
         impl SampleValue for $ty {
@@ -51,32 +62,32 @@ macro_rules! discrete {
     )*};
 }
 discrete!(bool, Texture, Option<Texture>);
-fn normalized(value: [f32; 4]) -> Quaternion {
+fn normalized(value: [f32; 4]) -> Quat {
     let length = value
         .iter()
         .map(|v| f64::from(*v).powi(2))
         .sum::<f64>()
         .sqrt();
     if length > 0.0 {
-        Quaternion(value.map(|v| (f64::from(v) / length) as f32))
+        Quat::from_array(value.map(|v| (f64::from(v) / length) as f32))
     } else {
-        Quaternion([0.0, 0.0, 0.0, 1.0])
+        Quat::from_array([0.0, 0.0, 0.0, 1.0])
     }
 }
-impl SampleValue for Quaternion {
+impl SampleValue for Quat {
     fn sampled_key(value: Self) -> Self {
-        normalized(value.0)
+        normalized(value.to_array())
     }
     fn adjacent(reference: &Self, mut value: Self) -> Self {
         if reference
-            .0
+            .to_array()
             .iter()
-            .zip(value.0)
+            .zip(value.to_array())
             .map(|(a, b)| f64::from(*a) * f64::from(b))
             .sum::<f64>()
             < 0.0
         {
-            value.0 = value.0.map(|v| -v);
+            value = -value;
         }
         value
     }
@@ -84,20 +95,21 @@ impl SampleValue for Quaternion {
         normalized(from_fn(|i| {
             values
                 .iter()
-                .map(|(v, w)| f64::from(v.0[i]) * w)
+                .map(|(v, w)| f64::from(v.to_array()[i]) * w)
                 .sum::<f64>() as f32
         }))
     }
     fn interpolate(a: Self, b: Self, amount: f64, normalized_linear: bool) -> Self {
-        let a = normalized(a.0);
-        let mut b = normalized(b.0);
-        let mut dot =
-            a.0.iter()
-                .zip(b.0)
-                .map(|(a, b)| f64::from(*a) * f64::from(b))
-                .sum::<f64>();
+        let a = normalized(a.to_array());
+        let mut b = normalized(b.to_array());
+        let mut dot = a
+            .to_array()
+            .iter()
+            .zip(b.to_array())
+            .map(|(a, b)| f64::from(*a) * f64::from(b))
+            .sum::<f64>();
         if dot < 0.0 {
-            b.0 = b.0.map(|v| -v);
+            b = -b;
             dot = -dot;
         }
         if normalized_linear || dot > 0.9995 {
@@ -254,6 +266,7 @@ impl<T: SampleValue> Curve<'_, T> {
 
 #[cfg(test)]
 mod tests {
+    use crate::model::PackedArray;
 
     use super::*;
     fn time(value: f64) -> Time {
@@ -354,17 +367,29 @@ mod tests {
     #[test]
     fn rotations_follow_shortest_arc_and_normalize_splines() {
         let times = [time(0.0), time(1.0)];
-        let identity = Quaternion::IDENTITY;
-        let opposite = Quaternion([0.0, 0.0, 0.0, -1.0]);
+        let identity = Quat::IDENTITY;
+        let opposite = Quat::from_array([0.0, 0.0, 0.0, -1.0]);
         let curve = Curve::linear(times, [identity, opposite]).unwrap();
         assert_eq!(curve.sample(time(0.5)), Some(identity));
-        let turn = Quaternion([0.0, 0.0, 1.0, 0.0]);
+        let turn = Quat::from_array([0.0, 0.0, 1.0, 0.0]);
         let curve = Curve::slerp(times, [identity, turn]).unwrap();
         let halfway = curve.sample(time(0.5)).unwrap();
-        close(halfway.0[2], 0.5f32.sqrt());
-        close(halfway.0[3], 0.5f32.sqrt());
-        let spline = Curve::hermite(times, [identity, turn], [[0.0; 4]; 2], [[0.0; 4]; 2]).unwrap();
+        close(halfway.to_array()[2], 0.5f32.sqrt());
+        close(halfway.to_array()[3], 0.5f32.sqrt());
+        let spline = Curve::hermite(
+            times,
+            [identity, turn],
+            ([[0.0; 4]; 2])
+                .into_iter()
+                .map(Vec4::from_array)
+                .collect::<PackedArray<_>>(),
+            ([[0.0; 4]; 2])
+                .into_iter()
+                .map(Vec4::from_array)
+                .collect::<PackedArray<_>>(),
+        )
+        .unwrap();
         let q = spline.sample(time(0.5)).unwrap();
-        close(q.0.iter().map(|v| v * v).sum(), 1.0);
+        close(q.to_array().iter().map(|v| v * v).sum(), 1.0);
     }
 }

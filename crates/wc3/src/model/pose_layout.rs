@@ -3,7 +3,7 @@ use crate::model::{
     AnimatedTransform, Billboard, Error, EvaluatedPose, Inheritance, Model, NodeId, PoseBehavior,
     Property, Skin, Transform as ModelTransform, TransformSemantics, ValueSample,
 };
-use glam::{Affine3A, Mat4, Vec3};
+use glam::{Affine3A, Mat4};
 use std::collections::{HashMap, HashSet};
 /// Authored node properties with a channel in any playback programme.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -72,7 +72,7 @@ impl PoseNode {
         let mut evaluated = self.behavior().evaluate(pose, parent, camera);
         if let Some(correction) = self.correction {
             let local = pose.to_matrix();
-            let origin = local.transform_point3(Vec3::from_array(pose.pivot));
+            let origin = local.transform_point3(pose.pivot);
             evaluated.matrix = parent.matrix
                 * Mat4::from_translation(origin)
                 * correction
@@ -305,7 +305,7 @@ impl PoseLayout {
             let bind = binds
                 .get(index)
                 .ok_or_else(|| Error::new("pose.skin", "inverse bind is absent"))?;
-            output.push(frame * pose.nodes[node].matrix * Mat4::from_cols_array_2d(&bind));
+            output.push(frame * pose.nodes[node].matrix * bind);
         }
         Ok(())
     }

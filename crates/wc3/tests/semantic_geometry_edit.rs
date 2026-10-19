@@ -1,3 +1,5 @@
+use glam::{Vec2, Vec3};
+use wc3::model::common::PackedArray;
 use wc3::model::common::{IntoZeroVec, ZeroVec};
 use wc3::model::ModelMetadata;
 use wc3::model::ValueGroups;
@@ -27,7 +29,9 @@ fn duplicate() -> GeometryEdit<'static> {
     GeometryEdit {
         remap: Some(VertexRemap {
             new_to_old: vec![2, 0, 1, 0],
-            topology: Topology::Triangles(vec![[3, 2, 0]].into_zero_vec()),
+            topology: Topology::Triangles(PackedArray::from_storage(
+                vec![[3, 2, 0]].into_zero_vec(),
+            )),
         }),
         ..Default::default()
     }
@@ -40,12 +44,16 @@ fn remapping_preserves_attribute_domains_and_profile_payloads() {
         Attribute {
             semantic: AttributeSemantic::Named("vertex".into()),
             domain: AttributeDomain::Vertex,
-            values: AttributeValues::Unsigned(vec![10, 20, 30].into_zero_vec()),
+            values: AttributeValues::Unsigned(PackedArray::from_storage(
+                vec![10, 20, 30].into_zero_vec(),
+            )),
         },
         Attribute {
             semantic: AttributeSemantic::TexCoord(0),
             domain: AttributeDomain::Corner,
-            values: AttributeValues::Vector2(vec![[0.; 2], [1.; 2], [2.; 2]].into_zero_vec()),
+            values: AttributeValues::Vector2(PackedArray::from_storage(
+                vec![[0.; 2], [1.; 2], [2.; 2]].into_zero_vec(),
+            )),
         },
     ]
     .try_into()
@@ -56,21 +64,32 @@ fn remapping_preserves_attribute_domains_and_profile_payloads() {
         _ => panic!(),
     }
     match &mapped.attributes[1].values {
-        AttributeValues::Vector2(v) => assert_eq!(v.to_vec(), vec![[0.; 2], [1.; 2], [2.; 2]]),
+        AttributeValues::Vector2(v) => assert_eq!(
+            (v.to_vec())
+                .into_iter()
+                .map(|v| v.to_array())
+                .collect::<Vec<_>>(),
+            vec![[0.; 2], [1.; 2], [2.; 2]]
+        ),
         _ => panic!(),
     }
     let wmo = WmoGeometry::triangles(positions(), triangles())
         .unwrap()
         .with_color_sets(vec![
-            vec![[1.; 4]; 3].into_zero_vec(),
-            vec![[2.; 4]; 3].into_zero_vec(),
+            PackedArray::from_storage(vec![[1.; 4]; 3].into_zero_vec()),
+            PackedArray::from_storage(vec![[2.; 4]; 3].into_zero_vec()),
         ])
         .unwrap()
-        .with_lightmap_coordinates(vec![[0.; 2], [1.; 2], [2.; 2]].into_zero_vec())
+        .with_lightmap_coordinates(PackedArray::from_storage(
+            vec![[0.; 2], [1.; 2], [2.; 2]].into_zero_vec(),
+        ))
         .unwrap();
     let mapped = wmo.edited(duplicate()).unwrap();
     assert_eq!(mapped.color_sets()[1].len(), 4);
-    assert_eq!(mapped.lightmap_coordinates().get(0), Some([2.; 2]));
+    assert_eq!(
+        mapped.lightmap_coordinates().get(0),
+        Some(Vec2::from_array([2.; 2]))
+    );
     let mdlx = MdlxGeometry::triangles(positions(), triangles())
         .unwrap()
         .with_influences(JointInfluences::MatrixGroups(ValueGroups::from_rows(vec![
@@ -91,8 +110,8 @@ fn constraints_and_connectivity_changes_are_explicit() {
         positions(),
         positions(),
         [
-            vec![[0.; 2]; 3].into_zero_vec(),
-            vec![[0.; 2]; 3].into_zero_vec(),
+            PackedArray::from_storage(vec![[0.; 2]; 3].into_zero_vec()),
+            PackedArray::from_storage(vec![[0.; 2]; 3].into_zero_vec()),
         ],
         triangles(),
         four(),
@@ -101,7 +120,7 @@ fn constraints_and_connectivity_changes_are_explicit() {
     assert_eq!(m2.edit_capabilities().normals, StreamSupport::Required);
     assert!(m2
         .edited(GeometryEdit {
-            normals: Some(ZeroVec::default()),
+            normals: Some(PackedArray::from_storage(ZeroVec::default())),
             ..Default::default()
         })
         .is_err());
@@ -113,7 +132,7 @@ fn constraints_and_connectivity_changes_are_explicit() {
         .is_err());
     assert!(m2
         .edited(GeometryEdit {
-            tangents: Some(ZeroVec::default()),
+            tangents: Some(PackedArray::from_storage(ZeroVec::default())),
             ..Default::default()
         })
         .is_err());
@@ -121,14 +140,16 @@ fn constraints_and_connectivity_changes_are_explicit() {
     let invalid = GeometryEdit {
         remap: Some(VertexRemap {
             new_to_old: vec![0, 1, 2],
-            topology: Topology::Triangles(vec![[2, 1, 0]].into_zero_vec()),
+            topology: Topology::Triangles(PackedArray::from_storage(
+                vec![[2, 1, 0]].into_zero_vec(),
+            )),
         }),
         ..Default::default()
     };
     assert!(data.edited(invalid).is_err());
     let wmo = WmoGeometry::triangles(positions(), triangles())
         .unwrap()
-        .with_strip_indices(vec![0, 1, 2].into_zero_vec())
+        .with_strip_indices(PackedArray::from_storage(vec![0, 1, 2].into_zero_vec()))
         .unwrap();
     assert!(!wmo.edit_capabilities().vertex_remap);
     assert!(wmo.edited(duplicate()).is_err());
@@ -145,7 +166,9 @@ fn edits_publish_transactionally_and_keep_unmodified_borrowed_streams() {
         .unwrap();
     let edited = geometry
         .edited(GeometryEdit {
-            positions: Some(vec![[2., 0., 0.]; 3].into_zero_vec()),
+            positions: Some(PackedArray::from_storage(
+                vec![[2., 0., 0.]; 3].into_zero_vec(),
+            )),
             ..Default::default()
         })
         .unwrap();
@@ -166,7 +189,9 @@ fn edits_publish_transactionally_and_keep_unmodified_borrowed_streams() {
     let failed: Result<(), Error> = collection.edit(|draft| {
         let mut mesh = draft.model().mesh(id).unwrap().clone();
         mesh.geometry = mesh.geometry.edited(GeometryEdit {
-            positions: Some(vec![[4., 0., 0.]; 4].into_zero_vec()),
+            positions: Some(PackedArray::from_storage(
+                vec![[4., 0., 0.]; 4].into_zero_vec(),
+            )),
             ..Default::default()
         })?;
         draft.set_mesh(id, mesh)?;
@@ -175,23 +200,25 @@ fn edits_publish_transactionally_and_keep_unmodified_borrowed_streams() {
     assert!(failed.is_err());
     assert_eq!(
         collection.mesh(id).unwrap().positions().get(0),
-        Some([0., 1., 0.])
+        Some(Vec3::from_array([0., 1., 0.]))
     );
 }
 
 #[test]
 fn polygon_corner_order_and_attributes_survive_vertex_splits() {
     let mut data = GeometryData::empty();
-    data.positions = positions();
+    data.positions = PackedArray::from_storage(positions());
     data.connectivity.primary = Topology::Polygons {
-        corners: vec![0, 1, 2].into_zero_vec(),
-        offsets: vec![0, 3].into_zero_vec(),
+        corners: PackedArray::from_storage(vec![0, 1, 2].into_zero_vec()),
+        offsets: PackedArray::from_storage(vec![0, 3].into_zero_vec()),
     };
     let mut geometry = data;
     geometry.attributes = vec![Attribute {
         semantic: AttributeSemantic::Named("selection".into()),
         domain: AttributeDomain::Vertex,
-        values: AttributeValues::Unsigned(vec![10, 20, 30].into_zero_vec()),
+        values: AttributeValues::Unsigned(PackedArray::from_storage(
+            vec![10, 20, 30].into_zero_vec(),
+        )),
     }]
     .try_into()
     .unwrap();
@@ -199,8 +226,8 @@ fn polygon_corner_order_and_attributes_survive_vertex_splits() {
         remap: Some(VertexRemap {
             new_to_old: vec![2, 0, 1, 0],
             topology: Topology::Polygons {
-                corners: vec![3, 2, 0].into_zero_vec(),
-                offsets: vec![0, 3].into_zero_vec(),
+                corners: PackedArray::from_storage(vec![3, 2, 0].into_zero_vec()),
+                offsets: PackedArray::from_storage(vec![0, 3].into_zero_vec()),
             },
         }),
         ..Default::default()

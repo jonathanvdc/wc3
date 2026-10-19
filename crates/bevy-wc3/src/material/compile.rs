@@ -181,7 +181,7 @@ pub(super) fn transform(
 ) {
     let translation = values[transform.translation];
     let scale = values[transform.scale];
-    let rotation = Quat::from_array(values[transform.rotation].0);
+    let rotation = values[transform.rotation];
     let (x, y, z) = rotation.to_euler(EulerRot::XYZ);
     pass.material.uv_transform = Affine2::from_scale_angle_translation(
         Vec2::new(scale[0], scale[1]),
@@ -237,7 +237,7 @@ fn compile_mdlx(
     let uv = &binding.coordinates.transform;
     pass.material.uv_transform = layered_uv(
         model.values()[uv.translation],
-        model.values()[uv.rotation].0,
+        model.values()[uv.rotation],
         model.values()[uv.scale],
     );
     pass.animation.centered_transform = true;

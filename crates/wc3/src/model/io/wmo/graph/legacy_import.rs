@@ -8,6 +8,7 @@ use crate::model::profiles::wmo::{ModelMetadata, WorldOptions, WorldSystem};
 use crate::model::profiles::Wmo;
 use crate::model::Model;
 use crate::model::{ModelBuilder, WorldModelResource};
+use glam::Vec3;
 use std::borrow::Cow;
 
 pub(super) fn alpha<'a>(
@@ -107,7 +108,7 @@ pub(super) fn alpha<'a>(
                 } else {
                     super::relationships::name(source, row.name_offset as u32)?
                 };
-                group.bounds = row.bounds;
+                group.bounds = (row.bounds).map(Vec3::from_array);
                 group.options = legacy_geometry::group_options(row.flags, 0);
             }
         }
@@ -219,7 +220,7 @@ pub(super) fn beta<'a>(
                 } else {
                     super::relationships::name(&source.root, row.name_offset as u32)?
                 };
-                group.bounds = row.bounds;
+                group.bounds = (row.bounds).map(Vec3::from_array);
                 group.options = legacy_geometry::group_options(row.flags, 0);
             }
         }

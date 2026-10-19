@@ -11,6 +11,7 @@ use crate::textures::{TextureImages, TextureRole};
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
+use bevy::math::{Vec2, Vec3};
 use bevy::mesh::{MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::*;
 use std::array::from_fn;
@@ -47,7 +48,7 @@ pub struct SpriteEmitter {
 struct AgeDrivenControls {
     activation: Property<bool>,
     speed_variation: Property<f32>,
-    gravity: Property<[f32; 3]>,
+    gravity: Property<Vec3>,
     lifespan_variation: f32,
     vertical: Property<f32>,
     horizontal: Property<f32>,
@@ -71,7 +72,7 @@ struct Emitter {
     drag: f32,
     wind: Vec3,
     inherit_velocity: f32,
-    follow: [[f32; 2]; 2],
+    follow: [Vec2; 2],
     spin: [f32; 4],
     appearance: M2ParticleAppearance<'static>,
     atlas: [u16; 2],
@@ -106,9 +107,9 @@ struct Birth {
     acceleration: Vec3,
     spin: f32,
     spin_rate: f32,
-    scale_variation: [f32; 2],
+    scale_variation: Vec2,
     random_cell: u32,
-    size_scale: [f32; 2],
+    size_scale: Vec2,
     appearance_index: u32,
 }
 struct EmitterInstance {
@@ -365,14 +366,14 @@ impl RuntimeAgeSprites {
                 generator: details.shape.generator,
                 flags: details.flags,
                 drag: details.drag.max(0.),
-                wind: Vec3::from(details.wind),
+                wind: details.wind,
                 inherit_velocity: if details.flags.inherit_velocity() {
                     details.inherit_velocity
                 } else {
                     0.
                 },
                 follow: details.follow,
-                spin: details.spin,
+                spin: (details.spin).to_array(),
                 appearance: owned_age(appearance),
                 atlas: details.rendering.atlas,
                 age_appearance: Some({
@@ -760,16 +761,16 @@ impl Emitter {
         // M2 emitter X/Y axes are rotated relative to the carrying bone.
         node * Mat4::from_rotation_z(FRAC_PI_2)
     }
-    fn particle_scale(&self, node: Mat4, basis: Mat4) -> [f32; 2] {
+    fn particle_scale(&self, node: Mat4, basis: Mat4) -> Vec2 {
         let inherited = if self.flags.inherit_bone_scale() {
             (basis.inverse() * node).x_axis.truncate().length()
         } else {
             1.
         };
-        [
+        Vec2::new(
             basis.x_axis.truncate().length() * inherited,
             basis.y_axis.truncate().length() * inherited,
-        ]
+        )
     }
     /// Native follow pairs describe the fraction of emitter translation at two
     /// emitter speeds. Rotation remains detached for world-space particles.
@@ -783,7 +784,7 @@ impl Emitter {
         }
         let displacement = current.w_axis.truncate() - previous.w_axis.truncate();
         let speed = displacement.length() / delta as f32;
-        let [[speed_a, scale_a], [speed_b, scale_b]] = self.follow;
+        let [[speed_a, scale_a], [speed_b, scale_b]] = self.follow.map(|v| v.to_array());
         let scale = if speed_a == speed_b {
             // Equal knots describe a constant rather than an undefined slope.
             scale_a
@@ -880,7 +881,7 @@ impl Emitter {
         if !aimed && self.generator == ParticleGenerator::Sphere && self.flags.sphere_up() {
             direction = Vec3::Z;
         }
-        let gravity = Vec3::from(sample.animated(&controls.gravity));
+        let gravity = sample.animated(&controls.gravity);
         let local = self.flags.attached();
         let (origin, mut velocity, acceleration) = if local {
             (origin, direction * speed, gravity + self.wind)
@@ -902,7 +903,7 @@ impl Emitter {
         } else {
             x_variation
         };
-        let scale_variation = [x_variation, y_variation];
+        let scale_variation = Vec2::new(x_variation, y_variation);
         Some((
             Birth {
                 appearance_index: u32::MAX,
@@ -1017,7 +1018,7 @@ impl Emitter {
                 .color
                 .as_ref()
                 .and_then(|v| v.sample(age))
-                .unwrap_or([1.; 3]);
+                .unwrap_or(Vec3::from_array([1.; 3]));
             let alpha = self
                 .appearance
                 .alpha
@@ -1030,10 +1031,8 @@ impl Emitter {
                 .scale
                 .as_ref()
                 .and_then(|v| v.sample(age))
-                .unwrap_or([1.; 2]);
-            for (size, variation) in size.iter_mut().zip(birth.scale_variation) {
-                *size *= variation * native_style.scale;
-            }
+                .unwrap_or(Vec2::from_array([1.; 2]));
+            size *= birth.scale_variation * native_style.scale;
             let (mut position, mut velocity) = self.motion(birth, frame.time);
             if self.flags.attached() {
                 position = node.transform_point3(position);

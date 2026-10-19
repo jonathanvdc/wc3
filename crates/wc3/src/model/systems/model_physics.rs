@@ -4,7 +4,8 @@ use crate::model::values::model::{
 };
 use crate::model::PhysicsResourceId;
 use crate::model::ValueGroups;
-use crate::model::{Error, Link, NodeId, ValidateLinks, ZeroVec};
+use crate::model::{Error, Link, NodeId, PackedArray, ValidateLinks};
+use glam::{Mat4, Vec2, Vec3, Vec4};
 /// Physics simulation data, optionally supplied by an external resource.
 #[derive(Clone, Debug)]
 pub struct Physics<'a> {
@@ -19,9 +20,9 @@ pub struct Physics<'a> {
     /// Collision-filter pairs: permitted contact between body nodes.
     pub collision_pairs: Vec<(NodeId, NodeId)>,
     /// Environmental response parameters.
-    pub wind_coefficients: Option<[f32; 3]>,
+    pub wind_coefficients: Option<Vec3>,
     /// Host-skeleton name hashes allowed to use authored pose-follow factors.
-    pub follow_allow_list: ZeroVec<'a, u32>,
+    pub follow_allow_list: PackedArray<'a, u32>,
     /// Environmental vegetation response systems.
     pub vegetation: Vec<Vegetation>,
 }
@@ -55,7 +56,7 @@ pub struct Body<'a> {
 #[derive(Clone, Debug)]
 pub struct Shape<'a> {
     /// Local affine transform relative to the body.
-    pub transform: [[f32; 4]; 4],
+    pub transform: Mat4,
     /// Shape geometry.
     pub geometry: ShapeGeometry<'a>,
     /// Surface friction coefficient.
@@ -75,22 +76,22 @@ pub struct Shape<'a> {
 #[derive(Clone, Debug)]
 pub enum ShapeGeometry<'a> {
     /// Box dimensions as half extents.
-    Box([f32; 3]),
+    Box(Vec3),
     /// Capsule radius and cylinder height along the local Z axis.
     Capsule {
         /// Radius of the spherical end caps and cylindrical body.
         radius: f32,
         /// Centers of the two end caps in shape coordinates.
-        endpoints: [[f32; 3]; 2],
+        endpoints: [Vec3; 2],
     },
     /// Sphere radius.
     Sphere(f32),
     /// Convex-hull vertices and oriented faces.
     ConvexHull {
         /// Hull vertices in shape coordinates.
-        vertices: ZeroVec<'a, [f32; 3]>,
+        vertices: PackedArray<'a, Vec3>,
         /// Plane equations of the convex boundary.
-        planes: ZeroVec<'a, [f32; 4]>,
+        planes: PackedArray<'a, Vec4>,
         /// Oriented polygon boundaries, expressed as vertex indices.
         faces: ValueGroups<'a, u32>,
     },
@@ -99,13 +100,13 @@ pub enum ShapeGeometry<'a> {
 #[derive(Clone, Copy, Debug)]
 pub struct Frame {
     /// Local X axis.
-    pub axis_x: [f32; 3],
+    pub axis_x: Vec3,
     /// Local Y axis.
-    pub axis_y: [f32; 3],
+    pub axis_y: Vec3,
     /// Local Z axis.
-    pub axis_z: [f32; 3],
+    pub axis_z: Vec3,
     /// Local anchor position.
-    pub origin: [f32; 3],
+    pub origin: Vec3,
 }
 /// Frequency and damping ratio of a constraint spring.
 #[derive(Clone, Copy, Debug, Default)]
@@ -161,7 +162,7 @@ pub enum Constraint {
     /// Sliding distance range in model units.
     Prismatic {
         /// Minimum and maximum sliding distances in model units.
-        distances: [f32; 2],
+        distances: Vec2,
         /// Authored reference offset along the sliding axis.
         reference_translation: f32,
         /// Target sliding speed in model units per second.
@@ -221,7 +222,7 @@ impl ValidateLinks for Physics<'_> {
 #[derive(Clone, Copy, Debug)]
 pub struct MassProperties {
     /// Center of the authored volume in shape coordinates.
-    pub centroid: [f32; 3],
+    pub centroid: Vec3,
     /// Enclosed volume in cubed model units.
     pub volume: f32,
     /// Boundary area in squared model units.
@@ -288,7 +289,7 @@ impl Physics<'_> {
                     .parent_body;
             }
             for shape in &body.shapes {
-                if shape.transform.iter().flatten().any(|v| !v.is_finite())
+                if !shape.transform.is_finite()
                     || [shape.friction, shape.restitution, shape.density]
                         .into_iter()
                         .any(|v| !v.is_finite() || v < 0.)
@@ -298,10 +299,10 @@ impl Physics<'_> {
                         "fixture parameters must be finite and contact coefficients nonnegative",
                     ));
                 }
-                if shape.transform[0][3] != 0.
-                    || shape.transform[1][3] != 0.
-                    || shape.transform[2][3] != 0.
-                    || shape.transform[3][3] != 1.
+                if shape.transform.x_axis.w != 0.
+                    || shape.transform.y_axis.w != 0.
+                    || shape.transform.z_axis.w != 0.
+                    || shape.transform.w_axis.w != 1.
                 {
                     return Err(Error::new(
                         "physics.shape.transform",
@@ -309,7 +310,7 @@ impl Physics<'_> {
                     ));
                 }
                 if let Some(mass) = shape.mass_properties {
-                    if mass.centroid.iter().any(|v| !v.is_finite())
+                    if mass.centroid.to_array().iter().any(|v| !v.is_finite())
                         || !mass.volume.is_finite()
                         || mass.volume < 0.
                         || !mass.surface_area.is_finite()
@@ -323,7 +324,7 @@ impl Physics<'_> {
                 }
                 match &shape.geometry {
                     ShapeGeometry::Box(v) => {
-                        if v.iter().any(|v| !v.is_finite() || *v < 0.) {
+                        if v.to_array().iter().any(|v| !v.is_finite() || *v < 0.) {
                             return Err(Error::new(
                                 "physics.box",
                                 "half extents must be finite and nonnegative",
@@ -341,7 +342,7 @@ impl Physics<'_> {
                     ShapeGeometry::Capsule { radius, endpoints } => {
                         if !radius.is_finite()
                             || *radius < 0.
-                            || endpoints.iter().flatten().any(|v| !v.is_finite())
+                            || endpoints.iter().any(|v| !v.is_finite())
                         {
                             return Err(Error::new(
                                 "physics.capsule",
@@ -356,8 +357,8 @@ impl Physics<'_> {
                     } => {
                         if vertices
                             .iter()
-                            .flatten()
-                            .chain(planes.iter().flatten())
+                            .flat_map(|v| v.to_array())
+                            .chain(planes.iter().flat_map(|v| v.to_array()))
                             .any(|v| !v.is_finite())
                             || faces.len() != planes.len()
                         {
@@ -405,10 +406,11 @@ impl Physics<'_> {
             for frame in [joint.frame_a, joint.frame_b] {
                 if frame
                     .axis_x
+                    .to_array()
                     .iter()
-                    .chain(&frame.axis_y)
-                    .chain(&frame.axis_z)
-                    .chain(&frame.origin)
+                    .chain(&frame.axis_y.to_array())
+                    .chain(&frame.axis_z.to_array())
+                    .chain(&frame.origin.to_array())
                     .any(|v| !v.is_finite())
                 {
                     return Err(Error::new(
@@ -428,7 +430,7 @@ impl Physics<'_> {
         }
         if self
             .wind_coefficients
-            .is_some_and(|v| v.iter().any(|v| !v.is_finite()))
+            .is_some_and(|v| v.to_array().iter().any(|v| !v.is_finite()))
         {
             return Err(Error::new(
                 "physics.wind",
@@ -487,6 +489,7 @@ impl Constraint {
                 motor: value,
             } => {
                 distances
+                    .to_array()
                     .iter()
                     .chain([reference_translation, motor_speed, friction_force])
                     .all(|value| value.is_finite())

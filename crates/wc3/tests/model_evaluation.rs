@@ -1,6 +1,8 @@
 //! Offline consumers use semantic values throughout; no image or engine assets are needed.
+use glam::Vec4;
 use glam::{Affine3A, EulerRot, Mat4, Quat, Vec2, Vec3};
 use std::{borrow::Cow, collections::HashMap};
+use wc3::model::common::PackedArray;
 use wc3::model::conversion::ImportOptions;
 use wc3::model::io::mdlx;
 use wc3::model::profiles::mdlx::Material as MdlxMaterial;
@@ -37,7 +39,13 @@ fn standing_snapshot_retains_bindings_and_supports_editable_geometry_without_ima
             draft.add_global_track(DynamicTrack::Vector3(Track {
                 target: draft.model().node(root).unwrap().transform.translation,
                 clock: TimeSource::Animation,
-                curve: Curve::linear([time(0.), time(1.)], [[0.; 3], [0., 0., 4.]])?,
+                curve: Curve::linear(
+                    [time(0.), time(1.)],
+                    ([[0.; 3], [0., 0., 4.]])
+                        .into_iter()
+                        .map(Vec3::from_array)
+                        .collect::<Vec<_>>(),
+                )?,
             }))
         })
         .unwrap();
@@ -73,7 +81,7 @@ fn standing_snapshot_retains_bindings_and_supports_editable_geometry_without_ima
             );
             let tint = appearances
                 .get(&instance.mesh)
-                .map_or([1.; 4], |v| v.sample(&sample));
+                .map_or([1.; 4], |v| (v.sample(&sample)).to_array());
             assert_eq!(tint, [1.; 4]);
             for mut geometry in mesh
                 .project(mesh.subset(draw.subset).unwrap(), 0, [None; 3])
@@ -117,7 +125,10 @@ fn standing_snapshot_retains_bindings_and_supports_editable_geometry_without_ima
 fn projection_carries_application_face_and_corner_fields_across_triangulation() {
     let mut mesh: Mesh<'static> = Mesh::new(
         GeometryData::triangles(
-            vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [1., 1., 0.]],
+            (vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [1., 1., 0.]])
+                .into_iter()
+                .map(Vec3::from_array)
+                .collect::<PackedArray<_>>(),
             vec![[0, 1, 2], [2, 1, 3]],
         )
         .unwrap(),
@@ -155,7 +166,14 @@ fn repeated_pose_sampling_reuses_buffers_and_retimed_sampling_preserves_override
         .add_global_track(DynamicTrack::Vector3(Track {
             target: builder.model().node(root).unwrap().transform.translation,
             clock: TimeSource::Animation,
-            curve: Curve::linear([time(0.), time(1.)], [[0.; 3], [4., 0., 0.]]).unwrap(),
+            curve: Curve::linear(
+                [time(0.), time(1.)],
+                ([[0.; 3], [4., 0., 0.]])
+                    .into_iter()
+                    .map(Vec3::from_array)
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap(),
         }))
         .unwrap();
     let model = {
@@ -182,7 +200,7 @@ fn repeated_pose_sampling_reuses_buffers_and_retimed_sampling_preserves_override
     let overrides = HashMap::from([(
         root,
         Transform {
-            translation: [7., 0., 0.],
+            translation: Vec3::from_array([7., 0., 0.]),
             ..SlotConstruct::construct(&mut slot_values)
         },
     )]);
@@ -216,9 +234,9 @@ fn repeated_pose_sampling_reuses_buffers_and_retimed_sampling_preserves_override
 
 #[test]
 fn deformation_preserves_normal_covectors_and_reflected_tangent_handedness() {
-    let mut positions = [[1., 2., 3.]];
-    let mut normals = [[1., 1., 0.]];
-    let mut tangents = [[1., 0., 0., 1.]];
+    let mut positions = [Vec3::from_array([1., 2., 3.])];
+    let mut normals = [Vec3::from_array([1., 1., 0.])];
+    let mut tangents = [Vec4::from_array([1., 0., 0., 1.])];
     let matrix =
         Mat4::from_scale_rotation_translation(Vec3::new(-2., 3., 4.), Quat::IDENTITY, Vec3::Y);
     DeformableGeometry {
@@ -228,11 +246,9 @@ fn deformation_preserves_normal_covectors_and_reflected_tangent_handedness() {
     }
     .deform(&[matrix])
     .unwrap();
-    assert_eq!(positions[0], [-2., 7., 12.]);
-    assert!(
-        Vec3::from_array(normals[0]).abs_diff_eq(Vec3::new(-0.5, 1. / 3., 0.).normalize(), 1e-6)
-    );
-    assert_eq!(tangents[0], [-1., 0., 0., -1.]);
+    assert_eq!(positions[0], Vec3::from_array([-2., 7., 12.]));
+    assert!(normals[0].abs_diff_eq(Vec3::new(-0.5, 1. / 3., 0.).normalize(), 1e-6));
+    assert_eq!(tangents[0], Vec4::from_array([-1., 0., 0., -1.]));
     let original = positions;
     assert!(DeformableGeometry {
         positions: &mut positions,
@@ -253,7 +269,10 @@ fn cpu_skinning_keeps_more_than_eight_influences() {
         .collect();
     let mut mesh: Mesh<'static> = Mesh::new(
         GeometryData::triangles(
-            vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
+            (vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]])
+                .into_iter()
+                .map(Vec3::from_array)
+                .collect::<PackedArray<_>>(),
             vec![[0, 1, 2]],
         )
         .unwrap(),
@@ -347,15 +366,15 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
     );
     let color = SurfaceColor {
         opacity: Some(&source.steps[0].shader.inputs().opacity),
-        fallback: [0.8, 0.6, 0.4, 1.],
+        fallback: Vec4::from_array([0.8, 0.6, 0.4, 1.]),
         ..SlotConstruct::construct(&mut slot_values)
     };
     assert_eq!(
-        color.sample(&sample, [0.5, 1., 1., 0.5]),
-        [0.4, 0.6, 0.4, 0.25]
+        color.sample(&sample, Vec4::from_array([0.5, 1., 1., 0.5])),
+        Vec4::from_array([0.4, 0.6, 0.4, 0.25])
     );
     let transform = TextureTransform {
-        scale: slot_values.add([2., 2., 1.]),
+        scale: slot_values.add(Vec3::from_array([2., 2., 1.])),
         ..SlotConstruct::construct(&mut slot_values)
     };
     let origin = Vec2::ZERO;
@@ -376,7 +395,7 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
 #[test]
 fn native_controls_are_not_an_evaluation_input() {
     use wc3::model::controls::model::BoneControls;
-    use wc3::model::{Billboard, BillboardAxis, NodeControls, Quaternion};
+    use wc3::model::{Billboard, BillboardAxis, NodeControls, Quat};
     let native = mdlx::decode_mdl(
         "Version { FormatVersion 800, } Model \"explicit\" {} Helper \"parent\" { ObjectId 0,  } Helper \"child\" { ObjectId 1, Parent 0, BillboardedLockX, DontInheritTranslation, DontInheritRotation, } PivotPoints 2 { { 1, 2, 3 }, { -1, 2, 1 }, }",
         &ImportOptions::default(),
@@ -394,14 +413,18 @@ fn native_controls_are_not_an_evaluation_input() {
         .1
         .transform;
     let mut values = model.values().clone();
-    values.set(parent.translation, [2., 3., 4.]).unwrap();
+    values
+        .set(parent.translation, Vec3::from_array([2., 3., 4.]))
+        .unwrap();
     values
         .set(
             parent.rotation,
-            Quaternion(Quat::from_rotation_z(0.4).to_array()),
+            Quat::from_array(Quat::from_rotation_z(0.4).to_array()),
         )
         .unwrap();
-    values.set(parent.scale, [2., -3., 1.]).unwrap();
+    values
+        .set(parent.scale, Vec3::from_array([2., -3., 1.]))
+        .unwrap();
     let layout = model.prepare_pose().unwrap();
     let expected = layout
         .evaluate(
@@ -456,16 +479,16 @@ fn native_controls_are_not_an_evaluation_input() {
 #[test]
 fn explicit_spherical_modes_preserve_pivots_and_selected_scale_measure() {
     use wc3::model::{
-        Billboard, BillboardFrame, BillboardScale, EvaluatedPose, Inheritance, PoseBehavior,
-        Quaternion, TransformSemantics,
+        Billboard, BillboardFrame, BillboardScale, EvaluatedPose, Inheritance, PoseBehavior, Quat,
+        TransformSemantics,
     };
     let camera =
         Affine3A::from_rotation_translation(Quat::from_rotation_y(0.8), Vec3::new(7., -4., 3.));
     let pose = Transform {
-        translation: [1., 2., 3.],
-        pivot: [2., -1., 3.],
-        rotation: Quaternion(Quat::from_rotation_z(0.4).to_array()),
-        scale: [-1., 2., 0.],
+        translation: Vec3::from_array([1., 2., 3.]),
+        pivot: Vec3::from_array([2., -1., 3.]),
+        rotation: Quat::from_array(Quat::from_rotation_z(0.4).to_array()),
+        scale: Vec3::from_array([-1., 2., 0.]),
     };
     for semantics in [TransformSemantics::Affine, TransformSemantics::PivotLocal] {
         for frame in [BillboardFrame::Camera, BillboardFrame::Yz] {
@@ -493,7 +516,7 @@ fn explicit_spherical_modes_preserve_pivots_and_selected_scale_measure() {
                     let before = behavior.evaluate(pose, parent, None);
                     let after = behavior.evaluate(pose, parent, Some(camera));
                     assert!(after.matrix.is_finite());
-                    let pivot = Vec3::from_array(pose.pivot);
+                    let pivot = pose.pivot;
                     assert!(after
                         .matrix
                         .transform_point3(pivot)
@@ -522,7 +545,7 @@ fn pivot_local_inheritance_can_compensate_an_affine_parents_motion() {
     use wc3::model::{EvaluatedPose, Inheritance, PoseBehavior, TransformSemantics};
     let parent = PoseBehavior::default().evaluate(
         Transform {
-            translation: [5., 0., 0.],
+            translation: Vec3::from_array([5., 0., 0.]),
             ..Default::default()
         },
         EvaluatedPose::default(),
@@ -538,7 +561,7 @@ fn pivot_local_inheritance_can_compensate_an_affine_parents_motion() {
     }
     .evaluate(
         Transform {
-            translation: [2., 0., 0.],
+            translation: Vec3::from_array([2., 0., 0.]),
             ..Default::default()
         },
         parent,
@@ -553,7 +576,7 @@ fn pivot_local_inheritance_can_compensate_an_affine_parents_motion() {
 
 #[test]
 fn affine_bone_corrections_follow_animated_origins_and_propagate_without_feedback() {
-    use wc3::model::Quaternion;
+    use wc3::model::Quat;
     let mut builder = ModelBuilder::new(ModelMetadata::M2("corrections".into()));
     let root = builder.add_named_node("animated parent").unwrap();
     let child = builder.new_node("corrected joint").with_parent(root);
@@ -570,18 +593,18 @@ fn affine_bone_corrections_follow_animated_origins_and_propagate_without_feedbac
     nodes[1].correction = Some(correction);
     let layout = PoseLayout::new(nodes.clone()).unwrap();
     let parent_pose = Transform {
-        translation: [2., -1., 3.],
-        rotation: Quaternion(Quat::from_rotation_y(0.6).to_array()),
+        translation: Vec3::from_array([2., -1., 3.]),
+        rotation: Quat::from_array(Quat::from_rotation_y(0.6).to_array()),
         ..Default::default()
     };
     let joint_pose = Transform {
-        translation: [0.4, -0.1, 0.3],
-        pivot: [1., 2., 3.],
-        rotation: Quaternion(Quat::from_rotation_z(0.8).to_array()),
+        translation: Vec3::from_array([0.4, -0.1, 0.3]),
+        pivot: Vec3::from_array([1., 2., 3.]),
+        rotation: Quat::from_array(Quat::from_rotation_z(0.8).to_array()),
         ..Default::default()
     };
     let leaf_pose = Transform {
-        translation: [0., 0.3, 0.],
+        translation: Vec3::from_array([0., 0.3, 0.]),
         ..Default::default()
     };
     let poses = [parent_pose, joint_pose, leaf_pose];
@@ -591,7 +614,7 @@ fn affine_bone_corrections_follow_animated_origins_and_propagate_without_feedbac
         .map(|(node, pose)| (node.id, pose))
         .collect();
     let local = joint_pose.to_matrix();
-    let origin = local.transform_point3(Vec3::from_array(joint_pose.pivot));
+    let origin = local.transform_point3(joint_pose.pivot);
     let expected = parent_pose.to_matrix()
         * Mat4::from_translation(origin)
         * correction
@@ -616,9 +639,9 @@ fn affine_bone_corrections_follow_animated_origins_and_propagate_without_feedbac
             .abs_diff_eq(expected * leaf_pose.to_matrix(), 1e-6));
     }
     let fixed_pivot = parent_pose.to_matrix()
-        * Mat4::from_translation(Vec3::from_array(joint_pose.pivot))
+        * Mat4::from_translation(joint_pose.pivot)
         * correction
-        * Mat4::from_translation(-Vec3::from_array(joint_pose.pivot))
+        * Mat4::from_translation(-joint_pose.pivot)
         * local;
     assert!(!expected.abs_diff_eq(fixed_pivot, 1e-3));
     let columns = [expected.x_axis.truncate(), expected.y_axis.truncate()];

@@ -12,6 +12,7 @@ use crate::model::{
     Bounds, ClipId, ClockId, Draw, Influence, JointInfluences, MaterialId, MdlxGeometry, Mesh,
     MeshInstance, ModelBuilder, NodeId, Skin,
 };
+use glam::Vec3;
 use std::collections::BTreeMap;
 use zerovec::ZeroVec;
 
@@ -106,8 +107,8 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                 .collect(),
         )?;
         let bounds = Bounds {
-            minimum: mesh.extent.minimum,
-            maximum: mesh.extent.maximum,
+            minimum: Vec3::from_array(mesh.extent.minimum),
+            maximum: Vec3::from_array(mesh.extent.maximum),
             sphere_radius: mesh.extent.bounds_radius,
         };
         let rows = influences(mesh).map_err(|error| Error::new("mesh.skin", error))?;
@@ -206,7 +207,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     .sequence_extents
                     .iter()
                     .skip(clips.len())
-                    .map(|extent| super::extents::read(extent))
+                    .map(super::extents::read)
                     .collect::<Result<Vec<_>, _>>()?,
             },
         ));
@@ -237,7 +238,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                 let payload = profile::Node::GeometryAnimation(profile::GeometryAnimation {
                     mesh,
                     opacity: decoder.bind(&source.alpha, "geometry::OPACITY", |value| value)?,
-                    color: decoder.bind(&source.color, "geometry::COLOR", |value| value)?,
+                    color: decoder.bind(&source.color, "geometry::COLOR", |value| value.into())?,
                     use_color: source.flags.color(),
                     drop_shadow: source.flags.drop_shadow(),
                     unclassified: flags.bits().into(),

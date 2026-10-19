@@ -125,9 +125,9 @@ impl ModelMaterialExtension {
     /// Current application palette for a guild programme, or `None` for other surfaces.
     pub fn guild_palette(&self) -> Option<GuildPalette> {
         matches!(self.combiner.mode.x, 24..=26).then(|| GuildPalette {
-            background: self.combiner.guild_background.truncate().to_array(),
-            emblem: self.combiner.guild_emblem.truncate().to_array(),
-            border: self.combiner.guild_border.truncate().to_array(),
+            background: self.combiner.guild_background.truncate(),
+            emblem: self.combiner.guild_emblem.truncate(),
+            border: self.combiner.guild_border.truncate(),
         })
     }
 
@@ -142,9 +142,9 @@ impl ModelMaterialExtension {
         if self.guild_palette().is_none() {
             return Ok(false);
         }
-        self.combiner.guild_background = Vec3::from_array(palette.background).extend(1.);
-        self.combiner.guild_emblem = Vec3::from_array(palette.emblem).extend(1.);
-        self.combiner.guild_border = Vec3::from_array(palette.border).extend(1.);
+        self.combiner.guild_background = palette.background.extend(1.);
+        self.combiner.guild_emblem = palette.emblem.extend(1.);
+        self.combiner.guild_border = palette.border.extend(1.);
         Ok(true)
     }
 }
@@ -439,8 +439,8 @@ pub(crate) struct SurfaceAnimation {
     untinted: Option<LinearRgba>,
     untinted_alpha_mode: Option<AlphaMode>,
     mesh: Option<MeshAnimation>,
-    color: Option<Property<[f32; 3]>>,
-    rgba: Option<Property<[f32; 4]>>,
+    color: Option<Property<Vec3>>,
+    rgba: Option<Property<Vec4>>,
     opacity: Option<Property<f32>>,
     weight: Option<Property<f32>>,
     pass_weights: Vec<Property<f32>>,
@@ -448,13 +448,13 @@ pub(crate) struct SurfaceAnimation {
     texture: Option<Property<Option<Texture>>>,
     transform: Option<TextureTransform>,
     secondary_transform: Option<TextureTransform>,
-    uv_scroll: [[f32; 2]; 2],
+    uv_scroll: [Vec2; 2],
     third_transform: Option<TextureTransform>,
-    third_uv_scroll: [f32; 2],
+    third_uv_scroll: Vec2,
     fourth_transform: Option<TextureTransform>,
     input_weights: [Option<Property<f32>>; 4],
     emissive_gain: Option<Property<f32>>,
-    emission: Option<Property<[f32; 4]>>,
+    emission: Option<Property<Vec4>>,
     emission_scale: f32,
     images: Arc<HashMap<Texture, Handle<Image>>>,
     centered_transform: bool,

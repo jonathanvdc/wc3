@@ -49,7 +49,11 @@ impl Node<'_> {
             Node::PointLight(light) => {
                 if !light.intensity.is_finite()
                     || !light.scalar_control.is_finite()
-                    || light.attenuation.iter().any(|value| !value.is_finite())
+                    || light
+                        .attenuation
+                        .to_array()
+                        .iter()
+                        .any(|value| !value.is_finite())
                 {
                     visitor(Link::InvalidValue);
                 }
@@ -65,21 +69,28 @@ impl Node<'_> {
                 if !program.intensity.is_finite()
                     || program
                         .attenuation
+                        .to_array()
                         .iter()
-                        .chain(&program.orientation)
-                        .chain(&program.flicker)
+                        .chain(&program.orientation.to_array())
+                        .chain(&program.flicker.to_array())
                         .any(|value| !value.is_finite())
                 {
                     visitor(Link::InvalidValue);
                 }
             }
             Node::Light(light) => {
-                if light.attenuation.iter().any(|value| !value.is_finite()) {
+                if light
+                    .attenuation
+                    .to_array()
+                    .iter()
+                    .any(|value| !value.is_finite())
+                {
                     visitor(Link::InvalidValue);
                 }
                 if light.directional_terms.as_ref().is_some_and(|terms| {
                     terms.iter().any(|(direction, scalar)| {
-                        !scalar.is_finite() || direction.iter().any(|value| !value.is_finite())
+                        !scalar.is_finite()
+                            || direction.to_array().iter().any(|value| !value.is_finite())
                     })
                 }) {
                     visitor(Link::InvalidValue);
@@ -112,7 +123,6 @@ impl ValidateLinks for super::RegionControls<'_> {
         if self
             .terrain_cut_planes
             .iter()
-            .flatten()
             .any(|value| !value.is_finite())
         {
             visitor(Link::InvalidValue);
@@ -161,7 +171,7 @@ impl ValidateLinks for super::RegionControls<'_> {
         if self
             .auxiliary_geometry
             .as_ref()
-            .is_some_and(|geometry| !geometry.values.iter().flatten().all(f32::is_finite))
+            .is_some_and(|geometry| !geometry.values.iter().all(|v| v.is_finite()))
         {
             visitor(Link::InvalidValue);
         }

@@ -1,7 +1,9 @@
 //! Direct native M2 adapters for the independent authoring graph.
 use super::*;
+use crate::model::common::PackedArray;
 use crate::model::io::materialize;
 use crate::model::{self as semantic, profiles::m2 as profile};
+use glam::Vec3;
 use std::collections::HashSet;
 mod billboard;
 use crate::model::controls::BillboardFlags;
@@ -130,7 +132,7 @@ where
                     .ok_or_else(|| Error::new("m2.bone.parent", "missing parent bone"))?,
             )
         }
-        node.transform.pivot = bone.pivot;
+        node.transform.pivot = Vec3::from_array(bone.pivot);
         node.inheritance = semantic::Inheritance {
             translation: !bone.flags.dont_inherit_translation(),
             rotation: !bone.flags.dont_inherit_rotation(),
@@ -298,13 +300,13 @@ where
                 if track.base.global_sequence != u16::MAX {
                     continue;
                 }
-                if let Some((curve, global)) = curve::<D, [f32; 3], [f32; 3]>(
+                if let Some((curve, global)) = curve::<D, [f32; 3], Vec3>(
                     &animation_source,
                     track,
                     owner,
                     index,
                     start,
-                    |v| v,
+                    |v| v.into(),
                 )? {
                     animation::insert(
                         &mut builder,
@@ -320,7 +322,7 @@ where
                     owner,
                     index,
                     start,
-                    |v| semantic::Quaternion(v.floats()),
+                    |v| semantic::Quat::from_array(v.floats()),
                 )? {
                     let rotation = builder
                         .model()
@@ -355,7 +357,9 @@ where
         ] {
             if track.base.global_sequence != u16::MAX {
                 if let Some((c, g)) =
-                    curve::<D, [f32; 3], [f32; 3]>(&animation_source, track, owner, 0, 0, |v| v)?
+                    curve::<D, [f32; 3], Vec3>(&animation_source, track, owner, 0, 0, |v| {
+                        Vec3::from_array(v)
+                    })?
                 {
                     animation::insert(
                         &mut builder,
@@ -367,7 +371,7 @@ where
         }
         if bone.rotation.base.global_sequence != u16::MAX {
             if let Some((c, g)) = curve(&animation_source, &bone.rotation, owner, 0, 0, |v| {
-                semantic::Quaternion(v.floats())
+                semantic::Quat::from_array(v.floats())
             })? {
                 let rotation = builder
                     .model()
@@ -406,15 +410,21 @@ where
     let collision_indices = &core.collision_indices;
     let collision_normals = &core.collision_normals;
     let collision = (!core.collision_vertices.is_empty()).then(|| profile::Collision {
-        positions: materialize(core.collision_vertices.len(), move |i| {
-            collision_positions.get(i).unwrap()
-        }),
+        positions: PackedArray::from_storage(
+            (materialize(core.collision_vertices.len(), move |i| {
+                collision_positions.get(i).unwrap()
+            }))
+            .into_storage(),
+        ),
         triangles: materialize(core.collision_indices.len() / 3, move |i| {
             std::array::from_fn(|j| u32::from(collision_indices.get(i * 3 + j).unwrap()))
         }),
-        normals: materialize(core.collision_normals.len(), move |i| {
-            collision_normals.get(i).unwrap()
-        }),
+        normals: PackedArray::from_storage(
+            (materialize(core.collision_normals.len(), move |i| {
+                collision_normals.get(i).unwrap()
+            }))
+            .into_storage(),
+        ),
         bounds: bounds(core.collision),
     });
     if let Some(collision) = collision {
@@ -492,8 +502,8 @@ where
 }
 pub(super) fn bounds(value: native::records::Extent) -> semantic::Bounds {
     semantic::Bounds {
-        minimum: value.minimum,
-        maximum: value.maximum,
+        minimum: Vec3::from_array(value.minimum),
+        maximum: Vec3::from_array(value.maximum),
         sphere_radius: value.radius,
     }
 }

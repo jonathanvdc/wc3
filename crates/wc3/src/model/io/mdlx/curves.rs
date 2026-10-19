@@ -97,7 +97,7 @@ mod tests {
     use crate::model::formats::mdlx::animation::TangentKeyframe;
     use crate::model::io::animation::crop;
     use crate::model::profiles::Mdlx;
-    use crate::model::{Model, Quaternion, TimeSource, Track as SemanticTrack};
+    use crate::model::{Model, Quat, TimeSource, Track as SemanticTrack};
 
     #[test]
     fn imported_rotation_splines_preserve_native_angular_sampling() {
@@ -123,19 +123,19 @@ mod tests {
             Track::hermite(keys, None).unwrap(),
             Track::bezier(keys, None).unwrap(),
         ] {
-            let curve = read(&source, 0.0, Quaternion).unwrap();
+            let curve = read(&source, 0.0, Quat::from_array).unwrap();
             assert!(curve.uses_spherical_controls());
             for t in [0.1, 0.25, 0.5, 0.8] {
                 let expected = source.evaluate_in(t * 1000.0, 0..=1000).unwrap();
-                let actual = curve.sample(Time::seconds(t).unwrap()).unwrap().0;
+                let actual = curve.sample(Time::seconds(t).unwrap()).unwrap().to_array();
                 for (actual, expected) in actual.into_iter().zip(expected) {
                     assert!((actual - expected).abs() < 1e-5);
                 }
             }
             let mut builder = Model::<Mdlx>::builder("curve restriction");
             let _node = builder.reserve_node();
-            let track: SemanticTrack<'_, Quaternion> = SemanticTrack {
-                target: builder.add_value(Quaternion::IDENTITY),
+            let track: SemanticTrack<'_, Quat> = SemanticTrack {
+                target: builder.add_value(Quat::IDENTITY),
                 curve,
                 clock: TimeSource::Animation,
             };

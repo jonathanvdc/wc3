@@ -5,8 +5,8 @@ use crate::model::{scene, Axis, NodeFeature};
 use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use crate::model::{M2RibbonControls, M2RibbonRendering, TrailAppearance, TrailGeometry};
 use crate::model::{ParticleEmission, ParticleLifetime, ParticleMotion};
+use glam::Vec3;
 use std::ptr;
-
 #[test]
 fn emission_distinguishes_continuous_rates_from_keyed_burst_counts() {
     let mut slot_values = SlotValues::default();
@@ -85,7 +85,7 @@ fn ribbon_components_preserve_distinct_rate_and_atlas_integer_domains() {
     let mut slot_values = SlotValues::default();
     let segmented = mdlx::RibbonEmitter {
         appearance: TrailAppearance {
-            color: slot_values.add([0.25, 0.5, 0.75]),
+            color: slot_values.add(Vec3::from_array([0.25, 0.5, 0.75])),
             opacity: slot_values.add(0.6),
             texture_slot: slot_values.add(70_000),
             ..SlotConstruct::construct(&mut slot_values)
@@ -129,7 +129,7 @@ fn ribbon_components_preserve_distinct_rate_and_atlas_integer_domains() {
             materials: vec![],
         },
         appearance: TrailAppearance {
-            color: slot_values.add([0.7, 0.3, 0.1]),
+            color: slot_values.add(Vec3::from_array([0.7, 0.3, 0.1])),
             opacity: slot_values.add(0.8),
             atlas: [2, 4],
             texture_slot: slot_values.add(31),
@@ -188,7 +188,7 @@ fn shared_illumination_is_inspected_identically_before_and_after_widening() {
     let mut slot_values = SlotValues::default();
     let light = mdlx::Light {
         diffuse: LightEmission {
-            color: slot_values.add([0.2, 0.4, 0.6]),
+            color: slot_values.add(Vec3::from_array([0.2, 0.4, 0.6])),
             ..SlotConstruct::construct(&mut slot_values)
         },
         ambient: LightEmission {

@@ -7,6 +7,7 @@ use crate::model::formats::wmo::root::RootChunk;
 use crate::model::profiles::Wmo;
 use crate::model::WorldImageResource;
 use crate::model::{MaterialId, Model};
+use glam::Vec2;
 use std::collections::{BTreeMap, BTreeSet};
 pub(super) fn write<'a>(
     model: &Model<'_, Wmo>,
@@ -64,7 +65,7 @@ pub(super) fn write<'a>(
             || surface.legacy_color.is_some()
             || surface.legacy_controls.is_some()
             || surface.legacy_runtime.is_some()
-            || surface.uv_scroll.iter().flatten().any(|value| *value != 0.)
+            || surface.uv_scroll.iter().any(|value| *value != Vec2::ZERO)
         {
             context.unsupported("world.material", "historical fixed-function materials have two texture slots and no shader selection, scroll curves, or later shader controls")?;
         }

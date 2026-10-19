@@ -1,17 +1,13 @@
 //! Profile-specific joint binding with borrowed matrix inspection.
-use crate::model::common::IntoZeroVec;
+use crate::model::common::IntoPackedArray;
 use crate::model::profiles::{Either, Unavailable};
-use crate::model::{Error, Link, ValidateLinks, ZeroVec};
+use crate::model::{Error, Link, PackedArray, ValidateLinks};
+use glam::Mat4;
 use std::fmt::Debug;
 
 /// A transform mapping an authored vertex into a joint's bind space.
-pub type BindMatrix = [[f32; 4]; 4];
-const IDENTITY: BindMatrix = [
-    [1., 0., 0., 0.],
-    [0., 1., 0., 0.],
-    [0., 0., 1., 0.],
-    [0., 0., 0., 1.],
-];
+pub type BindMatrix = Mat4;
+const IDENTITY: BindMatrix = Mat4::IDENTITY;
 
 /// Binding interpretation admitted by a semantic profile.
 pub trait BindingSchema<'data>: Clone + Debug + Send + Sync + ValidateLinks {
@@ -27,7 +23,7 @@ pub enum BindMatrices<'view, 'data> {
     /// Every joint uses the authored model coordinates directly.
     Identity(usize),
     /// Explicit inverse transforms in palette order.
-    Explicit(&'view ZeroVec<'data, BindMatrix>),
+    Explicit(&'view PackedArray<'data, BindMatrix>),
 }
 impl BindMatrices<'_, '_> {
     /// Number of transforms in the joint palette.
@@ -72,19 +68,19 @@ impl<'data> BindingSchema<'data> for IdentityBinding {
 /// An explicitly authored inverse bind transform per joint.
 #[derive(Clone, Debug)]
 pub struct ExplicitBinding<'data> {
-    matrices: ZeroVec<'data, BindMatrix>,
+    matrices: PackedArray<'data, BindMatrix>,
 }
 impl<'data> ExplicitBinding<'data> {
     /// Constructs a finite inverse bind stream; the owning skin checks its cardinality.
-    pub fn new(matrices: impl IntoZeroVec<'data, BindMatrix>) -> Result<Self, Error> {
+    pub fn new(matrices: impl IntoPackedArray<'data, BindMatrix>) -> Result<Self, Error> {
         let value = Self {
-            matrices: matrices.into_zero_vec(),
+            matrices: matrices.into_packed_array(),
         };
         value.validate(value.matrices.len())?;
         Ok(value)
     }
     /// Authored transforms, retaining their borrowed storage.
-    pub fn values(&self) -> &ZeroVec<'data, BindMatrix> {
+    pub fn values(&self) -> &PackedArray<'data, BindMatrix> {
         &self.matrices
     }
 }
@@ -96,14 +92,7 @@ impl<'data> BindingSchema<'data> for ExplicitBinding<'data> {
         BindMatrices::Explicit(&self.matrices)
     }
     fn validate(&self, joints: usize) -> Result<(), Error> {
-        if joints != self.matrices.len()
-            || self
-                .matrices
-                .iter()
-                .flatten()
-                .flatten()
-                .any(|value| !value.is_finite())
-        {
+        if joints != self.matrices.len() || self.matrices.iter().any(|value| !value.is_finite()) {
             Err(Error::new(
                 "skin.binding",
                 "expected one finite inverse bind transform per joint",

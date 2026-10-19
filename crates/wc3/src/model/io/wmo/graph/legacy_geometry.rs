@@ -1,5 +1,6 @@
 //! Direct historical group fields, with no upgraded native document.
 use super::{bounds, geometry, relationships, root_view::CommonRoot, scene::Identities};
+use crate::model::common::PackedArray;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::wmo::group::GroupChunk;
 use crate::model::formats::wmo::legacy::{Batch14, Batch16, LegacyGroupChunk};
@@ -16,8 +17,9 @@ use crate::model::{
     ColorSpace, InstanceId, MaterialId, Mesh, MeshInstance, ModelBuilder, Sampler, SystemId,
     Texture, WmoGeometry,
 };
+use glam::Vec3;
+use glam::Vec4;
 use std::borrow::Cow;
-use zerovec::ZeroVec;
 
 pub(super) struct Header<'a> {
     pub name: u32,
@@ -142,21 +144,21 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
             _ => None,
         })
     };
-    let mut positions = ZeroVec::new();
-    let mut normals = ZeroVec::new();
+    let mut positions = PackedArray::new();
+    let mut normals = PackedArray::new();
     let mut coordinates = Vec::new();
     let mut colors = Vec::new();
-    let mut indices = ZeroVec::new();
+    let mut indices = PackedArray::new();
     for chunk in common() {
         match chunk {
             GroupChunk::Positions(rows) => {
-                positions = ZeroVec::parse_bytes(rows.as_bytes()).map_err(read_error)?
+                positions = PackedArray::parse_bytes(rows.as_bytes()).map_err(read_error)?
             }
             GroupChunk::Normals(rows) => {
-                normals = ZeroVec::parse_bytes(rows.as_bytes()).map_err(read_error)?
+                normals = PackedArray::parse_bytes(rows.as_bytes()).map_err(read_error)?
             }
             GroupChunk::TextureCoordinates(rows) => {
-                coordinates.push(ZeroVec::parse_bytes(rows.as_bytes()).map_err(read_error)?)
+                coordinates.push(PackedArray::parse_bytes(rows.as_bytes()).map_err(read_error)?)
             }
             GroupChunk::Indices(rows) => {
                 indices = materialize(rows.len(), move |index| {
@@ -165,8 +167,10 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
             }
             GroupChunk::VertexColors(rows) | GroupChunk::VertexColors2(rows) => {
                 colors.push(materialize(rows.len(), move |index| {
-                    super::rgba(rows.get(index).unwrap().unwrap())
-                        .map(|value| f32::from(value) / 255.)
+                    Vec4::from_array(
+                        super::rgba(rows.get(index).unwrap().unwrap())
+                            .map(|value| f32::from(value) / 255.),
+                    )
                 }))
             }
             _ => {}
@@ -233,7 +237,7 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
         match chunk {
             LegacyGroupChunk::LightMapCoordinates(rows) => {
                 geometry = geometry.with_lightmap_coordinates(
-                    ZeroVec::parse_bytes(rows.as_bytes()).map_err(read_error)?,
+                    PackedArray::parse_bytes(rows.as_bytes()).map_err(read_error)?,
                 )?
             }
             LegacyGroupChunk::LightMaps(rows) => {
@@ -258,7 +262,7 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
             }
             LegacyGroupChunk::Liquid(liquid) => {
                 region.liquids.push(crate::model::profiles::wmo::Liquid {
-                    position: liquid.header.corner,
+                    position: Vec3::from_array(liquid.header.corner),
                     dimensions: liquid
                         .header
                         .vertex_dimensions
@@ -300,7 +304,7 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
                 region
                     .auxiliary_geometry
                     .get_or_insert_with(Default::default)
-                    .values = ZeroVec::parse_bytes(rows.as_bytes()).map_err(read_error)?
+                    .values = PackedArray::parse_bytes(rows.as_bytes()).map_err(read_error)?
             }
             LegacyGroupChunk::BatchVertices(rows) => {
                 region

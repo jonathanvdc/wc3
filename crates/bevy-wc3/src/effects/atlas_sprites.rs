@@ -9,6 +9,7 @@ use crate::effects::sprites::{
 };
 use crate::textures::{TextureImages, TextureRole};
 use bevy::camera::visibility::NoFrustumCulling;
+use bevy::math::{Quat, Vec3};
 use bevy::prelude::*;
 use std::array::from_fn;
 use std::collections::HashMap;
@@ -20,8 +21,8 @@ use wc3::model::scene::keyframed::Frames;
 #[cfg(test)]
 use wc3::model::ModelMetadata;
 use wc3::model::{
-    ClipId, FeatureId, Model, NodeFeature, NodeId, ParticleEmitter, Property, SampledTrack,
-    Time as ModelTime, TimeSource, ZeroVec,
+    ClipId, FeatureId, Model, NodeFeature, NodeId, PackedArray, ParticleEmitter, Property,
+    SampledTrack, Time as ModelTime, TimeSource,
 };
 
 enum BurstTrack<'sample, 'data> {
@@ -35,7 +36,7 @@ impl<'data> BurstTrack<'_, 'data> {
             Self::Boolean(sample) => (sample.track.clock, sample.period, sample.origin),
         }
     }
-    fn times(&self) -> &ZeroVec<'data, ModelTime> {
+    fn times(&self) -> &PackedArray<'data, ModelTime> {
         match self {
             Self::Scalar(sample) => sample.track.curve.times(),
             Self::Boolean(sample) => sample.track.curve.times(),
@@ -241,7 +242,7 @@ impl RuntimeAtlasParticles {
                             f32::from(appearance.alpha[i]) / 255.,
                         ]
                     }),
-                    scales: appearance.scale,
+                    scales: (appearance.scale).to_array(),
                     middle: appearance.middle_time,
                     intervals: appearance.uv_intervals,
                     atlas: details.rendering.atlas,
@@ -705,6 +706,17 @@ pub(super) fn retimed_selection(
     ))
 }
 
+impl RuntimeAtlasParticles {
+    pub(crate) fn map_images(
+        &mut self,
+        map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
+    ) {
+        for emitter in &mut self.emitters {
+            emitter.texture = emitter.texture.as_ref().and_then(&mut *map);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -913,16 +925,5 @@ mod tests {
         assert_eq!(state.live.len(), 5);
         advance(&runtime, &program, &mut state, 10.6, 0.25, true);
         assert_eq!(state.live.len(), 8);
-    }
-}
-
-impl RuntimeAtlasParticles {
-    pub(crate) fn map_images(
-        &mut self,
-        map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
-    ) {
-        for emitter in &mut self.emitters {
-            emitter.texture = emitter.texture.as_ref().and_then(&mut *map);
-        }
     }
 }

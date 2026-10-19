@@ -7,7 +7,7 @@ resolves dependencies, and writes the encoded outputs.
 
 The graph contains authoring values rather than an embedded source file.
 Compatible geometry and animation arrays borrow native encoded storage through
-`ZeroVec`, so their decoded source must outlive those arrays. Adapters materialize
+`PackedArray`, so their decoded source must outlive those arrays. Adapters materialize
 arrays once when the native layout differs from the semantic element layout. Retain the
 original native document separately if the application also needs its codec APIs
 or original physical layout.

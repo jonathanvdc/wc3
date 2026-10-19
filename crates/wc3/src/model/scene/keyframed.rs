@@ -10,6 +10,7 @@ use crate::model::ModelResourceId;
 use crate::model::PhotographicControls;
 use crate::model::{AimedCamera, AmbientDiffuseLight, VisibleLight};
 use crate::model::{MeshId, Property};
+use glam::Vec3;
 use std::borrow::Cow;
 
 /// Opacity, tint, and shadow behavior for one geometry controller.
@@ -20,7 +21,7 @@ pub struct GeometryAnimation {
     /// Geometry opacity.
     pub opacity: Property<f32>,
     /// Geometry RGB tint.
-    pub color: Property<[f32; 3]>,
+    pub color: Property<Vec3>,
     /// Enable authored tint.
     pub use_color: bool,
     /// Enable authored shadow-drop behavior.
@@ -61,7 +62,7 @@ pub struct Popcorn<'a> {
     /// Initial particle speed.
     pub speed: Property<f32>,
     /// Particle RGB tint.
-    pub color: Property<[f32; 3]>,
+    pub color: Property<Vec3>,
     /// Particle opacity.
     pub opacity: Property<f32>,
     /// Replaceable-texture category.
@@ -102,20 +103,20 @@ pub type Attachment = IndexedChildModel<ModelResourceId>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Collision {
     /// Axis-aligned box with minimum and maximum corners.
-    Box([[f32; 3]; 2]),
+    Box([Vec3; 2]),
     /// Plane represented by its two authored vertices.
-    Plane([[f32; 3]; 2]),
+    Plane([Vec3; 2]),
     /// Sphere center and radius.
     Sphere {
         /// Center in model coordinates.
-        center: [f32; 3],
+        center: Vec3,
         /// Radius in model units.
         radius: f32,
     },
     /// Cylinder endpoints and radius.
     Cylinder {
         /// Endpoints in model coordinates.
-        endpoints: [[f32; 3]; 2],
+        endpoints: [Vec3; 2],
         /// Radius in model units.
         radius: f32,
     },
@@ -124,7 +125,7 @@ pub enum Collision {
         /// Source kind selector.
         kind: u32,
         /// Authored defining vertices.
-        vertices: Vec<[f32; 3]>,
+        vertices: Vec<Vec3>,
         /// Authored radius.
         radius: Option<f32>,
     },

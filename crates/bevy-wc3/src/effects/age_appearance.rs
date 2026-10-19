@@ -57,7 +57,7 @@ impl AgeAppearance {
                 || details.twinkle_scale[0] != details.twinkle_scale[1])
                 .then(|| Arc::new(from_fn(|_| random.random()))),
             textures: details.flags.multi_texture().then(|| TextureMotion {
-                scales: details.rendering.texture_scale,
+                scales: (details.rendering.texture_scale).to_array(),
                 middle: [
                     Vec2::new(scroll[0], scroll[1]),
                     Vec2::new(scroll[2], scroll[3]),

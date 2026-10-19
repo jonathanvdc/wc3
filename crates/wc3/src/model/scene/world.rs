@@ -1,4 +1,5 @@
 //! Group visibility, environmental volumes, placements, and liquid grids.
+use crate::model::common::packed_identity;
 use crate::model::common::AsULE;
 use crate::model::controls::world::{DoodadSetId, GroupId, PortalId};
 use crate::model::values::world::{
@@ -7,7 +8,8 @@ use crate::model::values::world::{
 use crate::model::Construct;
 use crate::model::ModelResourceId;
 use crate::model::{ChildModelDefinition, WorldPlacementAppearance};
-use crate::model::{FeatureId, MaterialId, Property, Texture, ZeroVec};
+use crate::model::{FeatureId, MaterialId, PackedArray, Property, Texture};
+use glam::{Vec2, Vec3, Vec4};
 use std::borrow::Cow;
 
 /// Root world rendering options.
@@ -50,9 +52,9 @@ pub struct GroupOptions {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Portal<'a> {
     /// Boundary polygon in world coordinates.
-    pub vertices: ZeroVec<'a, [f32; 3]>,
+    pub vertices: PackedArray<'a, Vec3>,
     /// Plane equation (normal XYZ, distance).
-    pub plane: [f32; 4],
+    pub plane: Vec4,
     /// Supplemental culling-plane adjustment, whose individual controls are unresolved.
     pub adjustment: Option<[u32; 3]>,
 }
@@ -119,21 +121,21 @@ pub struct Light {
     /// Illumination behavior.
     pub kind: LightKind,
     /// Animated color in RGBA order.
-    pub color: Property<[f32; 4]>,
+    pub color: Property<Vec4>,
     /// Animated intensity.
     pub intensity: Property<f32>,
     /// Enable distance attenuation.
     pub use_attenuation: bool,
     /// Attenuation start and end distances.
-    pub attenuation: [f32; 2],
+    pub attenuation: Vec2,
     /// Cone start and end angles.
-    pub cone: [f32; 2],
+    pub cone: Vec2,
     /// Light controls with unresolved meanings.
     pub controls: LightFlags,
     /// Optional modern light color, cookie, flicker, and shadow controls.
     pub modern: Option<ModernLight>,
     /// Optional directional extension terms and their unresolved scalars.
-    pub directional_terms: Option<[([f32; 3], f32); 6]>,
+    pub directional_terms: Option<[(Vec3, f32); 6]>,
 }
 /// Light-flicker behavior.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -154,7 +156,7 @@ pub enum Flicker {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ModernLight {
     /// Authored Euler orientation; native axis order has not been established.
-    pub orientation: [f32; 3],
+    pub orientation: Vec3,
     /// External authored light identifier.
     pub id: i32,
     /// Restrict the light to one doodad set.
@@ -166,9 +168,9 @@ pub struct ModernLight {
     /// Outer light color in RGBA order.
     pub outer_color: [u8; 4],
     /// Distance interval for inner-to-outer color blending.
-    pub color_blend: [f32; 2],
+    pub color_blend: Vec2,
     /// Flicker intensity and speed.
-    pub flicker_parameters: [f32; 2],
+    pub flicker_parameters: Vec2,
     /// Flicker behavior.
     pub flicker: Flicker,
     /// Light projection cookie texture.
@@ -180,7 +182,7 @@ pub struct ModernLight {
     /// Authored intensity multiplier; zero retains the authored client-default behavior.
     pub intensity_multiplier: f32,
     /// Unresolved authored vector control.
-    pub vector_control: [f32; 3],
+    pub vector_control: Vec3,
     /// Unresolved authored words surrounding known light properties.
     pub controls: [u32; 7],
     /// Trailing unresolved authored controls.
@@ -202,14 +204,14 @@ pub enum Volume {
     /// Radial volume and its inner and outer blend radii.
     Sphere {
         /// World center.
-        center: [f32; 3],
+        center: Vec3,
         /// Inner and outer radius.
-        radii: [f32; 2],
+        radii: Vec2,
     },
     /// Six bounding planes and boundary fade distance.
     Planes {
         /// Plane equations.
-        planes: [[f32; 4]; 6],
+        planes: [Vec4; 6],
         /// Boundary fade distance.
         fade: f32,
     },
@@ -289,13 +291,13 @@ impl LiquidVertex {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Liquid<'a> {
     /// Grid origin in world coordinates.
-    pub position: [f32; 3],
+    pub position: Vec3,
     /// Number of vertices along X and Y.
     pub dimensions: [u32; 2],
     /// Surface grid vertices in row-major order.
-    pub vertices: ZeroVec<'a, LiquidVertex>,
+    pub vertices: PackedArray<'a, LiquidVertex>,
     /// Tile rendering and liquid selectors with unresolved bit-level meanings.
-    pub tiles: ZeroVec<'a, u8>,
+    pub tiles: PackedArray<'a, u8>,
     /// Rendering material.
     pub material: Option<MaterialId>,
     /// External liquid-type database identifier.
@@ -358,10 +360,12 @@ impl AsULE for LiquidVertex {
     }
 }
 
+packed_identity!(LiquidVertex);
+
 #[cfg(test)]
 mod tests {
     use super::LiquidVertex;
-    use zerovec::ZeroVec;
+    use crate::model::common::PackedArray;
 
     #[test]
     fn packed_liquid_vertices_preserve_variants_and_reject_unknown_tags() {
@@ -381,15 +385,15 @@ mod tests {
                 controls: [10, 11],
             },
         ];
-        let packed = ZeroVec::alloc_from_slice(&vertices);
+        let packed = PackedArray::alloc_from_slice(&vertices);
         assert_eq!(
-            ZeroVec::<LiquidVertex>::parse_bytes(packed.as_bytes())
+            PackedArray::<LiquidVertex>::parse_bytes(packed.as_bytes())
                 .unwrap()
                 .to_vec(),
             vertices
         );
         let mut bytes = packed.as_bytes().to_vec();
         bytes[0] = 3;
-        assert!(ZeroVec::<LiquidVertex>::parse_bytes(&bytes).is_err());
+        assert!(PackedArray::<LiquidVertex>::parse_bytes(&bytes).is_err());
     }
 }

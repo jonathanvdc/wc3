@@ -12,7 +12,8 @@ use crate::model::profiles::mdlx::{
     Shader, Shading, TextureSlot, UnresolvedInputs,
 };
 use crate::model::{Construct, PropertyValues};
-use crate::model::{Quaternion, Texture, TextureTransform};
+use crate::model::{Quat, Texture, TextureTransform};
+use glam::Vec3;
 
 pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
     source: &'source native::Material<'_, V>,
@@ -62,7 +63,9 @@ pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
         unresolved.set_no_depth_test(false);
         unresolved.set_no_depth_set(false);
         let fresnel = layer.try_fresnel().ok().map(|value| Fresnel {
-            color: values.add(value.color.value().copied().unwrap_or_default()),
+            color: values.add(Vec3::from_array(
+                value.color.value().copied().unwrap_or_default(),
+            )),
             opacity: values.add(value.opacity.value().copied().unwrap_or_default()),
             team_color: values.add(value.team_color.value().copied().unwrap_or_default()),
         });
@@ -185,21 +188,21 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
             inputs.binding.coordinates.transform = TextureTransform {
                 translation: decoder.track(
                     transform.translation.as_ref(),
-                    [0.; 3],
+                    Vec3::ZERO,
                     "layer.translation",
-                    |value| value,
+                    |value| value.into(),
                 )?,
                 rotation: decoder.track(
                     transform.rotation.as_ref(),
-                    Quaternion::IDENTITY,
+                    Quat::IDENTITY,
                     "layer.rotation",
-                    Quaternion,
+                    Quat::from_array,
                 )?,
                 scale: decoder.track(
                     transform.scaling.as_ref(),
-                    [1.; 3],
+                    Vec3::ONE,
                     "layer.scale",
-                    |value| value,
+                    |value| value.into(),
                 )?,
             };
         }
@@ -221,7 +224,7 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
         }
         if let (Ok(source), Some(target)) = (source.try_fresnel(), layer.shader.fresnel_mut()) {
             *target = Fresnel {
-                color: decoder.bind(&source.color, "layer.fresnel_color", |value| value)?,
+                color: decoder.bind(&source.color, "layer.fresnel_color", |value| value.into())?,
                 opacity: decoder.bind(&source.opacity, "layer.fresnel_opacity", |value| value)?,
                 team_color: decoder.bind(
                     &source.team_color,
@@ -315,6 +318,15 @@ fn shader_family(selector: Option<u32>, name: &str) -> ShaderFamily {
     }
 }
 
+/// Native emissive headers use NaN for an unspecified unity multiplier. This
+/// applies only to the stored header; authored animation keys stay unchanged.
+fn emissive_default(source: &Animatable<'_, f32>) -> f32 {
+    match source.value().copied() {
+        Some(value) if !value.is_nan() => value,
+        _ => 1.,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{shader_family, ShaderFamily};
@@ -344,14 +356,5 @@ mod tests {
         ] {
             assert_eq!(shader_family(None, name), family);
         }
-    }
-}
-
-/// Native emissive headers use NaN for an unspecified unity multiplier. This
-/// applies only to the stored header; authored animation keys stay unchanged.
-fn emissive_default(source: &Animatable<'_, f32>) -> f32 {
-    match source.value().copied() {
-        Some(value) if !value.is_nan() => value,
-        _ => 1.,
     }
 }

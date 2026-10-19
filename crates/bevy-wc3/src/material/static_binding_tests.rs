@@ -2,6 +2,7 @@
 use super::*;
 use crate::animation_targets::AnimationTargets;
 use crate::material::native_fixtures::m2;
+use bevy::math::Vec3;
 use wc3::model::profiles::{mdlx, Universal};
 use wc3::model::ModelMetadata;
 use wc3::model::{
@@ -16,7 +17,7 @@ fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
     let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let material = builder.reserve_material();
     let mut surface = m2::Material {
-        color: slot_values.add([0.2, 0.4, 0.6]),
+        color: slot_values.add(Vec3::from_array([0.2, 0.4, 0.6])),
         opacity: slot_values.add(0.75),
         ..SlotConstruct::construct(&mut slot_values)
     };
@@ -78,7 +79,10 @@ fn pruning_retains_targets_from_timeline_shared_unselected_clip_and_animation() 
                     ModelTime::seconds(0.).unwrap(),
                     ModelTime::seconds(1.).unwrap(),
                 ],
-                [[0.; 3], [1.; 3]],
+                ([[0.; 3], [1.; 3]])
+                    .into_iter()
+                    .map(Vec3::from_array)
+                    .collect::<Vec<_>>(),
             )
             .unwrap(),
         })
@@ -168,7 +172,7 @@ fn pruning_visits_every_uv_transform_weight_and_hd_control() {
             slots: std::array::from_fn(|_| Some(texture)),
             gain: Some(scalar()),
             fresnel: Some(mdlx::Fresnel {
-                color: slot_values.add([0.2; 3]),
+                color: slot_values.add(Vec3::from_array([0.2; 3])),
                 opacity: scalar(),
                 team_color: scalar(),
             }),
@@ -184,7 +188,7 @@ fn pruning_visits_every_uv_transform_weight_and_hd_control() {
     assert!(!animation.is_animated());
     assert_eq!(model.values()[animation.weight.unwrap()], 0.375);
     let fresnel = animation.hd.unwrap().fresnel.unwrap();
-    assert_eq!(model.values()[fresnel.color], [0.2; 3]);
+    assert_eq!(model.values()[fresnel.color], Vec3::from_array([0.2; 3]));
     assert_eq!(model.values()[fresnel.opacity], 0.375);
 }
 
@@ -193,7 +197,7 @@ fn scalar_material() -> (ModelBuilder<'static>, MaterialId) {
     let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let material = builder.reserve_material();
     let surface = m2::Material {
-        color: slot_values.add([1.; 3]),
+        color: slot_values.add(Vec3::from_array([1.; 3])),
         opacity: slot_values.add(1.),
         ..SlotConstruct::construct(&mut slot_values)
     };
@@ -374,7 +378,7 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
         builder.model().node(node).unwrap().transform.translation;
     let weight = unit.contribution;
     let surface = m2::Material {
-        color: slot_values.add([1.; 3]),
+        color: slot_values.add(Vec3::from_array([1.; 3])),
         opacity: slot_values.add(1.),
         textures: vec![unit],
         ..SlotConstruct::construct(&mut slot_values)
@@ -404,7 +408,10 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
                     ModelTime::seconds(0.).unwrap(),
                     ModelTime::seconds(1.).unwrap(),
                 ],
-                [[0.; 3], [0., 1., 0.]],
+                ([[0.; 3], [0., 1., 0.]])
+                    .into_iter()
+                    .map(Vec3::from_array)
+                    .collect::<Vec<_>>(),
             )
             .unwrap(),
         }))

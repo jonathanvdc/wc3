@@ -5,6 +5,7 @@ use crate::model::formats::wmo::records::FogParams;
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::formats::wmo::Dialect;
 use crate::model::profiles::wmo as profile;
+use glam::{Vec2, Vec3, Vec4};
 fn params(value: &FogParams) -> profile::FogParameters {
     profile::FogParameters {
         end: value.end,
@@ -51,8 +52,8 @@ pub(super) fn read<'a, 'data: 'a>(
                     flags.set_infinite_radius(false);
                     world.fogs.push(profile::Fog {
                         volume: profile::Volume::Sphere {
-                            center: row.position,
-                            radii: [row.radius_start, row.radius_end],
+                            center: Vec3::from_array(row.position),
+                            radii: Vec2::from_array([row.radius_start, row.radius_end]),
                         },
                         above_water: params(&row.fog),
                         underwater: params(&row.underwater),
@@ -67,7 +68,7 @@ pub(super) fn read<'a, 'data: 'a>(
                     let row = row.map_err(|error| Error::new("world.fog", error.to_string()))?;
                     world.fogs.push(profile::Fog {
                         volume: profile::Volume::Planes {
-                            planes: row.planes,
+                            planes: (row.planes).map(Vec4::from_array),
                             fade: row.fade_distance,
                         },
                         above_water: params(&row.fog),
@@ -87,8 +88,8 @@ pub(super) fn read<'a, 'data: 'a>(
                     world.ambient_volumes.push(profile::Ambient {
                         global: matches!(chunk, RootChunk::GlobalAmbients(_)),
                         volume: profile::Volume::Sphere {
-                            center: row.position,
-                            radii: [row.start, row.end],
+                            center: Vec3::from_array(row.position),
+                            radii: Vec2::from_array([row.start, row.end]),
                         },
                         colors: row.colors.map(rgba),
                         distinct_colors: row.flags.distinct_colors(),
@@ -104,7 +105,7 @@ pub(super) fn read<'a, 'data: 'a>(
                     world.ambient_volumes.push(profile::Ambient {
                         global: false,
                         volume: profile::Volume::Planes {
-                            planes: row.planes,
+                            planes: (row.planes).map(Vec4::from_array),
                             fade: row.end,
                         },
                         colors: row.colors.map(rgba),
@@ -159,7 +160,7 @@ pub(super) fn write<'a, D: Dialect>(
                 flags.set_infinite_radius(source.infinite);
                 fogs.push(Fog {
                     flags,
-                    position: center,
+                    position: (center).to_array(),
                     radius_start: radii[0],
                     radius_end: radii[1],
                     fog: params(&source.above_water),
@@ -178,7 +179,7 @@ pub(super) fn write<'a, D: Dialect>(
                     ));
                 }
                 boxes.push(FogBox {
-                    planes,
+                    planes: planes.map(|v| v.to_array()),
                     fade_distance: fade,
                     fog: params(&source.above_water),
                     underwater: params(&source.underwater),
@@ -205,7 +206,7 @@ pub(super) fn write<'a, D: Dialect>(
                 let mut flags = AmbientFlags(source.controls.bits());
                 flags.set_distinct_colors(source.distinct_colors);
                 let row = AmbientVolume {
-                    position: center,
+                    position: (center).to_array(),
                     start: radii[0],
                     end: radii[1],
                     colors: source.colors.map(rgba),
@@ -227,7 +228,7 @@ pub(super) fn write<'a, D: Dialect>(
                     ));
                 }
                 boxes.push(AmbientBox {
-                    planes,
+                    planes: planes.map(|v| v.to_array()),
                     end: fade,
                     colors: source.colors.map(rgba),
                     flags: AmbientBoxFlags(source.controls.bits()),

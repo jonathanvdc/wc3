@@ -22,9 +22,13 @@ pub(super) fn light<'a, V: FormatVersion>(
     record.attenuation_start =
         encoder.value(&source.attenuation[0], Ok, "light.attenuation_start")?;
     record.attenuation_end = encoder.value(&source.attenuation[1], Ok, "light.attenuation_end")?;
-    record.color = encoder.value(&source.diffuse.color, Ok, "light.color")?;
+    record.color = encoder.value(&source.diffuse.color, |v| Ok(v.to_array()), "light.color")?;
     record.intensity = encoder.value(&source.diffuse.intensity, Ok, "light.intensity")?;
-    record.ambient_color = encoder.value(&source.ambient.color, Ok, "light.ambient_color")?;
+    record.ambient_color = encoder.value(
+        &source.ambient.color,
+        |v| Ok(v.to_array()),
+        "light.ambient_color",
+    )?;
     record.ambient_intensity =
         encoder.value(&source.ambient.intensity, Ok, "light.ambient_intensity")?;
     record.visibility = super::encode_helpers::visibility(
@@ -86,14 +90,23 @@ pub(super) fn camera<V: FormatVersion>(
     }
     let mut record = native::Camera::<V>::new(&graph_node.name)
         .map_err(|error| Error::new("camera.name", error.to_string()))?;
-    record.position = encoder.constant(graph_node.transform.translation);
-    record.target_position = source.target;
+    record.position = (encoder.constant(graph_node.transform.translation)).to_array();
+    record.target_position = (source.target).to_array();
     record.field_of_view = source.field_of_view;
     record.near_clip = source.clipping[0];
     record.far_clip = source.clipping[1];
-    record.translation = encoder.optional(source.eye_offset, Ok, [0.; 3], "camera.eye_offset")?;
-    record.target_translation =
-        encoder.optional(source.target_offset, Ok, [0.; 3], "camera.target_offset")?;
+    record.translation = encoder.optional(
+        source.eye_offset,
+        |v| Ok(v.to_array()),
+        [0.; 3],
+        "camera.eye_offset",
+    )?;
+    record.target_translation = encoder.optional(
+        source.target_offset,
+        |v| Ok(v.to_array()),
+        [0.; 3],
+        "camera.target_offset",
+    )?;
     record.rotation = encoder.optional(source.roll, Ok, 0., "camera.roll")?;
     record.visibility = super::encode_helpers::visibility(
         &source.convention.visibility,

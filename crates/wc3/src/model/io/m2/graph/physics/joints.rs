@@ -1,5 +1,6 @@
 //! Versioned joint payloads become direct typed constraints.
 use super::*;
+use glam::Vec2;
 use native::records::PhysicsJointKind;
 use profile::{values::PhysicsMotorMode, Constraint, Joint, Motor, Spring};
 fn motor(mode: native::records::PhysicsMotorMode, force: f32, hz: f32, damping: f32) -> Motor {
@@ -192,7 +193,7 @@ pub(super) fn joints(file: &PhysicsFile<'_>, bodies: &[NodeId]) -> Result<Vec<Jo
                     frame(&value.frame_a),
                     frame(&value.frame_b),
                     Constraint::Prismatic {
-                        distances: [value.lower_limit, value.upper_limit],
+                        distances: Vec2::from_array([value.lower_limit, value.upper_limit]),
                         reference_translation: value.reference_translation,
                         motor_speed: value.motor_speed,
                         friction_force: 0.,

@@ -1,7 +1,8 @@
 //! Typed, model-scoped storage shared by authored and evaluated animation values.
 use crate::model::ids::Scope;
 use crate::model::ValueSample;
-use crate::model::{CurveValue, Error, Id, Link, Quaternion, Table, Texture, ValidateLinks};
+use crate::model::{CurveValue, Error, Id, Link, Quat, Table, Texture, ValidateLinks};
+use glam::{Vec2, Vec3, Vec4};
 use std::collections::HashMap;
 use std::fmt::{self, Debug, Formatter};
 use std::hash::{Hash, Hasher};
@@ -135,10 +136,10 @@ macro_rules! tables {
 }
 tables! {
     scalars: f32 => Scalar,
-    vectors2: [f32; 2] => Vector2,
-    vectors3: [f32; 3] => Vector3,
-    vectors4: [f32; 4] => Vector4,
-    rotations: Quaternion => Rotation,
+    vectors2: Vec2 => Vector2,
+    vectors3: Vec3 => Vector3,
+    vectors4: Vec4 => Vector4,
+    rotations: Quat => Rotation,
     unsigned: u32 => Unsigned,
     signed: i32 => Signed,
     shorts: u16 => Unsigned16,

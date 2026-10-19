@@ -136,19 +136,19 @@ The following edit duplicates a shared vertex while retaining its triangle's
 corner order. The same operation works for any schema that supports remapping.
 
 ```rust
-use wc3::model::common::IntoZeroVec;
+use wc3::model::common::IntoPackedArray;
 use wc3::model::{
-    GeometryData, GeometryEdit, GeometrySchema, Topology, VertexRemap,
+    GeometryData, GeometryEdit, GeometrySchema, Topology, Vec3, VertexRemap,
 };
 
 let geometry = GeometryData::triangles(
-    vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
+    vec![Vec3::ZERO, Vec3::X, Vec3::Y],
     vec![[0, 1, 2]],
 )?;
 let edited = geometry.edited(GeometryEdit {
     remap: Some(VertexRemap {
         new_to_old: vec![0, 1, 2, 0],
-        topology: Topology::Triangles(vec![[3, 1, 2]].into_zero_vec()),
+        topology: Topology::Triangles(vec![[3, 1, 2]].into_packed_array()),
     }),
     ..GeometryEdit::default()
 })?;

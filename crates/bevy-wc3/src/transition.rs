@@ -116,6 +116,7 @@ impl TransitionState {
 }
 #[cfg(test)]
 mod tests {
+    use bevy::math::Vec3;
 
     use super::*;
     #[test]
@@ -124,7 +125,7 @@ mod tests {
         state.record(
             0,
             ModelTransform {
-                translation: [2., 0., 0.],
+                translation: Vec3::from_array([2., 0., 0.]),
                 ..Default::default()
             },
         );
@@ -138,12 +139,12 @@ mod tests {
             1,
         );
         let destination = ModelTransform {
-            translation: [10., 0., 0.],
-            pivot: [0., 0., 3.],
+            translation: Vec3::from_array([10., 0., 0.]),
+            pivot: Vec3::from_array([0., 0., 3.]),
             ..Default::default()
         };
         let midpoint = state.blend(0, destination);
-        assert_eq!(midpoint.translation, [6., 0., 0.]);
+        assert_eq!(midpoint.translation, Vec3::from_array([6., 0., 0.]));
         assert_eq!(midpoint.pivot, destination.pivot);
         state.record(0, midpoint);
         state.prepare(
@@ -155,7 +156,10 @@ mod tests {
             0.,
             1,
         );
-        assert_eq!(state.blend(0, destination).translation, [6., 0., 0.]);
+        assert_eq!(
+            state.blend(0, destination).translation,
+            Vec3::from_array([6., 0., 0.])
+        );
         assert_eq!(
             state
                 .view()
@@ -163,7 +167,7 @@ mod tests {
                 .at_offset(0.5)
                 .blend(0, destination)
                 .translation,
-            [8., 0., 0.]
+            Vec3::from_array([8., 0., 0.])
         );
     }
     #[test]
@@ -172,7 +176,7 @@ mod tests {
         state.record(
             0,
             ModelTransform {
-                translation: [2., 0., 0.],
+                translation: Vec3::from_array([2., 0., 0.]),
                 ..Default::default()
             },
         );
@@ -196,12 +200,12 @@ mod tests {
             )
             .is_none());
         let destination = ModelTransform {
-            translation: [10., 0., 0.],
+            translation: Vec3::from_array([10., 0., 0.]),
             ..Default::default()
         };
         assert_eq!(
             state.view_at(1.).unwrap().blend(0, destination).translation,
-            [6., 0., 0.]
+            Vec3::from_array([6., 0., 0.])
         );
         assert_eq!(
             state
@@ -210,7 +214,7 @@ mod tests {
                 .at_offset(-2.)
                 .blend(0, destination)
                 .translation,
-            [6., 0., 0.]
+            Vec3::from_array([6., 0., 0.])
         );
         assert_eq!(
             state.blend(0, destination).translation,

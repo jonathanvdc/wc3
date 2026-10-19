@@ -523,6 +523,20 @@ fn interpolated(a: Mat4, b: Mat4, t: f32) -> Mat4 {
     Mat4::from_scale_rotation_translation(sa.lerp(sb, t), ra.slerp(rb, t), ta.lerp(tb, t))
 }
 
+impl RuntimeRibbons {
+    pub(crate) fn map_images(
+        &mut self,
+        map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
+    ) {
+        for emitter in &mut self.emitters {
+            for pass in &mut emitter.passes {
+                map_material_images(&mut pass.material, map);
+                pass.animation.map_images(map);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -580,19 +594,5 @@ mod tests {
             state.segments.as_slice(),
             &[RibbonSegment([2, 3, 0, 2]), RibbonSegment([3, 4, 1, 2])]
         );
-    }
-}
-
-impl RuntimeRibbons {
-    pub(crate) fn map_images(
-        &mut self,
-        map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
-    ) {
-        for emitter in &mut self.emitters {
-            for pass in &mut emitter.passes {
-                map_material_images(&mut pass.material, map);
-                pass.animation.map_images(map);
-            }
-        }
     }
 }

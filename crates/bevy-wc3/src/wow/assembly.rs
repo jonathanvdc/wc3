@@ -141,10 +141,10 @@ fn bone_corrections(
                 )));
             }
             for (index, node) in set.bones.iter().enumerate() {
-                let matrix =
-                    Mat4::from_cols_array_2d(&set.transforms.get(index).ok_or_else(|| {
-                        ModelError("native bone correction matrix is missing".into())
-                    })?);
+                let matrix = set
+                    .transforms
+                    .get(index)
+                    .ok_or_else(|| ModelError("native bone correction matrix is missing".into()))?;
                 if corrections.insert(*node, matrix).is_some() {
                     return Err(ModelError(format!(
                         "selected native bone sets overlap at {node:?}"

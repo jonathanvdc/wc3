@@ -1,6 +1,8 @@
+use glam::Vec3;
 use std::borrow::Cow;
 use wc3::model::common::{IntoZeroVec, ZeroVec};
 use wc3::model::io;
+use wc3::model::IntoPackedArray;
 use wc3::model::ModelMetadata;
 use wc3::model::TimeSource;
 use wc3::model::{
@@ -202,7 +204,10 @@ fn classic_geometry_becomes_editable_and_exports_modern_skin() {
     let semantic = &imported.value;
     let mesh = semantic.meshes().iter().next().unwrap().1;
     assert!(mesh.positions().is_owned());
-    assert_eq!(mesh.positions().get(1), Some([1., 0., 0.]));
+    assert_eq!(
+        mesh.positions().get(1),
+        Some(Vec3::from_array([1., 0., 0.]))
+    );
     let sm::Topology::Triangles(triangles) = mesh.topology() else {
         panic!("triangle topology lost")
     };
@@ -287,7 +292,7 @@ fn hermite_tangents_and_legacy_clock_survive_editable_roundtrip() {
     assert_eq!(track.curve.times().get(1).unwrap().as_seconds(), 1.);
     assert_eq!(
         track.curve.hermite_derivatives().unwrap().incoming.get(1),
-        Some([3., 0., 0.])
+        Some(Vec3::from_array([3., 0., 0.]))
     );
     let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
         .unwrap()
@@ -315,7 +320,7 @@ fn semantic_geometry_edits_rebuild_native_values() {
     let (id, mesh) = asset.meshes().iter().next().unwrap();
     let mut mesh = mesh.clone();
     let mut positions: Vec<_> = mesh.positions().iter().collect();
-    positions[1] = [5., 0., 0.];
+    positions[1] = Vec3::from_array([5., 0., 0.]);
     let sm::Topology::Triangles(triangles) = mesh.topology() else {
         unreachable!()
     };
@@ -328,7 +333,7 @@ fn semantic_geometry_edits_rebuild_native_values() {
         .collect::<Vec<_>>())
     .into_zero_vec();
     mesh.geometry = sm::M2Geometry::new(
-        (positions).into_zero_vec(),
+        (positions).into_packed_array(),
         normals,
         uv,
         triangles.clone(),
@@ -671,9 +676,9 @@ fn native_physics_shapes_and_body_offsets_are_editable() {
     let shape = &mut physics.bodies[0].shapes[0];
     assert!(matches!(
         shape.geometry,
-        mp::ShapeGeometry::Box([1., 2., 3.])
+        mp::ShapeGeometry::Box(v) if v == Vec3::new(1., 2., 3.)
     ));
-    shape.geometry = mp::ShapeGeometry::Box([7., 8., 9.]);
+    shape.geometry = mp::ShapeGeometry::Box(Vec3::from_array([7., 8., 9.]));
     asset
         .edit(|draft| draft.set_system(system_id, system))
         .unwrap();
@@ -760,9 +765,9 @@ fn sparse_bone_overrides_use_editable_pose_matrices() {
     let matrices = &mut overrides[0].transforms;
     assert!(matrices.is_owned());
     let mut matrix = matrices.get(0).unwrap();
-    assert_eq!(matrix[3][0], 3.);
-    matrix[3][0] = 9.;
-    *matrices = (vec![matrix]).into_zero_vec();
+    assert_eq!(matrix.w_axis.x, 3.);
+    matrix.w_axis.x = 9.;
+    *matrices = (vec![matrix]).into_packed_array();
     asset
         .edit(|draft| draft.set_system(system_id, system))
         .unwrap();
@@ -858,7 +863,11 @@ fn static_node_transforms_become_constant_native_curves() {
     let node = asset.node(id).unwrap().clone();
     let translation = node.transform.translation;
     asset
-        .edit(|draft| draft.values_mut().set(translation, [2., 3., 4.]))
+        .edit(|draft| {
+            draft
+                .values_mut()
+                .set(translation, Vec3::from_array([2., 3., 4.]))
+        })
         .unwrap();
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&asset, &ExportOptions::default())
         .unwrap()
@@ -1162,11 +1171,11 @@ fn zero_duration_global_tracks_are_typed_frozen_clocks_and_roundtrip_without_ret
             .unwrap();
         assert_eq!(
             sample.override_value(&imported.node(node).unwrap().transform.translation),
-            Some([2., 3., 4.])
+            Some(Vec3::from_array([2., 3., 4.]))
         );
         assert_eq!(
             sample.override_value(&imported.node(node).unwrap().transform.scale),
-            Some([1., 2., 3.])
+            Some(Vec3::from_array([1., 2., 3.]))
         );
     }
     let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
@@ -1333,7 +1342,7 @@ fn native_export_rejects_independent_transforms_on_repeated_shader_routes() {
     surface.steps[0].inputs_mut()[2]
         .coordinates
         .transform
-        .translation = slot_values.add([99., 0., 0.]);
+        .translation = slot_values.add(Vec3::from_array([99., 0., 0.]));
     imported
         .edit(|draft| {
             draft.import_values(&slot_values)?;
@@ -1374,7 +1383,7 @@ fn application_guild_palettes_survive_profile_changes_but_require_export_loss_po
     let mp::MaterialStep::Guild(guild) = &mut surface.steps[0] else {
         panic!("expected guild")
     };
-    guild.palette.background = [0.25, 0.5, 0.75];
+    guild.palette.background = Vec3::from_array([0.25, 0.5, 0.75]);
     imported
         .edit(|draft| draft.set_material_surface(id, surface))
         .unwrap();
@@ -1385,7 +1394,7 @@ fn application_guild_palettes_survive_profile_changes_but_require_export_loss_po
             .guild_palette()
             .unwrap()
             .background,
-        [0.25, 0.5, 0.75]
+        Vec3::from_array([0.25, 0.5, 0.75])
     );
     let error =
         io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).unwrap_err();
@@ -1688,7 +1697,10 @@ fn offset_animation_interval_exports_as_native_local_keys() {
                 clock: TimeSource::Animation,
                 curve: sm::Curve::linear(
                     [time(9.), time(10.), time(11.), time(12.)],
-                    [[900.; 3], [2.; 3], [4.; 3], [1200.; 3]],
+                    ([[900.; 3], [2.; 3], [4.; 3], [1200.; 3]])
+                        .into_iter()
+                        .map(Vec3::from_array)
+                        .collect::<Vec<_>>(),
                 )
                 .unwrap(),
             }),
@@ -1713,7 +1725,10 @@ fn offset_animation_interval_exports_as_native_local_keys() {
             ..Default::default()
         })
         .unwrap();
-    assert_eq!(sample.animated(&node.transform.translation), [3.; 3]);
+    assert_eq!(
+        sample.animated(&node.transform.translation),
+        Vec3::from_array([3.; 3])
+    );
     let sm::DynamicTrack::Vector3(track) = imported
         .clip_tracks(clip)
         .find(|channel| channel.target() == node.transform.translation.slot())
@@ -2101,8 +2116,14 @@ fn shared_bone_vectors_are_imported_once_at_model_scope_with_all_clips_retained(
     let sm::DynamicTrack::Vector3(track) = model.global_tracks().next().unwrap() else {
         panic!("shared translation must remain a vector curve");
     };
-    assert_eq!(track.curve.values().get(0), Some([1., 0., 0.]));
-    assert_eq!(track.curve.values().get(1), Some([2., 0., 0.]));
+    assert_eq!(
+        track.curve.values().get(0),
+        Some(Vec3::from_array([1., 0., 0.]))
+    );
+    assert_eq!(
+        track.curve.values().get(1),
+        Some(Vec3::from_array([2., 0., 0.]))
+    );
     assert_eq!(track.curve.times().get(1).unwrap().as_seconds(), 1.);
     for (id, _) in model.clips().iter() {
         assert_eq!(model.clip_tracks(id).count(), 0);

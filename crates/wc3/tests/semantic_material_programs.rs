@@ -1,3 +1,4 @@
+use glam::Vec2;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 #[path = "support/materials.rs"]
@@ -46,7 +47,7 @@ fn single_step_projection_preserves_shader_identity_and_native_state() {
 
     let mut world = wmo::Material {
         shader: Some(0xffff1234),
-        uv_scroll: [[0.2, -0.4], [0.5, 0.8]],
+        uv_scroll: [Vec2::from_array([0.2, -0.4]), Vec2::from_array([0.5, 0.8])],
         legacy_controls: Some(0xfedcba98),
         ..SlotConstruct::construct(&mut slot_values)
     };
@@ -675,9 +676,9 @@ fn modern_classic_layers_normalize_only_neutral_extension_storage() {
 
 #[test]
 fn equal_native_bitmap_declarations_retain_independent_identities_and_animation() {
-    use wc3::model::DynamicTrack;
     use native::animation::{Animatable, Sequence, Track, ValueKeyframe};
     use native::materials::{Layer, LayerTextureSlot, Material, ShaderType, Texture};
+    use wc3::model::DynamicTrack;
     let mut document = native::Document::<native::V1800>::new();
     let mut texture = Texture::new("").unwrap();
     texture.replaceable_id = 31;

@@ -1,13 +1,16 @@
 use super::*;
 use crate::{compile_model, BakeSpace, Playback, PoseBaker, PoseOptions};
+use bevy::math::Mat4;
+use bevy::math::Vec3;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
+use wc3::model::common::PackedArray;
 use wc3::model::materials::mdlx::{MaterialInputs, MaterialStep as MdlxStep, Shader};
 use wc3::model::profiles::mdlx::Material as MdlxMaterial;
 use wc3::model::ModelMetadata;
 use wc3::model::{
     Clip, Curve, Draw, DynamicTrack, ExplicitBinding, GeometryData, GeometryInfluences, Influence,
-    Material, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node as ModelNode, Quaternion,
-    Skin, Time, TimeSource, Track, UniversalBinding,
+    Material, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node as ModelNode, Quat, Skin,
+    Time, TimeSource, Track, UniversalBinding,
 };
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{ModelMount, MountTarget, Transform as ModelTransform};
@@ -20,7 +23,7 @@ fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
             ModelNode::named("joint", &mut slot_values)
                 .with_transform(
                     ModelTransform {
-                        translation: [rest, 0., 0.],
+                        translation: Vec3::from_array([rest, 0., 0.]),
                         ..SlotConstruct::construct(&mut slot_values)
                     },
                     &mut slot_values,
@@ -32,15 +35,21 @@ fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
         .add_skin(Skin::new(
             vec![joint],
             UniversalBinding::Explicit(
-                ExplicitBinding::new([
-                    Mat4::from_translation(Vec3::new(-rest, 0., 0.)).to_cols_array_2d()
-                ])
+                ExplicitBinding::new(
+                    ([Mat4::from_translation(Vec3::new(-rest, 0., 0.)).to_cols_array_2d()])
+                        .into_iter()
+                        .map(|v| Mat4::from_cols_array_2d(&v))
+                        .collect::<PackedArray<_>>(),
+                )
                 .unwrap(),
             ),
         ))
         .unwrap();
     let mut geometry = GeometryData::triangles(
-        [[rest, 0., 0.], [rest + 0.5, 0., 0.], [rest, 0.5, 0.]],
+        ([[rest, 0., 0.], [rest + 0.5, 0., 0.], [rest, 0.5, 0.]])
+            .into_iter()
+            .map(Vec3::from_array)
+            .collect::<PackedArray<_>>(),
         [[0, 1, 2]],
     )
     .unwrap();
@@ -106,8 +115,10 @@ fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
                 curve: Curve::linear(
                     [Time::seconds(0.).unwrap(), Time::seconds(1.).unwrap()],
                     [
-                        Quaternion::IDENTITY,
-                        Quaternion(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2).to_array()),
+                        Quat::IDENTITY,
+                        Quat::from_array(
+                            Quat::from_rotation_z(std::f32::consts::FRAC_PI_2).to_array(),
+                        ),
                     ],
                 )
                 .unwrap(),
@@ -221,7 +232,7 @@ fn rigid_equipment_uses_mount_frame_and_can_sync_its_clip() {
         Mounted(ModelMount {
             target: MountTarget::Node(joint),
             transform: ModelTransform {
-                translation: Vec3::Y.to_array(),
+                translation: Vec3::Y,
                 ..SlotConstruct::construct(&mut slot_values)
             },
             ..ModelMount::new(MountTarget::Node(joint))
@@ -241,7 +252,7 @@ fn mapped_attachment_anchor_retains_source_pivot_and_rest_space() {
     let (host, joint, clip) = model(1.);
     let (mut source, source_joint, _) = model(3.);
     let mut source_node = source.node(source_joint).unwrap().clone();
-    source_node.transform.pivot = [0., 0., 2.];
+    source_node.transform.pivot = Vec3::from_array([0., 0., 2.]);
     let feature = source
         .edit(|builder| {
             let edit_result = (|| {
@@ -282,7 +293,10 @@ fn mapped_attachment_anchor_retains_source_pivot_and_rest_space() {
         .iter()
         .position(|node| node.id == hook.node)
         .unwrap();
-    assert_eq!(composed.nodes[index].rest.pivot, [0., 0., 2.]);
+    assert_eq!(
+        composed.nodes[index].rest.pivot,
+        Vec3::from_array([0., 0., 2.])
+    );
     assert!(local_matrix(composed.nodes[index].rest).is_finite());
     let empty = HashMap::new();
     let pose = PoseContext {
@@ -340,7 +354,7 @@ fn repeated_rigid_parts_share_geometry_and_skinned_subassemblies_retain_mounts()
                 Mounted(ModelMount {
                     target: MountTarget::Node(joint),
                     transform: ModelTransform {
-                        translation: Vec3::Y.to_array(),
+                        translation: Vec3::Y,
                         ..SlotConstruct::construct(&mut slot_values)
                     },
                     ..ModelMount::new(MountTarget::Node(joint))
@@ -532,7 +546,7 @@ fn physical_placements_preserve_explicit_child_frame() {
     part.basis = Transform::from_scale(Vec3::splat(2.));
     part.up = Vec3::Y;
     let offset = ModelTransform {
-        translation: [2., 3., 4.],
+        translation: Vec3::from_array([2., 3., 4.]),
         ..SlotConstruct::construct(&mut slot_values)
     };
     let physical = body
@@ -564,7 +578,7 @@ fn physical_placements_preserve_explicit_child_frame() {
         .unwrap();
     assert!(position(&authored, clip, 0., 1).abs_diff_eq(Vec3::new(6., 3., 4.), 1e-5));
     let mut invalid = ModelMount::new(MountTarget::Node(joint));
-    invalid.transform.rotation = Quaternion([0.; 4]);
+    invalid.transform.rotation = Quat::from_array([0.; 4]);
     assert!(body
         .compose([ModelPart::new(&part, Mounted(invalid))])
         .is_err());

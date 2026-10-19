@@ -1,8 +1,8 @@
+use glam::{Vec2, Vec3};
 use std::borrow::Cow;
 use wc3::model::profiles::{m2, mdlx, wmo, Extends, Mdlx, Narrows, Universal, Wmo, M2};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{LightEmission, Model};
-
 #[test]
 fn resource_conversion_moves_owned_paths_and_preserves_handles() {
     let slot_values = SlotValues::default();
@@ -36,7 +36,7 @@ fn world_features_retain_light_relationship_categories() {
             appearance: SlotConstruct::construct(&mut slot_values),
         }),
         wmo::Node::Light(Box::new(wmo::Light {
-            directional_terms: Some([([1., 2., 3.], 4.); 6]),
+            directional_terms: Some([(Vec3::from_array([1., 2., 3.]), 4.); 6]),
             modern: Some(wmo::ModernLight {
                 controls: [0x8000_0001; 7],
                 trailing_controls: [17; 11],
@@ -70,11 +70,11 @@ fn m2_enable_and_camera_conventions_survive_projection() {
         m2::ActorKind::Light(m2::Light {
             kind: m2::values::LightKind::Unknown(65535),
             ambient: LightEmission {
-                color: slot_values.add([0.1, 0.2, 0.3]),
+                color: slot_values.add(Vec3::from_array([0.1, 0.2, 0.3])),
                 intensity: slot_values.add(0.4),
             },
             diffuse: LightEmission {
-                color: slot_values.add([0.5, 0.6, 0.7]),
+                color: slot_values.add(Vec3::from_array([0.5, 0.6, 0.7])),
                 intensity: slot_values.add(0.8),
             },
             attenuation: [slot_values.add(1.), slot_values.add(20.)],
@@ -83,10 +83,10 @@ fn m2_enable_and_camera_conventions_survive_projection() {
         m2::ActorKind::Camera(m2::Camera {
             convention: m2::values::CameraKind::Unknown(0x8000_0001),
             field_of_view: slot_values.add(0.8),
-            clipping: [0.1, 1000.],
-            target: [1., 2., 3.],
-            eye_offset: slot_values.add([4., 5., 6.]),
-            target_offset: slot_values.add([7., 8., 9.]),
+            clipping: Vec2::from_array([0.1, 1000.]),
+            target: Vec3::from_array([1., 2., 3.]),
+            eye_offset: slot_values.add(Vec3::from_array([4., 5., 6.])),
+            target_offset: slot_values.add(Vec3::from_array([7., 8., 9.])),
             roll: slot_values.add(0.5),
         }),
     ];
@@ -109,7 +109,7 @@ fn editing_shared_light_fields_survives_exact_native_projection() {
     };
     slot_values.set(light.diffuse.intensity, 7.).unwrap();
     slot_values
-        .set(light.ambient.color, [0.1, 0.2, 0.3])
+        .set(light.ambient.color, Vec3::from_array([0.1, 0.2, 0.3]))
         .unwrap();
     let mdlx::Node::Light(restored) =
         <Mdlx as Narrows<Universal>>::feature(widened, &slot_values).unwrap()
@@ -117,7 +117,10 @@ fn editing_shared_light_fields_survives_exact_native_projection() {
         panic!("light changed behavior")
     };
     assert_eq!(slot_values[restored.diffuse.intensity], 7.);
-    assert_eq!(slot_values[restored.ambient.color], [0.1, 0.2, 0.3]);
+    assert_eq!(
+        slot_values[restored.ambient.color],
+        Vec3::from_array([0.1, 0.2, 0.3])
+    );
 }
 
 #[test]

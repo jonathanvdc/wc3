@@ -1,32 +1,33 @@
 //! Geometry streams and connectivity available to this model family.
-use crate::model::common::IntoZeroVec;
+use crate::model::common::IntoPackedArray;
 use crate::model::geometry_edit::{check_edit, remap_values};
 use crate::model::geometry_schema::validate_geometry;
 use crate::model::vertex_geometry::{GeometryStreams, VertexStreams};
 use crate::model::TextureCoordinates;
 use crate::model::{
-    Attribute, Error, GeometrySchema, Influence, InfluenceRows, Link, Topology, ValidateLinks,
-    ZeroVec,
+    Attribute, Error, GeometrySchema, Influence, InfluenceRows, Link, PackedArray, Topology,
+    ValidateLinks,
 };
 use crate::model::{GeometryData, GeometryInfluences, GeometryKind, GeometryParts, VertexData};
 use crate::model::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
+use glam::{Vec2, Vec3, Vec4};
 type M2Streams<'data> =
-    VertexStreams<'data, ZeroVec<'data, [Influence; 4]>, [ZeroVec<'data, [f32; 2]>; 2], (), ()>;
+    VertexStreams<'data, PackedArray<'data, [Influence; 4]>, [PackedArray<'data, Vec2>; 2], (), ()>;
 
 /// World of Warcraft model geometry with two UV streams and four joint slots.
 /// Unsupported streams are unavailable through this type's constructors.
 ///
 /// ```compile_fail
-/// use wc3::model::M2Geometry;
+/// use wc3::model::{M2Geometry, Vec4};
 /// let geometry = M2Geometry::empty();
-/// let _ = geometry.with_tangents(vec![[1., 0., 0., 1.]]);
+/// let _ = geometry.with_tangents(vec![Vec4::new(1., 0., 0., 1.)]);
 /// ```
 ///
 /// ```compile_fail
-/// use wc3::model::{Influence, M2Geometry, ZeroVec};
+/// use wc3::model::{Influence, M2Geometry, PackedArray, Vec3};
 /// let _ = M2Geometry::new(
-///     Vec::<[f32; 3]>::new(), Vec::<[f32; 3]>::new(),
-///     [ZeroVec::default()], Vec::<[u32; 3]>::new(), Vec::<[Influence; 4]>::new(),
+///     Vec::<Vec3>::new(), Vec::<Vec3>::new(),
+///     [PackedArray::default()], Vec::<[u32; 3]>::new(), Vec::<[Influence; 4]>::new(),
 /// );
 /// ```
 #[derive(Clone, Debug)]
@@ -40,24 +41,24 @@ impl<'data> M2Geometry<'data> {
     }
     /// Creates checked native-family geometry from borrowed or owned streams.
     pub fn new(
-        positions: impl IntoZeroVec<'data, [f32; 3]>,
-        normals: impl IntoZeroVec<'data, [f32; 3]>,
-        texture_coordinates: [ZeroVec<'data, [f32; 2]>; 2],
-        triangles: impl IntoZeroVec<'data, [u32; 3]>,
-        influences: impl IntoZeroVec<'data, [Influence; 4]>,
+        positions: impl IntoPackedArray<'data, Vec3>,
+        normals: impl IntoPackedArray<'data, Vec3>,
+        texture_coordinates: [PackedArray<'data, Vec2>; 2],
+        triangles: impl IntoPackedArray<'data, [u32; 3]>,
+        influences: impl IntoPackedArray<'data, [Influence; 4]>,
     ) -> Result<Self, Error> {
         let geometry = Self {
             streams: VertexStreams {
                 vertices: VertexData {
                     tangents: (),
                     colors: (),
-                    positions: positions.into_zero_vec(),
-                    normals: normals.into_zero_vec(),
+                    positions: positions.into_packed_array(),
+                    normals: normals.into_packed_array(),
                     texture_coordinates,
                     extras: (),
                 },
-                topology: Topology::Triangles(triangles.into_zero_vec()),
-                influences: influences.into_zero_vec(),
+                topology: Topology::Triangles(triangles.into_packed_array()),
+                influences: influences.into_packed_array(),
             },
         };
         geometry.validate()?;
@@ -102,19 +103,19 @@ impl<'data> GeometrySchema<'data> for M2Geometry<'data> {
         Ok(result)
     }
 
-    fn positions(&self) -> &ZeroVec<'data, [f32; 3]> {
+    fn positions(&self) -> &PackedArray<'data, Vec3> {
         &self.streams.positions
     }
-    fn normals(&self) -> Option<&ZeroVec<'data, [f32; 3]>> {
+    fn normals(&self) -> Option<&PackedArray<'data, Vec3>> {
         Some(&self.streams.normals)
     }
-    fn tangents(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
+    fn tangents(&self) -> Option<&PackedArray<'data, Vec4>> {
         None
     }
     fn texture_coordinates(&self) -> TextureCoordinates<'_, 'data> {
         TextureCoordinates::Slice(&self.streams.texture_coordinates)
     }
-    fn colors(&self) -> Option<&ZeroVec<'data, [f32; 4]>> {
+    fn colors(&self) -> Option<&PackedArray<'data, Vec4>> {
         None
     }
     fn attributes(&self) -> &[Attribute<'data>] {
@@ -163,13 +164,13 @@ impl Default for M2Geometry<'_> {
                 vertices: VertexData {
                     tangents: (),
                     colors: (),
-                    positions: ZeroVec::default(),
-                    normals: ZeroVec::default(),
-                    texture_coordinates: [ZeroVec::default(), ZeroVec::default()],
+                    positions: PackedArray::default(),
+                    normals: PackedArray::default(),
+                    texture_coordinates: [PackedArray::default(), PackedArray::default()],
                     extras: (),
                 },
-                topology: Topology::Triangles(ZeroVec::default()),
-                influences: ZeroVec::default(),
+                topology: Topology::Triangles(PackedArray::default()),
+                influences: PackedArray::default(),
             },
         }
     }
@@ -188,13 +189,13 @@ impl<'data> From<M2Geometry<'data>> for GeometryData<'data> {
         } = value.streams;
         GeometryParts {
             strip_set: false,
-            surface_triangles: ZeroVec::default(),
+            surface_triangles: PackedArray::default(),
             pools: Default::default(),
             kind: GeometryKind::Display,
             positions: vertices.positions,
             normals: vertices.normals,
-            tangents: ZeroVec::default(),
-            colors: ZeroVec::default(),
+            tangents: PackedArray::default(),
+            colors: PackedArray::default(),
             texture_coordinates: Vec::from(vertices.texture_coordinates),
             attributes: Vec::new(),
             topology,

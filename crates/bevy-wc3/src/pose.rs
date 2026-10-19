@@ -60,7 +60,7 @@ impl PoseContext<'_> {
     ) -> (Mat4, bool) {
         let (matrix, visible) = self.sample_node(index, sample, scratch);
         (
-            matrix * Mat4::from_translation(Vec3::from_array(self.nodes[index].rest.pivot)),
+            matrix * Mat4::from_translation(self.nodes[index].rest.pivot),
             visible,
         )
     }

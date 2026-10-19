@@ -8,6 +8,7 @@ use crate::model::{
 };
 use crate::model::{EventOccurrence, EventSourceId};
 use crate::model::{PropertyValue, ValueSlot};
+use glam::{Vec2, Vec3, Vec4};
 use std::borrow::Cow;
 /// A relationship to another object in the semantic graph.
 #[derive(Clone, Debug)]
@@ -279,5 +280,27 @@ impl ValidateLinks for TimeSource {
 impl ValidateLinks for EventOccurrence {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.source.visit_links(visitor);
+    }
+}
+
+impl ValidateLinks for Vec2 {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if !self.is_finite() {
+            visitor(Link::InvalidValue);
+        }
+    }
+}
+impl ValidateLinks for Vec3 {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if !self.is_finite() {
+            visitor(Link::InvalidValue);
+        }
+    }
+}
+impl ValidateLinks for Vec4 {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if !self.is_finite() {
+            visitor(Link::InvalidValue);
+        }
     }
 }

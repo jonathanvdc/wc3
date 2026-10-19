@@ -1,7 +1,8 @@
 //! Curve restrictions shared by native clocks with bounded unsigned timestamps.
 use super::Error;
 use crate::model::PropertyValue;
-use crate::model::{Curve, CurveValue, Interpolation, Quaternion, Time, Track};
+use crate::model::{Curve, CurveValue, Interpolation, Quat, Time, Track};
+use glam::{Vec2, Vec3, Vec4};
 
 #[derive(Clone)]
 struct Key {
@@ -39,28 +40,26 @@ impl FloatValue for f32 {
         }
     }
 }
-impl<const N: usize> FloatValue for [f32; N]
-where
-    [f32; N]: PropertyValue,
-{
-    /// Reads the scalar components in their authored order.
-    fn components(&self) -> Vec<f32> {
-        self.to_vec()
-    }
-    fn from_components(v: Vec<f32>) -> Result<Self, Error> {
-        v.try_into()
-            .map_err(|_| Error::new("curve", "vector cardinality differs"))
-    }
+macro_rules! float_vectors {
+    ($($ty:ty),*) => {$ (
+        impl FloatValue for $ty {
+            fn components(&self) -> Vec<f32> { self.to_array().to_vec() }
+            fn from_components(v: Vec<f32>) -> Result<Self, Error> {
+                Ok(Self::from_array(v.try_into().map_err(|_| Error::new("curve", "vector cardinality differs"))?))
+            }
+        }
+    )*};
 }
-impl FloatValue for Quaternion {
+float_vectors!(Vec2, Vec3, Vec4);
+impl FloatValue for Quat {
     /// Whether component interpolation must honor quaternion rotation semantics.
     const IS_ROTATION: bool = true;
     /// Reads the scalar components in their authored order.
     fn components(&self) -> Vec<f32> {
-        self.0.to_vec()
+        self.to_array().to_vec()
     }
     fn from_components(values: Vec<f32>) -> Result<Self, Error> {
-        Ok(Self(values.try_into().map_err(|_| {
+        Ok(Self::from_array(values.try_into().map_err(|_| {
             Error::new("quaternion", "four components required")
         })?))
     }

@@ -1,6 +1,9 @@
 //! Hierarchy and authored transform behavior.
 use crate::model::profiles::{Profile, Universal};
-use crate::model::{Construct, Error, NodeId, Property, PropertyValues, Quaternion, ValueSample};
+use crate::model::{
+    Construct, CurveValue as _, Error, NodeId, Property, PropertyValues, Quat, ValueSample,
+};
+use glam::Vec3;
 use std::borrow::Cow;
 /// Transform inheritance along a parent relationship.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -112,34 +115,30 @@ impl EulerLocks {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Transform {
     /// Translation.
-    pub translation: [f32; 3],
+    pub translation: Vec3,
     /// Rotation in x/y/z/w order.
-    pub rotation: Quaternion,
+    pub rotation: Quat,
     /// Scale.
-    pub scale: [f32; 3],
+    pub scale: Vec3,
     /// Pivot relative to the parent frame.
-    pub pivot: [f32; 3],
+    pub pivot: Vec3,
 }
 impl Default for Transform {
     fn default() -> Self {
         Self {
-            translation: [0.; 3],
-            rotation: Quaternion::IDENTITY,
-            scale: [1.; 3],
-            pivot: [0.; 3],
+            translation: Vec3::from_array([0.; 3]),
+            rotation: Quat::IDENTITY,
+            scale: Vec3::from_array([1.; 3]),
+            pivot: Vec3::from_array([0.; 3]),
         }
     }
 }
 impl Transform {
     pub(crate) fn validate(&self) -> Result<(), Error> {
-        if self
-            .translation
-            .iter()
-            .chain(&self.rotation.0)
-            .chain(&self.scale)
-            .chain(&self.pivot)
-            .all(|x| x.is_finite())
-            && self.rotation.is_rotation()
+        if self.translation.is_finite()
+            && self.rotation.is_valid()
+            && self.scale.is_finite()
+            && self.pivot.is_finite()
         {
             Ok(())
         } else {
@@ -154,13 +153,13 @@ impl Transform {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AnimatedTransform {
     /// Local translation slot.
-    pub translation: Property<[f32; 3]>,
+    pub translation: Property<Vec3>,
     /// Local rotation slot.
-    pub rotation: Property<Quaternion>,
+    pub rotation: Property<Quat>,
     /// Local scale slot.
-    pub scale: Property<[f32; 3]>,
+    pub scale: Property<Vec3>,
     /// Pivot relative to the parent frame.
-    pub pivot: [f32; 3],
+    pub pivot: Vec3,
 }
 impl AnimatedTransform {
     /// Allocates the components of an authored transform.

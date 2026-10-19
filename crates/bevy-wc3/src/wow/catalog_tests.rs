@@ -1,4 +1,5 @@
 use super::*;
+use bevy::math::Vec3;
 use wc3::model::ModelBuilder;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
@@ -15,7 +16,7 @@ fn catalog(records: &[(u32, i32, [f32; 3])]) -> CharacterCatalog {
                 node,
                 name_crc: *crc,
                 key_bone: *key,
-                pivot: *pivot,
+                pivot: Vec3::from_array(*pivot),
                 name: format!("bone{i}"),
             }
         })

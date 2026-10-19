@@ -1,9 +1,9 @@
 use super::super::ModelMaterialKey;
 use super::*;
 use crate::material::native_fixtures::m2;
+use bevy::math::Vec3;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-
 #[test]
 fn third_input_reuses_raw_streams_with_its_own_transform() {
     let mut slot_values = SlotValues::default();
@@ -25,7 +25,8 @@ fn third_input_reuses_raw_streams_with_its_own_transform() {
                 .collect(),
             ..SlotConstruct::construct(&mut slot_values)
         };
-        shader.textures[2].coordinates.transform.translation = slot_values.add([0.25, 0.5, 0.]);
+        shader.textures[2].coordinates.transform.translation =
+            slot_values.add(Vec3::from_array([0.25, 0.5, 0.]));
         let model = {
             let mut draft = Model::<wc3::model::profiles::Universal>::builder(ModelMetadata::M2(
                 Default::default(),
@@ -75,7 +76,8 @@ fn masked_crossfade_reuses_streams_and_keeps_mask_transform() {
                 .collect(),
             ..SlotConstruct::construct(&mut slot_values)
         };
-        shader.textures[3].coordinates.transform.translation = slot_values.add([0.25, 0.5, 0.]);
+        shader.textures[3].coordinates.transform.translation =
+            slot_values.add(Vec3::from_array([0.25, 0.5, 0.]));
         shader.textures[3].contribution = slot_values.add(0.4);
         let model = {
             let mut draft = Model::<wc3::model::profiles::Universal>::builder(ModelMetadata::M2(

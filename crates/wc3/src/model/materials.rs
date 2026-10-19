@@ -1,5 +1,6 @@
 //! Resource identities, sampling, and composable complete material surfaces.
 
+use crate::model::common::packed_identity;
 /// Model shader steps and texture inputs.
 pub mod m2;
 
@@ -112,3 +113,5 @@ impl<P: Profile> Material<'_, P> {
         self.surface.validate()
     }
 }
+
+packed_identity!(Texture, Option<Texture>);

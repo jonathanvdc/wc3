@@ -358,11 +358,7 @@ pub fn compile_model_with_options(
                                             binds: retained
                                                 .iter()
                                                 .map(|&slot| {
-                                                    Mat4::from_cols_array_2d(
-                                                        &binds
-                                                            .get(slot)
-                                                            .expect("validated bind slot"),
-                                                    )
+                                                    binds.get(slot).expect("validated bind slot")
                                                 })
                                                 .collect::<Vec<_>>()
                                                 .into(),

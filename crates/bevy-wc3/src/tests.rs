@@ -1,5 +1,7 @@
 use super::*;
 use bevy::ecs::world::CommandQueue;
+use bevy::math::Mat4;
+use bevy::math::{Vec3, Vec4};
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::mesh::VertexAttributeValues;
@@ -13,8 +15,8 @@ use wc3::model::ModelBuilder;
 use wc3::model::ModelMetadata;
 use wc3::model::{
     Billboard, Draw, ExplicitBinding, GeometryData, GeometryInfluences, IdentityBinding, Influence,
-    Material as SemanticMaterial, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node, Skin,
-    UniversalBinding, ZeroVec,
+    Material as SemanticMaterial, MaterialSurface, Mesh as ModelMesh, MeshInstance, Node,
+    PackedArray, Skin, UniversalBinding,
 };
 use wc3::model::{BillboardFrame, BillboardScale};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
@@ -22,7 +24,14 @@ use wc3::model::{NodeId, Transform as ModelTransform};
 
 fn fixture(binding: UniversalBinding<'static>) -> (Model<'static>, NodeId) {
     fixture_geometry(
-        GeometryData::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]).unwrap(),
+        GeometryData::triangles(
+            ([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]])
+                .into_iter()
+                .map(Vec3::from_array)
+                .collect::<PackedArray<_>>(),
+            [[0, 1, 2]],
+        )
+        .unwrap(),
         binding,
     )
 }
@@ -40,7 +49,7 @@ fn fixture_geometry<'a>(
             Node::named("joint", &mut slot_values)
                 .with_transform(
                     ModelTransform {
-                        translation: [3., 0., 0.],
+                        translation: Vec3::from_array([3., 0., 0.]),
                         ..SlotConstruct::construct(&mut slot_values)
                     },
                     &mut slot_values,
@@ -53,7 +62,7 @@ fn fixture_geometry<'a>(
             Node::named("mesh placement", &mut slot_values)
                 .with_transform(
                     ModelTransform {
-                        translation: [7., 2., 0.],
+                        translation: Vec3::from_array([7., 2., 0.]),
                         ..SlotConstruct::construct(&mut slot_values)
                     },
                     &mut slot_values,
@@ -123,7 +132,13 @@ fn fixture_geometry<'a>(
 fn explicit_and_identity_bindings_preserve_authored_matrices() {
     let explicit = Mat4::from_translation(Vec3::new(-3., 0., 0.));
     let (source, _) = fixture(UniversalBinding::Explicit(
-        ExplicitBinding::new([explicit.to_cols_array_2d()]).unwrap(),
+        ExplicitBinding::new(
+            ([explicit.to_cols_array_2d()])
+                .into_iter()
+                .map(|v| Mat4::from_cols_array_2d(&v))
+                .collect::<PackedArray<_>>(),
+        )
+        .unwrap(),
     ));
     let compiled = compile_model(&source, |_| None).unwrap();
     assert_eq!(compiled.skins[0].binds[0], explicit);
@@ -136,7 +151,13 @@ fn explicit_and_identity_bindings_preserve_authored_matrices() {
 fn transformed_mesh_placement_cancels_in_joint_skin_matrix() {
     let inverse = Mat4::from_translation(Vec3::new(-3., 0., 0.));
     let (source, joint_id) = fixture(UniversalBinding::Explicit(
-        ExplicitBinding::new([inverse.to_cols_array_2d()]).unwrap(),
+        ExplicitBinding::new(
+            ([inverse.to_cols_array_2d()])
+                .into_iter()
+                .map(|v| Mat4::from_cols_array_2d(&v))
+                .collect::<PackedArray<_>>(),
+        )
+        .unwrap(),
     ));
     let compiled = compile_model(&source, |_| None).unwrap();
     drop(source);
@@ -183,11 +204,11 @@ fn transformed_mesh_placement_cancels_in_joint_skin_matrix() {
 #[test]
 fn compiled_mesh_survives_borrowed_position_storage() {
     let compiled = {
-        let packed: ZeroVec<'_, [f32; 3]> = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]
+        let packed: PackedArray<'_, [f32; 3]> = [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]
             .into_iter()
             .collect();
         let bytes = packed.as_bytes().to_vec();
-        let borrowed = ZeroVec::parse_bytes(&bytes).unwrap();
+        let borrowed = PackedArray::parse_bytes(&bytes).unwrap();
         let geometry = GeometryData::triangles(borrowed, [[0, 1, 2]]).unwrap();
         let (graph, _) = fixture_geometry(geometry, UniversalBinding::Identity(IdentityBinding));
         compile_model(&graph, |_| None).unwrap()
@@ -216,7 +237,7 @@ fn assert_matrix_close(actual: Mat4, expected: Mat4) {
 #[test]
 fn rendered_hierarchy_preserves_shear() {
     let mut slot_values = SlotValues::default();
-    use wc3::model::Quaternion;
+    use wc3::model::Quat;
     let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
     let mount = source.instances().iter().next().unwrap().1.node;
     let parent_rotation = Quat::from_rotation_z(0.3);
@@ -227,9 +248,9 @@ fn rendered_hierarchy_preserves_shear() {
                 let parent = builder.add_node(
                     Node::named("nonuniform parent", &mut slot_values).with_transform(
                         ModelTransform {
-                            translation: [1., 2., 3.],
-                            rotation: Quaternion(parent_rotation.to_array()),
-                            scale: [2., 1., 0.5],
+                            translation: Vec3::from_array([1., 2., 3.]),
+                            rotation: Quat::from_array(parent_rotation.to_array()),
+                            scale: Vec3::from_array([2., 1., 0.5]),
                             ..SlotConstruct::construct(&mut slot_values)
                         },
                         &mut slot_values,
@@ -241,8 +262,8 @@ fn rendered_hierarchy_preserves_shear() {
                         .with_parent(parent)
                         .with_transform(
                             ModelTransform {
-                                translation: [4., 0., 0.],
-                                rotation: Quaternion(child_rotation.to_array()),
+                                translation: Vec3::from_array([4., 0., 0.]),
+                                rotation: Quat::from_array(child_rotation.to_array()),
                                 ..SlotConstruct::construct(&mut slot_values)
                             },
                             &mut slot_values,
@@ -414,7 +435,7 @@ fn replacing_asset_population_removes_only_the_owned_old_hierarchy() {
             unresolved_images: Vec::new(),
         });
     let override_pose = ModelTransform {
-        translation: [9., 8., 7.],
+        translation: Vec3::from_array([9., 8., 7.]),
         ..SlotConstruct::construct(&mut slot_values)
     };
     let root = app
@@ -904,7 +925,7 @@ fn corrected_affine_joints_publish_shear_to_skinning_and_external_children() {
     use crate::runtime::publish_affine_poses;
     use bevy::transform::TransformSystems;
     use std::sync::Arc;
-    use wc3::model::{Quaternion, TransformSemantics};
+    use wc3::model::{Quat, TransformSemantics};
     let (source, joint_id) = fixture(UniversalBinding::Identity(IdentityBinding));
     let mut compiled = compile_model(&source, |_| None).unwrap();
     let original_binds = compiled.skins[0].binds.clone();
@@ -922,12 +943,12 @@ fn corrected_affine_joints_publish_shear_to_skinning_and_external_children() {
     node.transform_semantics = TransformSemantics::Affine;
     node.correction = Some(correction);
     let pose = ModelTransform {
-        translation: [3., 0., 0.],
-        rotation: Quaternion(Quat::from_rotation_z(0.8).to_array()),
+        translation: Vec3::from_array([3., 0., 0.]),
+        rotation: Quat::from_array(Quat::from_rotation_z(0.8).to_array()),
         ..Default::default()
     };
     let local = pose.to_matrix();
-    let origin = local.transform_point3(Vec3::from_array(pose.pivot));
+    let origin = local.transform_point3(pose.pivot);
     let expected =
         Mat4::from_translation(origin) * correction * Mat4::from_translation(-origin) * local;
     let mut meshes = Assets::default();

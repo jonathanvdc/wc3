@@ -1,6 +1,7 @@
 //! Native projection expands logical corner and face attributes at the output boundary.
 use super::{Context, Error};
 use crate::model::common::Borrowed as _;
+use crate::model::common::PackedArray;
 use crate::model::io::{materialize, owned};
 use crate::model::profiles::Profile;
 use crate::model::{
@@ -9,8 +10,8 @@ use crate::model::{
     SkinId, Topology, ValueGroups,
 };
 use crate::model::{GeometryInfluences, GeometrySchema};
+use glam::{Vec2, Vec3, Vec4};
 use std::collections::BTreeMap;
-use zerovec::ZeroVec;
 /// Geometry for one material draw after attribute seams and polygons are resolved.
 #[derive(Clone, Debug)]
 pub struct ProjectedDraw<'a> {
@@ -21,7 +22,7 @@ pub struct ProjectedDraw<'a> {
     /// Geometry with seam vertices expanded and polygon connectivity resolved.
     pub mesh: Mesh<'a>,
     /// Original vertex ordinal for each projected vertex.
-    pub source_vertices: ZeroVec<'a, u32>,
+    pub source_vertices: PackedArray<'a, u32>,
     /// Joint palette retained by the projected placement.
     pub skin: Option<SkinId>,
 }
@@ -258,26 +259,26 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                         bounds: source.bounds,
                         geometry: GeometryParts {
                             strip_set: false,
-                            surface_triangles: ZeroVec::new(),
+                            surface_triangles: PackedArray::new(),
                             pools: Default::default(),
                             kind: source.geometry.kind(),
                             positions: source.positions().as_borrowed(),
                             normals: source
                                 .normals()
-                                .map(ZeroVec::as_borrowed)
+                                .map(PackedArray::as_borrowed)
                                 .unwrap_or_default(),
                             tangents: source
                                 .tangents()
-                                .map(ZeroVec::as_borrowed)
+                                .map(PackedArray::as_borrowed)
                                 .unwrap_or_default(),
                             texture_coordinates: source
                                 .texture_coordinates()
                                 .iter()
-                                .map(ZeroVec::as_borrowed)
+                                .map(PackedArray::as_borrowed)
                                 .collect(),
                             colors: source
                                 .colors()
-                                .map(ZeroVec::as_borrowed)
+                                .map(PackedArray::as_borrowed)
                                 .unwrap_or_default(),
                             influences: GeometryInfluences::Variable(influences),
                             topology: source.topology().clone(),
@@ -520,7 +521,7 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                 bounds: source.bounds,
                 geometry: GeometryParts {
                     strip_set: false,
-                    surface_triangles: ZeroVec::new(),
+                    surface_triangles: PackedArray::new(),
                     pools: Default::default(),
                     kind: source.geometry.kind(),
                     positions,
@@ -543,8 +544,8 @@ fn vector3<'a, 'data: 'a, P: Profile>(
     mesh: &'a Mesh<'data, P>,
     semantic: AttributeSemantic<'_>,
     points: &[Corner],
-    fallback: Option<&'a ZeroVec<'data, [f32; 3]>>,
-) -> Result<ZeroVec<'a, [f32; 3]>, Error> {
+    fallback: Option<&'a PackedArray<'data, Vec3>>,
+) -> Result<PackedArray<'a, Vec3>, Error> {
     if let Some(attribute) = lookup(
         mesh,
         &semantic,
@@ -571,15 +572,15 @@ fn vector3<'a, 'data: 'a, P: Profile>(
                 .expect("validated attribute")
         }))
     } else {
-        Ok(ZeroVec::new())
+        Ok(PackedArray::new())
     }
 }
 fn vector4<'a, 'data: 'a, P: Profile>(
     mesh: &'a Mesh<'data, P>,
     semantic: AttributeSemantic<'_>,
     points: &[Corner],
-    fallback: Option<&'a ZeroVec<'data, [f32; 4]>>,
-) -> Result<ZeroVec<'a, [f32; 4]>, Error> {
+    fallback: Option<&'a PackedArray<'data, Vec4>>,
+) -> Result<PackedArray<'a, Vec4>, Error> {
     if let Some(attribute) = lookup(
         mesh,
         &semantic,
@@ -606,15 +607,15 @@ fn vector4<'a, 'data: 'a, P: Profile>(
                 .expect("validated attribute")
         }))
     } else {
-        Ok(ZeroVec::new())
+        Ok(PackedArray::new())
     }
 }
 fn vector2<'a, 'data: 'a, P: Profile>(
     mesh: &'a Mesh<'data, P>,
     semantic: AttributeSemantic<'_>,
     points: &[Corner],
-    fallback: Option<&'a ZeroVec<'data, [f32; 2]>>,
-) -> Result<ZeroVec<'a, [f32; 2]>, Error> {
+    fallback: Option<&'a PackedArray<'data, Vec2>>,
+) -> Result<PackedArray<'a, Vec2>, Error> {
     if let Some(attribute) = lookup(
         mesh,
         &semantic,
@@ -641,7 +642,7 @@ fn vector2<'a, 'data: 'a, P: Profile>(
                 .expect("validated attribute")
         }))
     } else {
-        Ok(ZeroVec::new())
+        Ok(PackedArray::new())
     }
 }
 // Ear clipping preserves authored winding and supports concave simple polygons.
@@ -658,6 +659,7 @@ fn triangulate<P: Profile>(
             mesh.positions()
                 .get(point.vertex as usize)
                 .expect("validated vertex")
+                .to_array()
                 .map(f64::from)
         })
         .collect();

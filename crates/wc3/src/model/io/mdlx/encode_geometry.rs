@@ -1,11 +1,12 @@
 //! Normalized logical draw geometry encoded into native Warcraft III geosets.
 use super::encode_animation::Encoder;
+use crate::model::common::{PackedArray, PackedValue};
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::{JointInfluences, LookId, MaterialId, MeshId, NodeId, Topology};
 use native::geometry::SkinWeight;
 use std::collections::BTreeMap;
-use zerovec::{ule::AsULE, ZeroVec};
+use zerovec::ZeroVec;
 
 pub(super) fn write<'a, 'data, T: Dialect>(
     target: &mut native::Document<'a, T>,
@@ -63,8 +64,8 @@ pub(super) fn write<'a, 'data, T: Dialect>(
                 .expect("validated material look")];
             geoset.selection_group = instance.selection_group;
             geoset.extent = native::GeosetExtent {
-                minimum: mesh.bounds.minimum,
-                maximum: mesh.bounds.maximum,
+                minimum: (mesh.bounds.minimum).to_array(),
+                maximum: (mesh.bounds.maximum).to_array(),
                 bounds_radius: mesh.bounds.sphere_radius,
             };
             if let Err(error) = geoset.try_set_name(&mesh.name) {
@@ -226,12 +227,8 @@ fn quantize(weight: f32, context: &mut Context) -> Result<u16, Error> {
     Ok(rounded as u16)
 }
 
-fn packed<'a, T>(values: &'a ZeroVec<'_, T>) -> ZeroVec<'a, T>
-where
-    T: AsULE + Clone + Send + Sync,
-    T::ULE: Send + Sync,
-{
-    values.as_slice().as_zerovec()
+fn packed<'a, T: PackedValue>(values: &'a PackedArray<'_, T>) -> ZeroVec<'a, T::Storage> {
+    values.storage().as_slice().as_zerovec()
 }
 
 fn triangles(topology: &Topology<'_>) -> Vec<[u32; 3]> {

@@ -3,6 +3,7 @@ use crate::compiled::RuntimeNode;
 use crate::pose::{hierarchical, local_matrix};
 use crate::RenderDiagnostic;
 use bevy::math::Affine3A;
+use bevy::math::{Quat, Vec3};
 use bevy::prelude::*;
 use std::collections::HashMap;
 use wc3::model::profiles::Universal;
@@ -243,7 +244,7 @@ impl PhysicsDefinition {
                 let mut radius: f32 = 0.;
                 let mut restitution: f32 = 0.;
                 for shape in &body.shapes {
-                    let transform = Mat4::from_cols_array_2d(&shape.transform);
+                    let transform = shape.transform;
                     let (scale, _, translation) = transform.to_scale_rotation_translation();
                     if translation != Vec3::ZERO
                         || scale.abs().min_element() != scale.abs().max_element()
@@ -255,7 +256,7 @@ impl PhysicsDefinition {
                             (*radius, 4. / 3. * std::f32::consts::PI * radius.powi(3))
                         }
                         ShapeGeometry::Box(extent) => {
-                            let extent = Vec3::from_array(*extent);
+                            let extent = *extent;
                             diagnostic(
                                 diagnostics,
                                 "Physics box contacts use a conservative bounding sphere",
@@ -263,8 +264,8 @@ impl PhysicsDefinition {
                             (extent.length(), 8. * extent.element_product())
                         }
                         ShapeGeometry::Capsule { radius, endpoints } => {
-                            let a = Vec3::from_array(endpoints[0]);
-                            let b = Vec3::from_array(endpoints[1]);
+                            let a = endpoints[0];
+                            let b = endpoints[1];
                             diagnostic(
                                 diagnostics,
                                 "Physics capsule contacts use a conservative bounding sphere",
@@ -281,10 +282,7 @@ impl PhysicsDefinition {
                                 "Physics convex contacts use a conservative bounding sphere",
                             );
                             (
-                                vertices
-                                    .iter()
-                                    .map(|v| Vec3::from_array(v).length())
-                                    .fold(0., f32::max),
+                                vertices.iter().map(|v| v.length()).fold(0., f32::max),
                                 shape.mass_properties.map_or(0., |value| value.volume),
                             )
                         }
@@ -293,15 +291,13 @@ impl PhysicsDefinition {
                     let shape_mass = shape.density * volume * scale.element_product().abs();
                     let centroid = shape
                         .mass_properties
-                        .map(|value| Vec3::from_array(value.centroid))
+                        .map(|value| value.centroid)
                         .unwrap_or_else(|| match &shape.geometry {
                             ShapeGeometry::Capsule { endpoints, .. } => {
-                                (Vec3::from_array(endpoints[0]) + Vec3::from_array(endpoints[1]))
-                                    * 0.5
+                                (endpoints[0] + endpoints[1]) * 0.5
                             }
                             ShapeGeometry::ConvexHull { vertices, .. } if !vertices.is_empty() => {
-                                vertices.iter().map(Vec3::from_array).sum::<Vec3>()
-                                    / vertices.len() as f32
+                                vertices.iter().sum::<Vec3>() / vertices.len() as f32
                             }
                             _ => Vec3::ZERO,
                         });
@@ -363,11 +359,7 @@ impl PhysicsDefinition {
                     continue;
                 };
                 let frame_rotation = |frame: Frame| {
-                    let matrix = Mat3::from_cols(
-                        Vec3::from_array(frame.axis_x),
-                        Vec3::from_array(frame.axis_y),
-                        Vec3::from_array(frame.axis_z),
-                    );
+                    let matrix = Mat3::from_cols(frame.axis_x, frame.axis_y, frame.axis_z);
                     if matrix.determinant().abs() < 1e-6 {
                         Quat::IDENTITY
                     } else {
@@ -386,8 +378,8 @@ impl PhysicsDefinition {
                 output.joints.push(JointDefinition {
                     a,
                     b,
-                    anchor_a: Vec3::from_array(joint.frame_a.origin),
-                    anchor_b: Vec3::from_array(joint.frame_b.origin),
+                    anchor_a: joint.frame_a.origin,
+                    anchor_b: joint.frame_b.origin,
                     rotation_a: frame_rotation(joint.frame_a),
                     rotation_b: frame_rotation(joint.frame_b),
                     authored: joint.clone(),

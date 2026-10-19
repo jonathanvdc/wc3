@@ -1,11 +1,12 @@
 use super::super::lod::{update_lod, LodSettings};
 use super::*;
+use bevy::math::{Vec2, Vec3, Vec4};
 use bevy::mesh::VertexAttributeValues;
+use wc3::model::common::PackedArray;
 use wc3::model::profiles::Universal;
 use wc3::model::ModelMetadata;
 use wc3::model::{controls::world::WorldSystem, ModelBuilder};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-
 fn system_id() -> SystemId {
     ModelBuilder::<Universal>::new(ModelMetadata::Wmo(Default::default()))
         .add_system(System::Wmo(WorldSystem::default()))
@@ -16,7 +17,7 @@ fn system_id() -> SystemId {
 fn liquid_grid_uses_absolute_heights_and_omits_hidden_tiles() {
     let mut slot_values = SlotValues::default();
     let mut liquid = Liquid {
-        position: [10., 20., 99.],
+        position: Vec3::from_array([10., 20., 99.]),
         dimensions: [2, 2],
         vertices: [2., 3., 4., 5.]
             .map(|height| LiquidVertex::Water {
@@ -30,7 +31,9 @@ fn liquid_grid_uses_absolute_heights_and_omits_hidden_tiles() {
         tiles: [0].into_iter().collect(),
         ..SlotConstruct::construct(&mut slot_values)
     };
-    let mesh = liquid_mesh(&liquid, [2., 3.]).unwrap().unwrap();
+    let mesh = liquid_mesh(&liquid, Vec2::from_array([2., 3.]))
+        .unwrap()
+        .unwrap();
     let Some(VertexAttributeValues::Float32x3(positions)) =
         mesh.attribute(Mesh::ATTRIBUTE_POSITION)
     else {
@@ -47,7 +50,9 @@ fn liquid_grid_uses_absolute_heights_and_omits_hidden_tiles() {
     );
     assert_eq!(mesh.indices().unwrap().len(), 6);
     liquid.tiles = [8].into_iter().collect();
-    assert!(liquid_mesh(&liquid, [2., 3.]).unwrap().is_none());
+    assert!(liquid_mesh(&liquid, Vec2::from_array([2., 3.]))
+        .unwrap()
+        .is_none());
 }
 
 #[test]
@@ -57,7 +62,7 @@ fn malformed_liquid_grid_returns_an_error() {
         dimensions: [2, 2],
         ..SlotConstruct::construct(&mut slot_values)
     };
-    assert!(liquid_mesh(&liquid, [1.; 2]).is_err());
+    assert!(liquid_mesh(&liquid, Vec2::from_array([1.; 2])).is_err());
 }
 
 #[test]
@@ -111,8 +116,8 @@ fn explicit_doodad_selection_keeps_common_set() {
 #[test]
 fn spherical_volume_fades_without_mutating_scene_lighting() {
     let volume = Volume::Sphere {
-        center: [0.; 3],
-        radii: [2., 4.],
+        center: Vec3::from_array([0.; 3]),
+        radii: Vec2::from_array([2., 4.]),
     };
     assert_eq!(world_volume_weight(&volume, Vec3::ZERO), 1.);
     assert_eq!(world_volume_weight(&volume, Vec3::new(3., 0., 0.)), 0.5);
@@ -130,8 +135,14 @@ fn compiled_world_spawns_liquid_hooks_and_selection_gates() {
 
     let mut builder = ModelBuilder::<Universal>::new(ModelMetadata::Wmo(Default::default()));
     let node = builder.add_named_node("region").unwrap();
-    let geometry =
-        GeometryData::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]).unwrap();
+    let geometry = GeometryData::triangles(
+        ([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]])
+            .into_iter()
+            .map(Vec3::from_array)
+            .collect::<PackedArray<_>>(),
+        [[0, 1, 2]],
+    )
+    .unwrap();
     let mesh = builder.add_mesh(ModelMesh::new(geometry)).unwrap();
     let mut placement = MeshInstance::new(node, mesh);
     placement.lod = Some(2);
@@ -290,7 +301,7 @@ fn portal_groups(system: SystemId, count: usize) -> WorldRuntime {
                 },
                 name: format!("room {index}"),
                 instances: Arc::from([]),
-                bounds: [[-100.0; 3], [100.0; 3]],
+                bounds: [Vec3::from_array([-100.0; 3]), Vec3::from_array([100.0; 3])],
                 options: GroupOptions {
                     interior: true,
                     ..default()
@@ -321,13 +332,16 @@ fn window(
     let mut portals = runtime.portals.to_vec();
     portals.push(WorldPortal {
         id,
-        vertices: Arc::from([
-            [x[0], -1.0, z],
-            [x[1], -1.0, z],
-            [x[1], 1.0, z],
-            [x[0], 1.0, z],
-        ]),
-        plane: [0.0, 0.0, 1.0, -z],
+        vertices: Arc::from(
+            [
+                [x[0], -1.0, z],
+                [x[1], -1.0, z],
+                [x[1], 1.0, z],
+                [x[0], 1.0, z],
+            ]
+            .map(Vec3::from_array),
+        ),
+        plane: Vec4::from_array([0.0, 0.0, 1.0, -z]),
         adjustment: None,
     });
     runtime.portals = portals.into();
@@ -461,13 +475,13 @@ fn clipped_portals_keep_exterior_unknown_views_and_malformed_windows_conservativ
     assert!(runtime
         .visibility(&selection)
         .group_visible(GroupId { system, index: 1 }));
-    assert!(portal_window(&[[0.0; 3]; 2], Vec3::ZERO, &[]).is_none());
+    assert!(portal_window(&[Vec3::ZERO; 2], Vec3::ZERO, &[]).is_none());
     assert!(portal_window(
         &[
-            [0.0, 0.0, 2.0],
-            [1.0, 0.0, 2.0],
-            [0.0, 1.0, 3.0],
-            [1.0, 1.0, 2.0]
+            Vec3::from_array([0.0, 0.0, 2.0]),
+            Vec3::from_array([1.0, 0.0, 2.0]),
+            Vec3::from_array([0.0, 1.0, 3.0]),
+            Vec3::from_array([1.0, 1.0, 2.0])
         ],
         Vec3::ZERO,
         &[]
@@ -518,7 +532,12 @@ fn portal_boundaries_and_degenerate_windows_remain_open() {
         [1.0, 1.0, 2.0],
         [-1.0, 1.0, 2.0],
     ];
-    assert!(portal_window(&polygon, Vec3::new(0.0, 0.0, 2.0), &[]).is_none());
+    assert!(portal_window(
+        &polygon.map(Vec3::from_array),
+        Vec3::new(0.0, 0.0, 2.0),
+        &[]
+    )
+    .is_none());
     let parent = [Vec4::new(0.0, 0.0, 1.0, -0.1)];
     assert_eq!(
         window_planes(&[Vec3::new(0.0, 0.0, 2.0)], Vec3::ZERO, &parent),
@@ -543,5 +562,10 @@ fn portal_boundaries_and_degenerate_windows_remain_open() {
     assert!(PortalView::new(group, Vec3::ZERO, [Vec4::new(0.001, 0.0, 0.0, f32::MAX)]).is_err());
     // Finite inputs can overflow intermediate dot products; such geometry is
     // ambiguous and must not become a rejected/empty window.
-    assert!(portal_window(&polygon, Vec3::ZERO, &[Vec4::splat(f32::MAX)]).is_none());
+    assert!(portal_window(
+        &polygon.map(Vec3::from_array),
+        Vec3::ZERO,
+        &[Vec4::splat(f32::MAX)]
+    )
+    .is_none());
 }

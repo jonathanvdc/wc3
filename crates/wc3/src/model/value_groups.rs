@@ -1,21 +1,21 @@
 //! Variable-length rows use one packed element buffer and explicit row boundaries.
-use crate::model::common::{AsULE, Borrowed, Detached, ZeroVec};
+use crate::model::common::{Borrowed, Detached, PackedArray, PackedValue};
 
 /// Packed variable-length rows. Boundaries include the final element count.
 #[derive(Clone, Debug, PartialEq)]
-pub struct ValueGroups<'a, T: AsULE> {
-    values: ZeroVec<'a, T>,
-    offsets: ZeroVec<'a, u32>,
+pub struct ValueGroups<'a, T: PackedValue> {
+    values: PackedArray<'a, T>,
+    offsets: PackedArray<'a, u32>,
 }
-impl<T: AsULE> Default for ValueGroups<'_, T> {
+impl<T: PackedValue> Default for ValueGroups<'_, T> {
     fn default() -> Self {
         Self {
-            values: ZeroVec::new(),
+            values: PackedArray::new(),
             offsets: [0].into_iter().collect(),
         }
     }
 }
-impl<'a, T: AsULE> ValueGroups<'a, T> {
+impl<'a, T: PackedValue> ValueGroups<'a, T> {
     /// Encodes rows into flat storage, preserving empty rows and authored order.
     pub fn from_rows(rows: impl IntoIterator<Item = impl IntoIterator<Item = T>>) -> Self {
         let mut values = Vec::new();
@@ -30,7 +30,7 @@ impl<'a, T: AsULE> ValueGroups<'a, T> {
         }
     }
     /// Checks canonical boundaries for an existing packed buffer.
-    pub fn new(values: ZeroVec<'a, T>, offsets: ZeroVec<'a, u32>) -> Option<Self> {
+    pub fn new(values: PackedArray<'a, T>, offsets: PackedArray<'a, u32>) -> Option<Self> {
         let valid = offsets.first() == Some(0)
             && offsets.last().map(|n| n as usize) == Some(values.len())
             && offsets
@@ -40,11 +40,11 @@ impl<'a, T: AsULE> ValueGroups<'a, T> {
         valid.then_some(Self { values, offsets })
     }
     /// Flat encoded elements in row order.
-    pub fn values(&self) -> &ZeroVec<'a, T> {
+    pub fn values(&self) -> &PackedArray<'a, T> {
         &self.values
     }
     /// Row boundaries, including the final element count.
-    pub fn offsets(&self) -> &ZeroVec<'a, u32> {
+    pub fn offsets(&self) -> &PackedArray<'a, u32> {
         &self.offsets
     }
     /// Number of rows, including empty rows.
@@ -56,13 +56,13 @@ impl<'a, T: AsULE> ValueGroups<'a, T> {
         self.len() == 0
     }
     /// Borrows one row's packed element buffer.
-    pub fn get(&self, index: usize) -> Option<ZeroVec<'_, T>> {
+    pub fn get(&self, index: usize) -> Option<PackedArray<'_, T>> {
         let start = self.offsets.get(index)? as usize;
         let end = self.offsets.get(index.checked_add(1)?)? as usize;
-        Some(self.values.get_subslice(start..end)?.as_zerovec())
+        self.values.get_subslice(start..end)
     }
     /// Iterates borrowed row buffers.
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = ZeroVec<'_, T>> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = PackedArray<'_, T>> {
         (0..self.len()).map(|i| self.get(i).expect("validated row index"))
     }
     /// Materializes rows as native vectors.
@@ -85,13 +85,13 @@ impl<'a, T: AsULE> ValueGroups<'a, T> {
         }
     }
 }
-impl<'a, T: AsULE> From<Vec<Vec<T>>> for ValueGroups<'a, T> {
+impl<'a, T: PackedValue> From<Vec<Vec<T>>> for ValueGroups<'a, T> {
     fn from(rows: Vec<Vec<T>>) -> Self {
         Self::from_rows(rows)
     }
 }
 
-impl<'view, T: AsULE + 'view> Borrowed<'view> for ValueGroups<'_, T> {
+impl<'view, T: PackedValue + 'view> Borrowed<'view> for ValueGroups<'_, T> {
     type View = ValueGroups<'view, T>;
     fn as_borrowed(&'view self) -> Self::View {
         ValueGroups {
@@ -100,7 +100,7 @@ impl<'view, T: AsULE + 'view> Borrowed<'view> for ValueGroups<'_, T> {
         }
     }
 }
-impl<'owned, T: AsULE + 'owned> Detached<'owned> for ValueGroups<'_, T> {
+impl<'owned, T: PackedValue + 'owned> Detached<'owned> for ValueGroups<'_, T> {
     type Detached = ValueGroups<'owned, T>;
     fn into_detached(self) -> Self::Detached {
         ValueGroups {
@@ -113,7 +113,7 @@ impl<'owned, T: AsULE + 'owned> Detached<'owned> for ValueGroups<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::ValueGroups;
-    use crate::model::common::{Borrowed, IntoZeroVec};
+    use crate::model::common::{Borrowed, IntoPackedArray};
 
     #[test]
     fn rows_preserve_empty_boundaries_and_borrow_flat_storage() {
@@ -134,7 +134,10 @@ mod tests {
     #[test]
     fn boundaries_must_cover_flat_values_in_order() {
         for offsets in [vec![], vec![1, 2], vec![0, 3], vec![0, 2, 1, 2]] {
-            assert!(ValueGroups::new([1u32, 2].into_zero_vec(), offsets.into_zero_vec()).is_none());
+            assert!(
+                ValueGroups::new([1u32, 2].into_packed_array(), offsets.into_packed_array())
+                    .is_none()
+            );
         }
         assert!(ValueGroups::<u32>::default().is_empty());
     }

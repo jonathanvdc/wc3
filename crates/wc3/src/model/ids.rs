@@ -1,4 +1,5 @@
 //! Typed object handles distinguish object families and owning models.
+use crate::model::common::PackedValue;
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -181,3 +182,15 @@ pub type BoneOverrideResourceId = Id<BoneOverrideResourceObject>;
 pub enum AnimationObject {}
 /// Handle to a reusable model-owned curve and event program.
 pub type AnimationId = Id<AnimationObject>;
+
+impl<K> PackedValue for Id<K> {
+    type Storage = Self;
+    #[inline]
+    fn pack(self) -> Self {
+        self
+    }
+    #[inline]
+    fn unpack(value: Self) -> Self {
+        value
+    }
+}

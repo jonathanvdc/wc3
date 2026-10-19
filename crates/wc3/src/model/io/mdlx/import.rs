@@ -11,8 +11,9 @@ use crate::model::Model;
 use crate::model::TransformSemantics;
 use crate::model::{
     AddressMode, Animation, Bounds, Clip, DynamicTrack, ImageResource, Inheritance, Material,
-    ModelBuilder, Quaternion, Sampler, SharedClock, Texture, Time, TimeSource, Track,
+    ModelBuilder, Quat, Sampler, SharedClock, Texture, Time, TimeSource, Track,
 };
+use glam::Vec3;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
@@ -39,8 +40,8 @@ where
         Cow::Owned(info.name.text().into_owned())
     });
     native_profile.metadata.bounds = source.model_info().map(|info| Bounds {
-        minimum: info.minimum_extent,
-        maximum: info.maximum_extent,
+        minimum: Vec3::from_array(info.minimum_extent),
+        maximum: Vec3::from_array(info.maximum_extent),
         sphere_radius: info.bounds_radius,
     });
     let mut builder = ModelBuilder::<Mdlx>::with_profile(profile::ModelMetadata::default());
@@ -67,10 +68,12 @@ where
                     .ok_or_else(|| Error::new("node.parent", "parent identity does not exist"))?,
             )
         };
-        value.transform.pivot = pivots
-            .get(node.object_id as usize)
-            .copied()
-            .unwrap_or_default();
+        value.transform.pivot = Vec3::from_array(
+            pivots
+                .get(node.object_id as usize)
+                .copied()
+                .unwrap_or_default(),
+        );
         value.inheritance = Inheritance {
             translation: !node.flags.dont_inherit_translation(),
             rotation: !node.flags.dont_inherit_rotation(),
@@ -255,19 +258,19 @@ where
             node.translation,
             builder.model().node(*id).unwrap().transform.translation,
             Vector3,
-            |value| value
+            Vec3::from_array
         );
         channel!(
             node.rotation,
             builder.model().node(*id).unwrap().transform.rotation,
             Rotation,
-            Quaternion
+            Quat::from_array
         );
         channel!(
             node.scaling,
             builder.model().node(*id).unwrap().transform.scale,
             Vector3,
-            |value| value
+            Vec3::from_array
         );
     }
     {

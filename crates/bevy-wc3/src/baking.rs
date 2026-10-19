@@ -9,6 +9,7 @@ use crate::error::ModelError;
 use bevy::camera::primitives::{Aabb, MeshAabb};
 use bevy::mesh::{skinning::SkinnedMeshInverseBindposes, VertexAttributeValues};
 use bevy::prelude::*;
+use bytemuck::cast_slice_mut;
 use std::collections::HashMap;
 use wc3::model::{skin_matrices, DeformableGeometry};
 
@@ -449,12 +450,16 @@ fn bake_mesh(
         _ => Vec::new(),
     };
     let mut tangents = match mesh.attribute(Mesh::ATTRIBUTE_TANGENT) {
-        Some(VertexAttributeValues::Float32x4(values)) => values.clone(),
+        Some(VertexAttributeValues::Float32x4(values)) => values
+            .iter()
+            .copied()
+            .map(Vec4::from_array)
+            .collect::<Vec<_>>(),
         _ => Vec::new(),
     };
     DeformableGeometry {
-        positions: &mut positions,
-        normals: &mut normals,
+        positions: cast_slice_mut(&mut positions),
+        normals: cast_slice_mut(&mut normals),
         tangents: &mut tangents,
     }
     .deform(transforms)
@@ -464,7 +469,13 @@ fn bake_mesh(
         baked.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     }
     if mesh.contains_attribute(Mesh::ATTRIBUTE_TANGENT) {
-        baked.insert_attribute(Mesh::ATTRIBUTE_TANGENT, tangents);
+        baked.insert_attribute(
+            Mesh::ATTRIBUTE_TANGENT,
+            tangents
+                .into_iter()
+                .map(|v| v.to_array())
+                .collect::<Vec<_>>(),
+        );
     }
     for attribute in [
         Mesh::ATTRIBUTE_JOINT_INDEX,

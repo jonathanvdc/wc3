@@ -1,12 +1,12 @@
 use super::*;
 use crate::compile_model;
 use crate::compiled::RuntimeNode;
+use bevy::math::Vec3;
 use std::f32::consts::FRAC_PI_2;
 use wc3::model::ModelMetadata;
-use wc3::model::{AnimationSample, Curve, DynamicTrack, Node, Quaternion, Time, TimeSource, Track};
+use wc3::model::{AnimationSample, Curve, DynamicTrack, Node, Quat, Time, TimeSource, Track};
 use wc3::model::{BillboardAxis, BillboardFrame, BillboardScale, ModelBuilder, TransformSemantics};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-
 fn runtime_node() -> RuntimeNode {
     let slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
@@ -36,10 +36,10 @@ fn native_billboards_preserve_authored_rotations_and_signed_or_collapsed_scales(
     ));
     for (scale_index, scale) in [[-2., 3., -4.], [0., 2., -1.]].into_iter().enumerate() {
         let parent_pose = ModelTransform {
-            translation: [2., -3., 1.],
-            rotation: Quaternion(Quat::from_rotation_z(0.4).to_array()),
-            scale,
-            pivot: [1., 2., 3.],
+            translation: Vec3::from_array([2., -3., 1.]),
+            rotation: Quat::from_array(Quat::from_rotation_z(0.4).to_array()),
+            scale: Vec3::from_array(scale),
+            pivot: Vec3::from_array([1., 2., 3.]),
         };
         let mut node = runtime_node();
         let parent = evaluate_pose(&node, parent_pose, EvaluatedPose::default(), None);
@@ -57,10 +57,12 @@ fn native_billboards_preserve_authored_rotations_and_signed_or_collapsed_scales(
                 })
             };
             let authored = ModelTransform {
-                translation: [0.5, 0.2, -0.3],
-                rotation: Quaternion(Quat::from_euler(EulerRot::XYZ, 0.2, 0.5, -0.4).to_array()),
-                scale: [1., -0.7, 1.3],
-                pivot: [2., -1., 4.],
+                translation: Vec3::from_array([0.5, 0.2, -0.3]),
+                rotation: Quat::from_array(
+                    Quat::from_euler(EulerRot::XYZ, 0.2, 0.5, -0.4).to_array(),
+                ),
+                scale: Vec3::from_array([1., -0.7, 1.3]),
+                pivot: Vec3::from_array([2., -1., 4.]),
             };
             let actual = evaluate_pose(&node, authored, parent, Some(camera.compute_affine()));
             let (matrix, rotation, scale) = BILLBOARDS[scale_index * 4 + axis];
@@ -115,10 +117,10 @@ fn native_noninheritance_preserves_expected_pose_with_collapsed_parent_axes() {
     for (scale_index, scale) in [[-2., 3., -4.], [0., 2., -1.]].into_iter().enumerate() {
         let mut node = runtime_node();
         let parent_pose = ModelTransform {
-            translation: [2., -3., 1.],
-            rotation: Quaternion(Quat::from_rotation_z(0.4).to_array()),
-            scale,
-            pivot: [1., 2., 3.],
+            translation: Vec3::from_array([2., -3., 1.]),
+            rotation: Quat::from_array(Quat::from_rotation_z(0.4).to_array()),
+            scale: Vec3::from_array(scale),
+            pivot: Vec3::from_array([1., 2., 3.]),
         };
         let parent = evaluate_pose(&node, parent_pose, EvaluatedPose::default(), None);
         for mask in 1..8 {
@@ -126,9 +128,9 @@ fn native_noninheritance_preserves_expected_pose_with_collapsed_parent_axes() {
             node.inheritance.rotation = mask & 2 == 0;
             node.inheritance.scale = mask & 4 == 0;
             let authored = ModelTransform {
-                translation: [0.5, 0.2, -0.3],
-                rotation: Quaternion(Quat::from_rotation_y(0.2).to_array()),
-                pivot: [2., -1., 4.],
+                translation: Vec3::from_array([0.5, 0.2, -0.3]),
+                rotation: Quat::from_array(Quat::from_rotation_y(0.2).to_array()),
+                pivot: Vec3::from_array([2., -1., 4.]),
                 ..SlotConstruct::construct(&mut slot_values)
             };
             let actual = evaluate_pose(&node, authored, parent, None);
@@ -153,7 +155,7 @@ fn birth_pose_follows_parent_rotation_between_frame_endpoints() {
                 .with_parent(parent)
                 .with_transform(
                     ModelTransform {
-                        translation: [1., 0., 0.],
+                        translation: Vec3::from_array([1., 0., 0.]),
                         ..SlotConstruct::construct(&mut slot_values)
                     },
                     &mut slot_values,
@@ -169,8 +171,8 @@ fn birth_pose_follows_parent_rotation_between_frame_endpoints() {
             curve: Curve::linear(
                 [time(0.), time(1.)],
                 [
-                    Quaternion(Quat::IDENTITY.to_array()),
-                    Quaternion(Quat::from_rotation_z(FRAC_PI_2).to_array()),
+                    Quat::from_array(Quat::IDENTITY.to_array()),
+                    Quat::from_array(Quat::from_rotation_z(FRAC_PI_2).to_array()),
                 ],
             )
             .unwrap(),
@@ -223,7 +225,7 @@ fn camera_selection_preserves_generic_nonbillboard_affine_shear() {
         ..SlotConstruct::construct(&mut slot_values)
     };
     let pose = ModelTransform {
-        rotation: Quaternion(Quat::from_rotation_z(0.7).to_array()),
+        rotation: Quat::from_array(Quat::from_rotation_z(0.7).to_array()),
         ..SlotConstruct::construct(&mut slot_values)
     };
     let without = evaluate_pose(&node, pose, parent, None);
@@ -240,7 +242,7 @@ fn feature_origins_use_node_pivots_without_moving_geometry_coordinates() {
             Node::named("feature anchor", &mut slot_values)
                 .with_transform(
                     ModelTransform {
-                        pivot: [0., 0., 2.],
+                        pivot: Vec3::from_array([0., 0., 2.]),
                         ..SlotConstruct::construct(&mut slot_values)
                     },
                     &mut slot_values,
@@ -312,7 +314,7 @@ fn m2_spherical_billboards_face_yz_geometry_toward_rotated_cameras() {
     };
     let pivot = Vec3::new(2., -1., 3.);
     let pose = ModelTransform {
-        pivot: pivot.to_array(),
+        pivot,
         ..SlotConstruct::construct(&mut slot_values)
     };
     for camera_rotation in [
@@ -345,10 +347,10 @@ fn m2_spherical_billboards_preserve_authored_rotation_pivot_and_basis_lengths() 
     };
     let authored_rotation = Quat::from_euler(EulerRot::XYZ, 0.4, -0.3, 0.2);
     let pose = ModelTransform {
-        translation: [0.5, 0.2, -0.3],
-        rotation: Quaternion(authored_rotation.to_array()),
-        scale: [1., -0.7, 1.3],
-        pivot: [2., -1., 4.],
+        translation: Vec3::from_array([0.5, 0.2, -0.3]),
+        rotation: Quat::from_array(authored_rotation.to_array()),
+        scale: Vec3::from_array([1., -0.7, 1.3]),
+        pivot: Vec3::from_array([2., -1., 4.]),
     };
     let camera_rotation = Quat::from_euler(EulerRot::XYZ, -0.2, 0.6, -0.4);
     let camera = Affine3A::from_rotation_translation(camera_rotation, Vec3::new(5., 6., 7.));
@@ -369,7 +371,7 @@ fn m2_spherical_billboards_preserve_authored_rotation_pivot_and_basis_lengths() 
         assert!(actual.matrix.is_finite());
         assert!(actual.rotation.is_finite());
         assert!(actual.scale.is_finite());
-        let pivot = Vec3::from_array(pose.pivot);
+        let pivot = pose.pivot;
         assert!(actual
             .matrix
             .transform_point3(pivot)
@@ -414,7 +416,7 @@ fn channel_presence_keeps_late_clip_shared_animation_and_static_node_poses() {
                 .with_parent(parent)
                 .with_transform(
                     ModelTransform {
-                        translation: [0., 1., 0.],
+                        translation: Vec3::from_array([0., 1., 0.]),
                         ..SlotConstruct::construct(&mut slot_values)
                     },
                     &mut slot_values,
@@ -427,7 +429,14 @@ fn channel_presence_keeps_late_clip_shared_animation_and_static_node_poses() {
         .add_global_track(DynamicTrack::Vector3(Track {
             target: builder.model().node(parent).unwrap().transform.translation,
             clock: TimeSource::Animation,
-            curve: Curve::linear(times, [[0.; 3], [2., 0., 0.]]).unwrap(),
+            curve: Curve::linear(
+                times,
+                ([[0.; 3], [2., 0., 0.]])
+                    .into_iter()
+                    .map(Vec3::from_array)
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap(),
         }))
         .unwrap();
     let shared = builder
@@ -442,8 +451,8 @@ fn channel_presence_keeps_late_clip_shared_animation_and_static_node_poses() {
             curve: Curve::linear(
                 times,
                 [
-                    Quaternion::default(),
-                    Quaternion(Quat::from_rotation_z(FRAC_PI_2).to_array()),
+                    Quat::default(),
+                    Quat::from_array(Quat::from_rotation_z(FRAC_PI_2).to_array()),
                 ],
             )
             .unwrap(),
@@ -461,7 +470,14 @@ fn channel_presence_keeps_late_clip_shared_animation_and_static_node_poses() {
             DynamicTrack::Vector3(Track {
                 target: builder.model().node(parent).unwrap().transform.scale,
                 clock: TimeSource::Animation,
-                curve: Curve::linear(times, [[1.; 3], [3.; 3]]).unwrap(),
+                curve: Curve::linear(
+                    times,
+                    ([[1.; 3], [3.; 3]])
+                        .into_iter()
+                        .map(Vec3::from_array)
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap(),
             }),
         )
         .unwrap();

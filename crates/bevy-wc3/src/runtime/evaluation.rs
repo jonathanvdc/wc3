@@ -399,13 +399,12 @@ pub(crate) fn animate_instances(
                             let local = parent.inverse() * matrix;
                             let (scale, rotation, translation) =
                                 local.to_scale_rotation_translation();
-                            let pivot = Vec3::from_array(pose.pivot);
+                            let pivot = pose.pivot;
                             if scale.is_finite() && rotation.is_finite() && translation.is_finite()
                             {
-                                pose.translation =
-                                    (translation - pivot + rotation * (scale * pivot)).to_array();
-                                pose.rotation.0 = rotation.to_array();
-                                pose.scale = scale.to_array();
+                                pose.translation = translation - pivot + rotation * (scale * pivot);
+                                pose.rotation = rotation;
+                                pose.scale = scale;
                             }
                         }
                     }

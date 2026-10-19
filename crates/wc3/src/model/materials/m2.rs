@@ -4,6 +4,7 @@ use super::state::{DepthState, Lighting, Operation, Rasterization};
 use crate::model::values::model::{MaterialFlags, TextureSource};
 use crate::model::{Construct, PropertyValues};
 use crate::model::{Error, Link, Property, ValidateLinks};
+use glam::Vec3;
 use std::fmt::Debug;
 
 pub use crate::model::TextureTransform;
@@ -32,28 +33,29 @@ pub type TextureUnit<T = TextureTransform> = TextureBinding<
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GuildPalette {
     /// Cloth background multiplier.
-    pub background: [f32; 3],
+    pub background: Vec3,
     /// Emblem multiplier, blended by the emblem texture alpha.
-    pub emblem: [f32; 3],
+    pub emblem: Vec3,
     /// Border multiplier, blended by the border texture alpha.
-    pub border: [f32; 3],
+    pub border: Vec3,
 }
 impl GuildPalette {
     /// Whether all linear RGB multipliers are finite.
     pub fn is_finite(self) -> bool {
         self.background
+            .to_array()
             .iter()
-            .chain(&self.emblem)
-            .chain(&self.border)
+            .chain(&self.emblem.to_array())
+            .chain(&self.border.to_array())
             .all(|value| value.is_finite())
     }
 }
 impl Default for GuildPalette {
     fn default() -> Self {
         Self {
-            background: [1.; 3],
-            emblem: [1.; 3],
-            border: [1.; 3],
+            background: Vec3::from_array([1.; 3]),
+            emblem: Vec3::from_array([1.; 3]),
+            border: Vec3::from_array([1.; 3]),
         }
     }
 }

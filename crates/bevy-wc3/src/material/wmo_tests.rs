@@ -1,21 +1,27 @@
 use super::super::ModelMaterial;
 use super::*;
 use crate::material::native_fixtures::wmo as wmo_shader;
+use bevy::math::{Vec2, Vec3, Vec4};
 use wc3::model::ModelMetadata;
 use wc3::model::{AnimationSample, ModelBuilder, Time};
-
 #[test]
 fn world_scroll_is_sampled_absolutely_and_keeps_clamped_coordinates() {
     let base =
         Affine2::from_scale_angle_translation(Vec2::new(2.0, 3.0), 0.75, Vec2::new(0.2, -0.4));
-    let scrolled = scrolling_transform(base, [0.5, -0.25], 6.0);
+    let scrolled = scrolling_transform(base, Vec2::from_array([0.5, -0.25]), 6.0);
     assert_eq!(scrolled.matrix2, base.matrix2);
     assert_eq!(scrolled.translation, Vec2::new(3.2, -1.9));
-    assert_eq!(scrolling_transform(base, [0.5, -0.25], 0.0), base);
-    assert_eq!(scrolling_transform(base, [0.0; 2], 6.0), base);
+    assert_eq!(
+        scrolling_transform(base, Vec2::from_array([0.5, -0.25]), 0.0),
+        base
+    );
+    assert_eq!(
+        scrolling_transform(base, Vec2::from_array([0.0; 2]), 6.0),
+        base
+    );
     // Resampling an earlier pose never integrates from a previously sampled UV.
     assert_eq!(
-        scrolling_transform(base, [0.5, -0.25], 2.0).translation,
+        scrolling_transform(base, Vec2::from_array([0.5, -0.25]), 2.0).translation,
         Vec2::new(1.2, -0.9),
     );
 }
@@ -27,7 +33,10 @@ fn world_compiler_retains_independent_scroll_velocities() {
         .unwrap();
     let surface = wmo_shader::Material {
         shader: Some(6),
-        uv_scroll: [[0.25, -0.5], [-0.75, 1.0]],
+        uv_scroll: [
+            Vec2::from_array([0.25, -0.5]),
+            Vec2::from_array([-0.75, 1.0]),
+        ],
         ..default()
     };
     let pass = compile_wmo(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
@@ -46,7 +55,7 @@ fn procedural_scroll_uses_shared_clock_without_a_clip_and_avoids_unchanged_write
         .unwrap();
     let surface = wmo_shader::Material {
         shader: Some(6),
-        uv_scroll: [[0.25, -0.5], [0.5, 0.0]],
+        uv_scroll: [Vec2::from_array([0.25, -0.5]), Vec2::from_array([0.5, 0.0])],
         ..default()
     };
     let pass = compile_wmo(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
@@ -163,12 +172,18 @@ fn reflection_programmes_scroll_the_uv_layer_without_scrolling_generated_coordin
         .unwrap();
     let surface = wmo_shader::Material {
         shader: Some(12),
-        uv_scroll: [[0.25, -0.5], [0.5, -0.25]],
+        uv_scroll: [
+            Vec2::from_array([0.25, -0.5]),
+            Vec2::from_array([0.5, -0.25]),
+        ],
         ..default()
     };
     let pass = compile_wmo(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
-    assert_eq!(pass.animation.uv_scroll[1], [0.; 2]);
-    assert_eq!(pass.animation.third_uv_scroll, [0.5, -0.25]);
+    assert_eq!(pass.animation.uv_scroll[1], Vec2::from_array([0.; 2]));
+    assert_eq!(
+        pass.animation.third_uv_scroll,
+        Vec2::from_array([0.5, -0.25])
+    );
     let mut material = ModelMaterial {
         base: pass.material,
         extension: pass.state,

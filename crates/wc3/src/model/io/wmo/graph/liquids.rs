@@ -5,6 +5,7 @@ use crate::model::formats::wmo::{Dialect, Group};
 use crate::model::io::materialize;
 use crate::model::profiles::wmo as profile;
 use crate::model::MaterialId;
+use glam::Vec3;
 pub(super) fn read<'a, D: Dialect>(
     source: &'a Group<'_, D>,
     materials: &[MaterialId],
@@ -73,7 +74,7 @@ pub(super) fn read<'a, D: Dialect>(
                     .expect("validated liquid tile")
             });
             result.push(profile::Liquid {
-                position: liquid.header.corner,
+                position: Vec3::from_array(liquid.header.corner),
                 dimensions,
                 vertices,
                 tiles,
@@ -200,7 +201,7 @@ pub(super) fn write<'a>(
         header: LiquidHeader {
             vertex_dimensions: dimensions,
             tile_dimensions: dimensions.map(|value| value.saturating_sub(1)),
-            corner: source.position,
+            corner: (source.position).to_array(),
             material,
         },
         vertices,

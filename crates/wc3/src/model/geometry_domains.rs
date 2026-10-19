@@ -1,7 +1,9 @@
 //! Additional geometry domains selected by faces and draw windows.
-use super::{MaterialId, Topology, ZeroVec};
+use super::{MaterialId, PackedArray, Topology};
+use crate::model::common::packed_identity;
 use crate::model::common::AsULE;
 use bitfield::bitfield;
+use glam::Vec4;
 bitfield! {
     /// Unresolved triangle flags retained alongside named authoring controls.
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -67,7 +69,7 @@ pub struct ConnectivitySets<'data> {
 impl Default for ConnectivitySets<'_> {
     fn default() -> Self {
         Self {
-            primary: Topology::Triangles(ZeroVec::default()),
+            primary: Topology::Triangles(PackedArray::default()),
             additional: Vec::new(),
         }
     }
@@ -76,8 +78,8 @@ impl Default for ConnectivitySets<'_> {
 // Constrained WMO storage keeps its independently indexed arrays together.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GeometryPools<'data> {
-    pub triangle_strip_indices: ZeroVec<'data, u32>,
-    pub tangent_vectors: ZeroVec<'data, [f32; 4]>,
+    pub triangle_strip_indices: PackedArray<'data, u32>,
+    pub tangent_vectors: PackedArray<'data, Vec4>,
 }
 
 impl<'data> ConnectivitySets<'data> {
@@ -177,10 +179,12 @@ impl AsULE for SurfaceTriangleControls {
     }
 }
 
+packed_identity!(TriangleFlags, SurfaceTriangleControls);
+
 #[cfg(test)]
 mod tests {
     use super::{SurfaceTriangleControls, TriangleFlags};
-    use crate::model::common::ZeroVec;
+    use crate::model::common::PackedArray;
     use crate::model::Scope;
 
     #[test]
@@ -203,12 +207,13 @@ mod tests {
             collide_hit: true,
             unclassified: TriangleFlags::from_bits_retain(u16::MAX),
         };
-        let packed = ZeroVec::alloc_from_slice(&[SurfaceTriangleControls::default(), record]);
-        let parsed = ZeroVec::<SurfaceTriangleControls>::parse_bytes(packed.as_bytes()).unwrap();
+        let packed = PackedArray::alloc_from_slice(&[SurfaceTriangleControls::default(), record]);
+        let parsed =
+            PackedArray::<SurfaceTriangleControls>::parse_bytes(packed.as_bytes()).unwrap();
         assert_eq!(parsed.get(0), Some(SurfaceTriangleControls::default()));
         assert_eq!(parsed.get(1), Some(record));
         let mut invalid = packed.as_bytes().to_vec();
         invalid[0] = 2;
-        assert!(ZeroVec::<SurfaceTriangleControls>::parse_bytes(&invalid).is_err());
+        assert!(PackedArray::<SurfaceTriangleControls>::parse_bytes(&invalid).is_err());
     }
 }

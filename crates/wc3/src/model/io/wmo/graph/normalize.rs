@@ -1,4 +1,6 @@
 //! Joins compatible region geometry without changing draw order or shared identities.
+use crate::model::common::PackedArray;
+use crate::model::common::PackedValue;
 use crate::model::conversion::Error;
 use crate::model::io::{materialize, owned};
 use crate::model::profiles::Wmo;
@@ -8,8 +10,6 @@ use crate::model::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
-use zerovec::ule::AsULE;
-use zerovec::ZeroVec;
 
 pub(super) fn prepare<'data>(
     model: &Model<'data, Wmo>,
@@ -236,8 +236,9 @@ pub(super) fn prepare<'data>(
             minimum,
             maximum,
             sphere_radius: minimum
+                .to_array()
                 .iter()
-                .zip(maximum)
+                .zip(maximum.to_array())
                 .map(|(a, b)| ((b - a) / 2.).powi(2))
                 .sum::<f32>()
                 .sqrt(),
@@ -303,9 +304,9 @@ pub(super) fn prepare<'data>(
     }
     Ok(Some(builder.finish()?))
 }
-fn concat<'data, T: AsULE + Clone + Send + Sync + 'data>(
-    parts: Vec<ZeroVec<'data, T>>,
-) -> Result<ZeroVec<'data, T>, Error> {
+fn concat<'data, T: PackedValue + Clone + Send + Sync + 'data>(
+    parts: Vec<PackedArray<'data, T>>,
+) -> Result<PackedArray<'data, T>, Error> {
     let mut ends = Vec::with_capacity(parts.len());
     let mut length = 0usize;
     for part in &parts {

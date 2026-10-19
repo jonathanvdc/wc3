@@ -5,6 +5,7 @@ use crate::model::materials::bindings::{Coordinates, ImageSelection};
 use crate::model::materials::m2::FrameSampling;
 use crate::model::materials::m2::{material_flags, rasterization};
 use crate::model::materials::state::PassState;
+use glam::{Vec2, Vec3};
 use semantic::{Draw, Influence, M2Geometry, Mesh, MeshInstance, Skin, Topology};
 use zerovec::ZeroVec;
 #[path = "geometry_coordinates.rs"]
@@ -93,10 +94,12 @@ where
                     .unwrap()
             };
             let geometry = M2Geometry::new(
-                materialize(count, move |i| vertex(i).position),
-                materialize(count, move |i| vertex(i).normal),
+                materialize(count, move |i| Vec3::from_array(vertex(i).position)),
+                materialize(count, move |i| Vec3::from_array(vertex(i).normal)),
                 std::array::from_fn(|set| {
-                    materialize(count, move |i| vertex(i).texture_coordinates[set])
+                    materialize(count, move |i| {
+                        Vec2::from_array(vertex(i).texture_coordinates[set])
+                    })
                 }),
                 materialize(faces, move |i| {
                     std::array::from_fn(|corner| {
@@ -115,24 +118,28 @@ where
             let mut mesh = Mesh::new(geometry);
             mesh.name = Cow::Owned(format!("skin-{index}-section-{section_index}"));
             mesh.bounds = bounds(core.bounding);
-            let mesh = builder.add_mesh(mesh.with_controls(profile::GeometryControls {
-                center_bone: if nodes.is_empty() && section.center_bone_index == 0 {
-                    None
-                } else {
-                    Some(
-                        *nodes
-                            .get(section.center_bone_index as usize)
-                            .ok_or_else(|| {
-                                Error::new(
-                                    "m2.mesh.center_bone",
-                                    "sorting center selects an absent bone",
-                                )
-                            })?,
-                    )
-                },
-                center: section.center_position,
-                sorting: section.sort_center.logical(),
-            }))?;
+            let mesh =
+                builder.add_mesh(
+                    mesh.with_controls(profile::GeometryControls {
+                        center_bone: if nodes.is_empty() && section.center_bone_index == 0 {
+                            None
+                        } else {
+                            Some(*nodes.get(section.center_bone_index as usize).ok_or_else(
+                                || {
+                                    Error::new(
+                                        "m2.mesh.center_bone",
+                                        "sorting center selects an absent bone",
+                                    )
+                                },
+                            )?)
+                        },
+                        center: Vec3::from_array(section.center_position),
+                        sorting: section
+                            .sort_center
+                            .logical()
+                            .map(|(v, r)| (Vec3::from_array(v), r)),
+                    }),
+                )?;
             let node = builder.add_named_node(format!("mesh-{index}-{section_index}"))?;
             let mut draws = Vec::new();
             let mut draw_materials = Vec::new();
@@ -169,7 +176,7 @@ where
                         batch_flags: profile::values::BatchFlags::from_bits_retain(
                             batch.flags.bits(),
                         ),
-                        color: builder.add_value([1.; 3]),
+                        color: builder.add_value(Vec3::from_array([1.; 3])),
                         opacity: builder.add_value(1.),
                         state: PassState {
                             blend: profile::values::BlendMode::from_raw(
@@ -246,7 +253,7 @@ where
                                     &source.key,
                                     seq,
                                     start,
-                                    |v| v,
+                                    |v| v.into(),
                                 )? {
                                     animation::insert(
                                         builder,
@@ -334,7 +341,7 @@ where
                                         &source.key,
                                         seq,
                                         start,
-                                        |v| v,
+                                        |v| v.into(),
                                     )? {
                                         animation::insert(
                                             builder,
@@ -349,7 +356,7 @@ where
                                     &source.key,
                                     seq,
                                     start,
-                                    semantic::Quaternion,
+                                    semantic::Quat::from_array,
                                 )? {
                                     animation::insert(
                                         builder,
@@ -429,10 +436,9 @@ where
         let placement = model
             .node(instance.node)
             .ok_or_else(|| Error::new("m2.mesh", "missing placement"))?;
-        if placement.transform.defaults(model.values()).translation != [0.; 3]
-            || placement.transform.defaults(model.values()).rotation
-                != semantic::Quaternion::default()
-            || placement.transform.defaults(model.values()).scale != [1.; 3]
+        if placement.transform.defaults(model.values()).translation != Vec3::from_array([0.; 3])
+            || placement.transform.defaults(model.values()).rotation != semantic::Quat::default()
+            || placement.transform.defaults(model.values()).scale != Vec3::from_array([1.; 3])
         {
             context.unsupported(
                 "m2.mesh.placement",
@@ -474,14 +480,19 @@ where
         }
         for (i, position) in mesh.positions().iter().enumerate() {
             let mut v = Vertex {
-                position,
-                normal: mesh.normals().and_then(|n| n.get(i)).unwrap_or([0.; 3]),
-                texture_coordinates: std::array::from_fn(|set| {
+                position: (position).to_array(),
+                normal: (mesh
+                    .normals()
+                    .and_then(|n| n.get(i))
+                    .unwrap_or(Vec3::from_array([0.; 3])))
+                .to_array(),
+                texture_coordinates: (std::array::from_fn(|set| {
                     mesh.texture_coordinates()
                         .get(set)
                         .and_then(|uv| uv.get(i))
-                        .unwrap_or([0.; 2])
-                }),
+                        .unwrap_or(Vec2::from_array([0.; 2]))
+                }))
+                .map(|v| v.to_array()),
                 ..Default::default()
             };
             let row = mesh.influences().joint_weights(i).unwrap_or_default();
@@ -591,7 +602,7 @@ where
                 .unwrap_or(0) as u16,
             center_position: geoset.map_or_else(
                 || std::array::from_fn(|a| (mesh.bounds.minimum[a] + mesh.bounds.maximum[a]) * 0.5),
-                |g| g.center,
+                |g| g.center.to_array(),
             ),
             center_bone_index: geoset
                 .and_then(|g| g.center_bone)
@@ -614,7 +625,10 @@ where
                 })
                 .transpose()?
                 .unwrap_or(0),
-            sort_center: SectionSorting::make(geoset.and_then(|g| g.sorting), context)?,
+            sort_center: SectionSorting::make(
+                geoset.and_then(|g| g.sorting.map(|(v, r)| (v.to_array(), r))),
+                context,
+            )?,
         });
         let mut section_layer = 0usize;
         for draw in &instance.draws {

@@ -1,6 +1,8 @@
+use glam::Vec3;
 use wc3::model::common::IntoZeroVec;
 use wc3::model::formats::mdlx::mdl::Read as _;
 use wc3::model::io;
+use wc3::model::IntoPackedArray;
 use wc3::model::TimeSource;
 use wc3::model::{
     conversion::{ExportOptions, ImportOptions},
@@ -51,7 +53,7 @@ fn additive_camera_keys_remain_exact_and_borrowed() {
     let profile::Node::Camera(camera) = &feature.payload else {
         panic!("camera feature missing")
     };
-    assert_eq!(camera.target, [30_000_000., 40., 50.]);
+    assert_eq!(camera.target, Vec3::from_array([30_000_000., 40., 50.]));
     let property = camera.eye_offset;
     let curve = graph
         .tracks()
@@ -62,7 +64,10 @@ fn additive_camera_keys_remain_exact_and_borrowed() {
         })
         .unwrap();
     assert!(curve.values().is_owned());
-    assert_eq!(curve.values().get(0), Some([0.1, 0.2, 0.3]));
+    assert_eq!(
+        curve.values().get(0),
+        Some(Vec3::from_array([0.1, 0.2, 0.3]))
+    );
     let output = io::mdlx::plan::<mdlx::V800>(&imported.value, &ExportOptions::default())
         .unwrap()
         .execute()
@@ -207,10 +212,10 @@ fn borrowed_mesh_authoring_edits_rebuild_native_geometry() {
     assert!(!mesh.positions().is_owned());
     let mut edited = mesh.clone();
     let mut positions = edited.positions().to_vec();
-    positions[0] = [1., 2., 3.];
+    positions[0] = Vec3::from_array([1., 2., 3.]);
     edited.geometry = edited
         .geometry
-        .with_positions((positions).into_zero_vec())
+        .with_positions((positions).into_packed_array())
         .unwrap();
     imported
         .value
@@ -469,8 +474,14 @@ fn overlapping_sequences_share_one_authored_absolute_curve() {
     else {
         panic!("translation curve missing")
     };
-    track.curve =
-        wc3::model::Curve::linear(track.curve.times().clone(), vec![[4., 5., 6.]]).unwrap();
+    track.curve = wc3::model::Curve::linear(
+        track.curve.times().clone(),
+        (vec![[4., 5., 6.]])
+            .into_iter()
+            .map(Vec3::from_array)
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
     imported
         .value
         .edit(|builder| {
@@ -625,13 +636,13 @@ fn skinned_geometry_placement_edits_cannot_silently_disappear() {
         let node = builder.model().node(anchor).unwrap().clone();
         builder
             .values_mut()
-            .set(node.transform.translation, [1., 0., 0.])?;
+            .set(node.transform.translation, Vec3::from_array([1., 0., 0.]))?;
         builder.set_node(anchor, node)
     });
     assert!(result.is_err());
     assert_eq!(
         asset.values()[asset.node(anchor).unwrap().transform.translation],
-        [0.; 3]
+        Vec3::from_array([0.; 3])
     );
 }
 

@@ -4,6 +4,7 @@ use super::mesh_attributes::{
 };
 use crate::ModelError;
 use bevy::asset::RenderAssetUsages;
+use bevy::math::Vec4;
 use bevy::mesh::{PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::Mesh;
 use wc3::model::{skin_weights, DrawSubset, Mesh as ModelMesh, NodeId, PrimitiveKind};
@@ -48,7 +49,7 @@ pub(super) fn compile_geometry_with_color(
     subset: &DrawSubset,
     coordinate: u32,
     additional: [Option<u32>; 3],
-    color: impl Fn(usize, [f32; 4]) -> [f32; 4],
+    color: impl Fn(usize, Vec4) -> Vec4,
 ) -> Result<Vec<GeometryPart>, ModelError> {
     mesh.project_with_color(subset, coordinate, additional, color)
         .map_err(|error| ModelError(error.to_string()))?

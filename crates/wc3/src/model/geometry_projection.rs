@@ -3,6 +3,7 @@ use crate::model::{
     AttributeDomain, AttributeSemantic, AttributeValues, DrawSubset, Error, GeometrySchema as _,
     Mesh, NodeId, PrimitiveRange, PrimitiveSelection, Topology, VertexInfluences,
 };
+use glam::Vec4;
 use glam::{Vec2, Vec3};
 
 fn projection_error(message: String) -> Error {
@@ -132,7 +133,7 @@ fn triangulate(mesh: &Mesh<'_>, polygon: &[SourceCorner]) -> Result<Vec<SourceCo
     }
     let positions: Vec<_> = polygon
         .iter()
-        .map(|c| Vec3::from_array(mesh.positions().get(c.vertex).unwrap()))
+        .map(|c| mesh.positions().get(c.vertex).unwrap())
         .collect();
     let mut normal = Vec3::ZERO;
     for index in 0..positions.len() {
@@ -258,15 +259,15 @@ pub struct ProjectedGeometry {
     /// Primitive family of this batch.
     pub kind: PrimitiveKind,
     /// Editable authored-space positions.
-    pub positions: Vec<[f32; 3]>,
+    pub positions: Vec<Vec3>,
     /// Normals, generated for triangle batches when absent.
-    pub normals: Vec<[f32; 3]>,
+    pub normals: Vec<Vec3>,
     /// Authored tangent directions and handedness; empty when absent.
-    pub tangents: Vec<[f32; 4]>,
+    pub tangents: Vec<Vec4>,
     /// Requested primary and additional UV streams in slot order.
-    pub texture_coordinates: [Vec<[f32; 2]>; 4],
+    pub texture_coordinates: [Vec<Vec2>; 4],
     /// Primary and secondary color streams.
-    pub colors: [Vec<[f32; 4]>; 2],
+    pub colors: [Vec<Vec4>; 2],
     /// Original vertex, primitive, and corner identities for each output vertex.
     pub sources: Vec<SourceCorner>,
 }
@@ -317,7 +318,7 @@ fn project_geometry_with_color(
     subset: &DrawSubset,
     coordinate: u32,
     additional: [Option<u32>; 3],
-    color: impl Fn(usize, [f32; 4]) -> [f32; 4],
+    color: impl Fn(usize, Vec4) -> Vec4,
 ) -> Result<Vec<ProjectedGeometry>, Error> {
     let [secondary, third, fourth] = additional;
     let topology = mesh
@@ -467,16 +468,13 @@ fn project_geometry_with_color(
                     .0
                     .iter()
                     .flat_map(|t| {
-                        let a = Vec3::from_array(t[0]);
-                        let normal = (Vec3::from_array(t[1]) - a)
-                            .cross(Vec3::from_array(t[2]) - a)
-                            .normalize_or_zero()
-                            .to_array();
+                        let a = t[0];
+                        let normal = (t[1] - a).cross(t[2] - a).normalize_or_zero();
                         [normal; 3]
                     })
                     .collect();
             } else {
-                output.normals = vec![[0., 0., 1.]; corners.len()];
+                output.normals = vec![Vec3::from_array([0., 0., 1.]); corners.len()];
             }
             if !colors.is_empty() {
                 output.colors[0] = colors;
@@ -500,7 +498,7 @@ fn project_geometry_with_color(
                     "texture coordinate set {coordinate} is absent"
                 )));
             } else {
-                output.texture_coordinates[0] = vec![[0.; 2]; corners.len()];
+                output.texture_coordinates[0] = vec![Vec2::from_array([0.; 2]); corners.len()];
             }
             if !tangents.is_empty() {
                 output.tangents = tangents;
@@ -588,7 +586,7 @@ impl Mesh<'_> {
         subset: &DrawSubset,
         coordinate: u32,
         additional: [Option<u32>; 3],
-        color: impl Fn(usize, [f32; 4]) -> [f32; 4],
+        color: impl Fn(usize, Vec4) -> Vec4,
     ) -> Result<Vec<ProjectedGeometry>, Error> {
         project_geometry_with_color(self, subset, coordinate, additional, color)
     }

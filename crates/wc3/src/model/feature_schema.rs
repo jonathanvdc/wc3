@@ -9,6 +9,7 @@ use crate::model::{
     NodeFeature, ParticleEmitter, Property, RibbonEmitter,
 };
 use crate::model::{Axis, ChildModel, Socket};
+use glam::{Vec2, Vec3};
 use std::fmt::Debug;
 
 /// A vocabulary exposing the behavior of an attached feature without conversion.
@@ -208,7 +209,7 @@ mod tests;
 #[derive(Clone, Copy, Debug)]
 pub struct IlluminationRef<'view> {
     /// RGB color animation.
-    pub color: &'view Property<[f32; 3]>,
+    pub color: &'view Property<Vec3>,
     /// Intensity animation.
     pub intensity: &'view Property<f32>,
 }
@@ -277,15 +278,15 @@ pub enum AimedFieldOfViewRef<'view> {
 #[derive(Clone, Copy, Debug)]
 pub struct AimedCameraRef<'view> {
     /// Offset from the carrying node's rest translation.
-    pub eye_offset: &'view Property<[f32; 3]>,
+    pub eye_offset: &'view Property<Vec3>,
     /// Model-space base target.
-    pub target: &'view [f32; 3],
+    pub target: &'view Vec3,
     /// Additive offset from the base target.
-    pub target_offset: &'view Property<[f32; 3]>,
+    pub target_offset: &'view Property<Vec3>,
     /// Roll angle in radians.
     pub roll: &'view Property<f32>,
     /// Near and far clipping distances.
-    pub clipping: &'view [f32; 2],
+    pub clipping: &'view Vec2,
     /// Angle and its explicitly authored axis convention.
     pub field_of_view: AimedFieldOfViewRef<'view>,
 }
@@ -440,7 +441,7 @@ pub struct EdgeStripRef<'view> {
     /// Emitter-local direction of positive cross-section extent.
     pub axis: &'view Axis,
     /// RGB tint of emitted trail geometry.
-    pub color: &'view Property<[f32; 3]>,
+    pub color: &'view Property<Vec3>,
     /// Fractional opacity.
     pub opacity: &'view Property<f32>,
     /// Extent above and below the center line.

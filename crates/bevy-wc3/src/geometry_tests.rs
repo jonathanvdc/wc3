@@ -1,5 +1,7 @@
 use super::*;
+use bevy::math::{Vec2, Vec4};
 use bevy::prelude::Vec3;
+use wc3::model::common::PackedArray;
 use wc3::model::profiles::Universal;
 use wc3::model::ModelMetadata;
 use wc3::model::{
@@ -16,7 +18,7 @@ fn positions(mesh: &Mesh) -> &[[f32; 3]] {
 }
 fn mesh(positions: &[[f32; 3]], topology: Topology<'static>) -> ModelMesh<'static> {
     ModelMesh::new(GeometryData {
-        positions: positions.iter().copied().collect(),
+        positions: positions.iter().copied().map(Vec3::from_array).collect(),
         connectivity: ConnectivitySets::new(topology, Vec::new()),
         ..Default::default()
     })
@@ -74,7 +76,9 @@ fn shared_vertices_keep_independent_corner_uvs() {
         .insert(Attribute {
             semantic: AttributeSemantic::TexCoord(0),
             domain: AttributeDomain::Corner,
-            values: AttributeValues::Vector2(coordinates.into_iter().collect()),
+            values: AttributeValues::Vector2(
+                coordinates.into_iter().map(Vec2::from_array).collect(),
+            ),
         })
         .unwrap();
     let id = source.add_primary_subset(0, 2);
@@ -117,7 +121,12 @@ fn strip_index_window_preserves_original_attribute_rows() {
         .insert(Attribute {
             semantic: AttributeSemantic::TexCoord(0),
             domain: AttributeDomain::Corner,
-            values: AttributeValues::Vector2((0..6).map(|i| [i as f32, 0.]).collect()),
+            values: AttributeValues::Vector2(
+                (0..6)
+                    .map(|i| [i as f32, 0.])
+                    .map(Vec2::from_array)
+                    .collect(),
+            ),
         })
         .unwrap();
     source
@@ -127,7 +136,10 @@ fn strip_index_window_preserves_original_attribute_rows() {
             semantic: AttributeSemantic::Color(0),
             domain: AttributeDomain::Face,
             values: AttributeValues::Vector4(
-                [[1., 0., 0., 1.], [0., 1., 0., 1.]].into_iter().collect(),
+                [[1., 0., 0., 1.], [0., 1., 0., 1.]]
+                    .into_iter()
+                    .map(Vec4::from_array)
+                    .collect(),
             ),
         })
         .unwrap();
@@ -193,7 +205,9 @@ fn mesh_constant_attributes_expand_to_every_selected_corner() {
         .insert(Attribute {
             semantic: AttributeSemantic::TexCoord(0),
             domain: AttributeDomain::Mesh,
-            values: AttributeValues::Vector2([[0.25, 0.75]].into_iter().collect()),
+            values: AttributeValues::Vector2(
+                [[0.25, 0.75]].into_iter().map(Vec2::from_array).collect(),
+            ),
         })
         .unwrap();
     source
@@ -202,7 +216,12 @@ fn mesh_constant_attributes_expand_to_every_selected_corner() {
         .insert(Attribute {
             semantic: AttributeSemantic::Color(0),
             domain: AttributeDomain::Mesh,
-            values: AttributeValues::Vector4([[0.1, 0.2, 0.3, 1.]].into_iter().collect()),
+            values: AttributeValues::Vector4(
+                [[0.1, 0.2, 0.3, 1.]]
+                    .into_iter()
+                    .map(Vec4::from_array)
+                    .collect(),
+            ),
         })
         .unwrap();
     let id = source.add_primary_subset(0, 1);
@@ -237,7 +256,9 @@ fn selected_connectivity_corner_attributes_override_vertex_streams() {
         .insert(Attribute {
             semantic: AttributeSemantic::TexCoord(0),
             domain: AttributeDomain::Vertex,
-            values: AttributeValues::Vector2([[9., 9.]; 4].into_iter().collect()),
+            values: AttributeValues::Vector2(
+                [[9., 9.]; 4].into_iter().map(Vec2::from_array).collect(),
+            ),
         })
         .unwrap();
     source
@@ -246,7 +267,12 @@ fn selected_connectivity_corner_attributes_override_vertex_streams() {
         .insert(Attribute {
             semantic: AttributeSemantic::TexCoord(0),
             domain: AttributeDomain::ConnectivityCorner(connectivity),
-            values: AttributeValues::Vector2((0..6).map(|value| [value as f32, 1.]).collect()),
+            values: AttributeValues::Vector2(
+                (0..6)
+                    .map(|value| [value as f32, 1.])
+                    .map(Vec2::from_array)
+                    .collect(),
+            ),
         })
         .unwrap();
     let subset = DrawSubset::new(PrimitiveSelection {
@@ -292,7 +318,10 @@ fn many_small_draw_ranges_preserve_global_face_correspondence() {
             semantic: AttributeSemantic::Color(0),
             domain: AttributeDomain::Face,
             values: AttributeValues::Vector4(
-                (0..256).map(|face| [face as f32, 0., 0., 1.]).collect(),
+                (0..256)
+                    .map(|face| [face as f32, 0., 0., 1.])
+                    .map(Vec4::from_array)
+                    .collect(),
             ),
         })
         .unwrap();
@@ -343,7 +372,9 @@ fn third_texture_route_preserves_corner_domain_and_omits_unused_streams() {
             .insert(Attribute {
                 semantic: AttributeSemantic::TexCoord(set),
                 domain,
-                values: AttributeValues::Vector2(values.into_iter().collect()),
+                values: AttributeValues::Vector2(
+                    values.into_iter().map(Vec2::from_array).collect(),
+                ),
             })
             .unwrap();
     }
@@ -384,7 +415,9 @@ fn second_color_projects_corner_values_independently_of_primary_illumination() {
             .insert(Attribute {
                 semantic: AttributeSemantic::Color(set),
                 domain,
-                values: AttributeValues::Vector4(values.into_iter().collect()),
+                values: AttributeValues::Vector4(
+                    values.into_iter().map(Vec4::from_array).collect(),
+                ),
             })
             .unwrap();
     }
@@ -426,7 +459,9 @@ fn fourth_uv_preserves_corner_rows_without_allocating_unused_streams() {
         .insert(Attribute {
             semantic: AttributeSemantic::TexCoord(3),
             domain: AttributeDomain::Corner,
-            values: AttributeValues::Vector2(coordinates.into_iter().collect()),
+            values: AttributeValues::Vector2(
+                coordinates.into_iter().map(Vec2::from_array).collect(),
+            ),
         })
         .unwrap();
     let id = source.add_primary_subset(0, 2);
@@ -453,7 +488,14 @@ fn compact_skin_remaps_both_streams_and_ignores_vertices_outside_part() {
     let joints: Vec<_> = (0..16)
         .map(|i| builder.add_named_node(format!("joint {i}")).unwrap())
         .collect();
-    let mut geometry = GeometryData::triangles([[0.; 3]; 3], [[0, 1, 2]]).unwrap();
+    let mut geometry = GeometryData::triangles(
+        ([[0.; 3]; 3])
+            .into_iter()
+            .map(Vec3::from_array)
+            .collect::<PackedArray<_>>(),
+        [[0, 1, 2]],
+    )
+    .unwrap();
     let selected = [14, 2, 10, 4, 12, 6, 8, 0];
     geometry.influences = GeometryInfluences::Variable(ValueGroups::from_rows([
         selected

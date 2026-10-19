@@ -2,6 +2,7 @@
 use super::BillboardFlags;
 use crate::model::values::model::{self as values, AnimationId, ModelFlags, SequenceFlags};
 use crate::model::{Bounds, ClipId, Link, NodeId, ValidateLinks};
+use glam::Vec3;
 use std::borrow::Cow;
 /// Native playback selection and transition controls owned by a common clip.
 #[derive(Clone, Debug)]
@@ -99,16 +100,18 @@ pub struct GeometryControls {
     /// Bone carrying the section's sorting frame.
     pub center_bone: Option<NodeId>,
     /// Section center in model coordinates.
-    pub center: [f32; 3],
+    pub center: Vec3,
     /// Optional transparency sorting sphere, as center and radius.
-    pub sorting: Option<([f32; 3], f32)>,
+    pub sorting: Option<(Vec3, f32)>,
 }
 impl ValidateLinks for GeometryControls {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.center_bone.visit_links(visitor);
-        if self.center.iter().any(|v| !v.is_finite())
+        if self.center.to_array().iter().any(|v| !v.is_finite())
             || self.sorting.is_some_and(|(center, radius)| {
-                center.iter().any(|v| !v.is_finite()) || !radius.is_finite() || radius < 0.
+                center.to_array().iter().any(|v| !v.is_finite())
+                    || !radius.is_finite()
+                    || radius < 0.
             })
         {
             visitor(Link::InvalidValue);

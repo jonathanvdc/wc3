@@ -1,7 +1,10 @@
 //! Fixtures retain their actual geometric and contact properties.
 use super::*;
+use crate::model::common::PackedArray;
 use crate::model::io::materialize;
 use crate::model::ValueGroups;
+use glam::Mat4;
+use glam::Vec3;
 use native::records::PhysicsShapeKind;
 use profile::{values::PhysicsGameFlags, MassProperties, Shape, ShapeGeometry};
 pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Error> {
@@ -42,7 +45,7 @@ pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Er
                     [f.axis_z[0], f.axis_z[1], f.axis_z[2], 0.],
                     [f.origin[0], f.origin[1], f.origin[2], 1.],
                 ];
-                ShapeGeometry::Box(value.half_extents)
+                ShapeGeometry::Box(Vec3::from_array(value.half_extents))
             }
             PhysicsShapeKind::Sphere => {
                 let value = file
@@ -77,7 +80,10 @@ pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Er
                     .ok_or_else(|| Error::new("physics.capsule", "missing geometry"))?;
                 ShapeGeometry::Capsule {
                     radius: value.radius,
-                    endpoints: [value.position1, value.position2],
+                    endpoints: [
+                        Vec3::from_array(value.position1),
+                        Vec3::from_array(value.position2),
+                    ],
                 }
             }
             PhysicsShapeKind::ConvexHull => {
@@ -118,15 +124,21 @@ pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Er
                     faces.push(face);
                 }
                 mass_properties = Some(MassProperties {
-                    centroid: value.header.centroid,
+                    centroid: Vec3::from_array(value.header.centroid),
                     volume: value.header.volume,
                     surface_area: value.header.surface_area,
                 });
                 ShapeGeometry::ConvexHull {
-                    vertices: materialize(value.vertices.len(), move |i| {
-                        value.vertices.get(i).unwrap()
-                    }),
-                    planes: materialize(value.planes.len(), move |i| value.planes.get(i).unwrap()),
+                    vertices: PackedArray::from_storage(
+                        (materialize(value.vertices.len(), move |i| {
+                            value.vertices.get(i).unwrap()
+                        }))
+                        .into_storage(),
+                    ),
+                    planes: PackedArray::from_storage(
+                        (materialize(value.planes.len(), move |i| value.planes.get(i).unwrap()))
+                            .into_storage(),
+                    ),
                     faces: ValueGroups::from_rows(faces),
                 }
             }
@@ -138,7 +150,7 @@ pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Er
             }
         };
         out.push(Shape {
-            transform,
+            transform: Mat4::from_cols_array_2d(&transform),
             geometry,
             friction: definition.friction,
             restitution: definition.restitution,

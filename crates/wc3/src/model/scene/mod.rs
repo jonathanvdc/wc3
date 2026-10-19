@@ -49,6 +49,7 @@ impl<'a> PhysicsSystem<'a> {
             }
             if body
                 .damping
+                .to_array()
                 .iter()
                 .chain([&body.inertia_scale, &body.gravity_scale])
                 .any(|v| !v.is_finite())
@@ -68,7 +69,7 @@ impl<'a> PhysicsSystem<'a> {
             }
         }
         for (_, shape) in &self.shapes {
-            if shape.transform.iter().flatten().any(|v| !v.is_finite()) {
+            if !shape.transform.is_finite() {
                 return Err(Error::new(
                     "physics.shapes",
                     "shape transform must be finite",
@@ -79,7 +80,7 @@ impl<'a> PhysicsSystem<'a> {
                 triangles,
             } = &shape.geometry
             {
-                if positions.iter().flatten().any(|v| !v.is_finite())
+                if positions.iter().any(|v| !v.is_finite())
                     || triangles
                         .iter()
                         .flatten()
@@ -228,10 +229,11 @@ impl<'a> PhysicsSystem<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use glam::Mat4;
     fn shape() -> Shape<'static> {
         Shape {
             geometry: Geometry::Sphere(1.),
-            transform: [[0.; 4]; 4],
+            transform: Mat4::ZERO,
             material: ContactMaterial::default(),
             game_controls: 0,
         }
@@ -252,8 +254,8 @@ mod tests {
         let mut system = PhysicsSystem::default();
         let id = system.add_shape(shape()).unwrap();
         let mut invalid = shape();
-        invalid.transform[0][0] = f32::NAN;
+        invalid.transform.x_axis.x = f32::NAN;
         assert!(system.set_shape(id, invalid).is_err());
-        assert_eq!(system.shape(id).unwrap().transform[0][0], 0.);
+        assert_eq!(system.shape(id).unwrap().transform.x_axis.x, 0.);
     }
 }

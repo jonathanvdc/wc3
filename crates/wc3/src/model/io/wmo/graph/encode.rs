@@ -6,6 +6,7 @@ use crate::model::formats::wmo::codec::Array;
 use crate::model::formats::wmo::records::{HeaderTailField, RootFlags};
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::formats::wmo::{Bundle, Dialect, GroupKey, Root};
+use crate::model::formats::wmo::{RecordLayout, Write};
 use crate::model::profiles::Wmo;
 use crate::model::Model;
 use crate::model::WorldModelResource;
@@ -109,7 +110,7 @@ fn write_model<'a, D: Dialect>(
             let flags = super::group_flags::catalog(model, group);
             crate::model::formats::wmo::records::GroupInfo {
                 flags,
-                bounds: group.bounds,
+                bounds: (group.bounds).map(|v| v.to_array()),
                 name_offset: *name as i32,
             }
         })
@@ -134,7 +135,7 @@ fn write_model<'a, D: Dialect>(
     }
     root.header_mut().group_count = world.groups.len() as u32;
     if let Some(bounds) = model.bounds() {
-        root.header_mut().bounds = [bounds.minimum, bounds.maximum];
+        root.header_mut().bounds = [(bounds.minimum).to_array(), (bounds.maximum).to_array()];
     }
     let max_lod = world
         .groups
@@ -262,12 +263,7 @@ fn write_model<'a, D: Dialect>(
         .map_err(|error| Error::new("world.output", error.to_string()))?;
     Ok(Plan::new(bundle, context.report))
 }
-pub(super) fn array<
-    'a,
-    T: crate::model::formats::wmo::Write + crate::model::formats::wmo::RecordLayout,
->(
-    rows: &[T],
-) -> Result<Array<'a, T>, Error> {
+pub(super) fn array<'a, T: Write + RecordLayout>(rows: &[T]) -> Result<Array<'a, T>, Error> {
     Array::from_records(rows).map_err(|error| Error::new("world.array", error.to_string()))
 }
 pub(super) fn append<'a, D: Dialect>(

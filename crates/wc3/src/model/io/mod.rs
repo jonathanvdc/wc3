@@ -13,13 +13,13 @@ pub mod mdlx;
 /// WMO import and export support.
 pub mod wmo;
 
-use zerovec::{ule::AsULE, ZeroVec};
+use crate::model::common::{PackedArray, PackedValue};
 
 /// Materializes a projection once at the native conversion boundary.
-fn materialize<T: AsULE>(len: usize, get: impl Fn(usize) -> T) -> ZeroVec<'static, T> {
+fn materialize<T: PackedValue>(len: usize, get: impl Fn(usize) -> T) -> PackedArray<'static, T> {
     (0..len).map(get).collect()
 }
 
-fn owned<T: AsULE>(values: impl AsRef<[T]>) -> ZeroVec<'static, T> {
-    ZeroVec::alloc_from_slice(values.as_ref())
+fn owned<T: PackedValue>(values: impl AsRef<[T]>) -> PackedArray<'static, T> {
+    PackedArray::alloc_from_slice(values.as_ref())
 }

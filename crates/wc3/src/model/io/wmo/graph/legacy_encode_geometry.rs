@@ -1,5 +1,6 @@
 //! Historical group records constructed directly from logical geometry.
 use super::encode::array;
+use crate::model::common::PackedArray;
 use crate::model::conversion::{Context, Error};
 use crate::model::formats::wmo::group::{GroupChunk, LiquidHeader, LiquidVertex};
 use crate::model::formats::wmo::legacy::{
@@ -15,7 +16,6 @@ use crate::model::profiles::Wmo;
 use crate::model::WorldImageResource;
 use crate::model::{InstanceId, LookId, MaterialId, Model, Topology};
 use std::collections::BTreeMap;
-use zerovec::ZeroVec;
 
 pub(super) struct DrawFields {
     pub bounds: CullingBox,
@@ -134,20 +134,24 @@ pub(super) fn write<'a, B: Batch>(
     result
         .chunks
         .push(LegacyGroupChunk::Common(GroupChunk::Positions(array(
-            &mesh.positions().to_vec(),
+            &mesh
+                .positions()
+                .iter()
+                .map(|v| v.to_array())
+                .collect::<Vec<_>>(),
         )?)));
     if let Some(normals) = mesh.normals() {
         result
             .chunks
             .push(LegacyGroupChunk::Common(GroupChunk::Normals(array(
-                &normals.to_vec(),
+                &normals.iter().map(|v| v.to_array()).collect::<Vec<_>>(),
             )?)));
     }
     for coordinates in mesh.texture_coordinates() {
         result
             .chunks
             .push(LegacyGroupChunk::Common(GroupChunk::TextureCoordinates(
-                array(&coordinates.to_vec())?,
+                array(&coordinates.storage().to_vec())?,
             )));
     }
     for colors in mesh.geometry.color_sets() {
@@ -155,7 +159,7 @@ pub(super) fn write<'a, B: Batch>(
             .iter()
             .map(|rgba| {
                 let mut encoded = [0; 4];
-                for (byte, value) in encoded.iter_mut().zip(rgba) {
+                for (byte, value) in encoded.iter_mut().zip(rgba.to_array()) {
                     let rounded = (value.clamp(0., 1.) * 255.).round() as u8;
                     context.approximate(
                         "world.colors",
@@ -283,8 +287,8 @@ pub(super) fn write<'a, B: Batch>(
             [bounds.minimum, bounds.maximum].map(|corner| corner.map(|value| value.round()));
         if bounds
             .iter()
-            .flatten()
-            .any(|value| *value < f32::from(i16::MIN) || *value > f32::from(i16::MAX))
+            .flat_map(|v| v.to_array())
+            .any(|value| value < f32::from(i16::MIN) || value > f32::from(i16::MAX))
         {
             return Err(Error::new(
                 "world.draw.bounds",
@@ -294,8 +298,8 @@ pub(super) fn write<'a, B: Batch>(
         let exact = control.bounds.unwrap_or(mesh.bounds);
         let quantization = [exact.minimum, exact.maximum]
             .iter()
-            .flatten()
-            .zip(bounds.iter().flatten())
+            .flat_map(|v| v.to_array())
+            .zip(bounds.iter().flat_map(|v| v.to_array()))
             .map(|(a, b)| (a - b).abs())
             .fold(0., f32::max);
         context.approximate(
@@ -304,8 +308,8 @@ pub(super) fn write<'a, B: Batch>(
             "historical draw bounds quantized to integer coordinates",
         )?;
         let bounds = CullingBox {
-            minimum: bounds[0].map(|value| value as i16),
-            maximum: bounds[1].map(|value| value as i16),
+            minimum: bounds[0].to_array().map(|value| value as i16),
+            maximum: bounds[1].to_array().map(|value| value as i16),
         };
         let selected = triangles
             .iter()
@@ -367,7 +371,7 @@ pub(super) fn write<'a, B: Batch>(
         result
             .chunks
             .push(LegacyGroupChunk::LightMapCoordinates(array(
-                &mesh.geometry.lightmap_coordinates().to_vec(),
+                &mesh.geometry.lightmap_coordinates().storage().to_vec(),
             )?));
     }
     for liquid in &region.liquids {
@@ -417,7 +421,7 @@ pub(super) fn write<'a, B: Batch>(
             header: LiquidHeader {
                 vertex_dimensions: dimensions,
                 tile_dimensions: dimensions.map(|value| value.saturating_sub(1)),
-                corner: liquid.position,
+                corner: (liquid.position).to_array(),
                 material,
             },
             vertices: array(&vertices)?,
@@ -481,10 +485,14 @@ fn write_lighting<'a, B: RecordLayout>(
         }
         if !auxiliary.values.is_empty() {
             chunks.push(LegacyGroupChunk::BatchGeometry(array(
-                &auxiliary.values.to_vec(),
+                &auxiliary
+                    .values
+                    .iter()
+                    .map(|v| v.to_array())
+                    .collect::<Vec<_>>(),
             )?));
         }
-        let windows = |values: &ZeroVec<'_, [u16; 2]>| {
+        let windows = |values: &PackedArray<'_, [u16; 2]>| {
             values
                 .iter()
                 .map(|[start, count]| BatchRange { start, count })

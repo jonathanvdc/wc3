@@ -58,7 +58,9 @@ mappings and remaining fidelity limits. Overrides replace a complete local pose;
 blend local transforms with `Transform::blend` before hierarchy composition.
 
 `cargo bench -p wc3 --bench evaluation` measures reusable pose evaluation and
-draw projection without initializing a renderer.
+draw projection without initializing a renderer. `cargo bench -p wc3 --bench
+packed_storage` compares borrowed packed glam access with native `ZeroVec`
+component access.
 `ValueSample` accepts both ordinary and retimed animation samples, so effect
 and event times do not require selecting animations again.
 
@@ -96,7 +98,7 @@ then apply the resulting vertex matrices with `ProjectedGeometry::deform`.
 Rigid geometry instead uses its placement node matrix for every vertex.
 
 `DeformableGeometry` offers the same deformation for borrowed mutable slices in an
-application's own storage. It changes only positions, normal covectors, and tangent
+application's own `Vec3` position/normal and `Vec4` tangent storage. It changes only positions, normal covectors, and tangent
 directions/handedness. UVs, colors, source mappings, and other application fields
 remain untouched. Singular normal transforms produce zero normals. `bounds`
 computes a finite box and conservative bounding sphere after deformation.

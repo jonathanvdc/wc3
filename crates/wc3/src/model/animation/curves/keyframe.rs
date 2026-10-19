@@ -1,7 +1,9 @@
 //! Typed authoring keys and borrowed spline controls.
 use super::CurveValue;
+use crate::model::common::packed_identity;
+use crate::model::common::{PackedArray, PackedValue};
 use crate::model::Time;
-use zerovec::{ule::AsULE, ZeroVec};
+use zerovec::ule::AsULE;
 
 /// Per-key Kochanek–Bartels spline parameters.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -57,19 +59,19 @@ pub struct TcbKeyframe<T> {
 }
 /// Incoming and outgoing Hermite derivatives stored independently of key values.
 #[derive(Clone, Debug)]
-pub struct HermiteDerivatives<'a, T: AsULE> {
+pub struct HermiteDerivatives<'a, T: PackedValue> {
     /// Derivatives approaching each key.
-    pub incoming: ZeroVec<'a, T>,
+    pub incoming: PackedArray<'a, T>,
     /// Derivatives leaving each key.
-    pub outgoing: ZeroVec<'a, T>,
+    pub outgoing: PackedArray<'a, T>,
 }
 /// Incoming and outgoing Bezier control points stored independently of key values.
 #[derive(Clone, Debug)]
-pub struct BezierControls<'a, T: AsULE> {
+pub struct BezierControls<'a, T: PackedValue> {
     /// Control points approaching each key.
-    pub incoming: ZeroVec<'a, T>,
+    pub incoming: PackedArray<'a, T>,
     /// Control points leaving each key.
-    pub outgoing: ZeroVec<'a, T>,
+    pub outgoing: PackedArray<'a, T>,
 }
 
 impl AsULE for TcbParameters {
@@ -86,3 +88,5 @@ impl AsULE for TcbParameters {
         }
     }
 }
+
+packed_identity!(TcbParameters);

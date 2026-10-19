@@ -73,3 +73,7 @@ required-features = ["blp-encode"]
 [[bench]]
 name = "evaluation"
 harness = false
+
+[[bench]]
+name = "packed_storage"
+harness = false
