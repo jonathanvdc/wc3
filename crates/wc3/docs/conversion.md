@@ -1,9 +1,10 @@
-# Importing and exporting model assets
+# Importing, translating, and exporting model assets
 
 Use `wc3::model::io` to import a native document into a checked
-[model graph](semantic.md), then plan an export into the destination format.
-Import and export work in memory. Your application supplies native documents,
-resolves dependencies, and writes the encoded outputs.
+[model graph](semantic.md). When the destination has different semantics, use
+`wc3::model::conversion` to prepare its profile explicitly, then plan a native
+export. These operations work in memory. Your application supplies native
+documents, resolves dependencies, and writes the encoded outputs.
 
 The graph contains authoring values rather than an embedded source file.
 Compatible geometry and animation arrays borrow native encoded storage through
@@ -11,6 +12,15 @@ Compatible geometry and animation arrays borrow native encoded storage through
 arrays once when the native layout differs from the semantic element layout. Retain the
 original native document separately if the application also needs its codec APIs
 or original physical layout.
+
+Resource paths preserve byte spellings, including non-UTF-8 paths. MDLX
+particles, popcorn effects, attachments, and facial animation references resolve
+through the model's resource declarations, and native output writes those bytes
+without Unicode replacement. A profile `FaceEffect` pairs its target name with
+an `EffectResourceId`; removing that declaration while retaining the reference
+fails normal graph validation. Display names and visibility-guide text still
+use Unicode strings, so invalid UTF-8 in those fields requires an explicit
+import loss policy.
 
 For an independent Warcraft III model, `io::mdlx::decode_mdx` and `decode_mdl`
 combine native decoding with owned import. Both return `Model<'static, Mdlx>`
@@ -42,6 +52,75 @@ boundary checks that revision's capacities, field availability, and numeric
 representations. M2 and WMO also construct their native supporting documents
 through bundles rather than leaving offsets or references for the caller to
 repair after writing.
+
+## Translating semantic behavior
+
+Use `conversion::Policy::<TargetProfile>` to assemble the transformations that
+an application explicitly accepts before exact narrowing. An empty policy
+requires exact representability. Add reusable rules with `with_rule`, or supply
+a closure accepting `&mut ModelBuilder` and `&mut conversion::Report`. Each rule
+can inspect its current draft with `draft.model()` and use the regular builder
+methods to change it. Rules run once in insertion order, and each completed
+stage must form a valid universal graph. The final `try_narrow` checks the whole
+target vocabulary, including data that no rule visited.
+
+Planning takes a shared source reference and prepares an independent draft.
+A failed rule, invalid relationship, or unsupported target meaning leaves the
+source unchanged. A successful plan exposes a checked target model and ordered
+decisions for review, just like a native output plan. Execute that semantic plan,
+then pass its target model to the native format planner.
+
+```rust
+use wc3::model::{conversion, profiles::Mdlx, FeatureId, Model};
+use conversion::{DropUnsupportedFeatures, Policy};
+
+fn translate<'data>(source: &Model<'data>, selected: Vec<FeatureId>)
+    -> Result<conversion::Plan<Model<'data, Mdlx>>, conversion::Error>
+{
+    Policy::<Mdlx>::new()
+        .with_rule(DropUnsupportedFeatures::new(selected))
+        .plan(source)
+}
+```
+
+`DropUnsupportedFeatures` discards only selected complete attached behaviors
+that the target cannot represent. It retains supported selected features and
+reports each discarded behavior with its identity and rejection reason. It does
+not discard dependencies, rewrite consumers, or remove unrelated unsupported
+features. A remaining reference to a removed feature fails graph validation.
+An animation channel left without a target-profile consumer can also prevent
+exact narrowing; dropping the feature does not authorize discarding that channel.
+Applications can instead write a specific rule that repairs relationships or
+removes explicitly accepted orphan channels and records the consequences before
+publishing its stage.
+
+`ConstantLightVisibility` re-expresses selected constant light switches as
+zero-or-one visibility for MDLX. It rejects animated switches rather than
+freezing animation at one time. Other light properties still need to be exactly
+representable.
+
+`ConstantLightSwitch::new(selected, threshold, max_error)` approximates constant
+fractional visibility with a boolean switch for M2. Visibility at or above the
+explicit threshold enables the light. The rule accepts only visibility from
+zero to one and rejects animated inputs. It measures the absolute difference
+between the original visibility and the resulting zero-or-one activation,
+rejects values exceeding `max_error`, and reports the original value, threshold,
+and measured error. This bound describes dimensionless activation, rather than
+rendered pixel differences. A zero-error change is reported as normalization;
+a nonzero accepted error is reported as approximation.
+
+Rules that approximate curves or effects should similarly state their accepted
+conditions and record every changed meaning as an `IssueKind::Approximated` or
+`IssueKind::Dropped` decision. User-defined rules are responsible for those
+reports; graph validation proves structural consistency and final narrowing
+proves target representability, rather than visual or numerical equivalence of
+an application-defined approximation.
+
+This structure keeps exact embedding, semantic transformation, and container
+encoding separate. Reusable transformations may prepare several destinations,
+while specialized destination rules can preserve more fidelity than a common
+fallback. Universal retains distinct authored effects when their behavior
+differs; translation does not require reducing every effect to a common minimum.
 
 ## Editing and inspecting an output plan
 
