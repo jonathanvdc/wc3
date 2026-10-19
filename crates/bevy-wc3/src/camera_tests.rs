@@ -4,11 +4,12 @@ use bevy::ecs::world::CommandQueue;
 use bevy::math::{Vec2, Vec3};
 use wc3::model::ModelBuilder;
 use wc3::model::ModelMetadata;
+use wc3::model::PerspectiveProjection;
+use wc3::model::PropertyValues as SlotValues;
 use wc3::model::{
-    AimedCamera, Camera as ModelCamera, CameraConvention, Curve, DynamicTrack, NodeFeature,
+    Camera as ModelCamera, Curve, DynamicTrack, FieldOfViewAxis, LookAtCamera, NodeFeature,
     Time as ModelTime, TimeSource, Track,
 };
-use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 
 #[test]
 fn binding_samples_current_animation_and_root_without_pose_or_global_update_lag() {
@@ -35,16 +36,19 @@ fn binding_samples_current_animation_and_root_without_pose_or_global_update_lag(
     let feature = builder
         .add_feature(
             node,
-            NodeFeature::Camera(ModelCamera::Aimed(Box::new(AimedCamera {
+            NodeFeature::Camera(ModelCamera::LookAt(Box::new(LookAtCamera {
                 eye_offset: slot_values.add(Vec3::from_array([0.; 3])),
                 target: Vec3::from_array([0., 10., 0.]),
                 target_offset: slot_values.add(Vec3::from_array([0.; 3])),
-                field_of_view: slot_values.add(1.),
-                clipping: Vec2::from_array([0.1, 100.]),
+                projection: PerspectiveProjection {
+                    field_of_view: slot_values.add(1.),
+                    clipping: Vec2::from_array([0.1, 100.]),
+                    axis: FieldOfViewAxis::Vertical,
+                },
                 roll: slot_values.add(0.),
-                convention: CameraConvention::Vertical(Box::new(SlotConstruct::construct(
-                    &mut slot_values,
-                ))),
+                role: None,
+                visibility: Some(slot_values.add(1.)),
+                lens: Default::default(),
             }))),
         )
         .unwrap();

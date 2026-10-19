@@ -178,7 +178,7 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
         .with_normals(normals)?
         .with_texture_coordinates(coordinates)?
         .with_color_sets(colors)?
-        .with_triangle_controls(owned(face_controls))?;
+        .with_triangle_properties(owned(face_controls))?;
     let header = source.header();
     let mut mesh = Mesh::<Wmo>::new(geometry);
     mesh.name = super::relationships::name(root, source.header().name_offset)?;
@@ -304,7 +304,7 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
             }
         }
     }
-    let mut region = crate::model::profiles::wmo::RegionControls {
+    let mut region = crate::model::profiles::wmo::Region {
         description: super::relationships::name(root, header.descriptive_name_offset)?,
         area_id: header.unique_id,
         batch_control: header.reserved_batch_count,
@@ -356,7 +356,7 @@ pub(in crate::model::io::wmo::graph) fn read<'a, D: Dialect>(
     let (draws, draw_materials): (Vec<_>, Vec<_>) = draws.into_iter().unzip();
     let instance_id = builder.add_instance_with_materials(
         MeshInstance {
-            controls: region,
+            properties: region,
             node,
             mesh: mesh_id,
             skin: None,

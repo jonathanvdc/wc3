@@ -5,7 +5,7 @@ use wc3::model::profiles::{Narrows, Universal, Wmo};
 use wc3::model::GeometrySchema;
 use wc3::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, GeometryData, GeometryEdit,
-    SurfaceTriangleControls, Topology, VertexRemap, WmoGeometry,
+    Topology, TriangleProperties, VertexRemap, WmoGeometry,
 };
 
 fn duplicate() -> GeometryEdit<'static> {
@@ -28,7 +28,7 @@ fn world_vertex_streams_remap_while_face_controls_and_draw_pools_keep_their_doma
     let lighting = [[0.4; 4], [0.5; 4], [0.6; 4]];
     let lightmap = [[0.1; 2], [0.2; 2], [0.3; 2]];
     let pool = [[1., 0., 0., 1.]];
-    let controls = [SurfaceTriangleControls {
+    let controls = [TriangleProperties {
         collision: true,
         lightmap_selector: Some(7),
         ..Default::default()
@@ -53,7 +53,7 @@ fn world_vertex_streams_remap_while_face_controls_and_draw_pools_keep_their_doma
     .unwrap()
     .with_tangent_vectors(PackedArray::from_storage(ZeroVec::alloc_from_slice(&pool)))
     .unwrap()
-    .with_triangle_controls(PackedArray::from_storage(ZeroVec::alloc_from_slice(
+    .with_triangle_properties(PackedArray::from_storage(ZeroVec::alloc_from_slice(
         &controls,
     )))
     .unwrap();
@@ -94,7 +94,7 @@ fn world_vertex_streams_remap_while_face_controls_and_draw_pools_keep_their_doma
             .collect::<Vec<_>>(),
         vec![lightmap[2], lightmap[0], lightmap[1], lightmap[0]]
     );
-    assert_eq!(mapped.triangle_controls().to_vec(), controls);
+    assert_eq!(mapped.triangle_properties().to_vec(), controls);
     assert_eq!(
         (mapped.tangent_vectors().to_vec())
             .into_iter()

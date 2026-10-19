@@ -199,7 +199,7 @@ where
                     }
                 }
                 core.ribbons.push(native::records::RibbonEmitter {
-                    id: value.controls.id,
+                    id: value.behavior.id,
                     bone_id: bone,
                     position,
                     texture_indices: ZeroVec::alloc_from_slice(&texture_indices),
@@ -238,7 +238,7 @@ where
                     )?,
                     edges_per_second: value.emission_rate,
                     edge_lifetime: value.lifetime,
-                    gravity: value.controls.angle,
+                    gravity: value.behavior.angle,
                     texture_rows: value.appearance.atlas[0],
                     texture_columns: value.appearance.atlas[1],
                     texture_slot: animated(
@@ -251,7 +251,7 @@ where
                     )?,
                     visibility: animated(
                         model,
-                        &value.controls.enabled,
+                        &value.behavior.enabled,
                         starts,
                         globals,
                         context,
@@ -259,8 +259,8 @@ where
                     )?,
                     modern: V::ribbon_tail_from(
                         [
-                            value.controls.priority_plane,
-                            i16::from(value.controls.color_index),
+                            value.rendering.priority_plane,
+                            i16::from(value.rendering.color_index),
                             0,
                         ],
                         context,
@@ -270,12 +270,13 @@ where
             profile::ActorKind::Camera(value) => {
                 let placement = model.node(attached.node).unwrap();
                 let mut camera = native::records::Camera::<V>::new();
-                camera.kind = CameraKind::from_raw(value.convention.raw());
+                camera.kind =
+                    CameraKind::from_raw(value.role.expect("validated M2 camera role").raw());
                 camera.position_base =
                     (placement.transform.defaults(model.values()).translation).to_array();
                 camera.target_position_base = (value.target).to_array();
-                camera.near_clip = value.clipping[0];
-                camera.far_clip = value.clipping[1];
+                camera.near_clip = value.projection.clipping[0];
+                camera.far_clip = value.projection.clipping[1];
                 camera.positions = animated_spline(
                     model,
                     &value.eye_offset,
@@ -296,7 +297,7 @@ where
                     animated_spline(model, &value.roll, starts, globals, context, |v, _| Ok(v))?;
                 V::write_logical_fov(
                     model,
-                    &value.field_of_view,
+                    &value.projection.field_of_view,
                     &mut camera,
                     starts,
                     globals,

@@ -12,11 +12,11 @@ struct PayloadMap<'a, P: Profile, Q: Profile> {
     system: fn(P::System<'a>) -> Q::System<'a>,
     map_surface: fn(P::Surface<'a>) -> Q::Surface<'a>,
     feature: fn(P::Feature<'a>, &mut PropertyValues) -> Q::Feature<'a>,
-    node: fn(P::Node<'a>) -> Q::Node<'a>,
-    mesh: fn(P::Mesh<'a>) -> Q::Mesh<'a>,
-    instance: fn(P::Instance<'a>) -> Q::Instance<'a>,
-    draw: fn(P::Draw) -> Q::Draw,
-    clip: fn(P::Clip<'a>) -> Q::Clip<'a>,
+    node: fn(P::NodeProperties<'a>) -> Q::NodeProperties<'a>,
+    mesh: fn(P::MeshProperties<'a>) -> Q::MeshProperties<'a>,
+    instance: fn(P::InstanceProperties<'a>) -> Q::InstanceProperties<'a>,
+    draw: fn(P::DrawProperties) -> Q::DrawProperties,
+    clip: fn(P::ClipProperties<'a>) -> Q::ClipProperties<'a>,
 }
 impl<'a, P: Profile> Model<'a, P> {
     /// Embeds the complete graph into a containing vocabulary without copying array storage.
@@ -112,7 +112,7 @@ impl<'a, P: Profile> Model<'a, P> {
                         billboard,
                         visible,
                         camera_anchored,
-                        controls,
+                        properties,
                     } = value;
                     (
                         id,
@@ -125,7 +125,7 @@ impl<'a, P: Profile> Model<'a, P> {
                             billboard,
                             visible,
                             camera_anchored,
-                            controls: (maps.node)(controls),
+                            properties: (maps.node)(properties),
                         },
                     )
                 })
@@ -140,7 +140,7 @@ impl<'a, P: Profile> Model<'a, P> {
                             subsets,
                             name,
                             bounds,
-                            controls,
+                            properties,
                             geometry: source_geometry,
                         },
                     )| {
@@ -150,7 +150,7 @@ impl<'a, P: Profile> Model<'a, P> {
                                 subsets,
                                 name,
                                 bounds,
-                                controls: (maps.mesh)(controls),
+                                properties: (maps.mesh)(properties),
                                 geometry: (maps.geometry)(source_geometry),
                             },
                         )
@@ -196,7 +196,7 @@ impl<'a, P: Profile> Model<'a, P> {
                         duration,
                         looping,
 
-                        controls,
+                        properties,
                     } = value;
                     (
                         id,
@@ -207,7 +207,7 @@ impl<'a, P: Profile> Model<'a, P> {
                             duration,
                             looping,
 
-                            controls: (maps.clip)(controls),
+                            properties: (maps.clip)(properties),
                         },
                     )
                 })
@@ -223,7 +223,7 @@ impl<'a, P: Profile> Model<'a, P> {
                         draws,
                         lod,
                         selection_group,
-                        controls,
+                        properties,
                     } = value;
                     (
                         id,
@@ -237,17 +237,17 @@ impl<'a, P: Profile> Model<'a, P> {
                                     |Draw {
                                          subset,
                                          id,
-                                         controls,
+                                         properties,
                                      }| Draw {
                                         subset,
                                         id,
-                                        controls: (maps.draw)(controls),
+                                        properties: (maps.draw)(properties),
                                     },
                                 )
                                 .collect(),
                             lod,
                             selection_group,
-                            controls: (maps.instance)(controls),
+                            properties: (maps.instance)(properties),
                         },
                     )
                 })

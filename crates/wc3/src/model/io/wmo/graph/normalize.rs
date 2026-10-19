@@ -48,10 +48,10 @@ pub(super) fn prepare<'data>(
         for id in &instances[1..] {
             let instance = model.instance(*id).expect("validated placement");
             let mesh = model.mesh(instance.mesh).expect("validated geometry");
-            let mut controls = instance.controls.clone();
-            controls.interior_windows = first.controls.interior_windows;
-            controls.exterior_windows = first.controls.exterior_windows;
-            if controls != first.controls
+            let mut controls = instance.properties.clone();
+            controls.interior_windows = first.properties.interior_windows;
+            controls.exterior_windows = first.properties.exterior_windows;
+            if controls != first.properties
                 || instance.selection_group != first.selection_group
                 || mesh.name != first_mesh.name
             {
@@ -136,7 +136,7 @@ pub(super) fn prepare<'data>(
                     .map(move |triangle| triangle.map(|vertex| vertex + vertex_base))
                     .collect::<Vec<_>>(),
             ));
-            faces.push(mesh.geometry.triangle_controls().clone());
+            faces.push(mesh.geometry.triangle_properties().clone());
             strips.push(owned(
                 mesh.geometry
                     .strip_indices()
@@ -146,8 +146,8 @@ pub(super) fn prepare<'data>(
             ));
             tangents.push(mesh.geometry.tangent_vectors().clone());
             windows.append(
-                instance.controls.interior_windows,
-                instance.controls.exterior_windows,
+                instance.properties.interior_windows,
+                instance.properties.exterior_windows,
                 vertex_base,
                 u32::try_from(draws.len()).map_err(error)?,
             )?;
@@ -225,7 +225,7 @@ pub(super) fn prepare<'data>(
                     .collect::<Result<_, _>>()?,
             )?
             .with_color_sets(colors.into_iter().map(concat).collect::<Result<_, _>>()?)?
-            .with_triangle_controls(concat(faces)?)?
+            .with_triangle_properties(concat(faces)?)?
             .with_lightmap_coordinates(concat(lightmap_coordinates)?)?
             .with_strip_indices(concat(strips)?)?
             .with_tangent_vectors(concat(tangents)?)?;
@@ -249,8 +249,8 @@ pub(super) fn prepare<'data>(
         instance.mesh = mesh;
         instance.draws = draws;
         (
-            instance.controls.interior_windows,
-            instance.controls.exterior_windows,
+            instance.properties.interior_windows,
+            instance.properties.exterior_windows,
         ) = windows.finish()?;
         builder.set_instance(first_id, instance)?;
         let mut world = builder

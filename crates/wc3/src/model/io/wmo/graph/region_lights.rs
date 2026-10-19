@@ -5,7 +5,7 @@ use crate::model::conversion::Error;
 use crate::model::formats::wmo::group::GroupChunk;
 use crate::model::formats::wmo::records;
 use crate::model::formats::wmo::{Dialect, Group};
-use crate::model::profiles::wmo::{self, RegionControls};
+use crate::model::profiles::wmo::{self, Region};
 use crate::model::profiles::Wmo;
 use crate::model::PropertyValues;
 use crate::model::WorldImageResource;
@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 pub(super) fn read<'a, D: Dialect>(
     source: &'a Group<'_, D>,
     builder: &mut ModelBuilder<'a, Wmo>,
-    region: &mut RegionControls<'a>,
+    region: &mut Region<'a>,
 ) -> Result<(), Error> {
     for chunk in source.chunks() {
         if let GroupChunk::PointLights(rows) = chunk {
@@ -123,7 +123,7 @@ fn error(error: crate::model::formats::wmo::ReadError) -> Error {
 
 pub(super) fn write<'a, D: Dialect>(
     model: &Model<'_, Wmo>,
-    region: &RegionControls<'_>,
+    region: &Region<'_>,
     group: &mut impl super::group_output::GroupOutput<'a, D>,
 ) -> Result<(), Error> {
     let mut points = Vec::new();

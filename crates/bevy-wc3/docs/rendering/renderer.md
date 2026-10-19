@@ -58,8 +58,10 @@ appearance choices. Authored secondary motion is opt-in and uses an approximate
 solver.
 
 Attachment mounts expose animated sockets and can load child models automatically.
-[Lights](lights.md) become ordinary Bevy lights. [Cameras](cameras.md) bind to
-application-owned views on request, and [events](events.md) publish occurrences
+[Lights](lights.md) preserve activation independently of shadow parameters and
+become ordinary Bevy lights. [Cameras](cameras.md) retain independent projection,
+role, visibility, and lens parameters, and bind to
+application-owned views on request. [Events](events.md) publish occurrences
 for application handling. [Static-world APIs](worlds.md) expose groups, portal
 selection, placement sets, liquids, and regional environment samples while leaving
 scene lighting, fog, and camera containment to the application.

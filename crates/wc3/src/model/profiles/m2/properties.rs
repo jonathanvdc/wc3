@@ -1,12 +1,12 @@
 //! Model playback, shadow passes, geometry sorting, and external category bindings.
-use super::BillboardFlags;
+use crate::model::properties::BillboardFlags;
 use crate::model::values::model::{self as values, AnimationId, ModelFlags, SequenceFlags};
 use crate::model::{Bounds, ClipId, Link, NodeId, ValidateLinks};
 use glam::Vec3;
 use std::borrow::Cow;
 /// Native playback selection and transition controls owned by a common clip.
 #[derive(Clone, Debug)]
-pub struct SequenceControls {
+pub struct SequenceProperties {
     /// External animation-data category selecting this playback program.
     pub animation_id: AnimationId,
     /// Variation identity within the animation-data category.
@@ -28,7 +28,7 @@ pub struct SequenceControls {
     /// Native alias selection; common playback shares the target animation identities directly.
     pub alias: Option<ClipId>,
 }
-impl Default for SequenceControls {
+impl Default for SequenceProperties {
     fn default() -> Self {
         Self {
             animation_id: AnimationId::STAND,
@@ -44,7 +44,7 @@ impl Default for SequenceControls {
         }
     }
 }
-impl ValidateLinks for SequenceControls {
+impl ValidateLinks for SequenceProperties {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.next_variation.visit_links(visitor);
         self.alias.visit_links(visitor);
@@ -55,7 +55,7 @@ impl ValidateLinks for SequenceControls {
 }
 /// Native shadow-pass behavior; geometry, range, and surface live on the draw.
 #[derive(Clone, Debug)]
-pub struct ShadowControls {
+pub struct ShadowProperties {
     /// Complete shadow behavior mask.
     pub flags: values::ShadowBatchFlags,
     /// Additional shadow and edge-fade behavior.
@@ -67,7 +67,7 @@ pub struct ShadowControls {
     /// Unresolved native opacity selection parameter.
     pub transparency_parameter: u16,
 }
-impl ValidateLinks for ShadowControls {
+impl ValidateLinks for ShadowProperties {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
 /// Model-wide behavior and external game-category bindings.
@@ -96,7 +96,7 @@ impl ValidateLinks for ModelMetadata<'_> {
 }
 /// Sorting and culling behavior attached directly to its logical geometry.
 #[derive(Clone, Debug)]
-pub struct GeometryControls {
+pub struct MeshProperties {
     /// Bone carrying the section's sorting frame.
     pub center_bone: Option<NodeId>,
     /// Section center in model coordinates.
@@ -104,7 +104,7 @@ pub struct GeometryControls {
     /// Optional transparency sorting sphere, as center and radius.
     pub sorting: Option<(Vec3, f32)>,
 }
-impl ValidateLinks for GeometryControls {
+impl ValidateLinks for MeshProperties {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.center_bone.visit_links(visitor);
         if self.center.to_array().iter().any(|v| !v.is_finite())
@@ -121,7 +121,7 @@ impl ValidateLinks for GeometryControls {
 
 /// Skeleton controls whose meanings are specific to the game model family.
 #[derive(Clone, Debug)]
-pub struct BoneControls {
+pub struct BoneProperties {
     /// External key-bone category.
     pub key_bone: i32,
     /// Simulation and transform behavior beyond the common hierarchy controls.
@@ -135,7 +135,7 @@ pub struct BoneControls {
     pub name_crc: u32,
 }
 
-impl Default for BoneControls {
+impl Default for BoneProperties {
     fn default() -> Self {
         Self {
             key_bone: -1,
@@ -149,14 +149,14 @@ impl Default for BoneControls {
 
 /// M2 draw-local native metadata and optional shadow behavior.
 #[derive(Clone, Debug, Default)]
-pub struct DrawControls {
+pub struct DrawProperties {
     /// Auxiliary native section/flags word, whose interpretation varies by client version.
     /// This is not a semantic geometry reference.
     pub auxiliary_section: u16,
     /// Optional dedicated shadow-pass behavior.
-    pub shadow: Option<ShadowControls>,
+    pub shadow: Option<ShadowProperties>,
 }
-impl ValidateLinks for DrawControls {
+impl ValidateLinks for DrawProperties {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.shadow.visit_links(visitor);
     }

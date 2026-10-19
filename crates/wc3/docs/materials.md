@@ -9,7 +9,10 @@ ownership and [conversion](conversion.md) for export policies.
 
 A material owns a program whose authored steps describe shader execution or
 material composition. Universal's `MaterialSurface` is a
-`MaterialProgram<MaterialStep>`, with an ordered `steps` collection.
+`MaterialProgram<MaterialStep, Option<mdlx::MaterialDeclaration>>`, with an
+ordered `steps` collection and an optional material-owned declaration. The second
+type parameter describes declarations that remain meaningful even when the
+program has no steps; profiles without those declarations use `NoProperties`.
 
 `MaterialStep` selects the dialect of one operation: `Mdlx`, `M2`, or `Wmo`.
 Each dialect lives under the matching `model::materials` namespace and defines
@@ -19,17 +22,29 @@ state, and rasterization components are reused where their meanings agree.
 
 ## Warcraft III shaders
 
-`mdlx::MaterialStep` owns pass state, draw declarations, and a `Shader` whose
+`mdlx::MaterialStep` owns pass state and a `Shader` whose
 variants are `Classic(MaterialInputs)`, `ReforgedDefault(ReforgedInputs)`, and
 `Unresolved(UnresolvedInputs)`. Common `MaterialInputs` contain the primary
 texture, opacity, and emissive gain. Blend, depth, and rasterization state belong
 to the pass independently of shader selection. Reforged inputs add ordered
 texture slots and Fresnel controls; unresolved inputs preserve those fields plus
-the uninterpreted shader name and selector.
+the uninterpreted per-layer selector. The material owns its shader name once in
+`mdlx::MaterialDeclaration`, alongside priority, sorting, and material-wide draw
+flags. These declarations remain present when the material has no layers.
+
+`mdlx::LayerOptions` preserves sphere-environment selection, independent layer
+U/V wrapping, and the named `Unlit`, `BackFacesForShadows`, and
+`AmbientOcclusion` controls. Layer wrapping remains distinct from each sampled
+image's sampler. The authored `Unlit` declaration also remains distinct from
+common unshaded lighting. Import and export preserve these known declarations;
+`bevy-wc3` does not yet interpret the independent layer wrap, `Unlit`, back-face
+shadow, or ambient-occlusion controls. Their game fidelity remains unverified.
 
 Native import interprets shader selection before constructing the semantic model.
 Numeric layer selectors take precedence over material shader names. Known shader
-variants carry neither IDs nor names; native export derives their selectors.
+variants carry no numeric selectors; native export derives their selectors. The
+material-level shader name remains an independent authored declaration, including
+known names whose interpretation is overridden by numeric layer selection.
 Texture slot order, duplicate selectors, and unknown roles remain intact. Raw
 native layers remain available through the codecs for editing encoded declarations.
 
@@ -41,20 +56,18 @@ auxiliary layer controls do not describe additional passes. Export to these
 versions expands one HD step back into ordered native role layers and rejects
 multiple HD steps or duplicate/unknown roles that the layout cannot represent.
 
-Each step carries priority, sorting, and additional draw flags in a
-`MaterialDeclaration`. Checked native MDLX export requires those declarations to
-agree, because the native material stores them once. Unresolved names must also
-agree when several unresolved steps share a native material. Semantic programs
-can retain known steps alongside unresolved names, but exact export requires a
-layout that can encode every declaration. Layouts with only a material shader name cannot encode per-layer overrides.
-Layouts with per-layer selectors cannot encode a nonempty unresolved shader name. An empty
-program carries no shader declarations. Nondefault headers on empty native
-materials remain editable through the native codecs; semantic import rejects
-them unless an explicit loss policy accepts dropping them.
+The MDLX profile stores
+`MaterialProgram<mdlx::MaterialStep, mdlx::MaterialDeclaration>`. All steps use the
+material's one declaration, so changing priority or a material-wide flag updates
+the whole program. Import preserves nondefault declarations and shader names on
+empty native materials. Widening wraps each step and retains the declaration;
+exact narrowing checks step dialects and restores the complete owner declaration.
+Projection into M2 or WMO rejects nondefault MDLX declarations.
 
-The MDLX profile stores `MaterialProgram<mdlx::MaterialStep>`. Widening wraps
-each step without changing it; narrowing checks its dialect. Export then checks
-whether the selected native layout can encode the complete program.
+Export checks whether the selected native layout can encode the complete program.
+Layouts with only a material shader name cannot express arbitrary per-layer
+selection. Layouts without a material shader-name field cannot encode a nonempty
+authored name. These are encoding limits; the semantic material remains valid.
 
 ## M2 and WMO shaders
 

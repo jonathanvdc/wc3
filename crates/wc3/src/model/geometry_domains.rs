@@ -6,7 +6,7 @@ use glam::Vec4;
 
 /// Authored world-triangle rendering and query behavior.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct SurfaceTriangleControls {
+pub struct TriangleProperties {
     /// Include this face in the static spatial-query structure.
     pub spatial_queries: bool,
     /// Surface material; absent for collision-only faces.
@@ -92,7 +92,7 @@ type SurfaceRecord = (
     (bool, bool, bool, bool, bool, bool),
     (bool, bool),
 );
-impl AsULE for SurfaceTriangleControls {
+impl AsULE for TriangleProperties {
     type ULE = <SurfaceRecord as AsULE>::ULE;
     fn to_unaligned(self) -> Self::ULE {
         (
@@ -148,18 +148,18 @@ impl AsULE for SurfaceTriangleControls {
     }
 }
 
-packed_identity!(SurfaceTriangleControls);
+packed_identity!(TriangleProperties);
 
 #[cfg(test)]
 mod tests {
-    use super::SurfaceTriangleControls;
+    use super::TriangleProperties;
     use crate::model::common::PackedArray;
     use crate::model::Scope;
 
     #[test]
     fn packed_surface_controls_preserve_optional_zero_values_and_identity() {
         let material = Scope::default().allocate();
-        let record = SurfaceTriangleControls {
+        let record = TriangleProperties {
             spatial_queries: true,
             material: Some(material),
             ground_type_selector: Some(0),
@@ -175,13 +175,12 @@ mod tests {
             cull_objects: true,
             collide_hit: true,
         };
-        let packed = PackedArray::alloc_from_slice(&[SurfaceTriangleControls::default(), record]);
-        let parsed =
-            PackedArray::<SurfaceTriangleControls>::parse_bytes(packed.as_bytes()).unwrap();
-        assert_eq!(parsed.get(0), Some(SurfaceTriangleControls::default()));
+        let packed = PackedArray::alloc_from_slice(&[TriangleProperties::default(), record]);
+        let parsed = PackedArray::<TriangleProperties>::parse_bytes(packed.as_bytes()).unwrap();
+        assert_eq!(parsed.get(0), Some(TriangleProperties::default()));
         assert_eq!(parsed.get(1), Some(record));
         let mut invalid = packed.as_bytes().to_vec();
         invalid[0] = 2;
-        assert!(PackedArray::<SurfaceTriangleControls>::parse_bytes(&invalid).is_err());
+        assert!(PackedArray::<TriangleProperties>::parse_bytes(&invalid).is_err());
     }
 }

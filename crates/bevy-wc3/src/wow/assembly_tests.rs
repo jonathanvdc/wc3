@@ -6,14 +6,14 @@ use bevy::math::Mat4;
 use bevy::math::Vec3;
 use std::collections::HashMap;
 use wc3::model::common::PackedArray;
-use wc3::model::controls::model::BoneControls;
 use wc3::model::materials::bindings::ImageSelection;
 use wc3::model::materials::program::MaterialStep;
+use wc3::model::profiles::m2::BoneProperties;
 use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 use wc3::model::{
     Draw, GeometryData, GeometryInfluences, IdentityBinding, Influence, Material, MaterialSurface,
-    Mesh, MeshInstance, Node, NodeControls, Skin, Texture, UniversalBinding, ValueGroups,
+    Mesh, MeshInstance, Node, NodeProperties, Skin, Texture, UniversalBinding, ValueGroups,
 };
 use wc3::model::{ImageResource, ResourceLocator};
 
@@ -24,12 +24,12 @@ fn model(name: &str, geosets: &[u16]) -> (Model<'static>, NodeId) {
         .map(|i| {
             builder
                 .add_node(
-                    Node::named(format!("matching bone{i}"), &mut slot_values).with_controls(Some(
-                        NodeControls::M2(BoneControls {
+                    Node::named(format!("matching bone{i}"), &mut slot_values).with_properties(
+                        Some(NodeProperties::M2(BoneProperties {
                             name_crc: 100 + i,
                             ..SlotConstruct::construct(&mut slot_values)
-                        }),
-                    )),
+                        })),
+                    ),
                 )
                 .unwrap()
         })

@@ -48,6 +48,7 @@ fn read_layers<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
     };
     let flags = source.render_mode;
     let declaration = MaterialDeclaration {
+        shader_name: S::text(source.try_shader().unwrap_or_default()),
         priority_plane: source.priority_plane,
         constant_color: flags.constant_color(),
         two_sided: flags.two_sided(),
@@ -131,6 +132,11 @@ fn read_layers<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                 },
                 controls: LayerOptions {
                     sphere_environment: flags.sphere_env_map(),
+                    wrap_u: flags.wrap_width(),
+                    wrap_v: flags.wrap_height(),
+                    unlit: flags.unlit(),
+                    back_faces_for_shadows: flags.back_faces_for_shadows(),
+                    ambient_occlusion: flags.ambient_occlusion(),
                 },
             },
             ordering: (),
@@ -151,20 +157,15 @@ fn read_layers<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                 fresnel,
             }),
             _ => Shader::Unresolved(UnresolvedInputs {
-                shader_name,
                 selector,
                 inputs,
                 textures: slots,
                 fresnel,
             }),
         };
-        steps.push(MaterialStep {
-            state,
-            declaration: declaration.clone(),
-            shader,
-        });
+        steps.push(MaterialStep { state, shader });
     }
-    Ok(Material { steps })
+    Ok(Material { declaration, steps })
 }
 
 pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
@@ -286,6 +287,7 @@ fn legacy_roles<'a, V: FormatVersion>(
         });
     }
     Ok(Material {
+        declaration: material.declaration,
         steps: vec![primary],
     })
 }

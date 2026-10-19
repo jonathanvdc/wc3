@@ -3,7 +3,9 @@ use super::encode_animation::{frame_at, Encoder};
 use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::profiles::mdlx as profile;
-use crate::model::{EventSourceId, MeshId, Property, Quat, TextureTransform, TimeSource};
+use crate::model::{
+    EventSourceId, MeshId, PathResource, Property, Quat, TextureTransform, TimeSource,
+};
 use native::animation::Track;
 use native::scene::Node;
 use std::collections::{BTreeMap, HashSet};
@@ -70,7 +72,7 @@ pub(super) fn controls<T: Dialect>(
             model
                 .meshes()
                 .iter()
-                .filter_map(|(id, mesh)| mesh.controls.glider.then_some(id))
+                .filter_map(|(id, mesh)| mesh.properties.glider.then_some(id))
                 .flat_map(|mesh| meshes.get(&mesh).into_iter().flatten())
                 .map(|id| native::Glider { geoset_id: *id }),
         );
@@ -80,11 +82,18 @@ pub(super) fn controls<T: Dialect>(
                 let faces = profile
                     .face_effects
                     .iter()
-                    .map(|(name, resource)| {
-                        native::FaceFx::new(name, resource)
-                            .map_err(|error| Error::new("face_effect", error.to_string()))
+                    .map(|effect| {
+                        let mut face = native::FaceFx::new(&effect.name, "")
+                            .map_err(|error| Error::new("face_effect.name", error.to_string()))?;
+                        let PathResource::Path(path) = model
+                            .effect_resource(effect.resource)
+                            .expect("validated facial-animation resource");
+                        face.path.set_bytes(path).map_err(|error| {
+                            Error::new("face_effect.resource", error.to_string())
+                        })?;
+                        Ok(face)
                     })
-                    .collect::<Result<Vec<_>, _>>()?;
+                    .collect::<Result<Vec<_>, Error>>()?;
                 if let Err(error) = target.try_set_face_fx(faces) {
                     encoder
                         .context
@@ -95,7 +104,7 @@ pub(super) fn controls<T: Dialect>(
         if model
             .nodes()
             .iter()
-            .any(|(_, node)| node.controls.bind_pose.is_some())
+            .any(|(_, node)| node.properties.bind_pose.is_some())
         {
             let node_ids: BTreeMap<_, _> = encoder
                 .model
@@ -116,7 +125,7 @@ pub(super) fn controls<T: Dialect>(
                 .map(|id| {
                     native::BindPoseMatrix(
                         id.and_then(|id| model.node(id))
-                            .and_then(|node| node.controls.bind_pose)
+                            .and_then(|node| node.properties.bind_pose)
                             .unwrap_or(identity),
                     )
                 })

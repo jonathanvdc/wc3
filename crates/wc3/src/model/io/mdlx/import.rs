@@ -2,11 +2,11 @@
 use super::billboard;
 use super::storage::Storage;
 use super::{curves, materials, state::ImportState};
-use crate::model::controls::BillboardFlags;
 use crate::model::conversion::{Context, Conversion, Error, ImportOptions, IssueKind};
 use crate::model::formats::mdlx::{self as native, Chunk, Dialect, ModelChunk};
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
+use crate::model::properties::BillboardFlags;
 use crate::model::Model;
 use crate::model::TransformSemantics;
 use crate::model::{
@@ -135,19 +135,8 @@ where
                     "interpreted the native NaN emissive-gain header as the unity default; animation is retained");
             }
         }
-        let mut surface =
+        let surface =
             materials::read::<_, S>(material, &texture_ids, &transforms, builder.values_mut())?;
-        if material.layers.is_empty()
-            && (material.priority_plane != 0
-                || material.render_mode.bits() != 0
-                || !material.try_shader().unwrap_or_default().is_empty())
-        {
-            context.unsupported(
-                "material.empty_declarations",
-                "nondefault declarations on an empty material require the native codec",
-            )?;
-            surface = Default::default();
-        }
         let value = Material::<Mdlx> {
             name: Cow::Borrowed(""),
             surface,
@@ -187,7 +176,7 @@ where
         clips.push((id, start));
         native_profile.sequences.push((
             id,
-            profile::Sequence {
+            profile::SequenceProperties {
                 move_speed: sequence.move_speed,
                 rarity: sequence.rarity,
                 sync_point: sequence.sync_point,
@@ -271,16 +260,16 @@ where
         &mut native_profile,
     )?;
     for (id, controls) in native_profile.sequences {
-        builder.set_clip_controls(id, controls)?;
+        builder.set_clip_properties(id, controls)?;
     }
     for (id, mut controls) in native_profile.geometry {
         controls.glider = native_profile.gliders.contains(&id);
         let mut mesh = builder.model().mesh(id).expect("imported mesh").clone();
-        mesh.controls = controls;
+        mesh.properties = controls;
         builder.set_mesh(id, mesh)?;
     }
     for (id, source_node) in ids.into_iter().zip(source_nodes.iter()) {
-        let controls = profile::NodeControls {
+        let controls = profile::NodeProperties {
             billboard_flags: BillboardFlags {
                 enabled: source_node.flags.billboarded(),
                 x: source_node.flags.billboard_lock_x(),
@@ -295,7 +284,7 @@ where
             bind_pose: None,
         };
         let mut node = builder.model().node(id).expect("imported node").clone();
-        node.controls = controls;
+        node.properties = controls;
         builder.set_node(id, node)?;
     }
     for (id, bind_pose) in native_profile.bind_poses {
@@ -304,7 +293,7 @@ where
             .node(id)
             .expect("imported bind-pose node")
             .clone();
-        node.controls.bind_pose = Some(bind_pose);
+        node.properties.bind_pose = Some(bind_pose);
         builder.set_node(id, node)?;
     }
     // Native ordinary tracks share one authored timeline. Only independent clocks

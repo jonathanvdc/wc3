@@ -30,6 +30,16 @@ impl ValidateLinks for AlphaAdditiveEncoding {
 pub struct LayerOptions {
     /// Select sphere-environment sampling.
     pub sphere_environment: bool,
+    /// Authored layer U-wrap control, independent of the texture sampler.
+    pub wrap_u: bool,
+    /// Authored layer V-wrap control, independent of the texture sampler.
+    pub wrap_v: bool,
+    /// Authored `Unlit` declaration, distinct from the common `Unshaded` control.
+    pub unlit: bool,
+    /// Authored back-face shadow participation.
+    pub back_faces_for_shadows: bool,
+    /// Authored ambient-occlusion participation.
+    pub ambient_occlusion: bool,
 }
 /// A layered pass selects explicit depth operations, face selection, and common lighting.
 pub type Shading = Rasterization<DepthState<Operation, Operation>, bool, Lighting, LayerOptions>;
@@ -54,7 +64,9 @@ pub struct Fresnel {
 }
 /// Material-wide draw declarations shared by the steps of an MDLX material.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct MaterialDeclaration {
+pub struct MaterialDeclaration<'a> {
+    /// Material-level named shader declaration, including an unresolved name.
+    pub shader_name: Cow<'a, str>,
     /// Rendering priority relative to other geometry.
     pub priority_plane: i32,
     /// Use constant-color behavior.
@@ -91,9 +103,7 @@ pub struct ReforgedInputs {
 }
 /// Inputs to a shader whose execution is not interpreted.
 #[derive(Clone, Debug, Construct, PartialEq)]
-pub struct UnresolvedInputs<'a> {
-    /// Uninterpreted material shader name.
-    pub shader_name: Cow<'a, str>,
+pub struct UnresolvedInputs {
     /// Uninterpreted per-pass selector, when authored.
     pub selector: Option<u32>,
     /// Primary image, opacity, and emissive gain.
@@ -105,30 +115,28 @@ pub struct UnresolvedInputs<'a> {
 }
 /// Shader-specific Warcraft III inputs, independent of pass state.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Shader<'a> {
+pub enum Shader {
     /// Classic texture composition.
     Classic(MaterialInputs),
     /// Reforged's default unit shader.
     ReforgedDefault(ReforgedInputs),
     /// An uninterpreted shader or input combination.
-    Unresolved(UnresolvedInputs<'a>),
+    Unresolved(UnresolvedInputs),
 }
-impl Construct for Shader<'_> {
+impl Construct for Shader {
     fn construct(values: &mut PropertyValues) -> Self {
         Self::Classic(Construct::construct(values))
     }
 }
 /// One Warcraft III pass, shared by the MDLX and Universal profiles.
 #[derive(Clone, Debug, Construct, PartialEq)]
-pub struct MaterialStep<'a> {
+pub struct MaterialStep {
     /// Color composition and rasterization for this pass.
     pub state: PassState<Blend, Shading>,
-    /// Draw declarations checked for agreement when exporting a native material.
-    pub declaration: MaterialDeclaration,
     /// Inputs admitted by the selected shader.
-    pub shader: Shader<'a>,
+    pub shader: Shader,
 }
-impl Shader<'_> {
+impl Shader {
     /// Common image and scalar inputs.
     pub fn inputs(&self) -> &MaterialInputs {
         match self {
@@ -188,7 +196,7 @@ impl ValidateLinks for MaterialInputs {
         self.emissive_gain.visit_links(visitor);
     }
 }
-impl ValidateLinks for Shader<'_> {
+impl ValidateLinks for Shader {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.inputs().visit_links(visitor);
         for slot in self.textures() {
@@ -202,9 +210,13 @@ impl ValidateLinks for Shader<'_> {
     }
 }
 
-impl ValidateLinks for MaterialStep<'_> {
+impl ValidateLinks for MaterialStep {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.state.visit_links(visitor);
         self.shader.visit_links(visitor);
     }
+}
+
+impl ValidateLinks for MaterialDeclaration<'_> {
+    fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }

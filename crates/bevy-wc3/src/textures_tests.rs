@@ -143,6 +143,7 @@ fn image_requests_retain_native_input_metadata_for_replacement_selection() {
         .add_material(Material {
             name: "surface".into(),
             surface: MaterialSurface::from(MdlxMaterial {
+                declaration: Default::default(),
                 steps: layers.into(),
             }),
         })

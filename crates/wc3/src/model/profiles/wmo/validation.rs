@@ -147,7 +147,7 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
             ));
         }
 
-        for ambient in &instance.controls.ambients {
+        for ambient in &instance.properties.ambients {
             if value
                 .system(ambient.system)
                 .and_then(|world| world.ambient_volumes.get(ambient.index as usize))
@@ -160,7 +160,7 @@ pub(super) fn model(value: &Model<'_, super::Wmo>) -> Result<(), Error> {
             }
         }
         for draw in &instance.draws {
-            if let Some(controls) = &draw.controls {
+            if let Some(controls) = &draw.properties {
                 if let Some(bounds) = controls.bounds {
                     aabb_bounds(bounds, "world.draw.bounds")?;
                 }

@@ -8,7 +8,8 @@ use native_fixtures::wmo;
 use wc3::model::conversion::{ExportOptions, ImportOptions};
 use wc3::model::formats::mdlx::{self as native, FormatVersion};
 use wc3::model::materials::mdlx::{
-    Blend, MaterialInputs, MaterialStep as MdlxStep, ReforgedInputs, Shader, UnresolvedInputs,
+    Blend, MaterialDeclaration, MaterialInputs, MaterialStep as MdlxStep, ReforgedInputs, Shader,
+    UnresolvedInputs,
 };
 use wc3::model::materials::program::{MaterialProgram, MaterialStep, MaterialSurface};
 use wc3::model::profiles::SurfacePayload;
@@ -18,12 +19,14 @@ use wc3::model::{io, Model};
 #[test]
 fn mdlx_profile_conversion_preserves_steps_without_interpreting_them() {
     let mut values = SlotValues::default();
-    let mut first = MdlxStep::construct(&mut values);
-    first.declaration.priority_plane = -17;
-    first.declaration.two_sided = true;
-    let mut second = first.clone();
-    second.declaration.priority_plane = 12;
+    let first = MdlxStep::construct(&mut values);
+    let second = first.clone();
     let original = MdlxMaterial {
+        declaration: MaterialDeclaration {
+            priority_plane: -17,
+            two_sided: true,
+            ..Default::default()
+        },
         steps: vec![first, second],
     };
     let broad = MaterialSurface::from(original.clone());
@@ -62,6 +65,7 @@ fn single_step_projection_preserves_shader_identity_and_native_state() {
 fn mixed_steps_are_valid_but_native_projection_cannot_drop_them() {
     let mut slot_values = SlotValues::default();
     let program = MaterialSurface {
+        declaration: Default::default(),
         steps: vec![
             MaterialStep::Mdlx(Box::new(SlotConstruct::construct(&mut slot_values))),
             MaterialStep::M2(Box::new(SlotConstruct::construct(&mut slot_values))),
@@ -76,6 +80,18 @@ fn mixed_steps_are_valid_but_native_projection_cannot_drop_them() {
 }
 
 #[test]
+fn non_mdlx_projection_rejects_material_owned_declarations() {
+    let mut values = SlotValues::default();
+    let shader = wmo::Material::construct(&mut values);
+    let mut surface = MaterialSurface::from(shader);
+    surface.declaration = Some(MaterialDeclaration {
+        priority_plane: 4,
+        ..Default::default()
+    });
+    assert!(wmo::Material::try_from(surface).is_err());
+}
+
+#[test]
 fn native_single_step_projection_rejects_empty_and_repeated_steps() {
     let mut slot_values = SlotValues::default();
     for steps in [
@@ -85,7 +101,10 @@ fn native_single_step_projection_rejects_empty_and_repeated_steps() {
             MaterialStep::Wmo(Box::new(SlotConstruct::construct(&mut slot_values))),
         ],
     ] {
-        let broad = MaterialSurface { steps };
+        let broad = MaterialSurface {
+            declaration: Default::default(),
+            steps,
+        };
         assert!(wmo::Material::try_from(broad.clone()).is_err());
         assert!(M2Material::try_from(broad).is_err());
     }
@@ -115,6 +134,7 @@ fn a_mixed_program_samples_each_shader_without_changing_step_order() {
             Material {
                 name: "mixed".into(),
                 surface: MaterialSurface {
+                    declaration: Default::default(),
                     steps: vec![
                         MaterialStep::Mdlx(Box::new(MdlxStep {
                             shader: Shader::Classic(MaterialInputs {
@@ -281,8 +301,8 @@ fn native_import_interprets_selector_precedence_before_widening() {
             std::mem::discriminant(&restored.steps[0].shader),
             std::mem::discriminant(shader)
         );
-        if let Shader::Unresolved(inputs) = &restored.steps[0].shader {
-            assert_eq!(inputs.shader_name, name);
+        if let Shader::Unresolved(_) = &restored.steps[0].shader {
+            assert_eq!(restored.declaration.shader_name, name);
         }
     }
 }
@@ -334,7 +354,10 @@ fn reforged_shader_derives_native_selection_and_preserves_fresnel() {
     builder
         .add_material(wc3::model::Material {
             name: "HD".into(),
-            surface: MdlxMaterial { steps: vec![step] },
+            surface: MdlxMaterial {
+                declaration: Default::default(),
+                steps: vec![step],
+            },
         })
         .unwrap();
     let model = builder.finish().unwrap();
@@ -393,6 +416,7 @@ fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassificati
                             })
                         };
                         MaterialSurface::from(MdlxMaterial {
+                            declaration: Default::default(),
                             steps: vec![MdlxStep {
                                 shader,
                                 ..SlotConstruct::construct(&mut slot_values)
@@ -449,7 +473,7 @@ fn wc3_reforged_and_unresolved_steps_freeze_shader_inputs_without_reclassificati
 }
 
 #[test]
-fn native_export_checks_shared_declarations_and_shader_names() {
+fn native_export_uses_one_material_declaration_for_all_steps() {
     let mut model = native_model::<native::V1800>("", &[Some(2), Some(1), Some(99)], false);
     let output = export::<native::V1800>(&model).unwrap();
     let material = output.materials().next().unwrap();
@@ -466,31 +490,15 @@ fn native_export_checks_shared_declarations_and_shader_names() {
     model
         .edit(|builder| {
             let mut material = builder.model().material(id).unwrap().clone();
-            let mut other = material.surface.steps[2].clone();
-            let Shader::Unresolved(inputs) = &mut other.shader else {
-                unreachable!()
-            };
-            inputs.shader_name = "another shader".into();
-            material.surface.steps.push(other);
+            material.surface.declaration.priority_plane = 17;
+            material.surface.declaration.shader_name = "one shared shader".into();
             builder.set_material(id, material)
         })
         .unwrap();
-    assert!(export::<native::V1800>(&model)
-        .unwrap_err()
-        .description
-        .contains("different material shader names"));
-    model
-        .edit(|builder| {
-            let mut material = builder.model().material(id).unwrap().clone();
-            material.surface.steps.pop();
-            material.surface.steps[1].declaration.priority_plane += 1;
-            builder.set_material(id, material)
-        })
-        .unwrap();
-    assert!(export::<native::V1800>(&model)
-        .unwrap_err()
-        .description
-        .contains("different material-wide draw declarations"));
+    let output = export::<native::V1800>(&model).unwrap();
+    let material = output.materials().next().unwrap();
+    assert_eq!(material.priority_plane, 17);
+    assert_eq!(material.try_shader().unwrap(), "one shared shader");
 }
 
 #[test]

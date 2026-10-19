@@ -7,8 +7,8 @@ use crate::model::ValueGroups;
 use crate::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivityId,
     ConnectivitySets, DrawSubsetCapabilities, Error, GeometryAttributes, GeometryInfluences,
-    Influence, Link, NodeInfluence, PackedArray, SurfaceTriangleControls, TextureCoordinates,
-    Topology, ValidateLinks, VertexInfluences,
+    Influence, Link, NodeInfluence, PackedArray, TextureCoordinates, Topology, TriangleProperties,
+    ValidateLinks, VertexInfluences,
 };
 use crate::model::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 use glam::{Vec2, Vec3, Vec4};
@@ -70,7 +70,7 @@ pub trait GeometrySchema<'data>: Clone + Debug + Send + Sync + ValidateLinks {
         ))
     }
     /// Typed surface behavior in primary triangle order, when supported.
-    fn surface_triangles(&self) -> Option<&PackedArray<'data, SurfaceTriangleControls>> {
+    fn triangle_properties(&self) -> Option<&PackedArray<'data, TriangleProperties>> {
         None
     }
     /// Independently indexed draw pools, when supported.
@@ -294,7 +294,7 @@ impl<'data> GeometryData<'data> {
         if !self.connectivity.additional().is_empty()
             || self.attributes.iter().any(|attribute| {
                 attribute.domain == AttributeDomain::Pool
-                    || attribute.semantic == AttributeSemantic::SurfaceControls
+                    || attribute.semantic == AttributeSemantic::TriangleProperties
             })
         {
             return Err(Error::new(
@@ -343,13 +343,16 @@ impl<'data> GeometrySchema<'data> for GeometryData<'data> {
             self.connectivity.additional().get(index - 1).cloned()
         }
     }
-    fn surface_triangles(&self) -> Option<&PackedArray<'data, SurfaceTriangleControls>> {
+    fn triangle_properties(&self) -> Option<&PackedArray<'data, TriangleProperties>> {
         match &self
             .attributes
-            .get(&AttributeSemantic::SurfaceControls, AttributeDomain::Face)?
+            .get(
+                &AttributeSemantic::TriangleProperties,
+                AttributeDomain::Face,
+            )?
             .values
         {
-            AttributeValues::SurfaceControls(values) => Some(values),
+            AttributeValues::TriangleProperties(values) => Some(values),
             _ => None,
         }
     }
@@ -442,7 +445,7 @@ impl<'data> GeometrySchema<'data> for GeometryData<'data> {
         for topology in self.connectivity.additional() {
             validate_topology(topology, self.positions.len())?;
         }
-        if self.surface_triangles().is_some_and(|values| {
+        if self.triangle_properties().is_some_and(|values| {
             !matches!(self.connectivity.primary, Topology::Triangles(_))
                 || values.len() != self.connectivity.primary.primitive_count()
         }) {
@@ -479,10 +482,10 @@ impl<'data, A: GeometrySchema<'data>, B: GeometrySchema<'data>> GeometrySchema<'
             Self::Right(value) => value.connectivity(index),
         }
     }
-    fn surface_triangles(&self) -> Option<&PackedArray<'data, SurfaceTriangleControls>> {
+    fn triangle_properties(&self) -> Option<&PackedArray<'data, TriangleProperties>> {
         match self {
-            Self::Left(value) => value.surface_triangles(),
-            Self::Right(value) => value.surface_triangles(),
+            Self::Left(value) => value.triangle_properties(),
+            Self::Right(value) => value.triangle_properties(),
         }
     }
     fn strip_indices(&self) -> Option<&PackedArray<'data, u32>> {
@@ -718,7 +721,7 @@ impl Default for GeometryData<'_> {
 impl ValidateLinks for GeometryData<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         for attribute in &self.attributes {
-            if let AttributeValues::SurfaceControls(values) = &attribute.values {
+            if let AttributeValues::TriangleProperties(values) = &attribute.values {
                 for face in values.iter() {
                     face.material.visit_links(visitor);
                 }

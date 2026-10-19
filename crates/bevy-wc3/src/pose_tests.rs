@@ -283,16 +283,16 @@ fn feature_origins_use_node_pivots_without_moving_geometry_coordinates() {
 
 #[test]
 fn native_controls_do_not_select_transform_or_facing_behavior() {
-    use wc3::model::controls::model::BoneControls;
-    use wc3::model::NodeControls;
+    use wc3::model::profiles::m2::BoneProperties;
+    use wc3::model::NodeProperties;
     let mut values = SlotValues::default();
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let plain = Node::named("plain", &mut values);
-    let mut with_controls = plain.clone();
-    with_controls.name = "with controls".into();
-    with_controls.controls = Some(NodeControls::M2(BoneControls::default()));
+    let mut with_properties = plain.clone();
+    with_properties.name = "with controls".into();
+    with_properties.properties = Some(NodeProperties::M2(BoneProperties::default()));
     builder.add_node(plain).unwrap();
-    builder.add_node(with_controls).unwrap();
+    builder.add_node(with_properties).unwrap();
     builder.import_values(&values).unwrap();
     let model = builder.finish().unwrap();
     let compiled = compile_model(&model, |_| None).unwrap();

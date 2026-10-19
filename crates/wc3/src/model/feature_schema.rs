@@ -3,12 +3,14 @@
 //! Views group features by their purpose. Typed alternatives retain authored simulation,
 //! projection, illumination, and resource semantics without allocating or converting values.
 use crate::model::profiles::{m2, mdlx, wmo, Either, Unavailable};
-use crate::model::EffectResourceId;
 use crate::model::{
-    scene, AimedCamera, AmbientDiffuseLight, Attachment, Camera, CameraConvention, Light,
-    NodeFeature, ParticleEmitter, Property, RibbonEmitter,
+    scene, AmbientDiffuseLight, Attachment, Camera, CameraLens, IlluminationKind, Light,
+    LightActivation, LightShadows, LookAtCamera, NodeFeature, ParticleEmitter, Property,
+    RibbonEmitter, UnknownIlluminationKind,
 };
 use crate::model::{Axis, ChildModel, Socket};
+use crate::model::{EffectResourceId, PerspectiveProjection};
+use crate::model::{NodeCamera, SingleEmissionLight};
 use glam::{Vec2, Vec3};
 use std::fmt::Debug;
 
@@ -17,35 +19,26 @@ pub trait FeatureSchema<'data> {
     /// Inspects the authored behavior, borrowing all payload storage.
     fn feature(&self) -> FeatureView<'_, 'data>;
 }
-/// Authored alternatives for camera behavior.
+/// Camera pose interpretations, independent of source profile.
 #[derive(Clone, Copy, Debug)]
 pub enum CameraView<'view> {
-    /// Shared aim-point camera definition.
-    Aimed(&'view AimedCamera),
-    /// Complete Scene definition, retaining its authored semantics.
-    Scene(&'view scene::Camera),
-    /// Complete Mdlx definition, retaining its authored semantics.
-    VerticalAim(&'view mdlx::Camera),
-    /// Complete M2 definition, retaining its authored semantics.
-    DiagonalAim(&'view m2::Camera),
+    /// Camera carried by a hierarchy node.
+    Node(&'view NodeCamera),
+    /// Model-space eye, target, and roll.
+    LookAt(LookAtCameraRef<'view>),
 }
-/// Authored alternatives for light behavior.
+/// Illumination interpretations, independent of source profile where meanings agree.
 #[derive(Clone, Copy, Debug)]
 pub enum LightView<'view> {
-    /// Shared independently authored ambient and diffuse illumination.
-    AmbientDiffuse(&'view AmbientDiffuseLight),
-    /// Complete Scene definition, retaining its authored semantics.
-    Scene(&'view scene::Light),
-    /// Complete Mdlx definition, retaining its authored semantics.
-    VisibleAmbientDiffuse(&'view mdlx::Light),
-    /// Complete M2 definition, retaining its authored semantics.
-    EnabledAmbientDiffuse(&'view m2::Light),
-
-    /// Complete World definition, retaining its authored semantics.
+    /// Independently authored ambient and direct illumination.
+    AmbientDiffuse(AmbientDiffuseLightRef<'view>),
+    /// RGB lighting with cone and shadow parameters.
+    SingleEmission(&'view SingleEmissionLight),
+    /// World lighting with RGBA color and cookie extensions.
     World(&'view wmo::Light),
-    /// Complete RegionPoint definition, retaining its authored semantics.
+    /// Region-local point illumination.
     RegionPoint(&'view wmo::PointLight),
-    /// Complete RegionProgram definition, retaining its authored semantics.
+    /// Region-local lighting program.
     RegionProgram(&'view wmo::PointProgram),
 }
 /// Authored alternatives for attachment behavior.
@@ -123,8 +116,8 @@ impl<'data> mdlx::Node<'data> {
             Self::Particle2(value) => FeatureView::Particles(ParticlesView::MdlxEmitter2(value)),
             Self::Ribbon(value) => FeatureView::Ribbon(RibbonView::Mdlx(value)),
             Self::ParticleProgram(value) => FeatureView::Particles(ParticlesView::Popcorn(value)),
-            Self::Light(value) => FeatureView::Light(LightView::VisibleAmbientDiffuse(value)),
-            Self::Camera(value) => FeatureView::Camera(CameraView::VerticalAim(value)),
+            Self::Light(value) => FeatureView::Light(LightView::AmbientDiffuse(value.into())),
+            Self::Camera(value) => FeatureView::Camera(CameraView::LookAt(value.into())),
             Self::Attachment(value) => FeatureView::Attachment(AttachmentView::External(value)),
             Self::CollisionShape(value) => FeatureView::Collision(CollisionView::Primitive(value)),
 
@@ -138,8 +131,8 @@ impl<'data> m2::ActorKind<'data> {
     pub(crate) fn profile_feature(&self) -> FeatureView<'_, 'data> {
         match self {
             Self::Attachment(value) => FeatureView::Attachment(AttachmentView::Role(value)),
-            Self::Light(value) => FeatureView::Light(LightView::EnabledAmbientDiffuse(value)),
-            Self::Camera(value) => FeatureView::Camera(CameraView::DiagonalAim(value)),
+            Self::Light(value) => FeatureView::Light(LightView::AmbientDiffuse(value.into())),
+            Self::Camera(value) => FeatureView::Camera(CameraView::LookAt(value.into())),
             Self::Ribbon(value) => FeatureView::Ribbon(RibbonView::M2(value)),
             Self::Particle(value) => FeatureView::Particles(ParticlesView::M2(value)),
 
@@ -176,8 +169,8 @@ impl<'data> wmo::Node<'data> {
 impl<'data> FeatureSchema<'data> for scene::Feature {
     fn feature(&self) -> FeatureView<'_, 'data> {
         match self {
-            Self::Camera(value) => FeatureView::Camera(CameraView::Scene(value)),
-            Self::Light(value) => FeatureView::Light(LightView::Scene(value)),
+            Self::Camera(value) => FeatureView::Camera(CameraView::Node(value)),
+            Self::Light(value) => FeatureView::Light(LightView::SingleEmission(value)),
             Self::Attachment(value) => FeatureView::Attachment(AttachmentView::External(value)),
             Self::Particles(value) => FeatureView::Particles(ParticlesView::External(value)),
             Self::Ribbon(value) => FeatureView::Ribbon(RibbonView::External(value)),
@@ -205,7 +198,7 @@ impl<'data> FeatureSchema<'data> for Unavailable {
 #[path = "feature_schema/tests.rs"]
 mod tests;
 
-/// Borrowed color and intensity of one independently authored illumination component.
+/// Borrowed color and intensity of one illumination component.
 #[derive(Clone, Copy, Debug)]
 pub struct IlluminationRef<'view> {
     /// RGB color animation.
@@ -213,118 +206,149 @@ pub struct IlluminationRef<'view> {
     /// Intensity animation.
     pub intensity: &'view Property<f32>,
 }
-/// Shared ambient/diffuse authoring semantics across native and Universal lights.
+/// Borrowed authored activation without changing its numeric domain.
+#[derive(Clone, Copy, Debug)]
+pub enum LightActivationRef<'view> {
+    /// Fractional visibility.
+    Visibility(&'view Property<f32>),
+    /// Boolean activation.
+    Enabled(&'view Property<bool>),
+}
+/// Shared ambient/diffuse illumination, including its complete authored parameters.
 #[derive(Clone, Copy, Debug)]
 pub struct AmbientDiffuseLightRef<'view> {
-    /// Ambient illumination independent of surface-facing direction.
+    /// Spatial interpretation.
+    pub kind: IlluminationKind,
+    /// Ambient illumination.
     pub ambient: IlluminationRef<'view>,
-    /// Direct illumination component.
+    /// Direct illumination.
     pub diffuse: IlluminationRef<'view>,
-    /// Attenuation start and end animations.
+    /// Attenuation start and end.
     pub attenuation: [&'view Property<f32>; 2],
+    /// Authored activation.
+    pub activation: LightActivationRef<'view>,
+    /// Independent shadow parameters.
+    pub shadows: &'view LightShadows,
+    /// Optional attenuation coefficients.
+    pub falloff: Option<&'view [Property<f32>; 3]>,
 }
+macro_rules! light_ref {
+    ($source:ty, $kind:expr, $activation:expr) => {
+        impl<'a> From<&'a $source> for AmbientDiffuseLightRef<'a> {
+            fn from(value: &'a $source) -> Self {
+                Self {
+                    kind: ($kind)(value.kind),
+                    ambient: IlluminationRef {
+                        color: &value.ambient.color,
+                        intensity: &value.ambient.intensity,
+                    },
+                    diffuse: IlluminationRef {
+                        color: &value.diffuse.color,
+                        intensity: &value.diffuse.intensity,
+                    },
+                    attenuation: value.attenuation.each_ref(),
+                    activation: ($activation)(&value.activation),
+                    shadows: &value.shadows,
+                    falloff: value.falloff.as_ref(),
+                }
+            }
+        }
+    };
+}
+fn activation_ref(activation: &LightActivation) -> LightActivationRef<'_> {
+    match activation {
+        LightActivation::Visibility(value) => LightActivationRef::Visibility(value),
+        LightActivation::Enabled(value) => LightActivationRef::Enabled(value),
+    }
+}
+light_ref!(AmbientDiffuseLight, |kind| kind, activation_ref);
+light_ref!(
+    mdlx::Light,
+    |kind| match kind {
+        mdlx::LightKind::Omni => IlluminationKind::Point,
+        mdlx::LightKind::Directional => IlluminationKind::Directional,
+        mdlx::LightKind::Ambient => IlluminationKind::Ambient,
+        mdlx::LightKind::Unknown(value) =>
+            IlluminationKind::Unknown(UnknownIlluminationKind::Mdlx(value)),
+    },
+    LightActivationRef::Visibility
+);
+light_ref!(
+    m2::Light,
+    |kind| match kind {
+        m2::values::LightKind::Point => IlluminationKind::Point,
+        m2::values::LightKind::Directional => IlluminationKind::Directional,
+        m2::values::LightKind::Unknown(value) =>
+            IlluminationKind::Unknown(UnknownIlluminationKind::M2(value)),
+    },
+    LightActivationRef::Enabled
+);
 impl<'view> LightView<'view> {
-    /// Inspects shared ambient/diffuse components without knowing their source vocabulary.
+    /// Borrows ambient/diffuse illumination when this light uses that interpretation.
     pub fn ambient_diffuse(self) -> Option<AmbientDiffuseLightRef<'view>> {
         match self {
-            Self::AmbientDiffuse(value) => Some(AmbientDiffuseLightRef {
-                ambient: IlluminationRef {
-                    color: &value.ambient.color,
-                    intensity: &value.ambient.intensity,
-                },
-                diffuse: IlluminationRef {
-                    color: &value.diffuse.color,
-                    intensity: &value.diffuse.intensity,
-                },
-                attenuation: [&value.attenuation[0], &value.attenuation[1]],
-            }),
-            Self::VisibleAmbientDiffuse(value) => Some(AmbientDiffuseLightRef {
-                ambient: IlluminationRef {
-                    color: &value.ambient.color,
-                    intensity: &value.ambient.intensity,
-                },
-                diffuse: IlluminationRef {
-                    color: &value.diffuse.color,
-                    intensity: &value.diffuse.intensity,
-                },
-                attenuation: [&value.attenuation[0], &value.attenuation[1]],
-            }),
-            Self::EnabledAmbientDiffuse(value) => Some(AmbientDiffuseLightRef {
-                ambient: IlluminationRef {
-                    color: &value.ambient.color,
-                    intensity: &value.ambient.intensity,
-                },
-                diffuse: IlluminationRef {
-                    color: &value.diffuse.color,
-                    intensity: &value.diffuse.intensity,
-                },
-                attenuation: [&value.attenuation[0], &value.attenuation[1]],
-            }),
+            Self::AmbientDiffuse(value) => Some(value),
             _ => None,
         }
     }
 }
-/// A field of view preserving static versus animated authoring and axis convention.
+/// Static or animated angle, independent of the projection axis.
 #[derive(Clone, Copy, Debug)]
-pub enum AimedFieldOfViewRef<'view> {
-    /// Animated vertical angle in radians.
-    AnimatedVertical(&'view Property<f32>),
-    /// Static vertical angle in radians.
-    Vertical(&'view f32),
-    /// Animated diagonal angle in radians.
-    Diagonal(&'view Property<f32>),
+pub enum CameraAngleRef<'view> {
+    /// Static angle in radians.
+    Constant(&'view f32),
+    /// Animated angle in radians.
+    Animated(&'view Property<f32>),
 }
-/// Shared additive eye/target and roll semantics of authored aim-point cameras.
+/// Borrowed look-at camera, independent of its native profile.
 #[derive(Clone, Copy, Debug)]
-pub struct AimedCameraRef<'view> {
-    /// Offset from the carrying node's rest translation.
+pub struct LookAtCameraRef<'view> {
+    /// Eye displacement from the carrying node's rest translation.
     pub eye_offset: &'view Property<Vec3>,
     /// Model-space base target.
     pub target: &'view Vec3,
-    /// Additive offset from the base target.
+    /// Additive target displacement.
     pub target_offset: &'view Property<Vec3>,
-    /// Roll angle in radians.
+    /// Roll angle.
     pub roll: &'view Property<f32>,
-    /// Near and far clipping distances.
-    pub clipping: &'view Vec2,
-    /// Angle and its explicitly authored axis convention.
-    pub field_of_view: AimedFieldOfViewRef<'view>,
+    /// Shared perspective projection with a borrowed static or animated angle.
+    pub projection: PerspectiveProjection<CameraAngleRef<'view>>,
+    /// Optional application role.
+    pub role: Option<m2::values::CameraKind>,
+    /// Optional authored visibility.
+    pub visibility: Option<&'view Property<f32>>,
+    /// Optical parameters.
+    pub lens: &'view CameraLens,
 }
+macro_rules! camera_ref {
+    ($angle:ty, $variant:ident) => {
+        impl<'a> From<&'a LookAtCamera<$angle>> for LookAtCameraRef<'a> {
+            fn from(value: &'a LookAtCamera<$angle>) -> Self {
+                Self {
+                    eye_offset: &value.eye_offset,
+                    target: &value.target,
+                    target_offset: &value.target_offset,
+                    roll: &value.roll,
+                    projection: PerspectiveProjection {
+                        field_of_view: CameraAngleRef::$variant(&value.projection.field_of_view),
+                        axis: value.projection.axis,
+                        clipping: value.projection.clipping,
+                    },
+                    role: value.role,
+                    visibility: value.visibility.as_ref(),
+                    lens: &value.lens,
+                }
+            }
+        }
+    };
+}
+camera_ref!(f32, Constant);
+camera_ref!(Property<f32>, Animated);
 impl<'view> CameraView<'view> {
-    /// Inspects shared aimed-camera components while preserving field-of-view conventions.
-    pub fn aimed(self) -> Option<AimedCameraRef<'view>> {
+    /// Borrows a look-at camera when this camera uses that pose interpretation.
+    pub fn look_at(self) -> Option<LookAtCameraRef<'view>> {
         match self {
-            Self::Aimed(value) => Some(AimedCameraRef {
-                eye_offset: &value.eye_offset,
-                target: &value.target,
-                target_offset: &value.target_offset,
-                roll: &value.roll,
-                clipping: &value.clipping,
-                field_of_view: match &value.convention {
-                    CameraConvention::Vertical(_) => {
-                        AimedFieldOfViewRef::AnimatedVertical(&value.field_of_view)
-                    }
-                    CameraConvention::Diagonal(_) => {
-                        AimedFieldOfViewRef::Diagonal(&value.field_of_view)
-                    }
-                },
-            }),
-            Self::VerticalAim(value) => Some(AimedCameraRef {
-                eye_offset: &value.eye_offset,
-                target: &value.target,
-                target_offset: &value.target_offset,
-                roll: &value.roll,
-                clipping: &value.clipping,
-                field_of_view: AimedFieldOfViewRef::Vertical(&value.field_of_view),
-            }),
-            Self::DiagonalAim(value) => Some(AimedCameraRef {
-                eye_offset: &value.eye_offset,
-                target: &value.target,
-                target_offset: &value.target_offset,
-                roll: &value.roll,
-                clipping: &value.clipping,
-                field_of_view: AimedFieldOfViewRef::Diagonal(&value.field_of_view),
-            }),
+            Self::LookAt(value) => Some(value),
             _ => None,
         }
     }
@@ -334,12 +358,12 @@ impl<'data> NodeFeature<'data> {
     pub(crate) fn profile_feature(&self) -> FeatureView<'_, 'data> {
         match self {
             Self::Camera(v) => FeatureView::Camera(match v {
-                Camera::Portable(v) => CameraView::Scene(v),
-                Camera::Aimed(v) => CameraView::Aimed(v),
+                Camera::Node(v) => CameraView::Node(v),
+                Camera::LookAt(v) => CameraView::LookAt((&**v).into()),
             }),
             Self::Light(v) => FeatureView::Light(match v {
-                Light::Portable(v) => LightView::Scene(v),
-                Light::AmbientDiffuse(v) => LightView::AmbientDiffuse(v),
+                Light::SingleEmission(v) => LightView::SingleEmission(v),
+                Light::AmbientDiffuse(v) => LightView::AmbientDiffuse((&**v).into()),
 
                 Light::World(v) => LightView::World(v),
                 Light::Point(v) => LightView::RegionPoint(v),

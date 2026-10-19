@@ -29,7 +29,7 @@ pub enum Pass {
 }
 /// Complete world-surface draw controls independent of batch record revisions.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct DrawControls {
+pub struct DrawProperties {
     /// Purpose of this draw.
     pub pass: Pass,
     /// Illumination class for this draw.
@@ -45,7 +45,7 @@ pub struct DrawControls {
     /// Historical alignment control whose meaning remains unresolved.
     pub alignment: u8,
 }
-impl ValidateLinks for DrawControls {
+impl ValidateLinks for DrawProperties {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.lightmap.visit_links(visitor);
         if self

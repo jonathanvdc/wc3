@@ -31,26 +31,23 @@ pub(super) fn light<'a, V: FormatVersion>(
     )?;
     record.ambient_intensity =
         encoder.value(&source.ambient.intensity, Ok, "light.ambient_intensity")?;
-    record.visibility = super::encode_helpers::visibility(
-        &source.activation.visibility,
-        encoder,
-        "light.visibility",
-    )?;
-    if let Some(value) = source.activation.shadow_casting {
+    record.visibility =
+        super::encode_helpers::visibility(&source.activation, encoder, "light.visibility")?;
+    if let Some(value) = source.shadows.casting {
         if let Err(error) = record.try_set_shadow_casting(value) {
             encoder
                 .context
                 .unsupported("light.shadow_casting", error.to_string())?;
         }
     }
-    if let Some(value) = source.activation.shadow_intensity {
+    if let Some(value) = source.shadows.intensity {
         if let Err(error) = record.try_set_shadow_intensity(value) {
             encoder
                 .context
                 .unsupported("light.shadow_intensity", error.to_string())?;
         }
     }
-    if let Some(value) = &source.activation.shadow_range {
+    if let Some(value) = &source.shadows.range {
         let range = native::scene::LightShadowRange {
             start: encoder.value(&value[0], Ok, "light.shadow_start")?,
             end: encoder.value(&value[1], Ok, "light.shadow_end")?,
@@ -61,7 +58,7 @@ pub(super) fn light<'a, V: FormatVersion>(
                 .unsupported("light.shadow_range", error.to_string())?;
         }
     }
-    if let Some(value) = &source.activation.falloff {
+    if let Some(value) = &source.falloff {
         let falloff = native::scene::LightFalloff {
             quadratic: encoder.value(&value[0], Ok, "light.quadratic")?,
             linear: encoder.value(&value[1], Ok, "light.linear")?,
@@ -92,9 +89,9 @@ pub(super) fn camera<V: FormatVersion>(
         .map_err(|error| Error::new("camera.name", error.to_string()))?;
     record.position = (encoder.constant(graph_node.transform.translation)).to_array();
     record.target_position = (source.target).to_array();
-    record.field_of_view = source.field_of_view;
-    record.near_clip = source.clipping[0];
-    record.far_clip = source.clipping[1];
+    record.field_of_view = source.projection.field_of_view;
+    record.near_clip = source.projection.clipping[0];
+    record.far_clip = source.projection.clipping[1];
     record.translation = encoder.optional(
         source.eye_offset,
         |v| Ok(v.to_array()),
@@ -108,14 +105,15 @@ pub(super) fn camera<V: FormatVersion>(
         "camera.target_offset",
     )?;
     record.rotation = encoder.optional(source.roll, Ok, 0., "camera.roll")?;
-    record.visibility = super::encode_helpers::visibility(
-        &source.convention.visibility,
-        encoder,
-        "camera.visibility",
-    )?;
+    record.visibility = match source.visibility {
+        Some(visibility) => {
+            super::encode_helpers::visibility(&visibility, encoder, "camera.visibility")?
+        }
+        None => None,
+    };
     macro_rules! lens {
         ($field:ident) => {
-            if let Some(value) = &source.convention.$field {
+            if let Some(value) = &source.lens.$field {
                 record.$field = encoder
                     .track(value, Ok, concat!("camera.", stringify!($field)))?
                     .or_else(|| Some(native::animation::Track::constant(encoder.constant(*value))));

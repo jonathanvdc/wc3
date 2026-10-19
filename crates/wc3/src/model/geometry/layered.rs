@@ -256,7 +256,7 @@ impl<'data> From<MdlxGeometry<'data>> for GeometryData<'data> {
         } = value.streams;
         GeometryParts {
             strip_set: false,
-            surface_triangles: PackedArray::default(),
+            triangle_properties: PackedArray::default(),
             pools: Default::default(),
             kind: GeometryKind::Display,
             positions: vertices.positions,

@@ -21,7 +21,7 @@ impl<P: Profile> Model<'_, P> {
             node.transform.rotation.visit_links(&mut visit);
             node.transform.scale.visit_links(&mut visit);
             node.visible.visit_links(&mut visit);
-            node.controls.visit_links(&mut visit);
+            node.properties.visit_links(&mut visit);
         }
         for material in self.materials.values() {
             material.surface.visit_links(&mut visit);
@@ -33,7 +33,7 @@ impl<P: Profile> Model<'_, P> {
             system.visit_links(&mut visit);
         }
         for mesh in self.meshes.values() {
-            mesh.controls.visit_links(&mut visit);
+            mesh.properties.visit_links(&mut visit);
             mesh.geometry.visit_links(&mut visit);
         }
         for slot in slots.clone() {
@@ -171,10 +171,10 @@ impl<P: Profile> Model<'_, P> {
             node.transform.rotation.visit_links(&mut visit);
             node.transform.scale.visit_links(&mut visit);
             node.visible.visit_links(&mut visit);
-            node.controls.visit_links(&mut visit);
+            node.properties.visit_links(&mut visit);
         }
         for clip in self.clips.values() {
-            clip.controls.visit_links(&mut visit);
+            clip.properties.visit_links(&mut visit);
         }
         self.global_animations.visit_links(&mut visit);
         for animation in self.animations.values() {
@@ -190,16 +190,16 @@ impl<P: Profile> Model<'_, P> {
             skin.binding.visit_links(&mut visit);
         }
         for mesh in self.meshes.values() {
-            mesh.controls.visit_links(&mut visit);
+            mesh.properties.visit_links(&mut visit);
             mesh.geometry.visit_links(&mut visit);
         }
         for instance in self.instances.values() {
-            instance.controls.visit_links(&mut visit);
+            instance.properties.visit_links(&mut visit);
             instance.node.visit_links(&mut visit);
             instance.mesh.visit_links(&mut visit);
             instance.skin.visit_links(&mut visit);
             for draw in &instance.draws {
-                draw.controls.visit_links(&mut visit);
+                draw.properties.visit_links(&mut visit);
             }
         }
         for material in self.materials.values() {

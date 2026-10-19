@@ -17,7 +17,7 @@ use std::f32::consts::{FRAC_PI_2, FRAC_PI_8, PI};
 use std::mem::take;
 use std::sync::Arc;
 use wc3::model::materials::state::BlendOperations;
-use wc3::model::scene::keyframed::Frames;
+use wc3::model::profiles::mdlx::Frames;
 #[cfg(test)]
 use wc3::model::ModelMetadata;
 use wc3::model::{

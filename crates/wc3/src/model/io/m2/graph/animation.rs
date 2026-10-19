@@ -523,7 +523,7 @@ pub(in super::super) fn insert<'a>(
                 if builder
                     .model()
                     .clip(clip)
-                    .is_some_and(|clip| clip.controls.alias.is_some())
+                    .is_some_and(|clip| clip.properties.alias.is_some())
                 {
                     return Ok(());
                 }

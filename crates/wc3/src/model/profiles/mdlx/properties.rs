@@ -1,6 +1,6 @@
 //! Layered-model ownership, sequence bounds, and hierarchy controls.
-use super::BillboardFlags;
-use crate::model::{Bounds, ClipId, FeatureId, Link, MeshId, ValidateLinks};
+use crate::model::properties::BillboardFlags;
+use crate::model::{Bounds, ClipId, EffectResourceId, FeatureId, Link, MeshId, ValidateLinks};
 use std::borrow::Cow;
 
 /// Authored Warcraft III extent, including an explicitly empty occupied volume.
@@ -29,7 +29,7 @@ impl ValidateLinks for Extent {
 
 /// Authored sequence controls beyond common animation timing.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Sequence {
+pub struct SequenceProperties {
     /// Movement speed used by the game animation controller.
     pub move_speed: f32,
     /// Selection rarity within a sequence family.
@@ -41,7 +41,7 @@ pub struct Sequence {
 }
 /// Mesh-level Warcraft III controls.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Geometry {
+pub struct MeshProperties {
     /// Include this mesh in glider behavior.
     pub glider: bool,
     /// Disable picking for this mesh.
@@ -61,7 +61,7 @@ pub struct Bone {
 }
 /// Warcraft III authoring controls attached directly to one hierarchy node.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct NodeControls {
+pub struct NodeProperties {
     /// Original native billboard declarations. Export retains them only when their
     /// effective behavior agrees with the node's current semantic billboard.
     pub billboard_flags: BillboardFlags,
@@ -70,12 +70,25 @@ pub struct NodeControls {
     /// Optional authored bind-pose matrix, without an inferred matrix convention.
     pub bind_pose: Option<[f32; 12]>,
 }
+/// A named facial-animation target and its independently owned effect resource.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FaceEffect<'a> {
+    /// Name identifying the facial-animation target.
+    pub name: Cow<'a, str>,
+    /// Model-owned declaration of the external facial-animation resource.
+    pub resource: EffectResourceId,
+}
+impl ValidateLinks for FaceEffect<'_> {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.resource.visit_links(visitor);
+    }
+}
 /// Genuinely model-wide Warcraft III authoring controls.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelMetadata<'a> {
     /// Authored model name.
     pub name: Cow<'a, str>,
-    /// Model-info bounding volume; absence means the model-info declaration is absent.
+    /// Authored model bounding volume, when supplied.
     pub bounds: Option<Bounds>,
 
     /// External animation-file resource.
@@ -83,10 +96,13 @@ pub struct ModelMetadata<'a> {
     /// Sequence transition blend duration in seconds.
     pub blend_time: f64,
     /// Named external face-animation resources.
-    pub face_effects: Vec<(Cow<'a, str>, Cow<'a, str>)>,
+    pub face_effects: Vec<FaceEffect<'a>>,
 }
 impl ValidateLinks for ModelMetadata<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        for effect in &self.face_effects {
+            effect.visit_links(visitor);
+        }
         if self.bounds.is_some_and(|bounds| bounds.validate().is_err()) {
             visitor(Link::InvalidValue);
         }

@@ -3,7 +3,7 @@ use super::super::coordinates::{axis, basis};
 use super::super::material::{effect_state, ModelMaterial, SurfaceAnimation, SurfacePass};
 use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
-use super::ribbon_definition::{TrailAtlasSlot, TrailControls, TrailEmitter, TrailRendering};
+use super::ribbon_definition::{TrailAtlasSlot, TrailBehavior, TrailEmitter, TrailRendering};
 use super::EffectFrame;
 use crate::effects::blend::EffectBlend;
 use crate::effects::records::RingCursor;
@@ -211,21 +211,24 @@ impl RuntimeRibbons {
                 diagnostic("Trail has no compiled material passes and is not drawn");
                 continue;
             }
-            if let TrailControls::EmissionAngle(controls) = &definition.controls {
+            if let TrailBehavior::EmissionAngle(controls) = &definition.behavior {
                 diagnostic("M2 trail cross-sections use an explicit local positive Z convention; native game fidelity remains unverified");
                 if controls.angle != 0. {
                     diagnostic("M2 trail emission angle is retained; its game-space cross-section convention remains unverified");
                 }
-                if controls.texture_transform.is_some() {
+                let TrailRendering::Surfaces(rendering) = &definition.rendering else {
+                    unreachable!("M2 ribbon rendering")
+                };
+                if rendering.texture_transform.is_some() {
                     diagnostic("M2 trail-specific UV transform is retained but material UV transforms alone are evaluated");
                 }
-                if controls.color_index != 0 {
+                if rendering.color_index != 0 {
                     diagnostic(
                         "External M2 trail color tables require application-supplied colors",
                     );
                 }
                 for pass in &mut passes {
-                    pass.priority = i32::from(controls.priority_plane);
+                    pass.priority = i32::from(rendering.priority_plane);
                 }
             }
             diagnostic("GPU trails retain 8192 resident cross-sections; skipped old sections are counted and never connected across omitted intervals");
@@ -379,11 +382,11 @@ impl RuntimeRibbons {
                             continue;
                         };
                         let sample = frame.sample.at_times(clip, shared);
-                        let enabled = match &definition.controls {
-                            TrailControls::Gravity(controls) => {
+                        let enabled = match &definition.behavior {
+                            TrailBehavior::Gravity(controls) => {
                                 sample.animated(&controls.visibility) > 0.
                             }
-                            TrailControls::EmissionAngle(controls) => {
+                            TrailBehavior::EmissionAngle(controls) => {
                                 sample.animated(&controls.enabled)
                             }
                         } && (frame.pose.is_some()
@@ -467,9 +470,9 @@ impl RuntimeRibbons {
                 TrailAtlasSlot::Compact(value) => u32::from(frame.sample.animated(value)),
             }
             .min(rows.saturating_mul(columns).saturating_sub(1));
-            let gravity = match &definition.controls {
-                TrailControls::Gravity(controls) => controls.gravity,
-                TrailControls::EmissionAngle(_) => 0.,
+            let gravity = match &definition.behavior {
+                TrailBehavior::Gravity(controls) => controls.gravity,
+                TrailBehavior::EmissionAngle(_) => 0.,
             };
             let [high, low] = split_time(frame.time);
             for (pass, (entity, material)) in emitter.passes.iter().zip(&mut state.passes) {

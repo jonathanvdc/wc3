@@ -4,19 +4,19 @@ pub mod model;
 /// Model-family bodies, constraints, and environmental response.
 pub mod model_physics;
 
-use crate::model::controls::{layered, model as model_controls, world};
-use crate::model::profiles::{ControlsPayload, Either, Unavailable};
+use crate::model::profiles::{m2, mdlx, wmo};
+use crate::model::profiles::{Either, PropertiesPayload, Unavailable};
 use crate::model::{scene, Link, ValidateLinks};
 /// Model-wide metadata chosen by the universal vocabulary.
 #[derive(Clone, Debug)]
 pub enum ModelMetadata<'a> {
     /// Warcraft III animation resources and transition policy.
-    Mdlx(layered::ModelMetadata<'a>),
+    Mdlx(mdlx::ModelMetadata<'a>),
     /// World of Warcraft model behavior and gameplay lookup programs.
-    M2(model_controls::ModelMetadata<'a>),
+    M2(m2::ModelMetadata<'a>),
 
     /// World-model rendering and environment settings.
-    Wmo(world::ModelMetadata),
+    Wmo(wmo::ModelMetadata),
 }
 impl ValidateLinks for ModelMetadata<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -37,7 +37,7 @@ pub enum System<'a> {
     M2(model::System<'a>),
 
     /// Static-world groups, portals, and environment volumes.
-    Wmo(world::WorldSystem<'a>),
+    Wmo(wmo::WorldSystem<'a>),
 }
 impl ValidateLinks for System<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -70,7 +70,7 @@ pub enum SystemMember {
     WmoAmbient(u32),
 }
 /// A scene system exposes its authored local identity domains for validation.
-pub trait SystemPayload: ControlsPayload {
+pub trait SystemPayload: PropertiesPayload {
     /// Whether this system owns the specified member.
     fn contains(&self, _member: SystemMember) -> bool {
         false
@@ -79,7 +79,7 @@ pub trait SystemPayload: ControlsPayload {
 impl SystemPayload for model::System<'_> {}
 
 impl SystemPayload for Unavailable {}
-impl SystemPayload for world::WorldSystem<'_> {
+impl SystemPayload for wmo::WorldSystem<'_> {
     fn contains(&self, member: SystemMember) -> bool {
         match member {
             SystemMember::WmoGroup(index) => (index as usize) < self.groups.len(),

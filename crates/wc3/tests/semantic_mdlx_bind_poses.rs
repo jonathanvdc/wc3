@@ -46,7 +46,7 @@ fn camera_bind_poses_follow_hierarchy_records_and_roundtrip_without_loss() {
             .unwrap()
             .value;
         for (index, (_, node)) in model.nodes().iter().enumerate() {
-            assert_eq!(node.controls.bind_pose, Some(poses[index].0));
+            assert_eq!(node.properties.bind_pose, Some(poses[index].0));
         }
         let output = io::mdlx::plan::<native::V1800>(&model, &ExportOptions::default())
             .unwrap()
@@ -62,12 +62,12 @@ fn camera_bind_poses_follow_hierarchy_records_and_roundtrip_without_loss() {
             restored
                 .nodes()
                 .iter()
-                .map(|(_, node)| node.controls.bind_pose)
+                .map(|(_, node)| node.properties.bind_pose)
                 .collect::<Vec<_>>(),
             model
                 .nodes()
                 .iter()
-                .map(|(_, node)| node.controls.bind_pose)
+                .map(|(_, node)| node.properties.bind_pose)
                 .collect::<Vec<_>>()
         );
         let repeated = io::mdlx::plan::<native::V1800>(&restored, &ExportOptions::default())
@@ -82,7 +82,7 @@ fn camera_bind_poses_follow_hierarchy_records_and_roundtrip_without_loss() {
         missing_pose
             .edit(|builder| {
                 let mut node = builder.model().node(last_camera).unwrap().clone();
-                node.controls.bind_pose = None;
+                node.properties.bind_pose = None;
                 builder.set_node(last_camera, node)
             })
             .unwrap();

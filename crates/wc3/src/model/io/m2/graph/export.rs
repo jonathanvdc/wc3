@@ -112,7 +112,7 @@ where
     let bone_controls: BTreeMap<_, _> = model
         .nodes()
         .iter()
-        .filter_map(|(id, node)| node.controls.as_ref().map(|value| (id, value)))
+        .filter_map(|(id, node)| node.properties.as_ref().map(|value| (id, value)))
         .collect();
     let mut nodes: Vec<_> = bone_controls.keys().copied().collect();
     for (_, attached) in model.features() {
@@ -189,9 +189,9 @@ where
     for (_, clip) in model.clips() {
         let duration = time_ms(clip.duration(), &mut context)?;
         starts.push(start);
-        let data = &clip.controls;
+        let data = &clip.properties;
         let mut flags = SequenceFlags::from_bits_retain(data.flags.bits());
-        flags.set_alias(clip.controls.alias.is_some());
+        flags.set_alias(clip.properties.alias.is_some());
         flags.set_primary_bone_sequence(true);
         flags.set_load_low_priority(false);
         flags.set_stored_in_model(false);
@@ -207,7 +207,7 @@ where
             blend_time: BlendField::make(data.blend_time, &mut context)?,
             bounding: native_bounds(data.bounds),
             alias_next: clip
-                .controls
+                .properties
                 .alias
                 .map(|id| clips.iter().position(|v| *v == id).unwrap() as u16)
                 .unwrap_or(0),
@@ -239,7 +239,7 @@ where
                 .iter()
                 .map(|id| {
                     id.map(|id| {
-                        if model.node(id).is_none_or(|node| node.controls.is_none()) {
+                        if model.node(id).is_none_or(|node| node.properties.is_none()) {
                             return Err(Error::new(
                                 "m2.key_bone_lookup",
                                 "key-bone binding requires a declared bone",

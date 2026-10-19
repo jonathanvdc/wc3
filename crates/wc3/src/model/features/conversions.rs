@@ -19,7 +19,7 @@ impl<'a> FromFeature<mdlx::Node<'a>> for NodeFeature<'a> {
             mdlx::Node::Light(value) => Self::Light(Light::AmbientDiffuse(Box::new(
                 FromFeature::from_feature(value, values),
             ))),
-            mdlx::Node::Camera(value) => Self::Camera(Camera::Aimed(Box::new(
+            mdlx::Node::Camera(value) => Self::Camera(Camera::LookAt(Box::new(
                 FromFeature::from_feature(value, values),
             ))),
             mdlx::Node::Attachment(value) => {
@@ -51,10 +51,10 @@ impl<'a> TryFromFeature<NodeFeature<'a>> for mdlx::Node<'a> {
                     Err(value) => Err(Box::new(NodeFeature::Light(Light::AmbientDiffuse(value)))),
                 }
             }
-            NodeFeature::Camera(Camera::Aimed(value)) => {
+            NodeFeature::Camera(Camera::LookAt(value)) => {
                 match TryFromFeature::try_from_feature(*value, values) {
                     Ok(value) => Ok(Self::Camera(value)),
-                    Err(value) => Err(Box::new(NodeFeature::Camera(Camera::Aimed(value)))),
+                    Err(value) => Err(Box::new(NodeFeature::Camera(Camera::LookAt(value)))),
                 }
             }
             NodeFeature::Attachment(Attachment::Child(value)) => {
@@ -77,7 +77,7 @@ impl<'a> FromFeature<m2::ActorKind<'a>> for NodeFeature<'a> {
             m2::ActorKind::Light(value) => Self::Light(Light::AmbientDiffuse(Box::new(
                 FromFeature::from_feature(value, values),
             ))),
-            m2::ActorKind::Camera(value) => Self::Camera(Camera::Aimed(Box::new(
+            m2::ActorKind::Camera(value) => Self::Camera(Camera::LookAt(Box::new(
                 FromFeature::from_feature(value, values),
             ))),
             m2::ActorKind::Ribbon(value) => Self::Ribbon(RibbonEmitter::M2(value)),
@@ -106,12 +106,7 @@ impl<'a> TryFromFeature<NodeFeature<'a>> for m2::ActorKind<'a> {
                     Err(value) => Err(Box::new(NodeFeature::Light(Light::AmbientDiffuse(value)))),
                 }
             }
-            NodeFeature::Camera(Camera::Aimed(value)) => {
-                match TryFromFeature::try_from_feature(*value, values) {
-                    Ok(value) => Ok(Self::Camera(value)),
-                    Err(value) => Err(Box::new(NodeFeature::Camera(Camera::Aimed(value)))),
-                }
-            }
+            NodeFeature::Camera(Camera::LookAt(value)) if value.is_m2() => Ok(Self::Camera(*value)),
             NodeFeature::Ribbon(RibbonEmitter::M2(value)) => Ok(Self::Ribbon(value)),
             NodeFeature::Particle(ParticleEmitter::M2(value)) => Ok(Self::Particle(value)),
             value => Err(Box::new(value)),
@@ -147,8 +142,8 @@ impl<'a> TryFrom<NodeFeature<'a>> for wmo::Node<'a> {
 impl<'a> From<scene::Feature> for NodeFeature<'a> {
     fn from(value: scene::Feature) -> Self {
         match value {
-            scene::Feature::Camera(value) => Self::Camera(Camera::Portable(value)),
-            scene::Feature::Light(value) => Self::Light(Light::Portable(value)),
+            scene::Feature::Camera(value) => Self::Camera(Camera::Node(value)),
+            scene::Feature::Light(value) => Self::Light(Light::SingleEmission(value)),
             scene::Feature::Attachment(value) => Self::Attachment(Attachment::Child(value.into())),
             scene::Feature::Particles(value) => Self::Particle(ParticleEmitter::Resource(value)),
             scene::Feature::Ribbon(value) => Self::Ribbon(RibbonEmitter::Resource(value)),
@@ -160,8 +155,8 @@ impl<'a> TryFrom<NodeFeature<'a>> for scene::Feature {
     type Error = Box<NodeFeature<'a>>;
     fn try_from(value: NodeFeature<'a>) -> Result<Self, Self::Error> {
         match value {
-            NodeFeature::Camera(Camera::Portable(value)) => Ok(Self::Camera(value)),
-            NodeFeature::Light(Light::Portable(value)) => Ok(Self::Light(value)),
+            NodeFeature::Camera(Camera::Node(value)) => Ok(Self::Camera(value)),
+            NodeFeature::Light(Light::SingleEmission(value)) => Ok(Self::Light(value)),
             NodeFeature::Attachment(Attachment::Child(value)) => match value.try_into() {
                 Ok(value) => Ok(Self::Attachment(value)),
                 Err(value) => Err(Box::new(NodeFeature::Attachment(Attachment::Child(*value)))),

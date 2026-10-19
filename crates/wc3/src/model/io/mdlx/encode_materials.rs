@@ -26,29 +26,7 @@ pub(super) fn write<'a, V: FormatVersion>(
         .transpose()
         .map(|id| id.unwrap_or(u32::MAX))
     };
-    let declaration = source
-        .steps
-        .first()
-        .map(|step| step.declaration.clone())
-        .unwrap_or_default();
-    let mut unresolved_name = None;
-    for step in &source.steps {
-        if step.declaration != declaration {
-            return Err(Error::new(
-                path,
-                "MDLX steps have different material-wide draw declarations",
-            ));
-        }
-        if let Shader::Unresolved(inputs) = &step.shader {
-            if unresolved_name.is_some_and(|name| name != inputs.shader_name.as_ref()) {
-                return Err(Error::new(
-                    path,
-                    "MDLX steps require different material shader names",
-                ));
-            }
-            unresolved_name = Some(inputs.shader_name.as_ref());
-        }
-    }
+    let declaration = &source.declaration;
     let mut material = native::Material::<V>::new();
     material.priority_plane = declaration.priority_plane;
     material.render_mode = native::MaterialRenderFlags(0);
@@ -67,7 +45,8 @@ pub(super) fn write<'a, V: FormatVersion>(
         .set_full_resolution(declaration.full_resolution);
     // Older layouts select a single shader by name instead of per-layer IDs.
     let named_default_unit = matches!(V::NUMBER, 900 | 1000)
-        && unresolved_name.is_none()
+        && (declaration.shader_name.is_empty()
+            || declaration.shader_name == "Shader_HD_DefaultUnit")
         && !source.steps.is_empty()
         && source
             .steps
@@ -82,7 +61,7 @@ pub(super) fn write<'a, V: FormatVersion>(
     let shader_name = if named_default_unit {
         "Shader_HD_DefaultUnit"
     } else {
-        unresolved_name.unwrap_or("")
+        declaration.shader_name.as_ref()
     };
     if let Err(error) = material.try_set_shader(shader_name) {
         if !shader_name.is_empty() {
@@ -95,7 +74,11 @@ pub(super) fn write<'a, V: FormatVersion>(
         let path = format!("{path}.layers[{index}]");
         let inputs = source.shader.inputs();
         let selector = match &source.shader {
-            Shader::Classic(_) if !shader_name.is_empty() => Some(0),
+            Shader::Classic(_)
+                if !shader_name.is_empty() && shader_name != "Shader_SD_FixedFunction" =>
+            {
+                Some(0)
+            }
             Shader::Classic(_) => None,
             Shader::ReforgedDefault(_) => Some(1),
             Shader::Unresolved(inputs) => inputs.selector,
@@ -129,6 +112,16 @@ pub(super) fn write<'a, V: FormatVersion>(
         layer
             .shading_flags
             .set_no_depth_set(source.state.rasterization.depth.write.is_bypassed());
+        let controls = source.state.rasterization.controls;
+        layer.shading_flags.set_wrap_width(controls.wrap_u);
+        layer.shading_flags.set_wrap_height(controls.wrap_v);
+        layer.shading_flags.set_unlit(controls.unlit);
+        layer
+            .shading_flags
+            .set_back_faces_for_shadows(controls.back_faces_for_shadows);
+        layer
+            .shading_flags
+            .set_ambient_occlusion(controls.ambient_occlusion);
         layer.texture_id = encoder.value(&inputs.binding.image, map, &format!("{path}.texture"))?;
         let transform = texture_transform(&inputs.binding.coordinates.transform, encoder)?;
         layer.texture_animation_id = if transform.translation.is_none()

@@ -37,8 +37,20 @@ impl<const N: usize> FixedText<N> {
                 max_bytes: N.saturating_sub(1),
             });
         }
+        self.set_bytes(value.as_bytes())
+    }
+
+    /// Sets byte text without requiring UTF-8 and clears unused field bytes.
+    ///
+    /// At most `N` bytes are accepted, without embedded NUL. Shorter values
+    /// receive a NUL terminator; full-width values remain unterminated, as is
+    /// permitted for decoded native fields. Invalid input leaves the field unchanged.
+    pub fn set_bytes(&mut self, value: &[u8]) -> Result<(), ValueError> {
+        if value.len() > N || value.contains(&0) {
+            return Err(ValueError::InvalidString { max_bytes: N });
+        }
         self.0.fill(0);
-        self.0[..value.len()].copy_from_slice(value.as_bytes());
+        self.0[..value.len()].copy_from_slice(value);
         Ok(())
     }
 }

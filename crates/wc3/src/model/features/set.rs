@@ -42,8 +42,8 @@ pub trait FeatureVocabulary<'a>: Clone + Debug + Send + Sync {
 /// Unsupported families have no constructible payload:
 /// ```compile_fail
 /// use wc3::model::profiles::wmo;
-/// use wc3::model::scene;
-/// let feature = wmo::Node::Camera(Box::new(scene::Camera::default()));
+/// use wc3::model::NodeCamera;
+/// let feature = wmo::Node::Camera(Box::new(NodeCamera::default()));
 /// ```
 #[derive(Clone, Debug)]
 pub enum FeatureSet<'a, V: FeatureVocabulary<'a>> {

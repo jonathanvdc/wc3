@@ -9,7 +9,7 @@ use std::borrow::Cow;
 pub(super) fn read<'a, D: Dialect>(
     root: &'a Root<'_, D>,
     source: &'a Group<'_, D>,
-    group: &mut profile::RegionControls<'a>,
+    group: &mut profile::Region<'a>,
     ids: &Identities,
     owner: crate::model::SystemId,
 ) -> Result<(), Error> {
@@ -37,7 +37,7 @@ pub(super) fn read_fields<'a, 'data: 'a, D: Dialect>(
     root: &'a impl super::root_view::CommonRoot<'data, Dialect = D>,
     chunks: impl Iterator<Item = &'a GroupChunk<'data, D>> + Clone,
     references: References,
-    group: &mut profile::RegionControls<'a>,
+    group: &mut profile::Region<'a>,
     ids: &Identities,
     owner: crate::model::SystemId,
 ) -> Result<(), Error> {
@@ -245,7 +245,7 @@ pub(super) fn name<'a, 'data: 'a>(
 
 pub(super) fn write<'a, D: Dialect>(
     group: &mut impl super::group_output::GroupOutput<'a, D>,
-    source: &profile::RegionControls<'_>,
+    source: &profile::Region<'_>,
     world: &profile::WorldSystem<'_>,
     actors: &super::encode_scene::Indices,
     portals: &mut Vec<crate::model::formats::wmo::records::PortalRef>,

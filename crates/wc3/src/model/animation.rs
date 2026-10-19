@@ -126,8 +126,8 @@ pub enum DynamicTrack<'a> {
 /// A named playback selection with timing and reusable animation identities.
 #[derive(Clone, Debug)]
 pub struct Clip<'a, P: Profile = Universal> {
-    /// Vocabulary-specific playback controls.
-    pub controls: P::Clip<'a>,
+    /// Vocabulary-specific playback properties.
+    pub properties: P::ClipProperties<'a>,
     /// Reusable animations selected by this clip, in evaluation order.
     pub animations: Vec<AnimationId>,
     /// Start of the authored source interval; duration bounds key selection.
@@ -141,7 +141,7 @@ impl<'a, P: Profile> Clip<'a, P> {
     pub fn named(name: impl Into<Cow<'a, str>>) -> Self {
         Self {
             name: name.into(),
-            controls: Default::default(),
+            properties: Default::default(),
             animations: Vec::new(),
             source_start: Time::default(),
             duration: Time::default(),

@@ -1,12 +1,12 @@
 //! Bone-attached scene features with typed logical animation bindings.
-use super::values::{CameraKind, LightKind};
+use super::values::LightKind;
 use crate::model::profiles::M2;
 use crate::model::M2RibbonEmitter;
 use crate::model::SocketDefinition;
-use crate::model::{AimedCamera, AmbientDiffuseLight};
+use crate::model::{AmbientDiffuseLight, LookAtCamera};
 use crate::model::{AttachedFeature, FeatureSet, Link, Property, ValidateLinks};
 
-use super::BoneControls;
+use super::BoneProperties;
 /// A hierarchy node carrying a model-family feature.
 pub type Actor<'a> = AttachedFeature<'a, M2>;
 /// Distinct scene feature families.
@@ -16,7 +16,7 @@ pub type Attachment = SocketDefinition<u32, Property<bool>, ()>;
 /// Model light with independently animated ambient and diffuse components.
 pub type Light = AmbientDiffuseLight<LightKind, Property<bool>>;
 /// Camera projection and model-local look-at animation.
-pub type Camera = AimedCamera<Property<f32>, CameraKind>;
+pub type Camera = LookAtCamera;
 /// A generated ribbon trail with texture and shader graph bindings.
 pub type RibbonEmitter = M2RibbonEmitter;
 
@@ -39,7 +39,7 @@ impl ActorKind<'_> {
         }
     }
 }
-impl ValidateLinks for BoneControls {
+impl ValidateLinks for BoneProperties {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if self.flags.bits() & 0x7f != 0 {
             visitor(Link::InvalidValue);

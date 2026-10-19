@@ -91,7 +91,7 @@ fn write_model<'a, D: Dialect>(
         for id in &group.instances {
             let instance = model.instance(*id).expect("validated placement");
             let mesh = model.mesh(instance.mesh).expect("validated geometry");
-            let region = &instance.controls;
+            let region = &instance.properties;
             let name = names.len() as u32;
             names.extend_from_slice(mesh.name.as_bytes());
             names.push(0);
@@ -170,7 +170,7 @@ fn write_model<'a, D: Dialect>(
             model
                 .instance(*id)
                 .expect("validated placement")
-                .controls
+                .properties
                 .file_id
                 .is_some()
         });
@@ -193,7 +193,7 @@ fn write_model<'a, D: Dialect>(
         for (index, group) in world.groups.iter().enumerate() {
             for id in &group.instances {
                 let instance = model.instance(*id).expect("validated placement");
-                let region = &instance.controls;
+                let region = &instance.properties;
                 let id=region.file_id.filter(|id| *id!=0).ok_or_else(||Error::new("world.groups.resources","database-addressed group table requires a nonzero identity for every placed region"))?;
                 file_ids[instance.lod.unwrap_or(0) as usize * world.groups.len() + index] = id;
             }
@@ -225,7 +225,10 @@ fn write_model<'a, D: Dialect>(
                 options.look,
                 &mut context,
             )?;
-            let region = &model.instance(*mesh).expect("validated placement").controls;
+            let region = &model
+                .instance(*mesh)
+                .expect("validated placement")
+                .properties;
             super::relationships::write(
                 &mut document,
                 region,

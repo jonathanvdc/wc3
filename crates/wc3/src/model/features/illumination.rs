@@ -1,14 +1,14 @@
 //! Shared illumination components with explicit activation semantics.
 use crate::model::profiles::{m2, mdlx, wmo};
 use crate::model::Construct;
-use crate::model::{scene, Link, Property, ValidateLinks};
+use crate::model::{Link, Property, ValidateLinks};
 use glam::Vec3;
 use m2::values::LightKind as ActorLightKind;
 /// Complete illumination models.
 #[derive(Clone, Debug)]
 pub enum Light {
     /// RGB lighting with cone and shadow controls.
-    Portable(Box<scene::Light>),
+    SingleEmission(Box<SingleEmissionLight>),
     /// Independently animated ambient and direct illumination.
     AmbientDiffuse(Box<AmbientDiffuseLight>),
 
@@ -56,30 +56,30 @@ pub struct AmbientDiffuseLight<K = IlluminationKind, A = LightActivation> {
     pub ambient: LightEmission,
     /// Beginning and ending distance attenuation.
     pub attenuation: [Property<f32>; 2],
-    /// Fractional visibility or discrete activation, including supported shadow controls.
+    /// Fractional visibility or discrete activation.
     pub activation: A,
+    /// Independently authored shadow parameters.
+    pub shadows: LightShadows,
+    /// Quadratic, linear, and damping attenuation coefficients.
+    pub falloff: Option<[Property<f32>; 3]>,
 }
 /// Distinct authored activation programs.
 #[derive(Clone, Debug)]
 pub enum LightActivation {
-    /// Fractional visibility with independently authored shadow and falloff controls.
-    Visibility(Box<VisibleLight>),
+    /// Fractional visibility.
+    Visibility(Property<f32>),
     /// Boolean activation.
     Enabled(Property<bool>),
 }
-/// Fractional light visibility and optional shadow/falloff controls.
-#[derive(Clone, Debug, Construct, PartialEq)]
-pub struct VisibleLight {
-    /// Visibility multiplier.
-    pub visibility: Property<f32>,
+/// Independently authored shadow parameters.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LightShadows {
     /// Explicit shadow casting.
-    pub shadow_casting: Option<bool>,
+    pub casting: Option<bool>,
     /// Explicit shadow intensity.
-    pub shadow_intensity: Option<f32>,
+    pub intensity: Option<f32>,
     /// Animated shadow near/far distances.
-    pub shadow_range: Option<[Property<f32>; 2]>,
-    /// Quadratic, linear, and damping attenuation coefficients.
-    pub falloff: Option<[Property<f32>; 3]>,
+    pub range: Option<[Property<f32>; 2]>,
 }
 impl From<mdlx::Light> for AmbientDiffuseLight {
     fn from(v: mdlx::Light) -> Self {
@@ -95,7 +95,9 @@ impl From<mdlx::Light> for AmbientDiffuseLight {
             diffuse: v.diffuse,
             ambient: v.ambient,
             attenuation: v.attenuation,
-            activation: LightActivation::Visibility(Box::new(v.activation)),
+            activation: LightActivation::Visibility(v.activation),
+            shadows: v.shadows,
+            falloff: v.falloff,
         }
     }
 }
@@ -113,6 +115,8 @@ impl From<m2::Light> for AmbientDiffuseLight {
             ambient: v.ambient,
             attenuation: v.attenuation,
             activation: LightActivation::Enabled(v.activation),
+            shadows: v.shadows,
+            falloff: v.falloff,
         }
     }
 }
@@ -136,7 +140,9 @@ impl TryFrom<AmbientDiffuseLight> for mdlx::Light {
             diffuse: v.diffuse,
             ambient: v.ambient,
             attenuation: v.attenuation,
-            activation: *control,
+            activation: control,
+            shadows: v.shadows,
+            falloff: v.falloff,
         })
     }
 }
@@ -151,6 +157,9 @@ impl TryFrom<AmbientDiffuseLight> for m2::Light {
             }
             _ => return Err(Box::new(v)),
         };
+        if v.shadows != LightShadows::default() || v.falloff.is_some() {
+            return Err(Box::new(v));
+        }
         let LightActivation::Enabled(enabled) = v.activation else {
             return Err(Box::new(v));
         };
@@ -160,6 +169,8 @@ impl TryFrom<AmbientDiffuseLight> for m2::Light {
             ambient: v.ambient,
             attenuation: v.attenuation,
             activation: enabled,
+            shadows: v.shadows,
+            falloff: v.falloff,
         })
     }
 }
@@ -171,6 +182,8 @@ impl<K: ValidateLinks, A: ValidateLinks> ValidateLinks for AmbientDiffuseLight<K
         self.ambient.visit_links(visitor);
         self.attenuation.visit_links(visitor);
         self.activation.visit_links(visitor);
+        self.shadows.visit_links(visitor);
+        self.falloff.visit_links(visitor);
     }
 }
 impl ValidateLinks for LightEmission {
@@ -179,11 +192,12 @@ impl ValidateLinks for LightEmission {
         self.intensity.visit_links(visitor);
     }
 }
-impl ValidateLinks for VisibleLight {
+impl ValidateLinks for LightShadows {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        self.visibility.visit_links(visitor);
-        self.shadow_range.visit_links(visitor);
-        self.falloff.visit_links(visitor);
+        self.range.visit_links(visitor);
+        if self.intensity.is_some_and(|value| !value.is_finite()) {
+            visitor(Link::InvalidValue);
+        }
     }
 }
 impl ValidateLinks for LightActivation {
@@ -203,4 +217,44 @@ impl ValidateLinks for mdlx::LightKind {
 }
 impl ValidateLinks for ActorLightKind {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
+}
+
+/// Spatial interpretation of a light with one emission component.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EmissionKind {
+    /// Radiates from a position.
+    #[default]
+    Point,
+    /// Illuminates along one direction.
+    Directional,
+    /// Radiates inside a cone.
+    Spot,
+    /// Supplies ambient illumination.
+    Ambient,
+    /// Unresolved authored interpretation.
+    Unknown(u32),
+}
+/// One RGB emission component with optional cone and shadow parameters.
+#[derive(Clone, Debug, Construct)]
+pub struct SingleEmissionLight {
+    /// Spatial interpretation.
+    pub kind: EmissionKind,
+    /// Animated RGB color and intensity.
+    pub emission: LightEmission,
+    /// Range attenuation start and end.
+    pub attenuation: [Property<f32>; 2],
+    /// Inner and outer cone angles.
+    pub cone: [Property<f32>; 2],
+    /// Independently authored shadow parameters.
+    pub shadows: LightShadows,
+    /// Quadratic, linear, and exponential attenuation coefficients.
+    pub attenuation_coefficients: [Option<f32>; 3],
+}
+impl ValidateLinks for SingleEmissionLight {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.emission.visit_links(visitor);
+        self.attenuation.visit_links(visitor);
+        self.cone.visit_links(visitor);
+        self.shadows.visit_links(visitor);
+    }
 }

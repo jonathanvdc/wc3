@@ -2,6 +2,7 @@ use glam::{Vec2, Vec3};
 use std::borrow::Cow;
 use wc3::model::profiles::{m2, mdlx, wmo, Extends, Mdlx, Narrows, Universal, Wmo, M2};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
+use wc3::model::{FieldOfViewAxis, PerspectiveProjection};
 use wc3::model::{LightEmission, Model};
 #[test]
 fn resource_conversion_moves_owned_paths_and_preserves_handles() {
@@ -79,15 +80,22 @@ fn m2_enable_and_camera_conventions_survive_projection() {
             },
             attenuation: [slot_values.add(1.), slot_values.add(20.)],
             activation: slot_values.add(false),
+            shadows: Default::default(),
+            falloff: None,
         }),
         m2::ActorKind::Camera(m2::Camera {
-            convention: m2::values::CameraKind::Unknown(0x8000_0001),
-            field_of_view: slot_values.add(0.8),
-            clipping: Vec2::from_array([0.1, 1000.]),
+            role: Some(m2::values::CameraKind::Unknown(0x8000_0001)),
+            projection: PerspectiveProjection {
+                axis: FieldOfViewAxis::Diagonal,
+                field_of_view: slot_values.add(0.8),
+                clipping: Vec2::from_array([0.1, 1000.]),
+            },
             target: Vec3::from_array([1., 2., 3.]),
             eye_offset: slot_values.add(Vec3::from_array([4., 5., 6.])),
             target_offset: slot_values.add(Vec3::from_array([7., 8., 9.])),
             roll: slot_values.add(0.5),
+            visibility: None,
+            lens: Default::default(),
         }),
     ];
     for source in features {
@@ -193,7 +201,11 @@ fn common_animation_destinations_validate_and_narrow_with_borrowed_keys() {
 fn camera_slot_alone_does_not_imply_authored_animation() {
     let mut slot_values = SlotValues::default();
     let source = mdlx::Camera {
-        field_of_view: 0.75,
+        projection: PerspectiveProjection {
+            field_of_view: 0.75,
+            axis: FieldOfViewAxis::Vertical,
+            clipping: Vec2::ZERO,
+        },
         ..SlotConstruct::construct(&mut slot_values)
     };
     let feature =
@@ -203,7 +215,7 @@ fn camera_slot_alone_does_not_imply_authored_animation() {
     else {
         panic!()
     };
-    assert_eq!(restored.field_of_view, 0.75);
+    assert_eq!(restored.projection.field_of_view, 0.75);
 }
 
 #[test]

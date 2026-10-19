@@ -316,19 +316,19 @@ impl<'a, P: Profile> ModelBuilder<'a, P> {
         Ok(event_id)
     }
     /// Replaces playback behavior directly on an existing clip.
-    pub fn set_clip_controls(
+    pub fn set_clip_properties(
         &mut self,
         id: ClipId,
-        value: impl Into<P::Clip<'a>>,
+        value: impl Into<P::ClipProperties<'a>>,
     ) -> Result<(), Error> {
         if !self.model.clips.contains_key(id) {
-            return Err(Error::new("clip.controls", "unknown owner"));
+            return Err(Error::new("clip.properties", "unknown owner"));
         }
         self.model
             .clips
             .get_mut(&id)
             .expect("checked owner")
-            .controls = value.into();
+            .properties = value.into();
         Ok(())
     }
     /// Defines or replaces a hierarchy node belonging to this draft.

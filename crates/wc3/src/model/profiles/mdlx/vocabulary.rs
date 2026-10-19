@@ -1,13 +1,13 @@
 //! Built-in MDLX authoring vocabulary and its lossless embeddings.
-use crate::model::profiles::{mdlx, Extends, NoControls, Profile, Unavailable, Universal};
+use crate::model::profiles::{mdlx, Extends, NoProperties, Profile, Unavailable, Universal};
 use crate::model::resources::{MdlxImageResource, PathResource};
 use crate::model::EventSource;
 use crate::model::Link;
 use crate::model::Model;
 use crate::model::PropertyValues;
 use crate::model::{
-    ClipControls, Error, FeatureKind, IdentityBinding, MdlxGeometry, MeshControls, ModelMetadata,
-    NodeControls, SingleLook, UniversalAppearance, UniversalBinding,
+    ClipProperties, Error, FeatureKind, IdentityBinding, MdlxGeometry, MeshProperties,
+    ModelMetadata, NodeProperties, SingleLook, UniversalAppearance, UniversalBinding,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 /// Vocabulary that maps mechanically to Warcraft III logical features.
@@ -42,16 +42,16 @@ impl Profile for Mdlx {
     type Appearance<'a> = SingleLook<'a>;
     type Binding<'a> = IdentityBinding;
     type Geometry<'a> = MdlxGeometry<'a>;
-    type Draw = NoControls;
+    type DrawProperties = NoProperties;
     type ModelMetadata<'a> = mdlx::ModelMetadata<'a>;
     type EventSource<'a> = mdlx::EventSource<'a>;
     type System<'a> = Unavailable;
     type Surface<'a> = mdlx::Material<'a>;
     type Feature<'a> = mdlx::Node<'a>;
-    type Node<'a> = mdlx::NodeControls;
-    type Mesh<'a> = mdlx::Geometry;
-    type Instance<'a> = NoControls;
-    type Clip<'a> = mdlx::Sequence;
+    type NodeProperties<'a> = mdlx::NodeProperties;
+    type MeshProperties<'a> = mdlx::MeshProperties;
+    type InstanceProperties<'a> = NoProperties;
+    type ClipProperties<'a> = mdlx::SequenceProperties;
 
     fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
         super::validation::resources(model)
@@ -100,7 +100,7 @@ impl Extends<Mdlx> for Universal {
     fn geometry<'a>(value: <Mdlx as Profile>::Geometry<'a>) -> Self::Geometry<'a> {
         value.into()
     }
-    fn draw(value: <Mdlx as Profile>::Draw) -> Self::Draw {
+    fn draw(value: <Mdlx as Profile>::DrawProperties) -> Self::DrawProperties {
         let _ = value;
         None
     }
@@ -122,18 +122,20 @@ impl Extends<Mdlx> for Universal {
     ) -> Self::Feature<'a> {
         crate::model::features::FromFeature::from_feature(value, values)
     }
-    fn node<'a>(value: <Mdlx as Profile>::Node<'a>) -> Self::Node<'a> {
-        Some(NodeControls::Mdlx(value))
+    fn node<'a>(value: <Mdlx as Profile>::NodeProperties<'a>) -> Self::NodeProperties<'a> {
+        Some(NodeProperties::Mdlx(value))
     }
-    fn mesh<'a>(value: <Mdlx as Profile>::Mesh<'a>) -> Self::Mesh<'a> {
-        Some(MeshControls::Mdlx(value))
+    fn mesh<'a>(value: <Mdlx as Profile>::MeshProperties<'a>) -> Self::MeshProperties<'a> {
+        Some(MeshProperties::Mdlx(value))
     }
-    fn instance<'a>(value: <Mdlx as Profile>::Instance<'a>) -> Self::Instance<'a> {
+    fn instance<'a>(
+        value: <Mdlx as Profile>::InstanceProperties<'a>,
+    ) -> Self::InstanceProperties<'a> {
         let _ = value;
         None
     }
-    fn clip<'a>(value: <Mdlx as Profile>::Clip<'a>) -> Self::Clip<'a> {
-        Some(ClipControls::Mdlx(value))
+    fn clip<'a>(value: <Mdlx as Profile>::ClipProperties<'a>) -> Self::ClipProperties<'a> {
+        Some(ClipProperties::Mdlx(value))
     }
 }
 

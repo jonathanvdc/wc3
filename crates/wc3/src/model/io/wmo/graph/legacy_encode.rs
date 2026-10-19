@@ -11,7 +11,7 @@ use crate::model::formats::wmo::legacy::{
 use crate::model::formats::wmo::records::{GroupFlags2, GroupInfo, HeaderTailField, RootFlags};
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::formats::wmo::Classic;
-use crate::model::profiles::wmo::{Group as WorldGroup, RegionControls, WorldSystem};
+use crate::model::profiles::wmo::{Group as WorldGroup, Region, WorldSystem};
 use crate::model::profiles::Wmo;
 use crate::model::WorldModelResource;
 use crate::model::{InstanceId, Model, Quat};
@@ -72,7 +72,7 @@ fn alpha_model<'a>(
         let instance_id = placement(catalog, model)?;
         let instance = model.instance(instance_id).expect("checked placement");
         let mesh = model.mesh(instance.mesh).expect("validated mesh");
-        let region = &instance.controls;
+        let region = &instance.properties;
         let body = legacy_encode_geometry::write::<Batch14>(
             model,
             instance_id,
@@ -211,7 +211,7 @@ fn beta_model<'a>(
         let instance_id = placement(catalog, model)?;
         let instance = model.instance(instance_id).expect("checked placement");
         let mesh = model.mesh(instance.mesh).expect("validated mesh");
-        let region = &instance.controls;
+        let region = &instance.properties;
         if region.interior_windows.is_some()
             || region.exterior_windows.is_some()
             || region.supplemental_controls.len() > 1
@@ -276,7 +276,7 @@ fn names(model: &Model<'_, Wmo>, world: &WorldSystem<'_>) -> Result<Names, Error
             let instance = model.instance(*id).expect("validated placement");
             let mesh = model.mesh(instance.mesh).expect("validated mesh");
             let display = name(&mut result.bytes, &mesh.name)?;
-            let description = name(&mut result.bytes, &instance.controls.description)?;
+            let description = name(&mut result.bytes, &instance.properties.description)?;
             result.regions.insert(*id, (display, description));
         }
     }
@@ -348,10 +348,10 @@ fn placement(group: &WorldGroup<'_>, model: &Model<'_, Wmo>) -> Result<InstanceI
     }
     Ok(*instance)
 }
-fn liquid_type(region: &RegionControls<'_>) -> Result<u32, Error> {
+fn liquid_type(region: &Region<'_>) -> Result<u32, Error> {
     super::liquids::category(region, false)
 }
-fn fogs(region: &RegionControls<'_>) -> Result<[u8; 4], Error> {
+fn fogs(region: &Region<'_>) -> Result<[u8; 4], Error> {
     if region.fogs.len() > 4 {
         return Err(Error::new(
             "world.group.fogs",

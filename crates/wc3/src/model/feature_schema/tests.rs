@@ -1,9 +1,10 @@
 use super::{CameraView, FeatureSchema, FeatureView, LightView, ParticlesView};
 use crate::model::profiles::{m2, mdlx, Either};
 use crate::model::LightEmission;
+use crate::model::NodeCamera;
 use crate::model::{scene, Axis, NodeFeature};
 use crate::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-use crate::model::{M2RibbonControls, M2RibbonRendering, TrailAppearance, TrailGeometry};
+use crate::model::{M2RibbonBehavior, M2RibbonRendering, TrailAppearance, TrailGeometry};
 use crate::model::{ParticleEmission, ParticleLifetime, ParticleMotion};
 use glam::Vec3;
 use std::ptr;
@@ -116,15 +117,15 @@ fn ribbon_components_preserve_distinct_rate_and_atlas_integer_domains() {
     assert_eq!(slot_values[cell], 70_000);
 
     let edge = m2::RibbonEmitter {
-        controls: M2RibbonControls {
+        behavior: M2RibbonBehavior {
             id: 0,
             angle: 0.4,
             enabled: slot_values.add(true),
+        },
+        rendering: M2RibbonRendering {
             priority_plane: -2,
             color_index: -1,
             texture_transform: None,
-        },
-        rendering: M2RibbonRendering {
             textures: vec![],
             materials: vec![],
         },
@@ -175,11 +176,11 @@ fn native_discovery_borrows_the_authored_definition() {
 fn unions_delegate_behavior_discovery() {
     let mut slot_values = SlotValues::default();
     let feature: Either<mdlx::Node<'_>, scene::Feature> = Either::Right(scene::Feature::Camera(
-        Box::new(scene::Camera::construct(&mut slot_values)),
+        Box::new(NodeCamera::construct(&mut slot_values)),
     ));
     assert!(matches!(
         feature.feature(),
-        FeatureView::Camera(CameraView::Scene(_))
+        FeatureView::Camera(CameraView::Node(_))
     ));
 }
 
@@ -220,7 +221,7 @@ fn light_discovery_retains_native_illumination_semantics() {
     let feature = mdlx::Node::Light(mdlx::Light::construct(&mut slot_values));
     assert!(matches!(
         feature.feature(),
-        FeatureView::Light(LightView::VisibleAmbientDiffuse(_))
+        FeatureView::Light(LightView::AmbientDiffuse(_))
     ));
 }
 

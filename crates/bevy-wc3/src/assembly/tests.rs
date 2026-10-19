@@ -140,6 +140,7 @@ fn replacements_distinguish_identical_inputs_before_resolved_images_are_shared()
             draft.set_material_surface(
                 material,
                 MaterialSurface::from(MdlxMaterial {
+                    declaration: Default::default(),
                     steps: layers.into(),
                 }),
             )?;
@@ -224,7 +225,10 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
                     .collect();
                 draft.set_material_surface(
                     material,
-                    MaterialSurface::from(MdlxMaterial { steps: layers }),
+                    MaterialSurface::from(MdlxMaterial {
+                        declaration: Default::default(),
+                        steps: layers,
+                    }),
                 )?;
                 for target in targets {
                     draft.add_global_track(DynamicTrack::OptionalTexture(Track {

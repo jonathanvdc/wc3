@@ -115,7 +115,7 @@ impl Node<'_> {
     }
 }
 
-impl ValidateLinks for super::RegionControls<'_> {
+impl ValidateLinks for super::Region<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if self.implicit_liquid.is_some() && !self.liquids.is_empty() {
             visitor(Link::InvalidValue);

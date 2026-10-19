@@ -37,15 +37,16 @@ pub(super) fn catalog(model: &Model<'_, Wmo>, group: &Group<'_>) -> GroupFlags {
         let mesh = model.mesh(instance.mesh).expect("validated group geometry");
         flags.set_has_bsp(
             mesh.geometry
-                .triangle_controls()
+                .triangle_properties()
                 .iter()
                 .any(|face| face.spatial_queries),
         );
         flags.set_has_vertex_colors(!mesh.geometry.color_sets().is_empty());
-        flags.set_has_lights(!instance.controls.lights.is_empty());
-        flags.set_has_doodads(!instance.controls.doodads.is_empty());
+        flags.set_has_lights(!instance.properties.lights.is_empty());
+        flags.set_has_doodads(!instance.properties.doodads.is_empty());
         flags.set_has_liquid(
-            !instance.controls.liquids.is_empty() || instance.controls.implicit_liquid.is_some(),
+            !instance.properties.liquids.is_empty()
+                || instance.properties.implicit_liquid.is_some(),
         );
         flags.set_lod(instance.lod.is_some_and(|lod| lod != 0));
     }

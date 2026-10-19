@@ -5,8 +5,9 @@ use super::storage::Storage;
 use crate::model::conversion::Error;
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::profiles::mdlx as profile;
-use crate::model::PhotographicControls;
-use crate::model::{LightEmission, NodeId, VisibleLight};
+use crate::model::PerspectiveProjection;
+use crate::model::{CameraLens, FieldOfViewAxis, PathResource};
+use crate::model::{LightEmission, LightShadows, NodeId};
 use glam::{Vec2, Vec3};
 use std::collections::BTreeMap;
 
@@ -66,18 +67,18 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                     color: a!(ambient_color),
                     intensity: a!(ambient_intensity),
                 },
-                activation: VisibleLight {
-                    shadow_casting: source.try_shadow_casting().ok(),
-                    shadow_intensity: source.try_shadow_intensity().ok(),
-                    shadow_range,
-                    falloff,
-                    visibility: decoder.track(
-                        source.visibility.as_ref(),
-                        1.,
-                        "light::VISIBILITY",
-                        |value| value,
-                    )?,
+                shadows: LightShadows {
+                    casting: source.try_shadow_casting().ok(),
+                    intensity: source.try_shadow_intensity().ok(),
+                    range: shadow_range,
                 },
+                falloff,
+                activation: decoder.track(
+                    source.visibility.as_ref(),
+                    1.,
+                    "light::VISIBILITY",
+                    |value| value,
+                )?,
             });
             decoder.builder.set_feature(feature, payload)?;
         }
@@ -124,16 +125,20 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                 eye_offset,
                 target: Vec3::from_array(source.target_position),
                 target_offset,
-                field_of_view: source.field_of_view,
-                clipping: Vec2::from_array([source.near_clip, source.far_clip]),
+                projection: PerspectiveProjection {
+                    field_of_view: source.field_of_view,
+                    clipping: Vec2::from_array([source.near_clip, source.far_clip]),
+                    axis: FieldOfViewAxis::Vertical,
+                },
                 roll: decoder.track(source.rotation.as_ref(), 0., "camera::ROLL", |value| value)?,
-                convention: PhotographicControls {
-                    visibility: decoder.track(
-                        source.visibility.as_ref(),
-                        1.,
-                        "camera::VISIBILITY",
-                        |value| value,
-                    )?,
+                role: None,
+                visibility: Some(decoder.track(
+                    source.visibility.as_ref(),
+                    1.,
+                    "camera::VISIBILITY",
+                    |value| value,
+                )?),
+                lens: CameraLens {
                     focus_distance: optional!(focus_distance),
                     focal_length: optional!(focal_length),
                     f_stop: optional!(f_stop),
@@ -162,10 +167,21 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         }
     }
     if let Ok(faces) = source.try_face_fx() {
-        profile
-            .metadata
-            .face_effects
-            .extend(faces.map(|face| (S::text(face.name.text()), S::text(face.path.text()))));
+        for face in faces {
+            let path = face
+                .path
+                .as_bytes()
+                .split(|byte| *byte == 0)
+                .next()
+                .unwrap_or_default();
+            let resource = decoder
+                .builder
+                .add_effect_resource(PathResource::Path(S::bytes(path)));
+            profile.metadata.face_effects.push(profile::FaceEffect {
+                name: S::text(face.name.text()),
+                resource,
+            });
+        }
     }
     Ok(())
 }

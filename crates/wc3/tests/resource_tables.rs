@@ -18,7 +18,10 @@ fn use_texture(draft: &mut wc3::model::ModelBuilder<'_, Universal>, texture: Tex
     draft
         .add_material(Material {
             name: "input".into(),
-            surface: MaterialSurface::from(MdlxMaterial { steps: vec![layer] }),
+            surface: MaterialSurface::from(MdlxMaterial {
+                declaration: Default::default(),
+                steps: vec![layer],
+            }),
         })
         .unwrap();
 }

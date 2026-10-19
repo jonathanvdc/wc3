@@ -665,7 +665,7 @@ fn semantic_sequence_controls_drop_unclassified_bits() {
 }
 
 #[test]
-fn absent_model_info_stays_absent_while_named_drafts_declare_bounds() {
+fn absent_model_info_stays_absent_and_encoding_requires_bounds_for_metadata() {
     let source = mdlx::Document::<mdlx::V800>::new();
     assert!(source.model_info().is_none());
     let asset = io::mdlx::import(&source, &ImportOptions::default())
@@ -681,49 +681,46 @@ fn absent_model_info_stays_absent_while_named_drafts_declare_bounds() {
     let named = Model::<Mdlx>::builder("named").finish().unwrap();
     assert_eq!(named.bounds(), Some(Bounds::default()));
     let mut asset = named;
-    assert!(asset
+    asset
         .edit(|builder| {
             builder.metadata_mut().bounds = None;
             Ok(())
         })
-        .is_err());
-    assert!(asset.bounds().is_some());
+        .unwrap();
+    assert!(asset.bounds().is_none());
+    asset.validate().unwrap();
+    let error = io::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default()).unwrap_err();
+    assert_eq!(error.path, "model.info");
 }
 
 #[test]
-fn empty_material_declarations_require_explicit_semantic_loss() {
-    use wc3::model::conversion::LossPolicy;
-    let mut source = mdlx::Document::<mdlx::V800>::new();
+fn empty_material_declarations_survive_import_widening_and_export() {
+    let mut source = mdlx::Document::<mdlx::V1800>::new();
     let mut material = mdlx::materials::Material::new();
     material.priority_plane = 7;
+    material.render_mode.set_two_sided(true);
+    material.try_set_shader("empty shader").unwrap();
     source.set_materials([material]);
-    assert!(io::mdlx::import(&source, &ImportOptions::default()).is_err());
-    let imported = io::mdlx::import(
-        &source,
-        &ImportOptions {
-            loss_policy: LossPolicy::Drop,
-            ..Default::default()
-        },
-    )
-    .unwrap();
-    assert!(imported
-        .report
-        .issues
-        .iter()
-        .any(|issue| issue.path == "material.empty_declarations"));
-    assert!(imported
-        .value
-        .widen::<wc3::model::profiles::Universal>()
-        .materials()
-        .iter()
-        .next()
+    let imported = io::mdlx::import(&source, &ImportOptions::default()).unwrap();
+    assert!(imported.report.issues.is_empty());
+    let broad = imported.value.widen::<wc3::model::profiles::Universal>();
+    let surface = &broad.materials().iter().next().unwrap().1.surface;
+    assert!(surface.steps.is_empty());
+    let declaration = surface.declaration.as_ref().unwrap();
+    assert_eq!(declaration.priority_plane, 7);
+    assert!(declaration.two_sided);
+    assert_eq!(declaration.shader_name, "empty shader");
+    let restored = broad.try_narrow::<Mdlx>().unwrap();
+    let output = io::mdlx::plan::<mdlx::V1800>(&restored, &ExportOptions::default())
         .unwrap()
-        .1
-        .surface
-        .steps
-        .is_empty());
-    // The native document still owns its declaration after semantic conversion.
-    assert_eq!(source.materials().next().unwrap().priority_plane, 7);
+        .execute()
+        .unwrap()
+        .value;
+    let material = output.materials().next().unwrap();
+    assert!(material.layers.is_empty());
+    assert_eq!(material.priority_plane, 7);
+    assert!(material.render_mode.two_sided());
+    assert_eq!(material.try_shader().unwrap(), "empty shader");
 }
 
 #[test]

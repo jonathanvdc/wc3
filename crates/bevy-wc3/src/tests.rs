@@ -100,6 +100,7 @@ fn fixture_geometry<'a>(
         .add_material(SemanticMaterial {
             name: "plain".into(),
             surface: MaterialSurface::from(MdlxMaterial {
+                declaration: Default::default(),
                 steps: vec![MdlxStep {
                     shader: Shader::Classic(MaterialInputs {
                         opacity: slot_values.add(1.),
@@ -576,6 +577,7 @@ fn animated_materials_are_isolated_between_playback_clocks() {
                 builder.set_material_surface(
                     material,
                     MaterialSurface::from(MdlxMaterial {
+                        declaration: Default::default(),
                         steps: vec![MdlxStep {
                             shader: Shader::Classic(MaterialInputs {
                                 opacity: property,
@@ -753,14 +755,14 @@ fn public_rest_bounds_use_joint_rest_pose_instead_of_mesh_placement() {
 #[test]
 fn m2_nonzero_transition_pairs_require_explicit_application_duration() {
     let mut slot_values = SlotValues::default();
-    use wc3::model::controls::model::SequenceControls;
-    use wc3::model::{Clip, ClipControls};
+    use wc3::model::profiles::m2::SequenceProperties;
+    use wc3::model::{Clip, ClipProperties};
     let (mut source, _) = fixture(UniversalBinding::Identity(IdentityBinding));
     source
         .edit(|builder| {
             let edit_result = {
                 let mut clip = Clip::named("M2 authored transition");
-                clip.controls = Some(ClipControls::M2(SequenceControls {
+                clip.properties = Some(ClipProperties::M2(SequenceProperties {
                     blend_time: [150, 300],
                     ..SlotConstruct::construct(&mut slot_values)
                 }));

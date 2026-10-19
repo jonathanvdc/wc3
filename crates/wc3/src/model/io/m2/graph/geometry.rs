@@ -120,7 +120,7 @@ where
             mesh.bounds = bounds(core.bounding);
             let mesh =
                 builder.add_mesh(
-                    mesh.with_controls(profile::GeometryControls {
+                    mesh.with_properties(profile::MeshProperties {
                         center_bone: if nodes.is_empty() && section.center_bone_index == 0 {
                             None
                         } else {
@@ -382,11 +382,17 @@ where
                     }
                     steps.push(surface);
                 }
-                builder.set_material_surface(material, profile::Material { steps })?;
+                builder.set_material_surface(
+                    material,
+                    profile::Material {
+                        steps,
+                        declaration: Default::default(),
+                    },
+                )?;
                 draw_materials.push(material);
                 draws.push(Draw::new(
                     subset,
-                    Some(profile::DrawControls {
+                    Some(profile::DrawProperties {
                         auxiliary_section,
                         shadow: None,
                     }),
@@ -394,7 +400,7 @@ where
             }
             builder.add_instance_with_materials(
                 MeshInstance {
-                    controls: NoControls,
+                    properties: NoProperties,
                     node,
                     mesh,
                     skin,
@@ -468,7 +474,7 @@ where
             for joint in &skin.joints {
                 if model
                     .node(*joint)
-                    .is_none_or(|node| node.controls.is_none())
+                    .is_none_or(|node| node.properties.is_none())
                     || !nodes.contains(joint)
                 {
                     return Err(Error::new(
@@ -514,7 +520,7 @@ where
                     .ok_or_else(|| Error::new("m2.mesh.skin", "missing authored joint"))?;
                 if model
                     .node(*joint_id)
-                    .is_none_or(|node| node.controls.is_none())
+                    .is_none_or(|node| node.properties.is_none())
                 {
                     return Err(Error::new(
                         "m2.mesh.skin",
@@ -583,7 +589,7 @@ where
         let palette_start = bone_combos.len();
         bone_combos.extend(palette);
         let section_index = profile.sections.len();
-        let geoset = mesh.controls.as_ref();
+        let geoset = mesh.properties.as_ref();
         profile.sections.push(SkinSection {
             id: u16::try_from(instance.selection_group)
                 .map_err(|_| Error::new("m2.mesh.selection", "selection group exceeds u16"))?,
@@ -607,7 +613,7 @@ where
             center_bone_index: geoset
                 .and_then(|g| g.center_bone)
                 .map(|id| {
-                    if model.node(id).is_none_or(|node| node.controls.is_none()) {
+                    if model.node(id).is_none_or(|node| node.properties.is_none()) {
                         return Err(Error::new(
                             "m2.mesh.center_bone",
                             "sorting center requires a declared bone",
@@ -718,7 +724,7 @@ where
                     material_index: material_index as u16,
                     material_layer: u16::try_from(section_layer)
                         .map_err(|_| Error::new("m2.material.steps", "too many material steps"))?,
-                    geoset_index: draw.controls.as_ref().map_or(0, |v| v.auxiliary_section),
+                    geoset_index: draw.properties.as_ref().map_or(0, |v| v.auxiliary_section),
                     texture_count: inputs.len() as u16,
                     texture_combo_index: combo as u16,
                     texture_coordinate_combo_index: combo as u16,

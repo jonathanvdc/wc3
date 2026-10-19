@@ -1,12 +1,12 @@
 //! Built-in WMO authoring vocabulary and its lossless embeddings.
-use crate::model::profiles::{wmo, Extends, NoControls, Profile, Unavailable, Universal};
+use crate::model::profiles::{wmo, Extends, NoProperties, Profile, Unavailable, Universal};
 use crate::model::resources::{WorldImageResource, WorldModelResource};
 use crate::model::Link;
 use crate::model::Model;
 use crate::model::PropertyValues;
 use crate::model::{
-    DrawControls, Error, FeatureKind, InstanceControls, MaterialSurface, ModelMetadata, SingleLook,
-    System, UniversalAppearance, WmoGeometry,
+    DrawProperties, Error, FeatureKind, InstanceProperties, MaterialSurface, ModelMetadata,
+    SingleLook, System, UniversalAppearance, WmoGeometry,
 };
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
 /// Vocabulary that maps mechanically to Wmo logical features.
@@ -22,16 +22,16 @@ impl Profile for Wmo {
     type Appearance<'a> = SingleLook<'a>;
     type Binding<'a> = Unavailable;
     type Geometry<'a> = WmoGeometry<'a>;
-    type Draw = Option<wmo::DrawControls>;
+    type DrawProperties = Option<wmo::DrawProperties>;
     type ModelMetadata<'a> = wmo::ModelMetadata;
     type EventSource<'a> = Unavailable;
     type System<'a> = wmo::WorldSystem<'a>;
     type Surface<'a> = wmo::Material<'a>;
     type Feature<'a> = wmo::Node<'a>;
-    type Node<'a> = NoControls;
-    type Mesh<'a> = NoControls;
-    type Instance<'a> = wmo::RegionControls<'a>;
-    type Clip<'a> = NoControls;
+    type NodeProperties<'a> = NoProperties;
+    type MeshProperties<'a> = NoProperties;
+    type InstanceProperties<'a> = wmo::Region<'a>;
+    type ClipProperties<'a> = NoProperties;
 
     fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
         super::validation::resources(model)
@@ -91,8 +91,8 @@ impl Extends<Wmo> for Universal {
     fn geometry<'a>(value: <Wmo as Profile>::Geometry<'a>) -> Self::Geometry<'a> {
         value.into()
     }
-    fn draw(value: <Wmo as Profile>::Draw) -> Self::Draw {
-        value.map(DrawControls::Wmo)
+    fn draw(value: <Wmo as Profile>::DrawProperties) -> Self::DrawProperties {
+        value.map(DrawProperties::Wmo)
     }
     fn model_metadata<'a>(value: <Wmo as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
         ModelMetadata::Wmo(value)
@@ -112,18 +112,20 @@ impl Extends<Wmo> for Universal {
     ) -> Self::Feature<'a> {
         value.into()
     }
-    fn node<'a>(value: <Wmo as Profile>::Node<'a>) -> Self::Node<'a> {
+    fn node<'a>(value: <Wmo as Profile>::NodeProperties<'a>) -> Self::NodeProperties<'a> {
         let _ = value;
         None
     }
-    fn mesh<'a>(value: <Wmo as Profile>::Mesh<'a>) -> Self::Mesh<'a> {
+    fn mesh<'a>(value: <Wmo as Profile>::MeshProperties<'a>) -> Self::MeshProperties<'a> {
         let _ = value;
         None
     }
-    fn instance<'a>(value: <Wmo as Profile>::Instance<'a>) -> Self::Instance<'a> {
-        Some(InstanceControls::Wmo(Box::new(value)))
+    fn instance<'a>(
+        value: <Wmo as Profile>::InstanceProperties<'a>,
+    ) -> Self::InstanceProperties<'a> {
+        Some(InstanceProperties::Wmo(Box::new(value)))
     }
-    fn clip<'a>(value: <Wmo as Profile>::Clip<'a>) -> Self::Clip<'a> {
+    fn clip<'a>(value: <Wmo as Profile>::ClipProperties<'a>) -> Self::ClipProperties<'a> {
         let _ = value;
         None
     }

@@ -196,10 +196,10 @@ pub fn project<'a, 'data: 'a, P: Profile>(
         .ok_or_else(|| Error::new("geometry.mesh", "geometry is absent"))?;
     if source.attributes().iter().any(|attribute| {
         attribute.domain == AttributeDomain::Pool
-            || attribute.semantic == AttributeSemantic::SurfaceControls
+            || attribute.semantic == AttributeSemantic::TriangleProperties
     }) || source
         .geometry
-        .surface_triangles()
+        .triangle_properties()
         .is_some_and(|controls| !controls.is_empty())
         || source
             .geometry
@@ -255,11 +255,11 @@ pub fn project<'a, 'data: 'a, P: Profile>(
                     mesh: Mesh {
                         subsets: Default::default(),
                         name: source.name.clone(),
-                        controls: None,
+                        properties: None,
                         bounds: source.bounds,
                         geometry: GeometryParts {
                             strip_set: false,
-                            surface_triangles: PackedArray::new(),
+                            triangle_properties: PackedArray::new(),
                             pools: Default::default(),
                             kind: source.geometry.kind(),
                             positions: source.positions().as_borrowed(),
@@ -516,12 +516,12 @@ pub fn project<'a, 'data: 'a, P: Profile>(
             source_vertices,
             mesh: Mesh {
                 subsets: Default::default(),
-                controls: None,
+                properties: None,
                 name: source.name.clone(),
                 bounds: source.bounds,
                 geometry: GeometryParts {
                     strip_set: false,
-                    surface_triangles: PackedArray::new(),
+                    triangle_properties: PackedArray::new(),
                     pools: Default::default(),
                     kind: source.geometry.kind(),
                     positions,
@@ -793,7 +793,7 @@ fn project_attribute<'a, 'data: 'a>(
         AttributeValues::Vector4(source) => values!(source, Vector4),
         AttributeValues::Unsigned(source) => values!(source, Unsigned),
         AttributeValues::Signed(source) => values!(source, Signed),
-        AttributeValues::SurfaceControls(source) => values!(source, SurfaceControls),
+        AttributeValues::TriangleProperties(source) => values!(source, TriangleProperties),
     };
     Attribute {
         semantic: attribute.semantic.clone(),

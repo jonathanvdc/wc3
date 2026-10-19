@@ -48,7 +48,10 @@ fn model(textured: bool) -> (Model<'static>, NodeId, Option<Texture>) {
     let material = builder
         .add_material(Material {
             name: "paint".into(),
-            surface: MaterialSurface::from(MdlxMaterial { steps: vec![layer] }),
+            surface: MaterialSurface::from(MdlxMaterial {
+                declaration: Default::default(),
+                steps: vec![layer],
+            }),
         })
         .unwrap();
     let mut instance = MeshInstance::new(node, mesh);
@@ -141,11 +144,11 @@ fn application_defined_machine_configuration_compiles_without_native_character_m
     assert!(chassis
         .nodes()
         .iter()
-        .all(|(_, node)| node.controls.is_none()));
+        .all(|(_, node)| node.properties.is_none()));
     assert!(module
         .nodes()
         .iter()
-        .all(|(_, node)| node.controls.is_none()));
+        .all(|(_, node)| node.properties.is_none()));
     let models: Models<'_> = [(resource("chassis"), chassis), (resource("module"), module)].into();
     let selection = Configuration {
         chassis: Chassis::Tripod,

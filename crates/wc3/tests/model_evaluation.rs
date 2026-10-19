@@ -394,8 +394,8 @@ fn sampled_surfaces_freeze_animated_values_and_keep_native_state() {
 
 #[test]
 fn native_controls_are_not_an_evaluation_input() {
-    use wc3::model::controls::model::BoneControls;
-    use wc3::model::{Billboard, BillboardAxis, NodeControls, Quat};
+    use wc3::model::profiles::m2::BoneProperties;
+    use wc3::model::{Billboard, BillboardAxis, NodeProperties, Quat};
     let native = mdlx::decode_mdl(
         "Version { FormatVersion 800, } Model \"explicit\" {} Helper \"parent\" { ObjectId 0,  } Helper \"child\" { ObjectId 1, Parent 0, BillboardedLockX, DontInheritTranslation, DontInheritRotation, } PivotPoints 2 { { 1, 2, 3 }, { -1, 2, 1 }, }",
         &ImportOptions::default(),
@@ -439,13 +439,13 @@ fn native_controls_are_not_an_evaluation_input() {
         .nodes()
         .iter()
         .any(|node| node.billboard == Billboard::Axial(BillboardAxis::X)));
-    for controls in [None, Some(NodeControls::M2(BoneControls::default()))] {
+    for controls in [None, Some(NodeProperties::M2(BoneProperties::default()))] {
         let nodes: Vec<_> = model
             .nodes()
             .iter()
             .map(|(id, node)| {
                 let mut node = node.clone();
-                node.controls = controls.clone();
+                node.properties = controls.clone();
                 (id, node)
             })
             .collect();

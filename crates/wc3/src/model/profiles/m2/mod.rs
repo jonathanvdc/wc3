@@ -5,7 +5,6 @@ pub use crate::model::materials::m2::*;
 mod actors;
 pub use actors::*;
 mod particles;
-pub use crate::model::controls::model::*;
 pub use crate::model::systems::model_physics::*;
 /// Logical choices and behavior flags specific to this model family.
 /// Logical option domains selected from the shared vocabulary.
@@ -32,3 +31,5 @@ pub type Material<'a> = MaterialProgram<MaterialStep<'a>>;
 
 mod events;
 pub use events::EventSource;
+mod properties;
+pub use properties::*;

@@ -45,12 +45,8 @@ pub(super) fn validate<D: Dialect>(
     for camera in source.cameras() {
         check(&camera.name, context, "camera.name")?;
     }
-    for emitter in source.particle_emitters() {
-        check(&emitter.path, context, "particle.resource")?;
-    }
     if let Ok(emitters) = source.try_popcorn_emitters() {
         for emitter in emitters {
-            check(&emitter.path, context, "popcorn.resource")?;
             check(
                 &emitter.visibility_guide,
                 context,
@@ -58,13 +54,9 @@ pub(super) fn validate<D: Dialect>(
             )?;
         }
     }
-    for attachment in source.attachments() {
-        check(&attachment.path, context, "attachment.resource")?;
-    }
     if let Ok(faces) = source.try_face_fx() {
         for face in faces {
             check(&face.name, context, "face_effect.name")?;
-            check(&face.path, context, "face_effect.resource")?;
         }
     }
     Ok(())

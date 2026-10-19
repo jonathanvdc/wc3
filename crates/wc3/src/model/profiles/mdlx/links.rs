@@ -34,39 +34,14 @@ impl Node<'_> {
                 value.appearance.color.visit_links(visitor);
                 value.appearance.texture_slot.visit_links(visitor);
                 value.rendering.material.visit_links(visitor);
-                value.controls.visibility.visit_links(visitor);
+                value.behavior.visibility.visit_links(visitor);
             }
             Node::ParticleProgram(value) => {
                 value.resource.visit_links(visitor);
                 fields!(value; life_span,emission_rate,speed,color,opacity,visibility)
             }
-            Node::Light(value) => {
-                value.diffuse.color.visit_links(visitor);
-                value.diffuse.intensity.visit_links(visitor);
-                value.ambient.color.visit_links(visitor);
-                value.ambient.intensity.visit_links(visitor);
-                value.activation.visibility.visit_links(visitor);
-                for parameter in &value.attenuation {
-                    parameter.visit_links(visitor);
-                }
-                for parameters in [&value.activation.shadow_range].into_iter().flatten() {
-                    for parameter in parameters {
-                        parameter.visit_links(visitor);
-                    }
-                }
-                for parameters in [&value.activation.falloff].into_iter().flatten() {
-                    for parameter in parameters {
-                        parameter.visit_links(visitor);
-                    }
-                }
-            }
-            Node::Camera(value) => {
-                fields!(value; eye_offset,target_offset,roll);
-                value.convention.visibility.visit_links(visitor);
-                value.convention.focus_distance.visit_links(visitor);
-                value.convention.focal_length.visit_links(visitor);
-                value.convention.f_stop.visit_links(visitor)
-            }
+            Node::Light(value) => value.visit_links(visitor),
+            Node::Camera(value) => value.visit_links(visitor),
             Node::Attachment(value) => value.visit_links(visitor),
             Node::CollisionShape(_) => {}
 
@@ -77,7 +52,7 @@ impl Node<'_> {
     }
 }
 
-impl ValidateLinks for super::Sequence {
+impl ValidateLinks for super::SequenceProperties {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if !self.move_speed.is_finite() || !self.rarity.is_finite() {
             visitor(Link::InvalidValue);
@@ -85,7 +60,7 @@ impl ValidateLinks for super::Sequence {
         self.extent.visit_links(visitor);
     }
 }
-impl ValidateLinks for super::NodeControls {
+impl ValidateLinks for super::NodeProperties {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         if let Some(bone) = &self.bone {
             bone.mesh.visit_links(visitor);
@@ -105,7 +80,7 @@ impl ValidateLinks for super::NodeControls {
     }
 }
 
-impl ValidateLinks for super::Geometry {
+impl ValidateLinks for super::MeshProperties {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         for (clip, extent) in &self.sequence_bounds {
             clip.visit_links(visitor);

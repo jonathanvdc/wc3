@@ -1,7 +1,7 @@
 //! Native batch declarations are separated into mesh selections and instance behavior.
 use super::super::Error;
 use crate::model::profiles::{
-    wmo::{DrawControls, Lighting, Pass},
+    wmo::{DrawProperties, Lighting, Pass},
     Wmo,
 };
 use crate::model::{
@@ -90,7 +90,7 @@ pub(crate) fn bind_draw(
                     control: value.control,
                 });
             }
-            Ok::<_, Error>(DrawControls {
+            Ok::<_, Error>(DrawProperties {
                 pass: value.pass,
                 lighting: value.lighting,
                 bounds: value.bounds,

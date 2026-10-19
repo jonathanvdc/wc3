@@ -1,7 +1,7 @@
 //! Exact checked projections of complete owner payloads.
 use super::Profile;
-use crate::model::Error;
 use crate::model::PropertyValues;
+use crate::model::{Error, Model};
 mod m2;
 
 mod mdlx;
@@ -10,6 +10,26 @@ mod wmo;
 /// Implementations must preserve every accepted authored value and relationship.
 /// Returning an error is required when an exact projection is unavailable.
 pub trait Narrows<Source: Profile>: Profile {
+    /// Checks exactness constraints requiring the complete source graph.
+    fn validate_projection(source: &Model<'_, Source>) -> Result<(), Error> {
+        for feature in source.features().values() {
+            Self::validate_feature(source, &feature.payload)?;
+        }
+        Ok(())
+    }
+
+    /// Checks a feature's target constraints that depend on its owning graph.
+    ///
+    /// This is also used when policies inspect whether a selected feature can
+    /// be retained. Payload-only projection remains the responsibility of `feature`.
+    fn validate_feature<'a>(
+        source: &Model<'a, Source>,
+        feature: &Source::Feature<'a>,
+    ) -> Result<(), Error> {
+        let _ = (source, feature);
+        Ok(())
+    }
+
     /// Projects image dependency declarations exactly.
     fn image_resource<'a>(
         value: Source::ImageResource<'a>,
@@ -52,16 +72,18 @@ pub trait Narrows<Source: Profile>: Profile {
         value: Source::Feature<'a>,
         values: &PropertyValues,
     ) -> Result<Self::Feature<'a>, Error>;
-    /// Projects node controls without changing meaning.
-    fn node<'a>(value: Source::Node<'a>) -> Result<Self::Node<'a>, Error>;
-    /// Projects mesh controls without changing meaning.
-    fn mesh<'a>(value: Source::Mesh<'a>) -> Result<Self::Mesh<'a>, Error>;
-    /// Projects instance controls without changing meaning.
-    fn instance<'a>(value: Source::Instance<'a>) -> Result<Self::Instance<'a>, Error>;
+    /// Projects node properties without changing meaning.
+    fn node<'a>(value: Source::NodeProperties<'a>) -> Result<Self::NodeProperties<'a>, Error>;
+    /// Projects mesh properties without changing meaning.
+    fn mesh<'a>(value: Source::MeshProperties<'a>) -> Result<Self::MeshProperties<'a>, Error>;
+    /// Projects instance properties without changing meaning.
+    fn instance<'a>(
+        value: Source::InstanceProperties<'a>,
+    ) -> Result<Self::InstanceProperties<'a>, Error>;
     /// Projects draw-pass behavior without changing meaning.
-    fn draw(value: Source::Draw) -> Result<Self::Draw, Error>;
-    /// Projects clip controls without changing meaning.
-    fn clip<'a>(value: Source::Clip<'a>) -> Result<Self::Clip<'a>, Error>;
+    fn draw(value: Source::DrawProperties) -> Result<Self::DrawProperties, Error>;
+    /// Projects clip properties without changing meaning.
+    fn clip<'a>(value: Source::ClipProperties<'a>) -> Result<Self::ClipProperties<'a>, Error>;
 }
 impl<P: Profile> Narrows<P> for P {
     fn image_resource<'a>(value: P::ImageResource<'a>) -> Result<Self::ImageResource<'a>, Error> {
@@ -113,19 +135,21 @@ impl<P: Profile> Narrows<P> for P {
     ) -> Result<Self::Feature<'a>, Error> {
         Ok(value)
     }
-    fn node<'a>(value: P::Node<'a>) -> Result<Self::Node<'a>, Error> {
+    fn node<'a>(value: P::NodeProperties<'a>) -> Result<Self::NodeProperties<'a>, Error> {
         Ok(value)
     }
-    fn mesh<'a>(value: P::Mesh<'a>) -> Result<Self::Mesh<'a>, Error> {
+    fn mesh<'a>(value: P::MeshProperties<'a>) -> Result<Self::MeshProperties<'a>, Error> {
         Ok(value)
     }
-    fn instance<'a>(value: P::Instance<'a>) -> Result<Self::Instance<'a>, Error> {
+    fn instance<'a>(
+        value: P::InstanceProperties<'a>,
+    ) -> Result<Self::InstanceProperties<'a>, Error> {
         Ok(value)
     }
-    fn draw(value: P::Draw) -> Result<Self::Draw, Error> {
+    fn draw(value: P::DrawProperties) -> Result<Self::DrawProperties, Error> {
         Ok(value)
     }
-    fn clip<'a>(value: P::Clip<'a>) -> Result<Self::Clip<'a>, Error> {
+    fn clip<'a>(value: P::ClipProperties<'a>) -> Result<Self::ClipProperties<'a>, Error> {
         Ok(value)
     }
 }

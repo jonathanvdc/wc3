@@ -27,8 +27,11 @@ and `perspective_projection` interprets the lens. The live binding samples curre
 animation and overrides directly rather than reading last frame's rig. Ordinary
 application transform chains are composed before propagation.
 
-Native aimed cameras retain authored base positions and animated offsets, roll, and
-lens values. Portable cameras retain their semantic conventions. Degenerate up
+Look-at cameras retain authored base positions, animated offsets, roll, and
+lens values. Field-of-view axis, role, visibility, and optical parameters remain
+independent in the semantic definition. Node cameras follow their carrying node
+and may supply an explicit target. Both own the same `PerspectiveProjection`;
+sampling converts its angle to vertical field of view using the current aspect ratio. Degenerate up
 directions have deterministic orthogonal fallbacks. Nonfinite views, invalid lens
 ranges, nonperspective projections, missing roots, and unsupported parents retain
 the previous view instead of writing invalid transforms.

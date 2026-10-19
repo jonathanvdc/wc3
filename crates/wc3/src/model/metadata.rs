@@ -1,5 +1,5 @@
 //! Profile-owned model declarations and universal coordinate interpretation.
-use super::controls::{layered, model};
+use super::profiles::{m2, mdlx};
 use super::profiles::{Mdlx, Universal, Wmo, M2};
 use super::{Basis, Bounds, LengthUnit, Model, ModelMetadata};
 use std::borrow::Cow;
@@ -26,8 +26,8 @@ macro_rules! named_metadata {
         }
     };
 }
-named_metadata!(layered);
-named_metadata!(model);
+named_metadata!(mdlx);
+named_metadata!(m2);
 
 // Accessors are implemented only for the built-in spatial profiles, rather than
 // imposing metadata capabilities on application-defined profiles.

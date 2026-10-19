@@ -49,13 +49,13 @@ fn native_empty_extents_remain_distinct_from_finite_point_bounds_and_roundtrip()
         .unwrap()
         .value;
     assert_eq!(
-        model.clips().iter().next().unwrap().1.controls.extent,
+        model.clips().iter().next().unwrap().1.properties.extent,
         Extent::Empty
     );
     let mesh = model.meshes().iter().next().unwrap().1;
-    assert_eq!(mesh.controls.sequence_bounds[0].1, Extent::Empty);
+    assert_eq!(mesh.properties.sequence_bounds[0].1, Extent::Empty);
     assert_eq!(
-        mesh.controls.unassigned_bounds,
+        mesh.properties.unassigned_bounds,
         vec![
             Extent::Bounds(Bounds {
                 minimum: Vec3::from_array([-2.; 3]),
@@ -80,7 +80,14 @@ fn native_empty_extents_remain_distinct_from_finite_point_bounds_and_roundtrip()
         .unwrap()
         .value;
     assert_eq!(
-        point_model.clips().iter().next().unwrap().1.controls.extent,
+        point_model
+            .clips()
+            .iter()
+            .next()
+            .unwrap()
+            .1
+            .properties
+            .extent,
         Extent::Bounds(Bounds::default())
     );
 }

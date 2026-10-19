@@ -1,17 +1,17 @@
 //! Built-in M2 authoring vocabulary and its lossless embeddings.
 use crate::model::profiles::Unavailable;
-use crate::model::profiles::{m2, Extends, NoControls, Profile, Universal};
+use crate::model::profiles::{m2, Extends, NoProperties, Profile, Universal};
 use crate::model::resources::{M2ImageResource, PathResource};
-use crate::model::Link;
 use crate::model::M2ResourceLocator;
 use crate::model::PropertyValues;
 use crate::model::{
-    ClipControls, DrawControls, DrawLooks, Error, FeatureKind, IdentityBinding, M2Geometry,
-    MaterialSurface, MeshControls, Model, ModelMetadata, NodeControls, System, UniversalAppearance,
-    UniversalBinding,
+    ClipProperties, DrawLooks, DrawProperties, Error, FeatureKind, IdentityBinding, M2Geometry,
+    MaterialSurface, MeshProperties, Model, ModelMetadata, NodeProperties, System,
+    UniversalAppearance, UniversalBinding,
 };
 use crate::model::{EventSource, TimeSource};
 use crate::model::{FeatureSet, FeatureView, FeatureVocabulary};
+use crate::model::{LightShadows, Link};
 /// Vocabulary that maps mechanically to M2 logical features.
 #[derive(Clone, Debug, Default)]
 pub struct M2;
@@ -25,22 +25,41 @@ impl Profile for M2 {
     type Appearance<'a> = DrawLooks<'a>;
     type Binding<'a> = IdentityBinding;
     type Geometry<'a> = M2Geometry<'a>;
-    type Draw = Option<m2::DrawControls>;
+    type DrawProperties = Option<m2::DrawProperties>;
     type ModelMetadata<'a> = m2::ModelMetadata<'a>;
     type EventSource<'a> = m2::EventSource;
     type System<'a> = m2::System<'a>;
     type Surface<'a> = m2::Material<'a>;
     type Feature<'a> = m2::ActorKind<'a>;
-    type Node<'a> = Option<m2::BoneControls>;
-    type Mesh<'a> = Option<m2::GeometryControls>;
-    type Instance<'a> = NoControls;
-    type Clip<'a> = m2::SequenceControls;
+    type NodeProperties<'a> = Option<m2::BoneProperties>;
+    type MeshProperties<'a> = Option<m2::MeshProperties>;
+    type InstanceProperties<'a> = NoProperties;
+    type ClipProperties<'a> = m2::SequenceProperties;
 
     fn validate_resources(model: &Model<'_, Self>) -> Result<(), Error> {
         super::texture::resources(model)
     }
     fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
         model.validate_animation_consumers()?;
+        for (_, feature) in model.features() {
+            match &feature.payload {
+                m2::ActorKind::Camera(camera) if !camera.is_m2() => {
+                    return Err(Error::new(
+                        "m2.camera.projection",
+                        "M2 cameras require diagonal field of view and a role, without visibility or lens parameters",
+                    ));
+                }
+                m2::ActorKind::Light(light)
+                    if light.shadows != LightShadows::default() || light.falloff.is_some() =>
+                {
+                    return Err(Error::new(
+                        "m2.light",
+                        "M2 lights have no independent shadow or falloff parameters",
+                    ));
+                }
+                _ => {}
+            }
+        }
         if model.global_events().any(|event| {
             model
                 .event_source(event.source)
@@ -63,7 +82,7 @@ impl Profile for M2 {
         }
 
         for (_, clip) in model.clips() {
-            if let Some(alias) = clip.controls.alias {
+            if let Some(alias) = clip.properties.alias {
                 let target = model.clip(alias).expect("validated alias reference");
                 if clip.animations != target.animations {
                     return Err(Error::new(
@@ -80,7 +99,7 @@ impl Profile for M2 {
             ));
         }
 
-        let declared = |id| model.node(id).is_some_and(|node| node.controls.is_some());
+        let declared = |id| model.node(id).is_some_and(|node| node.properties.is_some());
         if model
             .metadata()
             .key_bone_lookup
@@ -104,7 +123,7 @@ impl Profile for M2 {
             ));
         }
         if model.meshes().iter().any(|(_, mesh)| {
-            mesh.controls
+            mesh.properties
                 .as_ref()
                 .and_then(|controls| controls.center_bone)
                 .is_some_and(|id| !declared(id))
@@ -152,8 +171,8 @@ impl Extends<M2> for Universal {
     fn geometry<'a>(value: <M2 as Profile>::Geometry<'a>) -> Self::Geometry<'a> {
         value.into()
     }
-    fn draw(value: <M2 as Profile>::Draw) -> Self::Draw {
-        value.map(DrawControls::M2)
+    fn draw(value: <M2 as Profile>::DrawProperties) -> Self::DrawProperties {
+        value.map(DrawProperties::M2)
     }
     fn model_metadata<'a>(value: <M2 as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
         ModelMetadata::M2(value)
@@ -173,18 +192,20 @@ impl Extends<M2> for Universal {
     ) -> Self::Feature<'a> {
         crate::model::features::FromFeature::from_feature(value, values)
     }
-    fn node<'a>(value: <M2 as Profile>::Node<'a>) -> Self::Node<'a> {
-        value.map(NodeControls::M2)
+    fn node<'a>(value: <M2 as Profile>::NodeProperties<'a>) -> Self::NodeProperties<'a> {
+        value.map(NodeProperties::M2)
     }
-    fn mesh<'a>(value: <M2 as Profile>::Mesh<'a>) -> Self::Mesh<'a> {
-        value.map(MeshControls::M2)
+    fn mesh<'a>(value: <M2 as Profile>::MeshProperties<'a>) -> Self::MeshProperties<'a> {
+        value.map(MeshProperties::M2)
     }
-    fn instance<'a>(value: <M2 as Profile>::Instance<'a>) -> Self::Instance<'a> {
+    fn instance<'a>(
+        value: <M2 as Profile>::InstanceProperties<'a>,
+    ) -> Self::InstanceProperties<'a> {
         let _ = value;
         None
     }
-    fn clip<'a>(value: <M2 as Profile>::Clip<'a>) -> Self::Clip<'a> {
-        Some(ClipControls::M2(value))
+    fn clip<'a>(value: <M2 as Profile>::ClipProperties<'a>) -> Self::ClipProperties<'a> {
+        Some(ClipProperties::M2(value))
     }
 }
 
@@ -219,7 +240,7 @@ mod tests {
 
     use super::*;
     use crate::model::Skin;
-    use m2::{BoneControls, ModelMetadata};
+    use m2::{BoneProperties, ModelMetadata};
 
     #[test]
     fn native_joint_palettes_require_declared_bone_nodes() {
@@ -230,7 +251,7 @@ mod tests {
         let mut valid = Model::<M2>::builder("palette");
         let definition = valid
             .new_node("bone")
-            .with_controls(BoneControls::default());
+            .with_properties(BoneProperties::default());
         let bone = valid.add_node(definition).unwrap();
         valid.add_skin(Skin::identity(vec![bone])).unwrap();
         valid.finish().unwrap();

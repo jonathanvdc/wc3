@@ -12,7 +12,7 @@ use wc3::model::{
 
 fn material(builder: &mut ModelBuilder<'static>, name: &str) -> MaterialId {
     let slot_values = builder.values_mut();
-    let surface = MaterialSurface::from(MdlxMaterial {
+    let surface = MaterialSurface::from(MdlxMaterial { declaration: Default::default(),
         steps: vec![MdlxStep::construct(slot_values)],
     });
     builder
@@ -22,12 +22,12 @@ fn material(builder: &mut ModelBuilder<'static>, name: &str) -> MaterialId {
         })
         .unwrap()
 }
-fn instance(builder: &mut ModelBuilder<'static>, controls: Option<MeshControls>) -> InstanceId {
+fn instance(builder: &mut ModelBuilder<'static>, controls: Option<MeshProperties>) -> InstanceId {
     let node = builder.add_named_node("whole geometry").unwrap();
     let mesh = builder
         .add_mesh(
             ModelMesh::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]])
-                .with_controls(controls),
+                .with_properties(controls),
         )
         .unwrap();
     builder.add_instance(MeshInstance::new(node, mesh)).unwrap()
@@ -51,8 +51,9 @@ fn world_draw_materials_separate_lighting_classes_and_preserve_source_colors() {
     let mut slot_values = SlotValues::default();
     use crate::material::native_fixtures::wmo::Material as WmoMaterial;
     use bevy::mesh::VertexAttributeValues;
-    use wc3::model::controls::world::ModelMetadata as WorldMetadata;
-    use wc3::model::controls::{world::RegionControls, world_draw, DrawControls, InstanceControls};
+    use wc3::model::profiles::wmo::ModelMetadata as WorldMetadata;
+    use wc3::model::properties::{DrawProperties, InstanceProperties};
+    use wc3::model::profiles::wmo::{draw as world_draw, Region};
     use wc3::model::scene::world::WorldOptions;
     use wc3::model::{Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw};
 
@@ -88,7 +89,7 @@ fn world_draw_materials_separate_lighting_classes_and_preserve_source_colors() {
         })
         .unwrap();
     let mut instance = MeshInstance::new(node, mesh);
-    instance.controls = Some(InstanceControls::Wmo(Box::new(RegionControls::default())));
+    instance.properties = Some(InstanceProperties::Wmo(Box::new(Region::default())));
     for lighting in [
         world_draw::Lighting::Interior,
         world_draw::Lighting::Exterior,
@@ -96,7 +97,7 @@ fn world_draw_materials_separate_lighting_classes_and_preserve_source_colors() {
     ] {
         instance.draws.push(Draw::new(
             subset,
-            Some(DrawControls::Wmo(world_draw::DrawControls {
+            Some(DrawProperties::Wmo(world_draw::DrawProperties {
                 lighting,
                 ..SlotConstruct::construct(&mut slot_values)
             })),
@@ -215,7 +216,7 @@ fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
         let material = builder
             .add_material(SemanticMaterial {
                 name: "two passes".into(),
-                surface: MaterialSurface::from(MdlxMaterial {
+                surface: MaterialSurface::from(MdlxMaterial { declaration: Default::default(),
                     steps: vec![
                         MdlxStep::construct(&mut slot_values),
                         MdlxStep::construct(&mut slot_values),
@@ -305,7 +306,8 @@ fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
 fn a_pass_stack_keeps_world_lighting_local_to_each_pass() {
     let mut slot_values = SlotValues::default();
     use crate::material::native_fixtures::wmo::Material as WmoMaterial;
-    use wc3::model::controls::{world_draw, DrawControls};
+    use wc3::model::properties::DrawProperties;
+    use wc3::model::profiles::wmo::draw as world_draw;
     use wc3::model::materials::program::{MaterialStep, MaterialSurface};
     use wc3::model::Draw;
 
@@ -323,7 +325,7 @@ fn a_pass_stack_keeps_world_lighting_local_to_each_pass() {
     let material = builder
         .add_material(SemanticMaterial {
             name: "two lighting programmes".into(),
-            surface: MaterialSurface {
+            surface: MaterialSurface { declaration: Default::default(),
                 steps: vec![
                     MaterialStep::Wmo(Box::new(interior.into())),
                     MaterialStep::Wmo(Box::new(exterior.into())),
@@ -335,7 +337,7 @@ fn a_pass_stack_keeps_world_lighting_local_to_each_pass() {
     let mut instance = MeshInstance::new(node, mesh);
     instance.draws.push(Draw::new(
         subset,
-        Some(DrawControls::Wmo(world_draw::DrawControls {
+        Some(DrawProperties::Wmo(world_draw::DrawProperties {
             lighting: world_draw::Lighting::Interior,
             ..SlotConstruct::construct(&mut slot_values)
         })),
@@ -369,7 +371,7 @@ fn draw_selection_resolves_images_referenced_by_texture_slots_and_curves() {
     let layer = MdlxStep::construct(builder.values_mut());
     let image = layer.shader.inputs().binding.image;
     builder.values_mut().set(image, Some(first)).unwrap();
-    let surface = MaterialSurface::from(MdlxMaterial { steps: vec![layer] });
+    let surface = MaterialSurface::from(MdlxMaterial { declaration: Default::default(),  steps: vec![layer] });
     let material = builder
         .add_material(SemanticMaterial {
             name: "animated texture".into(),

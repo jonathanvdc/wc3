@@ -56,7 +56,15 @@ fn compile_material(
         let images = &scoped;
         let resolved_images = images.as_ref();
         let mut compiled = match step {
-            MaterialStep::Mdlx(layer) => vec![compile_mdlx(model, layer, images)?],
+            MaterialStep::Mdlx(layer) => vec![compile_mdlx(
+                model,
+                layer,
+                stack
+                    .declaration
+                    .as_ref()
+                    .unwrap_or(&mdlx::MaterialDeclaration::default()),
+                images,
+            )?],
             MaterialStep::M2(surface) => {
                 vec![compile_m2(model, surface, resolved_images)?]
             }
@@ -196,7 +204,8 @@ pub(super) fn transform(
 
 fn compile_mdlx(
     model: &Model<'_, Universal>,
-    surface: &mdlx::MaterialStep<'_>,
+    surface: &mdlx::MaterialStep,
+    declaration: &mdlx::MaterialDeclaration<'_>,
     images: &Arc<TextureImages>,
 ) -> Result<SurfacePass, ModelError> {
     let mut pass = SurfacePass::default();
@@ -209,7 +218,6 @@ fn compile_mdlx(
         mdlx::Shader::ReforgedDefault(inputs) => Some(inputs),
         _ => None,
     };
-    let declaration = &surface.declaration;
     pass.sort_near = declaration.sort_near_z;
     pass.sort_far = declaration.sort_far_z;
     blend(&state.blend, &mut pass);
@@ -298,10 +306,10 @@ fn compile_mdlx(
         pass.animation.texture = None;
         pass.animation.hd = Some(hd);
         pass.diagnostics.push("DefaultUnit Fresnel and authored environment reflection use the renderer's PBR approximation; game fidelity remains unverified".into());
-    } else if let mdlx::Shader::Unresolved(step) = &surface.shader {
+    } else if let mdlx::Shader::Unresolved(_) = &surface.shader {
         pass.diagnostics.push(format!(
             "extended layered shader {:?} needs its authored texture-slot and Fresnel interpreter",
-            step.shader_name
+            declaration.shader_name
         ));
     }
     if declaration.constant_color || declaration.sort_near_z || declaration.sort_far_z {

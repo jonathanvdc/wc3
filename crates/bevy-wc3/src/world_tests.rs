@@ -5,7 +5,7 @@ use bevy::mesh::VertexAttributeValues;
 use wc3::model::common::PackedArray;
 use wc3::model::profiles::Universal;
 use wc3::model::ModelMetadata;
-use wc3::model::{controls::world::WorldSystem, ModelBuilder};
+use wc3::model::{profiles::wmo::WorldSystem, ModelBuilder};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 fn system_id() -> SystemId {
     ModelBuilder::<Universal>::new(ModelMetadata::Wmo(Default::default()))
@@ -130,7 +130,7 @@ fn compiled_world_spawns_liquid_hooks_and_selection_gates() {
     use super::super::{compile_model, spawn_model, ModelMaterial, PoseBaker, PoseOptions};
     use bevy::ecs::world::CommandQueue;
     use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-    use wc3::model::controls::world::{Group, RegionControls};
+    use wc3::model::profiles::wmo::{Group, Region};
     use wc3::model::{GeometryData, Mesh as ModelMesh, MeshInstance};
 
     let mut builder = ModelBuilder::<Universal>::new(ModelMetadata::Wmo(Default::default()));
@@ -146,7 +146,7 @@ fn compiled_world_spawns_liquid_hooks_and_selection_gates() {
     let mesh = builder.add_mesh(ModelMesh::new(geometry)).unwrap();
     let mut placement = MeshInstance::new(node, mesh);
     placement.lod = Some(2);
-    placement.controls = Some(InstanceControls::Wmo(Box::new(RegionControls {
+    placement.properties = Some(InstanceProperties::Wmo(Box::new(Region {
         liquids: vec![Liquid {
             dimensions: [2, 2],
             vertices: [0.; 4]

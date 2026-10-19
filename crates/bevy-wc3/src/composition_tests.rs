@@ -85,6 +85,7 @@ fn model(rest: f32) -> (Model<'static>, NodeId, ClipId) {
         .add_material(Material {
             name: "plain".into(),
             surface: MaterialSurface::from(MdlxMaterial {
+                declaration: Default::default(),
                 steps: vec![MdlxStep {
                     shader: Shader::Classic(MaterialInputs {
                         opacity: slot_values.add(1.),

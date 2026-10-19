@@ -356,13 +356,15 @@ fn quantization_requires_an_explicit_tolerance() {
     let mut slot_values = SlotValues::default();
     let mut builder = sm::Model::<sm::profiles::M2>::builder("quantized");
     let node = {
-        let definition = builder.new_node("bone").with_controls(mp::BoneControls {
-            key_bone: -1,
-            flags: mp::values::BoneBehaviorFlags::default(),
-            billboard_flags: Default::default(),
-            submesh: 0,
-            name_crc: 0,
-        });
+        let definition = builder
+            .new_node("bone")
+            .with_properties(mp::BoneProperties {
+                key_bone: -1,
+                flags: mp::values::BoneBehaviorFlags::default(),
+                billboard_flags: Default::default(),
+                submesh: 0,
+                name_crc: 0,
+            });
         builder.add_node(definition)
     }
     .unwrap();
@@ -857,7 +859,7 @@ fn static_node_transforms_become_constant_native_curves() {
     let id = asset
         .nodes()
         .iter()
-        .find(|(_, node)| node.controls.is_some())
+        .find(|(_, node)| node.properties.is_some())
         .unwrap()
         .0;
     let node = asset.node(id).unwrap().clone();
@@ -1114,7 +1116,7 @@ fn native_alias_keeps_light_programme_on_its_referenced_clip() {
     let model = &imported.value;
     let clips = model.clips().iter().collect::<Vec<_>>();
     assert_eq!(clips.len(), 2);
-    assert_eq!(clips[1].1.controls.alias, Some(clips[0].0));
+    assert_eq!(clips[1].1.properties.alias, Some(clips[0].0));
     assert_eq!(clips[1].1.animations, clips[0].1.animations);
     assert!(model.clip_tracks(clips[0].0).next().is_some());
     let program = sm::AnimationProgram::compile(model);
@@ -1475,7 +1477,7 @@ fn batch_layers_become_ordered_steps_with_independent_animation() {
     assert_eq!(instance.selection_group, 17);
     assert_eq!(
         instance.draws[0]
-            .controls
+            .properties
             .as_ref()
             .unwrap()
             .auxiliary_section,
@@ -1672,13 +1674,15 @@ fn export_interns_equivalent_images_with_independent_resource_declarations() {
 #[test]
 fn offset_animation_interval_exports_as_native_local_keys() {
     let mut builder = sm::Model::<sm::profiles::M2>::builder("offset source");
-    let definition = builder.new_node("bone").with_controls(mp::BoneControls {
-        key_bone: -1,
-        flags: mp::values::BoneBehaviorFlags::default(),
-        billboard_flags: Default::default(),
-        submesh: 0,
-        name_crc: 0,
-    });
+    let definition = builder
+        .new_node("bone")
+        .with_properties(mp::BoneProperties {
+            key_bone: -1,
+            flags: mp::values::BoneBehaviorFlags::default(),
+            billboard_flags: Default::default(),
+            submesh: 0,
+            name_crc: 0,
+        });
     let property = definition.transform.translation;
     builder.add_node(definition).unwrap();
     let time = |seconds| sm::Time::seconds(seconds).unwrap();
@@ -2069,7 +2073,7 @@ fn animation_categories_preserve_named_and_unknown_ids_through_conversion() {
             });
         let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
         let (_, clip) = imported.value.clips().iter().next().unwrap();
-        assert_eq!(clip.controls.animation_id, category);
+        assert_eq!(clip.properties.animation_id, category);
         let exported =
             io::m2::plan::<m2::Flat<m2::V256>>(&imported.value, &ExportOptions::default())
                 .unwrap()

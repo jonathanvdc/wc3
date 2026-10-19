@@ -17,8 +17,8 @@ pub struct TrailComposition<R, S, A, B, C> {
     pub appearance: TrailAppearance<S, A>,
     /// Material and texture bindings.
     pub rendering: B,
-    /// Independent physical and activation controls.
-    pub controls: C,
+    /// Family-specific activation, motion, and effect identity.
+    pub behavior: C,
 }
 /// Animated upper and lower extent of a generated trail.
 #[derive(Clone, Debug, PartialEq)]
@@ -65,24 +65,6 @@ pub struct M2RibbonRendering {
     pub textures: Vec<Texture>,
     /// Ordered surfaces.
     pub materials: Vec<MaterialId>,
-}
-/// Gravitational acceleration and fractional visibility.
-#[derive(Clone, Debug, Construct, PartialEq)]
-pub struct MdlxRibbonControls {
-    /// Gravity acceleration.
-    pub gravity: f32,
-    /// Visibility multiplier.
-    pub visibility: Property<f32>,
-}
-/// Emission direction, discrete activation, and texture controls.
-#[derive(Clone, Debug)]
-pub struct M2RibbonControls {
-    /// Emission angle, independently of acceleration.
-    pub angle: f32,
-    /// Runtime effect identifier.
-    pub id: u32,
-    /// Discrete activation.
-    pub enabled: Property<bool>,
     /// Signed pass-order plane.
     pub priority_plane: i16,
     /// External color-table selection.
@@ -90,12 +72,30 @@ pub struct M2RibbonControls {
     /// Optional texture-coordinate transform.
     pub texture_transform: Option<m2::TextureTransform>,
 }
+/// Gravitational acceleration and fractional visibility.
+#[derive(Clone, Debug, Construct, PartialEq)]
+pub struct MdlxRibbonBehavior {
+    /// Gravity acceleration.
+    pub gravity: f32,
+    /// Visibility multiplier.
+    pub visibility: Property<f32>,
+}
+/// Emission direction, discrete activation, and effect identity.
+#[derive(Clone, Debug)]
+pub struct M2RibbonBehavior {
+    /// Emission angle, independently of acceleration.
+    pub angle: f32,
+    /// Runtime effect identifier.
+    pub id: u32,
+    /// Discrete activation.
+    pub enabled: Property<bool>,
+}
 /// Trail composition with integral section generation and fractional visibility.
 pub type MdlxRibbonEmitter =
-    TrailComposition<u32, Property<u32>, u32, MdlxRibbonRendering, MdlxRibbonControls>;
+    TrailComposition<u32, Property<u32>, u32, MdlxRibbonRendering, MdlxRibbonBehavior>;
 /// Trail composition with fractional edge generation and discrete activation.
 pub type M2RibbonEmitter =
-    TrailComposition<f32, Property<u16>, u16, M2RibbonRendering, M2RibbonControls>;
+    TrailComposition<f32, Property<u16>, u16, M2RibbonRendering, M2RibbonBehavior>;
 
 use crate::model::{Link, ValidateLinks};
 
@@ -129,7 +129,7 @@ impl<R: TrailRate, S: ValidateLinks, A, B: ValidateLinks, C: ValidateLinks> Vali
         self.appearance.opacity.visit_links(visitor);
         self.appearance.texture_slot.visit_links(visitor);
         self.rendering.visit_links(visitor);
-        self.controls.visit_links(visitor);
+        self.behavior.visit_links(visitor);
         if !self.emission_rate.valid_rate() || !self.lifetime.is_finite() {
             visitor(Link::InvalidValue);
         }
@@ -144,18 +144,18 @@ impl ValidateLinks for M2RibbonRendering {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.textures.visit_links(visitor);
         self.materials.visit_links(visitor);
+        self.texture_transform.visit_links(visitor);
     }
 }
-impl ValidateLinks for MdlxRibbonControls {
+impl ValidateLinks for MdlxRibbonBehavior {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.gravity.visit_links(visitor);
         self.visibility.visit_links(visitor);
     }
 }
-impl ValidateLinks for M2RibbonControls {
+impl ValidateLinks for M2RibbonBehavior {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.angle.visit_links(visitor);
         self.enabled.visit_links(visitor);
-        self.texture_transform.visit_links(visitor);
     }
 }

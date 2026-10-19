@@ -189,7 +189,7 @@ impl<'data> From<M2Geometry<'data>> for GeometryData<'data> {
         } = value.streams;
         GeometryParts {
             strip_set: false,
-            surface_triangles: PackedArray::default(),
+            triangle_properties: PackedArray::default(),
             pools: Default::default(),
             kind: GeometryKind::Display,
             positions: vertices.positions,

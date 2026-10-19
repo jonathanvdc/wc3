@@ -150,6 +150,7 @@ fn native_profiles_use_the_same_shader_specific_steps_as_universal() {
     use wc3::model::Material;
     let mut draft = Model::<M2>::builder("typed M2");
     let program = MaterialProgram {
+        declaration: Default::default(),
         steps: vec![
             m2::MaterialStep::MaskedDualCrossfade(Box::new(SlotConstruct::construct(
                 &mut slot_values,

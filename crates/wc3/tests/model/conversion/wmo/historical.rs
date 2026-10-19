@@ -263,7 +263,7 @@ fn historical_multiple_placements_relocate_lighting_windows() {
             placement.draws = placement
                 .draws
                 .iter()
-                .map(|draw| Draw::new(draw.subset, draw.controls.clone()))
+                .map(|draw| Draw::new(draw.subset, draw.properties.clone()))
                 .collect();
             let second = builder.add_instance_with_materials(placement, materials)?;
             world.groups[0].instances.push(second);

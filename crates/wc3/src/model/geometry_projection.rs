@@ -634,7 +634,7 @@ impl ProjectedGeometry {
             Ok(Some(AttributeValues::$variant(output.into_iter().collect())))
         },)* } }; }
         gather!(
-            SurfaceControls,
+            TriangleProperties,
             Boolean,
             Byte3,
             Byte4,

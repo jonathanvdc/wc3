@@ -53,7 +53,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     result.set_global_sequences(&periods);
     let mut sequences = Vec::new();
     for (_, clip) in model.clips() {
-        let metadata = &clip.controls;
+        let metadata = &clip.properties;
         let start = clip.source_start.as_seconds();
         let first = unsigned_frame(start, &mut context, "clip.start")?;
         let last = unsigned_frame(
@@ -180,7 +180,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
         }
         let flags = billboard::encode(
             source.billboard,
-            source.controls.billboard_flags,
+            source.properties.billboard_flags,
             encoder.context,
         )?;
         node.flags.set_billboarded(flags.enabled);

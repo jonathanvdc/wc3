@@ -188,19 +188,19 @@ impl<'a, P: Profile> Model<'a, P> {
         self.metadata.visit_links(&mut visit);
         self.appearance.visit_links(&mut visit);
         for node in self.nodes.values() {
-            node.controls.visit_links(&mut visit);
+            node.properties.visit_links(&mut visit);
         }
         for skin in self.skins.values() {
             skin.binding.visit_links(&mut visit);
         }
         for mesh in self.meshes.values() {
-            mesh.controls.visit_links(&mut visit);
+            mesh.properties.visit_links(&mut visit);
             mesh.geometry.visit_links(&mut visit);
         }
         for instance in self.instances.values() {
-            instance.controls.visit_links(&mut visit);
+            instance.properties.visit_links(&mut visit);
             for draw in &instance.draws {
-                draw.controls.visit_links(&mut visit);
+                draw.properties.visit_links(&mut visit);
             }
         }
         for system in self.systems.values() {
@@ -211,7 +211,7 @@ impl<'a, P: Profile> Model<'a, P> {
             track.visit_links(&mut visit);
         }
         for clip in self.clips.values() {
-            clip.controls.visit_links(&mut visit);
+            clip.properties.visit_links(&mut visit);
         }
         images
     }
@@ -253,8 +253,8 @@ impl<'a, P: Profile> Model<'a, P> {
         self.systems.get(id)
     }
     /// Owner-local playback behavior of a clip belonging to this graph.
-    pub fn clip_controls(&self, id: ClipId) -> Option<&P::Clip<'a>> {
-        Some(&self.clip(id)?.controls)
+    pub fn clip_properties(&self, id: ClipId) -> Option<&P::ClipProperties<'a>> {
+        Some(&self.clip(id)?.properties)
     }
     /// Attached behavior definitions in stable identity order.
     pub fn features(&self) -> &Table<FeatureObject, AttachedFeature<'a, P>> {

@@ -1,6 +1,6 @@
 use wc3::model::profiles::{m2, mdlx};
 use wc3::model::{
-    Construct, M2RibbonControls, M2RibbonRendering, MdlxRibbonControls, PropertyValues,
+    Construct, M2RibbonBehavior, M2RibbonRendering, MdlxRibbonBehavior, PropertyValues,
     RibbonEmitter, TrailAppearance,
 };
 
@@ -13,7 +13,7 @@ fn mdlx_ribbon_preserves_wide_integer_rate_and_property_identity() {
             texture_slot: values.add(70_000),
             ..Construct::construct(&mut values)
         },
-        controls: MdlxRibbonControls {
+        behavior: MdlxRibbonBehavior {
             gravity: 9.8,
             ..Construct::construct(&mut values)
         },
@@ -35,15 +35,15 @@ fn m2_ribbon_preserves_fractional_rate_angle_and_typed_atlas_slot() {
     let mut values = PropertyValues::default();
     let source = m2::RibbonEmitter {
         emission_rate: 0.5,
-        controls: M2RibbonControls {
+        behavior: M2RibbonBehavior {
             angle: 1.25,
             id: 9,
             enabled: values.add(true),
+        },
+        rendering: M2RibbonRendering {
             priority_plane: -2,
             color_index: 3,
             texture_transform: None,
-        },
-        rendering: M2RibbonRendering {
             textures: vec![],
             materials: vec![],
         },
@@ -60,6 +60,9 @@ fn m2_ribbon_preserves_fractional_rate_angle_and_typed_atlas_slot() {
     let restored = m2::RibbonEmitter::try_from(*rejected).unwrap();
     assert_eq!(format!("{restored:?}"), before);
     assert_eq!(restored.emission_rate, 0.5);
-    assert_eq!(restored.controls.angle, 1.25);
+    assert_eq!(restored.behavior.angle, 1.25);
+    assert_eq!(restored.behavior.id, 9);
+    assert_eq!(restored.rendering.priority_plane, -2);
+    assert_eq!(restored.rendering.color_index, 3);
     assert_eq!(values[restored.appearance.texture_slot], 7);
 }

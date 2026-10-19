@@ -1,7 +1,7 @@
 //! Private lowering of native ribbons into the shared ribbon transport.
 use wc3::model::profiles::{m2, mdlx};
 use wc3::model::{
-    M2RibbonControls, M2RibbonRendering, MdlxRibbonControls, MdlxRibbonRendering, Property,
+    M2RibbonBehavior, M2RibbonRendering, MdlxRibbonBehavior, MdlxRibbonRendering, Property,
     TrailAppearance, TrailGeometry,
 };
 /// Prepared fields shared by the MDLX and M2 ribbon transport.
@@ -12,7 +12,7 @@ pub(super) struct TrailEmitter {
     pub geometry: TrailGeometry,
     pub appearance: TrailAppearance<TrailAtlasSlot>,
     pub rendering: TrailRendering,
-    pub controls: TrailControls,
+    pub behavior: TrailBehavior,
 }
 /// Typed atlas selectors retain animation identity and value domain.
 #[derive(Clone, Debug)]
@@ -30,17 +30,17 @@ pub(super) enum TrailRendering {
     /// Ordered texture and shader-surface bindings.
     Surfaces(M2RibbonRendering),
 }
-/// Physical and application controls with explicit meanings.
+/// Family-specific motion, activation, and effect identity.
 #[derive(Clone, Debug)]
 #[allow(
     clippy::large_enum_variant,
-    reason = "Prepared controls are cloned once per compiled emitter."
+    reason = "Prepared behavior is cloned once per compiled emitter."
 )]
-pub(super) enum TrailControls {
+pub(super) enum TrailBehavior {
     /// Gravitational acceleration and fractional visibility.
-    Gravity(MdlxRibbonControls),
-    /// Emission direction and discrete activation with texture controls.
-    EmissionAngle(M2RibbonControls),
+    Gravity(MdlxRibbonBehavior),
+    /// Emission direction, discrete activation, and effect identity.
+    EmissionAngle(M2RibbonBehavior),
 }
 impl From<mdlx::RibbonEmitter> for TrailEmitter {
     fn from(v: mdlx::RibbonEmitter) -> Self {
@@ -55,7 +55,7 @@ impl From<mdlx::RibbonEmitter> for TrailEmitter {
                 texture_slot: TrailAtlasSlot::Wide(v.appearance.texture_slot),
             },
             rendering: TrailRendering::Layered(v.rendering),
-            controls: TrailControls::Gravity(v.controls),
+            behavior: TrailBehavior::Gravity(v.behavior),
         }
     }
 }
@@ -72,7 +72,7 @@ impl From<m2::RibbonEmitter> for TrailEmitter {
                 texture_slot: TrailAtlasSlot::Compact(v.appearance.texture_slot),
             },
             rendering: TrailRendering::Surfaces(v.rendering),
-            controls: TrailControls::EmissionAngle(v.controls),
+            behavior: TrailBehavior::EmissionAngle(v.behavior),
         }
     }
 }

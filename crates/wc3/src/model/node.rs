@@ -24,7 +24,7 @@ impl Default for Inheritance {
         }
     }
 }
-/// Composition and selective inheritance rules, independent of native controls.
+/// Composition and selective inheritance rules, independent of native properties.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TransformSemantics {
     /// Compose parent and pivot-adjusted local affine transforms. Selective inheritance
@@ -35,7 +35,7 @@ pub enum TransformSemantics {
     /// authored motion, rotation and scale inside the parent frame.
     PivotLocal,
 }
-/// Effective camera-facing behavior. Inactive native declarations live in profile controls.
+/// Effective camera-facing behavior. Inactive native declarations live in profile properties.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Billboard {
     /// No camera-facing correction.
@@ -209,7 +209,7 @@ impl AnimatedTransform {
 #[derive(Clone, Debug)]
 pub struct Node<'a, P: Profile = Universal> {
     /// Additional owner-local behavior permitted by the vocabulary.
-    pub controls: P::Node<'a>,
+    pub properties: P::NodeProperties<'a>,
     /// Node name.
     pub name: Cow<'a, str>,
     /// Optional parent.
@@ -232,7 +232,7 @@ impl<'a, P: Profile> Node<'a, P> {
     pub fn named(name: impl Into<Cow<'a, str>>, values: &mut PropertyValues) -> Self {
         Self {
             name: name.into(),
-            controls: Default::default(),
+            properties: Default::default(),
             parent: None,
             transform: AnimatedTransform::new(Transform::default(), values),
             inheritance: Inheritance::default(),
@@ -243,8 +243,8 @@ impl<'a, P: Profile> Node<'a, P> {
         }
     }
     /// Supplies hierarchy behavior from this graph's vocabulary.
-    pub fn with_controls(mut self, controls: impl Into<P::Node<'a>>) -> Self {
-        self.controls = controls.into();
+    pub fn with_properties(mut self, properties: impl Into<P::NodeProperties<'a>>) -> Self {
+        self.properties = properties.into();
         self
     }
     /// Attaches the definition to a parent; graph insertion checks ownership.

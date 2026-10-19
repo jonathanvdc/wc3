@@ -1,7 +1,7 @@
 //! Owned emitter components, with model-clock controls separate from particle-age appearance.
 
 use crate::model::materials::mdlx::Blend;
-use crate::model::scene::keyframed::Frames;
+use crate::model::profiles::mdlx::Frames;
 use crate::model::values::model::{
     ParticleBlend, ParticleFlags as AgeDrivenFlags, ParticleGenerator, ParticleHeadTail,
 };

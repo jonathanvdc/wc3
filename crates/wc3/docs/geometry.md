@@ -55,7 +55,7 @@ Collision geometry also widens to `GeometryData`, retaining
 
 WMO also widens to `GeometryData`. Ordered color sets use vertex-domain `Color(n)`
 attributes, retaining even empty authored slots on empty geometry. Baked-light
-coordinates use `LightmapCoordinates`. `SurfaceTriangleControls` retain named
+coordinates use `LightmapCoordinates`. `TriangleProperties` retain named
 face behavior, including optional material references, query and rendering controls,
 and authored selectors. Unclassified native flag bits are discarded. Their material
 references participate in graph validation.

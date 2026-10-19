@@ -201,7 +201,7 @@ fn missing_assets_invalid_clocks_and_camera_requirements_are_errors() {
 #[test]
 fn world_group_selection_intersects_authored_surface_visibility() {
     use wc3::model::{
-        controls::world::{Group, GroupId, WorldSystem},
+        profiles::wmo::{Group, GroupId, WorldSystem},
         System,
     };
     let mut model = io::mdlx::import_owned(&source(), &ImportOptions::default())

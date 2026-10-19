@@ -279,7 +279,7 @@ fn draw_batches_override_collision_face_material_and_keep_classification() {
         .mesh(instance.mesh)
         .unwrap()
         .geometry
-        .triangle_controls()
+        .triangle_properties()
         .get(0)
         .unwrap()
         .material
@@ -355,7 +355,7 @@ fn liquid_grid_fields_are_editable_without_source_packets() {
         .next()
         .map(|(id, value)| (id, value.clone()))
         .unwrap();
-    let liquid = &mut instance.controls.liquids[0];
+    let liquid = &mut instance.properties.liquids[0];
     let mut vertices = liquid.vertices.to_vec();
     let SurfaceVertex::Unresolved { height, .. } = &mut vertices[0] else {
         panic!("unresolved liquid interpretation changed")
@@ -517,7 +517,7 @@ fn portals_are_scoped_authoring_relationships_and_rebuild_native_windows() {
         .value;
     let world = asset.systems().iter().next().unwrap().1;
     assert_eq!(world.portals.len(), 1);
-    let region = &asset.instances().iter().next().unwrap().1.controls;
+    let region = &asset.instances().iter().next().unwrap().1.properties;
     assert_eq!(region.portals[0].portal.index, 0);
     assert_eq!(region.portals[0].neighbor.index, 0);
     let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
@@ -685,7 +685,7 @@ fn ambient_memberships_remap_scoped_volumes_across_native_table_order() {
         .unwrap()
         .value;
     let model = &asset;
-    let region = &model.instances().iter().next().unwrap().1.controls;
+    let region = &model.instances().iter().next().unwrap().1.properties;
     assert_eq!(region.ambients.len(), 2);
     let world = model.system(region.ambients[0].system).unwrap();
     assert!(matches!(
@@ -764,7 +764,7 @@ fn compatible_same_detail_geometry_joins_without_changing_material_look_or_sourc
     second.draws = second
         .draws
         .iter()
-        .map(|draw| Draw::new(draw.subset, draw.controls.clone()))
+        .map(|draw| Draw::new(draw.subset, draw.properties.clone()))
         .collect();
     let (world_id, mut world) = model
         .systems()
@@ -831,8 +831,8 @@ fn implicitly_filled_region_keeps_its_liquid_category_without_a_surface_grid() {
         .unwrap()
         .value;
     let (_, instance) = asset.instances().iter().next().unwrap();
-    assert_eq!(instance.controls.implicit_liquid, Some(37));
-    assert!(instance.controls.liquids.is_empty());
+    assert_eq!(instance.properties.implicit_liquid, Some(37));
+    assert!(instance.properties.liquids.is_empty());
     let output = io::wmo::plan::<wmo::Classic>(&asset, &ExportOptions::default())
         .unwrap()
         .execute()

@@ -117,10 +117,10 @@ fn authored_context(
     translation: [f32; 3],
 ) -> (Model<'static>, MeshInstance<'static>) {
     let mut slot_values = SlotValues::default();
-    use wc3::model::controls::world::{
-        Group, GroupId, ModelMetadata as WorldMetadata, PortalId, RegionControls, WorldSystem,
+    use wc3::model::profiles::wmo::draw::DrawProperties as WorldDraw;
+    use wc3::model::profiles::wmo::{
+        Group, GroupId, ModelMetadata as WorldMetadata, PortalId, Region, WorldSystem,
     };
-    use wc3::model::controls::world_draw::DrawControls as WorldDraw;
     use wc3::model::scene::world::{GroupOptions, Portal, PortalConnection, WorldOptions};
     use wc3::model::{Draw, DrawSubset, GeometryData, Mesh, Node, PrimitiveSelection};
     let mut builder = ModelBuilder::new(ModelMetadata::Wmo(Default::default()));
@@ -175,12 +175,12 @@ fn authored_context(
     let mut instance = MeshInstance::new(node, mesh);
     instance.draws.push(Draw::new(
         subset,
-        Some(DrawControls::Wmo(WorldDraw {
+        Some(DrawProperties::Wmo(WorldDraw {
             lighting: Lighting::Transition,
             ..SlotConstruct::construct(&mut slot_values)
         })),
     ));
-    instance.controls = Some(InstanceControls::Wmo(Box::new(RegionControls {
+    instance.properties = Some(InstanceProperties::Wmo(Box::new(Region {
         portals: vec![PortalConnection {
             portal: PortalId { system, index: 0 },
             neighbor: GroupId { system, index: 0 },

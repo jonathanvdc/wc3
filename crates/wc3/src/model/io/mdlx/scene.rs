@@ -16,7 +16,7 @@ use crate::model::{
     MdlxParticle1Details, MdlxParticle2Appearance, MdlxParticle2Details, MdlxParticle2Rendering,
     MdlxParticle2Shape, ParticleEmission, ParticleLifetime, ParticleMotion,
 };
-use crate::model::{MdlxRibbonControls, MdlxRibbonRendering, TrailAppearance, TrailGeometry};
+use crate::model::{MdlxRibbonBehavior, MdlxRibbonRendering, TrailAppearance, TrailGeometry};
 use glam::Vec3;
 use std::collections::BTreeMap;
 
@@ -241,7 +241,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
                         })?)
                     },
                 },
-                controls: MdlxRibbonControls {
+                behavior: MdlxRibbonBehavior {
                     gravity: source.gravity,
                     visibility: decoder.track(
                         source.visibility.as_ref(),

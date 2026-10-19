@@ -12,8 +12,8 @@ use crate::model::{
 };
 use crate::model::{Camera, FeatureSchema};
 use crate::model::{
-    ClipControls, DrawControls, GeometryData, InstanceControls, MeshControls, NodeControls, System,
-    UniversalAppearance, UniversalBinding,
+    ClipProperties, DrawProperties, GeometryData, InstanceProperties, MeshProperties,
+    NodeProperties, System, UniversalAppearance, UniversalBinding,
 };
 use crate::model::{EventSourceSchema, TimeSource};
 use std::fmt::Debug;
@@ -28,18 +28,18 @@ pub trait FeaturePayload: Clone + Debug + Send + Sync + ValidateLinks {
     /// Relationship category used by typed feature references.
     fn kind(&self) -> FeatureKind;
 }
-/// An owner for which this profile has no additional controls.
+/// An owner for which this profile has no additional properties.
 ///
 /// This is one zero-sized value, rather than optional presence of an empty payload.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
-pub struct NoControls;
-impl ValidateLinks for NoControls {
+pub struct NoProperties;
+impl ValidateLinks for NoProperties {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
 /// A vocabulary with no possible authored payload.
 ///
 /// Use this for object families that a profile cannot describe. An owner with
-/// optional controls can still exist, but its controls must remain absent.
+/// optional properties can still exist, but its properties must remain absent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Unavailable {}
 impl ValidateLinks for Unavailable {
@@ -61,30 +61,30 @@ impl SurfacePayload for Unavailable {
 ///
 /// `ValidateLinks` implementations must visit every referenced graph object;
 /// they must report invalid authored values with `Link::InvalidValue`.
-pub trait ControlsPayload: Clone + Debug + Send + Sync + ValidateLinks {}
-impl<T: Clone + Debug + Send + Sync + ValidateLinks> ControlsPayload for T {}
+pub trait PropertiesPayload: Clone + Debug + Send + Sync + ValidateLinks {}
+impl<T: Clone + Debug + Send + Sync + ValidateLinks> PropertiesPayload for T {}
 /// Selects the complete payload vocabulary allowed in a model graph.
 ///
 /// This parameter describes authoring meaning, rather than an on-disk version.
 /// For example, `Mdlx` describes Warcraft III behavior while native MDLX dialects
 /// select which file revisions can encode that behavior.
 /// Surface and feature payloads define complete objects; other owner payloads
-/// appear directly in their corresponding object's `controls` field. Profiles
-/// select required, optional, or absent controls independently for each owner.
+/// appear directly in their corresponding object's `properties` field. Profiles
+/// select required, optional, or absent properties independently for each owner.
 ///
 /// Implementations may use their own payload types. Implementing relationship traversal
 /// is mandatory: graph validation checks custom references exactly like built-in ones.
 pub trait Profile: Clone + Debug + 'static {
     /// External image resource declarations admitted by this vocabulary.
-    type ImageResource<'a>: ControlsPayload;
+    type ImageResource<'a>: PropertiesPayload;
     /// External model resource declarations admitted by this vocabulary.
-    type ModelResource<'a>: ControlsPayload;
+    type ModelResource<'a>: PropertiesPayload;
     /// External effect resource declarations admitted by this vocabulary.
-    type EffectResource<'a>: ControlsPayload;
+    type EffectResource<'a>: PropertiesPayload;
     /// External physics resource declarations admitted by this vocabulary.
-    type PhysicsResource<'a>: ControlsPayload;
+    type PhysicsResource<'a>: PropertiesPayload;
     /// External boneoverride resource declarations admitted by this vocabulary.
-    type BoneOverrideResource<'a>: ControlsPayload;
+    type BoneOverrideResource<'a>: PropertiesPayload;
     /// Complete material-assignment and appearance vocabulary.
     type Appearance<'a>: AppearanceSchema<'a>;
     /// Joint binding interpretations supported by this vocabulary.
@@ -92,7 +92,7 @@ pub trait Profile: Clone + Debug + 'static {
     /// Complete geometry vocabulary, including supported streams and connectivity.
     type Geometry<'a>: GeometrySchema<'a>;
     /// Model-wide authoring metadata.
-    type ModelMetadata<'a>: ControlsPayload;
+    type ModelMetadata<'a>: PropertiesPayload;
     /// Complete event-source definitions admitted by this vocabulary.
     type EventSource<'a>: EventSourceSchema;
     /// Independently authored scene systems.
@@ -102,18 +102,18 @@ pub trait Profile: Clone + Debug + 'static {
     /// Complete attached behavior payload.
     type Feature<'a>: FeaturePayload + FeatureSchema<'a>;
     /// Additional logical hierarchy behavior.
-    type Node<'a>: ControlsPayload + Default;
+    type NodeProperties<'a>: PropertiesPayload + Default;
     /// Additional geometry behavior.
-    type Mesh<'a>: ControlsPayload + Default;
+    type MeshProperties<'a>: PropertiesPayload + Default;
     /// Additional geometry placement behavior.
-    type Instance<'a>: ControlsPayload + Default;
+    type InstanceProperties<'a>: PropertiesPayload + Default;
     /// Additional draw-pass behavior.
-    type Draw: ControlsPayload + Default;
+    type DrawProperties: PropertiesPayload + Default;
     /// Additional playback selection and transition behavior.
-    type Clip<'a>: ControlsPayload + Default;
+    type ClipProperties<'a>: PropertiesPayload + Default;
 
     /// Returns the binding owned by shared geometry, when the vocabulary supports one.
-    fn mesh_skin(controls: &Self::Mesh<'_>) -> Option<SkinId> {
+    fn mesh_skin(controls: &Self::MeshProperties<'_>) -> Option<SkinId> {
         let _ = controls;
         None
     }
@@ -184,16 +184,16 @@ impl Profile for Universal {
     type Appearance<'a> = UniversalAppearance<'a>;
     type Binding<'a> = UniversalBinding<'a>;
     type Geometry<'a> = GeometryData<'a>;
-    type Draw = Option<DrawControls>;
+    type DrawProperties = Option<DrawProperties>;
     type ModelMetadata<'a> = ModelMetadata<'a>;
     type EventSource<'a> = EventSource<'a>;
     type System<'a> = System<'a>;
     type Surface<'a> = MaterialSurface<'a>;
     type Feature<'a> = NodeFeature<'a>;
-    type Node<'a> = Option<NodeControls>;
-    type Mesh<'a> = Option<MeshControls>;
-    type Instance<'a> = Option<InstanceControls<'a>>;
-    type Clip<'a> = Option<ClipControls>;
+    type NodeProperties<'a> = Option<NodeProperties>;
+    type MeshProperties<'a> = Option<MeshProperties>;
+    type InstanceProperties<'a> = Option<InstanceProperties<'a>>;
+    type ClipProperties<'a> = Option<ClipProperties>;
 }
 /// Proof that a target vocabulary can accept every source payload unchanged.
 ///
@@ -229,16 +229,16 @@ pub trait Extends<Source: Profile>: Profile {
     fn surface<'a>(value: Source::Surface<'a>) -> Self::Surface<'a>;
     /// Embeds an attached feature without changing its meaning.
     fn feature<'a>(value: Source::Feature<'a>, values: &mut PropertyValues) -> Self::Feature<'a>;
-    /// Embeds node controls without changing meaning.
-    fn node<'a>(value: Source::Node<'a>) -> Self::Node<'a>;
-    /// Embeds mesh controls without changing meaning.
-    fn mesh<'a>(value: Source::Mesh<'a>) -> Self::Mesh<'a>;
-    /// Embeds instance controls without changing meaning.
-    fn instance<'a>(value: Source::Instance<'a>) -> Self::Instance<'a>;
+    /// Embeds node properties without changing meaning.
+    fn node<'a>(value: Source::NodeProperties<'a>) -> Self::NodeProperties<'a>;
+    /// Embeds mesh properties without changing meaning.
+    fn mesh<'a>(value: Source::MeshProperties<'a>) -> Self::MeshProperties<'a>;
+    /// Embeds instance properties without changing meaning.
+    fn instance<'a>(value: Source::InstanceProperties<'a>) -> Self::InstanceProperties<'a>;
     /// Embeds draw-pass behavior without changing meaning.
-    fn draw(value: Source::Draw) -> Self::Draw;
-    /// Embeds clip controls without changing meaning.
-    fn clip<'a>(value: Source::Clip<'a>) -> Self::Clip<'a>;
+    fn draw(value: Source::DrawProperties) -> Self::DrawProperties;
+    /// Embeds clip properties without changing meaning.
+    fn clip<'a>(value: Source::ClipProperties<'a>) -> Self::ClipProperties<'a>;
 }
 impl<P: Profile> Extends<P> for P {
     fn image_resource<'a>(value: P::ImageResource<'a>) -> Self::ImageResource<'a> {
@@ -268,7 +268,7 @@ impl<P: Profile> Extends<P> for P {
     fn geometry<'a>(value: <P as Profile>::Geometry<'a>) -> Self::Geometry<'a> {
         value
     }
-    fn draw(value: <P as Profile>::Draw) -> Self::Draw {
+    fn draw(value: <P as Profile>::DrawProperties) -> Self::DrawProperties {
         value
     }
     fn model_metadata<'a>(value: <P as Profile>::ModelMetadata<'a>) -> Self::ModelMetadata<'a> {
@@ -286,16 +286,16 @@ impl<P: Profile> Extends<P> for P {
     fn feature<'a>(value: P::Feature<'a>, _values: &mut PropertyValues) -> Self::Feature<'a> {
         value
     }
-    fn node<'a>(value: <P as Profile>::Node<'a>) -> Self::Node<'a> {
+    fn node<'a>(value: <P as Profile>::NodeProperties<'a>) -> Self::NodeProperties<'a> {
         value
     }
-    fn mesh<'a>(value: <P as Profile>::Mesh<'a>) -> Self::Mesh<'a> {
+    fn mesh<'a>(value: <P as Profile>::MeshProperties<'a>) -> Self::MeshProperties<'a> {
         value
     }
-    fn instance<'a>(value: <P as Profile>::Instance<'a>) -> Self::Instance<'a> {
+    fn instance<'a>(value: <P as Profile>::InstanceProperties<'a>) -> Self::InstanceProperties<'a> {
         value
     }
-    fn clip<'a>(value: <P as Profile>::Clip<'a>) -> Self::Clip<'a> {
+    fn clip<'a>(value: <P as Profile>::ClipProperties<'a>) -> Self::ClipProperties<'a> {
         value
     }
 }

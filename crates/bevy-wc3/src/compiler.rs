@@ -34,9 +34,9 @@ use wc3::model::profiles::Universal;
 use wc3::model::systems::ModelMetadata;
 use wc3::model::systems::System;
 use wc3::model::{
-    AnimationProgram, Attachment, Billboard, Camera as ModelCamera, ClipControls, FeatureId,
-    Light as SemanticLight, Link, MaterialId, MaterialSelection, Model, NodeControls, NodeFeature,
-    ParticleEmitter, PoseLayout, SkinId, Texture, ValidateLinks, ValueSlot,
+    AnimationProgram, Attachment, Billboard, Camera as ModelCamera, ClipProperties, FeatureId,
+    Light as SemanticLight, Link, MaterialId, MaterialSelection, Model, NodeFeature,
+    NodeProperties, ParticleEmitter, PoseLayout, SkinId, Texture, ValidateLinks, ValueSlot,
 };
 
 fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
@@ -114,8 +114,9 @@ pub fn compile_model_with_options(
     let mut skin_cache: HashMap<(SkinId, Vec<usize>), usize> = HashMap::new();
     let mut diagnostics = Vec::new();
     for node in &nodes {
-        let Some(NodeControls::M2(controls)) =
-            model.node(node.id).and_then(|node| node.controls.as_ref())
+        let Some(NodeProperties::M2(controls)) = model
+            .node(node.id)
+            .and_then(|node| node.properties.as_ref())
         else {
             continue;
         };
@@ -131,7 +132,7 @@ pub fn compile_model_with_options(
         }
     }
     for (id, clip) in model.clips() {
-        if let Some(ClipControls::M2(controls)) = &clip.controls {
+        if let Some(ClipProperties::M2(controls)) = &clip.properties {
             if controls.blend_time != [0; 2] {
                 diagnostics.push(RenderDiagnostic {
                     feature: None,
@@ -303,7 +304,7 @@ pub fn compile_model_with_options(
                     Some(draw.subset),
                     material,
                     subset,
-                    draw.controls.as_ref(),
+                    draw.properties.as_ref(),
                 ))
             })
             .collect::<Result<Vec<_>, ModelError>>()?;
@@ -462,10 +463,10 @@ pub fn compile_model_with_options(
 
             NodeFeature::GeometryAnimation(value) if value.mesh.is_some() && !value.drop_shadow => continue,
             NodeFeature::GeometryAnimation(_) => "geometry tint and opacity are rendered; orphan controllers and authored drop shadows need application interpretation".to_string(),
-            NodeFeature::Camera(ModelCamera::Portable(_) | ModelCamera::Aimed(_))
+            NodeFeature::Camera(ModelCamera::Node(_) | ModelCamera::LookAt(_))
             | NodeFeature::Attachment(Attachment::Socket(_)) => continue,
 
-            NodeFeature::Light(SemanticLight::Portable(_) | SemanticLight::AmbientDiffuse(_)) =>
+            NodeFeature::Light(SemanticLight::SingleEmission(_) | SemanticLight::AmbientDiffuse(_)) =>
                 "direct illumination uses Bevy scene lights; ambient terms remain available through ModelLight metadata".to_string(),
             NodeFeature::Attachment(Attachment::Child(_)) if options.child_models.contains_key(&id) => continue,
             NodeFeature::Attachment(Attachment::Child(_)) =>

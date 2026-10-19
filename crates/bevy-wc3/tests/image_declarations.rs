@@ -39,7 +39,10 @@ fn file_data_resolution_uses_the_id_while_requests_retain_the_filename() {
     draft
         .add_material(Material {
             name: "image request".into(),
-            surface: MaterialSurface::from(MdlxMaterial { steps: vec![step] }),
+            surface: MaterialSurface::from(MdlxMaterial {
+                declaration: Default::default(),
+                steps: vec![step],
+            }),
         })
         .unwrap();
     let model = draft.finish().unwrap();

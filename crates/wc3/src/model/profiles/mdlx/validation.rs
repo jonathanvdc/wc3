@@ -1,8 +1,18 @@
 //! Authoring limits inherent to Warcraft III rather than a particular native dialect.
-use super::Mdlx;
+use super::{Mdlx, Node};
 use crate::model::{Billboard, DynamicTrack, Error, Interpolation, Model, TimeSource, Transform};
 pub(super) fn model(value: &Model<'_, Mdlx>) -> Result<(), Error> {
     value.validate_animation_consumers()?;
+    for (_, feature) in value.features() {
+        if let Node::Camera(camera) = &feature.payload {
+            if !camera.is_mdlx() {
+                return Err(Error::new(
+                    "camera.projection",
+                    "Warcraft III cameras use vertical field of view without an application role",
+                ));
+            }
+        }
+    }
     let mut ordinary_selection = None;
     for (_, clip) in value.clips() {
         if clip.animations.iter().any(|id| {

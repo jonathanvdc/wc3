@@ -90,7 +90,7 @@ pub(super) fn write<'a, 'data, T: Dialect>(
                         .unsupported("mesh.tangents", error.to_string())?;
                 }
             }
-            if let Some(metadata) = model.mesh(instance.mesh).map(|mesh| &mesh.controls) {
+            if let Some(metadata) = model.mesh(instance.mesh).map(|mesh| &mesh.properties) {
                 geoset.set_unselectable(metadata.unselectable);
                 let mut extents = Vec::new();
                 for (clip, _) in model.clips() {

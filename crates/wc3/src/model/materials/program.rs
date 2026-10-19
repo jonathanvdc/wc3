@@ -1,19 +1,24 @@
 //! Ordered material programs with explicit shader dialects.
 use super::m2::MaterialStep as M2MaterialStep;
-use super::mdlx::MaterialStep as MdlxMaterialStep;
+use super::mdlx::{MaterialDeclaration, MaterialStep as MdlxMaterialStep};
 use super::wmo::MaterialStep as WmoMaterialStep;
-use crate::model::profiles::SurfacePayload;
+use crate::model::profiles::{NoProperties, SurfacePayload};
 use crate::model::{Error, Link, ValidateLinks};
 
 /// An authored sequence of material operations, interpreted into rendering passes.
 #[derive(Clone, Debug, PartialEq)]
-pub struct MaterialProgram<S> {
+pub struct MaterialProgram<S, D = NoProperties> {
+    /// Declarations owned by this material, independent of the number of steps.
+    pub declaration: D,
     /// Material operations in authored order.
     pub steps: Vec<S>,
 }
-impl<S> Default for MaterialProgram<S> {
+impl<S, D: Default> Default for MaterialProgram<S, D> {
     fn default() -> Self {
-        Self { steps: Vec::new() }
+        Self {
+            declaration: D::default(),
+            steps: Vec::new(),
+        }
     }
 }
 /// One typed operation in the universal profile's material program.
@@ -23,16 +28,17 @@ impl<S> Default for MaterialProgram<S> {
 #[derive(Clone, Debug)]
 pub enum MaterialStep<'a> {
     /// Warcraft III shader inputs and rendering settings.
-    Mdlx(Box<MdlxMaterialStep<'a>>),
+    Mdlx(Box<MdlxMaterialStep>),
     /// World of Warcraft model shader inputs and rendering settings.
     M2(Box<M2MaterialStep<'a>>),
     /// World of Warcraft world shader inputs and rendering settings.
     Wmo(Box<WmoMaterialStep<'a>>),
 }
 /// The universal profile's complete material program.
-pub type MaterialSurface<'a> = MaterialProgram<MaterialStep<'a>>;
-impl<S: ValidateLinks> ValidateLinks for MaterialProgram<S> {
+pub type MaterialSurface<'a> = MaterialProgram<MaterialStep<'a>, Option<MaterialDeclaration<'a>>>;
+impl<S: ValidateLinks, D: ValidateLinks> ValidateLinks for MaterialProgram<S, D> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.declaration.visit_links(visitor);
         self.steps.visit_links(visitor);
     }
 }
@@ -64,9 +70,10 @@ impl SurfacePayload for MaterialSurface<'_> {
 fn incompatible(message: &str) -> Error {
     Error::new("surface", message)
 }
-impl<'a> From<MdlxMaterialStep<'a>> for MaterialSurface<'a> {
-    fn from(value: MdlxMaterialStep<'a>) -> Self {
+impl<'a> From<MdlxMaterialStep> for MaterialSurface<'a> {
+    fn from(value: MdlxMaterialStep) -> Self {
         Self {
+            declaration: None,
             steps: vec![MaterialStep::Mdlx(Box::new(value))],
         }
     }
@@ -74,6 +81,7 @@ impl<'a> From<MdlxMaterialStep<'a>> for MaterialSurface<'a> {
 impl<'a> From<M2MaterialStep<'a>> for MaterialSurface<'a> {
     fn from(value: M2MaterialStep<'a>) -> Self {
         Self {
+            declaration: None,
             steps: vec![MaterialStep::M2(Box::new(value))],
         }
     }
@@ -81,6 +89,7 @@ impl<'a> From<M2MaterialStep<'a>> for MaterialSurface<'a> {
 impl<'a> From<WmoMaterialStep<'a>> for MaterialSurface<'a> {
     fn from(value: WmoMaterialStep<'a>) -> Self {
         Self {
+            declaration: None,
             steps: vec![MaterialStep::Wmo(Box::new(value))],
         }
     }
@@ -104,6 +113,7 @@ impl<'a> TryFrom<MaterialSurface<'a>> for WmoMaterialStep<'a> {
     }
 }
 fn single_step(value: MaterialSurface<'_>) -> Result<MaterialStep<'_>, Error> {
+    require_no_declaration(&value)?;
     let mut stack = value;
     if stack.steps.len() != 1 {
         return Err(incompatible("surface requires exactly one step"));
@@ -119,6 +129,7 @@ impl SurfacePayload for MaterialProgram<M2MaterialStep<'_>> {
 impl<'a> From<MaterialProgram<M2MaterialStep<'a>>> for MaterialSurface<'a> {
     fn from(value: MaterialProgram<M2MaterialStep<'a>>) -> Self {
         Self {
+            declaration: None,
             steps: value
                 .steps
                 .into_iter()
@@ -130,7 +141,9 @@ impl<'a> From<MaterialProgram<M2MaterialStep<'a>>> for MaterialSurface<'a> {
 impl<'a> TryFrom<MaterialSurface<'a>> for MaterialProgram<M2MaterialStep<'a>> {
     type Error = Error;
     fn try_from(value: MaterialSurface<'a>) -> Result<Self, Error> {
+        require_no_declaration(&value)?;
         Ok(Self {
+            declaration: NoProperties,
             steps: value
                 .steps
                 .into_iter()
@@ -142,20 +155,24 @@ impl<'a> TryFrom<MaterialSurface<'a>> for MaterialProgram<M2MaterialStep<'a>> {
         })
     }
 }
-impl<S> From<S> for MaterialProgram<S> {
+impl<S, D: Default> From<S> for MaterialProgram<S, D> {
     fn from(step: S) -> Self {
-        Self { steps: vec![step] }
+        Self {
+            declaration: D::default(),
+            steps: vec![step],
+        }
     }
 }
 
-impl SurfacePayload for MaterialProgram<MdlxMaterialStep<'_>> {
+impl SurfacePayload for MaterialProgram<MdlxMaterialStep, MaterialDeclaration<'_>> {
     fn validate(&self) -> Result<(), Error> {
         Ok(())
     }
 }
-impl<'a> From<MaterialProgram<MdlxMaterialStep<'a>>> for MaterialSurface<'a> {
-    fn from(value: MaterialProgram<MdlxMaterialStep<'a>>) -> Self {
+impl<'a> From<MaterialProgram<MdlxMaterialStep, MaterialDeclaration<'a>>> for MaterialSurface<'a> {
+    fn from(value: MaterialProgram<MdlxMaterialStep, MaterialDeclaration<'a>>) -> Self {
         Self {
+            declaration: Some(value.declaration),
             steps: value
                 .steps
                 .into_iter()
@@ -164,10 +181,13 @@ impl<'a> From<MaterialProgram<MdlxMaterialStep<'a>>> for MaterialSurface<'a> {
         }
     }
 }
-impl<'a> TryFrom<MaterialSurface<'a>> for MaterialProgram<MdlxMaterialStep<'a>> {
+impl<'a> TryFrom<MaterialSurface<'a>>
+    for MaterialProgram<MdlxMaterialStep, MaterialDeclaration<'a>>
+{
     type Error = Error;
     fn try_from(value: MaterialSurface<'a>) -> Result<Self, Error> {
         Ok(Self {
+            declaration: value.declaration.unwrap_or_default(),
             steps: value
                 .steps
                 .into_iter()
@@ -178,4 +198,17 @@ impl<'a> TryFrom<MaterialSurface<'a>> for MaterialProgram<MdlxMaterialStep<'a>> 
                 .collect::<Result<_, _>>()?,
         })
     }
+}
+
+fn require_no_declaration(value: &MaterialSurface<'_>) -> Result<(), Error> {
+    if value
+        .declaration
+        .as_ref()
+        .is_some_and(|declaration| declaration != &MaterialDeclaration::default())
+    {
+        return Err(incompatible(
+            "surface carries Warcraft III material declarations",
+        ));
+    }
+    Ok(())
 }

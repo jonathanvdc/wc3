@@ -27,18 +27,18 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
     if !mesh.geometry.lightmap_coordinates().is_empty()
         || mesh
             .geometry
-            .triangle_controls()
+            .triangle_properties()
             .iter()
             .any(|face| face.lightmap_selector.is_some() || face.alignment != 0)
         || instance.draws.iter().any(|draw| {
-            draw.controls.as_ref().is_some_and(|controls| {
+            draw.properties.as_ref().is_some_and(|controls| {
                 controls.lightmap_selector.is_some() || controls.alignment != 0
             })
         })
     {
         context.unsupported("world.group.baked_light", "selected modern group layout cannot encode historical baked-light coordinates or selectors")?;
     }
-    let region = &instance.controls;
+    let region = &instance.properties;
     if !region.lightmap_images.is_empty()
         || !region.lightmap_rectangles.is_empty()
         || region.auxiliary_geometry.is_some()
@@ -207,7 +207,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
         )?;
     }
     let mut faces = Vec::new();
-    for control in mesh.geometry.triangle_controls().iter() {
+    for control in mesh.geometry.triangle_properties().iter() {
         let mut flags = TriangleFlags2(0);
         flags.set_transition(control.transition);
         flags.set_no_camera_collision(control.no_camera_collision);
@@ -263,7 +263,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
     }
     let query_faces = mesh
         .geometry
-        .triangle_controls()
+        .triangle_properties()
         .iter()
         .enumerate()
         .filter_map(|(index, face)| face.spatial_queries.then_some(index))
@@ -312,7 +312,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
         if let Some(crate::model::profiles::wmo::Pass::Shadow {
             controls,
             supplemental,
-        }) = draw.controls.as_ref().map(|value| &value.pass)
+        }) = draw.properties.as_ref().map(|value| &value.pass)
         {
             let mut remaining = draw.count;
             let mut first = draw.first;
@@ -363,7 +363,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
                 flags: BatchFlags(0),
                 ..Default::default()
             };
-            if let Some(controls) = &draw.controls {
+            if let Some(controls) = &draw.properties {
                 batch.prefix.set_supplemental(controls.supplemental);
                 if let Some(bounds) = controls.bounds {
                     let corners = [bounds.minimum, bounds.maximum]
@@ -522,7 +522,7 @@ pub(in crate::model::io::wmo::graph) fn write<'a, D: Dialect>(
     }
     let ground = mesh
         .geometry
-        .triangle_controls()
+        .triangle_properties()
         .iter()
         .map(|control| control.ground_type)
         .collect::<Vec<_>>();

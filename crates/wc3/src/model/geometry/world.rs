@@ -11,7 +11,7 @@ use crate::model::VertexData;
 use crate::model::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, DrawSubsetCapabilities, Error,
     GeometryData, GeometryInfluences, GeometryKind, GeometryParts, GeometryPools, GeometrySchema,
-    InfluenceRows, Link, PackedArray, SurfaceTriangleControls, Topology, ValidateLinks,
+    InfluenceRows, Link, PackedArray, Topology, TriangleProperties, ValidateLinks,
 };
 use crate::model::{GeometryEdit, GeometryEditCapabilities, StreamSupport};
 
@@ -34,7 +34,7 @@ type WmoStreams<'data> = VertexStreams<
 pub struct WmoGeometry<'data> {
     streams: WmoStreams<'data>,
     pools: GeometryPools<'data>,
-    triangle_controls: PackedArray<'data, SurfaceTriangleControls>,
+    triangle_properties: PackedArray<'data, TriangleProperties>,
 }
 impl<'data> WmoGeometry<'data> {
     /// Replaces positions while checking all geometry stream relationships.
@@ -49,8 +49,8 @@ impl<'data> WmoGeometry<'data> {
         triangles: impl IntoPackedArray<'data, [u32; 3]>,
     ) -> Result<Self, Error> {
         let triangles = triangles.into_packed_array();
-        let triangle_controls = (0..triangles.len())
-            .map(|_| SurfaceTriangleControls::default())
+        let triangle_properties = (0..triangles.len())
+            .map(|_| TriangleProperties::default())
             .collect();
         let geometry = Self {
             streams: VertexStreams {
@@ -66,17 +66,17 @@ impl<'data> WmoGeometry<'data> {
                 influences: (),
             },
             pools: GeometryPools::default(),
-            triangle_controls,
+            triangle_properties,
         };
         geometry.validate()?;
         Ok(geometry)
     }
     /// Sets per-triangle rendering, collision, and query behavior.
-    pub fn with_triangle_controls(
+    pub fn with_triangle_properties(
         mut self,
-        controls: PackedArray<'data, SurfaceTriangleControls>,
+        properties: PackedArray<'data, TriangleProperties>,
     ) -> Result<Self, Error> {
-        self.triangle_controls = controls;
+        self.triangle_properties = properties;
         self.validate()?;
         Ok(self)
     }
@@ -113,9 +113,9 @@ impl<'data> WmoGeometry<'data> {
     pub fn lightmap_coordinates(&self) -> &PackedArray<'data, Vec2> {
         &self.streams.extras
     }
-    /// Reads per-triangle controls in connectivity order.
-    pub fn triangle_controls(&self) -> &PackedArray<'data, SurfaceTriangleControls> {
-        &self.triangle_controls
+    /// Reads per-triangle properties in connectivity order.
+    pub fn triangle_properties(&self) -> &PackedArray<'data, TriangleProperties> {
+        &self.triangle_properties
     }
     /// Sets authored vertex normals.
     pub fn with_normals(
@@ -155,8 +155,8 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
             tangent_bindings: true,
         }
     }
-    fn surface_triangles(&self) -> Option<&PackedArray<'data, SurfaceTriangleControls>> {
-        Some(&self.triangle_controls)
+    fn triangle_properties(&self) -> Option<&PackedArray<'data, TriangleProperties>> {
+        Some(&self.triangle_properties)
     }
     fn strip_indices(&self) -> Option<&PackedArray<'data, u32>> {
         Some(&self.pools.triangle_strip_indices)
@@ -246,12 +246,12 @@ impl<'data> GeometrySchema<'data> for WmoGeometry<'data> {
                 "strip indices must address vertices and tangent vectors must be finite",
             ));
         }
-        if !self.triangle_controls.is_empty()
-            && self.triangle_controls.len() != self.streams.topology.primitive_count()
+        if !self.triangle_properties.is_empty()
+            && self.triangle_properties.len() != self.streams.topology.primitive_count()
         {
             return Err(Error::new(
-                "geometry.triangle_controls",
-                "controls must match triangle count",
+                "geometry.triangle_properties",
+                "properties must match triangle count",
             ));
         }
         if !self.streams.extras.is_empty()
@@ -292,14 +292,14 @@ impl Default for WmoGeometry<'_> {
                 influences: (),
             },
             pools: GeometryPools::default(),
-            triangle_controls: PackedArray::default(),
+            triangle_properties: PackedArray::default(),
         }
     }
 }
 
 impl ValidateLinks for WmoGeometry<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
-        for face in self.triangle_controls.iter() {
+        for face in self.triangle_properties.iter() {
             if let Some(material) = face.material {
                 visitor(Link::Material(material));
             }
@@ -332,7 +332,7 @@ impl<'data> From<WmoGeometry<'data>> for GeometryData<'data> {
             texture_coordinates: vertices.texture_coordinates,
             topology: value.streams.topology,
             attributes,
-            surface_triangles: value.triangle_controls,
+            triangle_properties: value.triangle_properties,
             pools: GeometryPools {
                 triangle_strip_indices: value.pools.triangle_strip_indices,
                 tangent_vectors: value.pools.tangent_vectors,
@@ -426,7 +426,7 @@ impl<'data> TryFrom<GeometryData<'data>> for WmoGeometry<'data> {
                 topology: value.topology,
                 influences: (),
             },
-            triangle_controls: value.surface_triangles,
+            triangle_properties: value.triangle_properties,
             pools: value.pools,
         };
         result.validate()?;

@@ -4,7 +4,7 @@ Use `wc3::model::Model` to work with hierarchy, geometry, materials, and animati
 as a checked graph. Use [native documents](models.md) instead when you need to
 preserve encoded records, unknown chunks, or file organization. A graph contains
 supported authoring values and can borrow compatible arrays from a native document;
-it does not keep that document as its backing representation. MDLX and WMO controls
+it does not keep that document as its backing representation. MDLX and WMO properties
 expose named behavior without residual `unclassified` or `unmapped_flags` fields.
 Native bits formerly stored in those fields are discarded during semantic import
 and are not reconstructed on export.
@@ -24,7 +24,8 @@ to handle several families through one API.
 A profile selects authoring behavior; a native layout such as `mdlx::V800` selects
 what a particular file revision can encode. Export checks the latter separately.
 Widening preserves values and identities. Narrowing checks that every value already
-fits the destination profile; it does not translate shaders or effects between games.
+fits the destination profile. A [conversion policy](conversion.md) can explicitly
+rewrite unsupported meanings before that exact projection.
 
 ```rust
 use wc3::model::{Error, Model};
@@ -57,6 +58,16 @@ IDs belong to their model, and mesh-local IDs belong to their mesh. Equal numeri
 indices from another owner cannot satisfy a reference. IDs remain stable through
 table edits, widening, and checked narrowing; native output assigns its own indices.
 Cloning a graph preserves its IDs while allowing independent edits.
+
+Each owner exposes its profile-specific authored data through `properties`.
+`NodeProperties`, `MeshProperties`, `InstanceProperties`, `DrawProperties`, and
+`ClipProperties` select those payloads in `Profile`; the native definitions live
+beside their profile. For example, `mdlx::MeshProperties` contains selection
+behavior and sequence bounds, while `m2::MeshProperties` describes sorting and
+culling frames. These are properties of the mesh, separate from vertex geometry.
+A WMO placement owns its `wmo::Region`, including links to lights and portals.
+`NoProperties` represents an owner without additional profile data. Universal
+retains the complete native property payload where no shared meaning exists.
 
 Collections such as `nodes()`, `meshes()`, and `materials()` support `get(id)`,
 `contains_key(id)`, `len()`, and `is_empty()`. Iterate `(Id, &value)` pairs in stable

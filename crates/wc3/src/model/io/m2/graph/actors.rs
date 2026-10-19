@@ -2,8 +2,10 @@
 use super::*;
 use crate::model::materials::m2::rasterization;
 use crate::model::materials::state::PassState;
+use crate::model::FieldOfViewAxis;
 use crate::model::LightEmission;
-use crate::model::{Axis, M2RibbonControls, M2RibbonRendering, TrailAppearance, TrailGeometry};
+use crate::model::PerspectiveProjection;
+use crate::model::{Axis, M2RibbonBehavior, M2RibbonRendering, TrailAppearance, TrailGeometry};
 use glam::{Vec2, Vec3};
 fn placement<'a>(
     builder: &mut GraphBuilder<'a>,
@@ -137,6 +139,8 @@ where
                 builder.add_value(initial(&value.attenuation_end).unwrap_or(0.)),
             ],
             activation: builder.add_value(initial(&value.visibility).unwrap_or(1) != 0),
+            shadows: Default::default(),
+            falloff: None,
         };
         bind_field!(
             feature,
@@ -247,15 +251,15 @@ where
         let tail = D::Layout::ribbon_tail(&value.modern);
         let feature = builder.reserve_feature(node);
         let ribbon = profile::RibbonEmitter {
-            controls: M2RibbonControls {
+            behavior: M2RibbonBehavior {
                 id: value.id,
                 angle: value.gravity,
                 enabled: builder.add_value(initial(&value.visibility).unwrap_or(1) != 0),
+            },
+            rendering: M2RibbonRendering {
                 priority_plane: tail[0],
                 color_index: tail[1] as i8,
                 texture_transform: None,
-            },
-            rendering: M2RibbonRendering {
                 textures: value
                     .texture_indices
                     .iter()
@@ -332,7 +336,7 @@ where
         bind_field!(
             feature,
             ribbon,
-            ribbon.controls.enabled,
+            ribbon.behavior.enabled,
             ENABLED,
             &value.visibility,
             Boolean,
@@ -469,17 +473,22 @@ where
         )?;
         let feature = builder.reserve_feature(node);
         let camera = profile::Camera {
-            convention: profile::values::CameraKind::from_raw(value.kind.raw()),
-            field_of_view: D::Layout::logical_fov(
-                source,
-                value,
-                feature,
-                animation_source,
-                clips,
-                clocks,
-                builder,
-            )?,
-            clipping: Vec2::from_array([value.near_clip, value.far_clip]),
+            role: Some(profile::values::CameraKind::from_raw(value.kind.raw())),
+            visibility: None,
+            lens: Default::default(),
+            projection: PerspectiveProjection {
+                axis: FieldOfViewAxis::Diagonal,
+                field_of_view: D::Layout::logical_fov(
+                    source,
+                    value,
+                    feature,
+                    animation_source,
+                    clips,
+                    clocks,
+                    builder,
+                )?,
+                clipping: Vec2::from_array([value.near_clip, value.far_clip]),
+            },
             target: Vec3::from_array(value.target_position_base),
             eye_offset: builder.add_value(Vec3::from_array([0.; 3])),
             target_offset: builder.add_value(Vec3::from_array([0.; 3])),
@@ -579,7 +588,7 @@ where
                 && builder
                     .model()
                     .clip(clip.ok_or_else(|| Error::new("m2.event.clip", "sequence has no clip"))?)
-                    .is_some_and(|c| c.controls.alias.is_some())
+                    .is_some_and(|c| c.properties.alias.is_some())
             {
                 continue;
             }

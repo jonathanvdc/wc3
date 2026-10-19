@@ -7,8 +7,11 @@ node hierarchy controls placement and cleanup.
 
 ## Mapping and controls
 
-Portable and MDLX ambient/diffuse lights, WMO world lights, and region point lights map supported color, intensity, range, activation,
-and shadow flags to Bevy point, directional, or spot components. Unknown kinds
+Single-emission and ambient/diffuse lights, WMO world lights, and region point lights map
+supported color, intensity, range, activation,
+and shadow flags to Bevy point, directional, or spot components. Boolean and
+fractional activation remain distinct from independently authored shadow and
+falloff parameters. Unknown kinds
 remain inspectable without an arbitrary substitute.
 
 `ModelLightSettings` on a model root configures power/range conversion and

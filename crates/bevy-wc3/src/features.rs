@@ -8,15 +8,15 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
 use wc3::model::scene::world::LightKind as WorldLightKind;
-use wc3::model::scene::{Camera as PortableCamera, LightKind};
+use wc3::model::{EmissionKind, NodeCamera};
 
 #[cfg(test)]
 use wc3::model::ModelMetadata;
 use wc3::model::{
-    AimedCamera, Attachment, Camera as ModelCamera, CameraConvention, ClipId, FeatureId,
-    FeatureKind, IlluminationKind, Light as SemanticLight, LightActivation, Model, ModelMount,
-    MountTarget, NodeFeature, NodeId, PlacementAppearance as SemanticPlacementAppearance,
-    ResourceLocator, SampledAnimation,
+    Attachment, Camera as ModelCamera, ClipId, FeatureId, FeatureKind, IlluminationKind,
+    Light as SemanticLight, LightActivation, LookAtCamera, Model, ModelMount, MountTarget,
+    NodeFeature, NodeId, PlacementAppearance as SemanticPlacementAppearance, ResourceLocator,
+    SampledAnimation,
 };
 
 /// Conversion controls on a model's animation root. Absence uses the defaults.
@@ -115,8 +115,8 @@ pub struct SampledCamera {
 
 #[derive(Clone)]
 enum CameraDefinition {
-    Aimed(AimedCamera),
-    Portable(PortableCamera),
+    LookAt(LookAtCamera),
+    Node(NodeCamera),
 }
 #[derive(Clone)]
 struct AttachmentDefinition {
@@ -211,12 +211,12 @@ impl RuntimeFeatures {
             result.hooks.push((feature, value.payload.kind()));
             match &value.payload {
                 NodeFeature::Light(light) => result.lights.push((feature, light.clone())),
-                NodeFeature::Camera(ModelCamera::Aimed(camera)) => result
+                NodeFeature::Camera(ModelCamera::LookAt(camera)) => result
                     .cameras
-                    .push((feature, CameraDefinition::Aimed((**camera).clone()))),
-                NodeFeature::Camera(ModelCamera::Portable(camera)) => result
+                    .push((feature, CameraDefinition::LookAt((**camera).clone()))),
+                NodeFeature::Camera(ModelCamera::Node(camera)) => result
                     .cameras
-                    .push((feature, CameraDefinition::Portable((**camera).clone()))),
+                    .push((feature, CameraDefinition::Node((**camera).clone()))),
                 NodeFeature::Attachment(value) => result.attachments.push(AttachmentDefinition {
                     feature,
                     definition: value.clone().into_owned(),
@@ -340,34 +340,34 @@ impl RuntimeFeatures {
                 ChildOf(parent),
             ));
             let kind = match definition {
-                SemanticLight::Portable(light) => light.kind,
+                SemanticLight::SingleEmission(light) => light.kind,
                 SemanticLight::AmbientDiffuse(light) => match light.kind {
-                    IlluminationKind::Point => LightKind::Point,
-                    IlluminationKind::Directional => LightKind::Directional,
-                    _ => LightKind::Ambient,
+                    IlluminationKind::Point => EmissionKind::Point,
+                    IlluminationKind::Directional => EmissionKind::Directional,
+                    _ => EmissionKind::Ambient,
                 },
                 SemanticLight::World(light) => match light.kind {
-                    WorldLightKind::Point => LightKind::Point,
-                    WorldLightKind::Spot => LightKind::Spot,
-                    WorldLightKind::Directional => LightKind::Directional,
-                    _ => LightKind::Ambient,
+                    WorldLightKind::Point => EmissionKind::Point,
+                    WorldLightKind::Spot => EmissionKind::Spot,
+                    WorldLightKind::Directional => EmissionKind::Directional,
+                    _ => EmissionKind::Ambient,
                 },
-                SemanticLight::Point(_) => LightKind::Point,
+                SemanticLight::Point(_) => EmissionKind::Point,
             };
             match kind {
-                LightKind::Point => {
+                EmissionKind::Point => {
                     entity.insert(PointLight {
                         intensity: 0.,
                         ..Default::default()
                     });
                 }
-                LightKind::Directional => {
+                EmissionKind::Directional => {
                     entity.insert(DirectionalLight {
                         illuminance: 0.,
                         ..Default::default()
                     });
                 }
-                LightKind::Spot => {
+                EmissionKind::Spot => {
                     entity.insert(SpotLight {
                         intensity: 0.,
                         ..Default::default()
@@ -425,40 +425,41 @@ impl RuntimeFeatures {
             };
             let (color, intensity, range, activation, shadows, ambient, ambient_intensity, cone) =
                 match &state.definition {
-                    SemanticLight::Portable(light) => (
-                        sample.animated(&light.color),
-                        sample.animated(&light.intensity),
+                    SemanticLight::SingleEmission(light) => (
+                        sample.animated(&light.emission.color),
+                        sample.animated(&light.emission.intensity),
                         sample.animated(&light.attenuation[1]),
                         1.,
-                        light.shadow_casting.unwrap_or(false),
-                        if light.kind == LightKind::Ambient {
-                            sample.animated(&light.color)
+                        light.shadows.casting.unwrap_or(false),
+                        if light.kind == EmissionKind::Ambient {
+                            sample.animated(&light.emission.color)
                         } else {
                             Vec3::from_array([0.; 3])
                         },
-                        if light.kind == LightKind::Ambient {
-                            sample.animated(&light.intensity)
+                        if light.kind == EmissionKind::Ambient {
+                            sample.animated(&light.emission.intensity)
                         } else {
                             0.
                         },
                         light.cone.each_ref().map(|v| sample.animated(v)),
                     ),
                     SemanticLight::AmbientDiffuse(light) => {
-                        let (activation, shadows) = match &light.activation {
+                        let activation = match &light.activation {
                             LightActivation::Enabled(enabled) => {
-                                (if sample.animated(enabled) { 1. } else { 0. }, false)
+                                if sample.animated(enabled) {
+                                    1.
+                                } else {
+                                    0.
+                                }
                             }
-                            LightActivation::Visibility(visible) => (
-                                sample.animated(&visible.visibility),
-                                visible.shadow_casting.unwrap_or(false),
-                            ),
+                            LightActivation::Visibility(visibility) => sample.animated(visibility),
                         };
                         (
                             sample.animated(&light.diffuse.color),
                             sample.animated(&light.diffuse.intensity),
                             sample.animated(&light.attenuation[1]),
                             activation,
-                            shadows,
+                            light.shadows.casting.unwrap_or(false),
                             sample.animated(&light.ambient.color),
                             sample.animated(&light.ambient.intensity),
                             [0., 0.],
@@ -589,27 +590,25 @@ impl RuntimeFeatures {
             return None;
         }
         let (_, definition) = self.cameras.iter().find(|(id, _)| id.id == feature)?;
-        let (eye, target, fov, clipping, roll, visibility, diagonal) = match definition {
-            CameraDefinition::Aimed(camera) => {
+        let (eye, target, projection, roll, visibility) = match definition {
+            CameraDefinition::LookAt(camera) => {
                 let offset = sample.animated(&camera.eye_offset);
                 let target = camera.target + sample.animated(&camera.target_offset);
-                let (visibility, diagonal) = match &camera.convention {
-                    CameraConvention::Vertical(controls) => {
-                        (sample.animated(&controls.visibility), false)
-                    }
-                    CameraConvention::Diagonal(_) => (1., true),
-                };
+                let visibility = camera
+                    .visibility
+                    .as_ref()
+                    .map_or(1., |value| sample.animated(value));
                 (
                     node.transform_point3(offset),
                     target,
-                    sample.animated(&camera.field_of_view),
-                    camera.clipping,
+                    camera
+                        .projection
+                        .map_field_of_view(|angle| sample.animated(angle)),
                     sample.animated(&camera.roll),
                     visibility,
-                    diagonal,
                 )
             }
-            CameraDefinition::Portable(camera) => {
+            CameraDefinition::Node(camera) => {
                 let eye = node.transform_point3(Vec3::ZERO);
                 let target = camera
                     .target
@@ -619,26 +618,22 @@ impl RuntimeFeatures {
                 (
                     eye,
                     target,
-                    sample.animated(&camera.field_of_view),
-                    camera.clipping,
+                    camera
+                        .projection
+                        .map_field_of_view(|angle| sample.animated(angle)),
                     0.,
                     1.,
-                    false,
                 )
             }
         };
-        let fov = if diagonal {
-            2. * ((fov * 0.5).tan() / (aspect * aspect + 1.).sqrt()).atan()
-        } else {
-            fov
-        };
+        let fov = projection.vertical_field_of_view(aspect);
         let direction = (target - eye).try_normalize()?;
         Some(SampledCamera {
             eye,
             target,
             up: Quat::from_axis_angle(direction, roll) * model_up,
             vertical_field_of_view: fov,
-            clipping: clipping.to_array(),
+            clipping: projection.clipping.to_array(),
             visibility,
         })
     }

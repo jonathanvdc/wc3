@@ -1,13 +1,28 @@
 //! Exact projections of Mdlx owner payloads.
 use super::{incompatible, Narrows};
-use crate::model::profiles::{Mdlx, NoControls, Profile, Universal};
+use crate::model::profiles::{Mdlx, NoProperties, Profile, Universal};
 use crate::model::EventSource;
 use crate::model::PropertyValues;
 use crate::model::{
-    ClipControls, Error, MeshControls, ModelMetadata, NodeControls, UniversalAppearance,
-    UniversalBinding,
+    Camera, ClipProperties, Error, MeshProperties, Model, ModelMetadata, NodeFeature,
+    NodeProperties, UniversalAppearance, UniversalBinding,
 };
 impl Narrows<Universal> for Mdlx {
+    fn validate_feature<'a>(
+        source: &Model<'a, Universal>,
+        feature: &NodeFeature<'a>,
+    ) -> Result<(), Error> {
+        if let NodeFeature::Camera(Camera::LookAt(camera)) = feature {
+            if source.is_animated(camera.projection.field_of_view) {
+                return Err(Error::new(
+                    "camera.projection.field_of_view",
+                    "Warcraft III cameras require a constant field of view",
+                ));
+            }
+        }
+        Ok(())
+    }
+
     fn image_resource<'a>(
         value: <Universal as Profile>::ImageResource<'a>,
     ) -> Result<Self::ImageResource<'a>, Error> {
@@ -85,35 +100,41 @@ impl Narrows<Universal> for Mdlx {
         crate::model::features::TryFromFeature::try_from_feature(value, values)
             .map_err(|_| incompatible("feature"))
     }
-    fn node<'a>(value: <Universal as Profile>::Node<'a>) -> Result<Self::Node<'a>, Error> {
+    fn node<'a>(
+        value: <Universal as Profile>::NodeProperties<'a>,
+    ) -> Result<Self::NodeProperties<'a>, Error> {
         match value {
-            Some(NodeControls::Mdlx(value)) => Ok(value),
+            Some(NodeProperties::Mdlx(value)) => Ok(value),
             _ => Err(incompatible("node")),
         }
     }
-    fn mesh<'a>(value: <Universal as Profile>::Mesh<'a>) -> Result<Self::Mesh<'a>, Error> {
+    fn mesh<'a>(
+        value: <Universal as Profile>::MeshProperties<'a>,
+    ) -> Result<Self::MeshProperties<'a>, Error> {
         match value {
-            Some(MeshControls::Mdlx(value)) => Ok(value),
+            Some(MeshProperties::Mdlx(value)) => Ok(value),
             _ => Err(incompatible("mesh")),
         }
     }
     fn instance<'a>(
-        value: <Universal as Profile>::Instance<'a>,
-    ) -> Result<Self::Instance<'a>, Error> {
+        value: <Universal as Profile>::InstanceProperties<'a>,
+    ) -> Result<Self::InstanceProperties<'a>, Error> {
         match value {
-            None => Ok(NoControls),
+            None => Ok(NoProperties),
             _ => Err(incompatible("instance")),
         }
     }
-    fn draw(value: <Universal as Profile>::Draw) -> Result<Self::Draw, Error> {
+    fn draw(value: <Universal as Profile>::DrawProperties) -> Result<Self::DrawProperties, Error> {
         match value {
-            None => Ok(NoControls),
+            None => Ok(NoProperties),
             _ => Err(incompatible("draw")),
         }
     }
-    fn clip<'a>(value: <Universal as Profile>::Clip<'a>) -> Result<Self::Clip<'a>, Error> {
+    fn clip<'a>(
+        value: <Universal as Profile>::ClipProperties<'a>,
+    ) -> Result<Self::ClipProperties<'a>, Error> {
         match value {
-            Some(ClipControls::Mdlx(value)) => Ok(value),
+            Some(ClipProperties::Mdlx(value)) => Ok(value),
             _ => Err(incompatible("clip")),
         }
     }

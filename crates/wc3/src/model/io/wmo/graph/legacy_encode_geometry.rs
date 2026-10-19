@@ -11,7 +11,7 @@ use crate::model::formats::wmo::records::{
     BatchFlags, BspFlags, BspNode, CullingBox, GroupFlags, TriangleFlags,
 };
 use crate::model::formats::wmo::{RecordLayout, Write};
-use crate::model::profiles::wmo::{Lighting, Pass, RegionControls};
+use crate::model::profiles::wmo::{Lighting, Pass, Region};
 use crate::model::profiles::Wmo;
 use crate::model::WorldImageResource;
 use crate::model::{InstanceId, LookId, MaterialId, Model, Topology};
@@ -104,7 +104,7 @@ pub(super) fn write<'a, B: Batch>(
 ) -> Result<Body<'a, B>, Error> {
     let instance = model.instance(instance_id).expect("validated placement");
     let mesh = model.mesh(instance.mesh).expect("validated geometry");
-    let region = &instance.controls;
+    let region = &instance.properties;
     if !mesh.geometry.strip_indices().is_empty() || !mesh.geometry.tangent_vectors().is_empty() {
         context.unsupported(
             "world.geometry.streams",
@@ -195,7 +195,7 @@ pub(super) fn write<'a, B: Batch>(
         )?)));
     let faces = mesh
         .geometry
-        .triangle_controls()
+        .triangle_properties()
         .iter()
         .map(|face| {
             if face.ground_type_selector.is_some() || face.ground_type.is_some() {
@@ -228,7 +228,7 @@ pub(super) fn write<'a, B: Batch>(
         .push(LegacyGroupChunk::Triangles(array(&faces)?));
     let query = mesh
         .geometry
-        .triangle_controls()
+        .triangle_properties()
         .iter()
         .enumerate()
         .filter_map(|(index, face)| face.spatial_queries.then_some(index))
@@ -259,7 +259,7 @@ pub(super) fn write<'a, B: Batch>(
     let mut batches = Vec::new();
     for draw in &instance.draws {
         let draw = mesh.resolve_draw(draw)?;
-        let control = draw.controls.clone().unwrap_or_default();
+        let control = draw.properties.clone().unwrap_or_default();
         if draw.subset.strip.is_some() || draw.subset.tangents.is_some() {
             context.unsupported(
                 "world.draw.streams",
@@ -428,7 +428,7 @@ pub(super) fn write<'a, B: Batch>(
     Ok(result)
 }
 fn write_lighting<'a, B: RecordLayout>(
-    region: &RegionControls<'_>,
+    region: &Region<'_>,
     model: &Model<'_, Wmo>,
     chunks: &mut Vec<LegacyGroupChunk<'a, B>>,
 ) -> Result<(), Error> {

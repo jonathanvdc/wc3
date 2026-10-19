@@ -15,7 +15,7 @@ use crate::model::common::IntoPackedArray;
 use crate::model::profiles::{Profile, Universal};
 use crate::model::BindingSchema as _;
 use crate::model::TextureCoordinates;
-use crate::model::{BindMatrices, IdentityBinding, SurfaceTriangleControls};
+use crate::model::{BindMatrices, IdentityBinding, TriangleProperties};
 use crate::model::{
     ConnectivityId, ConnectivitySets, DrawId, DrawSubset, DrawSubsetId, DrawSubsets, Error,
     GeometryData, GeometryEdit, GeometrySchema, InfluenceRows, MeshId, NodeId, PackedArray,
@@ -127,7 +127,7 @@ pub enum AttributeSemantic<'a> {
     /// Texture-coordinate stream with its authored slot.
     TexCoord(u32),
     /// Complete typed surface behavior per primary triangle.
-    SurfaceControls,
+    TriangleProperties,
     /// Independently authored baked-light texture coordinates.
     LightmapCoordinates,
     /// Application-defined attribute meaning.
@@ -137,7 +137,7 @@ pub enum AttributeSemantic<'a> {
 #[derive(Clone, Debug)]
 pub enum AttributeValues<'a> {
     /// Complete typed surface records, including material relationships.
-    SurfaceControls(PackedArray<'a, SurfaceTriangleControls>),
+    TriangleProperties(PackedArray<'a, TriangleProperties>),
     /// Logical boolean attributes.
     Boolean(PackedArray<'a, bool>),
     /// Three exact byte components.
@@ -167,7 +167,7 @@ impl AttributeValues<'_> {
     /// Number of domain elements carrying a value.
     pub fn len(&self) -> usize {
         match self {
-            Self::SurfaceControls(v) => v.len(),
+            Self::TriangleProperties(v) => v.len(),
             Self::Boolean(v) => v.len(),
             Self::Byte3(v) => v.len(),
             Self::Byte4(v) => v.len(),
@@ -239,7 +239,7 @@ pub struct Mesh<'a, P: Profile = Universal> {
     /// Mesh-owned reusable selections and scoped connectivity identities.
     pub subsets: DrawSubsets,
     /// Additional owner-local behavior permitted by the vocabulary.
-    pub controls: P::Mesh<'a>,
+    pub properties: P::MeshProperties<'a>,
     /// Geometry name.
     pub name: Cow<'a, str>,
     /// Complete geometry vocabulary selected by the profile.
@@ -253,7 +253,7 @@ impl<'a, P: Profile> Mesh<'a, P> {
         Self {
             subsets: DrawSubsets::default(),
             name: Cow::Borrowed(""),
-            controls: Default::default(),
+            properties: Default::default(),
             geometry,
             bounds: Bounds::default(),
         }
@@ -284,7 +284,7 @@ impl<'a, P: Profile> Mesh<'a, P> {
             id: draw.id(),
             first,
             count,
-            controls: &draw.controls,
+            properties: &draw.properties,
             subset,
         })
     }
@@ -340,7 +340,7 @@ impl<'a, P: Profile> Mesh<'a, P> {
     }
     /// Returns the binding shared by all placements of this geometry.
     pub fn skin(&self) -> Option<SkinId> {
-        P::mesh_skin(&self.controls)
+        P::mesh_skin(&self.properties)
     }
     /// Borrows model-space vertex positions without decoding the entire stream.
     pub fn positions(&self) -> &PackedArray<'a, Vec3> {
@@ -375,8 +375,8 @@ impl<'a, P: Profile> Mesh<'a, P> {
         self.geometry.influences()
     }
     /// Supplies geometry behavior from this graph's vocabulary.
-    pub fn with_controls(mut self, controls: impl Into<P::Mesh<'a>>) -> Self {
-        self.controls = controls.into();
+    pub fn with_properties(mut self, properties: impl Into<P::MeshProperties<'a>>) -> Self {
+        self.properties = properties.into();
         self
     }
     /// Names this geometry.
@@ -469,18 +469,18 @@ impl<'a, P: Profile<Binding<'a> = IdentityBinding>> Skin<'a, P> {
 #[derive(Clone, Debug)]
 pub struct Draw<P: Profile = Universal> {
     pub(crate) id: DrawId,
-    /// Behavioral controls permitted by this vocabulary.
-    pub controls: P::Draw,
+    /// Behavioral properties permitted by this vocabulary.
+    pub properties: P::DrawProperties,
     /// Mesh-owned geometry selection rendered by this binding.
     pub subset: DrawSubsetId,
 }
 impl<P: Profile> Draw<P> {
     /// Creates a draw binding with an independent stable identity.
-    pub fn new(subset: DrawSubsetId, controls: P::Draw) -> Self {
+    pub fn new(subset: DrawSubsetId, properties: P::DrawProperties) -> Self {
         Self {
             id: Scope::default().allocate(),
             subset,
-            controls,
+            properties,
         }
     }
     /// Stable identity retained when the draw is reordered or edited.
@@ -492,7 +492,7 @@ impl<P: Profile> Draw<P> {
 #[derive(Clone, Debug)]
 pub struct MeshInstance<'a, P: Profile = Universal> {
     /// Additional owner-local behavior permitted by the vocabulary.
-    pub controls: P::Instance<'a>,
+    pub properties: P::InstanceProperties<'a>,
     /// Placement node.
     pub node: NodeId,
     /// Shared geometry.
@@ -551,12 +551,12 @@ impl<'a, P: Profile> MeshInstance<'a, P> {
             draws: Vec::new(),
             lod: None,
             selection_group: 0,
-            controls: Default::default(),
+            properties: Default::default(),
         }
     }
     /// Supplies placement behavior from this graph's vocabulary.
-    pub fn with_controls(mut self, controls: impl Into<P::Instance<'a>>) -> Self {
-        self.controls = controls.into();
+    pub fn with_properties(mut self, properties: impl Into<P::InstanceProperties<'a>>) -> Self {
+        self.properties = properties.into();
         self
     }
 }
@@ -583,7 +583,7 @@ pub(crate) struct ResolvedDraw<'view, P: Profile> {
     pub id: DrawId,
     pub first: u32,
     pub count: u32,
-    pub controls: &'view P::Draw,
+    pub properties: &'view P::DrawProperties,
     pub subset: &'view DrawSubset,
 }
 

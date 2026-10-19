@@ -1,39 +1,30 @@
-//! Owner-local authoring controls chosen by the graph vocabulary.
+//! Owner-local authoring properties chosen by the graph vocabulary.
 
-/// Layered-model ownership and hierarchy semantics.
-pub mod layered;
-/// Model playback, shadow passes, and external category bindings.
-pub mod model;
-
-/// Static-world region and environment ownership declarations.
-pub mod world;
-/// Static-world draw semantics.
-pub mod world_draw;
-
+use crate::model::profiles::{m2, mdlx, wmo};
 use crate::model::{Link, ValidateLinks};
 /// Additional geometry behavior permitted by the universal vocabulary.
 #[derive(Clone, Debug)]
-pub enum MeshControls {
+pub enum MeshProperties {
     /// Warcraft III picking and sequence bounds.
-    Mdlx(layered::Geometry),
+    Mdlx(mdlx::MeshProperties),
     /// World of Warcraft sorting and culling frames.
-    M2(model::GeometryControls),
+    M2(m2::MeshProperties),
 }
-impl ValidateLinks for MeshControls {
+impl ValidateLinks for MeshProperties {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
             Self::Mdlx(value) => value.visit_links(visitor),
-            Self::M2(value) => value.center_bone.visit_links(visitor),
+            Self::M2(value) => value.visit_links(visitor),
         }
     }
 }
 /// Additional placement behavior permitted by the universal vocabulary.
 #[derive(Clone, Debug)]
-pub enum InstanceControls<'a> {
+pub enum InstanceProperties<'a> {
     /// Static-world placed region behavior and relationships.
-    Wmo(Box<world::RegionControls<'a>>),
+    Wmo(Box<wmo::Region<'a>>),
 }
-impl ValidateLinks for InstanceControls<'_> {
+impl ValidateLinks for InstanceProperties<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
             Self::Wmo(value) => value.visit_links(visitor),
@@ -46,13 +37,13 @@ impl ValidateLinks for () {
 
 /// Additional hierarchy behavior chosen by a semantic vocabulary.
 #[derive(Clone, Debug)]
-pub enum NodeControls {
+pub enum NodeProperties {
     /// World of Warcraft skeleton behavior and external bone role.
-    M2(model::BoneControls),
+    M2(m2::BoneProperties),
     /// Warcraft III bone scope, bind pose, and unresolved node behavior.
-    Mdlx(layered::NodeControls),
+    Mdlx(mdlx::NodeProperties),
 }
-impl ValidateLinks for NodeControls {
+impl ValidateLinks for NodeProperties {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
             Self::M2(value) => value.visit_links(visitor),
@@ -63,14 +54,14 @@ impl ValidateLinks for NodeControls {
 
 /// Behavioral controls attached directly to one draw pass.
 #[derive(Clone, Debug)]
-pub enum DrawControls {
+pub enum DrawProperties {
     /// World of Warcraft color or shadow pass behavior.
-    M2(model::DrawControls),
+    M2(m2::DrawProperties),
 
     /// Static-world lighting class, bounds, and lightmap behavior.
-    Wmo(world_draw::DrawControls),
+    Wmo(wmo::draw::DrawProperties),
 }
-impl ValidateLinks for DrawControls {
+impl ValidateLinks for DrawProperties {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
             Self::M2(value) => value.visit_links(visitor),

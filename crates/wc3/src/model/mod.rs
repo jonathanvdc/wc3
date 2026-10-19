@@ -61,8 +61,8 @@ pub use animation::{
 };
 mod events;
 pub use events::*;
-mod playback_controls;
-pub use playback_controls::*;
+mod playback_properties;
+pub use playback_properties::*;
 pub mod appearance;
 pub use appearance::{
     AppearanceSchema, DrawAppearanceSchema, DrawLooks, MaterialSelection, SingleLook,
@@ -83,7 +83,7 @@ mod geometry_schema;
 pub use geometry_schema::*;
 pub use profiles::wmo::WmoGeometry;
 mod geometry_domains;
-pub use geometry_domains::{ConnectivitySets, SurfaceTriangleControls};
+pub use geometry_domains::{ConnectivitySets, TriangleProperties};
 pub mod geometry;
 pub use geometry::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Bounds, Draw, Influence, Mesh,
@@ -112,8 +112,8 @@ pub use feature_schema::*;
 pub mod features;
 pub use features::*;
 /// Compile-time logical vocabularies and lossless embeddings.
-pub mod controls;
-pub use controls::{DrawControls, InstanceControls, MeshControls, NodeControls};
+pub mod properties;
+pub use properties::{DrawProperties, InstanceProperties, MeshProperties, NodeProperties};
 mod texture_transform;
 pub use texture_transform::*;
 pub mod systems;

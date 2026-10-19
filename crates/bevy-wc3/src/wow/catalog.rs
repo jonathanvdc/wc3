@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use wc3::model::MaterialStep;
 use wc3::model::{
-    DrawId, ImageResource, InstanceId, Model, NodeControls, NodeFeature, NodeId, SocketIdentity,
+    DrawId, ImageResource, InstanceId, Model, NodeFeature, NodeId, NodeProperties, SocketIdentity,
     Texture,
 };
 
@@ -50,8 +50,8 @@ impl CharacterCatalog {
         let bones = model
             .nodes()
             .iter()
-            .filter_map(|(id, node)| match &node.controls {
-                Some(NodeControls::M2(controls)) => Some(BoneIdentity {
+            .filter_map(|(id, node)| match &node.properties {
+                Some(NodeProperties::M2(controls)) => Some(BoneIdentity {
                     node: id,
                     name_crc: controls.name_crc,
                     key_bone: controls.key_bone,

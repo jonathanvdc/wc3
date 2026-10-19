@@ -34,6 +34,12 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
     let mut meshes = Vec::new();
     let mut placements = Vec::new();
     for mesh in source.geosets() {
+        if mesh.primitive_types().len() != mesh.primitive_counts().len() {
+            return Err(Error::new(
+                "mesh.topology",
+                "primitive type and count tables must have matching lengths",
+            ));
+        }
         if mesh.primitive_types().iter().any(|kind| kind != 4) || mesh.face_indices().len() % 3 != 0
         {
             return Err(Error::new(
@@ -182,7 +188,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         let subset = builder.add_primary_subset(mesh_id, 0, primitive_count)?;
         builder.add_instance_with_materials(
             MeshInstance {
-                controls: Default::default(),
+                properties: Default::default(),
                 node: placement,
                 mesh: mesh_id,
                 skin: Some(skin),
@@ -194,7 +200,7 @@ pub(super) fn read<'source, 'a, D: Dialect, S: Storage<'source, 'a>>(
         )?;
         profile.geometry.push((
             mesh_id,
-            profile::Geometry {
+            profile::MeshProperties {
                 glider: false,
                 unselectable: mesh.unselectable(),
                 sequence_bounds: mesh

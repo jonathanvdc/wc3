@@ -1,68 +1,14 @@
 //! Relationship traversal includes values not representable by a constrained profile.
-use super::{
-    Camera, CameraConvention, Light, LightActivation, NodeFeature, ParticleEmitter, RibbonEmitter,
-};
+use super::{Camera, Light, NodeFeature, ParticleEmitter, RibbonEmitter};
 use crate::model::{FeatureKind, Link, ValidateLinks};
 impl NodeFeature<'_> {
     /// Visits every graph relationship, including newly authored shared properties.
     pub(crate) fn visit_feature_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
-            Self::Light(Light::AmbientDiffuse(value)) => {
-                value.diffuse.color.visit_links(visitor);
-                value.diffuse.intensity.visit_links(visitor);
-                value.ambient.color.visit_links(visitor);
-                value.ambient.intensity.visit_links(visitor);
-                for parameter in &value.attenuation {
-                    parameter.visit_links(visitor);
-                }
-                match &value.activation {
-                    LightActivation::Enabled(value) => value.visit_links(visitor),
-                    LightActivation::Visibility(value) => {
-                        value.visibility.visit_links(visitor);
-                        if let Some(parameters) = &value.shadow_range {
-                            for parameter in parameters {
-                                parameter.visit_links(visitor);
-                            }
-                        }
-                        if let Some(parameters) = &value.falloff {
-                            for parameter in parameters {
-                                parameter.visit_links(visitor);
-                            }
-                        }
-                    }
-                }
-            }
-            Self::Camera(Camera::Aimed(value)) => {
-                value.eye_offset.visit_links(visitor);
-                value.target_offset.visit_links(visitor);
-                value.field_of_view.visit_links(visitor);
-                value.roll.visit_links(visitor);
-                if let CameraConvention::Vertical(value) = &value.convention {
-                    value.visibility.visit_links(visitor);
-                    value.focus_distance.visit_links(visitor);
-                    value.focal_length.visit_links(visitor);
-                    value.f_stop.visit_links(visitor);
-                }
-            }
-            Self::Light(Light::Portable(value)) => {
-                value.color.visit_links(visitor);
-                value.intensity.visit_links(visitor);
-                for parameter in value.attenuation.iter().chain(&value.cone) {
-                    parameter.visit_links(visitor);
-                }
-                if let Some(parameters) = &value.shadow_range {
-                    for parameter in parameters {
-                        parameter.visit_links(visitor);
-                    }
-                }
-            }
-            Self::Camera(Camera::Portable(value)) => {
-                value.field_of_view.visit_links(visitor);
-                value.target.visit_links(visitor);
-                value.focus_distance.visit_links(visitor);
-                value.focal_length.visit_links(visitor);
-                value.f_stop.visit_links(visitor);
-            }
+            Self::Light(Light::AmbientDiffuse(value)) => value.visit_links(visitor),
+            Self::Camera(Camera::LookAt(value)) => value.visit_links(visitor),
+            Self::Light(Light::SingleEmission(value)) => value.visit_links(visitor),
+            Self::Camera(Camera::Node(value)) => value.visit_links(visitor),
             Self::Attachment(value) => value.visit_links(visitor),
             Self::Light(Light::World(value)) => {
                 if value

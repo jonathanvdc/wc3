@@ -1,6 +1,4 @@
 //! Portable authored scene features, simulation constraints, and deformation systems.
-/// Keyframed geometry, collisions, and effect compositions.
-pub mod keyframed;
 /// Region-local illumination and cookie programs.
 pub mod region_lights;
 /// World regions, placements, environment, and illumination.

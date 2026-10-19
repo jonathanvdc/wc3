@@ -141,7 +141,7 @@ fn complete_material_looks_resolve_independently() {
     let instance = builder
         .add_instance_with_materials(
             MeshInstance {
-                controls: None,
+                properties: None,
                 node,
                 mesh,
                 skin: None,
@@ -246,15 +246,15 @@ fn application_vocabularies_participate_in_graph_validation() {
         type Geometry<'a> = GeometryData<'a>;
         type Surface<'a> = Surface;
         type Feature<'a> = Unavailable;
-        type ModelMetadata<'a> = profiles::NoControls;
+        type ModelMetadata<'a> = profiles::NoProperties;
         type System<'a> = Unavailable;
-        type Node<'a> = profiles::NoControls;
-        type Mesh<'a> = profiles::NoControls;
-        type Instance<'a> = profiles::NoControls;
-        type Draw = profiles::NoControls;
-        type Clip<'a> = profiles::NoControls;
+        type NodeProperties<'a> = profiles::NoProperties;
+        type MeshProperties<'a> = profiles::NoProperties;
+        type InstanceProperties<'a> = profiles::NoProperties;
+        type DrawProperties = profiles::NoProperties;
+        type ClipProperties<'a> = profiles::NoProperties;
     }
-    let mut first = ModelBuilder::<Application>::with_profile(profiles::NoControls);
+    let mut first = ModelBuilder::<Application>::with_profile(profiles::NoProperties);
     let texture = first.add_file_texture("custom.dds").unwrap();
     let material = first
         .add_material(Material::<Application> {
@@ -264,7 +264,7 @@ fn application_vocabularies_participate_in_graph_validation() {
         .unwrap();
     let graph = first.finish().unwrap();
     assert_eq!(graph.material(material).unwrap().surface.texture, texture);
-    let mut foreign = ModelBuilder::<Application>::with_profile(profiles::NoControls);
+    let mut foreign = ModelBuilder::<Application>::with_profile(profiles::NoProperties);
     foreign
         .add_material(Material::<Application> {
             name: "invalid".into(),

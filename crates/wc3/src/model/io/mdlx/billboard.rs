@@ -1,6 +1,6 @@
 //! Native declarations and their effective camera-facing operations.
-use crate::model::controls::BillboardFlags;
 use crate::model::conversion::{Context, Error};
+use crate::model::properties::BillboardFlags;
 use crate::model::{Billboard, BillboardAxis, BillboardFrame, BillboardScale};
 pub(super) fn decode(flags: BillboardFlags) -> Billboard {
     if flags.enabled {

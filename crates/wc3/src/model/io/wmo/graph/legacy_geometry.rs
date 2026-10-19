@@ -9,7 +9,7 @@ use crate::model::formats::wmo::{Classic, Read, RecordLayout};
 use crate::model::io::wmo::graph::draw::{bind_draw, ImportedDrawControls};
 use crate::model::io::{materialize, owned};
 use crate::model::profiles::wmo::{
-    Group as WorldGroup, GroupOptions, Lighting, RegionControls, WorldSystem,
+    Group as WorldGroup, GroupOptions, Lighting, Region, WorldSystem,
 };
 use crate::model::profiles::Wmo;
 use crate::model::WorldImageResource;
@@ -216,8 +216,8 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
         .with_normals(normals)?
         .with_texture_coordinates(coordinates)?
         .with_color_sets(colors)?
-        .with_triangle_controls(owned(faces))?;
-    let mut region = RegionControls {
+        .with_triangle_properties(owned(faces))?;
+    let mut region = Region {
         description: relationships::name(root, header.description)?,
         area_id: u32::from_ne_bytes(header.area.to_ne_bytes()),
         options: group_options(header.flags, header.supplemental),
@@ -393,7 +393,7 @@ pub(super) fn read<'a, 'data: 'a, B: Batch>(
     let (draws, draw_materials): (Vec<_>, Vec<_>) = draws.into_iter().unzip();
     let instance = builder.add_instance_with_materials(
         MeshInstance {
-            controls: region,
+            properties: region,
             node,
             mesh,
             skin: None,

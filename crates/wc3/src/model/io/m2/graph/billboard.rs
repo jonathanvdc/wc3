@@ -1,6 +1,6 @@
 //! Native M2 activation/lock declarations and the current facing approximation.
-use crate::model::controls::BillboardFlags;
 use crate::model::conversion::{Context, Error};
+use crate::model::properties::BillboardFlags;
 use crate::model::{Billboard, BillboardFrame, BillboardScale, EulerLocks};
 pub(super) fn decode(flags: BillboardFlags) -> Billboard {
     if !flags.enabled {

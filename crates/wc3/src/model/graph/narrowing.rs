@@ -94,7 +94,7 @@ impl<'a, P: Profile> Model<'a, P> {
                         billboard,
                         visible,
                         camera_anchored,
-                        controls,
+                        properties,
                     } = value;
                     Ok((
                         id,
@@ -107,7 +107,7 @@ impl<'a, P: Profile> Model<'a, P> {
                             billboard,
                             visible,
                             camera_anchored,
-                            controls: node(controls)?,
+                            properties: node(properties)?,
                         },
                     ))
                 })
@@ -122,7 +122,7 @@ impl<'a, P: Profile> Model<'a, P> {
                             subsets,
                             name,
                             bounds,
-                            controls,
+                            properties,
                             geometry: mut source_geometry,
                         },
                     )| {
@@ -133,7 +133,7 @@ impl<'a, P: Profile> Model<'a, P> {
                                 subsets,
                                 name,
                                 bounds,
-                                controls: mesh(controls)?,
+                                properties: mesh(properties)?,
                                 geometry: geometry(source_geometry)?,
                             },
                         ))
@@ -179,7 +179,7 @@ impl<'a, P: Profile> Model<'a, P> {
                         duration,
                         looping,
 
-                        controls,
+                        properties,
                     } = value;
                     Ok((
                         id,
@@ -190,7 +190,7 @@ impl<'a, P: Profile> Model<'a, P> {
                             duration,
                             looping,
 
-                            controls: clip(controls)?,
+                            properties: clip(properties)?,
                         },
                     ))
                 })
@@ -206,7 +206,7 @@ impl<'a, P: Profile> Model<'a, P> {
                         draws,
                         lod,
                         selection_group,
-                        controls,
+                        properties,
                     } = value;
                     Ok((
                         id,
@@ -220,19 +220,19 @@ impl<'a, P: Profile> Model<'a, P> {
                                     |Draw {
                                          subset,
                                          id,
-                                         controls,
+                                         properties,
                                      }| {
                                         Ok(Draw {
                                             subset,
                                             id,
-                                            controls: draw(controls)?,
+                                            properties: draw(properties)?,
                                         })
                                     },
                                 )
                                 .collect::<Result<_, Error>>()?,
                             lod,
                             selection_group,
-                            controls: instance(controls)?,
+                            properties: instance(properties)?,
                         },
                     ))
                 })
@@ -244,6 +244,7 @@ impl<'a, P: Profile> Model<'a, P> {
 impl<'a, P: Profile> Model<'a, P> {
     /// Projects into a smaller vocabulary exactly, rejecting incompatible authored data.
     pub fn try_narrow<Q: Narrows<P>>(self) -> Result<Model<'a, Q>, Error> {
+        Q::validate_projection(&self)?;
         let model = self.try_map_payloads::<Q>()?;
         model.validate()?;
         Ok(model)

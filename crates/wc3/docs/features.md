@@ -2,7 +2,7 @@
 
 Features attach behavior to hierarchy nodes. Use the shared inspection views to
 find that behavior across model profiles, and select its complete native definition
-when editing specialized controls. This guide builds on the [model graph](semantic.md).
+when editing specialized properties. This guide builds on the [model graph](semantic.md).
 
 ## Inspect and edit behavior
 
@@ -19,18 +19,33 @@ feature families use `Unavailable`, so they cannot be constructed accidentally.
 
 Shared structures retain common authored fields while explicit alternatives
 preserve different interpretations. `AmbientDiffuseLight` owns independently
-animated diffuse and ambient emission and distance attenuation. Its
-`LightActivation` distinguishes fractional visibility with optional shadow and
-falloff controls from boolean enablement. World, region-point, and portable lighting retain their complete definitions as
-separate illumination models. Unresolved light-kind selectors retain their original vocabulary, so
+animated diffuse and ambient emission and distance attenuation. `LightActivation`
+distinguishes fractional visibility from boolean enablement; `LightShadows` and
+optional falloff coefficients are independent of activation. World, region-point,
+and single-emission lighting retain their complete definitions as separate illumination
+models. Unresolved light-kind selectors retain their original vocabulary, so
 changing activation cannot reinterpret an unknown code in another format.
-Unresolved controls remain authored values.
 
-`AimedCamera` shares eye displacement, target and target displacement, clipping,
-roll, and field of view. `CameraConvention` distinguishes vertical projection
-with visibility and photographic controls from diagonal projection with an
-application camera role. Widening a static vertical field of view represents it
-as a slot containing a constant; animating that slot prevents exact MDLX export.
+`Camera::Node` owns a `NodeCamera` that follows its hierarchy node's position and orientation, with an
+optional target. `Camera::LookAt` owns a `LookAtCamera` with eye displacement,
+model-space target and target displacement, and roll. Both camera definitions
+own a `PerspectiveProjection` containing field of view, its vertical or diagonal
+`FieldOfViewAxis`, and clipping distances. Projection is independent of
+application role, visibility, and `CameraLens` optical parameters. A camera role
+does not select a projection or imply lens parameters.
+
+Native profiles constrain these shared meanings. MDLX uses a static vertical
+field of view, optional visibility and lens parameters, and no application role.
+M2 uses an animated diagonal field of view and an application role, without
+visibility or lens parameters. Widening a static angle creates a constant value
+slot. Exact MDLX narrowing rejects animation of that slot, even if another
+property shares it. Native profile validation rejects unsupported combinations
+before an exporter can discard them.
+
+Inspection uses the same `CameraView::LookAt` and `LightView::AmbientDiffuse`
+alternatives for shared behavior across profiles. Borrowed references preserve
+static versus animated angles and boolean versus fractional activation without
+materializing or reinterpreting their curves.
 
 ## Attachments and mounts
 
@@ -80,12 +95,14 @@ paired with their corresponding simulation rules.
 
 Ribbons follow the same contract. `mdlx::RibbonEmitter` and `m2::RibbonEmitter`
 use `TrailComposition` to share section geometry and appearance while retaining
-their exact rate, atlas selector, rendering bindings, and physical controls.
+their exact rate, atlas selector, rendering bindings, and behavior.
 Universal's `RibbonEmitter` owns either definition in its `Mdlx` or `M2`
 alternative, or references an external effect through `Resource`. MDLX rates
 remain `u32` and M2 rates remain `f32`; atlas selectors retain their `u32` or
 `u16` property identities. MDLX gravity and M2 emission angle stay in their
-respective definitions, as do their material and texture bindings.
+respective behavior definitions, alongside activation and M2 effect identity.
+M2 pass priority, color-table selection, and texture transforms belong to
+`M2RibbonRendering` with its material and texture bindings.
 
 The inspection views expose common light, camera, particle, and ribbon fields
 without cloning definitions or materializing curves. For specialized edits, select

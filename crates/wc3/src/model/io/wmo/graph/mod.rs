@@ -151,7 +151,7 @@ pub(super) fn import<'a, D: Dialect>(
             .instance(instance_id)
             .expect("created placement")
             .clone();
-        let region = &mut instance.controls;
+        let region = &mut instance.properties;
         region.file_id = source.group_file_key(key).and_then(|key| match key {
             FileKey::FileId(id) => Some(*id),
             _ => None,

@@ -1,10 +1,10 @@
 //! Exact projections of M2 owner payloads.
 use super::{incompatible, Narrows};
-use crate::model::profiles::{NoControls, Profile, Universal, M2};
+use crate::model::profiles::{NoProperties, Profile, Universal, M2};
 use crate::model::EventSource;
 use crate::model::PropertyValues;
 use crate::model::{
-    ClipControls, DrawControls, Error, MeshControls, ModelMetadata, NodeControls, System,
+    ClipProperties, DrawProperties, Error, MeshProperties, ModelMetadata, NodeProperties, System,
     UniversalAppearance, UniversalBinding,
 };
 impl Narrows<Universal> for M2 {
@@ -88,38 +88,44 @@ impl Narrows<Universal> for M2 {
         crate::model::features::TryFromFeature::try_from_feature(value, values)
             .map_err(|_| incompatible("feature"))
     }
-    fn node<'a>(value: <Universal as Profile>::Node<'a>) -> Result<Self::Node<'a>, Error> {
+    fn node<'a>(
+        value: <Universal as Profile>::NodeProperties<'a>,
+    ) -> Result<Self::NodeProperties<'a>, Error> {
         match value {
             None => Ok(None),
-            Some(NodeControls::M2(value)) => Ok(Some(value)),
+            Some(NodeProperties::M2(value)) => Ok(Some(value)),
             _ => Err(incompatible("node")),
         }
     }
-    fn mesh<'a>(value: <Universal as Profile>::Mesh<'a>) -> Result<Self::Mesh<'a>, Error> {
+    fn mesh<'a>(
+        value: <Universal as Profile>::MeshProperties<'a>,
+    ) -> Result<Self::MeshProperties<'a>, Error> {
         match value {
             None => Ok(None),
-            Some(MeshControls::M2(value)) => Ok(Some(value)),
+            Some(MeshProperties::M2(value)) => Ok(Some(value)),
             _ => Err(incompatible("mesh")),
         }
     }
     fn instance<'a>(
-        value: <Universal as Profile>::Instance<'a>,
-    ) -> Result<Self::Instance<'a>, Error> {
+        value: <Universal as Profile>::InstanceProperties<'a>,
+    ) -> Result<Self::InstanceProperties<'a>, Error> {
         match value {
-            None => Ok(NoControls),
+            None => Ok(NoProperties),
             _ => Err(incompatible("instance")),
         }
     }
-    fn draw(value: <Universal as Profile>::Draw) -> Result<Self::Draw, Error> {
+    fn draw(value: <Universal as Profile>::DrawProperties) -> Result<Self::DrawProperties, Error> {
         match value {
             None => Ok(None),
-            Some(DrawControls::M2(value)) => Ok(Some(value)),
+            Some(DrawProperties::M2(value)) => Ok(Some(value)),
             _ => Err(incompatible("draw")),
         }
     }
-    fn clip<'a>(value: <Universal as Profile>::Clip<'a>) -> Result<Self::Clip<'a>, Error> {
+    fn clip<'a>(
+        value: <Universal as Profile>::ClipProperties<'a>,
+    ) -> Result<Self::ClipProperties<'a>, Error> {
         match value {
-            Some(ClipControls::M2(value)) => Ok(value),
+            Some(ClipProperties::M2(value)) => Ok(value),
             _ => Err(incompatible("clip")),
         }
     }

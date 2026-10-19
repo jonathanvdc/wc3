@@ -2,7 +2,8 @@
 use bevy::math::Vec3;
 use bevy::math::Vec4;
 use std::sync::Arc;
-use wc3::model::controls::{world_draw::Lighting, DrawControls, InstanceControls};
+use wc3::model::profiles::wmo::Lighting;
+use wc3::model::properties::{DrawProperties, InstanceProperties};
 use wc3::model::systems::{ModelMetadata, System};
 use wc3::model::{Billboard, MeshInstance, Model, PrimitiveRange, Topology, Transform};
 
@@ -11,11 +12,11 @@ use wc3::model::{Billboard, MeshInstance, Model, PrimitiveRange, Topology, Trans
 pub(crate) fn illumination(
     model: &Model<'_>,
     instance: &MeshInstance<'_>,
-    controls: Option<&DrawControls>,
+    controls: Option<&DrawProperties>,
     exterior_material: bool,
 ) -> (Vec3, u32) {
-    let region = match &instance.controls {
-        Some(InstanceControls::Wmo(region)) => Some(region.as_ref()),
+    let region = match &instance.properties {
+        Some(InstanceProperties::Wmo(region)) => Some(region.as_ref()),
         _ => None,
     };
     let root_ambient = match model.metadata() {
@@ -30,7 +31,7 @@ pub(crate) fn illumination(
         return (ambient, 2);
     }
     let class = match controls {
-        Some(DrawControls::Wmo(controls)) => Some(controls.lighting),
+        Some(DrawProperties::Wmo(controls)) => Some(controls.lighting),
         _ => None,
     };
     let lighting = match class {
@@ -60,13 +61,13 @@ impl ColorAdjustment {
         let ModelMetadata::Wmo(metadata) = model.metadata() else {
             return None;
         };
-        let Some(InstanceControls::Wmo(region)) = &instance.controls else {
+        let Some(InstanceProperties::Wmo(region)) = &instance.properties else {
             return None;
         };
         let mesh = model.mesh(instance.mesh)?;
         let mut transition_end = 0;
         for draw in &instance.draws {
-            if !matches!(&draw.controls, Some(DrawControls::Wmo(controls)) if controls.lighting == Lighting::Transition)
+            if !matches!(&draw.properties, Some(DrawProperties::Wmo(controls)) if controls.lighting == Lighting::Transition)
             {
                 continue;
             }

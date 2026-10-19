@@ -1,7 +1,7 @@
 use super::*;
-use crate::model::controls::BillboardFlags;
 use crate::model::formats::mdlx::scene::{Node as NativeNode, NodeFlags};
 use crate::model::formats::mdlx::{Document, V800};
+use crate::model::properties::BillboardFlags;
 use crate::model::{
     Billboard, BillboardAxis, BillboardFrame, BillboardScale, EulerLocks, TransformSemantics,
 };
@@ -19,7 +19,7 @@ fn every_native_billboard_flag_combination_preserves_behavior_and_wire_bits() {
         let model = import(&source, &ImportOptions::default()).unwrap().value;
         let semantic = model.nodes().iter().next().unwrap().1;
         assert_eq!(semantic.transform_semantics, TransformSemantics::PivotLocal);
-        let original = semantic.controls.billboard_flags;
+        let original = semantic.properties.billboard_flags;
         assert_eq!(
             original,
             BillboardFlags {

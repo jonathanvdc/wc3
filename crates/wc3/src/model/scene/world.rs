@@ -1,7 +1,7 @@
 //! Group visibility, environmental volumes, placements, and liquid grids.
 use crate::model::common::packed_identity;
 use crate::model::common::AsULE;
-use crate::model::controls::world::{DoodadSetId, GroupId, PortalId};
+use crate::model::profiles::wmo::{DoodadSetId, GroupId, PortalId};
 use crate::model::values::world::{AmbientFlags, FogFlags, GroupFlags2, LightFlags};
 use crate::model::Construct;
 use crate::model::ModelResourceId;

@@ -2,7 +2,7 @@
 use super::{
     Attribute, AttributeDomain, AttributeSemantic, AttributeValues, ConnectivitySets, Error,
     GeometryData, GeometryInfluences, GeometryKind, GeometryPools, GeometrySchema, PackedArray,
-    SurfaceTriangleControls, Topology,
+    Topology, TriangleProperties,
 };
 use glam::{Vec2, Vec3, Vec4};
 
@@ -18,7 +18,7 @@ pub(crate) struct GeometryParts<'data> {
     pub topology: Topology<'data>,
     pub influences: GeometryInfluences<'data>,
     pub attributes: Vec<Attribute<'data>>,
-    pub surface_triangles: PackedArray<'data, SurfaceTriangleControls>,
+    pub triangle_properties: PackedArray<'data, TriangleProperties>,
     pub pools: GeometryPools<'data>,
 }
 impl Default for GeometryParts<'_> {
@@ -34,7 +34,7 @@ impl Default for GeometryParts<'_> {
             topology: Topology::Triangles(PackedArray::default()),
             influences: GeometryInfluences::None,
             attributes: Vec::new(),
-            surface_triangles: PackedArray::default(),
+            triangle_properties: PackedArray::default(),
             pools: GeometryPools::default(),
         }
     }
@@ -63,11 +63,11 @@ impl<'data> GeometryParts<'data> {
         for attribute in value.attributes {
             result.attributes.insert(attribute)?;
         }
-        if !value.surface_triangles.is_empty() {
+        if !value.triangle_properties.is_empty() {
             result.attributes.insert(Attribute {
-                semantic: AttributeSemantic::SurfaceControls,
+                semantic: AttributeSemantic::TriangleProperties,
                 domain: AttributeDomain::Face,
-                values: AttributeValues::SurfaceControls(value.surface_triangles),
+                values: AttributeValues::TriangleProperties(value.triangle_properties),
             })?;
         }
         if !value.pools.tangent_vectors.is_empty() {
@@ -86,7 +86,7 @@ impl<'data> GeometryData<'data> {
         let tangents = self.tangents().cloned().unwrap_or_default();
         let colors = self.colors().cloned().unwrap_or_default();
         let texture_coordinates = self.texture_coordinates().to_vec();
-        let surface_triangles = self.surface_triangles().cloned().unwrap_or_default();
+        let triangle_properties = self.triangle_properties().cloned().unwrap_or_default();
         let tangent_vectors = self.tangent_pool().cloned().unwrap_or_default();
         let strip_indices = self.strip_indices().cloned().unwrap_or_default();
         self.attributes.retain(|attribute| {
@@ -104,7 +104,7 @@ impl<'data> GeometryData<'data> {
                         | AttributeSemantic::Color(0)
                         | AttributeSemantic::TexCoord(_),
                     AttributeDomain::Vertex
-                ) | (AttributeSemantic::SurfaceControls, AttributeDomain::Face)
+                ) | (AttributeSemantic::TriangleProperties, AttributeDomain::Face)
                     | (AttributeSemantic::Tangent, AttributeDomain::Pool)
             )
         });
@@ -119,7 +119,7 @@ impl<'data> GeometryData<'data> {
             topology: self.connectivity.primary,
             influences: self.influences,
             attributes: self.attributes.into_iter().collect(),
-            surface_triangles,
+            triangle_properties,
             pools: GeometryPools {
                 triangle_strip_indices: strip_indices,
                 tangent_vectors,

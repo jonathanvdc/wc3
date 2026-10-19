@@ -120,6 +120,7 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
         .add_material(Material {
             name: "HD".into(),
             surface: MaterialSurface::from(wc3::model::profiles::mdlx::Material {
+                declaration: Default::default(),
                 steps: vec![layer],
             }),
         })
@@ -198,7 +199,6 @@ fn unknown_layer_shader_does_not_infer_hd_data_roles() {
     let mut layer = mdlx::MaterialStep::construct(&mut slot_values);
     let mut unresolved = mdlx::UnresolvedInputs::construct(&mut slot_values);
     unresolved.selector = Some(55);
-    unresolved.shader_name = "Shader_HD_DefaultUnit".into();
     unresolved.textures.push(mdlx::TextureSlot {
         slot: 1,
         binding: wc3::model::materials::bindings::TextureBinding {
@@ -211,6 +211,10 @@ fn unknown_layer_shader_does_not_infer_hd_data_roles() {
         .add_material(Material {
             name: "unknown".into(),
             surface: MaterialSurface::from(wc3::model::profiles::mdlx::Material {
+                declaration: mdlx::MaterialDeclaration {
+                    shader_name: "Shader_HD_DefaultUnit".into(),
+                    ..Default::default()
+                },
                 steps: vec![layer],
             }),
         })
@@ -263,7 +267,10 @@ fn same_resource_texture_variants_keep_independent_image_handles() {
     let id = builder
         .add_material(Material {
             name: "variants".into(),
-            surface: MaterialSurface::from(wc3::model::profiles::mdlx::Material { steps: layers }),
+            surface: MaterialSurface::from(wc3::model::profiles::mdlx::Material {
+                declaration: Default::default(),
+                steps: layers,
+            }),
         })
         .unwrap();
     let model = {
@@ -444,6 +451,7 @@ fn m2_material_program_compiles_steps_in_order_with_independent_controls() {
     second.declaration.state.ordering = -2;
     second.diffuse.contribution = slot_values.add(1.);
     let program: M2Material<'_> = MaterialProgram {
+        declaration: Default::default(),
         steps: vec![M2Step::Diffuse(first), M2Step::Diffuse(second)],
     };
     let id = builder

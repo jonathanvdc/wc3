@@ -210,10 +210,7 @@ pub(super) fn write<'a>(
 }
 
 /// Resolves the group-level category independently of database-addressed surface grids.
-pub(super) fn category(
-    region: &profile::RegionControls<'_>,
-    database_ids: bool,
-) -> Result<u32, Error> {
+pub(super) fn category(region: &profile::Region<'_>, database_ids: bool) -> Result<u32, Error> {
     if let Some(value) = region.implicit_liquid {
         if !region.liquids.is_empty() {
             return Err(Error::new(

@@ -6,7 +6,7 @@ use crate::model::{self as semantic, profiles::m2 as profile};
 use glam::Vec3;
 use std::collections::HashSet;
 mod billboard;
-use crate::model::controls::BillboardFlags;
+use crate::model::properties::BillboardFlags;
 mod actors;
 mod actors_export;
 pub(super) mod animation;
@@ -16,7 +16,7 @@ mod materials;
 mod overrides;
 mod physics;
 use animation::{bind, curve};
-use semantic::profiles::NoControls;
+use semantic::profiles::NoProperties;
 use semantic::profiles::M2 as M2Vocabulary;
 pub(in super::super) type Graph<'a> = semantic::Model<'a, M2Vocabulary>;
 pub(in super::super) type GraphBuilder<'a> = semantic::ModelBuilder<'a, M2Vocabulary>;
@@ -153,7 +153,7 @@ where
         behavior.set_billboard_lock_x(false);
         behavior.set_billboard_lock_y(false);
         behavior.set_billboard_lock_z(false);
-        node.controls = Some(profile::BoneControls {
+        node.properties = Some(profile::BoneProperties {
             billboard_flags,
             key_bone: bone.key_bone_id,
             flags: profile::values::BoneBehaviorFlags::from_bits_retain(behavior.bits()),
@@ -242,9 +242,9 @@ where
         let id = clips[index];
         let mut flags = profile::values::SequenceFlags::from_bits_retain(sequence.flags.bits());
         flags.set_alias(false);
-        builder.set_clip_controls(
+        builder.set_clip_properties(
             id,
-            profile::SequenceControls {
+            profile::SequenceProperties {
                 alias: if sequence.flags.alias() {
                     Some(
                         *clips
@@ -442,7 +442,7 @@ where
     for &id in &clips {
         let mut target = id;
         let mut seen = HashSet::new();
-        while let Some(next) = builder.model().clip(target).unwrap().controls.alias {
+        while let Some(next) = builder.model().clip(target).unwrap().properties.alias {
             if !seen.insert(target) {
                 return Err(Error::new("m2.sequence.alias", "alias cycle"));
             }

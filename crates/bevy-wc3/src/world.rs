@@ -5,10 +5,8 @@ use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
-use wc3::model::controls::{
-    world::{AmbientId, DoodadSetId, FogId, GroupId, PortalId},
-    InstanceControls,
-};
+use wc3::model::profiles::wmo::{AmbientId, DoodadSetId, FogId, GroupId, PortalId};
+use wc3::model::properties::InstanceProperties;
 use wc3::model::scene::world::{
     Ambient, Fog, GroupOptions, Liquid, LiquidVertex, PortalConnection, Volume,
 };
@@ -441,13 +439,13 @@ impl WorldRuntime {
         let mut liquids = Vec::new();
         for (instance, placement) in model.instances() {
             if runtime.memberships.contains_key(&instance)
-                || matches!(&placement.controls, Some(InstanceControls::Wmo(_)))
+                || matches!(&placement.properties, Some(InstanceProperties::Wmo(_)))
             {
                 runtime
                     .placements
                     .push((instance, placement.node, placement.lod));
             }
-            let Some(InstanceControls::Wmo(region)) = &placement.controls else {
+            let Some(InstanceProperties::Wmo(region)) = &placement.properties else {
                 continue;
             };
             for &group in runtime.memberships.get(&instance).into_iter().flatten() {

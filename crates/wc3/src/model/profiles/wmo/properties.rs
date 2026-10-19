@@ -67,7 +67,7 @@ pub struct Group<'a> {
 }
 /// Region behavior and authored relationships of one placed world geometry.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct RegionControls<'a> {
+pub struct Region<'a> {
     /// Authoring description for this region.
     pub description: Cow<'a, str>,
     /// Database identity of this region's separately addressable geometry, when assigned.

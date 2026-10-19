@@ -46,7 +46,7 @@ impl<'data> GeometryAttributes<'data> {
             (S::TexCoord(_) | S::LightmapCoordinates, V::Vector2(_)) => true,
             (S::ClothVertex, V::Unsigned(_)) => true,
             (S::CollisionTriangleControl, V::Scalar(_)) => true,
-            (S::SurfaceControls, V::SurfaceControls(_)) => {
+            (S::TriangleProperties, V::TriangleProperties(_)) => {
                 attribute.domain == AttributeDomain::Face
             }
             (S::Named(_), _) => true,

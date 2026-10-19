@@ -1,15 +1,15 @@
 //! Authoring controls belong to their logical playback owners.
-use crate::model::controls::{layered, model};
+use crate::model::profiles::{m2, mdlx};
 use crate::model::{Link, ValidateLinks};
 /// Native authoring behavior supplementing one logical clip.
 #[derive(Clone, Debug)]
-pub enum ClipControls {
+pub enum ClipProperties {
     /// Warcraft III sequence selection and authored interval controls.
-    Mdlx(layered::Sequence),
+    Mdlx(mdlx::SequenceProperties),
     /// World of Warcraft sequence selection and transition controls.
-    M2(model::SequenceControls),
+    M2(m2::SequenceProperties),
 }
-impl ValidateLinks for ClipControls {
+impl ValidateLinks for ClipProperties {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         match self {
             Self::Mdlx(value) => value.visit_links(visitor),
