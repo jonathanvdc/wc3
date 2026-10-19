@@ -15,8 +15,8 @@ use native::records::{
     SequenceFlags, TextureFlags, TextureSource, TimelineStorage, Track, ValuesStorage,
 };
 use native::{
-    Bundle, Chunked, Core, Dialect, File, ModelLayout, V272PreSplit, V256, V257, V260, V263, V264,
-    V265, V272, V273, V274,
+    AnimationResolver, Bundle, Chunked, Core, Dialect, File, ModelLayout, V272PreSplit, V256, V257,
+    V260, V263, V264, V265, V272, V273, V274,
 };
 use native::{ProfileRef, ResolvedValues};
 use std::borrow::Cow;

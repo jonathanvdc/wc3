@@ -28,6 +28,7 @@ pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     nodes: &[semantic::NodeId],
     textures: &[semantic::Texture],
+    animation_source: &AnimationResolver<'a, 'data, D>,
     clips: &[semantic::ClipId],
     clocks: &[semantic::ClockId],
     builder: &mut GraphBuilder<'a>,
@@ -46,7 +47,9 @@ where
                     .sequences
                     .get(seq)
                     .map_or((0, 0), |s| s.timing.window());
-                if let Some((c, g)) = curve(source, $native, &source.key, seq, start, $map)? {
+                if let Some((c, g)) =
+                    curve(animation_source, $native, &source.key, seq, start, $map)?
+                {
                     animation::insert(
                         builder,
                         clip,
@@ -79,7 +82,7 @@ where
                 .get(sequence)
                 .map_or((0, 0), |sequence| sequence.timing.window());
             if let Some((curve, global)) = animation::curve_in_stream(
-                source,
+                animation_source,
                 &value.animate,
                 attachment_owner,
                 if attachment_owner == &source.key {
@@ -456,7 +459,15 @@ where
         let feature = builder.reserve_feature(node);
         let camera = profile::Camera {
             convention: profile::values::CameraKind::from_raw(value.kind.raw()),
-            field_of_view: D::Layout::logical_fov(source, value, feature, clips, clocks, builder)?,
+            field_of_view: D::Layout::logical_fov(
+                source,
+                value,
+                feature,
+                animation_source,
+                clips,
+                clocks,
+                builder,
+            )?,
             clipping: [value.near_clip, value.far_clip],
             target: value.target_position_base,
             eye_offset: builder.add_value([0.; 3]),
@@ -475,7 +486,8 @@ where
                 (position, &value.positions),
                 (target, &value.target_positions),
             ] {
-                if let Some((c, g)) = animation::spline_curve(source, track, seq, start)? {
+                if let Some((c, g)) = animation::spline_curve(animation_source, track, seq, start)?
+                {
                     animation::insert(
                         builder,
                         clip,
@@ -483,7 +495,9 @@ where
                     )?;
                 }
             }
-            if let Some((c, g)) = animation::spline_curve(source, &value.roll, seq, start)? {
+            if let Some((c, g)) =
+                animation::spline_curve(animation_source, &value.roll, seq, start)?
+            {
                 animation::insert(
                     builder,
                     clip,
@@ -527,7 +541,7 @@ where
             let Some(times) = value.enabled.timeline.leaf(leaf) else {
                 continue;
             };
-            let times = source
+            let times = animation_source
                 .resolve_animation_array(times, &source.key, *b"AFM2", seq)
                 .map_err(failure)?;
             let range = if global == u16::MAX {

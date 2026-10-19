@@ -160,6 +160,7 @@ where
         });
         builder.set_node(nodes[index], node)?;
     }
+    let animation_source = source.animation_resolver();
     let tables = sequence_tables(source, owner)?;
     let mut clocks = Vec::new();
     for duration in tables.globals.iter() {
@@ -294,79 +295,91 @@ where
                     &bone.scale,
                 ),
             ] {
-                if let Some((curve, global)) =
-                    curve::<D, [f32; 3], [f32; 3]>(source, track, owner, index, start, |v| v)?
-                {
-                    builder.add_track(
-                        id,
+                if track.base.global_sequence != u16::MAX {
+                    continue;
+                }
+                if let Some((curve, global)) = curve::<D, [f32; 3], [f32; 3]>(
+                    &animation_source,
+                    track,
+                    owner,
+                    index,
+                    start,
+                    |v| v,
+                )? {
+                    animation::insert(
+                        &mut builder,
+                        Some(id),
                         DynamicTrack::Vector3(bind(curve, global, target, &clocks)?),
                     )?
                 }
             }
-            if let Some((curve, global)) =
-                curve(source, &bone.rotation, owner, index, start, |v| {
-                    semantic::Quaternion(v.floats())
-                })?
-            {
-                let rotation = builder
-                    .model()
-                    .node(nodes[bone_index])
-                    .unwrap()
-                    .transform
-                    .rotation;
-                animation::insert(
-                    &mut builder,
-                    Some(id),
-                    DynamicTrack::Rotation(bind(curve, global, rotation, &clocks)?),
-                )?
-            }
-        }
-    }
-    if clips.is_empty() {
-        for (index, bone) in bones.iter().enumerate() {
-            for (target, track) in [
-                (
-                    builder
-                        .model()
-                        .node(nodes[index])
-                        .unwrap()
-                        .transform
-                        .translation,
-                    &bone.translation,
-                ),
-                (
-                    builder.model().node(nodes[index]).unwrap().transform.scale,
-                    &bone.scale,
-                ),
-            ] {
-                if track.base.global_sequence != u16::MAX {
-                    if let Some((c, g)) =
-                        curve::<D, [f32; 3], [f32; 3]>(source, track, owner, 0, 0, |v| v)?
-                    {
-                        animation::insert(
-                            &mut builder,
-                            None,
-                            DynamicTrack::Vector3(bind(c, g, target, &clocks)?),
-                        )?
-                    }
-                }
-            }
-            if bone.rotation.base.global_sequence != u16::MAX {
-                if let Some((c, g)) = curve(source, &bone.rotation, owner, 0, 0, |v| {
-                    semantic::Quaternion(v.floats())
-                })? {
+            if bone.rotation.base.global_sequence == u16::MAX {
+                if let Some((curve, global)) = curve(
+                    &animation_source,
+                    &bone.rotation,
+                    owner,
+                    index,
+                    start,
+                    |v| semantic::Quaternion(v.floats()),
+                )? {
                     let rotation = builder
                         .model()
-                        .node(nodes[index])
+                        .node(nodes[bone_index])
                         .unwrap()
                         .transform
                         .rotation;
                     animation::insert(
                         &mut builder,
-                        None,
-                        DynamicTrack::Rotation(bind(c, g, rotation, &clocks)?),
+                        Some(id),
+                        DynamicTrack::Rotation(bind(curve, global, rotation, &clocks)?),
                     )?
                 }
+            }
+        }
+    }
+    for (index, bone) in bones.iter().enumerate() {
+        for (target, track) in [
+            (
+                builder
+                    .model()
+                    .node(nodes[index])
+                    .unwrap()
+                    .transform
+                    .translation,
+                &bone.translation,
+            ),
+            (
+                builder.model().node(nodes[index]).unwrap().transform.scale,
+                &bone.scale,
+            ),
+        ] {
+            if track.base.global_sequence != u16::MAX {
+                if let Some((c, g)) =
+                    curve::<D, [f32; 3], [f32; 3]>(&animation_source, track, owner, 0, 0, |v| v)?
+                {
+                    animation::insert(
+                        &mut builder,
+                        None,
+                        DynamicTrack::Vector3(bind(c, g, target, &clocks)?),
+                    )?
+                }
+            }
+        }
+        if bone.rotation.base.global_sequence != u16::MAX {
+            if let Some((c, g)) = curve(&animation_source, &bone.rotation, owner, 0, 0, |v| {
+                semantic::Quaternion(v.floats())
+            })? {
+                let rotation = builder
+                    .model()
+                    .node(nodes[index])
+                    .unwrap()
+                    .transform
+                    .rotation;
+                animation::insert(
+                    &mut builder,
+                    None,
+                    DynamicTrack::Rotation(bind(c, g, rotation, &clocks)?),
+                )?
             }
         }
     }
@@ -374,12 +387,21 @@ where
         source,
         &nodes,
         &textures,
+        &animation_source,
         &clips,
         &clocks,
         &mut builder,
         &mut context,
     )?;
-    actors::import(source, &nodes, &textures, &clips, &clocks, &mut builder)?;
+    actors::import(
+        source,
+        &nodes,
+        &textures,
+        &animation_source,
+        &clips,
+        &clocks,
+        &mut builder,
+    )?;
     let collision_positions = &core.collision_vertices;
     let collision_indices = &core.collision_indices;
     let collision_normals = &core.collision_normals;

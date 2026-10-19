@@ -125,6 +125,35 @@ impl<'data, D: Dialect> Bundle<'data, D> {
     pub fn files(&self) -> impl Iterator<Item = (&FileKey, &File<'data>)> {
         self.files.iter()
     }
+    /// Borrows a batch resolver with stable owner and animation dependency metadata.
+    pub fn animation_resolver(&self) -> AnimationResolver<'_, 'data, D> {
+        let dependencies = self.dependencies();
+        let owners = std::iter::once(&self.key)
+            .chain(self.files.iter().filter_map(|(key, file)| {
+                matches!(file, File::Document(_) | File::Skeleton(_)).then_some(key)
+            }))
+            .map(|key| {
+                let sequences = self.sequences_for(key);
+                let animations = (0..sequences.len())
+                    .map(|sequence| {
+                        animation_key(&dependencies, &self.files, key, &sequences, sequence)
+                    })
+                    .collect();
+                (
+                    key.clone(),
+                    AnimationOwner {
+                        layout: self.owner_layout(key),
+                        sequences,
+                        animations,
+                    },
+                )
+            })
+            .collect();
+        AnimationResolver {
+            bundle: self,
+            owners,
+        }
+    }
     /// Enumerates declared dependencies without accessing their sources.
     pub fn dependencies(&self) -> Vec<Dependency> {
         let mut result = self.model.dependencies(&self.key);
@@ -301,6 +330,15 @@ impl<'data, D: Dialect> Bundle<'data, D> {
         active.remove(key);
         Ok(())
     }
+    fn owner_layout(&self, owner: &FileKey) -> LayoutKind {
+        match self.files.get(owner) {
+            Some(File::Document(model)) => {
+                crate::visit_m2_model!(&**model, |typed| typed_layout(typed))
+            }
+            Some(File::Skeleton(skeleton)) => skeleton.layout(),
+            _ => D::Layout::KIND,
+        }
+    }
     fn owner_context(&self, owner: &FileKey) -> (LayoutKind, ModelFlags, Vec<bool>) {
         if let Some(File::Document(model)) = self.files.get(owner) {
             return crate::visit_m2_model!(&**model, |typed| model_context(typed));
@@ -443,22 +481,21 @@ impl<'data, D: Dialect> Bundle<'data, D> {
     where
         [T; 3]: Value,
     {
-        if self.owner_context(owner).0 != L::KIND {
+        if self.owner_layout(owner) != L::KIND {
             return Err(ReadError::invalid(0, "track owner layout"));
         }
-        if self.owner_context(owner).0.version() >= 264
+        if self.owner_layout(owner).version() >= 264
             && track.base.global_sequence == u16::MAX
             && sequence >= self.sequences_for(owner).len()
         {
             return Err(ReadError::invalid(0, "animation sequence index"));
         }
-        let index = if self.owner_context(owner).0.version() < 264
-            || track.base.global_sequence != u16::MAX
-        {
-            0
-        } else {
-            sequence
-        };
+        let index =
+            if self.owner_layout(owner).version() < 264 || track.base.global_sequence != u16::MAX {
+                0
+            } else {
+                sequence
+            };
         let timestamps = match track.base.timeline.leaf(index) {
             Some(values) => self.resolve_leaf(values, owner, stream, sequence)?,
             None => ZeroVec::new(),
@@ -499,7 +536,7 @@ impl<'data, D: Dialect> Bundle<'data, D> {
     where
         [T; 3]: Value,
     {
-        if self.owner_context(owner).0 != L::KIND {
+        if self.owner_layout(owner) != L::KIND {
             return Err(ReadError::invalid(0, "track owner layout"));
         }
         if L::KIND.version() >= 264
@@ -1125,4 +1162,173 @@ impl<'data, V: ModelLayout> From<Skeleton<'data, V>> for File<'data> {
     fn from(file: Skeleton<'data, V>) -> Self {
         Self::Skeleton(DynamicSkeleton::from_typed(file))
     }
+}
+
+/// An immutable animation view that resolves native keys without rebuilding bundle metadata.
+/// Its borrow keeps owner layouts, aliases and supporting-file identities stable during a batch.
+pub struct AnimationResolver<'view, 'data, D: Dialect> {
+    bundle: &'view Bundle<'data, D>,
+    owners: BTreeMap<FileKey, AnimationOwner>,
+}
+struct AnimationOwner {
+    layout: LayoutKind,
+    sequences: Vec<SequenceKey>,
+    animations: Vec<Option<FileKey>>,
+}
+impl<'view, 'data, D: Dialect> AnimationResolver<'view, 'data, D> {
+    /// Borrows the immutable native bundle backing this animation view.
+    pub fn bundle(&self) -> &'view Bundle<'data, D> {
+        self.bundle
+    }
+
+    fn owner(&self, owner: &FileKey) -> Result<&AnimationOwner, ReadError> {
+        self.owners
+            .get(owner)
+            .ok_or_else(|| ReadError::invalid(0, "animation owner"))
+    }
+    /// Resolves native timestamps and values through their owning animation stream.
+    pub fn resolve_track<T: Value, L: ModelLayout>(
+        &self,
+        track: &'view Track<'data, T, L>,
+        owner: &FileKey,
+        stream: [u8; 4],
+        sequence: usize,
+    ) -> Result<ResolvedTrack<'view, T>, ReadError>
+    where
+        [T; 3]: Value,
+    {
+        let owner_context = self.owner(owner)?;
+        if owner_context.layout != L::KIND {
+            return Err(ReadError::invalid(0, "track owner layout"));
+        }
+        if owner_context.layout.version() >= 264
+            && track.base.global_sequence == u16::MAX
+            && sequence >= owner_context.sequences.len()
+        {
+            return Err(ReadError::invalid(0, "animation sequence index"));
+        }
+        let index =
+            if owner_context.layout.version() < 264 || track.base.global_sequence != u16::MAX {
+                0
+            } else {
+                sequence
+            };
+        let timestamps = match track.base.timeline.leaf(index) {
+            Some(values) => self.resolve_leaf(values, owner, stream, sequence)?,
+            None => ZeroVec::new(),
+        };
+        let values = match track.values.leaf(index) {
+            Some(ValuesLeaf::Values(values)) => {
+                ResolvedValues::Values(self.resolve_leaf(values, owner, stream, sequence)?)
+            }
+            Some(ValuesLeaf::Splines(values)) => {
+                ResolvedValues::Splines(self.resolve_leaf(values, owner, stream, sequence)?)
+            }
+            None if track.values.is_spline() => ResolvedValues::Splines(ZeroVec::new()),
+            None => ResolvedValues::Values(ZeroVec::new()),
+        };
+        let value_count = match &values {
+            ResolvedValues::Values(values) => values.len(),
+            ResolvedValues::Splines(values) => values.len(),
+        };
+        if timestamps.len() != value_count {
+            return Err(ReadError::invalid(0, "timestamp/value count mismatch"));
+        }
+        Ok(ResolvedTrack {
+            interpolation: track.base.interpolation,
+            global_sequence: track.base.global_sequence,
+            timestamps,
+            values,
+        })
+    }
+    /// Resolves a camera spline using the same owner, sequence aliases and
+    /// external-animation streams as ordinary animation tracks.
+    pub fn resolve_spline_track<T: Value, L: ModelLayout>(
+        &self,
+        track: &'view SplineTrack<'data, T, L>,
+        owner: &FileKey,
+        stream: [u8; 4],
+        sequence: usize,
+    ) -> Result<ResolvedTrack<'view, T>, ReadError>
+    where
+        [T; 3]: Value,
+    {
+        let owner_context = self.owner(owner)?;
+        if owner_context.layout != L::KIND {
+            return Err(ReadError::invalid(0, "track owner layout"));
+        }
+        if L::KIND.version() >= 264
+            && track.base.global_sequence == u16::MAX
+            && sequence >= owner_context.sequences.len()
+        {
+            return Err(ReadError::invalid(0, "animation sequence index"));
+        }
+        let index = if L::KIND.version() < 264 || track.base.global_sequence != u16::MAX {
+            0
+        } else {
+            sequence
+        };
+        let timestamps = match track.base.timeline.leaf(index) {
+            Some(values) => self.resolve_leaf(values, owner, stream, sequence)?,
+            None => ZeroVec::new(),
+        };
+        let values = match track.values.leaf(index) {
+            Some(values) => self.resolve_leaf(values, owner, stream, sequence)?,
+            None => ZeroVec::new(),
+        };
+        if timestamps.len() != values.len() {
+            return Err(ReadError::invalid(0, "timestamp/value count mismatch"));
+        }
+        Ok(ResolvedTrack {
+            interpolation: track.base.interpolation,
+            global_sequence: track.base.global_sequence,
+            timestamps,
+            values: ResolvedValues::Splines(values),
+        })
+    }
+
+    /// Resolves a timestamp or value leaf using the owning document's terminal
+    /// animation identity, while retaining the requested leaf's encoded offsets.
+    pub fn resolve_animation_array<T: Value>(
+        &self,
+        values: Array<'view, T>,
+        owner: &FileKey,
+        stream: [u8; 4],
+        sequence: usize,
+    ) -> Result<ZeroVec<'view, T>, ReadError> {
+        self.resolve_leaf(values, owner, stream, sequence)
+    }
+
+    fn resolve_leaf<T: Value>(
+        &self,
+        values: Array<'view, T>,
+        owner: &FileKey,
+        stream: [u8; 4],
+        sequence: usize,
+    ) -> Result<ZeroVec<'view, T>, ReadError> {
+        match values {
+            Array::Inline(values) => Ok(values),
+            Array::External(reference) if reference.count == 0 => Ok(ZeroVec::new()),
+            Array::External(reference) => {
+                let key = self
+                    .owner(owner)?
+                    .animations
+                    .get(sequence)
+                    .and_then(Option::as_ref)
+                    .ok_or_else(|| ReadError::invalid(0, "animation file reference"))?;
+                let file = match self.bundle.files.get(key) {
+                    Some(File::Animation(file)) => file,
+                    _ => return Err(ReadError::invalid(0, "unloaded animation file")),
+                };
+                let bytes = file
+                    .stream(stream)
+                    .ok_or_else(|| ReadError::invalid(0, "missing animation stream"))?;
+                Decoder::new(bytes, 0, ModelFlags::default()).array(reference)
+            }
+        }
+    }
+}
+
+fn typed_layout<D: Dialect>(_: &Document<'_, D>) -> LayoutKind {
+    D::Layout::KIND
 }

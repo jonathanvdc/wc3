@@ -6,7 +6,7 @@ use crate::model::PropertyValue;
 use semantic::{Curve, CurveValue, Time, TimeSource};
 
 pub(super) fn curve<'a, 'data: 'a, D: Dialect, T, U: CurveValue + 'a>(
-    source: &'a Bundle<'data, D>,
+    source: &AnimationResolver<'a, 'data, D>,
     track: &'a Track<'data, T, D::Layout>,
     owner: &native::FileKey,
     sequence: usize,
@@ -23,7 +23,7 @@ where
         source,
         track,
         owner,
-        if *owner == source.key {
+        if *owner == source.bundle().key {
             *b"AFM2"
         } else {
             *b"AFSB"
@@ -35,7 +35,7 @@ where
 }
 
 pub(super) fn curve_in_stream<'a, 'data: 'a, D: Dialect, T, U: CurveValue + 'a>(
-    source: &'a Bundle<'data, D>,
+    source: &AnimationResolver<'a, 'data, D>,
     track: &'a Track<'data, T, D::Layout>,
     owner: &native::FileKey,
     stream: [u8; 4],
@@ -49,12 +49,15 @@ where
     T::ULE: Send + Sync,
     <[T; 3] as zerovec::ule::AsULE>::ULE: Send + Sync,
 {
-    if (0..track.base.timeline.len()).all(|i| match track.base.timeline.leaf(i) {
-        Some(Array::Inline(v)) => v.is_empty(),
-        Some(Array::External(r)) => r.count == 0,
-        None => true,
-    }) {
-        return Ok(None);
+    let index = if D::VERSION < 264 || track.base.global_sequence != u16::MAX {
+        0
+    } else {
+        sequence
+    };
+    match track.base.timeline.leaf(index) {
+        Some(Array::Inline(values)) if !values.is_empty() => {}
+        Some(Array::External(reference)) if reference.count != 0 => {}
+        _ => return Ok(None),
     }
     let resolved = source
         .resolve_track(track, owner, stream, sequence)
@@ -347,7 +350,7 @@ pub(super) fn time_ms(time: Time, context: &mut Context) -> Result<u32, Error> {
 }
 
 pub(in super::super) fn spline_curve<'a, 'data: 'a, D: Dialect, T: Value + CurveValue + 'a>(
-    source: &'a Bundle<'data, D>,
+    source: &AnimationResolver<'a, 'data, D>,
     track: &'a native::records::SplineTrack<'data, T, D::Layout>,
     sequence: usize,
     start: u32,
@@ -358,7 +361,7 @@ where
     <[T; 3] as zerovec::ule::AsULE>::ULE: Send + Sync,
 {
     let resolved = source
-        .resolve_spline_track(track, &source.key, *b"AFM2", sequence)
+        .resolve_spline_track(track, &source.bundle().key, *b"AFM2", sequence)
         .map_err(failure)?;
     let global = resolved.global_sequence;
     let times = resolved.timestamps;

@@ -223,8 +223,9 @@ fn camera_splines_follow_terminal_animation_identity_with_requested_alias_leaf()
         root_animation_key(),
         File::Animation(AnimationFile::Raw(Cow::Owned(animation_bytes()))),
     );
+    let resolver = bundle.animation_resolver();
     for (sequence, time, triplet) in [(0, 100, [11., 12., 13.]), (1, 200, [21., 22., 23.])] {
-        let resolved = bundle
+        let resolved = resolver
             .resolve_spline_track(&spline, &path(), *b"AFM2", sequence)
             .unwrap();
         assert_eq!(resolved.timestamps.get(0), Some(time));
@@ -939,4 +940,52 @@ fn event_occurrences_preserve_native_order_while_value_tracks_require_order() {
         spline.validate().unwrap_err().field,
         "track timestamps decrease"
     );
+}
+
+#[test]
+fn batch_animation_resolution_reuses_borrowed_keys_and_observes_later_bundle_edits() {
+    let mut bundle = raw_bundle();
+    let resolved = {
+        let resolver = bundle.animation_resolver();
+        let track = &bundle.model.core().bones[0].translation;
+        assert_eq!(
+            resolver
+                .resolve_track(track, &FileKey::Path("absent.m2".into()), *b"AFM2", 0)
+                .unwrap_err()
+                .field,
+            "animation owner"
+        );
+        let resolved = resolver.resolve_track(track, &path(), *b"AFM2", 0).unwrap();
+        let repeated = resolver.resolve_track(track, &path(), *b"AFM2", 0).unwrap();
+        assert_eq!(
+            resolved.timestamps.as_bytes().as_ptr(),
+            repeated.timestamps.as_bytes().as_ptr()
+        );
+        assert_eq!(resolved.timestamps.get(0), Some(100));
+        resolved
+    };
+    let ResolvedValues::Values(values) = resolved.values else {
+        panic!("ordinary values expected")
+    };
+    assert_eq!(values.get(0), Some([11., 12., 13.]));
+    drop(values);
+    let mut bytes = animation_bytes();
+    bytes[16..20].copy_from_slice(&99_f32.to_le_bytes());
+    bundle.insert(
+        root_animation_key(),
+        File::Animation(AnimationFile::Raw(Cow::Owned(bytes))),
+    );
+    let resolver = bundle.animation_resolver();
+    let resolved = resolver
+        .resolve_track(
+            &bundle.model.core().bones[0].translation,
+            &path(),
+            *b"AFM2",
+            0,
+        )
+        .unwrap();
+    let ResolvedValues::Values(values) = resolved.values else {
+        panic!("ordinary values expected")
+    };
+    assert_eq!(values.get(0), Some([99., 12., 13.]));
 }

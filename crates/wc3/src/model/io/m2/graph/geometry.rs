@@ -13,6 +13,7 @@ pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     nodes: &[semantic::NodeId],
     textures: &[semantic::Texture],
+    animation_source: &AnimationResolver<'a, 'data, D>,
     clips: &[semantic::ClipId],
     clocks: &[semantic::ClockId],
     builder: &mut GraphBuilder<'a>,
@@ -239,20 +240,28 @@ where
                                     .sequences
                                     .get(seq)
                                     .map_or((0, 0), |s| s.timing.window());
-                                if let Some((c, g)) =
-                                    curve(source, &color.color, &source.key, seq, start, |v| v)?
-                                {
+                                if let Some((c, g)) = curve(
+                                    animation_source,
+                                    &color.color,
+                                    &source.key,
+                                    seq,
+                                    start,
+                                    |v| v,
+                                )? {
                                     animation::insert(
                                         builder,
                                         clip,
                                         DynamicTrack::Vector3(bind(c, g, rgb, clocks)?),
                                     )?
                                 }
-                                if let Some((c, g)) =
-                                    curve(source, &color.alpha, &source.key, seq, start, |v| {
-                                        f32::from(v) / 32767.
-                                    })?
-                                {
+                                if let Some((c, g)) = curve(
+                                    animation_source,
+                                    &color.alpha,
+                                    &source.key,
+                                    seq,
+                                    start,
+                                    |v| f32::from(v) / 32767.,
+                                )? {
                                     animation::insert(
                                         builder,
                                         clip,
@@ -274,11 +283,14 @@ where
                                     .sequences
                                     .get(seq)
                                     .map_or((0, 0), |s| s.timing.window());
-                                if let Some((c, g)) =
-                                    curve(source, &weight.weight, &source.key, seq, start, |v| {
-                                        f32::from(v) / 32767.
-                                    })?
-                                {
+                                if let Some((c, g)) = curve(
+                                    animation_source,
+                                    &weight.weight,
+                                    &source.key,
+                                    seq,
+                                    start,
+                                    |v| f32::from(v) / 32767.,
+                                )? {
                                     animation::insert(
                                         builder,
                                         clip,
@@ -316,9 +328,14 @@ where
                                 for (prop, track) in
                                     [(tr, &transform.translation), (sc, &transform.scaling)]
                                 {
-                                    if let Some((c, g)) =
-                                        curve(source, track, &source.key, seq, start, |v| v)?
-                                    {
+                                    if let Some((c, g)) = curve(
+                                        animation_source,
+                                        track,
+                                        &source.key,
+                                        seq,
+                                        start,
+                                        |v| v,
+                                    )? {
                                         animation::insert(
                                             builder,
                                             clip,
@@ -327,7 +344,7 @@ where
                                     }
                                 }
                                 if let Some((c, g)) = curve(
-                                    source,
+                                    animation_source,
                                     &transform.rotation,
                                     &source.key,
                                     seq,

@@ -2064,3 +2064,47 @@ fn animation_categories_preserve_named_and_unknown_ids_through_conversion() {
         assert_eq!(exported.model.core().sequences[0].id, category.get());
     }
 }
+
+#[test]
+fn shared_bone_vectors_are_imported_once_at_model_scope_with_all_clips_retained() {
+    let mut source = native_triangle();
+    let core = source.model.core_mut();
+    core.global_sequences = ZeroVec::alloc_from_slice(&[1000]);
+    for id in [0, 4] {
+        core.sequences.push(m2::records::Sequence {
+            id,
+            timing: m2::records::LegacyTiming {
+                start: 0,
+                end: 1000,
+            },
+            flags: SequenceFlags::from_bits_retain(0x20),
+            variation_next: -1,
+            ..Default::default()
+        });
+    }
+    core.bones[0].translation = Track {
+        base: TrackBase {
+            global_sequence: 0,
+            timeline: LegacyTimeline {
+                timestamps: ZeroVec::alloc_from_slice(&[0, 1000]),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        values: LegacyValues::Values(ZeroVec::alloc_from_slice(&[[1., 0., 0.], [2., 0., 0.]])),
+    };
+    let model = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    assert_eq!(model.clips().len(), 2);
+    assert_eq!(model.global_tracks().count(), 1);
+    let sm::DynamicTrack::Vector3(track) = model.global_tracks().next().unwrap() else {
+        panic!("shared translation must remain a vector curve");
+    };
+    assert_eq!(track.curve.values().get(0), Some([1., 0., 0.]));
+    assert_eq!(track.curve.values().get(1), Some([2., 0., 0.]));
+    assert_eq!(track.curve.times().get(1).unwrap().as_seconds(), 1.);
+    for (id, _) in model.clips().iter() {
+        assert_eq!(model.clip_tracks(id).count(), 0);
+    }
+}
