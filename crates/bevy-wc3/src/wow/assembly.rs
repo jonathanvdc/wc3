@@ -27,7 +27,18 @@ pub fn compile_character(
     definition: &CharacterDefinition,
     models: &Models<'_>,
     images: &mut Assets<Image>,
-    resolve_image: impl FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
+    mut resolve_image: impl FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
+) -> Result<CompiledModel, ModelError> {
+    compile_character_impl(definition, models, images, &mut resolve_image)
+}
+
+// Keep preparation code generation in this crate; only image I/O crosses the callback boundary.
+#[inline(never)]
+fn compile_character_impl(
+    definition: &CharacterDefinition,
+    models: &Models<'_>,
+    images: &mut Assets<Image>,
+    resolve_image: &mut dyn FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
 ) -> Result<CompiledModel, ModelError> {
     definition
         .validate()

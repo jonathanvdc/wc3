@@ -14,7 +14,18 @@ pub fn compile_assembly(
     assembly: &Assembly,
     models: &Models<'_>,
     images: &mut Assets<Image>,
-    resolve_image: impl FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
+    mut resolve_image: impl FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
+) -> Result<CompiledModel, ModelError> {
+    compile_assembly_impl(assembly, models, images, &mut resolve_image)
+}
+
+// Keep preparation code generation in this crate; only image I/O crosses the callback boundary.
+#[inline(never)]
+fn compile_assembly_impl(
+    assembly: &Assembly,
+    models: &Models<'_>,
+    images: &mut Assets<Image>,
+    resolve_image: &mut dyn FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
 ) -> Result<CompiledModel, ModelError> {
     let mut pending = PendingAssembly::new(assembly.root.clone());
     pending.parts = assembly
