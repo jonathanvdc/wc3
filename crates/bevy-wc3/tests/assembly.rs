@@ -109,6 +109,7 @@ impl Resolver<Configuration> for Workshop {
                             height: 1,
                         },
                         opacity: 255,
+                        blend: Default::default(),
                     }],
                 },
             );

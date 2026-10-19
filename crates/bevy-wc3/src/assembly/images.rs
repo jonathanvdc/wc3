@@ -43,6 +43,7 @@ impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCo
                         }),
                         destination: layer.destination,
                         opacity: layer.opacity,
+                        blend: layer.blend,
                     })
                     .collect();
                 compose_atlas(*atlas, &layers).map_err(|error| ModelError(error.to_string()))

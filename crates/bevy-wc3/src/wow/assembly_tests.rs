@@ -140,6 +140,7 @@ fn assembly_selects_geosets_and_reuses_character_joint_for_armor() {
                     height: 1,
                 },
                 opacity: 255,
+                blend: Default::default(),
             }],
         },
     );
@@ -187,6 +188,7 @@ fn repeated_atlas_sources_are_decoded_once() {
             height: 1,
         },
         opacity: 255,
+        blend: Default::default(),
     };
     let replacement = TextureReplacement::Atlas {
         atlas: Atlas {

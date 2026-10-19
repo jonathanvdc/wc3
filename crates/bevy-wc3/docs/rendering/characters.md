@@ -27,6 +27,10 @@ directly. Resolved `wow::ModelPart`s have no inventory-slot requirement, so one
 selection can contribute several models or auxiliary components. Numeric native
 categories are translated into scoped `DrawId` and sampled-image selections before
 compilation. Atlas plans and pixels use types from `bevy_wc3::assembly`.
+For native character texture-layer modes, choose `AtlasBlend::Replace` for 0/1,
+`Multiply` for 4, `Overlay` for 6, `Screen` for 7, `AlphaStraight` for 9 and
+`Alpha` for 15. The generic `SourceOver` default retains normalized straight-alpha
+composition and is a separate equation.
 
 ## Interpret native model structure
 

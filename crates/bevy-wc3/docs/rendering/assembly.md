@@ -68,11 +68,17 @@ the order of material steps or image slots requires updating the plan.
 `TextureReplacement::Image` selects a decoded resource.
 `TextureReplacement::Atlas` defines dimensions, a clear color and ordered
 `TextureLayer` contributions. Layers carry resource identities, optional source
-crops, destination rectangles and byte opacity. The generic compiler uses explicit
+crops, destination rectangles, byte opacity and an `AtlasBlend` equation. The generic compiler uses explicit
 dependencies and input addresses; it does not infer native replacement categories.
 
-`compose_atlas` applies checked source-over composition in the decoded sRGB byte
-domain, including source and destination alpha, with nearest-neighbor scaling.
+`compose_atlas` blends in the decoded sRGB byte domain with nearest-neighbor
+scaling. `AtlasBlend::SourceOver` is the default normalized straight-alpha equation,
+including destination alpha. `Replace` copies source RGB and opacity-adjusted alpha,
+including RGB beneath transparent pixels. `Alpha` interpolates RGB by source alpha
+and uses Sa² + Da(1-Sa) for alpha; `AlphaStraight` instead uses Sa + Da(1-Sa).
+`Multiply`, source-conditioned `Overlay` and `Screen` first combine encoded colors,
+then use the `Alpha` equation. Native appearance adapters select these equations
+explicitly; generic layers retain the default.
 Invalid dimensions, pixel storage and rectangles are errors. Image callbacks
 supply `RgbaImage` values; source decoding is cached within an assembly compilation.
 After replacement resolution, equal sources, effective color spaces and samplers

@@ -6,7 +6,7 @@ mod plan;
 
 use crate::TextureInput;
 use crate::{DrawSelection, ModelError, PartBinding};
-pub use atlas::{compose_atlas, Atlas, AtlasError, AtlasLayer, PixelRect, RgbaImage};
+pub use atlas::{compose_atlas, Atlas, AtlasBlend, AtlasError, AtlasLayer, PixelRect, RgbaImage};
 pub use compile::compile_assembly;
 pub(crate) use compile::compile_with_bindings;
 use std::collections::{BTreeMap, HashMap};
@@ -126,6 +126,8 @@ pub struct TextureLayer {
     pub destination: PixelRect,
     /// Opacity multiplier, with 255 retaining source alpha.
     pub opacity: u8,
+    /// Encoded-color compositing equation.
+    pub blend: AtlasBlend,
 }
 /// Direct image replacement or ordered atlas composition.
 #[derive(Clone, Debug, PartialEq, Eq)]

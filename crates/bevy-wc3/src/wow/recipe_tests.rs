@@ -62,6 +62,7 @@ fn checked_rectangles_reject_overflow_before_asset_work() {
                         height: 1,
                     },
                     opacity: 255,
+                    blend: Default::default(),
                 }],
             },
         )]),

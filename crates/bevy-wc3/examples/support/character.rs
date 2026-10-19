@@ -99,6 +99,7 @@ fn replacements(values: BTreeMap<u32, Replacement>) -> BTreeMap<u32, TextureRepl
                             source: layer.source.map(rect),
                             destination: rect(layer.destination),
                             opacity: layer.opacity,
+                            blend: Default::default(),
                         })
                         .collect(),
                 },

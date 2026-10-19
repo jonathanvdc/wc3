@@ -19,6 +19,7 @@ fn source_over_accounts_for_both_alphas_and_layer_order() {
         source: rect(1, 1),
         destination: rect(1, 1),
         opacity: 255,
+        blend: Default::default(),
     };
     let atlas = Atlas {
         width: 1,
@@ -56,6 +57,7 @@ fn crop_scale_and_opacity_preserve_explicit_destination() {
             height: 2,
         },
         opacity: 128,
+        blend: Default::default(),
     };
     let result = compose_atlas(
         Atlas {
@@ -89,6 +91,7 @@ fn invalid_storage_and_overflowing_rectangles_are_rejected() {
             height: 1,
         },
         opacity: 255,
+        blend: Default::default(),
     };
     assert_eq!(
         compose_atlas(
@@ -101,4 +104,62 @@ fn invalid_storage_and_overflowing_rectangles_are_rejected() {
         ),
         Err(AtlasError::Rectangle)
     );
+}
+
+#[test]
+fn encoded_blend_modes_preserve_distinct_color_and_alpha_equations() {
+    let source = pixel([180, 70, 210, 128]);
+    let atlas = Atlas {
+        width: 1,
+        height: 1,
+        clear: [30, 160, 90, 96],
+    };
+    for (blend, expected) in [
+        (AtlasBlend::Replace, [180, 70, 210, 128]),
+        (AtlasBlend::Alpha, [105, 115, 150, 112]),
+        (AtlasBlend::AlphaStraight, [105, 115, 150, 176]),
+        (AtlasBlend::Multiply, [28, 138, 87, 87]),
+        (AtlasBlend::Overlay, [77, 124, 144, 112]),
+        (AtlasBlend::Screen, [110, 173, 158, 112]),
+    ] {
+        let layer = AtlasLayer {
+            image: &source,
+            source: rect(1, 1),
+            destination: rect(1, 1),
+            opacity: 255,
+            blend,
+        };
+        assert_eq!(
+            compose_atlas(atlas, &[layer]).unwrap().pixels(),
+            &expected,
+            "{blend:?}"
+        );
+    }
+}
+
+#[test]
+fn replace_keeps_hidden_rgb_and_zero_opacity_clears_alpha() {
+    let source = pixel([180, 70, 210, 0]);
+    for opacity in [0, 255] {
+        let layer = AtlasLayer {
+            image: &source,
+            source: rect(1, 1),
+            destination: rect(1, 1),
+            opacity,
+            blend: AtlasBlend::Replace,
+        };
+        assert_eq!(
+            compose_atlas(
+                Atlas {
+                    width: 1,
+                    height: 1,
+                    clear: [255; 4]
+                },
+                &[layer]
+            )
+            .unwrap()
+            .pixels(),
+            &[180, 70, 210, 0]
+        );
+    }
 }
