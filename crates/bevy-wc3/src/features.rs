@@ -134,7 +134,7 @@ impl AttachmentDefinition {
 }
 #[derive(Clone, Default)]
 pub(super) struct RuntimeFeatures {
-    lights: Vec<(ModelFeature, SemanticLight)>,
+    lights: Vec<(ModelFeature, SemanticLight, Vec3)>,
     cameras: Vec<(ModelFeature, CameraDefinition)>,
     attachments: Vec<AttachmentDefinition>,
     hooks: Vec<(ModelFeature, FeatureKind)>,
@@ -185,7 +185,7 @@ macro_rules! set_if_changed {
 }
 impl RuntimeFeatures {
     pub(super) fn light_diagnostics(&self) -> impl Iterator<Item = (FeatureId, &'static str)> + '_ {
-        self.lights.iter().filter_map(|(feature,light)|match light {
+        self.lights.iter().filter_map(|(feature,light,_)|match light {
             SemanticLight::World(_)=>Some((feature.id,"WMO common diffuse lights use Bevy intensity/range conversion; native cone calibration, Euler orientation, color blending, cookies, flicker, and per-region light-set activation remain uninterpreted")),
 
             SemanticLight::Point(_)=>Some((feature.id,"Region point-light color, intensity and range use Bevy lights; native attenuation-start and unresolved controls remain uninterpreted")),
@@ -210,7 +210,15 @@ impl RuntimeFeatures {
             // interpreter has not yet been implemented.
             result.hooks.push((feature, value.payload.kind()));
             match &value.payload {
-                NodeFeature::Light(light) => result.lights.push((feature, light.clone())),
+                NodeFeature::Light(light) => result.lights.push((
+                    feature,
+                    light.clone(),
+                    model
+                        .node(value.node)
+                        .expect("validated feature node")
+                        .transform
+                        .pivot,
+                )),
                 NodeFeature::Camera(ModelCamera::LookAt(camera)) => result
                     .cameras
                     .push((feature, CameraDefinition::LookAt((**camera).clone()))),
@@ -249,7 +257,7 @@ impl RuntimeFeatures {
             source
                 .lights
                 .iter()
-                .map(|(feature, light)| (remap(*feature), light.clone())),
+                .map(|(feature, light, origin)| (remap(*feature), light.clone(), *origin)),
         );
         self.cameras.extend(
             source
@@ -320,7 +328,7 @@ impl RuntimeFeatures {
         parents: &HashMap<FeatureId, Entity>,
     ) -> RuntimeFeatureInstances {
         let mut instances = RuntimeFeatureInstances::default();
-        for (feature, definition) in &self.lights {
+        for (feature, definition, origin) in &self.lights {
             let Some(&parent) = parents
                 .get(&feature.id)
                 .or_else(|| nodes.get(&feature.node))
@@ -335,7 +343,9 @@ impl RuntimeFeatures {
                     ambient_color: Vec3::ZERO,
                     ambient_intensity: 0.,
                 },
-                Transform::default(),
+                // The carrying node maps model coordinates; features originate at
+                // its authored pivot, as in PoseContext::sample_feature_node.
+                Transform::from_translation(*origin),
                 Visibility::default(),
                 ChildOf(parent),
             ));

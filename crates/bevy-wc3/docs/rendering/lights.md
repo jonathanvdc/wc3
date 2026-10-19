@@ -3,7 +3,9 @@
 Common authored diffuse lights become ordinary Bevy lights and illuminate other Bevy
 assets as well as imported models. `ModelLight` retains the complete supported
 light definition, application enablement, and sampled ambient metadata. The model's
-node hierarchy controls placement and cleanup.
+node hierarchy controls placement and cleanup. A light originates at its carrying
+node's authored pivot; node rotation, scale, and ancestor transforms carry that
+local origin into the scene, matching other sampled feature frames.
 
 ## Mapping and controls
 

@@ -1025,3 +1025,65 @@ fn corrected_affine_joints_publish_shear_to_skinning_and_external_children() {
     assert!(Vec3::from_array(positions[0]).abs_diff_eq(baked_expected, 1e-5));
     assert_eq!(compiled.skins[0].binds.as_ref(), original_binds.as_ref());
 }
+
+#[test]
+fn spawned_lights_use_pivot_local_origins_under_rotated_scaled_nodes() {
+    use wc3::model::{Light, NodeFeature, SingleEmissionLight};
+    for rotation in [Quat::IDENTITY, Quat::from_rotation_z(0.7)] {
+        let mut values = SlotValues::default();
+        let pivot = Vec3::new(0.5, -1., 2.);
+        let authored = ModelTransform {
+            translation: Vec3::new(3., 1., -2.),
+            rotation,
+            scale: Vec3::new(2., 0.5, 1.5),
+            pivot,
+        };
+        let mut draft = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
+        let node = draft
+            .add_node(
+                Node::named("light origin", &mut values)
+                    .with_transform(authored, &mut values)
+                    .unwrap(),
+            )
+            .unwrap();
+        let light = SingleEmissionLight::construct(&mut values);
+        let feature = draft
+            .add_feature(
+                node,
+                NodeFeature::Light(Light::SingleEmission(Box::new(light))),
+            )
+            .unwrap();
+        draft.import_values(&values).unwrap();
+        let model = draft.finish().unwrap();
+        let compiled = compile_model(&model, |_| None).unwrap();
+        let placement = Transform::from_xyz(7., 2., 1.);
+        let expected = (placement.to_matrix() * compiled.basis.to_matrix() * authored.to_matrix())
+            .transform_point3(pivot);
+        let mut meshes = Assets::default();
+        let mut binds = Assets::default();
+        let prepared = compiled.prepare(&mut meshes, &mut binds);
+        let mut materials = Assets::default();
+        let mut app = App::new();
+        app.add_plugins(TransformPlugin);
+        let mut queue = CommandQueue::default();
+        spawn_model(
+            &mut Commands::new(&mut queue, app.world()),
+            &mut meshes,
+            &mut materials,
+            &prepared,
+            placement,
+        );
+        queue.apply(app.world_mut());
+        app.update();
+        let mut lights = app
+            .world_mut()
+            .query::<(&ModelFeature, &PointLight, &GlobalTransform)>();
+        let (actual_feature, _, actual) = lights.single(app.world()).unwrap();
+        assert_eq!(actual_feature.id, feature);
+        assert!(
+            (actual.translation() - expected).length() < 1e-5,
+            "actual {:?}, expected {expected:?}",
+            actual.translation()
+        );
+    }
+}
