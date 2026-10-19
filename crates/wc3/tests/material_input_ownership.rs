@@ -143,16 +143,17 @@ fn animated_selection_retains_each_selected_images_sampler() {
     let model = io::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    assert_eq!(model.dependencies().images().len(), 1);
+    assert_eq!(model.dependencies().images().len(), 2);
     let selections = model.sampled_images();
     assert_eq!(selections.len(), 2);
-    assert_eq!(selections[0].resource, selections[1].resource);
+    assert_ne!(selections[0].resource, selections[1].resource);
     assert_ne!(selections[0].sampler.u, selections[1].sampler.u);
     let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
         .value;
     let textures: Vec<_> = output.textures().collect();
+    assert_eq!(textures.len(), 2);
     let layer = &output.materials().next().unwrap().layers[0];
     let track = layer.texture_id.track().unwrap();
     assert!(
@@ -168,7 +169,7 @@ fn animated_selection_retains_each_selected_images_sampler() {
 }
 
 #[test]
-fn duplicate_native_texture_records_share_the_resource_and_are_deduplicated_on_export() {
+fn equal_native_texture_declarations_retain_independent_resources_and_inputs() {
     let mut source = source();
     let texture = NativeTexture::new("shared.blp").unwrap();
     source.set_textures([texture.clone(), texture]);
@@ -178,17 +179,24 @@ fn duplicate_native_texture_records_share_the_resource_and_are_deduplicated_on_e
     let model = io::mdlx::import(&source, &ImportOptions::default())
         .unwrap()
         .value;
-    assert_eq!(model.dependencies().images().len(), 1);
+    assert_eq!(model.dependencies().images().len(), 2);
     let material = model.materials().iter().next().unwrap().1;
     let first = material.surface.steps[0].shader.inputs().binding.image;
     let second = material.surface.steps[1].shader.inputs().binding.image;
     assert_ne!(first, second);
-    assert_eq!(model.values()[first], model.values()[second]);
+    let first = model.values()[first].unwrap();
+    let second = model.values()[second].unwrap();
+    assert_ne!(first.resource, second.resource);
+    assert_eq!(
+        model.image_resource(first.resource),
+        model.image_resource(second.resource)
+    );
+    assert_eq!(first.sampler, second.sampler);
     let output = io::mdlx::plan::<mdlx::V800>(&model, &ExportOptions::default())
         .unwrap()
         .execute()
         .value;
-    assert_eq!(output.textures().count(), 1);
+    assert_eq!(output.textures().count(), 2);
 }
 
 #[test]
