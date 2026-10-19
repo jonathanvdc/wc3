@@ -8,7 +8,7 @@ use native_fixtures::wmo;
 use wc3::model::conversion::{ExportOptions, ImportOptions};
 use wc3::model::formats::mdlx::{self as native, FormatVersion};
 use wc3::model::materials::mdlx::{
-    MaterialInputs, MaterialStep as MdlxStep, ReforgedInputs, Shader, UnresolvedInputs,
+    Blend, MaterialInputs, MaterialStep as MdlxStep, ReforgedInputs, Shader, UnresolvedInputs,
 };
 use wc3::model::materials::program::{MaterialProgram, MaterialStep, MaterialSurface};
 use wc3::model::profiles::SurfacePayload;
@@ -291,6 +291,9 @@ fn native_import_interprets_selector_precedence_before_widening() {
 fn native_import_preserves_duplicate_and_unknown_texture_roles() {
     for selector in [1, 99, 0] {
         let model = native_model::<native::V1800>("", &[Some(selector)], true);
+        if selector == 1 {
+            assert!(export::<native::V1000>(&model).is_err());
+        }
         let material = &model.materials().iter().next().unwrap().1.surface;
         assert_eq!(
             matches!(material.steps[0].shader, Shader::ReforgedDefault(_)),
@@ -744,4 +747,158 @@ fn equal_native_bitmap_declarations_retain_independent_identities_and_animation(
     let selected = track.curve.values();
     assert_eq!(selected.get(0).unwrap().unwrap().resource, images[0].0);
     assert_eq!(selected.get(1).unwrap().unwrap().resource, images[1].0);
+}
+
+#[test]
+fn legacy_default_unit_imports_one_surface_with_animated_texture_roles() {
+    use native::mdl::Read as _;
+    use wc3::model::{AnimationSample, Time};
+
+    let source = native::Document::<native::V1000>::decode_mdl(
+        r#"
+Version { FormatVersion 1000, }
+Model "Legacy HD roles" { }
+Sequences 1 { Anim "Stand" { Interval { 0, 1000 }, } }
+Textures 7 {
+    Bitmap { Image "diffuse.dds", }
+    Bitmap { Image "normal.dds", }
+    Bitmap { Image "orm.dds", }
+    Bitmap { Image "emissive.dds", }
+    Bitmap { Image "team.dds", }
+    Bitmap { Image "environment.dds", }
+    Bitmap { Image "normal_alt.dds", }
+}
+Materials 1 {
+    Material {
+        Shader "Shader_HD_DefaultUnit",
+        Layer { FilterMode Transparent, TwoSided, static TextureID 0, static Alpha 0.8, }
+        Layer {
+            FilterMode None,
+            TextureID 2 { DontInterp, 0: 1, 500: 6, }
+            Alpha 2 { Linear, 0: 0.0, 1000: 1.0, }
+        }
+        Layer { FilterMode None, static TextureID 2, }
+        Layer { FilterMode None, static TextureID 3, }
+        Layer { FilterMode None, static TextureID 4, }
+        Layer { FilterMode None, static TextureID 5, }
+    }
+}
+"#,
+    )
+    .unwrap();
+    let model = io::mdlx::import_owned(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let surface = &model.materials().iter().next().unwrap().1.surface;
+    assert_eq!(surface.steps.len(), 1);
+    let step = &surface.steps[0];
+    assert!(step.state.rasterization.faces);
+    assert_eq!(step.state.blend, Blend::AlphaKey(()));
+    let Shader::ReforgedDefault(inputs) = &step.shader else {
+        panic!("expected interpreted HD surface");
+    };
+    assert_eq!(
+        inputs
+            .textures
+            .iter()
+            .map(|slot| slot.slot)
+            .collect::<Vec<_>>(),
+        [1, 2, 3, 4, 5]
+    );
+    let textures: Vec<_> = model
+        .dependencies()
+        .images()
+        .iter()
+        .map(|(id, _)| id)
+        .collect();
+    assert_eq!(
+        model.values()[inputs.inputs.binding.image].map(|texture| texture.resource),
+        Some(textures[0])
+    );
+    assert_eq!(model.values()[inputs.inputs.opacity], 0.8);
+    let mut sample_values = SlotValues::default();
+    let sample = model
+        .animation_sample(AnimationSample {
+            clip: model.clips().iter().next().map(|(id, _)| id),
+            clip_time: Time::seconds(0.75).unwrap(),
+            ..SlotConstruct::construct(&mut sample_values)
+        })
+        .unwrap();
+    let evaluated = sample.evaluate();
+    assert_eq!(
+        evaluated[inputs.textures[0].binding.image].map(|texture| texture.resource),
+        Some(textures[6])
+    );
+    for slot in &inputs.textures[1..] {
+        assert_eq!(
+            evaluated[slot.binding.image].map(|texture| texture.resource),
+            Some(textures[slot.slot as usize])
+        );
+    }
+    let output = export::<native::V1000>(&model).unwrap();
+    let layers = &output.materials().next().unwrap().layers;
+    assert_eq!(layers.len(), 6);
+    let output_textures: Vec<_> = output.textures().collect();
+    let track = layers[1].texture_id.track().unwrap();
+    for (time, expected) in [(0., "normal.dds"), (750., "normal_alt.dds")] {
+        let index = track.evaluate(time).unwrap() as usize;
+        assert_eq!(output_textures[index].path.text(), expected);
+    }
+    for version in [1000, 1100] {
+        let restored = if version == 1000 {
+            let output = export::<native::V1000>(&model).unwrap();
+            io::mdlx::import_owned(&output, &ImportOptions::default())
+                .unwrap()
+                .value
+        } else {
+            let output = export::<native::V1100>(&model).unwrap();
+            assert_eq!(output.materials().next().unwrap().layers.len(), 1);
+            io::mdlx::import_owned(&output, &ImportOptions::default())
+                .unwrap()
+                .value
+        };
+        let surface = &restored.materials().iter().next().unwrap().1.surface;
+        assert_eq!(surface.steps.len(), 1);
+        assert_eq!(surface.steps[0].shader.textures().len(), 5);
+    }
+}
+
+#[test]
+fn legacy_layer_roles_do_not_collapse_classic_or_modern_passes() {
+    for (version, name) in [(1000, ""), (1100, "Shader_HD_DefaultUnit")] {
+        let model = if version == 1000 {
+            native_model::<native::V1000>(name, &[None; 6], false)
+        } else {
+            native_model::<native::V1100>("", &[Some(1); 6], false)
+        };
+        assert_eq!(
+            model
+                .materials()
+                .iter()
+                .next()
+                .unwrap()
+                .1
+                .surface
+                .steps
+                .len(),
+            6
+        );
+        if version == 1100 {
+            assert!(export::<native::V1000>(&model).is_err());
+        }
+    }
+}
+
+#[test]
+fn version_900_uses_legacy_roles_without_fresnel_storage() {
+    let model = native_model::<native::V900>("Shader_HD_DefaultUnit", &[None; 6], false);
+    let surface = &model.materials().iter().next().unwrap().1.surface;
+    assert_eq!(surface.steps.len(), 1);
+    let Shader::ReforgedDefault(inputs) = &surface.steps[0].shader else {
+        panic!("expected interpreted HD surface");
+    };
+    assert!(inputs.fresnel.is_none());
+    assert_eq!(inputs.textures.len(), 5);
+    let output = export::<native::V900>(&model).unwrap();
+    assert_eq!(output.materials().next().unwrap().layers.len(), 6);
 }

@@ -21,6 +21,16 @@ pub(super) fn read<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
     transforms: &[&native::TextureAnimation<'_>],
     values: &mut PropertyValues,
 ) -> Result<Material<'a>, Error> {
+    let material = read_layers::<V, S>(source, textures, transforms, values)?;
+    legacy_roles(source, material)
+}
+
+fn read_layers<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
+    source: &'source native::Material<'_, V>,
+    textures: &[Texture],
+    transforms: &[&native::TextureAnimation<'_>],
+    values: &mut PropertyValues,
+) -> Result<Material<'a>, Error> {
     let texture = |index: u32| {
         if index == u32::MAX {
             return Ok(None);
@@ -178,9 +188,18 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
     transforms: &[&native::TextureAnimation<'_>],
     decoder: &mut Decoder<'a, '_>,
 ) -> Result<Material<'a>, Error> {
-    let mut material = read::<_, S>(source, textures, transforms, decoder.builder.values_mut())?;
+    let mut material =
+        read_layers::<_, S>(source, textures, transforms, decoder.builder.values_mut())?;
 
-    for (source, layer) in source.layers.iter().zip(&mut material.steps) {
+    let legacy = matches!(V::NUMBER, 900 | 1000)
+        && source.try_shader().unwrap_or_default() == "Shader_HD_DefaultUnit";
+    for (index, (source, layer)) in source.layers.iter().zip(&mut material.steps).enumerate() {
+        if legacy && index > 0 {
+            let map = texture_map(textures, &source.texture_id)?;
+            layer.shader.inputs_mut().binding.image =
+                decoder.bind(&source.texture_id, "layer.texture_role", map)?;
+            continue;
+        }
         let classic = matches!(layer.shader, Shader::Classic(_));
         let inputs = layer.shader.inputs_mut();
         if source.texture_animation_id != u32::MAX {
@@ -243,7 +262,47 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
             slot.binding.image = decoder.bind(&source.texture_id, "layer.texture_slot", map)?;
         }
     }
-    Ok(material)
+    legacy_roles(source, material)
+}
+
+/// Named HD materials in versions 900/1000 store texture roles in layer order.
+/// Only the diffuse layer supplies draw state, opacity, UVs, and Fresnel controls.
+fn legacy_roles<'a, V: FormatVersion>(
+    source: &native::Material<'_, V>,
+    material: Material<'a>,
+) -> Result<Material<'a>, Error> {
+    if !matches!(V::NUMBER, 900 | 1000)
+        || source.try_shader().unwrap_or_default() != "Shader_HD_DefaultUnit"
+        || material.steps.is_empty()
+    {
+        return Ok(material);
+    }
+    if material.steps.len() > 6 {
+        return Err(Error::new(
+            "material.layers",
+            "legacy DefaultUnit material has more than six texture roles",
+        ));
+    }
+    let mut layers = material.steps.into_iter();
+    let mut primary = layers.next().expect("nonempty legacy material");
+    let Shader::ReforgedDefault(inputs) = &mut primary.shader else {
+        unreachable!("legacy DefaultUnit shader was interpreted during layer decoding")
+    };
+    for (index, layer) in layers.enumerate() {
+        let binding = TextureBinding {
+            image: layer.shader.inputs().binding.image,
+            coordinates: (),
+            sampling: (),
+            contribution: (),
+        };
+        inputs.textures.push(TextureSlot {
+            slot: index as u32 + 1,
+            binding,
+        });
+    }
+    Ok(Material {
+        steps: vec![primary],
+    })
 }
 
 /// Normalize only inert version storage and the canonical diffuse-slot layout.

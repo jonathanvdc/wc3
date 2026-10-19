@@ -33,6 +33,14 @@ variants carry neither IDs nor names; native export derives their selectors.
 Texture slot order, duplicate selectors, and unknown roles remain intact. Raw
 native layers remain available through the codecs for editing encoded declarations.
 
+Versions 900 and 1000 store a named `Shader_HD_DefaultUnit` surface as up to six
+native layers in diffuse, normal, ORM, emissive, team, and environment order.
+Import combines these into one step with animated image bindings. Draw controls,
+opacity, UV transforms, emissive gain, and Fresnel come from the diffuse layer;
+auxiliary layer controls do not describe additional passes. Export to these
+versions expands one HD step back into ordered native role layers and rejects
+multiple HD steps or duplicate/unknown roles that the layout cannot represent.
+
 Each step carries priority, sorting, and additional draw flags in a
 `MaterialDeclaration`. Checked native MDLX export requires those declarations to
 agree, because the native material stores them once. Unresolved names must also

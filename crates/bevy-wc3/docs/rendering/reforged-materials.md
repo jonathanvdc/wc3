@@ -18,10 +18,14 @@ storage for versions 1100 and later. Nondefault or animated Fresnel, duplicate o
 unknown slots, and conflicting legacy bindings remain unresolved rather than
 losing authored information.
 
-Native import currently retains one step per native layer. Older six-layer DefaultUnit layouts therefore do not yet combine
-into one set of semantic role bindings. Unknown/Crystal shaders retain a diagnosed
-diffuse fallback; they do not receive DefaultUnit slot rules merely because they
-contain several textures.
+In versions 900 and 1000, a material named `Shader_HD_DefaultUnit` stores diffuse,
+normal, ORM, emissive, team, and environment maps in successive native layers.
+Import combines these into one semantic step, retaining each role's animated
+texture selection. The first layer supplies draw state, opacity, UV animation,
+emissive gain, and Fresnel; the remaining layers supply images rather than draw
+passes. Modern layouts retain their explicit per-layer shader and texture slots.
+Unknown/Crystal shaders retain a diagnosed diffuse fallback; several textures
+alone do not imply DefaultUnit slot rules.
 
 ## PBR integration and roles
 
@@ -50,7 +54,10 @@ Role-aware `TextureRequest` values request linear normal/ORM images and sRGB col
 images unless an explicit semantic declaration overrides that choice. The loader
 creates separately labeled sampler/color-space variants without modifying source
 images. The same resource can safely appear as both color and numeric data. Custom
-resolvers must return images with the requested interpretation.
+resolvers must return images with the requested interpretation. Reforged models
+also need matching HD texture variants: `_hd.w3mod` and `_de.w3mod` can contain
+different atlases at the same logical path. Color-space selection does not choose
+a game-content variant; that choice belongs to the resource provider.
 
 Role texture choices, gain, Fresnel controls, and UV transforms animate through the
 same semantic programme as nodes. Each layer selects its authored coordinate set.

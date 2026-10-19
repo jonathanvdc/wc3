@@ -73,6 +73,12 @@ pub(super) fn write<'a, V: FormatVersion>(
             .steps
             .iter()
             .all(|step| matches!(step.shader, Shader::ReforgedDefault(_)));
+    if named_default_unit && source.steps.len() != 1 {
+        return Err(Error::new(
+            path,
+            "legacy DefaultUnit supports one surface, not multiple draw passes",
+        ));
+    }
     let shader_name = if named_default_unit {
         "Shader_HD_DefaultUnit"
     } else {
@@ -202,6 +208,32 @@ pub(super) fn write<'a, V: FormatVersion>(
                 texture_type: 0,
                 texture_id: replace(&mut layer.texture_id, native::Animatable::Static(0)),
             });
+        }
+        if named_default_unit {
+            let mut roles = BTreeMap::new();
+            for slot in slots {
+                if slot.texture_type > 5
+                    || roles.insert(slot.texture_type, slot.texture_id).is_some()
+                {
+                    return Err(Error::new(
+                        &path,
+                        "legacy DefaultUnit requires unique texture roles zero through five",
+                    ));
+                }
+            }
+            if let Some(diffuse) = roles.remove(&0) {
+                layer.texture_id = diffuse;
+            }
+            let last = roles.keys().next_back().copied().unwrap_or(0);
+            material.layers.push(layer);
+            for role in 1..=last {
+                let mut auxiliary = native::Layer::<V>::new();
+                auxiliary.texture_id = roles
+                    .remove(&role)
+                    .unwrap_or(native::Animatable::Static(u32::MAX));
+                material.layers.push(auxiliary);
+            }
+            continue;
         }
         if !slots.is_empty() {
             if let Err(error) = layer.try_set_texture_slots(&slots) {
