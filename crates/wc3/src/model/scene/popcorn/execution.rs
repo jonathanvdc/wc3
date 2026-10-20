@@ -1,6 +1,7 @@
 use super::{Address, Destination, Family, Instruction, Program, Source, Value};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::mem::swap;
 
 /// Resource and side-effect boundary for one particle invocation.
 ///
@@ -33,18 +34,39 @@ pub struct State {
 impl State {
     /// Allocate the maximum storage required by a layer's alternative programmes.
     pub fn for_programs<'a>(programs: impl IntoIterator<Item = &'a Program>) -> Self {
+        Self::allocate(programs, [true; 4], true)
+    }
+    fn allocate<'a>(
+        programs: impl IntoIterator<Item = &'a Program>,
+        enabled: [bool; 4],
+        calls: bool,
+    ) -> Self {
         let mut counts = [0; 4];
         let mut arguments = 0;
         for program in programs {
-            for (count, required) in counts.iter_mut().zip(program.counts) {
-                *count = (*count).max(required);
+            for ((count, required), enabled) in counts.iter_mut().zip(program.counts).zip(enabled) {
+                if enabled {
+                    *count = (*count).max(required);
+                }
             }
-            arguments = arguments.max(program.max_arguments);
+            if calls {
+                arguments = arguments.max(program.max_arguments);
+            }
         }
         Self {
             scopes: counts.map(|count| vec![[0; 4]; count]),
             arguments: Vec::with_capacity(arguments),
         }
+    }
+    pub(crate) fn persistent_for_programs<'a>(
+        programs: impl IntoIterator<Item = &'a Program>,
+    ) -> Self {
+        Self::allocate(programs, [false, false, true, true], false)
+    }
+    pub(crate) fn scratch_for_programs<'a>(
+        programs: impl IntoIterator<Item = &'a Program>,
+    ) -> Self {
+        Self::allocate(programs, [true, true, false, false], true)
     }
     /// Clear every persistent value when reusing storage for a new particle.
     pub fn clear(&mut self) {
@@ -131,6 +153,23 @@ impl Program {
                 })?;
         }
         Ok(())
+    }
+    pub(crate) fn execute_with_scratch<H: Host>(
+        &self,
+        state: &mut State,
+        scratch: &mut State,
+        host: &mut H,
+    ) -> Result<(), ExecutionError<H::Error>> {
+        for scope in 0..2 {
+            swap(&mut state.scopes[scope], &mut scratch.scopes[scope]);
+        }
+        swap(&mut state.arguments, &mut scratch.arguments);
+        let result = self.execute(state, host);
+        for scope in 0..2 {
+            swap(&mut state.scopes[scope], &mut scratch.scopes[scope]);
+        }
+        swap(&mut state.arguments, &mut scratch.arguments);
+        result
     }
     fn execute_instruction<H: Host>(
         &self,
@@ -414,3 +453,7 @@ fn binary(operation: u8, left: u32, right: u32, family: Family) -> Option<u32> {
     };
     Some(result)
 }
+
+#[cfg(test)]
+#[path = "execution_tests.rs"]
+mod tests;

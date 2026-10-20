@@ -4,6 +4,8 @@
 //! owns named fields, resources, random state and event effects; instructions
 //! carry numeric bindings rather than looking up native names per particle.
 
+use glam::{Quat, Vec2, Vec3, Vec4};
+
 mod execution;
 pub use execution::{ExecutionError, Failure, Host, State};
 
@@ -83,6 +85,48 @@ impl Value {
     /// Component bits, with inactive words zeroed.
     pub fn words(self) -> [u32; 4] {
         self.words
+    }
+}
+
+impl From<f32> for Value {
+    fn from(value: f32) -> Self {
+        Self::from_words(ValueType::Float, [value.to_bits(), 0, 0, 0])
+    }
+}
+impl From<i32> for Value {
+    fn from(value: i32) -> Self {
+        Self::from_words(ValueType::Int, [value as u32, 0, 0, 0])
+    }
+}
+impl From<bool> for Value {
+    fn from(value: bool) -> Self {
+        Self::from_words(ValueType::Bool, [if value { u32::MAX } else { 0 }, 0, 0, 0])
+    }
+}
+impl From<Vec2> for Value {
+    fn from(value: Vec2) -> Self {
+        Self::from_words(
+            ValueType::Float2,
+            [value.x.to_bits(), value.y.to_bits(), 0, 0],
+        )
+    }
+}
+impl From<Vec3> for Value {
+    fn from(value: Vec3) -> Self {
+        Self::from_words(
+            ValueType::Float3,
+            value.extend(0.).to_array().map(f32::to_bits),
+        )
+    }
+}
+impl From<Vec4> for Value {
+    fn from(value: Vec4) -> Self {
+        Self::from_words(ValueType::Float4, value.to_array().map(f32::to_bits))
+    }
+}
+impl From<Quat> for Value {
+    fn from(value: Quat) -> Self {
+        Self::from_words(ValueType::Quaternion, value.to_array().map(f32::to_bits))
     }
 }
 
@@ -196,3 +240,13 @@ pub(crate) enum Instruction {
         flags: u8,
     },
 }
+
+mod callbacks;
+pub(crate) mod graph;
+mod runtime;
+pub use graph::{
+    EffectAttribute, EffectAttributeId, EffectEntry, EffectField, EffectFieldId, EffectLayer,
+    EffectLayerId, EffectLimitation, EffectParticleId, EffectProgram, EffectRandom, EffectRenderer,
+    EffectRendererInput, EffectRendererProperty, EventStreamDuration, SceneInputs,
+};
+pub use runtime::{EffectInstance, EffectLimits, EffectRuntimeError, EffectStats, ParticleView};

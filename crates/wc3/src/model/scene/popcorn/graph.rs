@@ -1,0 +1,264 @@
+//! Immutable effect programmes and renderer-independent storage bindings.
+use super::{Program, Value, ValueType};
+use glam::Mat4;
+use std::sync::Arc;
+
+/// Zero-based layer identity within one compiled effect.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct EffectLayerId(#[doc = "Layer position in the owning effect."] pub u32);
+/// Canonical field identity within one compiled layer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct EffectFieldId(#[doc = "Field position in the owning layer."] pub u32);
+/// Authored effect attribute identity, resolved once at compilation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct EffectAttributeId(#[doc = "Attribute position in the owning effect."] pub u32);
+/// Stable live-particle identity, including the pool-slot generation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct EffectParticleId {
+    /// Reusable pool slot.
+    pub slot: u32,
+    /// Slot incarnation; stale parents cannot alias a recycled particle.
+    pub generation: u32,
+}
+/// Effect-local external inputs; simulation time belongs to the instance.
+#[derive(Clone, Copy, Debug)]
+pub struct SceneInputs {
+    /// Transforms native effect coordinates into application world coordinates once.
+    pub world_from_effect: Mat4,
+}
+impl Default for SceneInputs {
+    fn default() -> Self {
+        Self {
+            world_from_effect: Mat4::IDENTITY,
+        }
+    }
+}
+/// Canonical particle field, separate from temporary VM register storage.
+#[derive(Clone, Debug)]
+pub struct EffectField {
+    /// Authored field name.
+    pub name: Box<[u8]>,
+    /// Native type identifier, including metadata with no evaluator meaning.
+    pub native_type: u32,
+    /// Supported evaluator layout, absent for uninterpreted metadata.
+    pub value_type: Option<ValueType>,
+    pub(crate) initial: [u32; 4],
+}
+/// Authored external effect control with a checked value layout.
+#[derive(Clone, Debug)]
+pub struct EffectAttribute {
+    /// Public authored control name.
+    pub name: Box<[u8]>,
+    /// Default typed value.
+    pub default: Value,
+}
+/// One renderer stream resolved to canonical field storage.
+#[derive(Clone, Debug)]
+pub struct EffectRendererInput {
+    /// Native semantic selector; custom names retain their separate meaning.
+    pub semantic: u32,
+    /// Canonical field consumed by this stream.
+    pub field: EffectFieldId,
+    /// Optional custom semantic name.
+    pub additional_name: Option<Box<[u8]>>,
+    /// Optional native custom type selector.
+    pub additional_type: Option<i32>,
+}
+/// Immutable renderer property retaining exact native component bits.
+#[derive(Clone, Debug)]
+pub struct EffectRendererProperty {
+    /// Authored property name.
+    pub name: Box<[u8]>,
+    /// Native property layout selector.
+    pub property_type: i32,
+    /// Bit-preserving numeric components.
+    pub numeric: [u32; 4],
+    /// Optional authored resource path or text.
+    pub text: Option<Box<[u8]>>,
+}
+/// Renderer description independent of graphics APIs and native object lifetimes.
+#[derive(Clone, Debug)]
+pub struct EffectRenderer {
+    /// Owning compiled layer.
+    pub layer: EffectLayerId,
+    /// Native renderer family; zero denotes the observed billboard family.
+    pub class: i32,
+    /// Authored material feature declaration path.
+    pub feature_set: Box<[u8]>,
+    /// Signed authored priority.
+    pub draw_order: i32,
+    /// Resolved stream bindings.
+    pub inputs: Box<[EffectRendererInput]>,
+    /// Authored properties, preserving absent versus present false controls.
+    pub properties: Box<[EffectRendererProperty]>,
+}
+impl EffectRenderer {
+    /// Find an authored property during renderer preparation, outside particle loops.
+    pub fn property(&self, name: &[u8]) -> Option<&EffectRendererProperty> {
+        self.properties
+            .iter()
+            .find(|property| property.name.as_ref() == name)
+    }
+    /// Primary diffuse resource when rendering and diffuse sampling are enabled.
+    /// Disabled atlas motion-vector fallback resources do not gate this image.
+    pub fn primary_image(&self) -> Option<&[u8]> {
+        let enabled = |name: &[u8], default| {
+            self.property(name)
+                .map_or(default, |value| value.numeric[0] != 0)
+        };
+        if !enabled(b"EnableRendering", true) || !enabled(b"Diffuse", false) {
+            return None;
+        }
+        self.property(b"Diffuse.DiffuseMap")?.text.as_deref()
+    }
+}
+/// A named native graph entry and its selected event route.
+#[derive(Clone, Debug)]
+pub struct EffectEntry {
+    /// Authored name; empty entries remain distinct from a named Root entry.
+    pub name: Box<[u8]>,
+    pub(crate) event: usize,
+}
+/// Established implementation policies whose native fidelity remains unverified.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EffectLimitation {
+    /// Original counter-based random stream rather than a verified native RNG.
+    RandomSequence,
+    /// Births use a deterministic remaining-subframe interval; native fidelity is unverified.
+    BirthScheduling,
+    /// Explicit stream duration interpretation.
+    StreamDuration,
+    /// Native coordinate metadata is retained without an inferred second conversion.
+    CoordinateMetadata,
+    /// Supported T/Q transform filters use the caller's frame without independently verified scale filtering.
+    TransformMask,
+    /// Constant-capable canonical fields initialize from native constants before the authored initializer.
+    FieldInitialization,
+    /// Authored death-step controls select whether evolution runs on the terminal interval.
+    DeathEvolution,
+    /// Native interpolation selector is restricted to the observed zero mode.
+    CurveInterpolation,
+}
+/// Explicit interpretation of EventStream.duration, whose native loop contract is unresolved.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum EventStreamDuration {
+    /// Last authored occurrence time, or zero for an empty stream.
+    LastOccurrence,
+    /// Application-selected finite duration in seconds.
+    Explicit(f32),
+}
+/// Original deterministic random policy used by the checked host.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EffectRandom {
+    /// Counter-based mixed random words with deterministic child stream splitting.
+    Counter,
+    /// Interval midpoints for independent numerical-oracle tests.
+    Midpoint,
+}
+/// Shared immutable effect graph; instances own no borrowed native data.
+#[derive(Clone, Debug)]
+pub struct EffectProgram {
+    pub(crate) inner: Arc<EffectGraph>,
+}
+impl EffectProgram {
+    /// Authored default entry index, independent of entry names.
+    pub fn default_entry(&self) -> u32 {
+        self.inner.default_entry
+    }
+    /// Named and anonymous graph entries.
+    pub fn entries(&self) -> &[EffectEntry] {
+        &self.inner.entries
+    }
+    /// Compiled layers in native order.
+    pub fn layers(&self) -> &[EffectLayer] {
+        &self.inner.layers
+    }
+    /// Immutable renderer descriptions in layer/native order.
+    pub fn renderers(&self) -> &[EffectRenderer] {
+        &self.inner.renderers
+    }
+    /// Exposed typed controls and their defaults.
+    pub fn attributes(&self) -> &[EffectAttribute] {
+        &self.inner.attributes
+    }
+    /// Explicit implementation policies with unverified native fidelity.
+    pub fn limitations(&self) -> &[EffectLimitation] {
+        &self.inner.limitations
+    }
+}
+/// Canonical layer storage and immutable selected programmes.
+#[derive(Clone, Debug)]
+pub struct EffectLayer {
+    /// Canonical particle fields in native storage-index order.
+    pub fields: Box<[EffectField]>,
+    pub(crate) init: BoundProgram,
+    pub(crate) evolve: Option<BoundProgram>,
+    pub(crate) life: usize,
+    pub(crate) inverse_life: usize,
+    pub(crate) standalone: bool,
+    pub(crate) spawner: bool,
+    pub(crate) rendered: bool,
+    pub(crate) evolve_on_death: bool,
+}
+#[derive(Debug)]
+pub(crate) struct EffectGraph {
+    pub identity: Arc<()>,
+    pub default_entry: u32,
+    pub entries: Box<[EffectEntry]>,
+    pub layers: Box<[EffectLayer]>,
+    pub events: Box<[EventRoute]>,
+    pub renderers: Box<[EffectRenderer]>,
+    pub attributes: Box<[EffectAttribute]>,
+    pub samplers: Box<[EffectSampler]>,
+    pub limitations: Box<[EffectLimitation]>,
+    pub duration: EventStreamDuration,
+    pub random: EffectRandom,
+}
+#[derive(Clone, Debug)]
+pub(crate) struct BoundProgram {
+    pub program: Program,
+    pub externals: Box<[External]>,
+    pub callbacks: Box<[Callback]>,
+}
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum External {
+    Field(usize),
+    Time,
+    Delta,
+    ParticleContext,
+    EffectContext,
+    RandomContext,
+    Sampler(usize),
+    Event(usize),
+    Attribute(usize),
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Callback {
+    Age,
+    Running,
+    StreamDuration,
+    Generate,
+    InitPayload,
+    Kick,
+    Kill,
+    Rand,
+    Transform,
+    TransformDirection,
+    Sample,
+    HsvToRgb,
+    RgbToHsv,
+}
+#[derive(Debug)]
+pub(crate) struct EventRoute {
+    pub targets: Box<[EffectLayerId]>,
+}
+#[derive(Debug)]
+pub(crate) enum EffectSampler {
+    Curve {
+        kind: ValueType,
+        times: Box<[f32]>,
+        values: Box<[[f32; 4]]>,
+        tangents: Box<[[f32; 4]]>,
+    },
+    Events(Box<[f32]>),
+}

@@ -32,7 +32,7 @@ They also identify data that is preserved without a complete interpretation.
 - [World of Warcraft WMO](wmo.md) covers roots and groups, client profiles,
   collision and liquids, resources, and bundle validation.
 - [Baked Popcorn effects](popcorn.md) covers borrowed native envelopes, compiled
-  instructions, and the boundary between inspection and effect execution.
+  bindings, checked graph compilation, pooled simulation, and scalar execution.
 - [Command-line tools](tools.md) provides runnable inspection, conversion,
   repathing, texture, and archive commands.
 

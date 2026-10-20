@@ -260,3 +260,6 @@ impl<'a> Document<'a> {
         self.objects.get(link.checked_sub(1)? as usize)
     }
 }
+
+mod effect_compile;
+pub use effect_compile::{EffectCompileError, EffectCompileOptions, EffectEvolution};

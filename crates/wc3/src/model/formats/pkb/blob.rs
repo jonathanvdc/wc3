@@ -38,6 +38,11 @@ impl<'a> Document<'a> {
             .map(|object| self.compiler_blob(object))
     }
 
+    /// Read one compiler cache by its checked one-based native object link.
+    pub fn compiler_blob_at(&self, link: u32) -> Result<CompilerBlob<'a>, ReadError> {
+        self.compiler_blob(self.declaration(link, b"CCompilerBlobCache")?)
+    }
+
     fn compiler_blob(&self, object: &Object<'a>) -> Result<CompilerBlob<'a>, ReadError> {
         let origin = object.fields.as_ptr() as usize - self.bytes.as_ptr() as usize;
         let mut fields = Cursor::new(object.fields, origin);

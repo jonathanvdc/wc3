@@ -2,8 +2,9 @@
 
 `model::formats::pkb` reads the native envelopes and compiled instruction streams
 of version 2.5.1 PKB effects. Use it to inspect an external effect referenced by an
-MDLX Popcorn feature. Reading a PKB does not simulate particles or make the effect
-renderable in `bevy-wc3`.
+MDLX Popcorn feature. Native inspection borrows its source; checked graph lowering
+produces an owned, Bevy-independent programme with bounded reusable simulation.
+Graphics integration resolves the compiled renderer descriptors and their resources.
 
 ## Inspect a document
 
@@ -90,7 +91,111 @@ remain `None`; the native view does not infer scalar width from sparse metadata.
 Localized curve names and editor coordinates remain inspection data. Scheduling,
 curve interpolation and unsupported-family diagnostics belong to checked lowering.
 
-## Execute a checked programme
+## Simulate a checked effect
+
+`effect_roots()` supplies native effect links for `compile_effect()`. Lowering
+resolves named fields, attributes, samplers, callbacks and event routes once.
+The resulting `EffectProgram` owns immutable data and can be shared among many
+instances after the source document is dropped. Initialization and the selected
+physics, fixed or varying evolution stage remain separate; alternative stages do
+not all execute for the same particle.
+
+```rust
+use wc3::model::formats::pkb::{Document, EffectCompileOptions};
+use wc3::model::scene::popcorn::{EffectLimits, SceneInputs};
+
+# fn simulate(bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+let document = Document::read(bytes)?;
+let (link, _) = document.effect_roots().next().ok_or("missing effect")??;
+let program = document.compile_effect(link, &EffectCompileOptions::default())?;
+let mut instance = program.instantiate(EffectLimits::default(), 42)?;
+instance.start(&program, program.default_entry(), SceneInputs::default())?;
+instance.advance(&program, 1.0 / 60.0, SceneInputs::default())?;
+for renderer in program.renderers() {
+    for particle in instance.particles(renderer.layer) {
+        for input in &renderer.inputs {
+            let value = particle.field(input.field);
+            // Feed these typed canonical values into an application renderer.
+        }
+    }
+}
+instance.stop();
+# Ok(())
+# }
+```
+
+A pool defaults to 1,024 slots, including controllers and generators. Configure
+`EffectLimits` before instantiation to bound population, pending births, generated
+occurrences, executions, steps and predicted storage. The instance preallocates
+field component planes, persistent particle registers, event storage and shared
+VM scratch. Starting, advancing, retiring and reusing particles allocate nothing.
+Borrowed `ParticleView` values expose canonical fields independently of temporary
+VM registers, and particle IDs include a generation to distinguish recycled slots.
+Instances require the same programme identity when starting or advancing.
+
+`SceneInputs` supplies the world transform; elapsed effect time belongs to the
+instance. Authored attributes have typed defaults and resolved IDs; set overrides
+before `start()` when initialization must observe them. `set_emitting(false)`
+reversibly suppresses renderer-bearing births while structural controllers and
+accumulators advance, so hidden intervals do not accumulate a later burst.
+`stop()` disables further generation and retires pure spawners while existing
+visible particles and authored controllers finish. Restarting clears the live
+population and simulation counters while retaining allocated storage.
+
+Events retain subframe birth times, fan-out ownership and invocation-specific
+batch/draft capabilities. Initialization runs once, and a newborn evolves only
+for the remaining portion of its birth interval. Budget omissions increment
+`EffectStats`; omitted work never enters a deferred catch-up queue. If step work
+is omitted, elapsed time and lifetime still advance so particles can retire.
+Runtime errors stop advancement until the instance is restarted and leave earlier
+writes observable.
+
+The implemented callback subset covers effect age/running state, event-stream
+and rate generation, event initialization/kick, retirement, random intervals,
+point transforms with masks 17/19, direction transforms with mask 18, RGB/HSV
+conversion, and typed curve sampling. It executes the complete acquired HD
+LichAttack graph, including invisible controllers and
+its routed child layer. Broadcasts, spatial queries, unsupported payload
+operations, other transform masks, unknown callbacks and unresolved sampler
+families fail explicitly. When a native curve omits dimensionality, lowering
+resolves it from the return registers of its bound `sample` calls. All uses across owning layers and programme
+stages must agree, and values/tangents must fit that width. The borrowed native
+view still reports `None`; unused sparse curves remain unresolved.
+
+`EffectCompileOptions` makes stage selection, random policy and event-stream
+duration interpretation explicit. The original deterministic random stream,
+remaining-subframe birth scheduling, transform-mask interpretation and curve
+interpolation are implemented policies whose exact native-game fidelity remains
+unverified. Constant-capable fields initialize from native constants before the
+authored initializer; other fields begin at zero. Native range metadata does not
+trigger invented randomization. Authored death-step controls decide whether
+terminal-interval evolution runs. `limitations()` exposes these policies and
+uncertainties. Native coordinate metadata remains inspectable in the document;
+the compiler does not infer an additional coordinate conversion. Renderer
+descriptors preserve authored properties and stream bindings; a graphics adapter
+must diagnose unsupported enabled features before drawing.
+
+The caller chooses the coordinate frame carried by `SceneInputs`. Point mask 17
+adds translation only, point mask 19 applies the caller's basis and translation,
+and direction mask 18 applies its basis without translation. The basis includes
+any embedded scale; independently verified scale filtering, inverse transforms
+and populated payload frames remain unsupported. A graphics adapter using a
+fixed axis conversion should keep that conversion separate from authored T/Q
+filters and apply it once when extracting positions.
+
+Color conversion treats hue as turns, wraps hue, clamps HSV saturation to 0–1,
+and clamps HSV value below zero while retaining HDR values above one. RGB-to-HSV
+uses dominant-channel hue, range/value saturation, and zero hue/saturation for a
+range of at most `1e-6`. Alpha passes through unchanged and no gamma conversion
+occurs. Negative RGB follows the same formula; nonfinite inputs or results fail
+explicitly. Exceptional native-game color behavior remains unverified.
+
+`Value` accepts `f32`, `i32`, `bool`, and glam `Vec2`, `Vec3`, `Vec4` and `Quat`
+through `From`, preserving their distinct layouts. Boolean values normalize to
+zero/all-ones. For raw encoded fields, `Value::from_words` retains direct control
+over component bits.
+
+## Execute a scalar programme
 
 `Script::compile()` takes ordered external value layouts and resolved function
 signatures. It validates register scopes, constant writes, component layouts,
@@ -117,7 +222,8 @@ explicitly. Float-to-integer conversion uses saturating Rust casts, including
 NaN-to-zero. These are defined evaluator policies; their exact native-game edge
 fidelity remains unverified.
 
-The evaluator supplies arithmetic and a host boundary, rather than implementations
-of named native functions. Samplers, layer events, lifecycle scheduling, resource
-resolution and rendering still require implementation. Compiling a script does
-not establish that an entire effect can execute or render.
+The scalar evaluator also remains useful as an independent oracle or with an
+application-provided host. Compiling an isolated script establishes its checked
+instruction and call layout; compiling an effect additionally checks the native
+graph bindings and supported callback subset. Rendering still belongs to a
+graphics adapter.
