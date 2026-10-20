@@ -1,5 +1,4 @@
 #import "embedded://bevy_wc3/shaders/model_io.wgsl"::{VertexOutput,to_bevy,from_bevy}
-#import "embedded://bevy_wc3/shaders/particle_composition.wgsl"::{particle,compose_particle}
 // Adapted from Bevy v0.19.1 pbr_prepass.wgsl (MIT OR Apache-2.0).
 #import bevy_pbr::{
     pbr_prepass_functions,
@@ -85,15 +84,7 @@ fn composed_alpha(in:VertexOutput)->f32 {
 #ifdef VERTEX_COLORS
     tint*=in.color;
 #endif
-    if particle.mode.x!=0u {
-#ifdef VERTEX_UVS_B
-        b=textureSample(secondary,secondary_sampler,in.uv_b);
-#endif
-#ifdef VERTEX_UVS_C
-        c=textureSample(tertiary,tertiary_sampler,in.uv_c);
-#endif
-        return compose_particle(a,b,c,tint).a;
-    }
+
     var alpha=compose(a,b,c,d,tint).color.a;
 #ifdef MODEL_EDGE_FADE
     alpha*=in.edge_opacity;
@@ -140,7 +131,7 @@ fn fragment(
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK
             && pbr_bindings::material.base_color.a < pbr_bindings::material.alpha_cutoff { discard; }
-    } else if combiner.mode.x == 0u && particle.mode.x == 0u && world.composition.x == 0u {
+    } else if combiner.mode.x == 0u && world.composition.x == 0u {
         pbr_prepass_functions::prepass_alpha_discard(to_bevy(in));
     } else {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
@@ -257,7 +248,7 @@ fn fragment(vertex_output: VertexOutput) {
     if world.flags.x != 0u && world.flags.y != 0u {
         let alpha_mode=flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode==pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK && pbr_bindings::material.base_color.a < pbr_bindings::material.alpha_cutoff {discard;}
-    } else if combiner.mode.x == 0u && particle.mode.x == 0u && world.composition.x == 0u {
+    } else if combiner.mode.x == 0u && world.composition.x == 0u {
         pbr_prepass_functions::prepass_alpha_discard(to_bevy(in));
     } else {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;

@@ -5,6 +5,7 @@ use super::super::{ModelAsset, ModelInstance, ModelRig, Playback};
 use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
 use super::EffectFrame;
+use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::effects::simulation::{EmissionPhase, EmissionRounding, EmitterRng};
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -50,7 +51,7 @@ pub(crate) struct RuntimeModelParticles {
     emitters: Vec<Emitter>,
     clips: HashMap<ClipId, (f64, bool)>,
     gravity_axis: Vec3,
-    diagnostics: Vec<(FeatureId, String)>,
+    diagnostics: Vec<(FeatureId, RenderIssue)>,
 }
 struct State {
     entity: Entity,
@@ -116,7 +117,7 @@ impl RuntimeModelParticles {
     pub fn is_empty(&self) -> bool {
         self.emitters.is_empty()
     }
-    pub fn diagnostics(&self) -> &[(FeatureId, String)] {
+    pub fn diagnostics(&self) -> &[(FeatureId, RenderIssue)] {
         &self.diagnostics
     }
     pub fn compile(
@@ -146,15 +147,21 @@ impl RuntimeModelParticles {
                 continue;
             };
             let details = &definition.details;
-            let mut diagnostic =
-                |message: &str| result.diagnostics.push((feature, message.to_owned()));
+            let mut diagnostic = |kind, message: &str| {
+                result
+                    .diagnostics
+                    .push((feature, RenderIssue::new(kind, message)))
+            };
             if !matches!(details.resource, MdlxParticle1Resource::Model(_)) || details.text_resource
             {
-                diagnostic("Model-particle image/text resources require a separate sprite interpretation and are not instantiated");
+                diagnostic(RenderDiagnosticKind::Unsupported, "Model-particle image/text resources require a separate sprite interpretation and are not instantiated");
                 continue;
             }
             let Some(child) = children.get(&feature) else {
-                diagnostic("Model-particle child resource is unresolved");
+                diagnostic(
+                    RenderDiagnosticKind::Resource,
+                    "Model-particle child resource is unresolved",
+                );
                 continue;
             };
             let (rate, speed, lifetime) = (
@@ -162,8 +169,8 @@ impl RuntimeModelParticles {
                 definition.motion.speed,
                 definition.lifetime.duration,
             );
-            diagnostic("Model-particle longitude is retained but unused; latitude uses the Warcraft III radian convention");
-            diagnostic("External-model particles retain at most 1024 children and 1024 births per update; rates use the shared bounded 60 Hz emission clock");
+            diagnostic(RenderDiagnosticKind::Unsupported, "Model-particle longitude is retained but unused; latitude uses the Warcraft III radian convention");
+            diagnostic(RenderDiagnosticKind::Budget, "External-model particles retain at most 1024 children and 1024 births per update; rates use the shared bounded 60 Hz emission clock");
             result.emitters.push(Emitter {
                 feature,
                 node: attached.node,

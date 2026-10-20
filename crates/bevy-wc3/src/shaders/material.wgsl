@@ -1,5 +1,4 @@
 #import "embedded://bevy_wc3/shaders/model_io.wgsl"::{VertexOutput,to_bevy,from_bevy}
-#import "embedded://bevy_wc3/shaders/particle_composition.wgsl"::{particle,compose_particle}
 // Adapted from Bevy v0.19.1 pbr.wgsl (MIT OR Apache-2.0).
 #import bevy_pbr::{
     pbr_types,
@@ -175,18 +174,7 @@ fn fragment(
         }
     }
 
-    // Primary texture/tint have already been sampled by Bevy. The extra
-    // layers use independent per-particle streams and preserve Bevy lighting.
-    if particle.mode.x!=0u {
-        var b=vec4(1.0); var c=vec4(1.0);
-#ifdef VERTEX_UVS_B
-        b=textureSample(secondary,secondary_sampler,in.uv_b);
-#endif
-#ifdef VERTEX_UVS_C
-        c=textureSample(tertiary,tertiary_sampler,in.uv_c);
-#endif
-        pbr_input.material.base_color=compose_particle(pbr_input.material.base_color,b,c,vec4(1.0));
-    }
+
 
 #ifdef MODEL_EDGE_FADE
     pbr_input.material.base_color.a*=in.edge_opacity;

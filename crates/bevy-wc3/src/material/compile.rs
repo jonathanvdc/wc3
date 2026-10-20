@@ -1,6 +1,7 @@
 //! Native-family surface interpretation into PBR passes and explicit states.
 use super::super::textures::{TextureImages, TextureRole};
 use super::m2::compile_m2;
+use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 
 use super::wmo::compile_wmo;
 use super::{layered_uv, Blend, HdAnimation, ModelMaterial, SurfacePass};
@@ -79,7 +80,10 @@ fn compile_material(
     for pass in &mut passes {
         pass.animation.prune_static_bindings(targets);
         for diagnostic in &mut pass.diagnostics {
-            *diagnostic = format!("material {id:?} ({}): {diagnostic}", material.name);
+            diagnostic.message = format!(
+                "material {id:?} ({}): {}",
+                material.name, diagnostic.message
+            );
         }
     }
     Ok(passes)
@@ -89,7 +93,7 @@ pub(super) fn image(
     model: &Model<'_, Universal>,
     id: Option<Texture>,
     images: &TextureImages,
-    diagnostics: &mut Vec<String>,
+    diagnostics: &mut Vec<RenderIssue>,
 ) -> Result<Option<Handle<Image>>, ModelError> {
     image_role(model, id, TextureRole::Color, images, diagnostics)
 }
@@ -99,7 +103,7 @@ pub(super) fn image_role(
     id: Option<Texture>,
     role: TextureRole,
     images: &TextureImages,
-    diagnostics: &mut Vec<String>,
+    diagnostics: &mut Vec<RenderIssue>,
 ) -> Result<Option<Handle<Image>>, ModelError> {
     image_role_with_sampler(model, id, role, None, images, diagnostics)
 }
@@ -110,7 +114,7 @@ pub(super) fn image_role_with_sampler(
     role: TextureRole,
     sampler: Option<Sampler>,
     images: &TextureImages,
-    diagnostics: &mut Vec<String>,
+    diagnostics: &mut Vec<RenderIssue>,
 ) -> Result<Option<Handle<Image>>, ModelError> {
     let Some(id) = id else { return Ok(None) };
     let texture = id;
@@ -123,9 +127,12 @@ pub(super) fn image_role_with_sampler(
         )
         .cloned();
     if resolved.is_none() {
-        diagnostics.push(format!(
-            "texture {id:?} resource {:?} with role {role:?} is unresolved",
-            model.image_resource(texture.resource)
+        diagnostics.push(RenderIssue::new(
+            RenderDiagnosticKind::Resource,
+            format!(
+                "texture {id:?} resource {:?} with role {role:?} is unresolved",
+                model.image_resource(texture.resource)
+            ),
         ));
     }
 
@@ -156,14 +163,18 @@ pub(super) fn blend<E: Debug, C, A, U: Debug>(
         | BlendOperations::Modulate
         | BlendOperations::Modulate2x => AlphaMode::Blend,
         BlendOperations::Extension(value) => {
-            pass.diagnostics.push(format!(
-                "blend operation {value:?} requires a custom pipeline; using alpha blending"
+            pass.diagnostics.push(RenderIssue::new(
+                RenderDiagnosticKind::Approximation,
+                format!(
+                    "blend operation {value:?} requires a custom pipeline; using alpha blending"
+                ),
             ));
             AlphaMode::Blend
         }
         BlendOperations::Unknown(value) => {
-            pass.diagnostics.push(format!(
-                "unknown blend selector {value:?}; using alpha blending"
+            pass.diagnostics.push(RenderIssue::new(
+                RenderDiagnosticKind::Approximation,
+                format!("unknown blend selector {value:?}; using alpha blending"),
             ));
             AlphaMode::Blend
         }
@@ -197,8 +208,10 @@ pub(super) fn transform(
         Vec2::new(translation[0], translation[1]),
     );
     if x.abs() > 1e-5 || y.abs() > 1e-5 {
-        pass.diagnostics
-            .push("texture rotation outside the UV plane requires generated coordinates".into());
+        pass.diagnostics.push(RenderIssue::new(
+            RenderDiagnosticKind::Unsupported,
+            "texture rotation outside the UV plane requires generated coordinates",
+        ));
     }
 }
 
@@ -229,7 +242,7 @@ fn compile_mdlx(
         || options.back_faces_for_shadows
         || options.ambient_occlusion
     {
-        pass.diagnostics.push("authored layer wrapping, Unlit, back-face shadow, or ambient-occlusion declarations require an additional interpreter".into());
+        pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Unsupported, "authored layer wrapping, Unlit, back-face shadow, or ambient-occlusion declarations require an additional interpreter"));
     }
     rasterization(
         &mut pass,
@@ -260,8 +273,10 @@ fn compile_mdlx(
     pass.animation.centered_transform = true;
     pass.animation.transform = Some(uv.clone());
     if raster.controls.sphere_environment {
-        pass.diagnostics
-            .push("sphere-environment coordinates require a generated-coordinate shader".into());
+        pass.diagnostics.push(RenderIssue::new(
+            RenderDiagnosticKind::Unsupported,
+            "sphere-environment coordinates require a generated-coordinate shader",
+        ));
     }
     if let Some(hd_inputs) = hd_inputs {
         let mut slots = from_fn(|_| None);
@@ -270,9 +285,9 @@ fn compile_mdlx(
             if let Some(binding) = slots.get_mut(slot.slot as usize) {
                 *binding = Some(slot.binding.image);
             } else {
-                pass.diagnostics.push(format!(
-                    "DefaultUnit texture slot {} is unsupported",
-                    slot.slot
+                pass.diagnostics.push(RenderIssue::new(
+                    RenderDiagnosticKind::Unsupported,
+                    format!("DefaultUnit texture slot {} is unsupported", slot.slot),
                 ));
             }
         }
@@ -314,18 +329,21 @@ fn compile_mdlx(
         // overwrite it transiently and mark an unchanged asset as modified.
         pass.animation.texture = None;
         pass.animation.hd = Some(hd);
-        pass.diagnostics.push("DefaultUnit Fresnel and authored environment reflection use the renderer's PBR approximation; game fidelity remains unverified".into());
+        pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Approximation, "DefaultUnit Fresnel and authored environment reflection use the renderer's PBR approximation; game fidelity remains unverified"));
     } else if let mdlx::Shader::Unresolved(_) = &surface.shader {
-        pass.diagnostics.push(format!(
+        pass.diagnostics.push(RenderIssue::new(
+            RenderDiagnosticKind::Unsupported,
+            format!(
             "extended layered shader {:?} needs its authored texture-slot and Fresnel interpreter",
             declaration.shader_name
+        ),
         ));
     }
     if declaration.constant_color || declaration.sort_near_z || declaration.sort_far_z {
-        pass.diagnostics.push(
-            "constant-color or primitive-level sorting controls are not evaluated by this PBR pass"
-                .into(),
-        );
+        pass.diagnostics.push(RenderIssue::new(
+            RenderDiagnosticKind::Unsupported,
+            "constant-color or primitive-level sorting controls are not evaluated by this PBR pass",
+        ));
     }
     if let Some(gain) = emissive_gain
         .as_ref()

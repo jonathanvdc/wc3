@@ -1,0 +1,325 @@
+//! View-specific M2 sprite ordering and GPU corner expansion.
+use bevy::core_pipeline::core_3d::Transparent3d;
+use bevy::math::{Affine3A, Vec3A};
+use bevy::mesh::MeshVertexBufferLayoutRef;
+use bevy::pbr::{
+    self, MeshInputUniform, MeshPipeline, MeshPipelineKey, MeshPipelineSystems, MeshUniform,
+    RenderMeshInstances, SetMeshViewBindGroup, SetMeshViewBindingArrayBindGroup, ViewKeyCache,
+};
+use bevy::prelude::*;
+use bevy::render::{
+    batching::gpu_preprocessing::BatchedInstanceBuffers,
+    extract_component::ExtractComponentPlugin,
+    mesh::RenderMesh,
+    render_asset::RenderAssets,
+    render_phase::{AddRenderCommand, DrawFunctions, SetItemPipeline, ViewSortedRenderPhases},
+    render_resource::*,
+    renderer::{RenderDevice, RenderQueue},
+    sync_world::MainEntity,
+    texture::{FallbackImage, GpuImage},
+    view::{ExtractedView, RenderVisibleEntities},
+    Render, RenderApp, RenderStartup, RenderSystems,
+};
+use std::sync::Arc;
+use wc3::model::values::model::ParticleBlend;
+
+use super::records::{AgeSpriteData, AgeSpriteRecord, AgeSpriteUniform};
+use crate::effects::render::{
+    effect_texture_layout, effect_vertex_layout, effect_visible, transparent_effect_draw,
+    DrawEffectInstances, EffectBuffer, PassResources, ResidentRecordBuffer,
+};
+
+pub(crate) struct AgeSpriteRenderPlugin;
+impl Plugin for AgeSpriteRenderPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_plugins(ExtractComponentPlugin::<AgeSpriteData>::default());
+        let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
+            return;
+        };
+        render_app
+            .add_render_command::<Transparent3d, DrawAgeSprites>()
+            .init_resource::<SpecializedMeshPipelines<AgeSpritePipeline>>()
+            .add_systems(RenderStartup, init_pipeline.after(MeshPipelineSystems))
+            .add_systems(
+                Render,
+                (
+                    queue_age_sprites.in_set(RenderSystems::QueueMeshes),
+                    prepare_age_sprites.in_set(RenderSystems::PrepareResources),
+                ),
+            );
+    }
+}
+
+#[derive(Resource)]
+struct AgeSpritePipeline {
+    shader: Handle<Shader>,
+    mesh_pipeline: MeshPipeline,
+    texture_layout: BindGroupLayoutDescriptor,
+    texture_bind_group_layout: BindGroupLayout,
+}
+fn init_pipeline(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mesh_pipeline: Res<MeshPipeline>,
+    cache: Res<PipelineCache>,
+) {
+    let mut texture_layout =
+        effect_texture_layout::<AgeSpriteUniform, AgeSpriteRecord>("wc3 age sprite texture layout");
+    use bevy::render::render_resource::binding_types::{sampler, texture_2d};
+    texture_layout.entries.extend(
+        BindGroupLayoutEntries::with_indices(
+            ShaderStages::FRAGMENT,
+            (
+                (4, texture_2d(TextureSampleType::Float { filterable: true })),
+                (5, sampler(SamplerBindingType::Filtering)),
+                (6, texture_2d(TextureSampleType::Float { filterable: true })),
+                (7, sampler(SamplerBindingType::Filtering)),
+            ),
+        )
+        .to_vec(),
+    );
+    commands.insert_resource(AgeSpritePipeline {
+        shader: asset_server.load("embedded://bevy_wc3/shaders/wc3_age_particle.wgsl"),
+        mesh_pipeline: mesh_pipeline.clone(),
+        texture_bind_group_layout: cache.get_bind_group_layout(&texture_layout),
+        texture_layout,
+    });
+}
+
+#[derive(Clone, Copy, Hash, Eq, PartialEq)]
+struct AgeSpriteKey {
+    mesh: MeshPipelineKey,
+    filter: u8,
+}
+impl SpecializedMeshPipeline for AgeSpritePipeline {
+    type Key = AgeSpriteKey;
+    fn specialize(
+        &self,
+        key: Self::Key,
+        layout: &MeshVertexBufferLayoutRef,
+    ) -> Result<RenderPipelineDescriptor, SpecializedMeshPipelineError> {
+        let mut descriptor = self.mesh_pipeline.specialize(key.mesh, layout)?;
+        descriptor.vertex.shader = self.shader.clone();
+        if key.filter == 1 {
+            descriptor
+                .fragment
+                .as_mut()
+                .unwrap()
+                .shader_defs
+                .push("ALPHA_KEY".into());
+        }
+        descriptor
+            .vertex
+            .buffers
+            .push(effect_vertex_layout::<u32>(VertexFormat::Uint32));
+        // The shader reads emitter-owned transforms and birth records, so it
+        // needs only Bevy's view groups, not a preprocessed mesh bind group.
+        descriptor.layout.truncate(2);
+        descriptor.layout.push(self.texture_layout.clone());
+        if let Some(fragment) = descriptor.fragment.as_mut() {
+            fragment.shader = self.shader.clone();
+            if let Some(Some(target)) = fragment.targets.first_mut() {
+                target.blend = blend_state(key.filter);
+            }
+        }
+        if let Some(depth) = descriptor.depth_stencil.as_mut() {
+            depth.depth_write_enabled = Some(matches!(key.filter, 0 | 1));
+        }
+        descriptor.primitive.cull_mode = None;
+        Ok(descriptor)
+    }
+}
+fn blend_state(filter: u8) -> Option<BlendState> {
+    if matches!(filter, 0 | 1) {
+        return None;
+    }
+    let (src_factor, dst_factor) = match filter {
+        3 => (BlendFactor::One, BlendFactor::One),
+        4 => (BlendFactor::SrcAlpha, BlendFactor::One),
+        5 => (BlendFactor::Zero, BlendFactor::Src),
+        6 => (BlendFactor::Dst, BlendFactor::Src),
+        7 => (BlendFactor::One, BlendFactor::OneMinusSrcAlpha),
+        _ => (BlendFactor::SrcAlpha, BlendFactor::OneMinusSrcAlpha),
+    };
+    Some(BlendState {
+        color: BlendComponent {
+            src_factor,
+            dst_factor,
+            operation: BlendOperation::Add,
+        },
+        alpha: BlendComponent::OVER,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn queue_age_sprites(
+    draws: Res<DrawFunctions<Transparent3d>>,
+    pipeline: Res<AgeSpritePipeline>,
+    mut pipelines: ResMut<SpecializedMeshPipelines<AgeSpritePipeline>>,
+    cache: Res<PipelineCache>,
+    meshes: Res<RenderAssets<RenderMesh>>,
+    mesh_instances: Res<RenderMeshInstances>,
+    batched: Option<Res<BatchedInstanceBuffers<MeshUniform, MeshInputUniform>>>,
+    particles: Query<(Entity, &MainEntity, &AgeSpriteData)>,
+    mut phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
+    views: Query<(&ExtractedView, &RenderVisibleEntities)>,
+    view_keys: Res<ViewKeyCache>,
+) {
+    let draw = draws.read().id::<DrawAgeSprites>();
+    for (view, visible) in &views {
+        let Some(phase) = phases.get_mut(&view.retained_view_entity) else {
+            continue;
+        };
+        let Some(&view_key) = view_keys.get(&view.retained_view_entity) else {
+            continue;
+        };
+        for (entity, main_entity, data) in &particles {
+            if data.live_indices.is_empty() || !effect_visible(visible, *main_entity) {
+                continue;
+            }
+            let Some(mesh_instance) = mesh_instances.render_mesh_queue_data(*main_entity) else {
+                continue;
+            };
+            let Some(mesh) = meshes.get(mesh_instance.mesh_asset_id()) else {
+                continue;
+            };
+            let mesh_key = view_key
+                | MeshPipelineKey::from_primitive_topology_and_strip_index(
+                    mesh.primitive_topology(),
+                    mesh.index_format(),
+                );
+            let Ok(id) = pipelines.specialize(
+                &cache,
+                &pipeline,
+                AgeSpriteKey {
+                    mesh: mesh_key,
+                    filter: match data.style.blend {
+                        ParticleBlend::Unknown(_) => 2,
+                        blend => blend.raw() as u8,
+                    },
+                },
+                &mesh.layout,
+            ) else {
+                continue;
+            };
+            let center = pbr::get_mesh_instance_world_from_local(
+                *main_entity,
+                mesh_instance.current_uniform_index,
+                &mesh_instances,
+                batched.as_deref(),
+            )
+            .transform_point3(mesh.aabb_center);
+            phase.add_transient(transparent_effect_draw(
+                entity,
+                *main_entity,
+                id,
+                draw,
+                center,
+                data.style.priority,
+            ));
+        }
+    }
+}
+
+type AgeSpriteBuffer = EffectBuffer<u32>;
+
+fn sorted_indices(data: &AgeSpriteData, world_from_view: &Affine3A) -> Vec<u32> {
+    let eye = world_from_view.translation;
+    let forward = -world_from_view.matrix3.z_axis;
+    let mut depths: Vec<_> = data
+        .records
+        .iter()
+        .enumerate()
+        .map(|(index, record)| {
+            let center = Vec3A::from(Vec3::from_slice(&record.position[..3]));
+            (index as u32, (center - eye).dot(forward))
+        })
+        .collect();
+    depths.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+    let mut order = Vec::with_capacity(data.live_indices.len());
+    for (index, _) in depths {
+        if data.style.head {
+            order.push(index);
+        }
+        if data.style.tail {
+            order.push(index | 0x8000_0000);
+        }
+    }
+    order
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prepare_age_sprites(
+    mut commands: Commands,
+    query: Query<(
+        Entity,
+        &MainEntity,
+        &AgeSpriteData,
+        Option<&AgeSpriteBuffer>,
+    )>,
+    device: Res<RenderDevice>,
+    queue: Res<RenderQueue>,
+    pipeline: Res<AgeSpritePipeline>,
+    images: Res<RenderAssets<GpuImage>>,
+    fallback: Res<FallbackImage>,
+    views: Query<(&ExtractedView, &RenderVisibleEntities)>,
+) {
+    for (entity, main_entity, data, previous) in &query {
+        if data.live_indices.is_empty()
+            || !views
+                .iter()
+                .any(|(_, visible)| effect_visible(visible, *main_entity))
+        {
+            // Keep resident records and allocated capacity across emission gaps.
+            continue;
+        }
+        let records = ResidentRecordBuffer::prepare_slice(
+            &data.records,
+            previous.map(|p| &p.records),
+            &device,
+            &queue,
+            previous.is_none_or(|p| !Arc::ptr_eq(&p.live_indices, &data.live_indices)),
+        );
+        let textures = data.style.textures.each_ref().map(|handle| {
+            handle
+                .as_ref()
+                .and_then(|handle| images.get(handle))
+                .unwrap_or(&fallback.d2)
+        });
+        let [image, secondary, tertiary] = textures;
+        let sorted_orders = views
+            .iter()
+            .filter(|(_, visible)| effect_visible(visible, *main_entity))
+            .map(|(view, _)| {
+                (
+                    view.retained_view_entity,
+                    sorted_indices(data, &view.world_from_view.affine()),
+                )
+            });
+        let buffer = AgeSpriteBuffer::prepare_layers(
+            records,
+            &data.live_indices,
+            &data.uniform,
+            previous,
+            PassResources {
+                device: &device,
+                queue: &queue,
+                layout: &pipeline.texture_bind_group_layout,
+                image,
+            },
+            sorted_orders,
+            Some([secondary, tertiary]),
+        );
+        commands.entity(entity).insert(buffer);
+    }
+}
+
+type DrawAgeSprites = (
+    SetItemPipeline,
+    SetMeshViewBindGroup<0>,
+    SetMeshViewBindingArrayBindGroup<1>,
+    DrawEffectInstances<AgeSpriteBuffer>,
+);
+#[cfg(test)]
+#[path = "tests.rs"]
+mod tests;

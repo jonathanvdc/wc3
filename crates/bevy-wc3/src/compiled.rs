@@ -1,4 +1,5 @@
 //! Owned compiled definitions and shared GPU asset preparation.
+use crate::diagnostics::RenderDiagnostic;
 use crate::effects::RuntimeParticles;
 use crate::events::RuntimeEvents;
 use crate::features::RuntimeFeatures;
@@ -25,17 +26,6 @@ use wc3::model::{
     AnimationProgram, ClipId, DrawId, FeatureId, FeatureKind, InstanceId, MaterialId, MeshId,
     NodeId,
 };
-/// An observable limitation attached to its semantic source identity.
-#[derive(Clone, Debug)]
-pub struct RenderDiagnostic {
-    /// Source object when this diagnostic concerns an attached feature.
-    pub feature: Option<FeatureId>,
-    /// Source material when this diagnostic concerns a surface.
-    pub material: Option<MaterialId>,
-    /// Implemented approximation or unresolved rendering behavior.
-    pub message: String,
-}
-
 pub(crate) type MaterialCacheKey = (MaterialId, usize, MeshMaterialState, [u32; 4]);
 pub(crate) type MaterialCache = HashMap<MaterialCacheKey, Handle<ModelMaterial>>;
 
@@ -204,7 +194,7 @@ impl CompiledModel {
     pub fn rest_bounds(&self) -> Option<Aabb> {
         self.rest_bounds
     }
-    /// Rendering approximations and unresolved features, with semantic provenance.
+    /// Rendering coverage, resources, and work limits with typed kinds and semantic owners.
     pub fn diagnostics(&self) -> &[RenderDiagnostic] {
         &self.diagnostics
     }
@@ -356,7 +346,7 @@ impl PreparedModel {
     pub fn rest_bounds(&self) -> Option<Aabb> {
         self.rest_bounds
     }
-    /// Rendering approximations and unresolved features, with semantic provenance.
+    /// Rendering coverage, resources, and work limits with typed kinds and semantic owners.
     pub fn diagnostics(&self) -> &[RenderDiagnostic] {
         &self.diagnostics
     }

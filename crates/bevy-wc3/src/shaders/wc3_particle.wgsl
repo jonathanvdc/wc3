@@ -1,9 +1,8 @@
 #import bevy_pbr::{
     mesh_view_bindings::view,
     view_transformations::position_world_to_clip,
-    pbr_types::pbr_input_new,
-    pbr_functions::{apply_pbr_lighting, calculate_view},
 }
+#import "embedded://bevy_wc3/shaders/effect_lighting.wgsl"::shade_effect
 
 @group(2) @binding(0) var particle_texture: texture_2d<f32>;
 @group(2) @binding(1) var particle_sampler: sampler;
@@ -22,7 +21,7 @@ struct Emitter {
     intervals: array<vec4<u32>, 4>,
     atlas_flags: vec4<u32>,
     clock_tail: vec4<f32>,
-    // x: Unshaded; remaining components reserved.
+    // x: Unshaded; y: fog enabled; remaining components reserved.
     render_flags: vec4<u32>,
     plane_axes: array<vec4<f32>, 2>,
 };
@@ -143,20 +142,6 @@ fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
 #ifdef ALPHA_KEY
     if color.a < 0.5 { discard; }
 #endif
-    if emitter.render_flags.x != 0u { return color; }
-    // Use scene lighting with a matte, zero-reflectance material. This is
-    // Bevy lighting, rather than the Classic clamped lighting equation.
-    // Keep the texture/segment alpha unchanged by lighting.
-    var lighting = pbr_input_new();
-    lighting.material.base_color = color;
-    lighting.material.reflectance = vec3(0.0);
-    lighting.material.perceptual_roughness = 1.0;
-    lighting.frag_coord = input.position;
-    lighting.world_position = vec4(input.world_position, 1.0);
-    lighting.world_normal = input.world_normal;
-    lighting.N = input.world_normal;
-    lighting.is_orthographic = view.clip_from_view[3].w == 1.0;
-    lighting.V = calculate_view(lighting.world_position, lighting.is_orthographic);
-    let shaded = apply_pbr_lighting(lighting);
-    return vec4(shaded.rgb, color.a);
+    return shade_effect(color, input.world_position, input.world_normal, input.position,
+        emitter.render_flags.x != 0u, emitter.render_flags.y != 0u, emitter.render_flags.z);
 }

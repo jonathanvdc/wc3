@@ -1,4 +1,5 @@
 //! Owned static-world catalogs, conservative visibility, and authored liquid meshes.
+use crate::diagnostics::{RenderDiagnostic, RenderDiagnosticKind, RenderDiagnosticSource};
 use bevy::asset::RenderAssetUsages;
 use bevy::math::Vec3;
 use bevy::mesh::{Indices, PrimitiveTopology};
@@ -288,7 +289,7 @@ struct PortalGroups {
 pub(crate) struct CompiledWorld {
     pub runtime: WorldRuntime,
     pub liquids: Vec<WorldLiquidMesh>,
-    pub diagnostics: Vec<String>,
+    pub diagnostics: Vec<RenderDiagnostic>,
 }
 
 impl WorldRuntime {
@@ -428,10 +429,10 @@ impl WorldRuntime {
                 occluders: world.occluders.iter().collect::<Vec<_>>().into(),
             });
             if !world.portals.is_empty() {
-                diagnostics.push(format!("world system {system:?}: portal polygons and connectivity retained; default visibility is conservative, explicit PortalView enables clipped-window traversal; native occluder planes are not evaluated"));
+                diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Approximation, RenderDiagnosticSource::System(system), format!("world system {system:?}: portal polygons and connectivity retained; default visibility is conservative, explicit PortalView enables clipped-window traversal; native occluder planes are not evaluated")));
             }
             if !world.fogs.is_empty() || !world.ambient_volumes.is_empty() {
-                diagnostics.push(format!("world system {system:?}: fog and ambient regions are exposed for application integration; global scene fog/ambient are not overwritten"));
+                diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Unsupported, RenderDiagnosticSource::System(system), format!("world system {system:?}: fog and ambient regions are exposed for application integration; global scene fog/ambient are not overwritten")));
             }
         }
         let mut regions = Vec::new();
@@ -521,17 +522,21 @@ impl WorldRuntime {
                         mesh,
                     });
                 }
-                diagnostics.push(format!("world region {instance:?} liquid {ordinal}: authored heights/tile holes generate geometry at native WMO grid spacing; flow, database shading and animated liquid response need an application interpreter"));
+                diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Approximation, RenderDiagnosticSource::Instance(instance), format!("world region {instance:?} liquid {ordinal}: authored heights/tile holes generate geometry at native WMO grid spacing; flow, database shading and animated liquid response need an application interpreter")));
                 if liquid.material.is_none() {
-                    diagnostics.push(format!("world region {instance:?} liquid {ordinal}: liquid type {} requires a material provider",liquid.liquid_type));
+                    diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Resource, RenderDiagnosticSource::Instance(instance), format!("world region {instance:?} liquid {ordinal}: liquid type {} requires a material provider",liquid.liquid_type)));
                 }
             }
             if !region.lightmap_images.is_empty() || !region.lightmap_rectangles.is_empty() {
-                diagnostics.push(format!("world region {instance:?}: baked lightmap resources/rectangles are exposed; lightmap shading requires an application interpreter"));
+                diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Unsupported, RenderDiagnosticSource::Instance(instance), format!("world region {instance:?}: baked lightmap resources/rectangles are exposed; lightmap shading requires an application interpreter")));
             }
             if region.implicit_liquid.is_some() {
-                diagnostics.push(format!(
-                    "world region {instance:?}: implicit liquid has no authored surface grid"
+                diagnostics.push(RenderDiagnostic::new(
+                    RenderDiagnosticKind::Unsupported,
+                    RenderDiagnosticSource::Instance(instance),
+                    format!(
+                        "world region {instance:?}: implicit liquid has no authored surface grid"
+                    ),
                 ));
             }
         }

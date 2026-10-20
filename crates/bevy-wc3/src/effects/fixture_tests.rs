@@ -145,3 +145,94 @@ fn write_packed_gravity_capture_fixtures() {
     write(format!("{directory}/atlas.tga"), tga).unwrap();
     println!("Native M2 fixtures: {directory}/{{positive,negative,inverted,scalar}}.m2");
 }
+
+#[test]
+#[ignore = "writes synthetic M2 geometry/material variants under /tmp for GPU comparisons"]
+fn write_gpu_sprite_capture_fixtures() {
+    use wc3::model::common::ZeroVec;
+    use wc3::model::formats::m2::records::{
+        LegacyValues, ParticleBlend, ParticleGenerator, ParticleHeadTail,
+    };
+
+    write_packed_gravity_capture_fixtures();
+    let directory = "/tmp/wc3-m2-gravity-fixture";
+    for name in [
+        "head-tail",
+        "velocity",
+        "xy-attached",
+        "xy-detached",
+        "multi-two",
+        "multi-three",
+        "spline",
+        "premultiplied",
+    ] {
+        let mut bundle = gravity_fixture(false, 0.0f32.to_bits());
+        let core = bundle.model.core_mut();
+        let mut secondary = core.textures[0].clone();
+        secondary.filename = ZeroVec::alloc_from_slice(b"secondary.tga\0");
+        let mut tertiary = secondary.clone();
+        tertiary.filename = ZeroVec::alloc_from_slice(b"tertiary.tga\0");
+        core.textures.extend([secondary, tertiary]);
+        let emitter = &mut core.particles[0];
+        emitter.flags.set_disable_lighting(true);
+        emitter.texture_scale.head_or_tail = ParticleHeadTail::Both;
+        emitter.tail_length = 0.4;
+        emitter.emission_speed.values = LegacyValues::Values(ZeroVec::alloc_from_slice(&[0.8]));
+        emitter.emission_area_width = emitter.emission_speed.clone();
+        emitter.emission_area_length = emitter.emission_speed.clone();
+        emitter.emission_area_width.values =
+            LegacyValues::Values(ZeroVec::alloc_from_slice(&[0.5]));
+        emitter.emission_area_length.values =
+            LegacyValues::Values(ZeroVec::alloc_from_slice(&[0.5]));
+        match name {
+            "velocity" => emitter.flags.set_velocity_oriented(true),
+            "xy-attached" => {
+                emitter.flags.set_align_xy(true);
+                emitter.flags.set_attached(true);
+            }
+            "xy-detached" => emitter.flags.set_align_xy(true),
+            "multi-two" | "multi-three" => {
+                emitter.flags.set_multi_texture(true);
+                emitter
+                    .flags
+                    .set_multi_texture_three_colors(name == "multi-three");
+                emitter.texture_id = (1 << 5) | (2 << 10);
+            }
+            "spline" => {
+                emitter.kind.emitter = ParticleGenerator::Spline;
+                emitter.spline_points =
+                    ZeroVec::alloc_from_slice(&[[0., 0., 0.], [0.5, 0., 0.], [0.5, 0.8, 0.]]);
+                emitter.emission_area_length.values =
+                    LegacyValues::Values(ZeroVec::alloc_from_slice(&[0.]));
+                emitter.emission_area_width.values =
+                    LegacyValues::Values(ZeroVec::alloc_from_slice(&[1.]));
+            }
+            "premultiplied" => emitter.kind.blending = ParticleBlend::BlendAdd,
+            _ => {}
+        }
+        bundle
+            .validate_complete()
+            .unwrap_or_else(|error| panic!("native sprite fixture {name}: {error:?}"));
+        write(
+            format!("{directory}/{name}.m2"),
+            bundle.encode().unwrap().model,
+        )
+        .unwrap();
+    }
+    for (name, texel) in [
+        ("secondary", [255, 180, 100, 160]),
+        ("tertiary", [160, 255, 180, 220]),
+    ] {
+        let mut tga = vec![0u8; 18];
+        tga[2] = 2;
+        tga[12..14].copy_from_slice(&8u16.to_le_bytes());
+        tga[14..16].copy_from_slice(&8u16.to_le_bytes());
+        tga[16] = 32;
+        tga[17] = 0x28;
+        for _ in 0..64 {
+            tga.extend_from_slice(&texel);
+        }
+        write(format!("{directory}/{name}.tga"), tga).unwrap();
+    }
+    println!("GPU M2 variants written to {directory}");
+}

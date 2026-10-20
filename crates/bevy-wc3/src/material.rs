@@ -3,14 +3,13 @@ mod animation;
 mod bindings;
 mod compile;
 mod m2;
-mod particle;
-pub(crate) use particle::{particle_material_layers, ParticleComposition};
 
 #[path = "ribbon_material.rs"]
 mod ribbon_material;
 mod wmo;
 #[cfg(test)]
 use self::wmo::compile_wmo;
+use crate::diagnostics::RenderIssue;
 use crate::ModelError;
 use animation::layered_uv;
 pub(super) use animation::mesh_alpha_mode;
@@ -27,7 +26,6 @@ use bevy::shader::ShaderRef;
 #[cfg(test)]
 pub(crate) use compile::compile_material_with_images;
 pub(crate) use compile::compile_materials_with_images;
-use compile::rasterization;
 #[cfg(test)]
 use compile::{blend, depth};
 #[cfg(test)]
@@ -35,8 +33,7 @@ use native_fixtures::wmo as wmo_shader;
 pub(crate) use ribbon_material::effect_state;
 use std::collections::HashMap;
 use std::sync::Arc;
-use wc3::model::materials::{m2::GuildPalette, mdlx, state::Lighting};
-use wc3::model::values::model::ParticleBlend;
+use wc3::model::materials::{m2::GuildPalette, mdlx};
 use wc3::model::{Property, Texture, TextureTransform};
 
 use super::mesh_animation::MeshAnimation;
@@ -47,7 +44,7 @@ use super::textures::TextureImages;
 pub(crate) struct SurfacePass {
     pub material: StandardMaterial,
     pub coordinate: u32,
-    pub diagnostics: Vec<String>,
+    pub diagnostics: Vec<RenderIssue>,
     pub animation: SurfaceAnimation,
     pub state: ModelMaterialExtension,
     pub secondary_coordinate: Option<u32>,
@@ -87,7 +84,6 @@ pub struct ModelMaterialExtension {
     tertiary: Option<Handle<Image>>,
     fourth: Option<Handle<Image>>,
     world: WorldUniform,
-    particle: ParticleUniform,
 
     blend: Option<Blend>,
     depth_test: bool,
@@ -192,11 +188,6 @@ struct CombinerUniform {
     mode: UVec4,
     clip: Vec4,
 }
-#[derive(Clone, Copy, Debug, Default, ShaderType)]
-struct ParticleUniform {
-    mode: UVec4,
-}
-
 impl Default for CombinerUniform {
     fn default() -> Self {
         Self {
@@ -215,63 +206,6 @@ impl Default for CombinerUniform {
     }
 }
 
-pub(crate) fn particle_material(
-    blend: ParticleBlend,
-    texture: Option<Handle<Image>>,
-    lit: bool,
-) -> ModelMaterial {
-    let mut pass = SurfacePass::default();
-    pass.material.base_color_texture = texture;
-    rasterization(
-        &mut pass,
-        true,
-        Lighting {
-            unlit: !lit,
-            unfogged: false,
-        },
-    );
-    match blend {
-        ParticleBlend::Opaque => {}
-        ParticleBlend::AlphaKey => {
-            pass.material.alpha_mode = AlphaMode::Mask(128.0 / 255.0);
-        }
-        ParticleBlend::NoAlphaAdd => {
-            pass.material.alpha_mode = AlphaMode::Blend;
-            pass.state.blend = Some(Blend::Additive);
-        }
-        ParticleBlend::Add => {
-            pass.material.alpha_mode = AlphaMode::Blend;
-            pass.state.blend = Some(Blend::AdditiveAlpha);
-        }
-        ParticleBlend::Modulate => {
-            pass.material.alpha_mode = AlphaMode::Blend;
-            pass.state.blend = Some(Blend::Modulate);
-        }
-        ParticleBlend::Modulate2x => {
-            pass.material.alpha_mode = AlphaMode::Blend;
-            pass.state.blend = Some(Blend::Modulate2x);
-        }
-        ParticleBlend::BlendAdd => {
-            // The authored shader color is already the source term for
-            // (One, OneMinusSrcAlpha); Bevy's Premultiplied mode preserves it.
-            pass.material.alpha_mode = AlphaMode::Premultiplied;
-            pass.state.blend = Some(Blend::Premultiplied);
-        }
-        ParticleBlend::Alpha | ParticleBlend::Unknown(_) => {
-            pass.material.alpha_mode = AlphaMode::Blend;
-            pass.state.blend = Some(Blend::Alpha);
-        }
-    }
-    pass.state.depth_write = Some(matches!(
-        blend,
-        ParticleBlend::Opaque | ParticleBlend::AlphaKey
-    ));
-    ModelMaterial {
-        base: pass.material,
-        extension: pass.state,
-    }
-}
-
 impl Default for ModelMaterialExtension {
     fn default() -> Self {
         Self {
@@ -284,7 +218,6 @@ impl Default for ModelMaterialExtension {
             team_color: None,
             environment: None,
             world: WorldUniform::default(),
-            particle: ParticleUniform::default(),
 
             blend: None,
             depth_test: true,
@@ -318,10 +251,9 @@ impl From<&ModelMaterialExtension> for ModelMaterialKey {
                 7 | 10 | 12 | 13 | 14 | 16 | 18 | 19 | 20
             ),
             edge_fade: state.combiner.clip.y != 0.0,
-            third_uv: state.particle.mode.x != 0
-                || (matches!(state.combiner.coordinates.w, 1 | 3)
-                    || state.combiner.additional_coordinates.x == 3
-                    || state.world.composition.y > 2),
+            third_uv: matches!(state.combiner.coordinates.w, 1 | 3)
+                || state.combiner.additional_coordinates.x == 3
+                || state.world.composition.y > 2,
             generated_coordinates: state.combiner.coordinates.x != 0
                 || state.combiner.coordinates.y != 0
                 || state.combiner.coordinates.w == 1,

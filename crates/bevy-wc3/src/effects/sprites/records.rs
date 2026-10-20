@@ -97,7 +97,7 @@ pub(crate) struct ParticleEmitterUniform {
     intervals: [[u32; 4]; 4],
     atlas_flags: [u32; 4],
     clock_tail: [f32; 4],
-    // Unshaded, followed by reserved lanes.
+    // Unshaded, fog enabled, followed by reserved lanes.
     render_flags: [u32; 4],
     plane_axes: [[f32; 4]; 2],
 }
@@ -114,6 +114,8 @@ pub(crate) struct StagedSpriteParameters {
     pub xy_quad: bool,
     pub tail_length: f32,
     pub unlit: bool,
+    pub fog_enabled: bool,
+    pub fog_blend: u32,
     pub plane_axes: [Vec3; 2],
 }
 impl ParticleEmitterUniform {
@@ -140,7 +142,12 @@ impl ParticleEmitterUniform {
                 u32::from(parameters.xy_quad),
             ],
             clock_tail: [high, low, parameters.tail_length, 0.],
-            render_flags: [u32::from(parameters.unlit), 0, 0, 0],
+            render_flags: [
+                u32::from(parameters.unlit),
+                u32::from(parameters.fog_enabled),
+                parameters.fog_blend,
+                0,
+            ],
             plane_axes: parameters.plane_axes.map(|v| v.extend(0.).to_array()),
         }
     }

@@ -1,5 +1,6 @@
 //! ECS services shared by the single semantic effect simulation system.
 use super::super::{ModelAsset, ModelMaterial};
+use super::age_sprites_gpu::AgeSpriteData;
 use super::{ModelEmitter, RibbonEmitter, SpriteEmitter};
 use crate::effects::sprites::ParticleInstances as SpriteInstances;
 use crate::effects::trails::RibbonInstances;
@@ -13,6 +14,7 @@ pub(crate) struct EffectWorld<'w, 's> {
     pub meshes: ResMut<'w, Assets<Mesh>>,
     pub materials: ResMut<'w, Assets<ModelMaterial>>,
     pub age_statistics: Query<'w, 's, &'static mut SpriteEmitter>,
+    pub age_sprites: Query<'w, 's, &'static mut AgeSpriteData>,
     pub sprites: Query<'w, 's, &'static mut SpriteInstances>,
     pub trails: Query<'w, 's, &'static mut RibbonInstances>,
     pub ribbon_statistics: Query<'w, 's, &'static mut RibbonEmitter>,

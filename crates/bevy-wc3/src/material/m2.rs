@@ -1,6 +1,7 @@
 //! Native model texture composition within Bevy lighting.
 use super::compile::{blend, depth, image, rasterization, transform};
 use super::{Blend, SurfacePass};
+use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::textures::TextureImages;
 use crate::ModelError;
 use bevy::math::Affine2;
@@ -119,7 +120,7 @@ pub(super) fn compile_m2(
     if let m2::MaterialStep::Unresolved(value) = surface {
         if let Some(equation) = value.partial_equation() {
             let mut pass = compile_m2(model, &equation, images)?;
-            pass.diagnostics.push("M2 single-input UV1 transform ownership remains unresolved; rendering the established texture equation".into());
+            pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Unverified, "M2 single-input UV1 transform ownership remains unresolved; rendering the established texture equation"));
             return Ok(pass);
         }
     }
@@ -177,7 +178,7 @@ pub(super) fn compile_m2(
         pass.state.combiner.clip.y = if program.edge_fade { 1. } else { 0. };
         pass.state.combiner.coordinates.z = program.inputs as u32;
         if program.inputs < inputs.len() {
-            pass.diagnostics.push("M2 legacy texture equation uses its first two inputs; surplus native bindings are retained but not sampled".into());
+            pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Approximation, "M2 legacy texture equation uses its first two inputs; surplus native bindings are retained but not sampled"));
         }
         for (slot, input) in inputs.iter().take(program.inputs).enumerate() {
             pass.state.combiner.weights[slot] = model.values()[input.contribution];
@@ -266,7 +267,7 @@ pub(super) fn compile_m2(
         || inputs.len() > 1
         || inputs.iter().any(|i| i.coordinates.source < 0)
     {
-        pass.diagnostics.push(format!("M2 shader with {} texture inputs or unsupported coordinates is approximated by its first input; authored combiners are not evaluated",inputs.len()));
+        pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Approximation, format!("M2 shader with {} texture inputs or unsupported coordinates is approximated by its first input; authored combiners are not evaluated",inputs.len())));
     }
     Ok(pass)
 }

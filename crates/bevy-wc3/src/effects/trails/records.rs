@@ -61,6 +61,7 @@ pub(crate) struct RibbonUniform {
     pub(crate) atlas_flags: [u32; 4],
     pub(crate) uv_transform: [[f32; 4]; 4],
     pub(crate) gravity_axis: [f32; 4],
+    pub(crate) render_flags: [u32; 4],
 }
 
 #[derive(Component, Clone)]

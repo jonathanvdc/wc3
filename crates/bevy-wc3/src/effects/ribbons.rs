@@ -5,10 +5,12 @@ use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
 use super::ribbon_definition::{TrailAtlasSlot, TrailBehavior, TrailEmitter, TrailRendering};
 use super::EffectFrame;
+use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::effects::blend::EffectBlend;
 use crate::effects::records::RingCursor;
 use crate::effects::simulation::{split_time, EmissionPhase, EmissionRounding, LiveRecords};
 use crate::effects::trails::{RibbonInstances, RibbonSection, RibbonSegment, RibbonUniform};
+use crate::layers::ModelOwnedRenderEntity;
 use crate::material::map_material_images;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::math::Affine2;
@@ -60,7 +62,7 @@ pub(crate) struct RuntimeRibbons {
     emitters: Vec<Emitter>,
     gravity_axis: Vec3,
     clips: HashMap<ClipId, (f64, bool)>,
-    diagnostics: Vec<(FeatureId, String)>,
+    diagnostics: Vec<(FeatureId, RenderIssue)>,
 }
 struct Section {
     birth: f64,
@@ -170,8 +172,11 @@ impl RuntimeRibbons {
                 NodeFeature::Ribbon(SemanticRibbonEmitter::M2(value)) => (**value).clone().into(),
                 _ => continue,
             };
-            let mut diagnostic =
-                |message: &str| result.diagnostics.push((feature, message.to_string()));
+            let mut diagnostic = |kind, message: &str| {
+                result
+                    .diagnostics
+                    .push((feature, RenderIssue::new(kind, message)))
+            };
             let ids = match &definition.rendering {
                 TrailRendering::Layered(value) => value.material.into_iter().collect::<Vec<_>>(),
                 TrailRendering::Surfaces(value) => value.materials.clone(),
@@ -179,7 +184,10 @@ impl RuntimeRibbons {
             let mut passes = Vec::new();
             for id in ids {
                 let Some(surfaces) = materials.get(&id) else {
-                    diagnostic("Trail material does not resolve to a compiled surface");
+                    diagnostic(
+                        RenderDiagnosticKind::Resource,
+                        "Trail material does not resolve to a compiled surface",
+                    );
                     continue;
                 };
                 for surface in surfaces {
@@ -188,11 +196,11 @@ impl RuntimeRibbons {
                         extension: surface.state.clone(),
                     };
                     let Some(state) = effect_state(&material) else {
-                        diagnostic("Trail blend/cutout combination requires a transport shader extension and is not drawn");
+                        diagnostic(RenderDiagnosticKind::Unsupported, "Trail blend/cutout combination requires a transport shader extension and is not drawn");
                         continue;
                     };
                     if surface.coordinate != 0 {
-                        diagnostic("Trail uses its procedural atlas coordinates; alternate geometry UV sets have no trail correspondence");
+                        diagnostic(RenderDiagnosticKind::Approximation, "Trail uses its procedural atlas coordinates; alternate geometry UV sets have no trail correspondence");
                     }
                     passes.push(Pass {
                         priority: material.base.depth_bias as i32,
@@ -208,22 +216,26 @@ impl RuntimeRibbons {
                 }
             }
             if passes.is_empty() {
-                diagnostic("Trail has no compiled material passes and is not drawn");
+                diagnostic(
+                    RenderDiagnosticKind::Unsupported,
+                    "Trail has no compiled material passes and is not drawn",
+                );
                 continue;
             }
             if let TrailBehavior::EmissionAngle(controls) = &definition.behavior {
-                diagnostic("M2 trail cross-sections use an explicit local positive Z convention; native game fidelity remains unverified");
+                diagnostic(RenderDiagnosticKind::Unverified, "M2 trail cross-sections use an explicit local positive Z convention; native game fidelity remains unverified");
                 if controls.angle != 0. {
-                    diagnostic("M2 trail emission angle is retained; its game-space cross-section convention remains unverified");
+                    diagnostic(RenderDiagnosticKind::Unsupported, "M2 trail emission angle is retained; its game-space cross-section convention remains unverified");
                 }
                 let TrailRendering::Surfaces(rendering) = &definition.rendering else {
                     unreachable!("M2 ribbon rendering")
                 };
                 if rendering.texture_transform.is_some() {
-                    diagnostic("M2 trail-specific UV transform is retained but material UV transforms alone are evaluated");
+                    diagnostic(RenderDiagnosticKind::Unsupported, "M2 trail-specific UV transform is retained but material UV transforms alone are evaluated");
                 }
                 if rendering.color_index != 0 {
                     diagnostic(
+                        RenderDiagnosticKind::Resource,
                         "External M2 trail color tables require application-supplied colors",
                     );
                 }
@@ -231,8 +243,8 @@ impl RuntimeRibbons {
                     pass.priority = i32::from(rendering.priority_plane);
                 }
             }
-            diagnostic("GPU trails retain 8192 resident cross-sections; skipped old sections are counted and never connected across omitted intervals");
-            diagnostic("GPU trails use Bevy lighting; material surface channels beyond primary color/opacity/texture and UV transform remain approximations");
+            diagnostic(RenderDiagnosticKind::Budget, "GPU trails retain 8192 resident cross-sections; skipped old sections are counted and never connected across omitted intervals");
+            diagnostic(RenderDiagnosticKind::Approximation, "GPU trails use Bevy lighting; material surface channels beyond primary color/opacity/texture and UV transform remain approximations");
             result.emitters.push(Emitter {
                 feature,
                 node: value.node,
@@ -243,7 +255,7 @@ impl RuntimeRibbons {
         }
         result
     }
-    pub fn diagnostics(&self) -> &[(FeatureId, String)] {
+    pub fn diagnostics(&self) -> &[(FeatureId, RenderIssue)] {
         &self.diagnostics
     }
     pub fn spawn(
@@ -295,6 +307,7 @@ impl RuntimeRibbons {
                             (
                                 commands
                                     .spawn((
+                                        ModelOwnedRenderEntity,
                                         Mesh3d(quad.as_ref().unwrap().clone()),
                                         render,
                                         Transform::default(),
@@ -493,6 +506,12 @@ impl RuntimeRibbons {
                         atlas_flags: [rows, columns, slot, u32::from(material.base.unlit)],
                         uv_transform: affine_uv(material.base.uv_transform).to_cols_array_2d(),
                         gravity_axis: self.gravity_axis.extend(0.).to_array(),
+                        render_flags: [
+                            u32::from(material.base.fog_enabled),
+                            pass.blend.fog_blend(),
+                            0,
+                            0,
+                        ],
                     };
                 }
             }

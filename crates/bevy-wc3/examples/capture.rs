@@ -8,8 +8,8 @@ use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::math::Vec3;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
+use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::render_resource::{CachedPipelineState, PipelineCache, PollType, TextureFormat};
 use bevy::render::renderer::RenderDevice;
@@ -22,7 +22,7 @@ use bevy::winit::WinitPlugin;
 use bevy_wc3::{
     spawn_model, AssetSettings, BakeSpace, CameraBinding, Lod, LodOverride, LodSettings,
     ModelAsset, ModelInstance, ModelInstanceError, ModelMaterial, ModelRig, PhysicsSimulation,
-    Playback, PlaybackError, PoseBaker, PoseOptions, PreparedModel, SpriteEmitter, Wc3BevyPlugin,
+    Playback, PlaybackError, PoseBaker, PoseOptions, PreparedModel, RibbonEmitter, SpriteEmitter, Wc3BevyPlugin,
     WorldSelection,
 };
 use std::collections::{BTreeMap, HashMap};
@@ -48,7 +48,7 @@ const HELP: &str = "Usage: capture MODEL OUTPUT_DIR [options]
 
 Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --character-recipe PATH  Assemble a resolved modern M2 character recipe (JSON)
-  --particle-stats      Report sprite populations and omitted simulation work at each capture
+  --particle-stats      Report sprite and ribbon populations and omitted simulation work at each capture
   --guild-palette RGB:RGB:RGB  Linear background, emblem and border RGB multipliers
   --physics             Enable authored rigid-body secondary motion
   --allow-loss          Explicitly discard unsupported native data, retaining diagnostics
@@ -59,6 +59,8 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --no-default-light    Omit the capture scene light (isolate model lights)
   --bevy-reference      Add a StandardMaterial sphere at (0, 2, 0)
   --tonemapping MODE    none or tony-mcmapface (default: none)
+  --fog START,END       Linear Bevy distance fog in world units
+  --fog-color R,G,B     Fog color in linear RGB (default: white)
   --illuminance LUX     Scene directional light intensity (default: 5000)
   --times SECONDS,...    Increasing capture times (default: 1)
   --benchmark-frames N   Measure N synchronized frames at each captured pose; write CSV
@@ -106,6 +108,8 @@ struct Options {
     no_default_light: bool,
     tonemapping: Tonemapping,
     illuminance: f32,
+    fog: Option<(f32, f32)>,
+    fog_color: Vec3,
     model: PathBuf,
     output: PathBuf,
     times: Vec<f64>,
@@ -151,6 +155,8 @@ impl Options {
             no_default_light: false,
             tonemapping: Tonemapping::None,
             illuminance: 5_000.0,
+            fog: None,
+            fog_color: Vec3::ONE,
             model: model.into(),
             output: output.into(),
             times: vec![1.0],
@@ -219,6 +225,20 @@ impl Options {
                         "none" => Tonemapping::None,
                         _ => return Err("tonemapping must be none or tony-mcmapface".into()),
                     };
+                }
+                "--fog" => {
+                    let (start, end) = value.split_once(',').ok_or("fog must be START,END")?;
+                    let (start, end): (f32, f32) = (start.parse()?, end.parse()?);
+                    if !start.is_finite() || !end.is_finite() || start < 0. || end <= start {
+                        return Err("fog requires finite 0 <= START < END".into());
+                    }
+                    options.fog = Some((start, end));
+                }
+                "--fog-color" => {
+                    options.fog_color = parse_vector(&value)?;
+                    if options.fog_color.min_element() < 0. {
+                        return Err("fog color must be nonnegative".into());
+                    }
                 }
                 "--guild-palette" => options.guild_palette = Some(parse_guild_palette(&value)?),
                 "--illuminance" => options.illuminance = value.parse()?,
@@ -623,6 +643,13 @@ fn capture(options: Options) -> CaptureResult<()> {
             options.camera(&prepared)?,
         ))
         .id();
+    if let Some((start, end)) = options.fog {
+        app.world_mut().entity_mut(camera).insert(DistanceFog {
+            color: Color::linear_rgb(options.fog_color.x, options.fog_color.y, options.fog_color.z),
+            falloff: FogFalloff::Linear { start, end },
+            ..default()
+        });
+    }
     if options.prepasses {
         app.world_mut().entity_mut(camera).insert((
             DepthPrepass,
@@ -827,24 +854,18 @@ fn capture(options: Options) -> CaptureResult<()> {
         println!("{} (Universal, time {time:.6}s)", path.display());
         if options.particle_stats {
             let world = app.world_mut();
-            let mut query = world.query::<(&SpriteEmitter, &Mesh3d)>();
-            let meshes = world.resource::<Assets<Mesh>>();
-            for (emitter, handle) in query.iter(world) {
-                let mesh = meshes.get(&handle.0);
-                let vertices = mesh.map_or(0, Mesh::count_vertices);
-                let alpha = mesh
-                    .and_then(|mesh| mesh.attribute(Mesh::ATTRIBUTE_COLOR))
-                    .and_then(|values| {
-                        if let VertexAttributeValues::Float32x4(colors) = values {
-                            Some(colors.iter().map(|c| c[3]).fold(0., f32::max))
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or(0.);
+            let mut sprites = world.query::<&SpriteEmitter>();
+            for emitter in sprites.iter(world) {
                 println!(
-                    "Sprite {:?}: alive={}, vertices={}, max_alpha={:.6}, dropped={}, skipped_seconds={:.6}",
-                    emitter.feature, emitter.alive, vertices, alpha, emitter.dropped, emitter.skipped_seconds
+                    "Sprite {:?}: alive={}, dropped={}, skipped_seconds={:.6}",
+                    emitter.feature, emitter.alive, emitter.dropped, emitter.skipped_seconds
+                );
+            }
+            let mut ribbons = world.query::<&RibbonEmitter>();
+            for emitter in ribbons.iter(world) {
+                println!(
+                    "Ribbon {:?}: sections={}, segments={}, omitted={}",
+                    emitter.feature, emitter.sections, emitter.segments, emitter.omitted_sections
                 );
             }
         }
@@ -1125,6 +1146,20 @@ mod tests {
         assert_eq!(options.plays.len(), 2);
         assert_eq!(options.plays[1].time, 0.75);
         assert_eq!(options.blend, Some(Duration::ZERO));
+    }
+
+    #[test]
+    fn validates_distance_fog_without_starting_the_renderer() {
+        for invalid in ["NaN,10", "0,inf", "-1,10", "10,1", "1,1", "0", "0,1,2"] {
+            assert!(parse(&["--fog", invalid]).is_err());
+        }
+        for invalid in ["-1,0,0", "1,NaN,0", "1,0"] {
+            assert!(parse(&["--fog-color", invalid]).is_err());
+        }
+        let options = parse(&["--fog", "5,20", "--fog-color", "0.2,0.3,0.4"])
+            .unwrap().unwrap();
+        assert_eq!(options.fog, Some((5., 20.)));
+        assert_eq!(options.fog_color, Vec3::new(0.2, 0.3, 0.4));
     }
 
     #[test]

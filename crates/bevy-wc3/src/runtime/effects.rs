@@ -57,7 +57,6 @@ pub(crate) fn simulate_particles(
                 node_poses: poses,
                 node_visible: visible,
                 basis_world: basis.to_matrix(),
-                camera_world: camera,
             },
             &mut world,
         );

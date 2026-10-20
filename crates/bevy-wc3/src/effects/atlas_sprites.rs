@@ -1,12 +1,14 @@
 //! Direct staged sprite simulation using the resident immutable GPU transport.
 use super::emission::{EffectChange, EmissionClock};
 use super::{EffectFrame, SpriteEmitter};
+use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::effects::blend::EffectBlend;
 use crate::effects::simulation::{EmissionPhase, EmissionRounding, EmitterRng, LiveRecords};
 use crate::effects::sprites::{
     ParticleEmitterUniform, ParticleInstance, ParticleInstances as SpriteInstances,
     StagedSpriteParameters,
 };
+use crate::layers::ModelOwnedRenderEntity;
 use crate::textures::{TextureImages, TextureRole};
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::math::{Quat, Vec3};
@@ -87,7 +89,7 @@ pub(crate) struct RuntimeAtlasParticles {
     emitters: Vec<AtlasEmitter>,
     clips: HashMap<ClipId, (f64, bool)>,
     gravity_axis: Vec3,
-    diagnostics: Vec<(FeatureId, String)>,
+    diagnostics: Vec<(FeatureId, RenderIssue)>,
 }
 struct Expiration {
     time: f64,
@@ -167,8 +169,11 @@ impl RuntimeAtlasParticles {
                 continue;
             };
             let details = &definition.details;
-            let mut diagnostic =
-                |message: &str| result.diagnostics.push((feature, message.to_string()));
+            let mut diagnostic = |kind, message: &str| {
+                result
+                    .diagnostics
+                    .push((feature, RenderIssue::new(kind, message)))
+            };
             let appearance = &definition.appearance;
             let (rate, speed, variation, lifetime) = (
                 definition.emission.rate,
@@ -178,14 +183,14 @@ impl RuntimeAtlasParticles {
             );
             let gravity = definition.motion.gravity;
             if matches!(details.rendering.frames, Frames::Unknown(_)) {
-                diagnostic("Unknown staged sprite head/tail selection is not rendered");
+                diagnostic(
+                    RenderDiagnosticKind::Unsupported,
+                    "Unknown staged sprite head/tail selection is not rendered",
+                );
                 continue;
             }
             if definition.emission.trigger {
-                diagnostic("Keyed sprite emission processes at most 4096 crossed key occurrences per update; extreme clock jumps are bounded");
-            }
-            if !details.rendering.unfogged {
-                diagnostic("Staged GPU sprites do not yet apply Bevy fog");
+                diagnostic(RenderDiagnosticKind::Budget, "Keyed sprite emission processes at most 4096 crossed key occurrences per update; extreme clock jumps are bounded");
             }
             let blend = match details.rendering.blend {
                 BlendOperations::Opaque => EffectBlend::Opaque,
@@ -197,6 +202,7 @@ impl RuntimeAtlasParticles {
                 BlendOperations::Modulate2x => EffectBlend::Modulate2x,
                 _ => {
                     diagnostic(
+                        RenderDiagnosticKind::Approximation,
                         "Unknown sprite blend operation uses an explicit alpha-blend approximation",
                     );
                     EffectBlend::Alpha
@@ -210,6 +216,7 @@ impl RuntimeAtlasParticles {
             });
             if texture.is_none() {
                 diagnostic(
+                    RenderDiagnosticKind::Resource,
                     "Staged sprite image is unresolved; texture-provider integration is required",
                 );
             }
@@ -247,6 +254,8 @@ impl RuntimeAtlasParticles {
                     xy_quad: details.rendering.xy_quad,
                     tail_length: details.rendering.tail_length,
                     unlit: details.rendering.unlit,
+                    fog_enabled: !details.rendering.unfogged,
+                    fog_blend: blend.fog_blend(),
                     plane_axes: [
                         basis.transform_vector3(Vec3::X).normalize_or_zero(),
                         basis.transform_vector3(Vec3::Y).normalize_or_zero(),
@@ -260,7 +269,7 @@ impl RuntimeAtlasParticles {
         }
         result
     }
-    pub fn diagnostics(&self) -> &[(FeatureId, String)] {
+    pub fn diagnostics(&self) -> &[(FeatureId, RenderIssue)] {
         &self.diagnostics
     }
     pub fn spawn(
@@ -277,6 +286,7 @@ impl RuntimeAtlasParticles {
                 .map(|emitter| {
                     let entity = commands
                         .spawn((
+                            ModelOwnedRenderEntity,
                             Mesh3d(quad.as_ref().unwrap().clone()),
                             SpriteInstances {
                                 records: Default::default(),
@@ -835,7 +845,6 @@ mod tests {
             node_poses: &poses,
             node_visible: &visible,
             basis_world: Mat4::IDENTITY,
-            camera_world: None,
         };
         runtime.bursts(
             &runtime.emitters[0],

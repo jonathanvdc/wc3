@@ -1,9 +1,8 @@
 #import bevy_pbr::{
     mesh_view_bindings::view,
     view_transformations::position_world_to_clip,
-    pbr_types::pbr_input_new,
-    pbr_functions::{apply_pbr_lighting, calculate_view},
 }
+#import "embedded://bevy_wc3/shaders/effect_lighting.wgsl"::shade_effect
 
 @group(2) @binding(0) var ribbon_texture: texture_2d<f32>;
 @group(2) @binding(1) var ribbon_sampler: sampler;
@@ -18,6 +17,7 @@ struct Emitter {
     atlas_flags: vec4<u32>,
     uv_transform: mat4x4<f32>,
     gravity_axis: vec4<f32>,
+    render_flags: vec4<u32>,
 };
 @group(2) @binding(2) var<uniform> emitter: Emitter;
 @group(2) @binding(3) var<storage, read> sections: array<Section>;
@@ -82,19 +82,7 @@ fn fragment(input: VertexOutput, @builtin(front_facing) front_facing: bool) -> @
 #ifdef ALPHA_KEY
     if color.a < 0.5 { discard; }
 #endif
-    if emitter.atlas_flags.w != 0u { return color; }
-    // Use Bevy scene lighting with a matte, zero-reflectance material.
-    // Keep the texture/segment alpha unchanged by lighting.
-    var lighting = pbr_input_new();
-    lighting.material.base_color = color;
-    lighting.material.reflectance = vec3(0.0);
-    lighting.material.perceptual_roughness = 1.0;
-    lighting.frag_coord = input.position;
-    lighting.world_position = vec4(input.world_position, 1.0);
-    lighting.world_normal = select(-input.world_normal, input.world_normal, front_facing);
-    lighting.N = lighting.world_normal;
-    lighting.is_orthographic = view.clip_from_view[3].w == 1.0;
-    lighting.V = calculate_view(lighting.world_position, lighting.is_orthographic);
-    let shaded = apply_pbr_lighting(lighting);
-    return vec4(shaded.rgb, color.a);
+    let normal = select(-input.world_normal, input.world_normal, front_facing);
+    return shade_effect(color, input.world_position, normal, input.position,
+        emitter.atlas_flags.w != 0u, emitter.render_flags.x != 0u, emitter.render_flags.y);
 }

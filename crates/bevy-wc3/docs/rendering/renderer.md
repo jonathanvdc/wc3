@@ -72,11 +72,12 @@ The renderer keeps native emitter families distinct while sharing transport wher
 possible. The effect guides describe simulation, playback, and resource needs:
 
 - [Model particles](prem.md) instantiate independent animated child models.
-- [Sprite particles](pre2.md) use GPU-generated MDLX atlas heads/tails or reusable CPU meshes for M2 age-driven particles.
+- [Sprite particles](pre2.md) use GPU-generated heads/tails from immutable MDLX births or compact M2 age-driven samples.
+  Billboards and draw ordering follow each view independently.
 - [Ribbons](ribbons.md) retain birth-time cross sections and generate connected geometry on the GPU.
 
 Each family bounds populations and per-update work and exposes omitted-work
-counters. Spline/bone generators, advanced M2 texture programmes, and unresolved
+counters. Bone generators, advanced M2 texture programmes, and unresolved
 modulation-gain controls require further interpretation. External effects need
 resource providers.
 

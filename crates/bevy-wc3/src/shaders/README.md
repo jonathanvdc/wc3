@@ -33,7 +33,10 @@ variants add a facing factor at varying location 11; ordinary variants omit it.
 Extension binding declarations live with `ModelMaterialExtension` and must
 match the WGSL uniform/texture declarations. These shaders do not replace global
 Bevy assets. Particle/ribbon transport has separate shader-generated geometry,
-record layouts, and material bindings. See the [material guide](../../docs/rendering/reforged-materials.md)
+record layouts, and material bindings. `effect_lighting.wgsl` shares their Bevy
+lighting, blend-aware distance fog, tonemapping, and debanding stages. Unlit effects
+still follow camera output processing, and authored unfogged controls remain
+independent of lighting. See the [material guide](../../docs/rendering/reforged-materials.md)
 and [architecture](../../docs/architecture.md) for runtime ownership and limits.
 
 `combiner.wgsl` contains the M2 texture-composition equations shared by forward
@@ -41,11 +44,12 @@ and alpha-discard prepasses. The vertex wrappers generate sphere environment
 coordinates, including the normal stream in depth-only layouts when required.
 Native additive inputs enter PBR emissive; ordinary diffuse stays in Bevy albedo.
 
-`particle_composition.wgsl` supplies the independent two-color/three-alpha and
-three-color/three-alpha particle equations. Its dedicated uniform leaves mesh
-combiners unchanged. Primary texture sampling stays in Bevy; the two additional
-textures use their own particle coordinate streams. Alpha-discard prepasses use
-the same composition.
+`wc3_age_particle.wgsl` expands exactly sampled M2 live records against each
+camera and evaluates independent two-color/three-alpha or three-color/three-alpha
+particle composition. The primary image retains atlas cells; additional images
+use their own offsets and scales. Shared records retain appearance and analytic
+motion sampling on the CPU while view-specific indices select head/tail geometry
+and sorting. All eight native particle blend states remain explicit.
 
 ## Bevy upgrades
 

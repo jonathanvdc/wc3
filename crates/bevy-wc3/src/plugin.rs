@@ -1,8 +1,10 @@
 //! Registration and scheduling for the Universal renderer.
 use crate::assets::BlpImageLoader;
+use crate::effects::age_sprites_gpu::AgeSpriteRenderPlugin;
 use crate::effects::sprites::ParticleRenderPlugin;
 use crate::effects::trails::RibbonRenderPlugin;
 use crate::image_replacements::{refresh_image_replacements, ReplacementImages};
+use crate::layers::synchronize_model_layers;
 use crate::runtime::{publish_affine_poses, synchronize_model_cameras, synchronize_mounted_models};
 use crate::schedule::{configure, Wc3Systems};
 use crate::{
@@ -30,10 +32,11 @@ impl Plugin for Wc3BevyPlugin {
         embedded_asset!(app, "shaders/surface_images.wgsl");
         embedded_asset!(app, "shaders/world_composition.wgsl");
         embedded_asset!(app, "shaders/model_io.wgsl");
-        embedded_asset!(app, "shaders/particle_composition.wgsl");
         embedded_asset!(app, "shaders/hd.wgsl");
         embedded_asset!(app, "shaders/material_prepass.wgsl");
+        embedded_asset!(app, "shaders/effect_lighting.wgsl");
         embedded_asset!(app, "shaders/wc3_particle.wgsl");
+        embedded_asset!(app, "shaders/wc3_age_particle.wgsl");
         embedded_asset!(app, "shaders/wc3_ribbon.wgsl");
         app.init_asset::<ModelAsset>();
         app.init_resource::<AssetSettings>();
@@ -46,6 +49,7 @@ impl Plugin for Wc3BevyPlugin {
         app.add_plugins((
             MaterialPlugin::<ModelMaterial>::default(),
             ParticleRenderPlugin,
+            AgeSpriteRenderPlugin,
             RibbonRenderPlugin,
         ));
         app.add_message::<ModelEvent>();
@@ -101,6 +105,12 @@ impl Plugin for Wc3BevyPlugin {
             (update_lod, apply_lod_visibility, apply_world_selection)
                 .chain()
                 .in_set(Wc3Systems::SelectLod),
+        );
+        app.add_systems(
+            PostUpdate,
+            synchronize_model_layers
+                .after(Wc3Systems::SimulateEffects)
+                .before(VisibilitySystems::CheckVisibility),
         );
         app.add_systems(
             PostUpdate,

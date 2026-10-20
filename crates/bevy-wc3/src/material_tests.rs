@@ -1,4 +1,5 @@
 use super::super::textures::TextureRole;
+use super::compile::rasterization;
 use super::*;
 use bevy::math::{Quat, Vec2, Vec3, Vec4};
 use std::array::from_fn;
@@ -27,11 +28,6 @@ fn default_extension_preserves_base_blend_and_depth_while_authored_pass_override
     opaque.apply_blend(&mut actual);
     assert_eq!(actual, None);
     assert_eq!(opaque.depth_write, Some(true));
-    let alpha = particle_material(ParticleBlend::Alpha, None, false);
-    let alpha = ModelMaterialKey::from(&alpha.extension);
-    alpha.apply_blend(&mut actual);
-    assert_eq!(actual.unwrap().color.src_factor, BlendFactor::SrcAlpha);
-    assert_eq!(alpha.depth_write, Some(false));
 }
 
 #[test]
@@ -54,10 +50,9 @@ fn basic_world_shaders_keep_black_baked_light_separate_from_surface_albedo() {
             UVec4::new(1, (shader == 4) as u32, 0, 0)
         );
         assert_eq!(pass.state.world.composition, UVec4::ZERO);
-        assert!(!pass
-            .diagnostics
-            .iter()
-            .any(|value| value.contains("needs its authored texture/specular combiner")));
+        assert!(!pass.diagnostics.iter().any(|value| value
+            .message
+            .contains("needs its authored texture/specular combiner")));
     }
     let unsupported = wmo_shader::Material {
         shader: Some(8),
@@ -69,10 +64,9 @@ fn basic_world_shaders_keep_black_baked_light_separate_from_surface_albedo() {
         &TextureImages::default(),
     )
     .unwrap();
-    assert!(pass
-        .diagnostics
-        .iter()
-        .any(|value| value.contains("needs its authored texture/specular combiner")));
+    assert!(pass.diagnostics.iter().any(|value| value
+        .message
+        .contains("needs its authored texture/specular combiner")));
 }
 
 #[test]
@@ -233,7 +227,7 @@ fn unknown_layer_shader_does_not_infer_hd_data_roles() {
     assert!(passes[0]
         .diagnostics
         .iter()
-        .any(|message| message.contains("extended layered shader")));
+        .any(|message| message.message.contains("extended layered shader")));
 }
 
 #[test]
@@ -288,22 +282,6 @@ fn same_resource_texture_variants_keep_independent_image_handles() {
     let passes = compile_material_with_images(&model, id, map).unwrap();
     assert_eq!(passes[0].material.base_color_texture, Some(first));
     assert_eq!(passes[1].material.base_color_texture, Some(second));
-}
-
-#[test]
-fn particle_blend_separates_unweighted_and_opacity_weighted_addition() {
-    let add = particle_material(ParticleBlend::NoAlphaAdd, None, false);
-    let alpha_add = particle_material(ParticleBlend::Add, None, false);
-    assert_eq!(add.extension.blend, Some(Blend::Additive));
-    assert_eq!(alpha_add.extension.blend, Some(Blend::AdditiveAlpha));
-    assert_eq!(alpha_add.extension.combiner.clip.x, 0.0);
-    assert!(!ModelMaterialKey::from(&add.extension).depth_write.unwrap());
-    let cutout = particle_material(ParticleBlend::AlphaKey, None, true);
-    assert_eq!(
-        ModelMaterialKey::from(&cutout.extension).depth_write,
-        Some(true)
-    );
-    assert!(!cutout.base.unlit);
 }
 
 #[test]
@@ -399,7 +377,7 @@ fn unknown_blending_does_not_silently_claim_opaque_support() {
     let operation: BlendOperations<Unavailable> = BlendOperations::Unknown(999);
     blend(&operation, &mut pass);
     assert_eq!(pass.material.alpha_mode, AlphaMode::Blend);
-    assert!(pass.diagnostics[0].contains("999"));
+    assert!(pass.diagnostics[0].message.contains("999"));
 }
 
 #[test]

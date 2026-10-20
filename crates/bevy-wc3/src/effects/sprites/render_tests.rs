@@ -18,6 +18,8 @@ fn emitter() -> StagedSpriteParameters {
         xy_quad: false,
         tail_length: 0.,
         unlit: false,
+        fog_enabled: true,
+        fog_blend: 0,
         plane_axes: [Vec3::X, Vec3::Y],
     }
 }
@@ -102,14 +104,8 @@ fn particle_shader_validates_and_matches_host_buffer_layouts() {
 struct View { world_from_view: mat4x4<f32>, clip_from_view: mat4x4<f32> };
 @group(0) @binding(0) var<uniform> view: View;
 fn position_world_to_clip(p: vec3<f32>) -> vec4<f32> { return vec4(p, 1.0); }
-struct Material { base_color: vec4<f32>, reflectance: vec3<f32>, perceptual_roughness: f32 };
-struct Lighting {
-    material: Material, frag_coord: vec4<f32>, world_position: vec4<f32>,
-    world_normal: vec3<f32>, N: vec3<f32>, V: vec3<f32>, is_orthographic: bool,
-};
-fn pbr_input_new() -> Lighting { var result: Lighting; return result; }
-fn calculate_view(p: vec4<f32>, orthographic: bool) -> vec3<f32> { return vec3(0.0, 0.0, 1.0); }
-fn apply_pbr_lighting(p: Lighting) -> vec4<f32> { return p.material.base_color; }
+fn shade_effect(color: vec4<f32>, position: vec3<f32>, normal: vec3<f32>,
+    frag_coord: vec4<f32>, unlit: bool, fog_enabled: bool, fog_blend: u32) -> vec4<f32> { return color; }
 "#;
     for alpha_key in [false, true] {
         let mut enabled = true;

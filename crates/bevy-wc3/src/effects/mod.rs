@@ -1,9 +1,12 @@
 //! Semantic effect compilation, shared simulation clocks, and composed transports.
+use crate::diagnostics::RenderIssue;
 mod age_appearance;
 mod age_sprites;
+pub(crate) mod age_sprites_gpu;
 mod atlas_sprites;
 mod emission;
 mod frame;
+mod generators;
 pub(super) mod model_particles;
 
 mod ribbons;
@@ -35,7 +38,7 @@ pub(super) struct RuntimeParticles {
     ribbons: RuntimeRibbons,
     models: RuntimeModelParticles,
 
-    diagnostics: Vec<(FeatureId, String)>,
+    diagnostics: Vec<(FeatureId, RenderIssue)>,
 }
 #[derive(Default)]
 pub(super) struct ParticleInstances {
@@ -107,7 +110,7 @@ impl RuntimeParticles {
             diagnostics,
         }
     }
-    pub fn diagnostics(&self) -> &[(FeatureId, String)] {
+    pub fn diagnostics(&self) -> &[(FeatureId, RenderIssue)] {
         &self.diagnostics
     }
     pub fn spawn(
@@ -167,6 +170,7 @@ impl RuntimeParticles {
             &mut instances.age,
             frame,
             &mut world.meshes,
+            &mut world.age_sprites,
             &mut world.age_statistics,
             world.materials.bypass_change_detection(),
         );

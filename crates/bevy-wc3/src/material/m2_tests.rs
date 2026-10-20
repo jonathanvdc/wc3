@@ -141,7 +141,7 @@ fn unknown_coordinates_or_programs_report_fallback() {
         assert!(pass
             .diagnostics
             .iter()
-            .any(|message| message.contains("approximated")));
+            .any(|message| message.message.contains("approximated")));
     }
 }
 
@@ -214,7 +214,7 @@ fn legacy_surplus_bindings_use_the_established_two_input_equation_with_diagnosti
         assert!(pass
             .diagnostics
             .iter()
-            .any(|message| message.contains("surplus")));
+            .any(|message| message.message.contains("surplus")));
         assert_ne!(pass.state.combiner.mode.x, 0);
     }
 }
@@ -259,7 +259,7 @@ fn legacy_guild_programmes_use_external_palettes_and_reject_six_input_layouts() 
     assert!(six
         .diagnostics
         .iter()
-        .any(|message| message.contains("approximated")));
+        .any(|message| message.message.contains("approximated")));
 }
 
 #[test]
@@ -271,7 +271,7 @@ fn unknown_legacy_selector_controls_do_not_silently_use_a_known_equation() {
         assert!(pass
             .diagnostics
             .iter()
-            .any(|message| message.contains("approximated")));
+            .any(|message| message.message.contains("approximated")));
     }
     assert!(program(0x4011, 2).is_some());
 }

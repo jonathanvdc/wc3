@@ -77,8 +77,8 @@ to use authored transition timing or set it to zero for an immediate switch.
 Images are named `frame-0000-0.000s.png`, and so on; reruns overwrite matching
 files. The tool requires a GPU even though it does not open a window. Loading,
 pipeline, or readback failures terminate with an error. Add `--particle-stats`
-to report each sprite emitter's live population, generated vertex count, maximum
-vertex alpha, dropped births, and skipped simulation time beside each capture.
+to report live sprite populations, dropped births, and skipped simulation time,
+alongside ribbon sections, connected segments, and omitted sections.
 These counters help distinguish simulation and visibility problems; inspect the
 images to assess appearance.
 
@@ -166,6 +166,12 @@ variants or renderer revisions. Inspect placement, motion, color and alpha,
 atlas frames, geometry, and blending in the resulting images. Compilation or a
 nonempty image alone does not establish rendering fidelity; controlled fixtures
 also do not establish equivalence to Warcraft III.
+
+Use `--fog START,END --fog-color R,G,B` to check linear Bevy distance fog in
+world units with a linear RGB color. Keep fog distances, tonemapping, and lighting
+identical across comparisons. Unlit sprites and trails still receive camera
+output processing; additive and modulation effects fade toward their blend’s
+neutral contribution.
 
 For focused comparisons, use a small complete MDL that isolates the behavior
 under investigation, with consistent node IDs, pivots, geometry references,

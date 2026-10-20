@@ -24,8 +24,13 @@ Every supported compiled material pass receives shared trail geometry. Primary
 texture/color/opacity and UV transforms sample the semantic animation programme.
 Authored alpha testing, additive/modulate factors, culling, depth controls, unlit
 state, priority bias, and supported segment sorting remain explicit. HD normal, ORM,
-reflection, secondary compositing, and effect fog do not have full ribbon transport
+reflection and secondary compositing do not have full ribbon transport
 equivalents and produce limitations.
+
+Trails follow the application camera’s Bevy distance fog and output processing,
+including unlit passes. Unfogged materials bypass fog independently of lighting.
+Additive passes fade toward black, modulation toward white, and doubled modulation
+toward half-white so a fully fogged trail contributes the blend’s neutral value.
 
 Pause and speed control effect age. Programme changes and backwards traversal break
 connectivity; living sections retain their lifetime policy. Root hierarchy

@@ -1,9 +1,6 @@
 //! GPU binding layout independent of semantic image/sampler ownership.
 
-use super::{
-    CombinerUniform, HdUniform, ModelMaterialExtension, ModelMaterialKey, ParticleUniform,
-    WorldUniform,
-};
+use super::{CombinerUniform, HdUniform, ModelMaterialExtension, ModelMaterialKey, WorldUniform};
 use bevy::ecs::system::{lifetimeless::SRes, SystemParamItem};
 use bevy::prelude::{Handle, Image};
 use bevy::render::render_asset::RenderAssets;
@@ -41,8 +38,6 @@ struct BindingSnapshot {
     fourth: Option<Handle<Image>>,
     #[uniform(110)]
     world: WorldUniform,
-    #[uniform(113)]
-    particle: ParticleUniform,
 }
 impl From<&ModelMaterialExtension> for BindingSnapshot {
     fn from(material: &ModelMaterialExtension) -> Self {
@@ -56,7 +51,6 @@ impl From<&ModelMaterialExtension> for BindingSnapshot {
             tertiary: material.tertiary.clone(),
             fourth: material.fourth.clone(),
             world: material.world,
-            particle: material.particle,
         }
     }
 }

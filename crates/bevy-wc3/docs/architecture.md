@@ -64,9 +64,14 @@ agrees; native definitions remain separate.
 Atlas sprites and trails store immutable births in bounded rings. GPU updates
 upload changed ranges, and per-view sorting uses separate indices. Effect draws
 bind their own emitter records after Bevy's view bindings, leaving application
-cameras and their GPU mesh preprocessing settings unchanged. Ribbon passes
-share section records. M2 age-driven sprites reuse CPU mesh buffers, updating them
-when population, view, or evaluated appearance changes. Model particles create
+cameras and their GPU mesh preprocessing settings unchanged. Queueing, per-view
+sorting, and uploads follow Bevy's visible mesh selections, including camera
+render layers. Ribbon passes share section records. M2 age-driven sprites sample
+exact authored curves and motion on the CPU into one compact record per particle.
+The GPU expands shared heads and tails for each view; camera motion updates their
+billboards and sorting without rebuilding particle vertices. Paused, unchanged
+samples reuse GPU records. All effect transports cache bindings and skip identical
+uniform uploads. Model particles create
 independent child models with explicit cleanup when their owner disappears.
 Population, birth, and long-update budgets bound work and expose omitted-work
 counters. The focused [effect guides](README.md#rendering-reference) describe their

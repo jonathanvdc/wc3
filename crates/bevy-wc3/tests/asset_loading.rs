@@ -2,7 +2,7 @@ use bevy::asset::{AssetApp, AssetPlugin, AssetServer};
 use bevy::image::{Image, ImageLoaderSettings};
 use bevy::prelude::{default, App, Assets, Handle};
 use bevy::tasks::{ComputeTaskPool, IoTaskPool, TaskPoolBuilder};
-use bevy_wc3::{BlpImageLoader, ModelAsset, ModelLoader, PathResolver};
+use bevy_wc3::{BlpImageLoader, ModelAsset, ModelLoader, PathResolver, RenderDiagnosticSource};
 use std::borrow::Cow;
 use std::fs;
 use std::sync::Arc;
@@ -156,8 +156,10 @@ fn asset_server_resolves_child_models_and_keeps_missing_slots() {
         .compiled
         .diagnostics()
         .iter()
-        .any(|diagnostic| diagnostic.feature.is_some()
-            && diagnostic.message.contains("could not be resolved")));
+        .any(
+            |diagnostic| matches!(diagnostic.source, RenderDiagnosticSource::Feature(_))
+                && diagnostic.message.contains("could not be resolved")
+        ));
     let server = app.world().resource::<AssetServer>();
     for path in ["units/weapon.mdl", "root.mdl", "units/spark.mdx"] {
         let child = server

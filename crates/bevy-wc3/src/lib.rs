@@ -38,6 +38,7 @@ mod compiled;
 mod compiler;
 mod composition;
 mod coordinates;
+mod diagnostics;
 mod effects;
 mod error;
 mod events;
@@ -47,6 +48,7 @@ mod hierarchy;
 mod image_replacements;
 pub use image_replacements::ImageReplacements;
 mod instances;
+mod layers;
 mod lod;
 mod material;
 mod mesh_animation;
@@ -74,9 +76,12 @@ pub use baking::{
 };
 pub use camera::CameraBinding;
 pub use child_coordinates::CoordinatePolicy;
-pub use compiled::{CompiledModel, DrawSource, PreparedModel, PreparedMount, RenderDiagnostic};
+pub use compiled::{CompiledModel, DrawSource, PreparedModel, PreparedMount};
 pub use compiler::{compile_model, compile_model_with_options, CompileOptions};
 pub use composition::{DrawSelection, JointMap, ModelPart, PartBinding};
+pub use diagnostics::{
+    RenderDiagnostic, RenderDiagnosticKind, RenderDiagnosticSeverity, RenderDiagnosticSource,
+};
 pub use effects::{ModelEmitter, RibbonEmitter, SpriteEmitter};
 pub use error::ModelError;
 pub use events::{EventDispatchStats, EventProgram, EventSource, ModelEvent};

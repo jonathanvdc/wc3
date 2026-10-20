@@ -19,7 +19,6 @@ pub(crate) struct EffectFrame<'a, 'view, 'data> {
     /// Current inherited node visibility, in the same order.
     pub node_visible: &'a [bool],
     pub basis_world: Mat4,
-    pub camera_world: Option<Mat4>,
 }
 
 impl EffectFrame<'_, '_, '_> {

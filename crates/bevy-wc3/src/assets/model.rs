@@ -1,4 +1,5 @@
 //! Native asset loading without lowering through Warcraft III records.
+use crate::diagnostics::{RenderDiagnosticKind, RenderDiagnosticSource};
 use crate::error::ModelError;
 use crate::textures::{texture_requests, ImageKey, TextureRequest, TextureRequestKey};
 use crate::{compile_model_with_options, CompileOptions, CompiledModel, RenderDiagnostic};
@@ -453,13 +454,21 @@ async fn compile_loaded(
         .issues
         .iter()
         .filter(|issue| matches!(issue.kind, IssueKind::Dropped | IssueKind::Approximated))
-        .map(|issue| RenderDiagnostic {
-            feature: None,
-            material: None,
-            message: format!(
-                "native import {:?} at {}: {}",
-                issue.kind, issue.path, issue.description
-            ),
+        .map(|issue| {
+            RenderDiagnostic::new(
+                if issue.kind == IssueKind::Dropped {
+                    RenderDiagnosticKind::Unsupported
+                } else {
+                    RenderDiagnosticKind::Approximation
+                },
+                RenderDiagnosticSource::NativeImport {
+                    path: issue.path.to_string(),
+                },
+                format!(
+                    "native import {:?} at {}: {}",
+                    issue.kind, issue.path, issue.description
+                ),
+            )
         })
         .collect::<Vec<_>>();
     for (id, feature) in model.features() {
@@ -514,13 +523,13 @@ async fn compile_loaded(
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .insert_for_load(owner, children.generation, &path)
             {
-                child_diagnostics.push(RenderDiagnostic {
-                    feature: Some(id),
-                    material: None,
-                    message: format!(
+                child_diagnostics.push(RenderDiagnostic::new(
+                    RenderDiagnosticKind::Resource,
+                    RenderDiagnosticSource::Feature(id),
+                    format!(
                         "cyclic child model reference {resource:?} at {path} is not instantiated"
                     ),
-                });
+                ));
                 resolved = true;
                 break;
             }
@@ -537,13 +546,11 @@ async fn compile_loaded(
             break;
         }
         if !resolved {
-            child_diagnostics.push(RenderDiagnostic {
-                feature: Some(id),
-                material: None,
-                message: format!(
-                    "optional {purpose:?} child model {resource:?} could not be resolved"
-                ),
-            });
+            child_diagnostics.push(RenderDiagnostic::new(
+                RenderDiagnosticKind::Resource,
+                RenderDiagnosticSource::Feature(id),
+                format!("optional {purpose:?} child model {resource:?} could not be resolved"),
+            ));
         }
     }
     let mut images = HashMap::new();

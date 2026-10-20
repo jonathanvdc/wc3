@@ -30,6 +30,7 @@ fn emitter(slot_values: &mut SlotValues) -> Emitter {
         speed: slot_values.add(10.),
         lifespan: slot_values.add(2.),
         generator: ParticleGenerator::Plane,
+        spline: Vec::new(),
         flags,
         drag: 0.,
         wind: Vec3::ZERO,
@@ -44,10 +45,15 @@ fn emitter(slot_values: &mut SlotValues) -> Emitter {
         tail_length: 0.,
         seed: 7,
 
-        passes: vec![MaterialPass {
-            material: particle_material(ParticleBlend::Alpha, None, false),
-            animation: None,
-        }],
+        gpu_style: AgeSpriteStyle {
+            textures: [None, None, None],
+            blend: ParticleBlend::Alpha,
+            priority: 0.,
+            composition: 0,
+            unlit: false,
+            head: true,
+            tail: false,
+        },
     }
 }
 #[test]
@@ -120,6 +126,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
     let mut state = EmitterInstance {
+        samples: Default::default(),
         mesh: Handle::default(),
         passes: vec![],
         births: vec![birth],
@@ -152,9 +159,14 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         node_poses: &[Mat4::IDENTITY],
         node_visible: &[true],
         basis_world: Mat4::IDENTITY,
-        camera_world: Some(Mat4::IDENTITY),
     };
-    emitter.draw(&mut state, &frame, Mat4::IDENTITY, &mut mesh);
+    emitter.draw(
+        &mut state,
+        &frame,
+        Mat4::IDENTITY,
+        &mut mesh,
+        Mat4::IDENTITY,
+    );
     let Some(VertexAttributeValues::Float32x4(colors)) = mesh.attribute(Mesh::ATTRIBUTE_COLOR)
     else {
         panic!("colors absent")
@@ -167,7 +179,13 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         panic!("positions absent")
     };
     let pointer = positions.as_ptr();
-    emitter.draw(&mut state, &frame, Mat4::IDENTITY, &mut mesh);
+    emitter.draw(
+        &mut state,
+        &frame,
+        Mat4::IDENTITY,
+        &mut mesh,
+        Mat4::IDENTITY,
+    );
     let Some(VertexAttributeValues::Float32x3(positions)) =
         mesh.attribute(Mesh::ATTRIBUTE_POSITION)
     else {
@@ -183,7 +201,13 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
     let mut farther = state.births[0].clone();
     farther.origin = Vec3::NEG_Z * 2.;
     state.births.push(farther);
-    emitter.draw(&mut state, &frame, Mat4::IDENTITY, &mut mesh);
+    emitter.draw(
+        &mut state,
+        &frame,
+        Mat4::IDENTITY,
+        &mut mesh,
+        Mat4::IDENTITY,
+    );
     let Some(VertexAttributeValues::Float32x3(positions)) =
         mesh.attribute(Mesh::ATTRIBUTE_POSITION)
     else {
@@ -199,7 +223,13 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
     );
     let pointer = positions.as_ptr();
     state.births.clear();
-    emitter.draw(&mut state, &frame, Mat4::IDENTITY, &mut mesh);
+    emitter.draw(
+        &mut state,
+        &frame,
+        Mat4::IDENTITY,
+        &mut mesh,
+        Mat4::IDENTITY,
+    );
     let Some(VertexAttributeValues::Float32x3(positions)) =
         mesh.attribute(Mesh::ATTRIBUTE_POSITION)
     else {
@@ -220,6 +250,8 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
     state.mesh = meshes.add(mesh);
     let handle = state.mesh.clone();
     let mut world = World::new();
+    let mut gpu_world = World::new();
+    let mut gpu_query = gpu_world.query::<&mut AgeSpriteData>();
     let mut query_state = world.query::<&mut SpriteEmitter>();
     let mut materials = Assets::<ModelMaterial>::default();
     emitter.rate = emitter.speed;
@@ -236,6 +268,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         &mut instances,
         frame,
         &mut meshes,
+        &mut gpu_query.query_mut(&mut gpu_world),
         &mut query_state.query_mut(&mut world),
         &mut materials,
     );
@@ -261,6 +294,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         &mut instances,
         frame,
         &mut meshes,
+        &mut gpu_query.query_mut(&mut gpu_world),
         &mut query_state.query_mut(&mut world),
         &mut materials,
     );
@@ -339,6 +373,7 @@ fn world_particles_follow_only_translation_after_their_birth() {
         RenderAssetUsages::default(),
     ));
     let state = EmitterInstance {
+        samples: Default::default(),
         mesh,
         passes: vec![],
         births: vec![prior_birth],
@@ -362,6 +397,8 @@ fn world_particles_follow_only_translation_after_their_birth() {
         ..SlotConstruct::construct(&mut slot_values)
     };
     let mut world = World::new();
+    let mut gpu_world = World::new();
+    let mut gpu_query = gpu_world.query::<&mut AgeSpriteData>();
     let mut query = world.query::<&mut SpriteEmitter>();
     let mut materials = Assets::<ModelMaterial>::default();
     let nodes = [Mat4::from_translation(Vec3::X * 4.)];
@@ -376,12 +413,12 @@ fn world_particles_follow_only_translation_after_their_birth() {
         node_poses: &nodes,
         node_visible: &[true],
         basis_world: Mat4::IDENTITY,
-        camera_world: Some(Mat4::IDENTITY),
     };
     runtime.update(
         &mut instances,
         frame,
         &mut meshes,
+        &mut gpu_query.query_mut(&mut gpu_world),
         &mut query.query_mut(&mut world),
         &mut materials,
     );
@@ -558,4 +595,305 @@ fn native_uniform_scale_variation_preserves_aspect_ratio() {
         assert_eq!(birth.scale_variation[0], birth.scale_variation[1]);
         assert!((0.6..=1.4).contains(&birth.scale_variation[0]));
     }
+}
+
+// Mirrors the shader's corner expansion, independently of the old CPU oracle.
+fn gpu_sample_corners(
+    record: &AgeSpriteRecord,
+    uniform: &AgeSpriteUniform,
+    camera: Mat4,
+    tail: bool,
+) -> [Vec3; 4] {
+    let back = camera.z_axis.truncate().normalize_or_zero();
+    let mut right = camera.x_axis.truncate().normalize_or_zero();
+    let mut up = camera.y_axis.truncate().normalize_or_zero();
+    let mut position = Vec3::from_slice(&record.position[..3]);
+    let velocity = Vec3::from_slice(&record.velocity_tail[..3]);
+    if uniform.flags[0] != 0 {
+        right = Vec3::from_slice(&uniform.axes[0][..3]);
+        up = Vec3::from_slice(&uniform.axes[1][..3]);
+    } else if uniform.flags[1] != 0 {
+        up = (velocity - back * velocity.dot(back))
+            .try_normalize()
+            .unwrap_or(up);
+        right = up.cross(back).normalize_or_zero();
+    }
+    let [width, height, cos, sin] = record.size_spin;
+    let mut side = (right * cos + up * sin) * width * 0.5;
+    let mut vertical = (up * cos - right * sin) * height * 0.5;
+    if tail {
+        let extent = velocity * record.velocity_tail[3];
+        side = extent
+            .cross(camera.w_axis.truncate() - position)
+            .normalize_or_zero()
+            * width
+            * 0.5;
+        vertical = extent * 0.5;
+        position -= vertical;
+    }
+    [
+        position - side - vertical,
+        position + side - vertical,
+        position + side + vertical,
+        position - side + vertical,
+    ]
+}
+
+#[test]
+fn gpu_live_samples_preserve_cpu_geometry_across_views_and_coordinate_frames() {
+    let mut values = SlotValues::default();
+    let mut emitter = emitter(&mut values);
+    emitter.head_tail = ParticleHeadTail::Both;
+    emitter.gpu_style.head = true;
+    emitter.gpu_style.tail = true;
+    emitter.tail_length = 0.75;
+    emitter.appearance.alpha = Some(
+        Curve::linear(
+            [
+                ModelTime::seconds(0.).unwrap(),
+                ModelTime::seconds(1.).unwrap(),
+            ],
+            [1., 0.25],
+        )
+        .unwrap(),
+    );
+    let mut birth = emitter
+        .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .unwrap();
+    birth.origin = Vec3::new(1., 2., -3.);
+    birth.velocity = Vec3::new(2., 0.5, 1.);
+    birth.spin = 0.3;
+    birth.spin_rate = 0.4;
+    birth.scale_variation = Vec2::new(0.8, 1.1);
+    let mut state = EmitterInstance {
+        samples: Default::default(),
+        mesh: Handle::default(),
+        passes: Vec::new(),
+        births: vec![birth],
+        age_appearances: Vec::new(),
+        order: Vec::new(),
+        fraction: 0.,
+        ordinal: 0,
+        previous_node: Mat4::IDENTITY,
+        pose_scratch: Vec::new(),
+        dropped: 0,
+        skipped_seconds: 0.,
+    };
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+    builder.import_values(&values).unwrap();
+    let model = builder.finish().unwrap();
+    let program = AnimationProgram::compile(&model);
+    let sample = program.sample(AnimationSample::default()).unwrap();
+    let basis = Mat4::from_scale_rotation_translation(
+        Vec3::new(2., 3., 4.),
+        Quat::from_rotation_z(0.4),
+        Vec3::X,
+    );
+    let node = basis * Mat4::from_rotation_x(0.7);
+    let mut data = AgeSpriteData {
+        records: Default::default(),
+        live_indices: Default::default(),
+        uniform: Default::default(),
+        style: emitter.gpu_style.clone(),
+    };
+    for attached in [false, true] {
+        emitter.flags.set_attached(attached);
+        for mode in 0..3 {
+            emitter.flags.set_align_xy(mode == 1);
+            emitter.flags.set_velocity_oriented(mode == 2);
+            for camera in [
+                Mat4::IDENTITY,
+                Mat4::from_rotation_translation(Quat::from_rotation_y(0.9), Vec3::new(4., 3., 8.)),
+            ] {
+                let frame = EffectFrame {
+                    traversal: Default::default(),
+                    change: Default::default(),
+                    root_visible: true,
+                    pose: None,
+                    selection: Default::default(),
+                    time: 0.5,
+                    sample: &sample,
+                    node_poses: &[node],
+                    node_visible: &[true],
+                    basis_world: basis,
+                };
+                emitter.sample_gpu(&mut state, &frame, node, &mut data);
+                assert_eq!(data.records.len(), 1);
+                assert_eq!(data.live_indices.as_slice(), &[0, 0x8000_0000]);
+                assert!((data.records[0].color[3] - 0.8125).abs() < 1e-6);
+                let snapshot = data.records.clone();
+                let mut mesh = Mesh::new(
+                    PrimitiveTopology::TriangleList,
+                    RenderAssetUsages::default(),
+                );
+                emitter.draw(&mut state, &frame, node, &mut mesh, camera);
+                let Some(VertexAttributeValues::Float32x3(positions)) =
+                    mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+                else {
+                    panic!("positions absent")
+                };
+                let Some(VertexAttributeValues::Float32x3(normals)) =
+                    mesh.attribute(Mesh::ATTRIBUTE_NORMAL)
+                else {
+                    panic!("normals absent")
+                };
+                for (quad_index, (quad, tail)) in
+                    positions.chunks_exact(4).zip([false, true]).enumerate()
+                {
+                    let generated =
+                        gpu_sample_corners(&data.records[0], &data.uniform, camera, tail);
+                    let normal = (generated[1] - generated[0])
+                        .cross(generated[2] - generated[0])
+                        .normalize_or_zero();
+                    let cpu_normal = basis
+                        .inverse()
+                        .transpose()
+                        .transform_vector3(Vec3::from_array(normals[quad_index * 4]))
+                        .normalize_or_zero();
+                    assert!(cpu_normal.abs_diff_eq(normal, 1e-5));
+                    for (cpu, gpu) in quad.iter().zip(generated) {
+                        assert!(
+                            Vec3::from_array(*cpu)
+                                .abs_diff_eq(basis.inverse().transform_point3(gpu), 1e-5),
+                            "mode {mode}, attached {attached}, tail {tail}"
+                        );
+                    }
+                }
+                assert!(
+                    Arc::ptr_eq(&snapshot, &data.records),
+                    "per-view expansion must not rewrite shared samples"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn spline_births_follow_authored_path_and_aim_from_the_source_height() {
+    let mut values = SlotValues::default();
+    let mut emitter = emitter(&mut values);
+    emitter.generator = ParticleGenerator::Spline;
+    emitter.spline = vec![Vec3::ZERO, Vec3::X, Vec3::new(1., 3., 0.)];
+    emitter.controls.as_mut().unwrap().length = values.add(0.5);
+    emitter.controls.as_mut().unwrap().width = values.add(1.);
+    emitter.controls.as_mut().unwrap().speed_variation = values.add(0.);
+    emitter.speed = values.add(2.);
+    for ordinal in 0..16 {
+        let birth = emitter
+            .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, ordinal)
+            .unwrap();
+        assert_eq!(birth.origin.x, 1.);
+        assert!((0. ..=3.).contains(&birth.origin.y));
+        assert_eq!(birth.velocity, Vec3::Y * 2.);
+    }
+    emitter.controls.as_mut().unwrap().z_source = values.add(1.);
+    let birth = emitter
+        .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .unwrap();
+    assert!(birth
+        .velocity
+        .abs_diff_eq((birth.origin - Vec3::Z).normalize() * 2., 1e-6));
+}
+
+#[test]
+#[ignore = "opt-in CPU preparation comparison; prints timings without asserting machine-specific limits"]
+fn benchmark_compact_samples_against_cpu_corner_transport() {
+    use std::hint::black_box;
+    use std::time::Instant;
+
+    let mut values = SlotValues::default();
+    let mut emitter = emitter(&mut values);
+    emitter.head_tail = ParticleHeadTail::Both;
+    emitter.gpu_style.tail = true;
+    emitter.tail_length = 0.4;
+    let births = (0..MAX_PARTICLES)
+        .map(|ordinal| {
+            let mut birth = emitter
+                .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, ordinal as u64)
+                .unwrap();
+            birth.origin = Vec3::new(
+                (ordinal % 23) as f32,
+                (ordinal % 17) as f32,
+                -(ordinal as f32) * 0.01,
+            );
+            birth
+        })
+        .collect();
+    let mut state = EmitterInstance {
+        samples: Default::default(),
+        mesh: Handle::default(),
+        passes: Vec::new(),
+        births,
+        age_appearances: Vec::new(),
+        order: Vec::new(),
+        fraction: 0.,
+        ordinal: 0,
+        previous_node: Mat4::IDENTITY,
+        pose_scratch: Vec::new(),
+        dropped: 0,
+        skipped_seconds: 0.,
+    };
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+    builder.import_values(&values).unwrap();
+    let model = builder.finish().unwrap();
+    let program = AnimationProgram::compile(&model);
+    let sample = program.sample(AnimationSample::default()).unwrap();
+    let frame = EffectFrame {
+        traversal: Default::default(),
+        change: Default::default(),
+        root_visible: true,
+        pose: None,
+        selection: Default::default(),
+        time: 0.5,
+        sample: &sample,
+        node_poses: &[Mat4::IDENTITY],
+        node_visible: &[true],
+        basis_world: Mat4::IDENTITY,
+    };
+    let mut data = AgeSpriteData {
+        records: Default::default(),
+        live_indices: Default::default(),
+        uniform: Default::default(),
+        style: emitter.gpu_style.clone(),
+    };
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    emitter.draw(
+        &mut state,
+        &frame,
+        Mat4::IDENTITY,
+        &mut mesh,
+        Mat4::IDENTITY,
+    );
+    emitter.sample_gpu(&mut state, &frame, Mat4::IDENTITY, &mut data);
+    let rounds = 64;
+    let start = Instant::now();
+    for _ in 0..rounds {
+        emitter.draw(
+            black_box(&mut state),
+            &frame,
+            Mat4::IDENTITY,
+            black_box(&mut mesh),
+            Mat4::IDENTITY,
+        );
+    }
+    let corners = start.elapsed().as_secs_f64() / f64::from(rounds);
+    let start = Instant::now();
+    for _ in 0..rounds {
+        emitter.sample_gpu(
+            black_box(&mut state),
+            &frame,
+            Mat4::IDENTITY,
+            black_box(&mut data),
+        );
+    }
+    let samples = start.elapsed().as_secs_f64() / f64::from(rounds);
+    println!("8192 head+tail particles: CPU indexed corners {corners:.6}s; compact samples {samples:.6}s; preparation ratio {:.2}x (per-view render sorting excluded)", corners / samples);
+    println!(
+        "live payload: {} compact bytes vs {} indexed-corner bytes, excluding draw-order buffers",
+        data.records.len() * size_of::<AgeSpriteRecord>(),
+        MAX_PARTICLES * 2 * 204
+    );
 }

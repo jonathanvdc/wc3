@@ -11,6 +11,8 @@ fn emitter() -> StagedSpriteParameters {
         xy_quad: false,
         tail_length: 0.,
         unlit: false,
+        fog_enabled: true,
+        fog_blend: 0,
         plane_axes: [Vec3::X, Vec3::Y],
     }
 }
@@ -85,4 +87,17 @@ fn vector_acceleration_and_drag_match_transport_sorting_motion() {
     let response = (1. - (-2.0f32).exp()) / 2.;
     let expected = Vec3::X * (10. * response) + Vec3::Y * (1. - response);
     assert!((record.center(&uniform) - expected).length() < 1e-5);
+}
+
+#[test]
+fn fog_and_lighting_are_independent_of_motion_and_each_other() {
+    let mut definition = emitter();
+    let fogged = ParticleEmitterUniform::from_staged(&definition, Mat4::IDENTITY, 1.);
+    definition.fog_enabled = false;
+    definition.unlit = true;
+    let unfogged = ParticleEmitterUniform::from_staged(&definition, Mat4::IDENTITY, 1.);
+    assert_eq!(fogged.render_flags, [0, 1, 0, 0]);
+    assert_eq!(unfogged.render_flags, [1, 0, 0, 0]);
+    assert_eq!(fogged.clock_tail, unfogged.clock_tail);
+    assert_eq!(fogged.world_from_local, unfogged.world_from_local);
 }

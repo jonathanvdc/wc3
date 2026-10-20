@@ -30,6 +30,25 @@ request for retry or reload, and success clears the error. Bevy's `AssetServer`
 also exposes load and recursive-dependency states. Optional missing images and
 unsupported rendering behavior remain in asset and compiled diagnostics.
 
+Rendering diagnostics carry a `kind`, `severity`, and typed semantic `source`.
+Use those fields to select application policy; messages explain the limitation
+and can change between releases. `Unsupported` identifies missing interpreters,
+`Approximation` identifies changed or partial behavior, and `Unverified` identifies
+implemented behavior whose fidelity still needs checking. `Resource` reports
+unresolved resources and `Budget` describes bounded simulation or storage.
+For example, a model inspection tool can report missing interpreters separately
+from resource failures or fidelity limits:
+
+```rust
+use bevy_wc3::RenderDiagnosticKind;
+
+for diagnostic in compiled.diagnostics() {
+    if diagnostic.kind == RenderDiagnosticKind::Unsupported {
+        eprintln!("{:?}: {}", diagnostic.source, diagnostic.message);
+    }
+}
+```
+
 Model axes and declared units convert beneath the root. Application transforms
 use Bevy's Y-up frame; choose a root scale appropriate for your scene. Native
 model metadata does not supply a calibrated physical scale.
@@ -145,6 +164,14 @@ Use `Lod::Fixed` or `Lod::Automatic` to select authored geometry, configure glob
 `LodSettings` or a root `LodOverride`, and inspect `LodState`. Automatic selection
 uses projected rest bounds and hysteresis. It does not simplify geometry or lower
 effect budgets. See [LOD](rendering/lod.md).
+
+Set ordinary Bevy `RenderLayers` on a model root to select cameras and lighting
+layers for its renderer-owned meshes, effects, and authored lights. Changes apply
+to existing draws and newly loaded or replaced content. Nested models inherit the
+nearest explicit model root selection; removing it resumes the parent selection
+or Bevy's default layer zero. A `RenderLayers` write on an individual renderer
+entity takes precedence until removed. Application-owned children keep their own
+Bevy layer choices.
 
 Imported [lights](rendering/lights.md) are ordinary Bevy lights. Root
 `ModelLightSettings` controls conversion and suppression; scene ambient resources

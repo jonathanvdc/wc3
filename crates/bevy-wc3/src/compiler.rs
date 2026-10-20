@@ -22,6 +22,7 @@ use super::{
 use crate::animation_targets::AnimationTargets;
 use crate::compiled::{ClipTiming, RuntimeDraw, RuntimeLiquid, RuntimeNode, RuntimeSkin};
 use crate::composition::DrawSelection;
+use crate::diagnostics::{RenderDiagnosticKind, RenderDiagnosticSource};
 use crate::image_replacements::ImageBinding;
 use crate::physics::PhysicsDefinition;
 use crate::ModelError;
@@ -36,7 +37,8 @@ use wc3::model::systems::System;
 use wc3::model::{
     AnimationProgram, Attachment, Billboard, Camera as ModelCamera, ClipProperties, FeatureId,
     Light as SemanticLight, Link, MaterialId, MaterialSelection, Model, NodeFeature,
-    NodeProperties, ParticleEmitter, PoseLayout, SkinId, Texture, ValidateLinks, ValueSlot,
+    NodeProperties, ParticleEmitter, PoseLayout, RibbonEmitter as SemanticRibbonEmitter, SkinId,
+    Texture, ValidateLinks, ValueSlot,
 };
 
 fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
@@ -124,21 +126,13 @@ pub fn compile_model_with_options(
         let all_locked =
             node.billboard == Billboard::None && flags.enabled && flags.x && flags.y && flags.z;
         if matches!(node.billboard, Billboard::Euler(_)) || all_locked {
-            diagnostics.push(RenderDiagnostic {
-                feature: None,
-                material: None,
-                message: format!("M2 node {:?} ({}) uses Euler billboard locks; component retention approximates native camera-frame behavior", node.id, node.name),
-            });
+            diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Approximation, RenderDiagnosticSource::Node(node.id), format!("M2 node {:?} ({}) uses Euler billboard locks; component retention approximates native camera-frame behavior", node.id, node.name)));
         }
     }
     for (id, clip) in model.clips() {
         if let Some(ClipProperties::M2(controls)) = &clip.properties {
             if controls.blend_time != [0; 2] {
-                diagnostics.push(RenderDiagnostic {
-                    feature: None,
-                    material: None,
-                    message: format!("M2 clip {id:?} ({}) declares incoming/outgoing blend durations {:?} milliseconds; native transition arbitration is not interpreted, so use Playback::play_with_blend for an explicit duration", clip.name(), controls.blend_time),
-                });
+                diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Unsupported, RenderDiagnosticSource::Clip(id), format!("M2 clip {id:?} ({}) declares incoming/outgoing blend durations {:?} milliseconds; native transition arbitration is not interpreted, so use Playback::play_with_blend for an explicit duration", clip.name(), controls.blend_time)));
             }
         }
     }
@@ -256,11 +250,7 @@ pub fn compile_model_with_options(
                 pass.diagnostics
                     .iter()
                     .cloned()
-                    .map(|message| RenderDiagnostic {
-                        feature: None,
-                        material: Some(id),
-                        message,
-                    }),
+                    .map(|issue| issue.at(RenderDiagnosticSource::Material(id))),
             );
         }
     }
@@ -281,11 +271,11 @@ pub fn compile_model_with_options(
             .as_ref()
             .and_then(ColorAdjustment::diagnostic)
         {
-            diagnostics.push(RenderDiagnostic {
-                feature: None,
-                material: None,
-                message: format!("world region {instance_id:?}: {message}"),
-            });
+            diagnostics.push(RenderDiagnostic::new(
+                RenderDiagnosticKind::Approximation,
+                RenderDiagnosticSource::Instance(instance_id),
+                format!("world region {instance_id:?}: {message}"),
+            ));
         }
         let selections = instance
             .draws
@@ -437,29 +427,24 @@ pub fn compile_model_with_options(
         particles
             .diagnostics()
             .iter()
-            .map(|(feature, message)| RenderDiagnostic {
-                feature: Some(*feature),
-                material: None,
-                message: message.clone(),
-            }),
+            .map(|(feature, issue)| issue.clone().at(RenderDiagnosticSource::Feature(*feature))),
     );
     let features = Arc::new(RuntimeFeatures::compile(
         model,
         &options.child_models,
         &options.child_coordinates,
     ));
-    diagnostics.extend(
-        features
-            .light_diagnostics()
-            .map(|(feature, message)| RenderDiagnostic {
-                feature: Some(feature),
-                material: None,
-                message: message.to_owned(),
-            }),
-    );
+    diagnostics.extend(features.light_diagnostics().map(|(feature, message)| {
+        RenderDiagnostic::new(
+            RenderDiagnosticKind::Approximation,
+            RenderDiagnosticSource::Feature(feature),
+            message,
+        )
+    }));
     for (id, feature) in model.features() {
         let message = match &feature.payload {
-            NodeFeature::Particle(ParticleEmitter::MdlxEmitter1(_) | ParticleEmitter::MdlxEmitter2(_) | ParticleEmitter::M2(_)) => continue,
+            NodeFeature::Particle(ParticleEmitter::MdlxEmitter1(_) | ParticleEmitter::MdlxEmitter2(_) | ParticleEmitter::M2(_))
+            | NodeFeature::Ribbon(SemanticRibbonEmitter::Mdlx(_) | SemanticRibbonEmitter::M2(_)) => continue,
 
             NodeFeature::GeometryAnimation(value) if value.mesh.is_some() && !value.drop_shadow => continue,
             NodeFeature::GeometryAnimation(_) => "geometry tint and opacity are rendered; orphan controllers and authored drop shadows need application interpretation".to_string(),
@@ -468,28 +453,27 @@ pub fn compile_model_with_options(
 
             NodeFeature::Light(SemanticLight::SingleEmission(_) | SemanticLight::AmbientDiffuse(_)) =>
                 "direct illumination uses Bevy scene lights; ambient terms remain available through ModelLight metadata".to_string(),
+            NodeFeature::Light(SemanticLight::World(_) | SemanticLight::Point(_)) => continue,
             NodeFeature::Attachment(Attachment::Child(_)) if options.child_models.contains_key(&id) => continue,
             NodeFeature::Attachment(Attachment::Child(_)) =>
                 "external attachment identity and activation are exposed; application resource instantiation is required".to_string(),
             _ => format!("{} requires a visual interpreter or application integration", feature_name(&feature.payload)),
         };
-        diagnostics.push(RenderDiagnostic {
-            feature: Some(id),
-            material: None,
+        let kind = match feature.payload {
+            NodeFeature::Attachment(Attachment::Child(_)) => RenderDiagnosticKind::Resource,
+            NodeFeature::GeometryAnimation(_) | NodeFeature::Light(_) => {
+                RenderDiagnosticKind::Approximation
+            }
+            _ => RenderDiagnosticKind::Unsupported,
+        };
+        diagnostics.push(RenderDiagnostic::new(
+            kind,
+            RenderDiagnosticSource::Feature(id),
             message,
-        });
+        ));
     }
     let world = WorldRuntime::compile(model)?;
-    diagnostics.extend(
-        world
-            .diagnostics
-            .into_iter()
-            .map(|message| RenderDiagnostic {
-                feature: None,
-                material: None,
-                message,
-            }),
-    );
+    diagnostics.extend(world.diagnostics);
     let mut liquids = Vec::new();
     for liquid in world.liquids {
         if options.draws.hidden_instances.contains(&liquid.instance) {
@@ -524,7 +508,11 @@ pub fn compile_model_with_options(
         if matches!(system, System::Wmo(_) | System::Physics(_)) {
             continue;
         }
-        diagnostics.push(RenderDiagnostic { feature: None, material: None, message: format!("system {id:?} remains in its authored/default state; application simulation is not active") });
+        diagnostics.push(RenderDiagnostic::new(
+            RenderDiagnosticKind::Unsupported,
+            RenderDiagnosticSource::System(id),
+            "system remains in its authored/default state; application simulation is not active",
+        ));
     }
     let lod = Arc::new(LodDefinition::compile(&draws, world.runtime.lod_levels()));
     let has_animation = draws.iter().any(|draw| draw.animation.uses_shared_time())
@@ -600,19 +588,23 @@ pub fn compile_model_with_options(
         .iter()
         .filter(|binding| binding.default.is_none())
     {
-        let (material, feature) = match binding.key.input {
-            Some(TextureInput::Material { material, .. }) => (Some(material), None),
-            Some(TextureInput::Particle { feature, .. }) => (None, Some(feature)),
+        let source = match binding.key.input {
+            Some(TextureInput::Material { material, .. }) => {
+                RenderDiagnosticSource::Material(material)
+            }
+            Some(TextureInput::Particle { feature, .. }) => {
+                RenderDiagnosticSource::Feature(feature)
+            }
             None => continue,
         };
-        diagnostics.push(RenderDiagnostic {
-            material,
-            feature,
-            message: format!(
+        diagnostics.push(RenderDiagnostic::new(
+            RenderDiagnosticKind::Resource,
+            source,
+            format!(
                 "texture {:?} resource {:?} with role {:?} is unresolved",
                 binding.key.resource, binding.resource, binding.role
             ),
-        });
+        ));
     }
     compiled.diagnostics = diagnostics.into();
     let template = Arc::new(compiled.clone());

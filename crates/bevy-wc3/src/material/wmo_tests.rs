@@ -45,7 +45,7 @@ fn world_compiler_retains_independent_scroll_velocities() {
     assert!(!pass
         .diagnostics
         .iter()
-        .any(|line| line.contains("UV scroll")));
+        .any(|line| line.message.contains("UV scroll")));
 }
 
 #[test]
@@ -129,14 +129,14 @@ fn world_programmes_select_native_routes_without_sampling_unimplemented_families
         assert_eq!(
             pass.diagnostics
                 .iter()
-                .any(|line| line.contains("partially rendered")),
+                .any(|line| line.message.contains("partially rendered")),
             matches!(shader, 16 | 21)
         );
         assert!(
             !pass
                 .diagnostics
                 .iter()
-                .any(|line| line.contains("showing its first")),
+                .any(|line| line.message.contains("showing its first")),
             "{shader}"
         );
     }
@@ -161,7 +161,7 @@ fn world_programmes_select_native_routes_without_sampling_unimplemented_families
         assert!(pass
             .diagnostics
             .iter()
-            .any(|line| line.contains("showing its first")));
+            .any(|line| line.message.contains("showing its first")));
     }
 }
 

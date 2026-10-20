@@ -11,6 +11,7 @@ use super::evaluation::EvaluationState;
 use super::mounts::MountedModel;
 use super::{ModelDraw, ModelNode, ModelRig, Playback, PlaybackError, PoseOverrides};
 use crate::bounds::transform_bounds;
+use crate::layers::ModelOwnedRenderEntity;
 use crate::physics::PhysicsState;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::mesh::skinning::SkinnedMesh;
@@ -156,6 +157,7 @@ pub(crate) fn populate_model(
                 pass: draw.pass,
                 lod: draw.lod,
             },
+            ModelOwnedRenderEntity,
             Mesh3d(draw.mesh.clone()),
             MeshMaterial3d(material.clone()),
             Transform::default(),
@@ -198,6 +200,7 @@ pub(crate) fn populate_model(
                 liquid_type: liquid.liquid_type,
                 material: liquid.material_id,
             },
+            ModelOwnedRenderEntity,
             Mesh3d(liquid.mesh.clone()),
             Transform::default(),
             Visibility::Inherited,

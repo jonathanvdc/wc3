@@ -1,5 +1,6 @@
 //! Optional, deterministic rigid-body secondary motion in authored model space.
 use crate::compiled::RuntimeNode;
+use crate::diagnostics::{RenderDiagnosticKind, RenderDiagnosticSource};
 use crate::pose::{hierarchical, local_matrix};
 use crate::RenderDiagnostic;
 use bevy::math::Affine3A;
@@ -11,6 +12,7 @@ use wc3::model::systems::model_physics::ShapeGeometry;
 use wc3::model::systems::model_physics::{Body, Constraint, Frame, Joint, Shape};
 use wc3::model::systems::{model::System as ModelSystem, System};
 use wc3::model::values::model::{PhysicsBodyKind, PhysicsKind};
+use wc3::model::SystemId;
 use wc3::model::{Model, NodeId, Transform as ModelTransform};
 
 /// Motion frame used for secondary-motion integration.
@@ -115,18 +117,21 @@ pub(crate) struct PhysicsDefinition {
     joints: Vec<JointDefinition>,
     pairs: Vec<(usize, usize)>,
 }
-fn diagnostic(diagnostics: &mut Vec<RenderDiagnostic>, message: impl Into<String>) {
+fn diagnostic(
+    diagnostics: &mut Vec<RenderDiagnostic>,
+    system: SystemId,
+    kind: RenderDiagnosticKind,
+    message: impl Into<String>,
+) {
     let message = message.into();
-    if diagnostics.iter().any(|entry| {
-        entry.feature.is_none() && entry.material.is_none() && entry.message == message
-    }) {
+    let source = RenderDiagnosticSource::System(system);
+    if diagnostics
+        .iter()
+        .any(|entry| entry.source == source && entry.kind == kind && entry.message == message)
+    {
         return;
     }
-    diagnostics.push(RenderDiagnostic {
-        feature: None,
-        material: None,
-        message,
-    });
+    diagnostics.push(RenderDiagnostic::new(kind, source, message));
 }
 fn own_body(body: &Body<'_>) -> Body<'static> {
     Body {
@@ -184,7 +189,7 @@ impl PhysicsDefinition {
             .map(|(i, node)| (node.id, i))
             .collect();
         let mut output = Self::default();
-        for (_, system) in model.systems() {
+        for (system_id, system) in model.systems() {
             let System::M2(ModelSystem::Physics(system)) = system else {
                 continue;
             };
@@ -192,17 +197,17 @@ impl PhysicsDefinition {
                 system.kind,
                 PhysicsKind::Vegetation | PhysicsKind::Unknown(_)
             ) {
-                diagnostic(diagnostics, format!("Physics domain {:?} is not supported by the rigid-body solver; simulation remains application-owned", system.kind));
+                diagnostic(diagnostics, system_id, RenderDiagnosticKind::Unsupported, format!("Physics domain {:?} is not supported by the rigid-body solver; simulation remains application-owned", system.kind));
                 continue;
             }
             if system.kind != PhysicsKind::WornItem {
-                diagnostic(diagnostics, format!("Physics domain {:?} uses opt-in local rigid constraints and declared body contacts; external-world collision and native ragdoll/game-state arbitration are not interpreted", system.kind));
+                diagnostic(diagnostics, system_id, RenderDiagnosticKind::Approximation, format!("Physics domain {:?} uses opt-in local rigid constraints and declared body contacts; external-world collision and native ragdoll/game-state arbitration are not interpreted", system.kind));
             }
             if !system.follow_allow_list.is_empty()
                 || system.wind_coefficients.is_some()
                 || !system.vegetation.is_empty()
             {
-                diagnostic(diagnostics, "Native physics allow lists, wind coefficients and vegetation controls require an external physics integration");
+                diagnostic(diagnostics, system_id, RenderDiagnosticKind::Unsupported, "Native physics allow lists, wind coefficients and vegetation controls require an external physics integration");
             }
             let mut body_indices = HashMap::new();
             for body in &system.bodies {
@@ -214,7 +219,7 @@ impl PhysicsDefinition {
                 // skin joint. Driving only this child would never deform armor.
                 let target = node.parent.unwrap_or(placement);
                 if !hierarchical(&nodes[target]) {
-                    diagnostic(diagnostics, "Physics targets with billboarding or selective inheritance require an external solver integration");
+                    diagnostic(diagnostics, system_id, RenderDiagnosticKind::Unsupported, "Physics targets with billboarding or selective inheritance require an external solver integration");
                     continue;
                 }
                 let offset = if target == placement {
@@ -225,7 +230,7 @@ impl PhysicsDefinition {
                 if offset.determinant().abs() < 1e-8
                     || matches!(body.kind, PhysicsBodyKind::Unknown(_))
                 {
-                    diagnostic(diagnostics, "Physics body with a singular offset or unknown motion kind is not simulated");
+                    diagnostic(diagnostics, system_id, RenderDiagnosticKind::Unsupported, "Physics body with a singular offset or unknown motion kind is not simulated");
                     continue;
                 }
                 if output
@@ -233,11 +238,11 @@ impl PhysicsDefinition {
                     .iter()
                     .any(|candidate| candidate.target == target)
                 {
-                    diagnostic(diagnostics, "Multiple physics bodies target the same skeleton node; subsequent bodies are not simulated");
+                    diagnostic(diagnostics, system_id, RenderDiagnosticKind::Unsupported, "Multiple physics bodies target the same skeleton node; subsequent bodies are not simulated");
                     continue;
                 }
                 if body.parent_body.is_some() || body.attachment_host || body.ragdoll_root {
-                    diagnostic(diagnostics, "Native attachment-host and ragdoll body controls need application physics policy");
+                    diagnostic(diagnostics, system_id, RenderDiagnosticKind::Unsupported, "Native attachment-host and ragdoll body controls need application physics policy");
                 }
                 let mut mass: f32 = 0.;
                 let mut weighted_center = Vec3::ZERO;
@@ -249,7 +254,7 @@ impl PhysicsDefinition {
                     if translation != Vec3::ZERO
                         || scale.abs().min_element() != scale.abs().max_element()
                     {
-                        diagnostic(diagnostics, "Offset or nonuniformly scaled physics shapes use a conservative body-centered contact sphere");
+                        diagnostic(diagnostics, system_id, RenderDiagnosticKind::Approximation, "Offset or nonuniformly scaled physics shapes use a conservative body-centered contact sphere");
                     }
                     let (bound, volume) = match &shape.geometry {
                         ShapeGeometry::Sphere(radius) => {
@@ -259,6 +264,8 @@ impl PhysicsDefinition {
                             let extent = *extent;
                             diagnostic(
                                 diagnostics,
+                                system_id,
+                                RenderDiagnosticKind::Approximation,
                                 "Physics box contacts use a conservative bounding sphere",
                             );
                             (extent.length(), 8. * extent.element_product())
@@ -268,6 +275,8 @@ impl PhysicsDefinition {
                             let b = endpoints[1];
                             diagnostic(
                                 diagnostics,
+                                system_id,
+                                RenderDiagnosticKind::Approximation,
                                 "Physics capsule contacts use a conservative bounding sphere",
                             );
                             (
@@ -279,6 +288,8 @@ impl PhysicsDefinition {
                         ShapeGeometry::ConvexHull { vertices, .. } => {
                             diagnostic(
                                 diagnostics,
+                                system_id,
+                                RenderDiagnosticKind::Approximation,
                                 "Physics convex contacts use a conservative bounding sphere",
                             );
                             (
@@ -308,7 +319,7 @@ impl PhysicsDefinition {
                         || shape.game_flags.bits() != 0
                         || shape.collision_mask.bits() != 0
                     {
-                        diagnostic(diagnostics, "Native physics friction, game collision categories and contact masks need an external physics integration");
+                        diagnostic(diagnostics, system_id, RenderDiagnosticKind::Unsupported, "Native physics friction, game collision categories and contact masks need an external physics integration");
                     }
                 }
                 let center = if mass > 1e-8 {
@@ -351,7 +362,7 @@ impl PhysicsDefinition {
                 });
             }
             for joint in &system.joints {
-                diagnostic(diagnostics, "Secondary-motion constraints approximate native physics: spring damping ratios, angular friction and motors are not interpreted");
+                diagnostic(diagnostics, system_id, RenderDiagnosticKind::Approximation, "Secondary-motion constraints approximate native physics: spring damping ratios, angular friction and motors are not interpreted");
                 let (Some(&a), Some(&b)) = (
                     body_indices.get(&joint.body_a),
                     body_indices.get(&joint.body_b),
@@ -367,13 +378,13 @@ impl PhysicsDefinition {
                     }
                 };
                 if matches!(joint.constraint, Constraint::Prismatic { .. }) {
-                    diagnostic(diagnostics, "Physics slider limits currently project anchor coincidence only; native slider behavior needs an external solver");
+                    diagnostic(diagnostics, system_id, RenderDiagnosticKind::Approximation, "Physics slider limits currently project anchor coincidence only; native slider behavior needs an external solver");
                 }
                 if matches!(
                     joint.constraint,
                     Constraint::Shoulder { .. } | Constraint::Revolute { .. }
                 ) {
-                    diagnostic(diagnostics, "Physics cone, twist and hinge limits use the authored frame Z axis; native solver response remains unverified");
+                    diagnostic(diagnostics, system_id, RenderDiagnosticKind::Unverified, "Physics cone, twist and hinge limits use the authored frame Z axis; native solver response remains unverified");
                 }
                 output.joints.push(JointDefinition {
                     a,

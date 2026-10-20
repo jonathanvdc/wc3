@@ -2,6 +2,7 @@
 use super::super::textures::{TextureImages, TextureRole};
 use super::compile::{blend, image_role_with_sampler, rasterization};
 use super::{Blend, SurfacePass};
+use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::ModelError;
 use bevy::math::Affine2;
 use bevy::math::Vec2;
@@ -79,12 +80,12 @@ pub(super) fn compile_wmo(
         pass.animation.uv_scroll[0] = declaration.uv_scroll[0];
         if let wmo_shader::MaterialStep::Unresolved(step) = surface {
             if !surface.is_partial() {
-                pass.diagnostics.push(format!("WMO shader {:?} needs its authored texture/specular combiner; showing its first diffuse input with Bevy lighting", step.shader));
+                pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Approximation, format!("WMO shader {:?} needs its authored texture/specular combiner; showing its first diffuse input with Bevy lighting", step.shader)));
             }
         }
     }
     if surface.is_partial() {
-        pass.diagnostics.push("WMO shader is partially rendered through its first diffuse image; the specialized terrain/LOD client path is not evaluated".into());
+        pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Approximation, "WMO shader is partially rendered through its first diffuse image; the specialized terrain/LOD client path is not evaluated"));
     }
     if raster.controls.self_illuminated {
         let color = declaration.self_illumination;
@@ -125,7 +126,7 @@ fn world_image(
     surface: &wmo_shader::MaterialStep<'_>,
     slot: usize,
     images: &TextureImages,
-    diagnostics: &mut Vec<String>,
+    diagnostics: &mut Vec<RenderIssue>,
 ) -> Result<Option<Handle<Image>>, ModelError> {
     let inputs = surface.inputs();
     let input = inputs.get(slot);

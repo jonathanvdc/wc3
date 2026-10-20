@@ -3,6 +3,7 @@ use super::child_coordinates::{ChildCoordinates, CoordinatePolicy};
 use super::runtime::{ModelDraw, ModelNode};
 use super::world::WorldLiquidSurface;
 use super::{ModelAsset, ModelInstance, ModelRig, Playback};
+use crate::layers::ModelOwnedRenderEntity;
 use bevy::math::{Quat, Vec3};
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -337,6 +338,7 @@ impl RuntimeFeatures {
             };
             let mut entity = commands.spawn((
                 *feature,
+                ModelOwnedRenderEntity,
                 ModelLight {
                     definition: definition.clone(),
                     enabled: true,

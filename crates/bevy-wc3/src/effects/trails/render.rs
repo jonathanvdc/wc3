@@ -1,7 +1,6 @@
 //! GPU ribbon quads built from pairs of immutable world-space cross-sections.
 use crate::effects::blend::EffectBlend;
 use bevy::core_pipeline::core_3d::Transparent3d;
-use bevy::ecs::system::{lifetimeless::*, SystemParamItem};
 use bevy::math::{Affine3A, Vec3A};
 use bevy::mesh::MeshVertexBufferLayoutRef;
 use bevy::pbr::{
@@ -11,17 +10,14 @@ use bevy::pbr::{
 use bevy::prelude::*;
 use bevy::render::{
     extract_component::ExtractComponentPlugin,
-    mesh::{allocator::MeshAllocator, RenderMesh, RenderMeshBufferInfo},
+    mesh::RenderMesh,
     render_asset::RenderAssets,
-    render_phase::{
-        AddRenderCommand, DrawFunctions, PhaseItem, RenderCommand, RenderCommandResult,
-        SetItemPipeline, TrackedRenderPass, ViewSortedRenderPhases,
-    },
+    render_phase::{AddRenderCommand, DrawFunctions, SetItemPipeline, ViewSortedRenderPhases},
     render_resource::*,
     renderer::{RenderDevice, RenderQueue},
     sync_world::MainEntity,
     texture::{FallbackImage, GpuImage},
-    view::ExtractedView,
+    view::{ExtractedView, RenderVisibleEntities},
     Render, RenderApp, RenderStartup, RenderSystems,
 };
 use std::collections::HashMap;
@@ -30,8 +26,8 @@ use super::records::{
     segment_center, RibbonInstances, RibbonSection, RibbonSegment, RibbonUniform,
 };
 use crate::effects::render::{
-    effect_texture_layout, effect_vertex_layout, transparent_effect_draw, EffectBuffer,
-    PassResources, ResidentRecordBuffer,
+    effect_texture_layout, effect_vertex_layout, effect_visible, transparent_effect_draw,
+    DrawEffectInstances, EffectBuffer, PassResources, ResidentRecordBuffer,
 };
 
 pub(crate) struct RibbonRenderPlugin;
@@ -169,13 +165,13 @@ fn queue_ribbons(
     mesh_instances: Res<RenderMeshInstances>,
     ribbons: Query<(Entity, &MainEntity, &RibbonInstances)>,
     mut phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
-    views: Query<&ExtractedView>,
+    views: Query<(&ExtractedView, &RenderVisibleEntities)>,
     view_keys: Res<ViewKeyCache>,
 ) {
     let draw = draws.read().id::<DrawRibbons>();
     let mut ordered: Vec<_> = ribbons.iter().collect();
     ordered.sort_by_key(|(_, _, data)| (data.emitter.to_bits(), data.layer_index));
-    for view in &views {
+    for (view, visible) in &views {
         let Some(phase) = phases.get_mut(&view.retained_view_entity) else {
             continue;
         };
@@ -183,7 +179,7 @@ fn queue_ribbons(
             continue;
         };
         for &(entity, main_entity, data) in &ordered {
-            if data.live_indices.is_empty() {
+            if data.live_indices.is_empty() || !effect_visible(visible, *main_entity) {
                 continue;
             }
             let Some(mesh_instance) = mesh_instances.render_mesh_queue_data(*main_entity) else {
@@ -218,6 +214,7 @@ fn queue_ribbons(
                 &data.uniform,
             );
             let center = (first + last) * 0.5;
+
             phase.add_transient(transparent_effect_draw(
                 entity,
                 *main_entity,
@@ -257,20 +254,24 @@ fn sorted_indices(data: &RibbonInstances, world_from_view: &Affine3A) -> Vec<Rib
 #[allow(clippy::too_many_arguments)]
 fn prepare_ribbons(
     mut commands: Commands,
-    query: Query<(Entity, &RibbonInstances, Option<&RibbonBuffer>)>,
+    query: Query<(Entity, &MainEntity, &RibbonInstances, Option<&RibbonBuffer>)>,
     device: Res<RenderDevice>,
     queue: Res<RenderQueue>,
     pipeline: Res<RibbonPipeline>,
     images: Res<RenderAssets<GpuImage>>,
     fallback: Res<FallbackImage>,
-    views: Query<&ExtractedView>,
+    views: Query<(&ExtractedView, &RenderVisibleEntities)>,
     mut scratch: Local<Vec<RibbonSection>>,
 ) {
     // All material layers of an emitter share the same resident section buffer.
     // Uniforms, texture bindings, and draw ordering remain specific to each pass.
     let mut shared_sections: HashMap<Entity, ResidentRecordBuffer> = HashMap::new();
-    for (entity, data, previous) in &query {
-        if data.live_indices.is_empty() {
+    for (entity, main_entity, data, previous) in &query {
+        if data.live_indices.is_empty()
+            || !views
+                .iter()
+                .any(|(_, visible)| effect_visible(visible, *main_entity))
+        {
             // Keep resident records and allocated capacity across emission gaps.
             continue;
         }
@@ -293,8 +294,10 @@ fn prepare_ribbons(
             .unwrap_or(&fallback.d2);
         let sorted_orders = views
             .iter()
-            .filter(|_| data.sort_far || data.sort_near)
-            .map(|view| {
+            .filter(|(_, visible)| {
+                (data.sort_far || data.sort_near) && effect_visible(visible, *main_entity)
+            })
+            .map(|(view, _)| {
                 (
                     view.retained_view_entity,
                     sorted_indices(data, &view.world_from_view.affine()),
@@ -313,6 +316,7 @@ fn prepare_ribbons(
             },
             sorted_orders,
         );
+
         commands.entity(entity).insert(buffer);
     }
 }
@@ -321,67 +325,8 @@ type DrawRibbons = (
     SetItemPipeline,
     SetMeshViewBindGroup<0>,
     SetMeshViewBindingArrayBindGroup<1>,
-    DrawRibbonInstances,
+    DrawEffectInstances<RibbonBuffer>,
 );
-struct DrawRibbonInstances;
-impl<P: PhaseItem> RenderCommand<P> for DrawRibbonInstances {
-    type Param = (
-        SRes<RenderAssets<RenderMesh>>,
-        SRes<RenderMeshInstances>,
-        SRes<MeshAllocator>,
-    );
-    type ViewQuery = Read<ExtractedView>;
-    type ItemQuery = Read<RibbonBuffer>;
-    fn render<'w>(
-        item: &P,
-        view: &'w ExtractedView,
-        buffer: Option<&'w RibbonBuffer>,
-        (meshes, instances, allocator): SystemParamItem<'w, '_, Self::Param>,
-        pass: &mut TrackedRenderPass<'w>,
-    ) -> RenderCommandResult {
-        let allocator = allocator.into_inner();
-        let Some(mesh_instance) = instances.render_mesh_queue_data(item.main_entity()) else {
-            return RenderCommandResult::Skip;
-        };
-        let Some(mesh) = meshes.into_inner().get(mesh_instance.mesh_asset_id()) else {
-            return RenderCommandResult::Skip;
-        };
-        let Some(buffer) = buffer else {
-            return RenderCommandResult::Skip;
-        };
-        let Some(vertex) = allocator.mesh_vertex_slice(&mesh_instance.mesh_asset_id()) else {
-            return RenderCommandResult::Skip;
-        };
-        pass.set_vertex_buffer(0, vertex.buffer.slice(..));
-        let records = buffer
-            .sorted
-            .get(&view.retained_view_entity)
-            .unwrap_or(&buffer.order);
-        pass.set_vertex_buffer(1, records.buffer.slice(..));
-        pass.set_bind_group(2, &buffer.texture, &[]);
-        match &mesh.buffer_info {
-            RenderMeshBufferInfo::Indexed {
-                index_format,
-                count,
-            } => {
-                let Some(index) = allocator.mesh_index_slice(&mesh_instance.mesh_asset_id()) else {
-                    return RenderCommandResult::Skip;
-                };
-                pass.set_index_buffer(index.buffer.slice(..), *index_format);
-                pass.draw_indexed(
-                    index.range.start..index.range.start + count,
-                    vertex.range.start as i32,
-                    0..buffer.live_indices.len() as u32,
-                );
-            }
-            RenderMeshBufferInfo::NonIndexed => {
-                pass.draw(vertex.range, 0..buffer.live_indices.len() as u32)
-            }
-        }
-        RenderCommandResult::Success
-    }
-}
-
 #[cfg(test)]
 #[path = "render_tests.rs"]
 mod tests;
