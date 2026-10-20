@@ -5,8 +5,8 @@ use bevy::ecs::system::{lifetimeless::*, SystemParamItem};
 use bevy::math::{Affine3A, Vec3A};
 use bevy::mesh::MeshVertexBufferLayoutRef;
 use bevy::pbr::{
-    MeshPipeline, MeshPipelineKey, MeshPipelineSystems, RenderMeshInstances, SetMeshBindGroup,
-    SetMeshViewBindGroup, SetMeshViewBindingArrayBindGroup, ViewKeyCache,
+    MeshPipeline, MeshPipelineKey, MeshPipelineSystems, RenderMeshInstances, SetMeshViewBindGroup,
+    SetMeshViewBindingArrayBindGroup, ViewKeyCache,
 };
 use bevy::prelude::*;
 use bevy::render::{
@@ -109,6 +109,9 @@ impl SpecializedMeshPipeline for RibbonPipeline {
             .push(effect_vertex_layout::<RibbonSegment>(
                 VertexFormat::Uint32x4,
             ));
+        // The shader reads emitter-owned transforms and birth records, so it
+        // needs only Bevy's view groups, not a preprocessed mesh bind group.
+        descriptor.layout.truncate(2);
         descriptor.layout.push(self.texture_layout.clone());
         if let Some(fragment) = descriptor.fragment.as_mut() {
             fragment.shader = self.shader.clone();
@@ -318,7 +321,6 @@ type DrawRibbons = (
     SetItemPipeline,
     SetMeshViewBindGroup<0>,
     SetMeshViewBindingArrayBindGroup<1>,
-    SetMeshBindGroup<2>,
     DrawRibbonInstances,
 );
 struct DrawRibbonInstances;
@@ -356,7 +358,7 @@ impl<P: PhaseItem> RenderCommand<P> for DrawRibbonInstances {
             .get(&view.retained_view_entity)
             .unwrap_or(&buffer.order);
         pass.set_vertex_buffer(1, records.buffer.slice(..));
-        pass.set_bind_group(3, &buffer.texture, &[]);
+        pass.set_bind_group(2, &buffer.texture, &[]);
         match &mesh.buffer_info {
             RenderMeshBufferInfo::Indexed {
                 index_format,

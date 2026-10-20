@@ -31,7 +31,9 @@ M2 age-driven particles sample independent color, opacity, scale, and cell curve
 Import expands their native always-repeat addressing into each particle image
 input, independently of mesh inputs sharing the same image dependency.
 Their reusable meshes upload when population, appearance, or view changes; paused,
-unchanged frames avoid uploads. Native head and tail style bits become a semantic
+unchanged frames avoid uploads. Each head or tail shares four corner vertices
+between its two indexed triangles, reducing vertex preparation and upload while
+preserving particle order. Native head and tail style bits become a semantic
 head/tail selection during import. That selection can enable either geometry,
 both, or neither; it does not change the emission direction. Velocity-oriented
 heads use the projected particle velocity, while fixed-plane heads use the

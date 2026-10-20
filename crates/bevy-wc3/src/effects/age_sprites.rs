@@ -12,7 +12,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::math::{Vec2, Vec3};
-use bevy::mesh::{MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues};
+use bevy::mesh::{Indices, MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::*;
 use std::array::from_fn;
 use std::collections::HashMap;
@@ -28,6 +28,8 @@ use wc3::model::{
 
 const MAX_PARTICLES: usize = 8192;
 const MAX_BIRTHS_PER_UPDATE: usize = 8192;
+// A living particle can emit one head and one tail, each with four corners.
+const _: () = assert!(MAX_PARTICLES * 8 <= u16::MAX as usize + 1);
 
 /// Observable state and source identity of an age-driven emitter.
 #[derive(Component, Clone, Debug)]
@@ -452,6 +454,7 @@ impl RuntimeAgeSprites {
                 mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0., 0., 1.]; 3]);
                 mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.; 2]; 3]);
                 mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, vec![[0.; 4]; 3]);
+                update_sprite_indices(&mut mesh, 3);
                 if emitter.multi_texture {
                     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_1, vec![[0.; 2]; 3]);
                     mesh.insert_attribute(EXTRA_TEXCOORD, vec![[0.; 2]; 3]);
@@ -1147,6 +1150,7 @@ impl Emitter {
             }
             colors.resize(3, [0.; 4]);
         }
+        update_sprite_indices(mesh, positions.len());
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
         mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
         mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
@@ -1158,6 +1162,28 @@ impl Emitter {
             mesh.insert_attribute(EXTRA_TEXCOORD, uv);
         }
     }
+}
+/// Reuse the topology allocation; particle sorting changes corner attributes,
+/// while the index pattern depends only on the number of visible quads.
+fn update_sprite_indices(mesh: &mut Mesh, vertices: usize) {
+    let mut indices = match mesh.remove_indices() {
+        Some(Indices::U16(values)) => values,
+        _ => Vec::new(),
+    };
+    if vertices == 3 {
+        indices.clear();
+        indices.extend_from_slice(&[0, 1, 2]);
+    } else {
+        let count = vertices / 4 * 6;
+        // The empty sentinel has three indices and is not a quad prefix.
+        indices.truncate(indices.len() / 6 * 6);
+        indices.truncate(count);
+        for quad in indices.len() / 6..vertices / 4 {
+            let base = u16::try_from(quad * 4).expect("sprite vertex budget exceeded");
+            indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+        }
+    }
+    mesh.insert_indices(Indices::U16(indices));
 }
 fn take_vec3(mesh: &mut Mesh, attribute: MeshVertexAttribute) -> Vec<[f32; 3]> {
     let mut values = match mesh.remove_attribute(attribute) {
@@ -1220,7 +1246,7 @@ impl SpriteMeshBuffers {
             .cross(transformed[2] - transformed[0])
             .normalize_or_zero()
             .to_array();
-        for index in [0, 1, 2, 0, 2, 3] {
+        for index in 0..4 {
             self.positions.push(transformed[index].to_array());
             self.normals.push(normal);
             self.uv.push(coordinates[index].to_array());

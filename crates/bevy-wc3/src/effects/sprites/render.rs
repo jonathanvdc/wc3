@@ -6,8 +6,7 @@ use bevy::math::{Affine3A, Vec3A};
 use bevy::mesh::MeshVertexBufferLayoutRef;
 use bevy::pbr::{
     self, MeshInputUniform, MeshPipeline, MeshPipelineKey, MeshPipelineSystems, MeshUniform,
-    RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup, SetMeshViewBindingArrayBindGroup,
-    ViewKeyCache,
+    RenderMeshInstances, SetMeshViewBindGroup, SetMeshViewBindingArrayBindGroup, ViewKeyCache,
 };
 use bevy::prelude::*;
 use bevy::render::{
@@ -106,6 +105,9 @@ impl SpecializedMeshPipeline for ParticlePipeline {
             .vertex
             .buffers
             .push(effect_vertex_layout::<u32>(VertexFormat::Uint32));
+        // The shader reads emitter-owned transforms and birth records, so it
+        // needs only Bevy's view groups, not a preprocessed mesh bind group.
+        descriptor.layout.truncate(2);
         descriptor.layout.push(self.texture_layout.clone());
         if let Some(fragment) = descriptor.fragment.as_mut() {
             fragment.shader = self.shader.clone();
@@ -287,7 +289,6 @@ type DrawParticles = (
     SetItemPipeline,
     SetMeshViewBindGroup<0>,
     SetMeshViewBindingArrayBindGroup<1>,
-    SetMeshBindGroup<2>,
     DrawParticleInstances,
 );
 struct DrawParticleInstances;
@@ -325,7 +326,7 @@ impl<P: PhaseItem> RenderCommand<P> for DrawParticleInstances {
             .get(&view.retained_view_entity)
             .unwrap_or(&buffer.order);
         pass.set_vertex_buffer(1, records.buffer.slice(..));
-        pass.set_bind_group(3, &buffer.texture, &[]);
+        pass.set_bind_group(2, &buffer.texture, &[]);
         match &mesh.buffer_info {
             RenderMeshBufferInfo::Indexed {
                 index_format,

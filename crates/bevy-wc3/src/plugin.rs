@@ -1,6 +1,5 @@
 //! Registration and scheduling for the Universal renderer.
 use crate::assets::BlpImageLoader;
-use crate::effects::render::configure_effect_views;
 use crate::effects::sprites::ParticleRenderPlugin;
 use crate::effects::trails::RibbonRenderPlugin;
 use crate::image_replacements::{refresh_image_replacements, ReplacementImages};
@@ -111,6 +110,5 @@ impl Plugin for Wc3BevyPlugin {
                 .after(Wc3Systems::SelectLod)
                 .before(VisibilitySystems::CheckVisibility),
         );
-        app.add_systems(PostUpdate, configure_effect_views);
     }
 }

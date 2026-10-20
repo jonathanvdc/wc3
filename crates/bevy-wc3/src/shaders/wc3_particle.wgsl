@@ -5,8 +5,8 @@
     pbr_functions::{apply_pbr_lighting, calculate_view},
 }
 
-@group(3) @binding(0) var particle_texture: texture_2d<f32>;
-@group(3) @binding(1) var particle_sampler: sampler;
+@group(2) @binding(0) var particle_texture: texture_2d<f32>;
+@group(2) @binding(1) var particle_sampler: sampler;
 
 struct Particle {
     position_birth: vec4<f32>,
@@ -26,8 +26,8 @@ struct Emitter {
     render_flags: vec4<u32>,
     plane_axes: array<vec4<f32>, 2>,
 };
-@group(3) @binding(2) var<uniform> emitter: Emitter;
-@group(3) @binding(3) var<storage, read> particles: array<Particle>;
+@group(2) @binding(2) var<uniform> emitter: Emitter;
+@group(2) @binding(3) var<storage, read> particles: array<Particle>;
 
 struct VertexInput {
     @location(0) corner: vec3<f32>,

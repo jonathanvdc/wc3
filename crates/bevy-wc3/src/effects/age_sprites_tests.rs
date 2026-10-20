@@ -159,7 +159,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
     else {
         panic!("colors absent")
     };
-    assert_eq!(colors.len(), 6);
+    assert_eq!(colors.len(), 4);
     assert!(colors.iter().all(|color| (color[3] - 0.5).abs() < 1e-5));
     let Some(VertexAttributeValues::Float32x3(positions)) =
         mesh.attribute(Mesh::ATTRIBUTE_POSITION)
@@ -174,6 +174,30 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         panic!("positions absent")
     };
     assert_eq!(pointer, positions.as_ptr());
+    // Keep each sorted particle's head immediately before its tail, with the
+    // same two triangle windings as the former expanded vertex stream.
+    emitter.head_tail = ParticleHeadTail::Both;
+    emitter.tail_length = 0.25;
+    state.births[0].origin = Vec3::Z * 2.;
+    state.births[0].velocity = Vec3::X;
+    let mut farther = state.births[0].clone();
+    farther.origin = Vec3::NEG_Z * 2.;
+    state.births.push(farther);
+    emitter.draw(&mut state, &frame, Mat4::IDENTITY, &mut mesh);
+    let Some(VertexAttributeValues::Float32x3(positions)) =
+        mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+    else {
+        panic!("positions absent")
+    };
+    assert_eq!(positions.len(), 16);
+    for (quad, expected_z) in positions.chunks_exact(4).zip([-2., -2., 2., 2.]) {
+        assert!(quad.iter().all(|position| position[2] == expected_z));
+    }
+    assert_eq!(
+        mesh.indices().unwrap().iter().collect::<Vec<_>>(),
+        [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15],
+    );
+    let pointer = positions.as_ptr();
     state.births.clear();
     emitter.draw(&mut state, &frame, Mat4::IDENTITY, &mut mesh);
     let Some(VertexAttributeValues::Float32x3(positions)) =
@@ -183,6 +207,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
     };
     assert_eq!(positions.as_slice(), &[[0.; 3]; 3]);
     assert_eq!(positions.as_ptr(), pointer);
+    assert_eq!(mesh.indices(), Some(&Indices::U16(vec![0, 1, 2])));
     let Some(VertexAttributeValues::Float32x4(colors)) = mesh.attribute(Mesh::ATTRIBUTE_COLOR)
     else {
         panic!("colors absent")
@@ -459,6 +484,55 @@ fn additional_uvs_preserve_primary_atlas_and_remain_independent() {
         buffers.uv.len(),
         buffers.uv_secondary.as_ref().unwrap().len()
     );
+    assert_eq!(buffers.positions.len(), 4);
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    update_sprite_indices(&mut mesh, buffers.positions.len());
+    let indices: Vec<_> = mesh.indices().unwrap().iter().collect();
+    assert_eq!(indices, [0, 1, 2, 0, 2, 3]);
+    for (index, corner) in indices.into_iter().zip([0, 1, 2, 0, 2, 3]) {
+        assert_eq!(buffers.positions[index], corners[corner].to_array());
+        assert_eq!(buffers.normals[index], buffers.normals[corner]);
+        assert_eq!(buffers.colors[index], [1.; 4]);
+    }
+}
+
+#[test]
+fn indexed_sprite_topology_reuses_storage_through_budget_and_empty_transitions() {
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    let vertices = MAX_PARTICLES * 8;
+    update_sprite_indices(&mut mesh, vertices);
+    let Some(Indices::U16(indices)) = mesh.indices() else {
+        panic!("compact sprite indices absent")
+    };
+    let pointer = indices.as_ptr();
+    assert_eq!(indices.len(), MAX_PARTICLES * 12);
+    assert_eq!(indices.last(), Some(&u16::MAX));
+    assert_eq!(indices.iter().copied().max(), Some(u16::MAX));
+    for vertices in [8, 3, 4, 8, MAX_PARTICLES * 8] {
+        update_sprite_indices(&mut mesh, vertices);
+        let Some(Indices::U16(indices)) = mesh.indices() else {
+            panic!("compact sprite indices absent")
+        };
+        assert_eq!(indices.as_ptr(), pointer);
+        if vertices == 3 {
+            assert_eq!(indices, &[0, 1, 2]);
+        } else {
+            assert_eq!(indices.len(), vertices / 4 * 6);
+            for (quad, triangle_pair) in indices.chunks_exact(6).enumerate() {
+                let base = quad as u16 * 4;
+                assert_eq!(
+                    triangle_pair,
+                    &[base, base + 1, base + 2, base, base + 2, base + 3]
+                );
+            }
+        }
+    }
 }
 
 #[test]

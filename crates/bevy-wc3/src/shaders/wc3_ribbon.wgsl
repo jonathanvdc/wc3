@@ -5,8 +5,8 @@
     pbr_functions::{apply_pbr_lighting, calculate_view},
 }
 
-@group(3) @binding(0) var ribbon_texture: texture_2d<f32>;
-@group(3) @binding(1) var ribbon_sampler: sampler;
+@group(2) @binding(0) var ribbon_texture: texture_2d<f32>;
+@group(2) @binding(1) var ribbon_sampler: sampler;
 
 struct Section {
     above_birth: vec4<f32>,
@@ -19,8 +19,8 @@ struct Emitter {
     uv_transform: mat4x4<f32>,
     gravity_axis: vec4<f32>,
 };
-@group(3) @binding(2) var<uniform> emitter: Emitter;
-@group(3) @binding(3) var<storage, read> sections: array<Section>;
+@group(2) @binding(2) var<uniform> emitter: Emitter;
+@group(2) @binding(3) var<storage, read> sections: array<Section>;
 
 struct VertexInput {
     @location(0) corner: vec3<f32>,

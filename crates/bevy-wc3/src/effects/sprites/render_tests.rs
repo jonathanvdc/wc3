@@ -97,7 +97,7 @@ fn particle_shader_validates_and_matches_host_buffer_layouts() {
     let shader = include_str!("../../shaders/wc3_particle.wgsl");
     // Bevy supplies these imports. Stubs let Naga validate the complete
     // particle shader without starting a renderer or requiring a GPU.
-    let body = &shader[shader.find("@group(3)").unwrap()..];
+    let body = &shader[shader.find("@group(2)").unwrap()..];
     let imports = r#"
 struct View { world_from_view: mat4x4<f32>, clip_from_view: mat4x4<f32> };
 @group(0) @binding(0) var<uniform> view: View;

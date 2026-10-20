@@ -13,7 +13,7 @@ use bevy::render::render_resource::{
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::render::sync_world::MainEntity;
 use bevy::render::texture::GpuImage;
-use bevy::render::view::{NoIndirectDrawing, RetainedViewEntity};
+use bevy::render::view::RetainedViewEntity;
 use bytemuck::{bytes_of, cast_slice, Pod};
 use std::collections::HashMap;
 use std::num::NonZeroU64;
@@ -173,16 +173,6 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
             texture,
             sorted,
         }
-    }
-}
-
-/// Effect draw commands need direct mesh bindings from Bevy's GPU preprocessing.
-pub(crate) fn configure_effect_views(
-    mut commands: Commands,
-    cameras: Query<Entity, (With<Camera3d>, Without<NoIndirectDrawing>)>,
-) {
-    for camera in &cameras {
-        commands.entity(camera).insert(NoIndirectDrawing);
     }
 }
 
