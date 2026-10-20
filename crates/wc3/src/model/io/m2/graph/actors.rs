@@ -241,6 +241,8 @@ where
                                 ),
                                 ordering: 0,
                             },
+                            color: builder.add_value(Vec3::ONE),
+                            opacity: builder.add_value(1.0),
                             ..builder.construct()
                         },
                         Vec::new(),
@@ -252,6 +254,60 @@ where
             }?)
         }
         let tail = D::Layout::ribbon_tail(&value.modern);
+        let texture_transform = if tail[2] < 0 {
+            None
+        } else {
+            match core.texture_transform_combos.get(tail[2] as usize) {
+                None | Some(u16::MAX) => None,
+                Some(index) => {
+                    let native = core.texture_transforms.get(index as usize).ok_or_else(|| {
+                        Error::new(
+                            "m2.ribbon.transform",
+                            "lookup selects an absent texture transform",
+                        )
+                    })?;
+                    let transform = semantic::TextureTransform {
+                        translation: builder.add_value(Vec3::from_array(
+                            initial(&native.translation).unwrap_or([0.; 3]),
+                        )),
+                        rotation: builder.add_value(semantic::Quat::from_array(
+                            initial(&native.rotation).unwrap_or([0., 0., 0., 1.]),
+                        )),
+                        scale: builder.add_value(Vec3::from_array(
+                            initial(&native.scaling).unwrap_or([1.; 3]),
+                        )),
+                    };
+                    bind_field!(
+                        node,
+                        ribbon,
+                        transform.translation,
+                        translation,
+                        &native.translation,
+                        Vector3,
+                        Vec3::from_array
+                    );
+                    bind_field!(
+                        node,
+                        ribbon,
+                        transform.rotation,
+                        rotation,
+                        &native.rotation,
+                        Rotation,
+                        semantic::Quat::from_array
+                    );
+                    bind_field!(
+                        node,
+                        ribbon,
+                        transform.scale,
+                        scaling,
+                        &native.scaling,
+                        Vector3,
+                        Vec3::from_array
+                    );
+                    Some(transform)
+                }
+            }
+        };
         let feature = builder.reserve_feature(node);
         let ribbon = profile::RibbonEmitter {
             behavior: M2RibbonBehavior {
@@ -262,7 +318,7 @@ where
             rendering: M2RibbonRendering {
                 priority_plane: tail[0],
                 color_index: tail[1] as i8,
-                texture_transform: None,
+                texture_transform,
                 textures: value
                     .texture_indices
                     .iter()

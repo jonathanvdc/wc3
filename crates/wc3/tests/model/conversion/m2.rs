@@ -2186,3 +2186,241 @@ fn malformed_real_extents_remain_strict_import_errors() {
         assert!(io::m2::import(&source, &ImportOptions::default()).is_err());
     }
 }
+
+fn modern_ribbon_uv_source() -> m2::Bundle<'static, m2::Flat<m2::V274>> {
+    use m2::codec::Array;
+    use m2::records::{ModernTimeline, RibbonModern, TrackValues};
+    let mut slots = SlotValues::default();
+    let mut source = m2::Bundle::from_model(m2::Document::<m2::Flat<m2::V274>>::new());
+    let core = source.model.core_mut();
+    core.bones.push(Bone::new());
+    core.materials = ZeroVec::alloc_from_slice(&[Material::default()]);
+    core.global_sequences = ZeroVec::alloc_from_slice(&[1000]);
+    core.texture_transform_combos = ZeroVec::alloc_from_slice(&[0]);
+    core.texture_transforms.push(m2::records::TextureTransform {
+        translation: Track {
+            base: TrackBase {
+                global_sequence: 0,
+                interpolation: Interpolation::Linear,
+                timeline: ModernTimeline {
+                    timestamps: vec![Array::Inline(ZeroVec::alloc_from_slice(&[0, 1000]))],
+                },
+                ..Default::default()
+            },
+            values: TrackValues::Values(vec![Array::Inline(ZeroVec::alloc_from_slice(&[
+                [0.; 3],
+                [0.5, 0., 0.],
+            ]))]),
+        },
+        ..SlotConstruct::construct(&mut slots)
+    });
+    core.ribbons.push(m2::records::RibbonEmitter {
+        bone_id: 0,
+        material_indices: ZeroVec::alloc_from_slice(&[0]),
+        modern: RibbonModern {
+            texture_transform_index: 0,
+            ..Default::default()
+        },
+        ..SlotConstruct::construct(&mut slots)
+    });
+    source
+}
+
+#[test]
+fn modern_ribbon_zero_lookup_imports_animated_uv_and_round_trips_without_an_origin_alias() {
+    let mut slots = SlotValues::default();
+    let mut source = modern_ribbon_uv_source();
+    for selector in [0, -1] {
+        source.model.core_mut().ribbons[0]
+            .modern
+            .texture_transform_index = selector;
+        let imported = io::m2::import(&source, &ImportOptions::default())
+            .unwrap()
+            .value;
+        let ribbon = imported
+            .features()
+            .values()
+            .find_map(|feature| {
+                if let mp::ActorKind::Ribbon(ribbon) = &feature.payload {
+                    Some(ribbon)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        assert_eq!(ribbon.rendering.texture_transform.is_some(), selector == 0);
+        for material in &ribbon.rendering.materials {
+            for step in &imported.material(*material).unwrap().surface.steps {
+                assert_eq!(imported.values()[step.declaration().color], Vec3::ONE);
+                assert_eq!(imported.values()[step.declaration().opacity], 1.0);
+            }
+        }
+        if let Some(transform) = &ribbon.rendering.texture_transform {
+            let program = sm::AnimationProgram::compile(&imported);
+            let sample = program
+                .sample(sm::AnimationSample {
+                    shared_time: sm::Time::seconds(0.5).unwrap(),
+                    ..SlotConstruct::construct(&mut slots)
+                })
+                .unwrap();
+            assert!((transform.m2_affine(&sample).translation.x - 0.25).abs() < 1e-6);
+        }
+        let output = io::m2::plan::<m2::Flat<m2::V274>>(&imported, &ExportOptions::default())
+            .unwrap()
+            .execute()
+            .value;
+        assert_eq!(
+            output.model.core().ribbons[0]
+                .modern
+                .texture_transform_index
+                >= 0,
+            selector == 0
+        );
+    }
+    source.model.core_mut().ribbons[0]
+        .modern
+        .texture_transform_index = 0;
+    source.model.core_mut().texture_transform_combos = ZeroVec::alloc_from_slice(&[u16::MAX]);
+    let imported = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    assert!(imported.features().values().any(|feature| matches!(&feature.payload, mp::ActorKind::Ribbon(ribbon) if ribbon.rendering.texture_transform.is_none())));
+}
+
+#[test]
+fn m2_uv_translation_precedes_rotation_and_scale_about_the_half_unit_pivot() {
+    let mut values = SlotValues::default();
+    let transform = sm::TextureTransform::construct(&mut values);
+    values
+        .set(transform.translation, Vec3::new(0.25, 0.125, 0.0))
+        .unwrap();
+    values
+        .set(transform.scale, Vec3::new(2.0, 3.0, 1.0))
+        .unwrap();
+    values
+        .set(
+            transform.rotation,
+            sm::Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+        )
+        .unwrap();
+    let uv = transform
+        .m2_affine(&values)
+        .transform_point2(sm::Vec2::new(1.0, 0.5));
+    assert!((uv - sm::Vec2::new(0.125, 2.0)).length() < 1e-5);
+}
+
+#[test]
+#[ignore = "writes an original native M2 ribbon fixture for the shared GPU capture example"]
+fn write_m2_ribbon_uv_capture_fixture() {
+    use m2::codec::Array;
+    use m2::records::TrackValues;
+    use std::fs::{create_dir_all, write};
+    let mut source = modern_ribbon_uv_source();
+    let core = source.model.core_mut();
+    let mut material = Material::default();
+    material.flags.set_unlit(true);
+    material.flags.set_two_sided(true);
+    core.materials = ZeroVec::alloc_from_slice(&[material]);
+    core.textures.push(Texture {
+        filename: ZeroVec::alloc_from_slice(b"ribbon.tga\0"),
+        kind: TextureSource::File,
+        ..Default::default()
+    });
+    core.bounding = m2::records::Extent {
+        minimum: [-5., -2., -2.],
+        maximum: [5., 2., 2.],
+        radius: 7.,
+    };
+    core.bones[0].translation = core.texture_transforms[0].translation.clone();
+    core.bones[0].translation.values =
+        TrackValues::Values(vec![Array::Inline(ZeroVec::alloc_from_slice(&[
+            [-3., 0., 0.],
+            [3., 0., 0.],
+        ]))]);
+    let ribbon = &mut core.ribbons[0];
+    ribbon.texture_indices = ZeroVec::alloc_from_slice(&[0]);
+    ribbon.edges_per_second = 40.;
+    ribbon.edge_lifetime = 2.;
+    ribbon.texture_rows = 1;
+    ribbon.texture_columns = 1;
+    ribbon.height_above = Track {
+        base: core.texture_transforms[0].translation.base.clone(),
+        values: TrackValues::Values(vec![Array::Inline(ZeroVec::alloc_from_slice(&[1., 1.]))]),
+    };
+    ribbon.height_below = ribbon.height_above.clone();
+    let directory = "/tmp/wc3-m2-ribbon-fixture";
+    create_dir_all(directory).unwrap();
+    write(
+        format!("{directory}/animated.m2"),
+        source.encode().unwrap().model,
+    )
+    .unwrap();
+    source.model.core_mut().ribbons[0]
+        .modern
+        .texture_transform_index = -1;
+    write(
+        format!("{directory}/static.m2"),
+        source.encode().unwrap().model,
+    )
+    .unwrap();
+    let mut tga = vec![0u8; 18];
+    tga[2] = 2;
+    tga[12..14].copy_from_slice(&8u16.to_le_bytes());
+    tga[14..16].copy_from_slice(&8u16.to_le_bytes());
+    tga[16] = 24;
+    tga[17] = 0x20;
+    for _ in 0..8 {
+        for x in 0..8 {
+            tga.extend_from_slice(if x < 2 {
+                &[20, 20, 255]
+            } else if x < 4 {
+                &[20, 255, 20]
+            } else {
+                &[255, 20, 20]
+            });
+        }
+    }
+    write(format!("{directory}/ribbon.tga"), tga).unwrap();
+    println!("Original ribbon UV fixtures: {directory}/{{animated,static}}.m2");
+}
+
+#[test]
+fn modern_particle_fog_and_refraction_flags_round_trip_independently() {
+    for controls in [0x8, 0x0010_0000, 0x0010_0008, 0x8010_0008] {
+        let raw = controls | (1 << 17);
+        let mut source = particle_program_bundle(&[[0, 0]; 3]);
+        for particle in &mut source.model.core_mut().particles {
+            particle.flags = raw.into();
+        }
+        let imported = io::m2::import(&source, &ImportOptions::default()).unwrap();
+        for (_, feature) in imported.value.features() {
+            let mp::ActorKind::Particle(particle) = &feature.payload else {
+                continue;
+            };
+            assert_eq!(particle.details.flags.bits(), raw);
+            assert_eq!(particle.details.flags.unfogged(), controls & 0x8 != 0);
+            assert_eq!(
+                particle.details.flags.refraction(),
+                controls & 0x0010_0000 != 0
+            );
+        }
+        let output =
+            io::m2::plan::<m2::Chunked<m2::V274>>(&imported.value, &ExportOptions::default())
+                .unwrap()
+                .execute()
+                .value;
+        let encoded = output.encode().unwrap();
+        let decoded = m2::Bundle::<m2::Chunked<m2::V274>>::decode(
+            &encoded.model,
+            m2::FileKey::Root,
+            |dependency| Ok(encoded.files.get(&dependency.key).map(Vec::as_slice)),
+        )
+        .unwrap();
+        assert_eq!(decoded.model.core().particles.len(), 2);
+        for particle in &decoded.model.core().particles {
+            assert_eq!(particle.flags.bits(), raw);
+            assert_eq!(particle.flags.unfogged(), controls & 0x8 != 0);
+            assert_eq!(particle.flags.refraction(), controls & 0x0010_0000 != 0);
+        }
+    }
+}

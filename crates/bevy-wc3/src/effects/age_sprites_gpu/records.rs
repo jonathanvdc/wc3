@@ -25,8 +25,31 @@ pub(crate) struct AgeSpriteUniform {
     pub axes: [[f32; 4]; 2],
     /// Fixed XY plane, velocity facing, unlit, fog enabled.
     pub flags: [u32; 4],
-    /// Atlas rows, columns, composition programme, blend code.
+    /// Atlas rows, columns, composition flags plus V flip, blend code.
     pub atlas: [u32; 4],
+}
+
+/// Known native composition controls, independent of opaque TXAC selectors.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum AgeSpriteComposition {
+    #[default]
+    Single,
+    Multi {
+        three_colors: bool,
+        alpha_modulate4x: bool,
+    },
+}
+impl AgeSpriteComposition {
+    /// GPU bits: multi-input, three RGB inputs, fourfold alpha gain.
+    pub(crate) fn flags(self) -> u32 {
+        match self {
+            Self::Single => 0,
+            Self::Multi {
+                three_colors,
+                alpha_modulate4x,
+            } => 1 | (u32::from(three_colors) << 1) | (u32::from(alpha_modulate4x) << 2),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -34,7 +57,9 @@ pub(crate) struct AgeSpriteStyle {
     pub textures: [Option<Handle<Image>>; 3],
     pub blend: ParticleBlend,
     pub priority: f32,
-    pub composition: u32,
+    pub composition: AgeSpriteComposition,
+    /// Reverse authored image V while keeping geometric corners unchanged.
+    pub uv_flip_v: bool,
     pub unlit: bool,
     pub head: bool,
     pub tail: bool,

@@ -207,12 +207,14 @@ bitfield! {
     /// Native ParticleFlags; unknown bits are retained.
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ownership, m2::Read, m2::Write, m2::RecordLayout, m2::Validate, m2::VisitArrays)]
     pub struct ParticleFlags(u32);
-    /// Exact stored bits, including unresolved flags such as bit 3.
+    /// Exact stored bits, including unresolved flags.
     pub bits, _: 31, 0;
     /// Selects the unlit particle shader rather than the lit shader.
     pub disable_lighting, set_disable_lighting: 0;
     /// Aligns particle heads with their projected velocity.
     pub velocity_oriented, set_velocity_oriented: 2;
+    /// Disables fog for particle rendering.
+    pub unfogged, set_unfogged: 3;
     /// Keeps particle simulation local to the moving emitter frame.
     pub attached, set_attached: 4;
     /// Multiplies rendered particle size by the inherited bone scale.
@@ -243,8 +245,8 @@ bitfield! {
     pub tail, set_tail: 18;
     /// Uses independent random X and Y scale variation.
     pub independent_scale, set_independent_scale: 19;
-    /// Disables fog for particle rendering.
-    pub unfogged, set_unfogged: 20;
+    /// Selects the scene-refraction particle programme when multi-texture is inactive.
+    pub refraction, set_refraction: 20;
     /// Randomizes the starting flipbook frame.
     pub random_flipbook, set_random_flipbook: 21;
     /// Stores gravity keys as signed direction components and a signed magnitude.
@@ -257,7 +259,7 @@ bitfield! {
     pub offset_head_by_spin, set_offset_head_by_spin: 27;
     /// Uses three packed five-bit texture identifiers and multi-texture composition.
     pub multi_texture, set_multi_texture: 28;
-    /// Selects fourfold modulation in the multi-texture programme.
+    /// Selects fourfold alpha gain in the multi-texture programme.
     pub multi_texture_modulate4x, set_multi_texture_modulate4x: 29;
     /// Selects three color inputs in the multi-texture programme.
     pub multi_texture_three_colors, set_multi_texture_three_colors: 30;
@@ -382,6 +384,8 @@ mod tests {
         }
         check!(disable_lighting, set_disable_lighting, 0);
         check!(velocity_oriented, set_velocity_oriented, 2);
+        check!(unfogged, set_unfogged, 3);
+        check!(refraction, set_refraction, 20);
         check!(attached, set_attached, 4);
         check!(inherit_bone_scale, set_inherit_bone_scale, 5);
         check!(inherit_velocity, set_inherit_velocity, 6);

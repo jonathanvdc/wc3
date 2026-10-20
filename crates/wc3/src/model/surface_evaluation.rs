@@ -77,6 +77,23 @@ impl TextureTransform {
             )
         }
     }
+    /// Samples M2 texture coordinates around their half-unit pivot, translating
+    /// before scaling and rotation. Native game fidelity remains unverified.
+    pub fn m2_affine(&self, sample: &impl ValueSample) -> Affine2 {
+        let center = Vec3::new(0.5, 0.5, 0.0);
+        let matrix = Mat4::from_translation(center)
+            * Mat4::from_scale_rotation_translation(
+                sample.animated(&self.scale),
+                sample.animated(&self.rotation).normalize(),
+                Vec3::ZERO,
+            )
+            * Mat4::from_translation(sample.animated(&self.translation) - center);
+        Affine2::from_cols(
+            matrix.x_axis.truncate().truncate(),
+            matrix.y_axis.truncate().truncate(),
+            matrix.w_axis.truncate().truncate(),
+        )
+    }
     /// Projects a complete texture transform around the layered shader's UV center.
     #[inline]
     pub fn centered_affine(translation: Vec3, rotation: Quat, scale: Vec3) -> Affine2 {

@@ -12,6 +12,7 @@ use crate::effects::simulation::{split_time, EmissionPhase, EmissionRounding, Li
 use crate::effects::trails::{RibbonInstances, RibbonSection, RibbonSegment, RibbonUniform};
 use crate::layers::ModelOwnedRenderEntity;
 use crate::material::map_material_images;
+use crate::textures::{TextureImages, TextureRole};
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::math::Affine2;
 use bevy::prelude::*;
@@ -19,7 +20,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use wc3::model::{
     ClipId, FeatureId, MaterialId, Model, NodeFeature, NodeId,
-    RibbonEmitter as SemanticRibbonEmitter,
+    RibbonEmitter as SemanticRibbonEmitter, TextureTransform,
 };
 
 const CAPACITY: usize = 8192;
@@ -41,6 +42,8 @@ pub struct RibbonEmitter {
 struct Pass {
     material: ModelMaterial,
     animation: SurfaceAnimation,
+    ribbon_transform: Option<TextureTransform>,
+    override_texture: bool,
     blend: EffectBlend,
     depth_test: bool,
     depth_write: bool,
@@ -152,6 +155,7 @@ impl RuntimeRibbons {
     pub fn compile(
         model: &Model<'_>,
         nodes: &HashMap<NodeId, usize>,
+        images: &TextureImages,
         materials: &HashMap<MaterialId, Vec<SurfacePass>>,
     ) -> Self {
         let basis = basis(model)
@@ -191,10 +195,22 @@ impl RuntimeRibbons {
                     continue;
                 };
                 for surface in surfaces {
-                    let material = ModelMaterial {
+                    let mut material = ModelMaterial {
                         base: surface.material.clone(),
                         extension: surface.state.clone(),
                     };
+                    let ribbon_transform =
+                        if let TrailRendering::Surfaces(rendering) = &definition.rendering {
+                            if let Some(texture) = rendering.textures.first() {
+                                material.base.base_color_texture = images
+                                    .ribbon(feature, 0)
+                                    .for_role(*texture, TextureRole::Color)
+                                    .cloned();
+                            }
+                            rendering.texture_transform.clone()
+                        } else {
+                            None
+                        };
                     let Some(state) = effect_state(&material) else {
                         diagnostic(RenderDiagnosticKind::Unsupported, "Trail blend/cutout combination requires a transport shader extension and is not drawn");
                         continue;
@@ -209,6 +225,8 @@ impl RuntimeRibbons {
                         two_sided: material.base.cull_mode.is_none(),
                         material,
                         animation: surface.animation.clone(),
+                        ribbon_transform,
+                        override_texture: matches!(&definition.rendering, TrailRendering::Surfaces(rendering) if !rendering.textures.is_empty()),
                         blend: state.blend,
                         depth_test: state.depth_test,
                         depth_write: state.depth_write,
@@ -231,13 +249,19 @@ impl RuntimeRibbons {
                     unreachable!("M2 ribbon rendering")
                 };
                 if rendering.texture_transform.is_some() {
-                    diagnostic(RenderDiagnosticKind::Unsupported, "M2 trail-specific UV transform is retained but material UV transforms alone are evaluated");
+                    diagnostic(RenderDiagnosticKind::Unverified, "M2 trail UV transforms are evaluated; native global-flag applicability and game fidelity remain unverified");
                 }
                 if rendering.color_index != 0 {
                     diagnostic(
                         RenderDiagnosticKind::Resource,
                         "External M2 trail color tables require application-supplied colors",
                     );
+                }
+                if rendering.textures.len() > 1 {
+                    diagnostic(RenderDiagnosticKind::Unsupported, "M2 trails sample their first texture; additional native texture bindings are retained but not drawn");
+                }
+                if rendering.materials.len() > 1 {
+                    diagnostic(RenderDiagnosticKind::Unverified, "M2 trail material entries render as ordered Bevy passes; native game use beyond the first entry remains unverified");
                 }
                 for pass in &mut passes {
                     pass.priority = i32::from(rendering.priority_plane);
@@ -490,6 +514,20 @@ impl RuntimeRibbons {
             let [high, low] = split_time(frame.time);
             for (pass, (entity, material)) in emitter.passes.iter().zip(&mut state.passes) {
                 pass.animation.apply(frame.sample, &mut material.base);
+                if pass.override_texture
+                    && material.base.base_color_texture != pass.material.base.base_color_texture
+                {
+                    material
+                        .base
+                        .base_color_texture
+                        .clone_from(&pass.material.base.base_color_texture);
+                }
+                let uv = pass
+                    .ribbon_transform
+                    .as_ref()
+                    .map_or(material.base.uv_transform, |transform| {
+                        transform.m2_affine(frame.sample) * material.base.uv_transform
+                    });
                 let color = material.base.base_color.to_linear();
                 if let Ok(mut data) = render.get_mut(*entity) {
                     data.records = state.live.records.clone();
@@ -504,7 +542,7 @@ impl RuntimeRibbons {
                         ],
                         clock_gravity: [high, low, gravity, 0.],
                         atlas_flags: [rows, columns, slot, u32::from(material.base.unlit)],
-                        uv_transform: affine_uv(material.base.uv_transform).to_cols_array_2d(),
+                        uv_transform: affine_uv(uv).to_cols_array_2d(),
                         gravity_axis: self.gravity_axis.extend(0.).to_array(),
                         render_flags: [
                             u32::from(material.base.fog_enabled),
@@ -563,6 +601,91 @@ impl RuntimeRibbons {
 mod tests {
 
     use super::*;
+    use crate::material::compile_material_with_images;
+    use crate::textures::{texture_requests, TextureInput};
+    use wc3::model::common::ZeroVec;
+    use wc3::model::conversion::ImportOptions;
+    use wc3::model::formats::m2::records::{
+        Bone, Material, RibbonEmitter as NativeRibbon, Texture as NativeTexture, TextureSource,
+    };
+    use wc3::model::formats::m2::{Bundle, Document, Flat, V274};
+    use wc3::model::{io, profiles::Universal, Construct, PropertyValues};
+
+    #[test]
+    fn m2_primary_texture_uses_feature_scoped_image_for_every_pass() {
+        let mut slots = PropertyValues::default();
+        let mut source = Bundle::from_model(Document::<Flat<V274>>::new());
+        let core = source.model.core_mut();
+        core.bones.push(Bone::new());
+        core.materials = ZeroVec::alloc_from_slice(&[Material::default()]);
+        core.textures.push(NativeTexture {
+            filename: ZeroVec::alloc_from_slice(b"ribbon.png\0"),
+            kind: TextureSource::File,
+            ..Default::default()
+        });
+        core.ribbons.push(NativeRibbon {
+            bone_id: 0,
+            texture_indices: ZeroVec::alloc_from_slice(&[0]),
+            material_indices: ZeroVec::alloc_from_slice(&[0]),
+            ..Construct::construct(&mut slots)
+        });
+        let model = io::m2::import(&source, &ImportOptions::default())
+            .unwrap()
+            .value
+            .widen::<Universal>();
+        let feature = model
+            .features()
+            .iter()
+            .find_map(|(id, feature)| {
+                matches!(&feature.payload, NodeFeature::Ribbon(_)).then_some(id)
+            })
+            .unwrap();
+        assert!(texture_requests(&model)
+            .iter()
+            .any(|request| request.input == Some(TextureInput::Ribbon { feature, slot: 0 })));
+        let mut assets = Assets::<Image>::default();
+        let scoped = assets.add(Image::default());
+        let fallback = assets.add(Image::default());
+        let images = TextureImages::resolve(&model, |request| {
+            Some(
+                if request.input == Some(TextureInput::Ribbon { feature, slot: 0 }) {
+                    scoped.clone()
+                } else {
+                    fallback.clone()
+                },
+            )
+        });
+        let materials = model
+            .materials()
+            .keys()
+            .map(|id| {
+                (
+                    id,
+                    compile_material_with_images(&model, id, Arc::new(images.clone())).unwrap(),
+                )
+            })
+            .collect();
+        let nodes = model
+            .nodes()
+            .keys()
+            .enumerate()
+            .map(|(index, id)| (id, index))
+            .collect();
+        let runtime = RuntimeRibbons::compile(&model, &nodes, &images, &materials);
+        assert_eq!(runtime.emitters.len(), 1);
+        assert!(runtime.emitters[0].passes.iter().all(|pass| pass
+            .material
+            .base
+            .base_color
+            .to_linear()
+            == LinearRgba::WHITE));
+        assert!(runtime.emitters[0].passes.iter().all(|pass| pass
+            .material
+            .base
+            .base_color_texture
+            .as_ref()
+            == Some(&scoped)));
+    }
     fn state() -> State {
         State {
             entity: Entity::PLACEHOLDER,

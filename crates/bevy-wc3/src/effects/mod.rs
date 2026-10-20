@@ -93,7 +93,7 @@ impl RuntimeParticles {
     ) -> Self {
         let age = RuntimeAgeSprites::compile(model, nodes, images, materials);
         let atlas = RuntimeAtlasParticles::compile(model, nodes, images);
-        let ribbons = RuntimeRibbons::compile(model, nodes, materials);
+        let ribbons = RuntimeRibbons::compile(model, nodes, images, materials);
         let models = RuntimeModelParticles::compile(model, nodes, children, placements);
         let diagnostics = atlas
             .diagnostics()

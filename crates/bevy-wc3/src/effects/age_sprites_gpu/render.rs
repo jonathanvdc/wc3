@@ -242,6 +242,14 @@ fn sort_indices(data: &AgeSpriteData, world_from_view: &Affine3A, scratch: &mut 
     });
 }
 #[cfg(test)]
+pub(crate) fn sort_for_benchmark(
+    data: &AgeSpriteData,
+    world_from_view: &Affine3A,
+    scratch: &mut SortScratch<u32>,
+) {
+    sort_indices(data, world_from_view, scratch);
+}
+#[cfg(test)]
 fn sorted_indices(data: &AgeSpriteData, world_from_view: &Affine3A) -> Vec<u32> {
     let mut scratch = SortScratch::default();
     sort_indices(data, world_from_view, &mut scratch);

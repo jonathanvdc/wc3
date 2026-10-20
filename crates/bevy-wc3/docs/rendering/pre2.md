@@ -39,8 +39,10 @@ appearance. Paused, unchanged effects retain their GPU records. Unchanged views
 also retain their sorted draw-order buffers across paused frames and temporary
 culling. Native head and tail style bits become a semantic head/tail selection
 during import. That selection can enable either geometry, both, or neither; it
-does not change the emission direction. Velocity-oriented heads use the projected particle velocity,
-while fixed-plane heads use the appropriate attached or detached XY frame. Tail
+does not change the emission direction. Selecting neither keeps births, motion,
+retirement, and statistics active without sampling or uploading live geometry.
+Velocity-oriented heads use the projected particle velocity, while fixed-plane
+heads use the appropriate attached or detached XY frame. Tail
 extent uses velocity multiplied by the authored tail time, optionally clamped to
 particle age. Exact native tail geometry remains unverified.
 
@@ -92,8 +94,12 @@ inputs. The primary image retains its atlas cells. The two additional images
 have their own UV scales, randomized starting coordinates and authored scrolling
 velocity ranges. Their UV motion depends on particle age and wraps
 independently. Two-color and three-color combinations preserve their
-corresponding alpha masks and use unlit materials. Single-texture particles
-honor the authored lighting flag. The native texture ordering word supplies a
+corresponding alpha masks and use unlit materials. Two-color RGB uses a
+twofold gain; three-color RGB uses a fourfold gain. Alpha combines all three
+texture masks with a twofold gain, or a fourfold gain when native bit 29 is set.
+For multi-texture cutout particles, the texture alpha test precedes vertex
+opacity, so fading does not prematurely discard otherwise accepted texels.
+Single-texture particles honor the authored lighting flag. The native texture ordering word supplies a
 material priority bias; this does not establish exact mesh/effect ordering
 across Bevy render phases.
 
@@ -108,10 +114,12 @@ gate visibility and vary scale over time. This renderer's random streams and
 table are independent implementation choices. Native random-number sequences,
 twinkle patterns and stochastic distribution fidelity remain unverified.
 
-Container-level texture-program selectors are retained on each emitter. Nonzero
-TXAC selectors require advanced UV/shader interpretation and display the primary
-input with diagnostics instead of being treated as a basic multi-texture
-programme. The modulation-gain flag at bit 29 also remains unresolved. Texture
+Container-level TXAC selectors are retained on each emitter without invented
+byte semantics. Nonzero selectors produce a diagnostic independently of known
+composition flags; they do not disable the supported multi-texture path. The
+refraction flag selects a scene-color postprocess only when multi-texture is
+inactive. This postprocess has no interpreter in the current Bevy pipeline;
+those emitters retain their ordinary primary texture with a diagnostic. Texture
 rotation programmes, bone generators, native keyed squirt emission, collisions,
 external model particles and child emitters still require additional
 interpretation or application integration.
@@ -138,4 +146,5 @@ not cast shadows or participate in depth, normal, or motion-vector prepasses.
 Opaque and cutout M2 sprites still write depth in the main view. Sprite effects
 use Bevy scene fog and output processing, including unlit sprites. Additive and
 modulation blends fade toward their neutral fog colors; authored unfogged
-controls bypass scene fog.
+controls bypass scene fog. M2 unfogged is native bit 3; bit 20 selects
+refraction independently. Classic-client game fidelity remains unverified.

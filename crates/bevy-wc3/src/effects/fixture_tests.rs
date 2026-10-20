@@ -8,7 +8,7 @@ use wc3::model::io::m2 as semantic_m2;
 
 use wc3::model::TimeSource;
 
-fn gravity_fixture(
+pub(super) fn gravity_fixture(
     packed: bool,
     gravity: u32,
 ) -> NativeM2Bundle<'static, NativeM2Flat<NativeM2V256>> {
@@ -163,6 +163,12 @@ fn write_gpu_sprite_capture_fixtures() {
         "xy-detached",
         "multi-two",
         "multi-three",
+        "multi-two-mod4",
+        "multi-three-mod4",
+        "multi-alpha-key-faded",
+        "multi-refraction",
+        "unfogged",
+        "refraction",
         "spline",
         "premultiplied",
         "sphere",
@@ -189,16 +195,26 @@ fn write_gpu_sprite_capture_fixtures() {
             LegacyValues::Values(ZeroVec::alloc_from_slice(&[0.5]));
         match name {
             "velocity" => emitter.flags.set_velocity_oriented(true),
+            "unfogged" => emitter.flags.set_unfogged(true),
+            "refraction" => emitter.flags.set_refraction(true),
             "xy-attached" => {
                 emitter.flags.set_align_xy(true);
                 emitter.flags.set_attached(true);
             }
             "xy-detached" => emitter.flags.set_align_xy(true),
-            "multi-two" | "multi-three" => {
+            value if value.starts_with("multi-") => {
                 emitter.flags.set_multi_texture(true);
+                emitter.flags.set_refraction(name == "multi-refraction");
                 emitter
                     .flags
-                    .set_multi_texture_three_colors(name == "multi-three");
+                    .set_multi_texture_three_colors(name.contains("three"));
+                emitter
+                    .flags
+                    .set_multi_texture_modulate4x(name.ends_with("mod4"));
+                if name == "multi-alpha-key-faded" {
+                    emitter.kind.blending = ParticleBlend::AlphaKey;
+                    emitter.lifetime.colors_bgra = [[255, 255, 255, 32]; 3];
+                }
                 emitter.texture_id = (1 << 5) | (2 << 10);
             }
             "spline" => {

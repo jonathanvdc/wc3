@@ -77,9 +77,10 @@ possible. The effect guides describe simulation, playback, and resource needs:
 - [Ribbons](ribbons.md) retain birth-time cross sections and generate connected geometry on the GPU.
 
 Each family bounds populations and per-update work and exposes omitted-work
-counters. Bone generators, advanced M2 texture programmes, and unresolved
-modulation-gain controls require further interpretation. External effects need
-resource providers.
+counters. M2 multi-texture colors and alpha masks retain their independent
+modulation gains; native TXAC selectors, refraction, and bone generators still
+require further interpretation. External effects need resource providers and
+an executable programme interpreter.
 
 ## Check a particular model
 

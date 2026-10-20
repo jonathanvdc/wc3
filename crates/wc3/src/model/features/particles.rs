@@ -198,9 +198,8 @@ pub struct M2ParticleRendering {
     pub color_index: u16,
     /// Ordered particle texture resources.
     pub textures: Vec<Texture>,
-    /// Native texture-program selectors, when an emitter has a container-level
-    /// combiner programme. Byte meanings remain opaque; absence selects the
-    /// baseline texture path rather than discarding an unknown programme.
+    /// Native container-level texture-program selectors with opaque byte meanings.
+    /// These are retained independently of recognized particle-composition flags.
     pub texture_program: Option<[u8; 2]>,
     /// Model geometry resource used for model particles.
     pub model: Option<ModelResourceId>,

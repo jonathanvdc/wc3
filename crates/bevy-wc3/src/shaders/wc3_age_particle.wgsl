@@ -76,7 +76,8 @@ fn vertex(input: VertexInput) -> VertexOutput {
     let rows = max(emitter.atlas.x, 1u);
     let columns = max(emitter.atlas.y, 1u);
     cell %= rows * columns;
-    let corner = (input.corner.xy + vec2(1.0)) * 0.5;
+    var corner = (input.corner.xy + vec2(1.0)) * 0.5;
+    if (emitter.atlas.z & 8u) != 0u { corner.y = 1.0 - corner.y; }
     var output: VertexOutput;
     output.position = position_world_to_clip(world);
     output.uv = (vec2(f32(cell % columns), f32(cell / columns)) + corner)
@@ -92,16 +93,22 @@ fn vertex(input: VertexInput) -> VertexOutput {
 fn fragment(input: VertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
     let a = textureSample(primary, primary_sampler, input.uv);
     var color = a * input.color;
-    if emitter.atlas.z != 0u {
+    var alpha_test = color.a;
+    let multi = (emitter.atlas.z & 1u) != 0u;
+    if multi {
         let b = textureSample(secondary, secondary_sampler, input.uv_secondary);
         let c = textureSample(tertiary, tertiary_sampler, input.uv_tertiary);
+        let three_colors = (emitter.atlas.z & 2u) != 0u;
         var rgb = a.rgb * b.rgb;
-        if emitter.atlas.z == 2u { rgb *= c.rgb; }
-        color = vec4(input.color.rgb * rgb, input.color.a * a.a * b.a * c.a);
+        if three_colors { rgb *= c.rgb; }
+        let rgb_gain = select(2.0, 4.0, three_colors);
+        let alpha_gain = select(2.0, 4.0, (emitter.atlas.z & 4u) != 0u);
+        alpha_test = a.a * b.a * c.a * alpha_gain;
+        color = vec4(input.color.rgb * rgb * rgb_gain, input.color.a * alpha_test);
     }
 #ifdef ALPHA_KEY
-    if color.a < 128.0 / 255.0 { discard; }
-    color.a = 1.0;
+    if alpha_test < 128.0 / 255.0 { discard; }
+    if !multi { color.a = 1.0; }
 #endif
     if emitter.atlas.w == 0u { color.a = 1.0; }
     var fog_blend = 0u;

@@ -198,6 +198,63 @@ where
                         core.materials = ZeroVec::alloc_from_slice(&materials)
                     }
                 }
+                let transform_slot = if let Some(transform) = &value.rendering.texture_transform {
+                    let encoded = native::records::TextureTransform {
+                        translation: animated(
+                            model,
+                            &transform.translation,
+                            starts,
+                            globals,
+                            context,
+                            |v, _| Ok(v.to_array()),
+                        )?,
+                        rotation: animated(
+                            model,
+                            &transform.rotation,
+                            starts,
+                            globals,
+                            context,
+                            |v, _| Ok(v.to_array()),
+                        )?,
+                        scaling: animated(
+                            model,
+                            &transform.scale,
+                            starts,
+                            globals,
+                            context,
+                            |v, _| Ok(v.to_array()),
+                        )?,
+                    };
+                    let index = core
+                        .texture_transforms
+                        .iter()
+                        .position(|value| value == &encoded)
+                        .unwrap_or_else(|| {
+                            core.texture_transforms.push(encoded);
+                            core.texture_transforms.len() - 1
+                        });
+                    let index = u16::try_from(index).map_err(|_| {
+                        Error::new("m2.ribbon.transform", "too many texture transforms")
+                    })?;
+                    let mut combos: Vec<_> = core.texture_transform_combos.iter().collect();
+                    let slot = combos
+                        .iter()
+                        .position(|value| *value == index)
+                        .unwrap_or_else(|| {
+                            combos.push(index);
+                            combos.len() - 1
+                        });
+                    let slot = i8::try_from(slot).map_err(|_| {
+                        Error::new(
+                            "m2.ribbon.transform",
+                            "lookup index exceeds signed ribbon field",
+                        )
+                    })?;
+                    core.texture_transform_combos = ZeroVec::alloc_from_slice(&combos);
+                    i16::from(slot)
+                } else {
+                    -1
+                };
                 core.ribbons.push(native::records::RibbonEmitter {
                     id: value.behavior.id,
                     bone_id: bone,
@@ -261,7 +318,7 @@ where
                         [
                             value.rendering.priority_plane,
                             i16::from(value.rendering.color_index),
-                            0,
+                            transform_slot,
                         ],
                         context,
                     )?,

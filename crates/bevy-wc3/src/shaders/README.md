@@ -47,8 +47,10 @@ Native additive inputs enter PBR emissive; ordinary diffuse stays in Bevy albedo
 `wc3_age_particle.wgsl` expands exactly sampled M2 live records against each
 camera and evaluates independent two-color/three-alpha or three-color/three-alpha
 particle composition. The primary image retains atlas cells; additional images
-use their own offsets and scales. Shared records retain appearance and analytic
-motion sampling on the CPU while view-specific indices select head/tail geometry
+use their own offsets and scales. RGB and alpha gains remain independent, and
+multi-texture cutout tests texture alpha before vertex opacity. Opaque TXAC
+selectors do not override recognized composition flags. Shared records retain
+appearance and analytic motion sampling on the CPU while view-specific indices select head/tail geometry
 and sorting. All eight native particle blend states remain explicit.
 
 ## Bevy upgrades

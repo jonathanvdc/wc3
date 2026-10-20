@@ -2,7 +2,8 @@
 use super::super::material::{ModelMaterial, SurfacePass};
 use super::age_appearance::{AgeAppearance, AgeParticleAppearance};
 use super::age_sprites_gpu::{
-    AgeSpriteData, AgeSpriteRecord, AgeSpriteStyle, AgeSpriteUniform, SampleBuffers,
+    AgeSpriteComposition, AgeSpriteData, AgeSpriteRecord, AgeSpriteStyle, AgeSpriteUniform,
+    SampleBuffers,
 };
 use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
@@ -258,9 +259,6 @@ impl RuntimeAgeSprites {
                     .diagnostics
                     .push((feature, RenderIssue::new(kind, message)));
             };
-            if details.rendering.head_tail == ParticleHeadTail::Disabled {
-                continue;
-            }
             let appearance = &definition.appearance;
             if !matches!(
                 details.shape.generator,
@@ -297,28 +295,26 @@ impl RuntimeAgeSprites {
                 );
                 continue;
             }
-            let basic_program = details
+            let multi_texture =
+                details.flags.multi_texture() && details.rendering.textures.len() == 3;
+            if details
                 .rendering
                 .texture_program
-                .is_none_or(|hints| hints == [0, 0]);
-            let multi_texture = details.flags.multi_texture()
-                && details.rendering.textures.len() == 3
-                && basic_program;
-            if !basic_program {
+                .is_some_and(|hints| hints != [0, 0])
+            {
                 diagnostic(RenderDiagnosticKind::Unsupported,
-                    "M2 particle texture programme requires an advanced UV/shader interpreter; displaying its primary input",
+                    "M2 particle TXAC selectors are retained without interpretation; recognized native composition flags remain active",
+                );
+            }
+            if details.flags.refraction() && !details.flags.multi_texture() {
+                diagnostic(RenderDiagnosticKind::Unsupported,
+                    "M2 refraction requires a scene-color postprocess interpreter; displaying the ordinary primary texture path",
                 );
             }
             if details.rendering.textures.len() > 1 && !multi_texture {
                 diagnostic(
                     RenderDiagnosticKind::Unsupported,
                     "M2 extra particle textures require the three-input multi-texture programme",
-                );
-            }
-            if details.flags.multi_texture_modulate4x() {
-                diagnostic(
-                    RenderDiagnosticKind::Unsupported,
-                    "M2 multi-texture modulation-gain control remains unresolved",
                 );
             }
             if let ParticleBlend::Unknown(_) = details.rendering.blend {
@@ -345,7 +341,10 @@ impl RuntimeAgeSprites {
                     "Legacy particle atlas segments currently use normalized-age cell curves when present",
                 );
             }
-            if !matches!(details.rendering.head_tail, ParticleHeadTail::Head) {
+            if matches!(
+                details.rendering.head_tail,
+                ParticleHeadTail::Tail | ParticleHeadTail::Both
+            ) {
                 diagnostic(RenderDiagnosticKind::Unverified,
                     "M2 tails use velocity times the authored tail parameter; exact client time-versus-distance fidelity remains unverified",
                 );
@@ -368,6 +367,7 @@ impl RuntimeAgeSprites {
             }
             let supported_flags = (1 << 0)
                 | (1 << 2)
+                | (1 << 3)
                 | (1 << 4)
                 | (1 << 5)
                 | (1 << 8)
@@ -382,6 +382,7 @@ impl RuntimeAgeSprites {
                 | (1 << 20)
                 | (1 << 23)
                 | (1 << 28)
+                | (1 << 29)
                 | (1 << 30);
             if details.flags.bits() & !supported_flags != 0 {
                 diagnostic(RenderDiagnosticKind::Unsupported, &format!(
@@ -453,14 +454,14 @@ impl RuntimeAgeSprites {
                     blend: details.rendering.blend,
                     priority: f32::from(details.rendering.texture_tile_rotation),
                     composition: if multi_texture {
-                        if details.flags.multi_texture_three_colors() {
-                            2
-                        } else {
-                            1
+                        AgeSpriteComposition::Multi {
+                            three_colors: details.flags.multi_texture_three_colors(),
+                            alpha_modulate4x: details.flags.multi_texture_modulate4x(),
                         }
                     } else {
-                        0
+                        AgeSpriteComposition::Single
                     },
+                    uv_flip_v: false,
                     unlit: multi_texture || details.flags.disable_lighting(),
                     head: matches!(
                         details.rendering.head_tail,
@@ -1053,7 +1054,10 @@ impl Emitter {
         data: &mut AgeSpriteData,
     ) {
         let (record_snapshot, index_snapshot) = state.samples.begin();
-        if !frame.basis_world.is_finite() || frame.basis_world.determinant() == 0. {
+        if (!data.style.head && !data.style.tail)
+            || !frame.basis_world.is_finite()
+            || frame.basis_world.determinant() == 0.
+        {
             data.records = record_snapshot.clone();
             data.live_indices = index_snapshot.clone();
             return;
@@ -1177,7 +1181,7 @@ impl Emitter {
             atlas: [
                 u32::from(self.atlas[0].max(1)),
                 u32::from(self.atlas[1].max(1)),
-                data.style.composition,
+                data.style.composition.flags() | (u32::from(data.style.uv_flip_v) << 3),
                 u32::from(data.style.blend.raw()),
             ],
         };

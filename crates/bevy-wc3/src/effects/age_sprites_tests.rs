@@ -49,7 +49,8 @@ fn emitter(slot_values: &mut SlotValues) -> Emitter {
             textures: [None, None, None],
             blend: ParticleBlend::Alpha,
             priority: 0.,
-            composition: 0,
+            composition: Default::default(),
+            uv_flip_v: false,
             unlit: false,
             head: true,
             tail: false,
@@ -699,6 +700,9 @@ fn gpu_live_samples_preserve_cpu_geometry_across_views_and_coordinate_frames() {
     for attached in [false, true] {
         emitter.flags.set_attached(attached);
         for mode in 0..3 {
+            data.style.uv_flip_v = mode == 2;
+            emitter.flags.set_unfogged(mode == 1);
+            emitter.flags.set_refraction(mode == 2);
             emitter.flags.set_align_xy(mode == 1);
             emitter.flags.set_velocity_oriented(mode == 2);
             for camera in [
@@ -718,6 +722,9 @@ fn gpu_live_samples_preserve_cpu_geometry_across_views_and_coordinate_frames() {
                     basis_world: basis,
                 };
                 emitter.sample_gpu(&mut state, &frame, node, &mut data);
+                assert_eq!(data.uniform.flags[3], u32::from(mode != 1));
+                assert_eq!(data.uniform.atlas[2] & 8, u32::from(mode == 2) << 3);
+                assert_eq!(data.uniform.atlas[2] & 7, data.style.composition.flags());
                 assert_eq!(data.records.len(), 1);
                 assert_eq!(data.live_indices.as_slice(), &[0, 0x8000_0000]);
                 assert!((data.records[0].color[3] - 0.8125).abs() < 1e-6);
@@ -798,6 +805,9 @@ fn spline_births_follow_authored_path_and_aim_from_the_source_height() {
 #[test]
 #[ignore = "opt-in CPU preparation comparison; prints timings without asserting machine-specific limits"]
 fn benchmark_compact_samples_against_cpu_corner_transport() {
+    use super::super::age_sprites_gpu::sort_for_benchmark;
+    use super::super::render::SortScratch;
+    use bevy::math::Affine3A;
     use std::hint::black_box;
     use std::time::Instant;
 
@@ -890,7 +900,23 @@ fn benchmark_compact_samples_against_cpu_corner_transport() {
         );
     }
     let samples = start.elapsed().as_secs_f64() / f64::from(rounds);
-    println!("8192 head+tail particles: CPU indexed corners {corners:.6}s; compact samples {samples:.6}s; preparation ratio {:.2}x (per-view render sorting excluded)", corners / samples);
+    let mut scratch = SortScratch::default();
+    let view = Affine3A::IDENTITY;
+    let start = Instant::now();
+    for _ in 0..rounds {
+        emitter.sample_gpu(
+            black_box(&mut state),
+            &frame,
+            Mat4::IDENTITY,
+            black_box(&mut data),
+        );
+        scratch.clear();
+        sort_for_benchmark(&data, &view, &mut scratch);
+        black_box(&scratch.order);
+    }
+    let samples_and_sort = start.elapsed().as_secs_f64() / f64::from(rounds);
+    println!("Matched single-view CPU preparation: indexed corners + sorting {corners:.6}s; compact samples + actual renderer sorting {samples_and_sort:.6}s; ratio {:.2}x (GPU upload/submission excluded)", corners / samples_and_sort);
+    println!("8192 head+tail particles: CPU indexed corners {corners:.6}s; compact samples {samples:.6}s; preparation ratio {:.2}x (compact-only measurement excludes renderer sorting)", corners / samples);
     println!(
         "live payload: {} compact bytes vs {} indexed-corner bytes, excluding draw-order buffers",
         data.records.len() * size_of::<AgeSpriteRecord>(),
@@ -1106,5 +1132,298 @@ fn implosion_long_update_reports_omitted_time_once_per_emitter() {
             Some(100.),
             "budgets must not defer the emitter clock"
         );
+    }
+}
+
+#[test]
+fn opaque_txac_selectors_do_not_disable_known_multi_texture_controls() {
+    use super::super::fixture_tests::gravity_fixture;
+    use wc3::model::conversion::ImportOptions;
+    use wc3::model::io::m2 as semantic_m2;
+
+    for three_colors in [false, true] {
+        for alpha_modulate4x in [false, true] {
+            let mut native = gravity_fixture(false, 0.0f32.to_bits());
+            let core = native.model.core_mut();
+            core.textures = vec![core.textures[0].clone(); 3];
+            let particle = &mut core.particles[0];
+            particle.flags.set_multi_texture(true);
+            particle.flags.set_refraction(true);
+            particle.flags.set_multi_texture_three_colors(three_colors);
+            particle
+                .flags
+                .set_multi_texture_modulate4x(alpha_modulate4x);
+            particle.texture_id = (1 << 5) | (2 << 10);
+            let mut model: Model<'_, Universal> =
+                semantic_m2::import(&native, &ImportOptions::default())
+                    .unwrap()
+                    .value
+                    .widen();
+            let (feature, payload) = model
+                .features()
+                .iter()
+                .find_map(|(id, feature)| {
+                    matches!(feature.payload, NodeFeature::Particle(_))
+                        .then(|| (id, feature.payload.clone()))
+                })
+                .unwrap();
+            let node_indices = model
+                .nodes()
+                .iter()
+                .enumerate()
+                .map(|(index, (id, _))| (id, index))
+                .collect();
+            for selectors in [None, Some([0, 0]), Some([17, 42])] {
+                let mut changed = payload.clone();
+                let NodeFeature::Particle(ParticleEmitter::M2(definition)) = &mut changed else {
+                    unreachable!()
+                };
+                definition.details.rendering.texture_program = selectors;
+                model
+                    .edit(|builder| builder.set_feature(feature, changed))
+                    .unwrap();
+                let compiled = RuntimeAgeSprites::compile(
+                    &model,
+                    &node_indices,
+                    &TextureImages::default(),
+                    &HashMap::new(),
+                );
+                assert_eq!(compiled.emitters.len(), 1);
+                let style = &compiled.emitters[0].gpu_style;
+                assert_eq!(
+                    style.composition,
+                    AgeSpriteComposition::Multi {
+                        three_colors,
+                        alpha_modulate4x
+                    }
+                );
+                assert_eq!(
+                    style.composition.flags(),
+                    1 | (u32::from(three_colors) << 1) | (u32::from(alpha_modulate4x) << 2)
+                );
+                assert!(style.unlit);
+                assert_eq!(
+                    compiled.diagnostics.iter().any(|(_, issue)| {
+                        issue.kind == RenderDiagnosticKind::Unsupported
+                            && issue.message.contains("TXAC selectors")
+                    }),
+                    selectors == Some([17, 42])
+                );
+                assert!(!compiled.diagnostics.iter().any(|(_, issue)| {
+                    issue.message.contains("extra particle textures")
+                        || issue.message.contains("modulation-gain")
+                        || issue.message.contains("refraction requires")
+                }));
+            }
+        }
+    }
+}
+
+#[test]
+fn refraction_has_an_explicit_diagnostic_without_disabling_scene_fog() {
+    use super::super::fixture_tests::gravity_fixture;
+    use wc3::model::conversion::ImportOptions;
+    use wc3::model::io::m2 as semantic_m2;
+
+    let mut source = gravity_fixture(false, 0.0f32.to_bits());
+    source.model.core_mut().particles[0]
+        .flags
+        .set_refraction(true);
+    let model = semantic_m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value
+        .widen();
+    let node_indices = model
+        .nodes()
+        .iter()
+        .enumerate()
+        .map(|(index, (id, _))| (id, index))
+        .collect();
+    let compiled = RuntimeAgeSprites::compile(
+        &model,
+        &node_indices,
+        &TextureImages::default(),
+        &HashMap::new(),
+    );
+    assert_eq!(compiled.emitters.len(), 1);
+    assert!(compiled.emitters[0].flags.refraction());
+    assert!(!compiled.emitters[0].flags.unfogged());
+    assert_eq!(
+        compiled.emitters[0].gpu_style.composition,
+        AgeSpriteComposition::Single
+    );
+    assert!(compiled.diagnostics.iter().any(|(_, issue)| {
+        issue.kind == RenderDiagnosticKind::Unsupported
+            && issue.message.contains("refraction requires")
+    }));
+}
+#[test]
+#[ignore = "exports original deterministic benchmark births under /tmp for matched independent CPU comparisons"]
+fn write_matched_particle_benchmark_births() {
+    use std::fmt::Write as _;
+    use std::fs::{read_to_string, write};
+
+    let mut values = SlotValues::default();
+    let mut emitter = emitter(&mut values);
+    emitter.head_tail = ParticleHeadTail::Both;
+    emitter.gpu_style.tail = true;
+    emitter.tail_length = 0.4;
+    let mut output = String::from("# 8192 particles; sample_age=0.5; head=true; tail=true; tail_time=0.4; white_rgba=1; size_xy=1; spin=0; drag=0; identity_camera=true\norigin_x,origin_y,origin_z,velocity_x,velocity_y,velocity_z,acceleration_x,acceleration_y,acceleration_z,lifetime,scale_x,scale_y\n");
+    for ordinal in 0..MAX_PARTICLES {
+        let mut birth = emitter
+            .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, ordinal as u64)
+            .unwrap();
+        birth.origin = Vec3::new(
+            (ordinal % 23) as f32,
+            (ordinal % 17) as f32,
+            -(ordinal as f32) * 0.01,
+        );
+        writeln!(
+            output,
+            "{},{},{},{},{},{},{},{},{},{},{},{}",
+            birth.origin.x,
+            birth.origin.y,
+            birth.origin.z,
+            birth.velocity.x,
+            birth.velocity.y,
+            birth.velocity.z,
+            birth.acceleration.x,
+            birth.acceleration.y,
+            birth.acceleration.z,
+            birth.lifetime,
+            birth.scale_variation.x,
+            birth.scale_variation.y
+        )
+        .unwrap();
+    }
+    let path = "/tmp/wc3-matched-particle-births.csv";
+    if let Ok(previous) = read_to_string(path) {
+        let first_difference = previous
+            .lines()
+            .zip(output.lines())
+            .enumerate()
+            .find(|(_, (before, actual))| before != actual);
+        if let Some((line, (before, actual))) = first_difference {
+            println!(
+                "Previous input first differs at line {}: previous={before}; actual={actual}",
+                line + 1
+            );
+        }
+        let mut changed_fields = 0;
+        let mut max_absolute_difference = 0f64;
+        for (before, actual) in previous.lines().skip(2).zip(output.lines().skip(2)) {
+            for (before, actual) in before.split(',').zip(actual.split(',')) {
+                if let (Ok(before), Ok(actual)) = (before.parse::<f32>(), actual.parse::<f32>()) {
+                    changed_fields += usize::from(before.to_bits() != actual.to_bits());
+                    max_absolute_difference =
+                        max_absolute_difference.max((f64::from(before) - f64::from(actual)).abs());
+                }
+            }
+        }
+        println!("Previous input comparison: {changed_fields} changed f32 fields, maximum absolute difference {max_absolute_difference:e}; row counts {} previous / {} actual", previous.lines().count().saturating_sub(2), output.lines().count().saturating_sub(2));
+    }
+    write(path, output).unwrap();
+    println!("Original deterministic benchmark births: {path}");
+}
+
+#[test]
+fn disabled_geometry_keeps_m2_simulation_and_statistics_without_live_records() {
+    use super::super::fixture_tests::gravity_fixture;
+    use bevy::ecs::system::SystemState;
+    use bevy::ecs::world::CommandQueue;
+    use wc3::model::conversion::ImportOptions;
+    use wc3::model::io::m2 as semantic_m2;
+
+    let source = gravity_fixture(false, 0.0f32.to_bits());
+    let mut model: Model<'_, Universal> = semantic_m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value
+        .widen();
+    let (feature, mut payload) = model
+        .features()
+        .iter()
+        .find_map(|(id, value)| {
+            matches!(value.payload, NodeFeature::Particle(_)).then(|| (id, value.payload.clone()))
+        })
+        .unwrap();
+    let NodeFeature::Particle(ParticleEmitter::M2(definition)) = &mut payload else {
+        unreachable!()
+    };
+    definition.details.rendering.head_tail = ParticleHeadTail::Disabled;
+    model
+        .edit(|builder| builder.set_feature(feature, payload))
+        .unwrap();
+    let node_indices = model
+        .nodes()
+        .iter()
+        .enumerate()
+        .map(|(index, (id, _))| (id, index))
+        .collect();
+    let runtime = RuntimeAgeSprites::compile(
+        &model,
+        &node_indices,
+        &TextureImages::default(),
+        &HashMap::new(),
+    );
+    assert_eq!(
+        runtime.emitters.len(),
+        1,
+        "geometry selection must not remove an emitter's simulation"
+    );
+    let mut meshes = Assets::<Mesh>::default();
+    let mut materials = Assets::<ModelMaterial>::default();
+    let mut world = World::new();
+    let basis = world.spawn_empty().id();
+    let mut queue = CommandQueue::default();
+    let mut commands = Commands::new(&mut queue, &world);
+    let mut instances = runtime.spawn(&mut commands, &mut meshes, &mut materials, basis);
+    drop(commands);
+    queue.apply(&mut world);
+    let entity = instances.emitters[0].passes[0].entity;
+    let program = AnimationProgram::compile(&model);
+    let sample = program.sample(AnimationSample::default()).unwrap();
+    let poses = vec![Mat4::IDENTITY; model.nodes().len()];
+    let visibility = vec![true; model.nodes().len()];
+    let mut system =
+        SystemState::<(Query<&mut AgeSpriteData>, Query<&mut SpriteEmitter>)>::new(&mut world);
+    let mut previous_population = 0;
+    for (time, change) in [
+        (0., EffectChange::Continuous),
+        (0.5, EffectChange::Continuous),
+        (1., EffectChange::Continuous),
+        (0., EffectChange::Reset),
+    ] {
+        let (mut data, mut statistics) = system.get_mut(&mut world).unwrap();
+        runtime.update(
+            &mut instances,
+            EffectFrame {
+                traversal: Default::default(),
+                change,
+                root_visible: true,
+                pose: None,
+                selection: Default::default(),
+                time,
+                sample: &sample,
+                node_poses: &poses,
+                node_visible: &visibility,
+                basis_world: Mat4::IDENTITY,
+            },
+            &mut meshes,
+            &mut data,
+            &mut statistics,
+            &mut materials,
+        );
+        let stats = statistics.get(entity).unwrap();
+        let draw = data.get(entity).unwrap();
+        assert!(draw.records.is_empty());
+        assert!(draw.live_indices.is_empty());
+        assert_eq!(stats.alive, instances.emitters[0].births.len());
+        if time > 0. {
+            assert!(stats.alive > previous_population);
+            previous_population = stats.alive;
+        } else {
+            assert_eq!(stats.alive, 0);
+        }
+        assert_eq!(stats.dropped, 0);
     }
 }

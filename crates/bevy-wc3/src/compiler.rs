@@ -592,7 +592,7 @@ pub fn compile_model_with_options(
             Some(TextureInput::Material { material, .. }) => {
                 RenderDiagnosticSource::Material(material)
             }
-            Some(TextureInput::Particle { feature, .. }) => {
+            Some(TextureInput::Particle { feature, .. } | TextureInput::Ribbon { feature, .. }) => {
                 RenderDiagnosticSource::Feature(feature)
             }
             None => continue,

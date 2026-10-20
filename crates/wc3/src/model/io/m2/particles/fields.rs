@@ -247,10 +247,10 @@ pub(super) trait RibbonTailFields: Sized {
 
 impl RibbonTailFields for () {
     fn parts(&self) -> [i16; 3] {
-        [0; 3]
+        [0, 0, -1]
     }
     fn make(parts: [i16; 3], context: &mut Context) -> Result<Self, Error> {
-        if parts != [0; 3] {
+        if parts != [0, 0, -1] {
             context.unsupported(
                 "ribbons.order",
                 "target ribbon lacks priority and lookup fields",

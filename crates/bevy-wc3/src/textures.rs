@@ -10,7 +10,7 @@ use wc3::model::materials::mdlx;
 use wc3::model::materials::program::MaterialStep;
 use wc3::model::{
     ColorSpace, FeatureId, ImageResource, ImageResourceId, MaterialId, Model, NodeFeature,
-    ParticleEmitter, Sampler, Texture,
+    ParticleEmitter, RibbonEmitter, Sampler, Texture,
 };
 
 /// Purpose of one sampled image, independent of its resource identity.
@@ -63,6 +63,13 @@ pub enum TextureInput {
         /// Image slot within that step.
         slot: u32,
     },
+    /// One ribbon emitter's ordered image input.
+    Ribbon {
+        /// Owning ribbon emitter.
+        feature: FeatureId,
+        /// Image slot within the emitter.
+        slot: u32,
+    },
     /// One sprite emitter's image input.
     Particle {
         /// Owning sprite emitter.
@@ -80,6 +87,7 @@ impl TextureInput {
                 slot,
             },
             Self::Particle { feature, .. } => Self::Particle { feature, slot },
+            Self::Ribbon { feature, .. } => Self::Ribbon { feature, slot },
         }
     }
 }
@@ -221,6 +229,19 @@ pub fn texture_requests<'view, 'data>(
         }
     }
     for (feature, value) in model.features() {
+        if let NodeFeature::Ribbon(RibbonEmitter::M2(ribbon)) = &value.payload {
+            for (slot, image) in ribbon.rendering.textures.iter().enumerate() {
+                add(
+                    Some(TextureInput::Ribbon {
+                        feature,
+                        slot: slot as u32,
+                    }),
+                    *image,
+                    TextureRole::Color,
+                    None,
+                );
+            }
+        }
         if let NodeFeature::Particle(particle) = &value.payload {
             let images = match particle {
                 ParticleEmitter::M2(value) => value.details.rendering.textures.to_vec(),
@@ -313,6 +334,12 @@ impl TextureImages {
         Self {
             variants: self.variants.clone(),
             input: Some(TextureInput::Particle { feature, slot }),
+        }
+    }
+    pub(crate) fn ribbon(&self, feature: FeatureId, slot: u32) -> Self {
+        Self {
+            variants: self.variants.clone(),
+            input: Some(TextureInput::Ribbon { feature, slot }),
         }
     }
     pub(crate) fn slot(&self, slot: u32) -> Self {
