@@ -242,7 +242,9 @@ pub(crate) enum Instruction {
 }
 
 mod callbacks;
+mod color;
 pub(crate) mod graph;
+mod orientation;
 mod runtime;
 pub use graph::{
     EffectAttribute, EffectAttributeId, EffectEntry, EffectField, EffectFieldId, EffectLayer,

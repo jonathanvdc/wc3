@@ -82,3 +82,67 @@ fn color_callback_contracts_are_typed_free_functions_and_unknown_symbols_fail() 
     }
     assert!(lowering.callback(b"unimplemented", &[], None, &[]).is_err());
 }
+
+#[test]
+fn typed_boolean_defaults_use_integer_storage_and_canonical_false_when_absent() {
+    assert_eq!(
+        attribute_default(ValueType::Bool, None, None).unwrap(),
+        Value::from(false)
+    );
+    for word in [1, u32::MAX] {
+        assert_eq!(
+            attribute_default(ValueType::Bool, None, Some([word, 0, 0, 0])).unwrap(),
+            Value::from(true)
+        );
+    }
+    assert!(attribute_default(ValueType::Bool, None, Some([2, 0, 0, 0])).is_err());
+    assert!(attribute_default(ValueType::Bool, Some([1f32.to_bits(), 0, 0, 0]), None).is_err());
+    assert_eq!(
+        attribute_default(
+            ValueType::Float,
+            Some([2f32.to_bits(), 0, 0, 0]),
+            Some([99, 0, 0, 0])
+        )
+        .unwrap(),
+        Value::from(2f32)
+    );
+}
+#[test]
+fn orientation_callback_signatures_preserve_quaternion_types_and_reject_bound_receivers() {
+    let document = Document::read(FIXTURE).unwrap();
+    let options = EffectCompileOptions::default();
+    let lowering = Lowering {
+        document: &document,
+        options: &options,
+        samplers: vec![],
+        attributes: vec![],
+        attribute_slots: HashMap::new(),
+        curve_widths: HashMap::new(),
+    };
+    let (_, result) = lowering
+        .callback(b"scene.orientation_f_norm", &[ValueType::Float3], None, &[])
+        .unwrap();
+    assert_eq!(result, Some(ValueType::Quaternion));
+    for (symbol, args) in [
+        (
+            b"rotate".as_slice(),
+            vec![ValueType::Float3, ValueType::Quaternion],
+        ),
+        (b"orientation_axisSide", vec![ValueType::Quaternion]),
+        (b"effect.axisSide", vec![ValueType::Context]),
+        (b"effect.axisUp", vec![ValueType::Context]),
+        (
+            b"radians.rotate",
+            vec![ValueType::Float3, ValueType::Float3, ValueType::Float],
+        ),
+    ] {
+        let (_, result) = lowering.callback(symbol, &args, None, &[]).unwrap();
+        assert_eq!(result, Some(ValueType::Float3));
+        assert!(lowering
+            .callback(symbol, &args, Some(0), &[External::EffectContext])
+            .is_err());
+    }
+    assert!(lowering
+        .callback(b"orientation_axisSide", &[ValueType::Float4], None, &[])
+        .is_err());
+}

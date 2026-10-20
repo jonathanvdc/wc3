@@ -145,6 +145,8 @@ pub enum EffectLimitation {
     ShapeCoordinates,
     /// Primitive distributions and fixed random consumption are original policies without client trace verification.
     ShapeSampling,
+    /// Pure orientation kernels retain explicit axis, normalization and degenerate-vector policies.
+    OrientationPolicies,
     /// Native interpolation selector is restricted to the observed zero mode.
     CurveInterpolation,
 }
@@ -257,6 +259,12 @@ pub(crate) enum Callback {
     HsvToRgb,
     RgbToHsv,
     SamplePosition,
+    Orientation,
+    Rotate,
+    OrientationSide,
+    RotateAbout,
+    EffectSide,
+    EffectUp,
 }
 #[derive(Debug)]
 pub(crate) struct EventRoute {

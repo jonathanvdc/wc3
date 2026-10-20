@@ -1,8 +1,9 @@
 //! Checked numeric callback dispatch with invocation-owned generation capabilities.
 use super::graph::*;
 use super::runtime::{EffectLimits, EffectStats, FieldPlanes, RandomState, Spawn};
+use super::{color, orientation};
 use super::{Host, Value, ValueType};
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Quat, Vec3};
 use std::array::from_fn;
 use std::collections::BinaryHeap;
 use std::mem::size_of;
@@ -89,6 +90,13 @@ fn scalar(value: f32) -> Result<Value> {
 }
 fn number(value: Value) -> f32 {
     f32::from_bits(value.words()[0])
+}
+fn vector(value: Value) -> Vec3 {
+    let [x, y, z, _] = value.words().map(f32::from_bits);
+    Vec3::new(x, y, z)
+}
+fn quaternion(value: Value) -> Quat {
+    Quat::from_array(value.words().map(f32::from_bits))
 }
 impl ExecutionHost<'_> {
     fn external(&self, slot: u16) -> Result<External> {
@@ -262,9 +270,14 @@ impl Host for ExecutionHost<'_> {
             .get(function as usize)
             .ok_or("effect callback binding is outside its table")?;
         Ok(match callback {
-            Callback::HsvToRgb | Callback::RgbToHsv => {
-                Some(convert_color(a[0], callback == Callback::HsvToRgb)?)
-            }
+            Callback::HsvToRgb | Callback::RgbToHsv => Some(Value::from_words(
+                ValueType::Float4,
+                color::convert(
+                    a[0].words().map(f32::from_bits),
+                    callback == Callback::HsvToRgb,
+                )?
+                .map(f32::to_bits),
+            )),
             Callback::Age => {
                 self.context(a[0], false)?;
                 Some(scalar((self.time - self.birth).max(0.) as f32)?)
@@ -432,6 +445,26 @@ impl Host for ExecutionHost<'_> {
                     [point.x.to_bits(), point.y.to_bits(), point.z.to_bits(), 0],
                 ))
             }
+            Callback::Orientation => Some(Value::from(orientation::from_forward(vector(a[0]))?)),
+            Callback::OrientationSide => {
+                Some(Value::from(orientation::rotate(Vec3::X, quaternion(a[0]))?))
+            }
+            Callback::Rotate => Some(Value::from(orientation::rotate(
+                vector(a[0]),
+                quaternion(a[1]),
+            )?)),
+            Callback::RotateAbout => Some(Value::from(orientation::rotate_about(
+                vector(a[0]),
+                vector(a[1]),
+                number(a[2]),
+            )?)),
+            Callback::EffectSide | Callback::EffectUp => {
+                self.context(a[0], false)?;
+                Some(Value::from(orientation::emitter_axis(
+                    self.world,
+                    callback == Callback::EffectUp,
+                )?))
+            }
             Callback::SamplePosition => {
                 self.context(a[0], true)?;
                 let External::Sampler(index) =
@@ -492,59 +525,6 @@ impl Host for ExecutionHost<'_> {
             }
         })
     }
-}
-
-fn convert_color(value: Value, hsv_to_rgb: bool) -> Result<Value> {
-    let channels = value.words().map(f32::from_bits);
-    if channels.iter().any(|value| !value.is_finite()) {
-        return Err("color conversion requires finite components");
-    }
-    let [a, b, c, alpha] = channels;
-    let color = if hsv_to_rgb {
-        let hue = a.rem_euclid(1.) * 6.;
-        let saturation = b.clamp(0., 1.);
-        let value = c.max(0.);
-        let chroma = value * saturation;
-        let secondary = chroma * (1. - (hue.rem_euclid(2.) - 1.).abs());
-        let base = value - chroma;
-        let components = match hue as u32 {
-            0 => [chroma, secondary, 0.],
-            1 => [secondary, chroma, 0.],
-            2 => [0., chroma, secondary],
-            3 => [0., secondary, chroma],
-            4 => [secondary, 0., chroma],
-            _ => [chroma, 0., secondary],
-        };
-        [
-            components[0] + base,
-            components[1] + base,
-            components[2] + base,
-            alpha,
-        ]
-    } else {
-        let maximum = a.max(b).max(c);
-        let minimum = a.min(b).min(c);
-        let range = maximum - minimum;
-        if range <= 1e-6 {
-            [0., 0., maximum, alpha]
-        } else {
-            let sector = if maximum == a {
-                (b - c) / range
-            } else if maximum == b {
-                (c - a) / range + 2.
-            } else {
-                (a - b) / range + 4.
-            };
-            [sector.rem_euclid(6.) / 6., range / maximum, maximum, alpha]
-        }
-    };
-    if color.iter().any(|component| !component.is_finite()) {
-        return Err("color conversion produced nonfinite components");
-    }
-    Ok(Value::from_words(
-        ValueType::Float4,
-        color.map(f32::to_bits),
-    ))
 }
 
 fn transform(world: Mat4, value: Vec3, mask: u32, direction: bool) -> Result<Vec3> {

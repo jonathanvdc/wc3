@@ -138,7 +138,9 @@ Instances require the same programme identity when starting or advancing.
 
 `SceneInputs` supplies the world transform; elapsed effect time belongs to the
 instance. Authored attributes have typed defaults and resolved IDs; set overrides
-before `start()` when initialization must observe them. `set_emitting(false)`
+before `start()` when initialization must observe them. Float defaults use native
+F4 storage, while boolean defaults use separate I4 storage. An omitted boolean
+default is false; supported explicit true encodings normalize to all-ones. `set_emitting(false)`
 reversibly suppresses renderer-bearing births while structural controllers and
 accumulators advance, so hidden intervals do not accumulate a later burst.
 `stop()` disables further generation and retires pure spawners while existing
@@ -161,7 +163,8 @@ writes observable.
 The implemented callback subset covers effect age/running state, event-stream
 and rate generation, event initialization/kick, retirement, random intervals,
 point transforms with masks 17/19, direction transforms with mask 18, RGB/HSV
-conversion, typed curve sampling, and primitive `samplePosition` callbacks. It
+conversion, quaternion orientation and rotation, emitter axes, typed curve
+sampling, and primitive `samplePosition` callbacks. It
 executes the complete acquired HD LichAttack graph, including invisible
 controllers and its routed child layer. Broadcasts, spatial queries, unsupported payload
 operations, other transform masks, unknown callbacks and unresolved sampler
@@ -169,8 +172,6 @@ families fail explicitly. When a native curve omits dimensionality, lowering
 resolves it from the return registers of its bound `sample` calls. All uses across
 owning layers and programme stages must agree, and values/tangents must fit that width. The borrowed native
 view still reports `None`; unused sparse curves remain unresolved.
-
-## Execution policies
 
 ## Execution policies
 
@@ -221,6 +222,15 @@ uses dominant-channel hue, range/value saturation, and zero hue/saturation for a
 range of at most `1e-6`. Alpha passes through unchanged and no gamma conversion
 occurs. Negative RGB follows the same formula; nonfinite inputs or results fail
 explicitly. Exceptional native-game color behavior remains unverified.
+
+Orientation aligns +Z with the supplied normalized forward direction using the
+shortest arc; it does not normalize that input implicitly. Opposite directions
+use a half-turn about +X and a zero forward vector produces identity. Quaternion
+rotation applies the unit-quaternion vector kernel to the authored components
+without normalization; native-game behavior for nonunit inputs remains unverified.
+Axis-angle rotation normalizes its axis and rejects a zero axis. Emitter side/up
+axes use normalized world-transform columns +X/+Z, with those positive unit axes
+as degenerate-basis fallbacks. Nonfinite inputs or results fail explicitly.
 
 `Value` accepts `f32`, `i32`, `bool`, and glam `Vec2`, `Vec3`, `Vec4` and `Quat`
 through `From`, preserving their distinct layouts. Boolean values normalize to

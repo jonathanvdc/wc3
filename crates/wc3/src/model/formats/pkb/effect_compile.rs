@@ -96,6 +96,28 @@ fn error(message: impl Into<String>) -> EffectCompileError {
         message: message.into(),
     }
 }
+fn attribute_default(
+    kind: ValueType,
+    float: Option<[u32; 4]>,
+    integer: Option<[u32; 4]>,
+) -> Result<Value, &'static str> {
+    match kind {
+        ValueType::Float | ValueType::Float2 | ValueType::Float3 | ValueType::Float4 => {
+            Ok(Value::from_words(kind, float.unwrap_or([0; 4])))
+        }
+        ValueType::Bool => {
+            if integer.is_none() && float.is_some_and(|words| words.iter().any(|word| *word != 0)) {
+                return Err("boolean attribute default requires integer-family storage");
+            }
+            match integer.unwrap_or([0; 4])[0] {
+                0 => Ok(Value::from(false)),
+                1 | u32::MAX => Ok(Value::from(true)),
+                _ => Err("boolean attribute default is not canonical zero, one or all-ones"),
+            }
+        }
+        _ => Err("unsupported native attribute default layout"),
+    }
+}
 struct Lowering<'d, 'a> {
     document: &'d Document<'a>,
     options: &'d EffectCompileOptions,
@@ -454,6 +476,7 @@ impl<'a> Document<'a> {
                         EffectLimitation::DeathEvolution,
                         EffectLimitation::InstantLifetime,
                         EffectLimitation::CurveInterpolation,
+                        EffectLimitation::OrientationPolicies,
                     ];
                     if lowering
                         .samplers
@@ -480,7 +503,7 @@ impl Lowering<'_, '_> {
         let d = self.document;
         let object = d.declaration(link, b"CLayerCompileCacheAttrib")?;
         let (mut name, mut kind) = (None, None);
-        let mut words = [0; 4];
+        let (mut float, mut integer) = (None, None);
         d.fields(object, |field, input| {
             match field {
                 0 => name = Some(d.string(input)?),
@@ -488,10 +511,11 @@ impl Lowering<'_, '_> {
                 3 | 4 => {
                     input.word()?;
                 }
-                8 | 9 => {
+                5 | 6 | 8 | 9 => {
                     d.words(input)?;
                 }
-                10 => words = d.words(input)?,
+                7 => integer = Some(d.words(input)?),
+                10 => float = Some(d.words(input)?),
                 _ => return Err(input.error("unsupported compiled-attribute field")),
             }
             Ok(())
@@ -501,13 +525,7 @@ impl Lowering<'_, '_> {
             .required(object, kind)?
             .value_type()
             .ok_or_else(|| error("unsupported attribute value layout"))?;
-        if !matches!(
-            kind,
-            ValueType::Float | ValueType::Float2 | ValueType::Float3 | ValueType::Float4
-        ) {
-            return Err(error("attribute default conversion is supported only for observed floating-point layouts"));
-        }
-        let default = Value::from_words(kind, words);
+        let default = attribute_default(kind, float, integer).map_err(error)?;
         if let Some(index) = self.attribute_slots.get(name) {
             if self.attributes[*index].default != default {
                 return Err(error("same named attribute has conflicting layer defaults"));
@@ -769,7 +787,7 @@ impl Lowering<'_, '_> {
         receiver: Option<u16>,
         externals: &[External],
     ) -> Result<(Callback, Option<ValueType>), EffectCompileError> {
-        use ValueType::{Bool, Context, Float, Float3, Float4, Int, Int2, Int3};
+        use ValueType::{Bool, Context, Float, Float3, Float4, Int, Int2, Int3, Quaternion};
         let bound = receiver
             .map(|slot| {
                 externals
@@ -779,6 +797,16 @@ impl Lowering<'_, '_> {
             })
             .transpose()?;
         let (callback, expected, result) = match name {
+            b"scene.orientation_f_norm" => (Callback::Orientation, vec![Float3], Some(Quaternion)),
+            b"orientation_axisSide" => (Callback::OrientationSide, vec![Quaternion], Some(Float3)),
+            b"rotate" => (Callback::Rotate, vec![Float3, Quaternion], Some(Float3)),
+            b"radians.rotate" => (
+                Callback::RotateAbout,
+                vec![Float3, Float3, Float],
+                Some(Float3),
+            ),
+            b"effect.axisSide" => (Callback::EffectSide, vec![Context], Some(Float3)),
+            b"effect.axisUp" => (Callback::EffectUp, vec![Context], Some(Float3)),
             b"hsv2rgb" => (Callback::HsvToRgb, vec![Float4], Some(Float4)),
             b"rgb2hsv" => (Callback::RgbToHsv, vec![Float4], Some(Float4)),
             b"effect.age" => (Callback::Age, vec![Context], Some(Float)),
@@ -887,6 +915,12 @@ impl Lowering<'_, '_> {
                 | Callback::TransformDirection
                 | Callback::HsvToRgb
                 | Callback::RgbToHsv
+                | Callback::Orientation
+                | Callback::OrientationSide
+                | Callback::Rotate
+                | Callback::RotateAbout
+                | Callback::EffectSide
+                | Callback::EffectUp
         ) && bound.is_some()
         {
             return Err(error(
