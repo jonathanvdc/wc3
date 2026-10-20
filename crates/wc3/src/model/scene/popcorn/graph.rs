@@ -267,6 +267,7 @@ pub(crate) enum Callback {
     Kick,
     Kill,
     Rand,
+    VRand,
     Transform,
     TransformDirection,
     Sample,

@@ -168,7 +168,8 @@ Runtime errors stop advancement until the instance is restarted and leave earlie
 writes observable.
 
 The implemented callback subset covers effect age/running state, event-stream
-and rate generation, condition-triggered events, typed payload construction, routing and extraction, retirement, random intervals,
+and rate generation, condition-triggered events, typed payload construction, routing and extraction, retirement, random intervals
+and isotropic random vectors,
 point transforms with masks 17/19, direction transforms with mask 18, RGB/HSV
 conversion, quaternion orientation and rotation, emitter axes, typed curve
 sampling, and primitive `samplePosition` callbacks. It
@@ -269,6 +270,14 @@ without normalization; native-game behavior for nonunit inputs remains unverifie
 Axis-angle rotation normalizes its axis and rejects a zero axis. Emitter side/up
 axes use normalized world-transform columns +X/+Z, with those positive unit axes
 as degenerate-basis fallbacks. Nonfinite inputs or results fail explicitly.
+
+`vrand` draws unit directions uniformly over a sphere, using the native +Y polar
+axis. Its shell form clamps finite radii below zero, accepts reversed endpoints,
+and samples the cubic radial interval uniformly. Angle draws precede the optional
+radius draw, so the unit form consumes two random values and the shell consumes
+three. Cubic interpolation uses normalized radii to avoid overflow for large
+finite shells. Nonfinite radii fail explicitly. These distributions and bounded
+edge policies do not establish native random-sequence fidelity.
 
 `Value` accepts `f32`, `i32`, `bool`, and glam `Vec2`, `Vec3`, `Vec4` and `Quat`
 through `From`, preserving their distinct layouts. Boolean values normalize to

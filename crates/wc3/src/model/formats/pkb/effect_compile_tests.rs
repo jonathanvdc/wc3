@@ -176,3 +176,39 @@ fn trigger_is_a_typed_free_boolean_fraction_callback() {
         )
         .is_err());
 }
+#[test]
+fn vector_random_has_distinct_unit_and_shell_free_function_abis() {
+    let document = Document::read(FIXTURE).unwrap();
+    let options = EffectCompileOptions::default();
+    let lowering = Lowering {
+        document: &document,
+        options: &options,
+        samplers: vec![],
+        attributes: vec![],
+        attribute_slots: HashMap::new(),
+        curve_widths: HashMap::new(),
+    };
+    for args in [
+        vec![ValueType::Context],
+        vec![ValueType::Float, ValueType::Float, ValueType::Context],
+    ] {
+        assert_eq!(
+            lowering.callback(b"vrand", &args, None, &[]).unwrap(),
+            (Callback::VRand, Some(ValueType::Float3))
+        );
+        assert!(lowering
+            .callback(b"vrand", &args, Some(0), &[External::RandomContext])
+            .is_err());
+    }
+    assert!(lowering
+        .callback(b"vrand", &[ValueType::Float], None, &[])
+        .is_err());
+    assert!(lowering
+        .callback(
+            b"vrand",
+            &[ValueType::Context, ValueType::Context],
+            None,
+            &[]
+        )
+        .is_err());
+}

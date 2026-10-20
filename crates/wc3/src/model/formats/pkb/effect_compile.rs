@@ -937,6 +937,14 @@ impl Lowering<'_, '_> {
                 },
                 None,
             ),
+            b"vrand" => {
+                let expected = if arguments.len() == 1 {
+                    vec![Context]
+                } else {
+                    vec![Float, Float, Context]
+                };
+                (Callback::VRand, expected, Some(Float3))
+            }
             b"rand" => {
                 let kind = arguments
                     .first()
@@ -995,6 +1003,7 @@ impl Lowering<'_, '_> {
                 | Callback::Running
                 | Callback::Kill
                 | Callback::Rand
+                | Callback::VRand
                 | Callback::Transform
                 | Callback::TransformDirection
                 | Callback::HsvToRgb

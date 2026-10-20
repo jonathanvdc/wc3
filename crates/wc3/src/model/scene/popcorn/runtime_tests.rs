@@ -702,3 +702,5 @@ fn trigger_in_initialization_can_route_at_zero_without_warmup_replay() {
 
 #[path = "payload_runtime_tests.rs"]
 mod payload;
+#[path = "vrand_runtime_tests.rs"]
+mod vrand;

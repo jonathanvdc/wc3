@@ -2,7 +2,7 @@
 use super::graph::*;
 use super::payload::{Element as PayloadElement, Storage as PayloadStorage};
 use super::runtime::{EffectLimits, EffectStats, FieldPlanes, RandomState, Spawn};
-use super::{color, orientation, payload};
+use super::{color, orientation, payload, random};
 use super::{Host, Value, ValueType};
 use glam::{Mat4, Quat, Vec3};
 use std::array::from_fn;
@@ -111,6 +111,12 @@ pub(crate) struct ExecutionHost<'a> {
     pub limits: EffectLimits,
     pub stats: &'a mut EffectStats,
     pub order: &'a mut u64,
+}
+fn random_unit(policy: EffectRandom, random: &mut RandomState) -> f32 {
+    match policy {
+        EffectRandom::Midpoint => 0.5,
+        EffectRandom::Counter => (random.next() >> 40) as f32 / 16_777_216.,
+    }
 }
 fn scalar(value: f32) -> Result<Value> {
     if !value.is_finite() {
@@ -391,6 +397,23 @@ impl Host for ExecutionHost<'_> {
                 }
                 None
             }
+            Callback::VRand => {
+                let radii = if a.len() == 1 {
+                    self.context(a[0], true)?;
+                    None
+                } else {
+                    self.context(a[2], true)?;
+                    Some((number(a[0]), number(a[1])))
+                };
+                let first = random_unit(self.graph.random, self.random);
+                let second = random_unit(self.graph.random, self.random);
+                let third = if radii.is_some() {
+                    random_unit(self.graph.random, self.random)
+                } else {
+                    0.
+                };
+                Some(Value::from(random::vector([first, second, third], radii)?))
+            }
             Callback::Rand => {
                 self.context(a[2], true)?;
                 let kind = a[0].kind();
@@ -403,10 +426,7 @@ impl Host for ExecutionHost<'_> {
                     if !a.is_finite() || !b.is_finite() {
                         return Err("random interval endpoints must be finite");
                     }
-                    let u = match self.graph.random {
-                        EffectRandom::Midpoint => 0.5,
-                        EffectRandom::Counter => (self.random.next() >> 40) as f32 / 16_777_216.,
-                    };
+                    let u = random_unit(self.graph.random, self.random);
                     let value = a + (b - a) * u;
                     if !value.is_finite() {
                         return Err("random interval result is not finite");
@@ -463,10 +483,7 @@ impl Host for ExecutionHost<'_> {
                 let EffectSampler::Shape(shape) = &self.graph.samplers[index] else {
                     return Err("samplePosition receiver is not a shape");
                 };
-                let draws = from_fn(|_| match self.graph.random {
-                    EffectRandom::Midpoint => 0.5,
-                    EffectRandom::Counter => (self.random.next() >> 40) as f32 / 16_777_216.,
-                });
+                let draws = from_fn(|_| random_unit(self.graph.random, self.random));
                 let position = shape.sample(draws)?;
                 Some(Value::from(position))
             }
