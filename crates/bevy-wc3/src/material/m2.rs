@@ -1,6 +1,6 @@
 //! Native model texture composition within Bevy lighting.
-use super::compile::{blend, depth, image, rasterization, transform};
-use super::{Blend, SurfacePass};
+use super::compile::{blend, depth, image, rasterization};
+use super::{Blend, SurfacePass, UvConvention};
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::textures::TextureImages;
 use crate::ModelError;
@@ -125,6 +125,7 @@ pub(super) fn compile_m2(
         }
     }
     let mut pass = SurfacePass::default();
+    pass.animation.uv_convention = UvConvention::M2;
     let declaration = surface.declaration();
     let inputs = surface.inputs();
     if matches!(
@@ -160,7 +161,7 @@ pub(super) fn compile_m2(
         pass.material.base_color_texture =
             image(model, first.image.texture, images, &mut pass.diagnostics)?;
         pass.coordinate = u32::try_from(first.coordinates.source).unwrap_or(0);
-        transform(&mut pass, &first.coordinates.transform, model.values());
+        pass.material.uv_transform = first.coordinates.transform.m2_affine(model.values());
         pass.animation.transform = Some(first.coordinates.transform.clone());
         if declaration.batch_flags.bits() & 0x40 == 0 {
             pass.animation.weight = Some(first.contribution);
@@ -208,10 +209,8 @@ pub(super) fn compile_m2(
                     &mut pass.diagnostics,
                 )?;
                 if !environment {
-                    let mut scratch = SurfacePass::default();
-                    transform(&mut scratch, &input.coordinates.transform, model.values());
-                    pass.state.combiner.uv_transform = Mat3::from(scratch.material.uv_transform);
-                    pass.diagnostics.extend(scratch.diagnostics);
+                    pass.state.combiner.uv_transform =
+                        Mat3::from(input.coordinates.transform.m2_affine(model.values()));
                     pass.animation.secondary_transform = Some(input.coordinates.transform.clone());
                 }
             } else if slot == 2 {
@@ -238,10 +237,8 @@ pub(super) fn compile_m2(
                     &mut pass.diagnostics,
                 )?;
                 if !environment {
-                    let mut scratch = SurfacePass::default();
-                    transform(&mut scratch, &input.coordinates.transform, model.values());
-                    pass.state.combiner.third_transform = Mat3::from(scratch.material.uv_transform);
-                    pass.diagnostics.extend(scratch.diagnostics);
+                    pass.state.combiner.third_transform =
+                        Mat3::from(input.coordinates.transform.m2_affine(model.values()));
                     pass.animation.third_transform = Some(input.coordinates.transform.clone());
                 }
             } else if slot == 3 {
@@ -256,10 +253,8 @@ pub(super) fn compile_m2(
                     &images.slot(slot as u32),
                     &mut pass.diagnostics,
                 )?;
-                let mut scratch = SurfacePass::default();
-                transform(&mut scratch, &input.coordinates.transform, model.values());
-                pass.state.combiner.fourth_transform = Mat3::from(scratch.material.uv_transform);
-                pass.diagnostics.extend(scratch.diagnostics);
+                pass.state.combiner.fourth_transform =
+                    Mat3::from(input.coordinates.transform.m2_affine(model.values()));
                 pass.animation.fourth_transform = Some(input.coordinates.transform.clone());
             }
         }

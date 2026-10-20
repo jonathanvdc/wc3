@@ -31,7 +31,11 @@ source `-1` select view-space sphere environment mapping. Nonnegative sources
 select the declared mesh coordinate stream; other negative sources remain
 unsupported. Generated coordinates use the animated/skinned normal and current
 view, bypassing texture transforms. Ordinary UV inputs retain independent
-animated transforms.
+animated transforms. Rest and sampled transforms use
+`(0.5, 0.5) + rotation * scale * (uv + translation - (0.5, 0.5))`,
+including all four supported inputs. Rotation and scale therefore share a
+half-unit pivot, with translation applied before either. Native game fidelity
+remains unverified.
 
 The high-bit shader table interprets entries 0 through 28 and 32 through 35. The [programme inventory](m2-programmes.md) lists every established
 entry, resource requirement and unresolved family. These include environment modulation, masked additive contributions,

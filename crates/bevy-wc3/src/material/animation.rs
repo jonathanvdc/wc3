@@ -1,7 +1,7 @@
 //! Owned surface binding evaluation and authored UV transforms.
 use super::super::{mesh_animation::MeshAnimation, textures::TextureRole};
 use super::wmo::scrolling_transform;
-use super::{HdAnimation, ModelMaterial, SurfaceAnimation};
+use super::{HdAnimation, ModelMaterial, SurfaceAnimation, UvConvention};
 use crate::animation_targets::AnimationTargets;
 use bevy::math::Affine2;
 use bevy::math::{Vec3, Vec4};
@@ -115,6 +115,19 @@ pub(crate) fn mesh_alpha_mode(authored: AlphaMode, opacity: f32) -> AlphaMode {
 }
 
 impl SurfaceAnimation {
+    fn sampled_transform(
+        &self,
+        sample: &SampledAnimation<'_, '_>,
+        transform: &TextureTransform,
+        primary: bool,
+    ) -> Affine2 {
+        match self.uv_convention {
+            UvConvention::M2 => transform.m2_affine(sample),
+            UvConvention::Layered if primary => transform.affine(sample, true),
+            _ => transform.affine(sample, false),
+        }
+    }
+
     /// Records whether the retained slots require instance-owned material updates.
     pub(super) fn prune_static_bindings(&mut self, targets: &AnimationTargets) {
         fn contains<T: PropertyValue>(
@@ -202,7 +215,9 @@ impl SurfaceAnimation {
             let base = self
                 .secondary_transform
                 .as_ref()
-                .map_or(Affine2::IDENTITY, |t| sampled_transform(sample, t));
+                .map_or(Affine2::IDENTITY, |t| {
+                    self.sampled_transform(sample, t, false)
+                });
             let next = Mat3::from(scrolling_transform(
                 base,
                 self.uv_scroll[1],
@@ -215,7 +230,7 @@ impl SurfaceAnimation {
                 .third_transform
                 .as_ref()
                 .map_or(Affine2::IDENTITY, |transform| {
-                    sampled_transform(sample, transform)
+                    self.sampled_transform(sample, transform, false)
                 });
             changed |= replace(
                 &mut material.extension.combiner.third_transform,
@@ -229,7 +244,7 @@ impl SurfaceAnimation {
         if let Some(transform) = &self.fourth_transform {
             changed |= replace(
                 &mut material.extension.combiner.fourth_transform,
-                Mat3::from(sampled_transform(sample, transform)),
+                Mat3::from(self.sampled_transform(sample, transform, false)),
             );
         }
         for (slot, weight) in self.input_weights.iter().enumerate() {
@@ -305,15 +320,7 @@ impl SurfaceAnimation {
                 .transform
                 .as_ref()
                 .map_or(Affine2::IDENTITY, |transform| {
-                    if self.centered_transform {
-                        layered_uv(
-                            sample.animated(&transform.translation),
-                            sample.animated(&transform.rotation),
-                            sample.animated(&transform.scale),
-                        )
-                    } else {
-                        sampled_transform(sample, transform)
-                    }
+                    self.sampled_transform(sample, transform, true)
                 });
             let next = scrolling_transform(
                 next,
@@ -353,9 +360,6 @@ impl SurfaceAnimation {
     }
 }
 
-fn sampled_transform(sample: &SampledAnimation<'_, '_>, transform: &TextureTransform) -> Affine2 {
-    transform.affine(sample, false)
-}
 pub(super) fn layered_uv(translation: Vec3, rotation: Quat, scale: Vec3) -> Affine2 {
     TextureTransform::centered_affine(translation, rotation, scale)
 }

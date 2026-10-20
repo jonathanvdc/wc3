@@ -4,11 +4,10 @@ use super::m2::compile_m2;
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 
 use super::wmo::compile_wmo;
-use super::{layered_uv, Blend, HdAnimation, ModelMaterial, SurfacePass};
+use super::{layered_uv, Blend, HdAnimation, ModelMaterial, SurfacePass, UvConvention};
 use crate::animation_targets::AnimationTargets;
 use crate::error::ModelError;
 use bevy::material::OpaqueRendererMethod;
-use bevy::math::Affine2;
 use bevy::prelude::*;
 use bevy::render::render_resource::Face;
 use std::{array::from_fn, collections::HashMap, fmt::Debug, sync::Arc};
@@ -17,8 +16,7 @@ use wc3::model::materials::mdlx;
 use wc3::model::materials::program::MaterialStep;
 use wc3::model::materials::state::{BlendOperations, Lighting, Operation};
 use wc3::model::profiles::Universal;
-use wc3::model::PropertyValues;
-use wc3::model::{MaterialId, Model, Sampler, Texture, TextureTransform};
+use wc3::model::{MaterialId, Model, Sampler, Texture};
 
 #[cfg(test)]
 pub(crate) fn compile_material_with_images(
@@ -193,28 +191,6 @@ pub(super) fn depth(pass: &mut SurfacePass, test: Operation, write: Operation) {
     pass.state.depth_write = Some(!write.is_bypassed());
 }
 
-pub(super) fn transform(
-    pass: &mut SurfacePass,
-    transform: &TextureTransform,
-    values: &PropertyValues,
-) {
-    let translation = values[transform.translation];
-    let scale = values[transform.scale];
-    let rotation = values[transform.rotation];
-    let (x, y, z) = rotation.to_euler(EulerRot::XYZ);
-    pass.material.uv_transform = Affine2::from_scale_angle_translation(
-        Vec2::new(scale[0], scale[1]),
-        z,
-        Vec2::new(translation[0], translation[1]),
-    );
-    if x.abs() > 1e-5 || y.abs() > 1e-5 {
-        pass.diagnostics.push(RenderIssue::new(
-            RenderDiagnosticKind::Unsupported,
-            "texture rotation outside the UV plane requires generated coordinates",
-        ));
-    }
-}
-
 fn compile_mdlx(
     model: &Model<'_, Universal>,
     surface: &mdlx::MaterialStep,
@@ -270,7 +246,7 @@ fn compile_mdlx(
         model.values()[uv.rotation],
         model.values()[uv.scale],
     );
-    pass.animation.centered_transform = true;
+    pass.animation.uv_convention = UvConvention::Layered;
     pass.animation.transform = Some(uv.clone());
     if raster.controls.sphere_environment {
         pass.diagnostics.push(RenderIssue::new(

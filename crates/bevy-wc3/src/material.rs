@@ -364,6 +364,14 @@ impl MaterialExtension for ModelMaterialExtension {
     }
 }
 
+#[derive(Clone, Copy, Default)]
+enum UvConvention {
+    #[default]
+    Origin,
+    Layered,
+    M2,
+}
+
 /// Owned bindings shared by instances; sampling allocates no texture tables.
 #[derive(Clone, Default)]
 pub(crate) struct SurfaceAnimation {
@@ -389,7 +397,7 @@ pub(crate) struct SurfaceAnimation {
     emission: Option<Property<Vec4>>,
     emission_scale: f32,
     images: Arc<HashMap<Texture, Handle<Image>>>,
-    centered_transform: bool,
+    uv_convention: UvConvention,
     hd: Option<HdAnimation>,
 }
 

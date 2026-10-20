@@ -1,4 +1,4 @@
-use super::super::ModelMaterialKey;
+use super::super::{ModelMaterial, ModelMaterialKey};
 use super::*;
 use crate::material::native_fixtures::m2;
 use bevy::math::Vec3;
@@ -175,5 +175,76 @@ fn shared_primary_and_secondary_coordinates_avoid_duplicate_vertex_streams() {
             .unwrap();
         let pass = compile_m2(&model, &surface.clone().into(), &TextureImages::default()).unwrap();
         assert_eq!(pass.secondary_coordinate, secondary);
+    }
+}
+
+#[test]
+fn all_m2_texture_inputs_share_centered_pretranslation_in_rest_and_sampled_states() {
+    use bevy::math::{Mat2, Quat, Vec2};
+    use std::array::from_fn;
+    use wc3::model::profiles::Universal;
+    use wc3::model::{AnimationProgram, AnimationSample};
+
+    let mut values = SlotValues::default();
+    let shader: m2::Material<'static> = m2::Material {
+        shader: 0x8016,
+        textures: [0, 1, 0, 1]
+            .into_iter()
+            .enumerate()
+            .map(|(index, source)| {
+                let mut input = m2::TextureUnit::construct(&mut values);
+                input.coordinates.source = source;
+                let factor = index as f32 + 1.;
+                input.coordinates.transform.translation =
+                    values.add(Vec3::new(0.12 * factor, -0.07 * factor, 0.));
+                input.coordinates.transform.rotation =
+                    values.add(Quat::from_rotation_z(0.3 * factor));
+                input.coordinates.transform.scale =
+                    values.add(Vec3::new(1.2 + 0.1 * factor, 0.7, 1.));
+                input
+            })
+            .collect(),
+        ..SlotConstruct::construct(&mut values)
+    };
+    let mut builder = Model::<Universal>::builder(ModelMetadata::M2(Default::default()));
+    builder.import_values(&values).unwrap();
+    let model = builder.finish().unwrap();
+    let pass = compile_m2(&model, &shader.clone().into(), &TextureImages::default()).unwrap();
+    let uv = Vec2::new(0.18, 0.83);
+    let expected = from_fn::<_, 4, _>(|index| {
+        let factor = index as f32 + 1.;
+        Vec2::splat(0.5)
+            + Mat2::from_angle(0.3 * factor)
+                * (Vec2::new(1.2 + 0.1 * factor, 0.7)
+                    * (uv + Vec2::new(0.12 * factor, -0.07 * factor) - Vec2::splat(0.5)))
+    });
+    let rest = [
+        pass.material.uv_transform,
+        Affine2::from_mat3(pass.state.combiner.uv_transform),
+        Affine2::from_mat3(pass.state.combiner.third_transform),
+        Affine2::from_mat3(pass.state.combiner.fourth_transform),
+    ];
+    for (transform, expected) in rest.into_iter().zip(expected) {
+        assert!((transform.transform_point2(uv) - expected).length() < 1e-6);
+    }
+    let mut material = ModelMaterial {
+        base: pass.material.clone(),
+        extension: pass.state.clone(),
+    };
+    material.base.uv_transform = Affine2::IDENTITY;
+    material.extension.combiner.uv_transform = Mat3::IDENTITY;
+    material.extension.combiner.third_transform = Mat3::IDENTITY;
+    material.extension.combiner.fourth_transform = Mat3::IDENTITY;
+    let program = AnimationProgram::compile(&model);
+    let sample = program.sample(AnimationSample::default()).unwrap();
+    assert!(pass.animation.apply_to_material(&sample, &mut material));
+    let sampled = [
+        material.base.uv_transform,
+        Affine2::from_mat3(material.extension.combiner.uv_transform),
+        Affine2::from_mat3(material.extension.combiner.third_transform),
+        Affine2::from_mat3(material.extension.combiner.fourth_transform),
+    ];
+    for (transform, expected) in sampled.into_iter().zip(expected) {
+        assert!((transform.transform_point2(uv) - expected).length() < 1e-6);
     }
 }
