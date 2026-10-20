@@ -219,7 +219,11 @@ fn malformed_script_regions_and_instruction_operands_fail_explicitly() {
 }
 
 fn blob_fixture(fields: &[u8], field_count: u16) -> Vec<u8> {
-    let original = fixture(b"CCompilerBlobCache");
+    typed_fixture(b"CCompilerBlobCache", fields, field_count)
+}
+
+fn typed_fixture(name: &[u8], fields: &[u8], field_count: u16) -> Vec<u8> {
+    let original = fixture(name);
     let string_offset = u32::from_le_bytes(original[20..24].try_into().unwrap()) as usize;
     let mut bytes = original[..36].to_vec();
     bytes.extend(((7 + fields.len()) as u32).to_le_bytes());
@@ -266,5 +270,118 @@ fn unknown_duplicate_or_invalid_cache_fields_leave_native_document_intact() {
         let document = Document::read(&bytes).unwrap();
         assert!(document.compiler_blobs().next().unwrap().is_err());
         assert_eq!(document.as_bytes(), bytes);
+    }
+}
+
+fn typed_words(name: &[u8], fields: &[(u16, u32)]) -> Vec<u8> {
+    let payload: Vec<u8> = fields
+        .iter()
+        .flat_map(|(field, word)| field.to_le_bytes().into_iter().chain(word.to_le_bytes()))
+        .collect();
+    typed_fixture(name, &payload, fields.len() as u16)
+}
+
+#[test]
+fn external_declarations_keep_required_layouts_and_sparse_attribute_defaults() {
+    use wc3::model::scene::popcorn::ValueType;
+    let fields = [(0, 1), (1, 0), (2, 31), (3, 4), (4, 4), (6, 2)];
+    let bytes = typed_words(b"CCompilerBlobCacheExternal", &fields);
+    let document = Document::read(&bytes).unwrap();
+    let external = document.external_declaration(1).unwrap();
+    assert_eq!(external.name, b"");
+    assert_eq!(external.type_name, b"CCompilerBlobCacheExternal");
+    assert_eq!(external.native_type.value_type(), Some(ValueType::Float));
+    assert_eq!(external.storage_bytes, 4);
+    assert_eq!(external.meta_type, 4);
+    assert_eq!(external.attributes, 0);
+    assert_eq!(external.access, 2);
+    assert!(document.external_declaration(0).is_err());
+    assert!(document.function_argument(1).is_err());
+    for index in 0..fields.len() {
+        let mut missing = fields.to_vec();
+        missing.remove(index);
+        let bytes = typed_words(b"CCompilerBlobCacheExternal", &missing);
+        assert!(Document::read(&bytes)
+            .unwrap()
+            .external_declaration(1)
+            .is_err());
+    }
+}
+
+#[test]
+fn declaration_unknowns_and_bad_links_fail_the_view_without_losing_the_document() {
+    for fields in [
+        vec![(0, 1), (1, 0), (2, 999), (3, 4), (4, 4), (6, 2), (7, 0)],
+        vec![(0, 1), (0, 1)],
+        vec![(0, u32::MAX)],
+        vec![(63, 0)],
+    ] {
+        let bytes = typed_words(b"CCompilerBlobCacheExternal", &fields);
+        let document = Document::read(&bytes).unwrap();
+        assert!(document.external_declaration(1).is_err());
+        assert_eq!(document.as_bytes(), bytes);
+    }
+    let bytes = typed_words(
+        b"CCompilerBlobCacheExternal",
+        &[(0, 1), (1, 0), (2, 999), (3, 4), (4, 4), (6, 2)],
+    );
+    let document = Document::read(&bytes).unwrap();
+    assert_eq!(
+        document
+            .external_declaration(1)
+            .unwrap()
+            .native_type
+            .value_type(),
+        None
+    );
+}
+
+#[test]
+fn function_binding_defaults_to_external_zero_and_preserves_explicit_unbound() {
+    for symbol_slot in [None, Some(u32::MAX)] {
+        let mut fields = vec![(0, 1), (2, 40), (3, 0)];
+        if let Some(slot) = symbol_slot {
+            fields.push((1, slot));
+        }
+        let bytes = typed_words(b"CCompilerBlobCacheFunctionDef", &fields);
+        let document = Document::read(&bytes).unwrap();
+        let declaration = document.function_declaration(1).unwrap();
+        assert_eq!(declaration.symbol_slot, symbol_slot.unwrap_or(0));
+        assert_eq!(declaration.traits, 40);
+        assert!(declaration.arguments.is_empty());
+    }
+    let bytes = typed_words(b"CCompilerBlobCacheFunctionDef", &[(0, 1), (2, 40)]);
+    assert!(Document::read(&bytes)
+        .unwrap()
+        .function_declaration(1)
+        .is_err());
+    let mut payload = Vec::new();
+    for (field, word) in [(0u16, 1u32), (2, 40), (3, 1)] {
+        payload.extend(field.to_le_bytes());
+        payload.extend(word.to_le_bytes());
+    }
+    payload.extend(2u32.to_le_bytes());
+    let bytes = typed_fixture(b"CCompilerBlobCacheFunctionDef", &payload, 3);
+    assert!(Document::read(&bytes)
+        .unwrap()
+        .function_declaration(1)
+        .is_err());
+}
+
+#[test]
+fn argument_layout_and_entrypoint_range_have_explicit_sparse_defaults() {
+    let bytes = typed_words(b"CCompilerBlobCacheFunctionArg", &[(0, 27), (1, 0)]);
+    let document = Document::read(&bytes).unwrap();
+    let argument = document.function_argument(1).unwrap();
+    assert_eq!(argument.native_type.0, 27);
+    assert_eq!(argument.attributes, 0);
+    let bytes = typed_words(b"CCompilerBlobCacheEntryPoint", &[(0, 1), (2, 21)]);
+    let document = Document::read(&bytes).unwrap();
+    let entry = document.entrypoint(1).unwrap();
+    assert_eq!(entry.begin, 0);
+    assert_eq!(entry.end, 21);
+    for fields in [vec![(0, 1)], vec![(2, 21)], vec![(0, 1), (1, 22), (2, 21)]] {
+        let bytes = typed_words(b"CCompilerBlobCacheEntryPoint", &fields);
+        assert!(Document::read(&bytes).unwrap().entrypoint(1).is_err());
     }
 }

@@ -1,4 +1,6 @@
 //! Portable authored scene features, simulation constraints, and deformation systems.
+/// Compiled particle programmes and their typed host boundary.
+pub mod popcorn;
 /// Region-local illumination and cookie programs.
 pub mod region_lights;
 /// World regions, placements, environment, and illumination.

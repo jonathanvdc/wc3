@@ -5,9 +5,15 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
+mod bindings;
 mod blob;
+mod compile;
 mod script;
+pub use bindings::{
+    EntryPoint, ExternalDeclaration, FunctionArgument, FunctionDeclaration, NativeType,
+};
 pub use blob::CompilerBlob;
+pub use compile::{CompileError, CompileLimits};
 pub use script::{Argument, Instruction, LocatedInstruction, Register, Script};
 
 const MAGIC: [u8; 4] = [0x11, 0x0b, 0x00, 0xca];
