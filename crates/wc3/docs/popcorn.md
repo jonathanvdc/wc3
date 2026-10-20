@@ -64,6 +64,32 @@ The authored coordinate tuple and broadcast declarations remain native data.
 Their presence does not imply coordinate interpretation or broadcast execution.
 Graph inspection does not start layers or emit particles.
 
+`layer_cache()` resolves a layer's field and event declarations while its
+constant/range arrays borrow unaligned native bytes through `PackedArray`.
+Field storage indices remain separate from VM register addresses. Sparse zero
+indices and explicit minus-one sentinels retain their distinct meanings, and
+unknown field types remain data rather than guessed evaluator layouts. Event
+payload elements retain native type, footprint and range controls; their total
+footprint must match the declared event size.
+
+## Inspect renderer and sampler bindings
+
+`renderer()` resolves ordered `RendererInput` and `RendererProperty` declarations.
+Input storage indices address the owning layer's fields, independently of script
+registers. Custom input names and native types remain explicit. Renderer class,
+draw order, input semantic, property type and numeric words have native sparse
+zero defaults. Property numeric values preserve component bits, including boolean
+all-ones and nonfinite float encodings. Missing properties are not synthesized:
+an absent `EnableRendering` differs from a present toggle with zero numeric data.
+
+`named_sampler()` preserves each binding's symbol, native type, usage and checked
+object link. Unsupported shape, turbulence and future payload families remain raw
+links. `curve_sampler()` and `event_stream_sampler()` expose borrowed native arrays
+without applying simulation policy. Curve type, interpolation and quality omissions
+remain `None`; the native view does not infer scalar width from sparse metadata.
+Localized curve names and editor coordinates remain inspection data. Scheduling,
+curve interpolation and unsupported-family diagnostics belong to checked lowering.
+
 ## Execute a checked programme
 
 `Script::compile()` takes ordered external value layouts and resolved function

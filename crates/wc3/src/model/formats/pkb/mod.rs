@@ -9,6 +9,9 @@ mod bindings;
 mod blob;
 mod compile;
 mod graph;
+mod layer;
+mod rendering;
+mod samplers;
 mod script;
 pub use bindings::{
     EntryPoint, ExternalDeclaration, FunctionArgument, FunctionDeclaration, NativeType,
@@ -16,6 +19,9 @@ pub use bindings::{
 pub use blob::CompilerBlob;
 pub use compile::{CompileError, CompileLimits};
 pub use graph::{Effect, EventIndex, Graph, GraphEntry, GraphEvent, GraphLayer, LayerIndex};
+pub use layer::{LayerCache, LayerEvent, LayerField, PayloadField};
+pub use rendering::{Renderer, RendererInput, RendererProperty};
+pub use samplers::{CurveSampler, EventStreamSampler, NamedSampler};
 pub use script::{Argument, Instruction, LocatedInstruction, Register, Script};
 
 const MAGIC: [u8; 4] = [0x11, 0x0b, 0x00, 0xca];
