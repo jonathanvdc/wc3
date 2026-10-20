@@ -59,6 +59,7 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --no-default-light    Omit the capture scene light (isolate model lights)
   --bevy-reference      Add a StandardMaterial sphere at (0, 2, 0)
   --tonemapping MODE    none or tony-mcmapface (default: none)
+  --msaa SAMPLES        1, 2, 4 or 8 samples per pixel (default: 4)
   --fog START,END       Linear Bevy distance fog in world units
   --fog-color R,G,B     Fog color in linear RGB (default: white)
   --illuminance LUX     Scene directional light intensity (default: 5000)
@@ -107,6 +108,7 @@ struct Options {
     bevy_reference: bool,
     no_default_light: bool,
     tonemapping: Tonemapping,
+    msaa: Msaa,
     illuminance: f32,
     fog: Option<(f32, f32)>,
     fog_color: Vec3,
@@ -154,6 +156,7 @@ impl Options {
             bevy_reference: false,
             no_default_light: false,
             tonemapping: Tonemapping::None,
+            msaa: Msaa::Sample4,
             illuminance: 5_000.0,
             fog: None,
             fog_color: Vec3::ONE,
@@ -224,6 +227,15 @@ impl Options {
                         "tony-mcmapface" => Tonemapping::TonyMcMapface,
                         "none" => Tonemapping::None,
                         _ => return Err("tonemapping must be none or tony-mcmapface".into()),
+                    };
+                }
+                "--msaa" => {
+                    options.msaa = match value.as_str() {
+                        "1" => Msaa::Off,
+                        "2" => Msaa::Sample2,
+                        "4" => Msaa::Sample4,
+                        "8" => Msaa::Sample8,
+                        _ => return Err("msaa must be 1, 2, 4 or 8".into()),
                     };
                 }
                 "--fog" => {
@@ -638,7 +650,7 @@ fn capture(options: Options) -> CaptureResult<()> {
             Camera3d::default(),
             options.tonemapping,
             ShadowLodOrigin,
-            Msaa::Sample4,
+            options.msaa,
             RenderTarget::Image(image.clone().into()),
             options.camera(&prepared)?,
         ))

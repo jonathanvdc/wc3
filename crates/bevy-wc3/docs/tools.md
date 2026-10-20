@@ -79,6 +79,8 @@ files. The tool requires a GPU even though it does not open a window. Loading,
 pipeline, or readback failures terminate with an error. Add `--particle-stats`
 to report live sprite populations, dropped births, and skipped simulation time,
 alongside ribbon sections, connected segments, and omitted sections.
+External programmes report living controllers and particles, extracted sprites,
+omissions and checked execution errors; an execution error terminates the capture.
 These counters help distinguish simulation and visibility problems; inspect the
 images to assess appearance.
 
@@ -166,6 +168,9 @@ variants or renderer revisions. Inspect placement, motion, color and alpha,
 atlas frames, geometry, and blending in the resulting images. Compilation or a
 nonempty image alone does not establish rendering fidelity; controlled fixtures
 also do not establish equivalence to Warcraft III.
+
+`--msaa 1`, `2`, `4` or `8` selects the samples per pixel; the default is four.
+Keep the sample count fixed alongside the camera and viewport.
 
 Use `--fog START,END --fog-color R,G,B` to check linear Bevy distance fog in
 world units with a linear RGB color. Keep fog distances, tonemapping, and lighting

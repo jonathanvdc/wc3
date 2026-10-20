@@ -12,10 +12,43 @@ pose. The tool warms the pose with eight synchronized frames, then measures `N`
 frames while keeping simulation time fixed. It writes a timing CSV beside the
 PNG and prints median and p95 wall times.
 
+Use `--msaa 1`, `2`, `4` or `8` to select the sample count; the default is four.
+Keep this count, tone mapping, viewport, camera and scene lighting fixed when
+comparing renderers. Match simulation steps as well as the final time: floating
+accumulators can produce different populations at an emission boundary when
+given different step sequences.
+
 Each sample includes CPU update, render submission, and waiting for the submitted
 GPU work to finish. Loading, screenshot readback, and file writes are excluded.
 Use the [benchmark guide](../../../benchmarks/README.md#host-gpu-measurements)
 for synthetic asset export and instructions for comparing renderer revisions.
+
+## Measure effect preparation
+
+Two opt-in CPU microbenchmarks isolate particle preparation and paused view
+ordering. Use a release build, including optimized dependencies, and run the
+benchmarks without other compilation or rendering work:
+
+```sh
+cargo test --release -p bevy-wc3 --lib \
+  benchmark_compact_samples_against_cpu_corner_transport -- \
+  --ignored --nocapture --test-threads=1
+cargo test --release -p bevy-wc3 --lib benchmark_paused_view_order_cache -- \
+  --ignored --nocapture --test-threads=1
+```
+
+The compact-sample benchmark compares 8,192 head-and-tail particles with the
+indexed CPU corner implementation retained as a test oracle. It reports CPU
+corner-plus-sort time, compact sampling alone, compact sampling with the actual
+view sort, and record payload sizes. GPU submission and upload are excluded. The
+view-order benchmark compares repeated ordering with cache hits over 120 paused
+frames and two cameras, including the index payload that would require upload.
+It excludes natural-order and source-record uploads.
+
+These measurements isolate CPU kernels. They exclude GPU execution, frame
+scheduling, asset loading and birth simulation, so use completed-frame captures
+or pipelined workloads to assess an application's frame budget. Run matched
+captures before interpreting an optimization as equivalent visual work.
 
 ## Measure character crowds
 
