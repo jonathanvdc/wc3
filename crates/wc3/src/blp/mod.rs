@@ -14,6 +14,11 @@
 //! `encode_image` validates settings and mipmaps and creates a `Blp<'static>`
 //! with owned buffers from RGBA pixels.
 //!
+//! BLP2 BC5 payloads use native selector 11 and decode two independent unsigned
+//! channels to `[red, green, 0, 255]`. Decoding preserves these numeric channels
+//! without reconstructing a normal's third component. Pixel encoding supports
+//! DXT1, DXT3 and DXT5; BC5 container payloads can be preserved and written.
+//!
 //! # Editing and ownership
 //!
 //! Mipmaps, shared JPEG prefixes, and unused byte regions use

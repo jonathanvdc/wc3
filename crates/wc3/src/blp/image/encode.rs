@@ -1,8 +1,9 @@
 //! RGBA image encoding for BLP0, BLP1, and BLP2.
 use super::{assemble, bgra, dxt, indexed, jpeg, mipmaps};
-use crate::blp::{Blp, DxtFormat, MIPMAP_SLOTS};
-pub use image::imageops::FilterType as MipmapFilter;
+use crate::blp::{Blp, MIPMAP_SLOTS};
 use image::RgbaImage;
+pub use image::imageops::FilterType as MipmapFilter;
+use squish::Format;
 use std::{error::Error, fmt};
 
 /// BLP container version for indexed and JPEG encodings.
@@ -206,18 +207,11 @@ impl Blp<'static> {
                     EncodeFormat::Jpeg { alpha, quality, .. } => {
                         jpeg::encode(image, u8::from(alpha) * 8, quality)?
                     }
-                    EncodeFormat::Dxt1 { alpha } => dxt::encode(
-                        image,
-                        DxtFormat::Dxt1,
-                        u8::from(alpha),
-                        options.dxt_algorithm,
-                    ),
-                    EncodeFormat::Dxt3 => {
-                        dxt::encode(image, DxtFormat::Dxt3, 4, options.dxt_algorithm)
+                    EncodeFormat::Dxt1 { alpha } => {
+                        dxt::encode(image, Format::Bc1, u8::from(alpha), options.dxt_algorithm)
                     }
-                    EncodeFormat::Dxt5 => {
-                        dxt::encode(image, DxtFormat::Dxt5, 8, options.dxt_algorithm)
-                    }
+                    EncodeFormat::Dxt3 => dxt::encode(image, Format::Bc2, 4, options.dxt_algorithm),
+                    EncodeFormat::Dxt5 => dxt::encode(image, Format::Bc3, 8, options.dxt_algorithm),
                     EncodeFormat::Bgra => bgra::encode(image),
                     EncodeFormat::Indexed { .. } => unreachable!(),
                 });

@@ -2,6 +2,7 @@
 use super::DecodeError;
 #[cfg(feature = "blp-encode")]
 use super::DxtAlgorithm;
+#[cfg(feature = "blp-decode")]
 use crate::blp::DxtFormat;
 #[cfg(feature = "blp-encode")]
 use image::RgbaImage;
@@ -45,27 +46,34 @@ fn colors(bytes: &[u8], four_color: bool, alpha_enabled: bool) -> [[u8; 4]; 4] {
 }
 
 #[cfg(feature = "blp-decode")]
-fn alpha_bc3(bytes: &[u8], pixel: usize) -> u8 {
-    let a0 = bytes[0];
-    let a1 = bytes[1];
-    let mut table = [0u8; 8];
-    table[0] = a0;
-    table[1] = a1;
-    if a0 > a1 {
-        for (i, alpha) in table.iter_mut().enumerate().skip(2) {
-            *alpha = (((8 - i) * usize::from(a0) + (i - 1) * usize::from(a1)) / 7) as u8;
+struct Channel {
+    table: [u8; 8],
+    indices: u64,
+}
+#[cfg(feature = "blp-decode")]
+impl Channel {
+    fn new(bytes: &[u8]) -> Self {
+        let (first, second) = (bytes[0], bytes[1]);
+        let mut table = [first, second, 0, 0, 0, 0, 0, 255];
+        if first > second {
+            for (index, value) in table.iter_mut().enumerate().skip(2) {
+                *value = (((8 - index) * usize::from(first) + (index - 1) * usize::from(second))
+                    / 7) as u8;
+            }
+        } else {
+            for (index, value) in table.iter_mut().enumerate().take(6).skip(2) {
+                *value = (((6 - index) * usize::from(first) + (index - 1) * usize::from(second))
+                    / 5) as u8;
+            }
         }
-    } else {
-        for (i, alpha) in table.iter_mut().enumerate().take(6).skip(2) {
-            *alpha = (((6 - i) * usize::from(a0) + (i - 1) * usize::from(a1)) / 5) as u8;
-        }
-        table[6] = 0;
-        table[7] = 255;
+        let indices = u64::from_le_bytes([
+            bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], 0, 0,
+        ]);
+        Self { table, indices }
     }
-    let bits = u64::from_le_bytes([
-        bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], 0, 0,
-    ]);
-    table[((bits >> (3 * pixel)) & 7) as usize]
+    fn sample(&self, pixel: usize) -> u8 {
+        self.table[((self.indices >> (3 * pixel)) & 7) as usize]
+    }
 }
 
 #[cfg(feature = "blp-decode")]
@@ -96,6 +104,9 @@ pub(super) fn decode_into(
                 let len = source.len().min(block_size);
                 block[..len].copy_from_slice(&source[..len]);
             }
+            let red_or_alpha = matches!(format, DxtFormat::Dxt5 | DxtFormat::Bc5)
+                .then(|| Channel::new(&block[..8]));
+            let green = (format == DxtFormat::Bc5).then(|| Channel::new(&block[8..]));
             let color_start = if format == DxtFormat::Dxt1 { 0 } else { 8 };
             let colors = colors(
                 &block[color_start..color_start + 4],
@@ -115,13 +126,28 @@ pub(super) fn decode_into(
                         continue;
                     }
                     let index = local_y * 4 + local_x;
-                    let color = colors[((indices >> (2 * index)) & 3) as usize];
+                    let color = if let Some(green) = &green {
+                        [
+                            red_or_alpha
+                                .as_ref()
+                                .expect("BC5 red channel")
+                                .sample(index),
+                            green.sample(index),
+                            0,
+                            255,
+                        ]
+                    } else {
+                        colors[((indices >> (2 * index)) & 3) as usize]
+                    };
                     let dst = (y * width + x) * 4;
                     pixels[dst..dst + 4].copy_from_slice(&color);
                     if format == DxtFormat::Dxt3 {
                         pixels[dst + 3] = ((block[index / 2] >> ((index % 2) * 4)) & 15) * 17;
                     } else if format == DxtFormat::Dxt5 {
-                        pixels[dst + 3] = alpha_bc3(&block[..8], index);
+                        pixels[dst + 3] = red_or_alpha
+                            .as_ref()
+                            .expect("BC3 alpha channel")
+                            .sample(index);
                     }
                 }
             }
@@ -133,15 +159,10 @@ pub(super) fn decode_into(
 #[cfg(feature = "blp-encode")]
 pub(super) fn encode(
     image: &RgbaImage,
-    format: DxtFormat,
+    format: Format,
     alpha_bits: u8,
     algorithm: DxtAlgorithm,
 ) -> Vec<u8> {
-    let format = match format {
-        DxtFormat::Dxt1 => Format::Bc1,
-        DxtFormat::Dxt3 => Format::Bc2,
-        DxtFormat::Dxt5 => Format::Bc3,
-    };
     let mut pixels = image.as_raw().clone();
     if alpha_bits == 0 {
         for pixel in pixels.as_chunks_mut::<4>().0.iter_mut() {

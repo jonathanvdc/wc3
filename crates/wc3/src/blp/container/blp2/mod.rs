@@ -1,5 +1,5 @@
 //! BLP2 container types.
-use crate::blp::{Palette, MIPMAP_SLOTS};
+use crate::blp::{MIPMAP_SLOTS, Palette};
 
 mod codec;
 mod ownership;
@@ -18,7 +18,7 @@ pub struct Blp2Header {
     pub mipmap_flags: u8,
 }
 
-/// Supported BLP2 DXT block formats.
+/// Supported BLP2 block compression formats.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DxtFormat {
     /// BC1 blocks with opaque or one-bit alpha.
@@ -27,6 +27,8 @@ pub enum DxtFormat {
     Dxt3,
     /// BC3 blocks with interpolated alpha.
     Dxt5,
+    /// BC5 blocks containing independent unsigned red and green channels.
+    Bc5,
 }
 
 /// BLP2 encoding metadata with borrowed or owned byte storage. The unused region is retained

@@ -4,7 +4,7 @@ use crate::blp::container::io::{
     append_u32, byte, checked_u32, palette, read_mips, slice, validate_dimensions, validate_write,
     word, write_mips,
 };
-use crate::blp::{ReadError, ReadErrorKind, WriteError, PALETTE_BYTES};
+use crate::blp::{PALETTE_BYTES, ReadError, ReadErrorKind, WriteError};
 use std::borrow::Cow;
 
 const REGION: usize = 148;
@@ -79,6 +79,7 @@ impl<'a> Blp2Content<'a> {
                     0 => DxtFormat::Dxt1,
                     1 => DxtFormat::Dxt3,
                     7 => DxtFormat::Dxt5,
+                    11 => DxtFormat::Bc5,
                     value => {
                         return Err(ReadError::new(
                             10,
@@ -116,6 +117,7 @@ impl<'a> Blp2Content<'a> {
                     DxtFormat::Dxt1 => 0,
                     DxtFormat::Dxt3 => 1,
                     DxtFormat::Dxt5 => 7,
+                    DxtFormat::Bc5 => 11,
                 },
             )),
             Self::Bgra {

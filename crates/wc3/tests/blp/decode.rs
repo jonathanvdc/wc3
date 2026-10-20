@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 use std::{env, fs, path::Path};
 use wc3::blp::{
-    register_decoding_hook, Blp, Blp1, Blp1Content, Blp1Header, Blp2, Blp2Content, Blp2Header,
-    BlpDecoder, DxtFormat,
+    Blp, Blp1, Blp1Content, Blp1Header, Blp2, Blp2Content, Blp2Header, BlpDecoder, DxtFormat,
+    register_decoding_hook,
 };
 
 #[test]
@@ -253,4 +253,82 @@ fn local_blp_corpus_decodes_all_present_mips() {
     let mut count = 0;
     visit(Path::new(&directory), &mut count);
     assert!(count > 0, "WC3_FIXTURES contains no BLP files");
+}
+
+#[test]
+fn bc5_decodes_independent_red_green_channels_and_preserves_native_selector() {
+    let palette = [0; 1024];
+    let mut block = [0u8; 16];
+    block[..2].copy_from_slice(&[210, 70]);
+    block[8..10].copy_from_slice(&[40, 190]);
+    let red_indices = (0..16).fold(0u64, |bits, pixel| {
+        bits | ((pixel % 8) as u64) << (3 * pixel)
+    });
+    let green_indices = (0..16).fold(0u64, |bits, pixel| {
+        bits | ((7 - pixel % 8) as u64) << (3 * pixel)
+    });
+    block[2..8].copy_from_slice(&red_indices.to_le_bytes()[..6]);
+    block[10..16].copy_from_slice(&green_indices.to_le_bytes()[..6]);
+    let blp = blp2(
+        &block,
+        Blp2Content::Dxt {
+            format: DxtFormat::Bc5,
+            palette_region: (&palette).into(),
+        },
+        0,
+        4,
+        4,
+    );
+    let bytes = blp.write().unwrap();
+    assert_eq!(bytes[10], 11);
+    let decoded = Blp::read(&bytes).unwrap();
+    assert_eq!(decoded.write().unwrap(), bytes);
+    let image = decoded.decode_mip(0).unwrap();
+    let reds = [210, 70, 190, 170, 150, 130, 110, 90];
+    let greens = [40, 190, 70, 100, 130, 160, 0, 255];
+    for pixel in 0..16 {
+        assert_eq!(
+            image.get_pixel(pixel % 4, pixel / 4).0,
+            [
+                reds[pixel as usize % 8],
+                greens[7 - pixel as usize % 8],
+                0,
+                255
+            ]
+        );
+    }
+}
+
+#[test]
+fn bc5_clips_edge_blocks_without_reconstructing_or_reordering_channels() {
+    let palette = [0; 1024];
+    let mut blocks = [0u8; 32];
+    blocks[0] = 10;
+    blocks[8] = 30;
+    blocks[16] = 20;
+    blocks[24] = 40;
+    let image = blp2(
+        &blocks,
+        Blp2Content::Dxt {
+            format: DxtFormat::Bc5,
+            palette_region: (&palette).into(),
+        },
+        0,
+        3,
+        5,
+    )
+    .decode_mip(0)
+    .unwrap();
+    for y in 0..5 {
+        for x in 0..3 {
+            assert_eq!(
+                image.get_pixel(x, y).0,
+                if y < 4 {
+                    [10, 30, 0, 255]
+                } else {
+                    [20, 40, 0, 255]
+                }
+            );
+        }
+    }
 }
