@@ -84,8 +84,11 @@ all-ones and nonfinite float encodings. Missing properties are not synthesized:
 an absent `EnableRendering` differs from a present toggle with zero numeric data.
 
 `named_sampler()` preserves each binding's symbol, native type, usage and checked
-object link. Unsupported shape, turbulence and future payload families remain raw
-links. `curve_sampler()` and `event_stream_sampler()` expose borrowed native arrays
+object link. `shape_sampler()` exposes primitive parameters and preserves sparse
+omissions, raw authoring coordinates, localized names and editor metadata. Shape
+defaults and coordinate conversion belong to checked lowering. Turbulence and
+future payload families remain raw links. `curve_sampler()` and
+`event_stream_sampler()` expose borrowed native arrays
 without applying simulation policy. Curve type, interpolation and quality omissions
 remain `None`; the native view does not infer scalar width from sparse metadata.
 Localized curve names and editor coordinates remain inspection data. Scheduling,
@@ -139,7 +142,12 @@ before `start()` when initialization must observe them. `set_emitting(false)`
 reversibly suppresses renderer-bearing births while structural controllers and
 accumulators advance, so hidden intervals do not accumulate a later burst.
 `stop()` disables further generation and retires pure spawners while existing
-visible particles and authored controllers finish. Restarting clears the live
+visible particles and authored controllers finish. An authored positive-infinite
+inverse lifetime denotes an instantaneous particle: initialization and its routes
+run normally, zero-delta warmup leaves it pending, and its first positive interval
+retires it after any requested terminal evolution. This is an explicit scheduling
+policy rather than a `0 * infinity` NaN dependency. NaN, negative-infinite and
+negative inverse lifetimes remain errors. Restarting clears the live
 population and simulation counters while retaining allocated storage.
 
 Events retain subframe birth times, fan-out ownership and invocation-specific
@@ -153,14 +161,18 @@ writes observable.
 The implemented callback subset covers effect age/running state, event-stream
 and rate generation, event initialization/kick, retirement, random intervals,
 point transforms with masks 17/19, direction transforms with mask 18, RGB/HSV
-conversion, and typed curve sampling. It executes the complete acquired HD
-LichAttack graph, including invisible controllers and
-its routed child layer. Broadcasts, spatial queries, unsupported payload
+conversion, typed curve sampling, and primitive `samplePosition` callbacks. It
+executes the complete acquired HD LichAttack graph, including invisible
+controllers and its routed child layer. Broadcasts, spatial queries, unsupported payload
 operations, other transform masks, unknown callbacks and unresolved sampler
 families fail explicitly. When a native curve omits dimensionality, lowering
-resolves it from the return registers of its bound `sample` calls. All uses across owning layers and programme
-stages must agree, and values/tangents must fit that width. The borrowed native
+resolves it from the return registers of its bound `sample` calls. All uses across
+owning layers and programme stages must agree, and values/tangents must fit that width. The borrowed native
 view still reports `None`; unused sparse curves remain unresolved.
+
+## Execution policies
+
+## Execution policies
 
 `EffectCompileOptions` makes stage selection, random policy and event-stream
 duration interpretation explicit. The original deterministic random stream,
@@ -171,7 +183,8 @@ authored initializer; other fields begin at zero. Native range metadata does not
 trigger invented randomization. Authored death-step controls decide whether
 terminal-interval evolution runs. `limitations()` exposes these policies and
 uncertainties. Native coordinate metadata remains inspectable in the document;
-the compiler does not infer an additional coordinate conversion. Renderer
+the compiler does not infer a global coordinate conversion from that tuple.
+Shape authoring properties have their separate explicit lowering boundary. Renderer
 descriptors preserve authored properties and stream bindings; a graphics adapter
 must diagnose unsupported enabled features before drawing.
 
@@ -182,6 +195,25 @@ any embedded scale; independently verified scale filtering, inverse transforms
 and populated payload frames remain unsupported. A graphics adapter using a
 fixed axis conversion should keep that conversion separate from authored T/Q
 filters and apply it once when extracting positions.
+
+Primitive sampling supports boxes, spheres, complex ellipsoids, cylinders,
+capsules and cones in surface or volume mode. Lowering applies explicit sparse
+defaults and converts shape authoring properties once into the native simulation
+frame: position maps `(x, y, z)` to `(x, -z, y)`, box dimensions and ellipsoid scale
+swap Y/Z, and XYZ-degree rotations use the corresponding basis conjugation. The
+borrowed native view preserves the original properties. This authoring-frame
+interpretation remains unverified against the game client.
+
+Sphere volume uses shell-volume weighting; surface shells use area weighting.
+Box faces use their areas, with volume sampling for line/point degeneracies.
+Cylinder surfaces include side walls only; volume sampling uses a
+radial approximation for nonzero inner radius. Capsules combine sphere and
+cylinder portions by their surface/volume weights. Cones omit the base cap in
+surface mode and ignore inner radius. Only complex ellipsoids apply nonuniform
+scale and the hemisphere fold; other primitives ignore that hemisphere toggle.
+Fixed six-draw random consumption and sampling distributions remain explicit
+fidelity limitations. Zero-radius
+and zero-height shapes are legal; mesh shapes and other domain selectors fail.
 
 Color conversion treats hue as turns, wraps hue, clamps HSV saturation to 0–1,
 and clamps HSV value below zero while retaining HDR values above one. RGB-to-HSV

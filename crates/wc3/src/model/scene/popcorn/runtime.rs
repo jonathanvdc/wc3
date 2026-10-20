@@ -1,6 +1,7 @@
 //! Bounded reusable lifecycle storage and deterministic event-time scheduling.
 use super::callbacks::{ExecutionHost, Scratch};
 use super::graph::*;
+use super::lifetime::Lifetime;
 use super::{Failure, State, Value, ValueType};
 use std::array::from_fn;
 use std::cmp::Ordering;
@@ -541,12 +542,16 @@ impl EffectInstance {
                 let slot = self.active[index];
                 let particle = &mut self.particles[slot];
                 let layer = &program.inner.layers[particle.layer.0 as usize];
-                let inverse = f64::from(f32::from_bits(
-                    self.fields.read(layer.inverse_life, slot)[0],
-                ));
-                let life = (f64::from(f32::from_bits(self.fields.read(layer.life, slot)[0]))
-                    + (end - particle.cursor) * inverse)
-                    .min(1.0) as f32;
+                let lifetime = Lifetime::read(
+                    f32::from_bits(self.fields.read(layer.life, slot)[0]),
+                    f32::from_bits(self.fields.read(layer.inverse_life, slot)[0]),
+                )
+                .map_err(|message| EffectRuntimeError {
+                    layer: Some(particle.layer),
+                    offset: None,
+                    message,
+                })?;
+                let life = lifetime.advance(end - particle.cursor);
                 particle.cursor = end;
                 self.fields
                     .write(layer.life, slot, [life.to_bits(), 0, 0, 0]);
@@ -640,20 +645,18 @@ impl EffectInstance {
         self.stats.spawned = self.stats.spawned.saturating_add(1);
         let life = f32::from_bits(self.fields.read(layer.life, slot)[0]);
         let inverse = f32::from_bits(self.fields.read(layer.inverse_life, slot)[0]);
-        if !life.is_finite() || !inverse.is_finite() || inverse < 0. {
-            return Err(failure(
-                "particle lifetime controls must be finite and nonnegative",
-            ));
-        }
+        Lifetime::read(life, inverse).map_err(|message| EffectRuntimeError {
+            layer: Some(spawn.layer),
+            offset: None,
+            message,
+        })?;
         if life >= 1.0 {
             self.retire_at(self.active.len() - 1);
             return Ok(());
         }
-        if end > spawn.time {
-            if self.evolve(program, slot, end, inputs, work)? {
-                let index = self.active.len() - 1;
-                self.retire_at(index);
-            }
+        if end > spawn.time && self.evolve(program, slot, end, inputs, work)? {
+            let index = self.active.len() - 1;
+            self.retire_at(index);
         }
         Ok(())
     }
@@ -666,17 +669,19 @@ impl EffectInstance {
         work: &mut usize,
     ) -> Result<bool, EffectRuntimeError> {
         let particle = &mut self.particles[slot];
-        let layer = &program.inner.layers[particle.layer.0 as usize];
+        let layer_id = particle.layer;
+        let layer = &program.inner.layers[layer_id.0 as usize];
         let delta = (end - particle.cursor).max(0.);
         particle.cursor = end;
         let inverse = f32::from_bits(self.fields.read(layer.inverse_life, slot)[0]);
         let mut life = f32::from_bits(self.fields.read(layer.life, slot)[0]);
-        if !inverse.is_finite() || inverse < 0. || !life.is_finite() {
-            return Err(failure(
-                "particle lifetime controls must be finite and nonnegative",
-            ));
-        }
-        life = (life + delta as f32 * inverse).min(1.);
+        life = Lifetime::read(life, inverse)
+            .map_err(|message| EffectRuntimeError {
+                layer: Some(layer_id),
+                offset: None,
+                message,
+            })?
+            .advance(delta);
         self.fields
             .write(layer.life, slot, [life.to_bits(), 0, 0, 0]);
         if *work >= self.limits.work_per_update {
@@ -690,9 +695,15 @@ impl EffectInstance {
             }
         }
         let life = f32::from_bits(self.fields.read(layer.life, slot)[0]);
-        if !life.is_finite() {
-            return Err(failure("particle programme produced nonfinite lifetime"));
-        }
+        Lifetime::read(
+            life,
+            f32::from_bits(self.fields.read(layer.inverse_life, slot)[0]),
+        )
+        .map_err(|message| EffectRuntimeError {
+            layer: Some(layer_id),
+            offset: None,
+            message,
+        })?;
         Ok(life >= 1.)
     }
     fn execute(

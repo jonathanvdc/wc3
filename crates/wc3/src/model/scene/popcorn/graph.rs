@@ -1,4 +1,5 @@
 //! Immutable effect programmes and renderer-independent storage bindings.
+use super::shapes::Shape;
 use super::{Program, Value, ValueType};
 use glam::Mat4;
 use std::sync::Arc;
@@ -136,6 +137,14 @@ pub enum EffectLimitation {
     FieldInitialization,
     /// Authored death-step controls select whether evolution runs on the terminal interval.
     DeathEvolution,
+    /// Authored positive-infinite inverse lifetimes retire on the first positive interval, preserving zero-delta warmup.
+    InstantLifetime,
+    /// Sparse primitive parameters use explicit defaults whose client fidelity remains unverified.
+    ShapeDefaults,
+    /// Shape authoring coordinates convert once into the simulation frame by an explicit convention.
+    ShapeCoordinates,
+    /// Primitive distributions and fixed random consumption are original policies without client trace verification.
+    ShapeSampling,
     /// Native interpolation selector is restricted to the observed zero mode.
     CurveInterpolation,
 }
@@ -247,6 +256,7 @@ pub(crate) enum Callback {
     Sample,
     HsvToRgb,
     RgbToHsv,
+    SamplePosition,
 }
 #[derive(Debug)]
 pub(crate) struct EventRoute {
@@ -261,4 +271,5 @@ pub(crate) enum EffectSampler {
         tangents: Box<[[f32; 4]]>,
     },
     Events(Box<[f32]>),
+    Shape(Shape),
 }

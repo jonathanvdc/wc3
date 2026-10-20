@@ -250,3 +250,6 @@ pub use graph::{
     EffectRendererInput, EffectRendererProperty, EventStreamDuration, SceneInputs,
 };
 pub use runtime::{EffectInstance, EffectLimits, EffectRuntimeError, EffectStats, ParticleView};
+
+mod lifetime;
+pub(crate) mod shapes;

@@ -7,13 +7,16 @@ use crate::model::common::PackedArray;
 use crate::model::scene::popcorn::graph::{
     BoundProgram, Callback, EffectGraph, EffectSampler, EventRoute, External,
 };
+use crate::model::scene::popcorn::shapes::{Domain, Primitive, Shape};
 use crate::model::scene::popcorn::{
     EffectAttribute, EffectEntry, EffectField, EffectFieldId, EffectLayer, EffectLayerId,
     EffectLimitation, EffectProgram, EffectRandom, EffectRenderer, EffectRendererInput,
     EffectRendererProperty, EventStreamDuration, Function as Signature, Value, ValueType,
 };
+use glam::{Quat, Vec3};
 use std::collections::HashMap;
 use std::error::Error;
+use std::f32::consts::FRAC_PI_2;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::sync::Arc;
 
@@ -440,18 +443,33 @@ impl<'a> Document<'a> {
                     .collect(),
                 renderers: renderers.into_boxed_slice(),
                 attributes: lowering.attributes.into_boxed_slice(),
-                samplers: lowering.samplers.into_boxed_slice(),
-                limitations: Box::new([
-                    EffectLimitation::RandomSequence,
-                    EffectLimitation::BirthScheduling,
-                    EffectLimitation::StreamDuration,
-                    EffectLimitation::CoordinateMetadata,
-                    EffectLimitation::TransformMask,
-                    EffectLimitation::FieldInitialization,
-                    EffectLimitation::DeathEvolution,
-                    EffectLimitation::CurveInterpolation,
-                ]),
+                limitations: {
+                    let mut limitations = vec![
+                        EffectLimitation::RandomSequence,
+                        EffectLimitation::BirthScheduling,
+                        EffectLimitation::StreamDuration,
+                        EffectLimitation::CoordinateMetadata,
+                        EffectLimitation::TransformMask,
+                        EffectLimitation::FieldInitialization,
+                        EffectLimitation::DeathEvolution,
+                        EffectLimitation::InstantLifetime,
+                        EffectLimitation::CurveInterpolation,
+                    ];
+                    if lowering
+                        .samplers
+                        .iter()
+                        .any(|sampler| matches!(sampler, EffectSampler::Shape(_)))
+                    {
+                        limitations.extend([
+                            EffectLimitation::ShapeDefaults,
+                            EffectLimitation::ShapeCoordinates,
+                            EffectLimitation::ShapeSampling,
+                        ]);
+                    }
+                    limitations.into_boxed_slice()
+                },
                 duration: options.stream_duration,
+                samplers: lowering.samplers.into_boxed_slice(),
                 random: options.random,
             }),
         })
@@ -562,6 +580,42 @@ impl Lowering<'_, '_> {
                     values: pack(&curve.values)?,
                     tangents: pack(&curve.tangents)?,
                 }
+            }
+            5 => {
+                let native = self.document.shape_sampler(link)?;
+                let primitive = match native.shape_type.unwrap_or(0) {
+                    0 => Primitive::Box,
+                    1 => Primitive::Sphere,
+                    2 => Primitive::Ellipsoid,
+                    3 => Primitive::Cylinder,
+                    4 => Primitive::Capsule,
+                    5 => Primitive::Cone,
+                    _ => return Err(error("unsupported native shape primitive")),
+                };
+                let domain = match native.dimensionality.unwrap_or(2) {
+                    2 => Domain::Surface,
+                    3 => Domain::Volume,
+                    _ => return Err(error("unsupported native shape sampling domain")),
+                };
+                // PKB editor properties use a distinct authoring frame. Convert once here.
+                let author_to_native = Quat::from_rotation_x(FRAC_PI_2);
+                let swap = |value: Vec3| Vec3::new(value.x, value.z, value.y);
+                let shape = Shape {
+                    primitive,
+                    domain,
+                    dimensions: swap(native.box_dimensions.unwrap_or(Vec3::splat(0.5))),
+                    radius: native.radius.unwrap_or(1.),
+                    inner_radius: native.inner_radius.unwrap_or(0.),
+                    height: native.height.unwrap_or(0.),
+                    hemisphere: native.hemisphere.unwrap_or(false),
+                    scale: swap(native.nonuniform_scale.unwrap_or(Vec3::ONE)),
+                    translation: author_to_native * native.position.unwrap_or(Vec3::ZERO),
+                    rotation: author_to_native
+                        * Shape::rotation(native.euler_degrees.unwrap_or(Vec3::ZERO))
+                        * author_to_native.conjugate(),
+                };
+                shape.validate().map_err(error)?;
+                EffectSampler::Shape(shape)
             }
             4 => {
                 let stream = self.document.event_stream_sampler(link)?;
@@ -792,6 +846,15 @@ impl Lowering<'_, '_> {
                 vec![Float3, Int, Context],
                 Some(Float3),
             ),
+            b"samplePosition" => {
+                let Some(External::Sampler(index)) = bound else {
+                    return Err(error("samplePosition requires a bound shape sampler"));
+                };
+                if !matches!(self.samplers[index], EffectSampler::Shape(_)) {
+                    return Err(error("samplePosition requires a shape sampler"));
+                }
+                (Callback::SamplePosition, vec![Context], Some(Float3))
+            }
             b"sample" => {
                 let Some(External::Sampler(index)) = bound else {
                     return Err(error("sample requires a bound sampler"));

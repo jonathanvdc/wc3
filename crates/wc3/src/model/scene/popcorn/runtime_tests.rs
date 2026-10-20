@@ -369,7 +369,7 @@ fn fanout_spawns_distinct_particles_and_capacity_drops_do_not_defer() {
 
 #[test]
 fn invalid_initialized_lifetime_faults_before_any_step_or_budget_omission() {
-    for invalid in [f32::NAN, f32::INFINITY, -1.] {
+    for invalid in [f32::NAN, f32::NEG_INFINITY, -1.] {
         let mut program = sprite();
         Arc::get_mut(&mut program.inner).unwrap().layers[0].fields[1].initial[0] =
             invalid.to_bits();
@@ -387,4 +387,104 @@ fn invalid_initialized_lifetime_faults_before_any_step_or_budget_omission() {
         assert!(instance.advance(&program, 10., inputs()).is_err());
         assert_eq!(instance.time(), 0.);
     }
+}
+
+#[test]
+fn authored_instant_controller_runs_terminal_evolution_once_after_positive_time() {
+    for evolve_on_death in [false, true] {
+        let mut program = generator();
+        let graph = Arc::get_mut(&mut program.inner).unwrap();
+        graph.layers[0].fields[1].initial = [f32::INFINITY.to_bits(), 0, 0, 0];
+        graph.layers[0].evolve_on_death = evolve_on_death;
+        let mut instance = program
+            .instantiate(
+                EffectLimits {
+                    particles: 8,
+                    step_seconds: 0.1,
+                    ..Default::default()
+                },
+                0,
+            )
+            .unwrap();
+        instance.start(&program, 0, inputs()).unwrap();
+        assert_eq!(instance.active_count(), 1);
+        instance.advance(&program, 0., inputs()).unwrap();
+        assert_eq!(instance.active_count(), 1);
+        instance.advance(&program, 0.1, inputs()).unwrap();
+        assert_eq!(instance.particles(EffectLayerId(0)).count(), 0);
+        assert_eq!(
+            instance.particles(EffectLayerId(1)).count(),
+            usize::from(evolve_on_death)
+        );
+        let spawned = instance.stats().spawned;
+        instance.advance(&program, 0.1, inputs()).unwrap();
+        assert_eq!(instance.stats().spawned, spawned);
+    }
+}
+
+#[test]
+fn instant_initialization_routes_children_before_positive_interval_retirement() {
+    let mut program = generator();
+    let graph = Arc::get_mut(&mut program.inner).unwrap();
+    let controller = &mut graph.layers[0];
+    controller.fields[1].initial = [f32::INFINITY.to_bits(), 0, 0, 0];
+    let mut init = controller.evolve.take().unwrap();
+    init.program.operations[1].instruction = Instruction::Reinterpret {
+        destination: Destination {
+            scope: 1,
+            slot: 1,
+            kind: ValueType::Float,
+        },
+        source: Source {
+            address: Address::Constant([0.1f32.to_bits(), 0, 0, 0]),
+            kind: ValueType::Float,
+        },
+    };
+    controller.init = init;
+    let mut instance = program
+        .instantiate(
+            EffectLimits {
+                particles: 8,
+                ..Default::default()
+            },
+            0,
+        )
+        .unwrap();
+    instance.start(&program, 0, inputs()).unwrap();
+    assert_eq!(instance.active_count(), 2);
+    assert_eq!(
+        instance
+            .particles(EffectLayerId(1))
+            .next()
+            .unwrap()
+            .birth_time,
+        0.
+    );
+    instance.advance(&program, 0., inputs()).unwrap();
+    assert_eq!(instance.active_count(), 2);
+    instance.advance(&program, 0.01, inputs()).unwrap();
+    assert_eq!(instance.particles(EffectLayerId(0)).count(), 0);
+    assert_eq!(instance.particles(EffectLayerId(1)).count(), 1);
+    assert_eq!(instance.stats().spawned, 2);
+}
+#[test]
+fn renderer_bearing_instant_lifetime_is_observable_at_zero_then_retires() {
+    let mut program = sprite();
+    Arc::get_mut(&mut program.inner).unwrap().layers[0].fields[1].initial =
+        [f32::INFINITY.to_bits(), 0, 0, 0];
+    let mut instance = program
+        .instantiate(
+            EffectLimits {
+                particles: 1,
+                ..Default::default()
+            },
+            0,
+        )
+        .unwrap();
+    instance.start(&program, 0, inputs()).unwrap();
+    assert_eq!(instance.particles(EffectLayerId(0)).count(), 1);
+    instance.advance(&program, 0., inputs()).unwrap();
+    assert_eq!(instance.particles(EffectLayerId(0)).count(), 1);
+    instance.advance(&program, 0.01, inputs()).unwrap();
+    assert_eq!(instance.particles(EffectLayerId(0)).count(), 0);
 }

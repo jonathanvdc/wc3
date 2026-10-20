@@ -263,3 +263,6 @@ impl<'a> Document<'a> {
 
 mod effect_compile;
 pub use effect_compile::{EffectCompileError, EffectCompileOptions, EffectEvolution};
+
+mod shape;
+pub use shape::ShapeSampler;

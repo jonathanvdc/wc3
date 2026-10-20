@@ -3,6 +3,7 @@ use super::graph::*;
 use super::runtime::{EffectLimits, EffectStats, FieldPlanes, RandomState, Spawn};
 use super::{Host, Value, ValueType};
 use glam::{Mat4, Vec3};
+use std::array::from_fn;
 use std::collections::BinaryHeap;
 use std::mem::size_of;
 
@@ -430,6 +431,23 @@ impl Host for ExecutionHost<'_> {
                     ValueType::Float3,
                     [point.x.to_bits(), point.y.to_bits(), point.z.to_bits(), 0],
                 ))
+            }
+            Callback::SamplePosition => {
+                self.context(a[0], true)?;
+                let External::Sampler(index) =
+                    self.external(receiver.ok_or("shape sample requires a bound receiver")?)?
+                else {
+                    return Err("shape receiver is not a sampler");
+                };
+                let EffectSampler::Shape(shape) = &self.graph.samplers[index] else {
+                    return Err("samplePosition receiver is not a shape");
+                };
+                let draws = from_fn(|_| match self.graph.random {
+                    EffectRandom::Midpoint => 0.5,
+                    EffectRandom::Counter => (self.random.next() >> 40) as f32 / 16_777_216.,
+                });
+                let position = shape.sample(draws)?;
+                Some(Value::from(position))
             }
             Callback::Sample => {
                 let External::Sampler(index) =
