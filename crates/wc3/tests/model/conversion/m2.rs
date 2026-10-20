@@ -2386,8 +2386,8 @@ fn write_m2_ribbon_uv_capture_fixture() {
 }
 
 #[test]
-fn modern_particle_fog_and_refraction_flags_round_trip_independently() {
-    for controls in [0x8, 0x0010_0000, 0x0010_0008, 0x8010_0008] {
+fn modern_particle_sort_fog_and_refraction_flags_round_trip_independently() {
+    for controls in [0x2, 0x8, 0xa, 0x0010_0000, 0x0010_0008, 0x8010_000a] {
         let raw = controls | (1 << 17);
         let mut source = particle_program_bundle(&[[0, 0]; 3]);
         for particle in &mut source.model.core_mut().particles {
@@ -2399,6 +2399,7 @@ fn modern_particle_fog_and_refraction_flags_round_trip_independently() {
                 continue;
             };
             assert_eq!(particle.details.flags.bits(), raw);
+            assert_eq!(particle.details.flags.sort_particles(), controls & 0x2 != 0);
             assert_eq!(particle.details.flags.unfogged(), controls & 0x8 != 0);
             assert_eq!(
                 particle.details.flags.refraction(),
@@ -2420,6 +2421,7 @@ fn modern_particle_fog_and_refraction_flags_round_trip_independently() {
         assert_eq!(decoded.model.core().particles.len(), 2);
         for particle in &decoded.model.core().particles {
             assert_eq!(particle.flags.bits(), raw);
+            assert_eq!(particle.flags.sort_particles(), controls & 0x2 != 0);
             assert_eq!(particle.flags.unfogged(), controls & 0x8 != 0);
             assert_eq!(particle.flags.refraction(), controls & 0x0010_0000 != 0);
         }

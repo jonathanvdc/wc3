@@ -46,6 +46,55 @@ fn two_views_sort_shared_heads_and_tails_independently() {
 }
 
 #[test]
+fn equal_depth_ties_keep_alive_order_and_head_tail_pairs_without_repeating_particles() {
+    let data = AgeSpriteData {
+        records: Arc::new(
+            [-3., -3., 2., -1.]
+                .map(|z| AgeSpriteRecord {
+                    position: [0., 0., z, 0.],
+                    ..Zeroable::zeroed()
+                })
+                .into(),
+        ),
+        live_indices: Arc::new(vec![
+            0,
+            0x8000_0000,
+            1,
+            0x8000_0001,
+            2,
+            0x8000_0002,
+            3,
+            0x8000_0003,
+        ]),
+        uniform: Default::default(),
+        style: AgeSpriteStyle {
+            textures: [None, None, None],
+            blend: ParticleBlend::Alpha,
+            priority: 0.,
+            sort: SortPolicy::Far,
+            composition: Default::default(),
+            uv_flip_v: false,
+            unlit: false,
+            head: true,
+            tail: true,
+        },
+    };
+    assert_eq!(
+        sorted_indices(&data, &Affine3A::IDENTITY),
+        [
+            0,
+            0x8000_0000,
+            1,
+            0x8000_0001,
+            3,
+            0x8000_0003,
+            2,
+            0x8000_0002
+        ]
+    );
+}
+
+#[test]
 fn age_shader_validates_and_matches_host_record_layout() {
     let shader = include_str!("../../shaders/wc3_age_particle.wgsl");
     let body = &shader[shader.find("struct Particle").unwrap()..];

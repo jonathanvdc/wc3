@@ -1529,3 +1529,105 @@ fn bone_births_use_posed_joint_origins_once_in_attached_and_detached_frames() {
     let aimed = (birth.origin - Vec3::Z * 3.).normalize();
     assert!(birth.velocity.normalize().abs_diff_eq(aimed, 1e-5));
 }
+
+#[test]
+fn authored_sort_flag_selects_transport_policy_without_unknown_flag_diagnostic() {
+    use super::super::fixture_tests::gravity_fixture;
+    use wc3::model::conversion::ImportOptions;
+    use wc3::model::io::m2 as semantic_m2;
+    for sorted in [false, true] {
+        let mut native = gravity_fixture(false, 0.0f32.to_bits());
+        native.model.core_mut().particles[0]
+            .flags
+            .set_sort_particles(sorted);
+        let model = semantic_m2::import(&native, &ImportOptions::default())
+            .unwrap()
+            .value
+            .widen();
+        let indices = model
+            .nodes()
+            .iter()
+            .enumerate()
+            .map(|(i, (id, _))| (id, i))
+            .collect();
+        let runtime = RuntimeAgeSprites::compile(
+            &model,
+            &indices,
+            &TextureImages::default(),
+            &HashMap::new(),
+        );
+        assert_eq!(
+            runtime.emitters[0].gpu_style.sort,
+            if sorted {
+                SortPolicy::Far
+            } else {
+                SortPolicy::None
+            }
+        );
+        assert!(!runtime
+            .diagnostics()
+            .iter()
+            .any(|(_, issue)| issue.kind == RenderDiagnosticKind::Unsupported
+                && issue.message.contains("particle controls")));
+    }
+}
+
+#[test]
+fn natural_and_sorted_transport_orders_preserve_every_living_particle() {
+    let mut values = SlotValues::default();
+    let mut emitter = emitter(&mut values);
+    let births = [-1., -3., -2.].map(|z| {
+        let mut birth = emitter
+            .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+            .unwrap();
+        birth.origin = Vec3::Z * z;
+        birth.velocity = Vec3::ZERO;
+        birth
+    });
+    let mut state = implosion_state(births.into());
+    let model = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()))
+        .finish()
+        .unwrap();
+    let program = AnimationProgram::compile(&model);
+    let sample = program.sample(AnimationSample::default()).unwrap();
+    let frame = EffectFrame {
+        pose: None,
+        root_visible: true,
+        traversal: Default::default(),
+        change: EffectChange::Continuous,
+        time: 0.,
+        selection: Default::default(),
+        sample: &sample,
+        node_poses: &[Mat4::IDENTITY],
+        node_visible: &[true],
+        basis_world: Mat4::IDENTITY,
+    };
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    for (policy, expected) in [
+        (SortPolicy::None, [-1., -3., -2.]),
+        (SortPolicy::Far, [-3., -2., -1.]),
+        (SortPolicy::Near, [-1., -2., -3.]),
+    ] {
+        emitter.gpu_style.sort = policy;
+        emitter.draw(
+            &mut state,
+            &frame,
+            Mat4::IDENTITY,
+            &mut mesh,
+            Mat4::IDENTITY,
+        );
+        let Some(VertexAttributeValues::Float32x3(positions)) =
+            mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            panic!("positions missing")
+        };
+        let centers: Vec<_> = positions
+            .chunks_exact(4)
+            .map(|quad| quad.iter().map(|p| p[2]).sum::<f32>() * 0.25)
+            .collect();
+        assert_eq!(centers, expected);
+    }
+}

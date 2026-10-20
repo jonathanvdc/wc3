@@ -34,8 +34,11 @@ curves. Import expands their native always-repeat addressing into each particle
 image input, independently of mesh inputs sharing the same image dependency.
 Motion and age curves sample once per particle into a compact live record shared
 by its head, tail, and every camera. The GPU expands corners against each view;
-camera changes update ordering without rebuilding vertex meshes or resampling
-appearance. Paused, unchanged effects retain their GPU records. Unchanged views
+native sort bit 1 selects per-view far-to-near order; otherwise live particles
+retain their natural order. Camera changes update enabled ordering without
+rebuilding vertex meshes or resampling appearance. Each particle appears once,
+with head then tail adjacent and stable ties. Exact client ordering quirks remain
+unverified. Paused, unchanged effects retain their GPU records. Unchanged views
 also retain their sorted draw-order buffers across paused frames and temporary
 culling. Native head and tail style bits become a semantic head/tail selection
 during import. That selection can enable either geometry, both, or neither; it

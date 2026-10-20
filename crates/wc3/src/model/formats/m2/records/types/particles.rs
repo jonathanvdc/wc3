@@ -211,6 +211,8 @@ bitfield! {
     pub bits, _: 31, 0;
     /// Selects the unlit particle shader rather than the lit shader.
     pub disable_lighting, set_disable_lighting: 0;
+    /// Orders living particles far to near in each view.
+    pub sort_particles, set_sort_particles: 1;
     /// Aligns particle heads with their projected velocity.
     pub velocity_oriented, set_velocity_oriented: 2;
     /// Disables fog for particle rendering.
@@ -383,6 +385,7 @@ mod tests {
             }};
         }
         check!(disable_lighting, set_disable_lighting, 0);
+        check!(sort_particles, set_sort_particles, 1);
         check!(velocity_oriented, set_velocity_oriented, 2);
         check!(unfogged, set_unfogged, 3);
         check!(refraction, set_refraction, 20);

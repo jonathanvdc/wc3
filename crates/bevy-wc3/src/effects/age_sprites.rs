@@ -416,6 +416,7 @@ impl RuntimeAgeSprites {
                 );
             }
             let supported_flags = (1 << 0)
+                | (1 << 1)
                 | (1 << 2)
                 | (1 << 3)
                 | (1 << 4)
@@ -507,7 +508,11 @@ impl RuntimeAgeSprites {
                     }),
                     blend: details.rendering.blend,
                     priority: f32::from(details.rendering.texture_tile_rotation),
-                    sort: SortPolicy::Far,
+                    sort: if details.flags.sort_particles() {
+                        SortPolicy::Far
+                    } else {
+                        SortPolicy::None
+                    },
                     composition: if multi_texture {
                         AgeSpriteComposition::Multi {
                             three_colors: details.flags.multi_texture_three_colors(),
@@ -1316,9 +1321,15 @@ impl Emitter {
                 }
                 (index, (position - camera_position).dot(camera_back))
             }));
-        state
-            .order
-            .sort_unstable_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)));
+        match self.gpu_style.sort {
+            SortPolicy::None => {}
+            SortPolicy::Far => state
+                .order
+                .sort_unstable_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0))),
+            SortPolicy::Near => state
+                .order
+                .sort_unstable_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0))),
+        }
         let mut buffers = SpriteMeshBuffers {
             positions: take_vec3(mesh, Mesh::ATTRIBUTE_POSITION),
             normals: take_vec3(mesh, Mesh::ATTRIBUTE_NORMAL),
