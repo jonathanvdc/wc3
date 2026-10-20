@@ -897,3 +897,214 @@ fn benchmark_compact_samples_against_cpu_corner_transport() {
         MAX_PARTICLES * 2 * 204
     );
 }
+
+fn implosion_state(births: Vec<Birth>) -> EmitterInstance {
+    EmitterInstance {
+        samples: Default::default(),
+        mesh: Handle::default(),
+        passes: Vec::new(),
+        births,
+        age_appearances: Vec::new(),
+        order: Vec::new(),
+        fraction: 0.,
+        ordinal: 0,
+        previous_node: Mat4::IDENTITY,
+        pose_scratch: Vec::new(),
+        dropped: 0,
+        skipped_seconds: 0.,
+    }
+}
+fn implosion_interval(start: f64, end: f64) -> ImplosionInterval {
+    ImplosionInterval {
+        start,
+        end,
+        checked_end: end,
+        centers: [Vec3::ZERO; 2],
+        follow: Vec3::ZERO,
+    }
+}
+
+#[test]
+fn implosion_is_sphere_only_and_starts_at_each_birth_occurrence() {
+    let mut values = SlotValues::default();
+    let mut emitter = emitter(&mut values);
+    let mut birth = emitter
+        .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .unwrap();
+    birth.origin = Vec3::X;
+    birth.velocity = Vec3::X;
+    birth.acceleration = Vec3::ZERO;
+    let mut state = implosion_state(vec![birth.clone()]);
+    emitter.flags.set_implosion_filter(true);
+    emitter.retire_implosion(&mut state, implosion_interval(0., 1.));
+    assert_eq!(
+        state.births.len(),
+        1,
+        "plane emitters ignore the sphere-only flag"
+    );
+    emitter.generator = ParticleGenerator::Sphere;
+    emitter.flags.set_implosion_filter(false);
+    emitter.retire_implosion(&mut state, implosion_interval(0., 1.));
+    assert_eq!(
+        state.births.len(),
+        1,
+        "unflagged spheres retain outward particles"
+    );
+    emitter.flags.set_implosion_filter(true);
+    emitter.retire_implosion(&mut state, implosion_interval(0., 1.));
+    assert!(state.births.is_empty());
+
+    birth.time = 1.;
+    state.births.push(birth);
+    emitter.retire_implosion(&mut state, implosion_interval(0., 1.));
+    assert_eq!(state.births.len(), 1, "an endpoint birth has not moved yet");
+    emitter.retire_implosion(&mut state, implosion_interval(1., 1.01));
+    assert!(
+        state.births.is_empty(),
+        "its first outward movement retires it"
+    );
+}
+
+#[test]
+fn implosion_uses_interpolated_live_centers_and_local_attached_coordinates() {
+    let mut values = SlotValues::default();
+    let mut emitter = emitter(&mut values);
+    emitter.generator = ParticleGenerator::Sphere;
+    emitter.flags.set_implosion_filter(true);
+    let mut birth = emitter
+        .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .unwrap();
+    birth.origin = Vec3::X;
+    birth.velocity = Vec3::NEG_X;
+    birth.acceleration = Vec3::ZERO;
+    let mut state = implosion_state(vec![birth.clone()]);
+    let interval = ImplosionInterval {
+        start: 0.,
+        end: 1.,
+        checked_end: 0.1,
+        centers: [Vec3::ZERO, Vec3::X * 2.],
+        follow: Vec3::ZERO,
+    };
+    emitter.retire_implosion(&mut state, interval);
+    assert_eq!(
+        state.births.len(),
+        1,
+        "the emitter has not overtaken the particle yet"
+    );
+    let mut interval = implosion_interval(0., 0.5);
+    interval.centers = [Vec3::X * 2.; 2];
+    emitter.retire_implosion(&mut state, interval);
+    assert!(
+        state.births.is_empty(),
+        "detached motion uses the live center, not birth center"
+    );
+    emitter.flags.set_attached(true);
+    state.births.push(birth);
+    let mut interval = implosion_interval(0., 0.5);
+    interval.centers = [Vec3::X * 2.; 2];
+    emitter.retire_implosion(&mut state, interval);
+    assert_eq!(
+        state.births.len(),
+        1,
+        "attached filtering stays in local coordinates"
+    );
+    emitter.retire_implosion(&mut state, implosion_interval(0.5, 1.1));
+    assert!(
+        state.births.is_empty(),
+        "an inward particle retires after passing the local center"
+    );
+}
+
+#[test]
+fn implosion_includes_follow_translation_in_attempted_movement() {
+    let mut values = SlotValues::default();
+    let mut emitter = emitter(&mut values);
+    emitter.generator = ParticleGenerator::Sphere;
+    emitter.flags.set_implosion_filter(true);
+    let mut birth = emitter
+        .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .unwrap();
+    birth.origin = Vec3::X * 3.; // Original x=1 plus the full observed follow x=2.
+    birth.velocity = Vec3::ZERO;
+    birth.acceleration = Vec3::ZERO;
+    let mut state = implosion_state(vec![birth]);
+    let mut interval = implosion_interval(0., 1.);
+    interval.centers = [Vec3::ZERO, Vec3::X * 2.];
+    interval.follow = Vec3::X * 2.;
+    emitter.retire_implosion(&mut state, interval);
+    assert!(state.births.is_empty());
+}
+
+#[test]
+fn implosion_long_update_reports_omitted_time_once_per_emitter() {
+    let mut values = SlotValues::default();
+    let mut emitter = emitter(&mut values);
+    emitter.generator = ParticleGenerator::Sphere;
+    emitter.flags.set_implosion_filter(true);
+    emitter.rate = values.add(0.);
+    let mut birth = emitter
+        .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .unwrap();
+    birth.origin = Vec3::ZERO;
+    birth.velocity = Vec3::ZERO;
+    birth.acceleration = Vec3::ZERO;
+    birth.lifetime = 1000.;
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+    builder.import_values(&values).unwrap();
+    let model = builder.finish().unwrap();
+    let program = AnimationProgram::compile(&model);
+    let sample = program.sample(AnimationSample::default()).unwrap();
+    let frame = EffectFrame {
+        traversal: Default::default(),
+        change: Default::default(),
+        root_visible: true,
+        pose: None,
+        selection: Default::default(),
+        time: 100.,
+        sample: &sample,
+        node_poses: &[Mat4::IDENTITY],
+        node_visible: &[true],
+        basis_world: Mat4::IDENTITY,
+    };
+    let runtime = RuntimeAgeSprites {
+        emitters: vec![emitter],
+        ..Default::default()
+    };
+    let mut meshes = Assets::<Mesh>::default();
+    let mut materials = Assets::<ModelMaterial>::default();
+    let mut gpu_world = World::new();
+    let mut gpu_query = gpu_world.query::<&mut AgeSpriteData>();
+    let mut stats_world = World::new();
+    let mut stats_query = stats_world.query::<&mut SpriteEmitter>();
+    let mut clock = EmissionClock::new(0., 100.);
+    for _ in clock.by_ref() {}
+    for population in [4, MAX_PARTICLES] {
+        let state = implosion_state(vec![birth.clone(); population]);
+        let mut instances = AgeSpriteInstances {
+            emitters: vec![state],
+            previous_time: Some(0.),
+            previous_basis: Some(Mat4::IDENTITY),
+        };
+        runtime.update(
+            &mut instances,
+            frame,
+            &mut meshes,
+            &mut gpu_query.query_mut(&mut gpu_world),
+            &mut stats_query.query_mut(&mut stats_world),
+            &mut materials,
+        );
+        let expected = if population == 4 {
+            clock.omitted_seconds()
+        } else {
+            100. - 4. / 60.
+        };
+        assert_eq!(instances.emitters[0].births.len(), population);
+        assert_eq!(instances.emitters[0].skipped_seconds, expected);
+        assert!(instances.emitters[0].skipped_seconds > 31.);
+        assert_eq!(
+            instances.previous_time,
+            Some(100.),
+            "budgets must not defer the emitter clock"
+        );
+    }
+}

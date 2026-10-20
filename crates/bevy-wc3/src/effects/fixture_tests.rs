@@ -165,6 +165,9 @@ fn write_gpu_sprite_capture_fixtures() {
         "multi-three",
         "spline",
         "premultiplied",
+        "sphere",
+        "implosion-inward",
+        "implosion-outward",
     ] {
         let mut bundle = gravity_fixture(false, 0.0f32.to_bits());
         let core = bundle.model.core_mut();
@@ -208,6 +211,14 @@ fn write_gpu_sprite_capture_fixtures() {
                     LegacyValues::Values(ZeroVec::alloc_from_slice(&[1.]));
             }
             "premultiplied" => emitter.kind.blending = ParticleBlend::BlendAdd,
+            "sphere" | "implosion-inward" | "implosion-outward" => {
+                emitter.kind.emitter = ParticleGenerator::Sphere;
+                emitter.flags.set_implosion_filter(name != "sphere");
+                if name == "implosion-inward" {
+                    emitter.emission_speed.values =
+                        LegacyValues::Values(ZeroVec::alloc_from_slice(&[-0.8]));
+                }
+            }
             _ => {}
         }
         bundle

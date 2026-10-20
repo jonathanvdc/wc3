@@ -76,6 +76,14 @@ already follow their emitter and receive no extra displacement. Emitter speed
 uses the observed update interval, so inherited velocity and follow response
 remain approximations of the native simulation.
 
+Sphere emitters can retire imploding particles when their attempted movement
+points outward relative to the live emitter center. The filter checks analytic
+motion in bounded 60 Hz intervals, starting at each particle's birth occurrence.
+Attached particles use the local origin; detached particles use the emitter's
+interpolated world center. Follow translation contributes to the tested
+movement. This approximates the native discrete integrator rather than
+reproducing its acceleration and damping order exactly.
+
 ## M2 texture composition and twinkle
 
 Basic multi-texture emitters combine three independently selected texture
@@ -103,17 +111,23 @@ Container-level texture-program selectors are retained on each emitter. Nonzero
 TXAC selectors require advanced UV/shader interpretation and display the primary
 input with diagnostics instead of being treated as a basic multi-texture
 programme. The modulation-gain flag at bit 29 also remains unresolved. Texture
-rotation programmes, bone generators, the sphere implosion filter, native keyed
-squirt emission, collisions, external model particles and child emitters still
-require additional interpretation or application integration.
+rotation programmes, bone generators, native keyed squirt emission, collisions,
+external model particles and child emitters still require additional
+interpretation or application integration.
 
 ## Budgets and limits
 
-Each sprite emitter is bounded to 8,192 living particles. The age-driven simulation also
-bounds births and long-update integration intervals, reporting omitted births
-and skipped time through `SpriteEmitter`. Budgets discard work rather than
-creating an unbounded catch-up queue. Root despawn removes simulation and render
-state. Hierarchy visibility gates rendering; effect activation controls births.
+Each sprite emitter is bounded to 8,192 living particles. The age-driven
+simulation also bounds births and long-update integration intervals, reporting
+omitted births and skipped time through `SpriteEmitter`. Budgets discard work
+rather than creating an unbounded catch-up queue. Root despawn removes
+simulation and render state. Hierarchy visibility gates rendering; effect
+activation controls births. Implosion filtering also limits the combined
+population to 32,768 particle-step checks per update. It examines a common
+chronological prefix of the emission integration window; overlapping omitted
+tails are reported once per emitter rather than once per particle. Clocks still
+advance to the requested time, and omitted retirement checks are discarded
+without a catch-up queue.
 
 Game-specific ordering across effect and mesh families is not reproduced by the
 shared transport. GPU sprites receive Bevy lighting and shadows when lit, but do

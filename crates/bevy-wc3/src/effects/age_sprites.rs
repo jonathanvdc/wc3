@@ -8,6 +8,7 @@ use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
 use super::frame::EffectFrame;
 use super::generators::spline;
+use super::implosion::{bounded_end, outward_crossing};
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::layers::ModelOwnedRenderEntity;
 #[cfg(test)]
@@ -49,7 +50,8 @@ pub struct SpriteEmitter {
     pub alive: usize,
     /// Births omitted because the explicit CPU transport budget was reached.
     pub dropped: u64,
-    /// Simulation time omitted by the explicit long-update emission budget.
+    /// Time omitted from emission or sphere-retirement checks by work budgets.
+    /// Overlapping omitted intervals are counted once; clocks still advance.
     pub skipped_seconds: f64,
 }
 
@@ -141,10 +143,13 @@ struct MaterialPassInstance {
 }
 impl EmitterInstance {
     fn retire(&mut self, now: f64) {
+        self.retain(|birth| now - birth.time < f64::from(birth.lifetime));
+    }
+    fn retain(&mut self, mut keep: impl FnMut(&Birth) -> bool) {
         let mut retained = 0;
         let age_appearances = &mut self.age_appearances;
         self.births.retain_mut(|birth| {
-            if now - birth.time >= f64::from(birth.lifetime) {
+            if !keep(birth) {
                 return false;
             }
             if birth.appearance_index != u32::MAX {
@@ -271,6 +276,14 @@ impl RuntimeAgeSprites {
                 diagnostic(RenderDiagnosticKind::Unverified,
                     "M2 spline particles sample the normalized authored path; exact client shape and frame fidelity remain unverified");
             }
+            if details.shape.generator == ParticleGenerator::Sphere
+                && details.flags.implosion_filter()
+            {
+                diagnostic(RenderDiagnosticKind::Approximation,
+                    "M2 sphere implosion retirement samples analytic movement at bounded 60 Hz intervals against the interpolated live emitter center; discrete native integration is approximated");
+                diagnostic(RenderDiagnosticKind::Budget,
+                    "M2 sphere implosion filtering bounds each emitter to 32768 particle-steps per update; emission and retirement omissions share one skipped-time counter and do not create a catch-up queue");
+            }
             let (rate, speed, speed_variation, lifespan, lifespan_variation) = (
                 definition.emission.rate,
                 definition.motion.speed,
@@ -359,6 +372,7 @@ impl RuntimeAgeSprites {
                 | (1 << 5)
                 | (1 << 8)
                 | (1 << 6)
+                | (1 << 7)
                 | (1 << 10)
                 | (1 << 12)
                 | (1 << 16)
@@ -584,7 +598,9 @@ impl RuntimeAgeSprites {
             };
 
             let mut clock = EmissionClock::new(start, frame.time);
+            let mut checked_end = start;
             for step in clock.by_ref() {
+                checked_end = step.end;
                 let at = step.start;
                 let end = step.end;
                 let tick = step.tick;
@@ -636,7 +652,26 @@ impl RuntimeAgeSprites {
                     state.ordinal = state.ordinal.wrapping_add(omitted as u64);
                 }
             }
-            state.skipped_seconds += clock.omitted_seconds();
+            let emission_omitted = clock.omitted_seconds();
+            if emitter.generator == ParticleGenerator::Sphere && emitter.flags.implosion_filter() {
+                checked_end = bounded_end(start, checked_end, state.births.len());
+            }
+            let retirement_omitted = (frame.time - checked_end).max(0.);
+            state.skipped_seconds += emission_omitted.max(retirement_omitted);
+            let centers = [
+                state.previous_node.w_axis.truncate(),
+                node.w_axis.truncate(),
+            ];
+            emitter.retire_implosion(
+                state,
+                ImplosionInterval {
+                    start,
+                    end: frame.time,
+                    checked_end,
+                    centers,
+                    follow,
+                },
+            );
 
             let node_changed = state.previous_node != node;
             state.previous_node = node;
@@ -675,6 +710,15 @@ impl RuntimeAgeSprites {
         instances.previous_time = Some(frame.time);
         instances.previous_basis = Some(frame.basis_world);
     }
+}
+
+/// Filtering shares the emission clock's examined prefix and omission counter.
+struct ImplosionInterval {
+    start: f64,
+    end: f64,
+    checked_end: f64,
+    centers: [Vec3; 2],
+    follow: Vec3,
 }
 
 /// Common occurrence-pose evaluation for continuous and keyed emission.
@@ -772,6 +816,40 @@ fn interpolated_transform(a: Mat4, b: Mat4, t: f32) -> Mat4 {
     Mat4::from_scale_rotation_translation(sa.lerp(sb, t), ra.slerp(rb, t), ta.lerp(tb, t))
 }
 impl Emitter {
+    fn retire_implosion(&self, state: &mut EmitterInstance, interval: ImplosionInterval) {
+        if self.generator != ParticleGenerator::Sphere
+            || !self.flags.implosion_filter()
+            || interval.checked_end <= interval.start
+        {
+            return;
+        }
+        let fraction = |time: f64| {
+            ((time - interval.start) / (interval.end - interval.start)).clamp(0., 1.) as f32
+        };
+        state.retain(|birth| {
+            let result = outward_crossing(
+                interval.start.max(birth.time),
+                interval.checked_end,
+                |time| {
+                    // Origins already contain the full observed follow offset;
+                    // reconstruct only the translation received by this time.
+                    self.motion(birth, time).0 - interval.follow * (1. - fraction(time))
+                },
+                |time| {
+                    if self.flags.attached() {
+                        Vec3::ZERO
+                    } else {
+                        interval.centers[0].lerp(interval.centers[1], fraction(time))
+                    }
+                },
+            );
+            // Omitted seconds were reported once by the emitter's emission
+            // clock, rather than being added again for each living particle.
+            debug_assert_eq!(result.skipped_seconds, 0.);
+            result.time.is_none()
+        });
+    }
+
     fn emitter_frame(&self, node: Mat4) -> Mat4 {
         // M2 emitter X/Y axes are rotated relative to the carrying bone.
         node * Mat4::from_rotation_z(FRAC_PI_2)

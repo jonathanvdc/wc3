@@ -7,6 +7,7 @@ mod atlas_sprites;
 mod emission;
 mod frame;
 mod generators;
+mod implosion;
 pub(super) mod model_particles;
 
 mod ribbons;

@@ -8,8 +8,8 @@ use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::math::Vec3;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-use bevy::prelude::*;
 use bevy::pbr::{DistanceFog, FogFalloff};
+use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::render_resource::{CachedPipelineState, PipelineCache, PollType, TextureFormat};
 use bevy::render::renderer::RenderDevice;
@@ -22,8 +22,8 @@ use bevy::winit::WinitPlugin;
 use bevy_wc3::{
     spawn_model, AssetSettings, BakeSpace, CameraBinding, Lod, LodOverride, LodSettings,
     ModelAsset, ModelInstance, ModelInstanceError, ModelMaterial, ModelRig, PhysicsSimulation,
-    Playback, PlaybackError, PoseBaker, PoseOptions, PreparedModel, RibbonEmitter, SpriteEmitter, Wc3BevyPlugin,
-    WorldSelection,
+    Playback, PlaybackError, PoseBaker, PoseOptions, PreparedModel, RibbonEmitter, SpriteEmitter,
+    Wc3BevyPlugin, WorldSelection,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::env::args;
@@ -645,7 +645,11 @@ fn capture(options: Options) -> CaptureResult<()> {
         .id();
     if let Some((start, end)) = options.fog {
         app.world_mut().entity_mut(camera).insert(DistanceFog {
-            color: Color::linear_rgb(options.fog_color.x, options.fog_color.y, options.fog_color.z),
+            color: Color::linear_rgb(
+                options.fog_color.x,
+                options.fog_color.y,
+                options.fog_color.z,
+            ),
             falloff: FogFalloff::Linear { start, end },
             ..default()
         });
@@ -1157,7 +1161,8 @@ mod tests {
             assert!(parse(&["--fog-color", invalid]).is_err());
         }
         let options = parse(&["--fog", "5,20", "--fog-color", "0.2,0.3,0.4"])
-            .unwrap().unwrap();
+            .unwrap()
+            .unwrap();
         assert_eq!(options.fog, Some((5., 20.)));
         assert_eq!(options.fog_color, Vec3::new(0.2, 0.3, 0.4));
     }
