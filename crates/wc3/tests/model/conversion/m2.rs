@@ -1872,7 +1872,7 @@ fn ordinary_event_source_retains_sequence_timing_and_unordered_duplicate_keys() 
 
 #[test]
 fn billboard_flags_round_trip_while_effective_states_are_normalized() {
-    use sm::{Billboard, BillboardFrame, BillboardScale, EulerLocks, TransformSemantics};
+    use sm::{Billboard, BillboardAxis, BillboardFrame, BillboardScale, TransformSemantics};
     for bits in 0..16 {
         let mut source = native_triangle();
         let flags = &mut source.model.core_mut().bones[0].flags;
@@ -1886,22 +1886,15 @@ fn billboard_flags_round_trip_while_effective_states_are_normalized() {
             .value;
         let bone = imported.nodes().iter().next().unwrap().1;
         assert_eq!(bone.transform_semantics, TransformSemantics::Affine);
-        let expected = if bits & 1 == 0 {
-            Billboard::None
-        } else {
-            match bits >> 1 {
-                0 => Billboard::Spherical {
-                    frame: BillboardFrame::Yz,
-                    scale: BillboardScale::BasisLengths,
-                },
-                1 => Billboard::Euler(EulerLocks::X),
-                2 => Billboard::Euler(EulerLocks::Y),
-                3 => Billboard::Euler(EulerLocks::Xy),
-                4 => Billboard::Euler(EulerLocks::Z),
-                5 => Billboard::Euler(EulerLocks::Xz),
-                6 => Billboard::Euler(EulerLocks::Yz),
-                _ => Billboard::None,
-            }
+        let expected = match bits {
+            1 => Billboard::Spherical {
+                frame: BillboardFrame::Yz,
+                scale: BillboardScale::LocalBasisLengths,
+            },
+            2 => Billboard::ScreenAxis(BillboardAxis::X),
+            4 => Billboard::ScreenAxis(BillboardAxis::Y),
+            8 => Billboard::ScreenAxis(BillboardAxis::Z),
+            _ => Billboard::None,
         };
         assert_eq!(bone.billboard, expected);
         // Widening and exact narrowing preserve explicit behavior and native declarations.
@@ -1931,7 +1924,7 @@ fn billboard_edits_do_not_reactivate_inactive_m2_declarations() {
     let mut node = original.clone();
     node.billboard = Billboard::Spherical {
         frame: BillboardFrame::Yz,
-        scale: BillboardScale::BasisLengths,
+        scale: BillboardScale::LocalBasisLengths,
     };
     model.edit(|draft| draft.set_node(id, node)).unwrap();
     let output = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default())

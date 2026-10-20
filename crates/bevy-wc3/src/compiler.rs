@@ -36,8 +36,8 @@ use wc3::model::systems::System;
 use wc3::model::{
     AnimationProgram, Attachment, Billboard, Camera as ModelCamera, ClipProperties, FeatureId,
     Light as SemanticLight, Link, MaterialId, MaterialSelection, Model, NodeFeature,
-    NodeProperties, ParticleEmitter, PoseLayout, RibbonEmitter as SemanticRibbonEmitter, SkinId,
-    Texture, ValidateLinks, ValueSlot,
+    ParticleEmitter, PoseLayout, RibbonEmitter as SemanticRibbonEmitter, SkinId, Texture,
+    ValidateLinks, ValueSlot,
 };
 
 fn feature_name(feature: &NodeFeature<'_>) -> &'static str {
@@ -115,20 +115,6 @@ pub fn compile_model_with_options(
     let mut skins = Vec::new();
     let mut skin_cache: HashMap<(SkinId, Vec<usize>), usize> = HashMap::new();
     let mut diagnostics = Vec::new();
-    for node in &nodes {
-        let Some(NodeProperties::M2(controls)) = model
-            .node(node.id)
-            .and_then(|node| node.properties.as_ref())
-        else {
-            continue;
-        };
-        let flags = controls.billboard_flags;
-        let all_locked =
-            node.billboard == Billboard::None && flags.enabled && flags.x && flags.y && flags.z;
-        if matches!(node.billboard, Billboard::Euler(_)) || all_locked {
-            diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Approximation, RenderDiagnosticSource::Node(node.id), format!("M2 node {:?} ({}) uses Euler billboard locks; component retention approximates native camera-frame behavior", node.id, node.name)));
-        }
-    }
     for (id, clip) in model.clips() {
         if let Some(ClipProperties::M2(controls)) = &clip.properties {
             if controls.blend_time != [0; 2] {

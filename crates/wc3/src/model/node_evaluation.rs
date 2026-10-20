@@ -5,6 +5,9 @@ use crate::model::{
 };
 use glam::{Affine3A, EulerRot, Mat4, Quat, Vec3};
 
+mod screen;
+use screen::{camera_rotation, screen_axis};
+
 /// Signed authored factors accompany the affine transform, including collapsed axes.
 /// Explicit affine corrections affect `matrix`; these factors retain the authored TRS
 /// sample and cannot represent corrective shear. Corrected descendants require full
@@ -141,6 +144,47 @@ fn evaluate_pose(
     parent: EvaluatedPose,
     camera: Option<Affine3A>,
 ) -> EvaluatedPose {
+    if matches!(
+        node.billboard,
+        Billboard::ScreenAxis(_)
+            | Billboard::Spherical {
+                scale: BillboardScale::LocalBasisLengths,
+                ..
+            }
+    ) {
+        let ordinary = PoseBehavior {
+            billboard: Billboard::None,
+            ..*node
+        };
+        let mut result = evaluate_pose(&ordinary, pose, parent, camera);
+        let Some(target) = camera.and_then(|camera| camera_rotation(camera.matrix3.into())) else {
+            return result;
+        };
+        match node.billboard {
+            Billboard::ScreenAxis(axis) => {
+                if let Some((matrix, rotation, scale)) =
+                    screen_axis(result.matrix, target, pose.pivot, axis)
+                {
+                    result.matrix = matrix;
+                    result.rotation = rotation;
+                    result.scale = scale;
+                }
+            }
+            Billboard::Spherical { frame, .. } => {
+                let anchor = result.matrix.transform_point3(pose.pivot);
+                result.scale = basis_lengths(result.matrix).copysign(pose.scale);
+                result.rotation =
+                    (target * facing_frame(frame) * pose.rotation.normalize()).normalize();
+                result.matrix = Mat4::from_scale_rotation_translation(
+                    result.scale,
+                    result.rotation,
+                    anchor - result.rotation * (result.scale * pose.pivot),
+                );
+            }
+            _ => unreachable!(),
+        }
+        return result;
+    }
     if node.transform_semantics == TransformSemantics::PivotLocal {
         return evaluate_pivot_local(node, pose, parent, camera);
     }
@@ -273,7 +317,7 @@ fn evaluate_pivot_local(
                 local.rotation = parent.rotation.inverse()
                     * euler_facing(locks, parent.rotation * local.rotation, camera_rotation);
             }
-            Billboard::None => {}
+            Billboard::None | Billboard::ScreenAxis(_) => {}
         }
         if node.camera_anchored {
             local.translation += inverse_vector(

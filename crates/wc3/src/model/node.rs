@@ -51,6 +51,9 @@ pub enum Billboard {
     /// Rotate around one authored axis toward the camera viewing axis. X also reflects local Z;
     /// Y and Z do not reflect. Correction occurs in the node's authored rotation frame.
     Axial(BillboardAxis),
+    /// Preserve one composed axis and reconstruct the other axes against the camera image plane.
+    /// Degenerate camera frames or axes leave the composed transform unchanged.
+    ScreenAxis(BillboardAxis),
     /// Retain selected XYZ Euler components of the composed rotation and take the
     /// remaining components from the camera. This is not an axial rotation constraint.
     Euler(EulerLocks),
@@ -70,15 +73,17 @@ pub enum BillboardScale {
     SignedFactors,
     /// Retain affine basis lengths measured before facing correction, with authored signs.
     BasisLengths,
+    /// Retain composed affine basis lengths with signs from this node's local scale.
+    LocalBasisLengths,
 }
 /// Selected authored axis for view-facing rotation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BillboardAxis {
-    /// Rotate around X and reflect local Z.
+    /// Authored X axis.
     X,
-    /// Rotate around Y.
+    /// Authored Y axis.
     Y,
-    /// Rotate around Z.
+    /// Authored Z axis.
     Z,
 }
 /// Nonempty, proper subsets of XYZ Euler components retained from authored rotation.

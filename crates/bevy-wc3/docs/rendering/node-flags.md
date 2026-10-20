@@ -53,19 +53,23 @@ MDLX full facing uses `BillboardFrame::Yz` and
 `BillboardScale::SignedFactors` within pivot-local composition. Native full facing
 takes precedence over all lock declarations; otherwise import selects X, then Y,
 then Z. M2 full facing uses the same YZ frame with
-`BillboardScale::BasisLengths` within affine composition. Authored geometry in
-the YZ plane faces the camera along +X, with +Y running across the image and +Z
-following camera up. The transformed pivot stays fixed, and the composed basis
-lengths retain their authored signs, including mirrored and collapsed scales.
-The `Camera` frame instead maps authored +X/+Y/+Z to camera right/up/facing.
+`BillboardScale::LocalBasisLengths` within affine composition. It measures the
+composed axis lengths before facing, retains local scale signs and local rotation,
+and removes inherited rotation and reflection. The transformed pivot stays fixed.
+`BasisLengths` instead retains signs from accumulated authored scale factors;
+`SignedFactors` retains those factors directly. The `Camera` geometry frame maps
+authored +X/+Y/+Z to camera right/up/facing.
 
-M2 axis locks remain an approximation expressed as Euler component retention and
-produce a rendering diagnostic. The remaining M2 axis-lock mirroring and
-camera-frame reconstruction are not implemented. Disabled native locks normalize
-to `None`; retaining all three Euler components also normalizes to `None` and
-leaves affine shear intact.
-Native declarations remain in profile controls as `billboard_flags`; runtime
-behavior follows the effective semantic mode.
+`ScreenAxis` preserves one composed axis and rebuilds its free axes against the
+camera image plane, retaining pre-facing axis lengths and the transformed pivot.
+M2 standalone X, Y, and Z lock declarations select this operation. Standalone full
+facing selects spherical facing; combinations of full facing and locks, or multiple
+locks, select `None`. Unchanged native declarations round-trip in profile controls
+as `billboard_flags`; runtime behavior follows the effective semantic mode.
+Camera affine distortion is removed in model-to-view order before reconstructing
+these screen frames. Singular camera frames and locked axes parallel to the view
+retain the composed transform as a finite fallback. Native fidelity of these
+singular and reflected edge cases remains unverified.
 
 Camera anchoring adds the driving camera position once along an inherited chain.
 Repeated anchored descendants account for the already inherited offset. It does not

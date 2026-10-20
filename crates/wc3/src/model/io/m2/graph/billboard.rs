@@ -1,27 +1,18 @@
-//! Native M2 activation/lock declarations and the current facing approximation.
+//! Native M2 camera-facing declarations.
 use crate::model::conversion::{Context, Error};
 use crate::model::properties::BillboardFlags;
-use crate::model::{Billboard, BillboardFrame, BillboardScale, EulerLocks};
+use crate::model::{Billboard, BillboardAxis, BillboardFrame, BillboardScale};
 pub(super) fn decode(flags: BillboardFlags) -> Billboard {
-    if !flags.enabled {
-        return Billboard::None;
+    match (flags.enabled, flags.x, flags.y, flags.z) {
+        (true, false, false, false) => Billboard::Spherical {
+            frame: BillboardFrame::Yz,
+            scale: BillboardScale::LocalBasisLengths,
+        },
+        (false, true, false, false) => Billboard::ScreenAxis(BillboardAxis::X),
+        (false, false, true, false) => Billboard::ScreenAxis(BillboardAxis::Y),
+        (false, false, false, true) => Billboard::ScreenAxis(BillboardAxis::Z),
+        _ => Billboard::None,
     }
-    let locks = match (flags.x, flags.y, flags.z) {
-        (false, false, false) => {
-            return Billboard::Spherical {
-                frame: BillboardFrame::Yz,
-                scale: BillboardScale::BasisLengths,
-            }
-        }
-        (true, false, false) => EulerLocks::X,
-        (false, true, false) => EulerLocks::Y,
-        (false, false, true) => EulerLocks::Z,
-        (true, true, false) => EulerLocks::Xy,
-        (true, false, true) => EulerLocks::Xz,
-        (false, true, true) => EulerLocks::Yz,
-        (true, true, true) => return Billboard::None,
-    };
-    Billboard::Euler(locks)
 }
 pub(super) fn encode(
     value: Billboard,
@@ -34,12 +25,11 @@ pub(super) fn encode(
     let mut flags = BillboardFlags::default();
     match value {
         Billboard::None => {},
-        Billboard::Spherical { frame: BillboardFrame::Yz, scale: BillboardScale::BasisLengths } => flags.enabled = true,
-        Billboard::Euler(locks) => {
-            flags.enabled = true;
-            [flags.x, flags.y, flags.z] = locks.axes();
-        },
-        _ => context.unsupported("node.billboard", "M2 requires YZ spherical facing with composed basis lengths or Euler lock approximations")?,
+        Billboard::Spherical { frame: BillboardFrame::Yz, scale: BillboardScale::LocalBasisLengths } => flags.enabled = true,
+        Billboard::ScreenAxis(BillboardAxis::X) => flags.x = true,
+        Billboard::ScreenAxis(BillboardAxis::Y) => flags.y = true,
+        Billboard::ScreenAxis(BillboardAxis::Z) => flags.z = true,
+        _ => context.unsupported("node.billboard", "M2 requires YZ spherical facing with local signed basis lengths or a camera screen axis")?,
     }
     Ok(flags)
 }

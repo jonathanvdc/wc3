@@ -43,7 +43,8 @@ visibility buffers are sized. `evaluate` is the allocating convenience method.
 Both return full authored-space affine matrices and signed rotation/scale factors,
 including mirrored or collapsed axes. Ordinary hierarchy retains shear. Native
 billboards and selective inheritance use the same numerical evaluator as
-`bevy-wc3`; existing approximations to native camera-facing behavior remain.
+`bevy-wc3`; the node guide describes camera-frame reconstruction and finite
+fallbacks for singular facing inputs.
 Missing camera input leaves camera-dependent corrections unapplied. Offline tools
 requiring a camera-complete snapshot should require camera input themselves.
 

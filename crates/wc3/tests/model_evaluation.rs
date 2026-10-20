@@ -523,7 +523,7 @@ fn explicit_spherical_modes_preserve_pivots_and_selected_scale_measure() {
                         .abs_diff_eq(before.matrix.transform_point3(pivot), 1e-5));
                     match scale {
                         BillboardScale::SignedFactors => assert_eq!(after.scale, before.scale),
-                        BillboardScale::BasisLengths => {
+                        BillboardScale::BasisLengths | BillboardScale::LocalBasisLengths => {
                             for axis in [Vec3::X, Vec3::Y, Vec3::Z] {
                                 assert!(
                                     (after.matrix.transform_vector3(axis).length()
