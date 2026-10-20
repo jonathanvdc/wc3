@@ -134,6 +134,8 @@ pub enum EffectLimitation {
     CoordinateMetadata,
     /// Supported T/Q transform filters use the caller's frame without independently verified scale filtering.
     TransformMask,
+    /// Supported inverse masks use a checked full affine inverse; native partial scale filtering is unverified.
+    InverseTransform,
     /// Constant-capable canonical fields initialize from native constants before the authored initializer.
     FieldInitialization,
     /// Authored death-step controls select whether evolution runs on the terminal interval.
@@ -270,6 +272,8 @@ pub(crate) enum Callback {
     VRand,
     Transform,
     TransformDirection,
+    InverseTransform,
+    InverseDirection,
     Sample,
     HsvToRgb,
     RgbToHsv,

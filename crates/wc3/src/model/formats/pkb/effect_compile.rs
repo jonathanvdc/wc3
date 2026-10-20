@@ -491,6 +491,19 @@ impl<'a> Document<'a> {
                 maps: maps.into_boxed_slice(),
             });
         }
+        let layers_use_inverse = layers.iter().any(|layer| {
+            Some(&layer.init)
+                .into_iter()
+                .chain(layer.evolve.as_ref())
+                .any(|bound| {
+                    bound.callbacks.iter().any(|callback| {
+                        matches!(
+                            callback,
+                            Callback::InverseTransform | Callback::InverseDirection
+                        )
+                    })
+                })
+        });
         let payload_policies = payload_policies(&layers, &events);
         Ok(EffectProgram {
             inner: Arc::new(EffectGraph {
@@ -521,6 +534,9 @@ impl<'a> Document<'a> {
                         EffectLimitation::CurveInterpolation,
                         EffectLimitation::OrientationPolicies,
                     ];
+                    if layers_use_inverse {
+                        limitations.push(EffectLimitation::InverseTransform);
+                    }
                     limitations.extend(payload_policies);
                     if lowering
                         .samplers
@@ -955,6 +971,16 @@ impl Lowering<'_, '_> {
                 }
                 (Callback::Rand, vec![kind, kind, Context], Some(kind))
             }
+            b"xform_w2l_f_masked" => (
+                Callback::InverseTransform,
+                vec![Float3, Int, Context],
+                Some(Float3),
+            ),
+            b"xform_w2l_d_masked" => (
+                Callback::InverseDirection,
+                vec![Float3, Int, Context],
+                Some(Float3),
+            ),
             b"xform_l2w_f_masked" => (
                 Callback::Transform,
                 vec![Float3, Int, Context],
@@ -1006,6 +1032,8 @@ impl Lowering<'_, '_> {
                 | Callback::VRand
                 | Callback::Transform
                 | Callback::TransformDirection
+                | Callback::InverseTransform
+                | Callback::InverseDirection
                 | Callback::HsvToRgb
                 | Callback::RgbToHsv
                 | Callback::Orientation

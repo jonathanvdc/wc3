@@ -212,3 +212,37 @@ fn vector_random_has_distinct_unit_and_shell_free_function_abis() {
         )
         .is_err());
 }
+#[test]
+fn inverse_callbacks_keep_distinct_point_and_direction_contracts_and_free_context() {
+    let document = Document::read(FIXTURE).unwrap();
+    let options = EffectCompileOptions::default();
+    let lowering = Lowering {
+        document: &document,
+        options: &options,
+        samplers: vec![],
+        attributes: vec![],
+        attribute_slots: HashMap::new(),
+        curve_widths: HashMap::new(),
+    };
+    for (name, callback) in [
+        (b"xform_w2l_f_masked".as_slice(), Callback::InverseTransform),
+        (b"xform_w2l_d_masked".as_slice(), Callback::InverseDirection),
+    ] {
+        let arguments = [ValueType::Float3, ValueType::Int, ValueType::Context];
+        assert_eq!(
+            lowering.callback(name, &arguments, None, &[]).unwrap(),
+            (callback, Some(ValueType::Float3))
+        );
+        assert!(lowering
+            .callback(name, &arguments, Some(0), &[External::ParticleContext])
+            .is_err());
+        assert!(lowering
+            .callback(
+                name,
+                &[ValueType::Float3, ValueType::Float, ValueType::Context],
+                None,
+                &[]
+            )
+            .is_err());
+    }
+}

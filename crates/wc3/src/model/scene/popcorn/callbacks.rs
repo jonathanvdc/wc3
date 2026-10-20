@@ -2,7 +2,7 @@
 use super::graph::*;
 use super::payload::{Element as PayloadElement, Storage as PayloadStorage};
 use super::runtime::{EffectLimits, EffectStats, FieldPlanes, RandomState, Spawn};
-use super::{color, orientation, payload, random};
+use super::{color, orientation, random, transforms};
 use super::{Host, Value, ValueType};
 use glam::{Mat4, Quat, Vec3};
 use std::array::from_fn;
@@ -435,23 +435,36 @@ impl Host for ExecutionHost<'_> {
                 }
                 Some(Value::from_words(kind, words))
             }
-            Callback::Transform | Callback::TransformDirection => {
+            Callback::Transform
+            | Callback::TransformDirection
+            | Callback::InverseTransform
+            | Callback::InverseDirection => {
                 self.context(a[2], false)?;
-                let words = a[0].words();
-                let point = transform(
-                    payload::select(self.world, self.payload_frame, a[1].words()[0])?,
-                    Vec3::new(
-                        f32::from_bits(words[0]),
-                        f32::from_bits(words[1]),
-                        f32::from_bits(words[2]),
-                    ),
-                    a[1].words()[0],
-                    callback == Callback::TransformDirection,
-                )?;
-                Some(Value::from_words(
-                    ValueType::Float3,
-                    [point.x.to_bits(), point.y.to_bits(), point.z.to_bits(), 0],
-                ))
+                let direction = matches!(
+                    callback,
+                    Callback::TransformDirection | Callback::InverseDirection
+                );
+                let point = if matches!(
+                    callback,
+                    Callback::InverseTransform | Callback::InverseDirection
+                ) {
+                    transforms::inverse(
+                        self.world,
+                        self.payload_frame,
+                        vector(a[0]),
+                        a[1].words()[0],
+                        direction,
+                    )?
+                } else {
+                    transforms::forward(
+                        self.world,
+                        self.payload_frame,
+                        vector(a[0]),
+                        a[1].words()[0],
+                        direction,
+                    )?
+                };
+                Some(Value::from(point))
             }
             Callback::Orientation => Some(Value::from(orientation::from_forward(vector(a[0]))?)),
             Callback::OrientationSide => {
@@ -531,23 +544,6 @@ impl Host for ExecutionHost<'_> {
         })
     }
 }
-
-fn transform(world: Mat4, value: Vec3, mask: u32, direction: bool) -> Result<Vec3> {
-    let transformed = match (direction, mask) {
-        (false, 17) => value + world.w_axis.truncate(),
-        (false, 11 | 19) => world.transform_point3(value),
-        (true, 18) => world.transform_vector3(value),
-        _ => return Err("unsupported native local-to-world transform mask"),
-    };
-    if !transformed.is_finite() {
-        return Err("effect transform produced nonfinite components");
-    }
-    Ok(transformed)
-}
-
-#[cfg(test)]
-#[path = "callback_tests.rs"]
-mod tests;
 
 #[path = "callbacks/payload.rs"]
 mod payload_dispatch;

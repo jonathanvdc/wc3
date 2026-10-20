@@ -170,7 +170,8 @@ writes observable.
 The implemented callback subset covers effect age/running state, event-stream
 and rate generation, condition-triggered events, typed payload construction, routing and extraction, retirement, random intervals
 and isotropic random vectors,
-point transforms with masks 17/19, direction transforms with mask 18, RGB/HSV
+point transforms with masks 11/17/19, direction transforms with mask 18, checked
+inverse point/direction transforms with masks 67/66, RGB/HSV
 conversion, quaternion orientation and rotation, emitter axes, typed curve
 sampling, and primitive `samplePosition` callbacks. It
 executes the complete acquired HD LichAttack graph, including invisible
@@ -197,16 +198,21 @@ Shape authoring properties have their separate explicit lowering boundary. Rende
 descriptors preserve authored properties and stream bindings; a graphics adapter
 must diagnose unsupported enabled features before drawing.
 
-The caller chooses the coordinate frame carried by `SceneInputs`. Point mask 17
+The caller chooses the coordinate frame carried by `SceneInputs`. One `advance()`
+uses that input frame throughout its substeps; callers needing intermediate
+moving frames can supply smaller separately sampled advances. Long moving-frame
+update fidelity remains unverified. Point mask 17
 adds translation only, point mask 19 applies the caller's basis and translation,
-and direction mask 18 applies its basis without translation. Mask 11 always uses
+and direction mask 18 applies its basis without translation. Inverse point mask67
+and inverse direction mask 66 use the same selected frame and a checked affine
+inverse, including the caller's nonuniform scale. Singular, nonaffine or nonfinite
+frames fail explicitly. Exact native scale filtering remains unverified. Mask 11 always uses
 the ordinary caller frame. Masks 17/19/18 select the routed payload frame when a
 Position or Orientation value was supplied; without either they use the caller
 frame. A supplied Position is already world-space. In the payload frame, absent
 Position means the origin, absent Orientation means identity, and scale is one;
 the ordinary emitter transform is replaced as a whole. The basis includes
-any embedded scale; independently verified scale filtering and inverse transforms
-remain unsupported. A graphics adapter using a
+any embedded scale; exact native scale filtering remains unverified. A graphics adapter using a
 fixed axis conversion should keep that conversion separate from authored T/Q
 filters and apply it once when extracting positions.
 
