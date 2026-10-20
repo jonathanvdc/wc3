@@ -37,11 +37,13 @@ fn invalid_metadata_edits_are_transactional() {
     let mut model = Model::<M2>::builder("checked").finish().unwrap();
     assert!(model
         .edit(|draft| {
-            draft.metadata_mut().bounds.minimum[0] = f32::NAN;
+            let mut bounds = Bounds::default();
+            bounds.minimum[0] = f32::NAN;
+            draft.metadata_mut().bounds = Some(bounds);
             Ok(())
         })
         .is_err());
-    assert_eq!(model.metadata().bounds, Bounds::default());
+    assert_eq!(model.metadata().bounds, None);
 }
 
 #[test]
@@ -55,5 +57,5 @@ fn universal_metadata_edits_replace_native_declarations() {
         .unwrap();
     assert!(matches!(model.metadata(), ModelMetadata::M2(_)));
     assert_eq!(model.name(), "after");
-    assert_eq!(model.bounds(), Some(Bounds::default()));
+    assert_eq!(model.bounds(), None);
 }
