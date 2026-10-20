@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 use std::{env, fs, path::Path};
 use wc3::blp::{
-    Blp, Blp1, Blp1Content, Blp1Header, Blp2, Blp2Content, Blp2Header, BlpDecoder, DxtFormat,
-    register_decoding_hook,
+    register_decoding_hook, Blp, Blp1, Blp1Content, Blp1Header, Blp2, Blp2Content, Blp2Header,
+    BlpDecoder, DxtFormat,
 };
 
 #[test]

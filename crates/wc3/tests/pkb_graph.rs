@@ -170,12 +170,10 @@ fn null_links_missing_fields_and_unknown_schemas_do_not_become_empty_graphs() {
         native[object].fields.push((field, payload));
         let bytes = encode(&native);
         let document = Document::read(&bytes).unwrap();
-        assert!(
-            document
-                .effect(1)
-                .and_then(|effect| document.layer_graph(effect.graph))
-                .is_err()
-        );
+        assert!(document
+            .effect(1)
+            .and_then(|effect| document.layer_graph(effect.graph))
+            .is_err());
     }
     let mut native = objects();
     native[1].fields.retain(|(id, _)| *id != 5);

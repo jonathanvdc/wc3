@@ -1,5 +1,5 @@
 //! BLP2 container types.
-use crate::blp::{MIPMAP_SLOTS, Palette};
+use crate::blp::{Palette, MIPMAP_SLOTS};
 
 mod codec;
 mod ownership;

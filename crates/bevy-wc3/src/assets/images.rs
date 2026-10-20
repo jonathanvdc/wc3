@@ -2,8 +2,8 @@
 use crate::error::ModelError;
 use crate::textures::{ImageKey, TextureColorSpace};
 use bevy::asset::{
-    AssetPath, LoadContext, ReadAssetBytesError,
     io::{AssetReaderError, SliceReader},
+    AssetPath, LoadContext, ReadAssetBytesError,
 };
 use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::{Handle, Image};

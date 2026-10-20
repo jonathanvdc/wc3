@@ -8,7 +8,6 @@ use bevy::pbr::{
 };
 use bevy::prelude::*;
 use bevy::render::{
-    Render, RenderApp, RenderStartup, RenderSystems,
     batching::gpu_preprocessing::BatchedInstanceBuffers,
     extract_component::ExtractComponentPlugin,
     mesh::RenderMesh,
@@ -19,6 +18,7 @@ use bevy::render::{
     sync_world::MainEntity,
     texture::{FallbackImage, GpuImage},
     view::{ExtractedView, RenderVisibleEntities},
+    Render, RenderApp, RenderStartup, RenderSystems,
 };
 #[cfg(test)]
 use std::sync::Arc;
@@ -26,9 +26,9 @@ use wc3::model::values::model::ParticleBlend;
 
 use super::records::{AgeSpriteData, AgeSpriteRecord, AgeSpriteUniform};
 use crate::effects::render::{
+    effect_texture_layout, effect_vertex_layout, effect_visible, transparent_effect_draw,
     DrawEffectInstances, EffectBuffer, PassResources, ResidentRecordBuffer, SortPolicy,
-    SortScratch, effect_texture_layout, effect_vertex_layout, effect_visible,
-    transparent_effect_draw,
+    SortScratch,
 };
 
 pub(crate) struct AgeSpriteRenderPlugin;

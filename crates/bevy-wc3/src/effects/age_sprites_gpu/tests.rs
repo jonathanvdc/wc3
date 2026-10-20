@@ -1,9 +1,9 @@
 use super::*;
 use crate::effects::age_sprites_gpu::AgeSpriteStyle;
 use bytemuck::Zeroable;
-use naga::TypeInner;
 use naga::front::wgsl::parse_str;
 use naga::valid::{Capabilities, ValidationFlags, Validator};
+use naga::TypeInner;
 use wc3::model::values::model::ParticleBlend;
 
 #[test]

@@ -4,7 +4,7 @@ use crate::blp::container::io::{
     append_u32, byte, checked_u32, palette, read_mips, slice, validate_dimensions, validate_write,
     word, write_mips,
 };
-use crate::blp::{PALETTE_BYTES, ReadError, ReadErrorKind, WriteError};
+use crate::blp::{ReadError, ReadErrorKind, WriteError, PALETTE_BYTES};
 use std::borrow::Cow;
 
 const REGION: usize = 148;

@@ -1,5 +1,5 @@
 use crate::error::ModelError;
-use bevy::asset::{AssetLoader, AssetPath, LoadContext, RenderAssetUsages, io::Reader};
+use bevy::asset::{io::Reader, AssetLoader, AssetPath, LoadContext, RenderAssetUsages};
 use bevy::image::ImageLoaderSettings;
 use bevy::prelude::*;
 use bevy::reflect::TypePath;

@@ -1,6 +1,6 @@
 #[path = "support/pkb.rs"]
 mod pkb_fixture;
-use pkb_fixture::{Builder, array, word, words};
+use pkb_fixture::{array, word, words, Builder};
 use wc3::model::formats::pkb::Document;
 
 fn cache_fixture(

@@ -1,8 +1,8 @@
 use super::*;
 use bevy::math::{Quat, Vec2, Vec3};
 use std::f32::consts::TAU;
-use wc3::model::ModelMetadata;
 use wc3::model::profiles::Universal;
+use wc3::model::ModelMetadata;
 use wc3::model::{AnimationProgram, AnimationSample};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 fn emitter(slot_values: &mut SlotValues) -> Emitter {
@@ -222,9 +222,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
     }
     assert_eq!(
         mesh.indices().unwrap().iter().collect::<Vec<_>>(),
-        [
-            0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15
-        ],
+        [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15],
     );
     let pointer = positions.as_ptr();
     state.births.clear();
@@ -448,11 +446,9 @@ fn semantic_gravity_is_independent_of_the_emitter_bone_and_scalar_packing_flags(
     let (birth, _) = emitter
         .birth_in(&slot_values, 0., node, basis, Vec3::ZERO, 0)
         .unwrap();
-    assert!(
-        birth
-            .acceleration
-            .abs_diff_eq(basis.transform_vector3(Vec3::new(1., -2., 3.)), 1e-6)
-    );
+    assert!(birth
+        .acceleration
+        .abs_diff_eq(basis.transform_vector3(Vec3::new(1., -2., 3.)), 1e-6));
     emitter.flags.set_attached(true);
     let (birth, _) = emitter
         .birth_in(&slot_values, 0., node, basis, Vec3::ZERO, 0)
@@ -491,18 +487,14 @@ fn sphere_and_plane_use_distinct_polar_axes_and_head_flags_do_not_aim_velocity()
     let aimed = emitter
         .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
-    assert!(
-        aimed
-            .velocity
-            .abs_diff_eq(Vec3::new(1., 0., -1.).normalize() * 2., 1e-6)
-    );
+    assert!(aimed
+        .velocity
+        .abs_diff_eq(Vec3::new(1., 0., -1.).normalize() * 2., 1e-6));
 
-    assert!(
-        emitter
-            .emitter_frame(Mat4::IDENTITY)
-            .transform_vector3(Vec3::X)
-            .abs_diff_eq(Vec3::Y, 1e-6)
-    );
+    assert!(emitter
+        .emitter_frame(Mat4::IDENTITY)
+        .transform_vector3(Vec3::X)
+        .abs_diff_eq(Vec3::Y, 1e-6));
 }
 
 #[test]
@@ -807,11 +799,9 @@ fn spline_births_follow_authored_path_and_aim_from_the_source_height() {
     let birth = emitter
         .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
-    assert!(
-        birth
-            .velocity
-            .abs_diff_eq((birth.origin - Vec3::Z).normalize() * 2., 1e-6)
-    );
+    assert!(birth
+        .velocity
+        .abs_diff_eq((birth.origin - Vec3::Z).normalize() * 2., 1e-6));
 }
 
 #[test]
@@ -1522,12 +1512,10 @@ fn bone_births_use_posed_joint_origins_once_in_attached_and_detached_frames() {
             } else {
                 node.transform_vector3(Vec3::Z)
             };
-            assert!(
-                birth
-                    .velocity
-                    .normalize()
-                    .abs_diff_eq(expected_direction.normalize(), 1e-5)
-            );
+            assert!(birth
+                .velocity
+                .normalize()
+                .abs_diff_eq(expected_direction.normalize(), 1e-5));
         }
     }
     emitter.flags.set_attached(true);

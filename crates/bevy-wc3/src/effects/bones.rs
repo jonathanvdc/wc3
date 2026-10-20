@@ -137,8 +137,8 @@ impl BoneSource {
 mod tests {
     use super::*;
     use wc3::model::profiles::{
-        Universal,
         m2::{BoneProperties, MeshProperties as SectionProperties},
+        Universal,
     };
     use wc3::model::{
         GeometryData, IdentityBinding, Mesh, MeshInstance, ModelBuilder, ModelMetadata, Skin,
@@ -254,21 +254,17 @@ mod tests {
         assert!((across_limb - center).dot(Vec3::Z).abs() < 1e-5);
         assert!(((across_limb - center).length() - 2.).abs() < 1e-5);
         for parent in [None, Some(Vec3::ZERO)] {
-            assert!(
-                source
-                    .sample([0., 0.5, 0.5, 0.7], -1., 2., |_| Some((Vec3::ZERO, parent)))
-                    .unwrap()
-                    .is_finite()
-            );
+            assert!(source
+                .sample([0., 0.5, 0.5, 0.7], -1., 2., |_| Some((Vec3::ZERO, parent)))
+                .unwrap()
+                .is_finite());
         }
         let empty = BoneSource::default();
-        assert!(
-            empty
-                .sample([0.; 4], 0., 0., |_| panic!(
-                    "empty candidates must not evaluate a pose"
-                ))
-                .is_none()
-        );
+        assert!(empty
+            .sample([0.; 4], 0., 0., |_| panic!(
+                "empty candidates must not evaluate a pose"
+            ))
+            .is_none());
     }
     #[test]
     fn explicit_empty_palette_does_not_fall_back_to_model_nodes() {
@@ -300,16 +296,12 @@ mod tests {
             ..Default::default()
         };
         assert!(source.sample([0.; 4], 0., 0., |_| None).is_none());
-        assert!(
-            source
-                .sample([0.; 4], 0., 0., |_| Some((Vec3::NAN, None)))
-                .is_none()
-        );
-        assert!(
-            source
-                .sample([0.; 4], f32::INFINITY, 1., |_| Some((Vec3::ZERO, None)))
-                .is_none()
-        );
+        assert!(source
+            .sample([0.; 4], 0., 0., |_| Some((Vec3::NAN, None)))
+            .is_none());
+        assert!(source
+            .sample([0.; 4], f32::INFINITY, 1., |_| Some((Vec3::ZERO, None)))
+            .is_none());
     }
     #[test]
     fn excluded_unlisted_parent_remains_the_selected_childs_span_endpoint() {
