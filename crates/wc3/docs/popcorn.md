@@ -50,6 +50,20 @@ argument layouts and entrypoint ranges. Required binding fields fail explicitly
 when absent; supported sparse defaults remain separate from unknown native data.
 Declaration type identifiers and register-bank bytes are different domains.
 
+## Inspect graph routes
+
+`Document::effects()` discovers effect roots; `layer_graph(effect.graph)` resolves
+entry, layer and event objects into checked graph slots. `LayerIndex` and
+`EventIndex` distinguish these positions from one-based native object links.
+The reader checks route bounds and declared event ownership before returning a
+graph. Anonymous entry zero remains distinct from a named `Root` entry, which
+may select another event.
+
+Event parent omission denotes layer zero; explicit minus one denotes no parent.
+The authored coordinate tuple and broadcast declarations remain native data.
+Their presence does not imply coordinate interpretation or broadcast execution.
+Graph inspection does not start layers or emit particles.
+
 ## Execute a checked programme
 
 `Script::compile()` takes ordered external value layouts and resolved function

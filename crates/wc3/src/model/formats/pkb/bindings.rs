@@ -75,7 +75,7 @@ pub struct EntryPoint<'a> {
 }
 
 impl<'a> Document<'a> {
-    fn declaration(&self, link: u32, name: &[u8]) -> Result<&Object<'a>, ReadError> {
+    pub(super) fn declaration(&self, link: u32, name: &[u8]) -> Result<&Object<'a>, ReadError> {
         let object = self.object(link).ok_or(ReadError {
             offset: 0,
             message: "declaration link is null or outside the object table",
@@ -88,17 +88,17 @@ impl<'a> Document<'a> {
         }
         Ok(object)
     }
-    fn object_origin(&self, object: &Object<'_>) -> usize {
+    pub(super) fn object_origin(&self, object: &Object<'_>) -> usize {
         object.fields.as_ptr() as usize - self.bytes.as_ptr() as usize
     }
-    fn string(&self, input: &mut Cursor<'_>) -> Result<&'a [u8], ReadError> {
+    pub(super) fn string(&self, input: &mut Cursor<'_>) -> Result<&'a [u8], ReadError> {
         let index = input.word()?;
         self.strings
             .get(index as usize)
             .copied()
             .ok_or_else(|| input.error("declaration string is null or outside the string table"))
     }
-    fn links(&self, input: &mut Cursor<'_>) -> Result<Vec<u32>, ReadError> {
+    pub(super) fn links(&self, input: &mut Cursor<'_>) -> Result<Vec<u32>, ReadError> {
         let count = input.count(4)?;
         let mut links = Vec::with_capacity(count);
         for _ in 0..count {
@@ -112,7 +112,7 @@ impl<'a> Document<'a> {
         }
         Ok(links)
     }
-    fn fields(
+    pub(super) fn fields(
         &self,
         object: &Object<'a>,
         mut decode: impl FnMut(u16, &mut Cursor<'a>) -> Result<(), ReadError>,
@@ -136,7 +136,11 @@ impl<'a> Document<'a> {
         }
         Ok(())
     }
-    fn required<T>(&self, object: &Object<'_>, value: Option<T>) -> Result<T, ReadError> {
+    pub(super) fn required<T>(
+        &self,
+        object: &Object<'_>,
+        value: Option<T>,
+    ) -> Result<T, ReadError> {
         value.ok_or(ReadError {
             offset: self.object_origin(object),
             message: "required declaration field is absent",
