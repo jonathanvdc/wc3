@@ -7,8 +7,8 @@ use bevy::prelude::*;
 use bevy::shader::Shader;
 use bevy::time::TimeUpdateStrategy;
 use bevy_wc3::{
-    compile_model_with_options, spawn_model, CompileOptions, ModelAsset, ModelMaterial, Playback,
-    PreparedModel, Wc3BevyPlugin,
+    compile_model_with_options, spawn_model, ChildModelBinding, ChildModelKey, CompileOptions,
+    ModelAsset, ModelMaterial, Playback, PreparedModel, Wc3BevyPlugin,
 };
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
 use mdx::Write as _;
@@ -85,7 +85,10 @@ impl Harness {
                     &feature.payload,
                     NodeFeature::Particle(ParticleEmitter::MdlxEmitter1(_))
                 ) {
-                    options.child_models.insert(id, handle.clone());
+                    options.child_models.insert(
+                        ChildModelKey::particle_geometry(id),
+                        ChildModelBinding::new(handle.clone()),
+                    );
                 }
             }
         }

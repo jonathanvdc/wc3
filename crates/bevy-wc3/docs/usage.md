@@ -121,6 +121,23 @@ default; `ResourceResolver::import_options` can explicitly accept conversion los
 Accepted loss remains diagnostic and cannot repair malformed data or missing
 required files.
 
+`ResourceResolver::child_model_candidates` receives a `ChildModelRole` for
+attachments, geometry particles, or adopted particle emitters. M2 emitters can
+request both particle roles independently. With `compile_model_with_options`,
+bind an already resolved model through `CompileOptions::child_models`:
+
+```rust
+options.child_models.insert(
+    ChildModelKey::attachment(feature),
+    ChildModelBinding::new(child_model).with_coordinates(CoordinatePolicy::Child),
+);
+```
+
+Each binding contains its own coordinate policy. Keys belong to the source
+model; foreign feature IDs and roles without an authored dependency are rejected.
+M2 geometry and adopted-emitter resources can resolve independently, but their
+runtime interpreters remain unsupported.
+
 BLP0/1/2 decoding is included. BLP0 needs its sibling `.b00` in the same asset
 source; compatibility with real beta-game BLP0 assets remains unverified. Only
 base-level pixels are uploaded, rather than authored BLP mip chains.
@@ -198,7 +215,7 @@ mount gate; fractional visibility does not multiply child opacity. Hiding a pare
 does not implicitly pause every child clock.
 
 Children default to `CoordinatePolicy::Host`, using the host frame and units.
-Select `CoordinatePolicy::Child` in `CompileOptions::child_coordinates` to retain
+Select `CoordinatePolicy::Child` on the corresponding `ChildModelBinding` to retain
 a child's standalone conversion. WMO placement RGB is interior illumination and
 remains an integration hook, rather than automatically tinting child albedo.
 Cyclic dependencies are rejected. [Model particles](rendering/prem.md) have explicit

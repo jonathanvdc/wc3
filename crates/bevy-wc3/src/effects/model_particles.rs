@@ -1,10 +1,11 @@
 //! External-model particles with frozen world-space births and independent clocks.
-use super::super::child_coordinates::{ChildCoordinates, CoordinatePolicy};
+use super::super::child_coordinates::ChildCoordinates;
 use super::super::coordinates::basis;
 use super::super::{ModelAsset, ModelInstance, ModelRig, Playback};
 use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
 use super::EffectFrame;
+use crate::child_models::{ChildModelBinding, ChildModelKey};
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::effects::simulation::{EmissionPhase, EmissionRounding, EmitterRng};
 use bevy::prelude::*;
@@ -123,8 +124,7 @@ impl RuntimeModelParticles {
     pub fn compile(
         model: &Model<'_>,
         nodes: &HashMap<NodeId, usize>,
-        children: &HashMap<FeatureId, Handle<ModelAsset>>,
-        placements: &HashMap<FeatureId, CoordinatePolicy>,
+        children: &HashMap<ChildModelKey, ChildModelBinding>,
     ) -> Self {
         let mut result = Self {
             clips: model
@@ -157,7 +157,7 @@ impl RuntimeModelParticles {
                 diagnostic(RenderDiagnosticKind::Unsupported, "Model-particle image/text resources require a separate sprite interpretation and are not instantiated");
                 continue;
             }
-            let Some(child) = children.get(&feature) else {
+            let Some(child) = children.get(&ChildModelKey::particle_geometry(feature)) else {
                 diagnostic(
                     RenderDiagnosticKind::Resource,
                     "Model-particle child resource is unresolved",
@@ -175,11 +175,8 @@ impl RuntimeModelParticles {
                 feature,
                 node: attached.node,
                 anchor: nodes[&attached.node],
-                model: child.clone(),
-                placement: ChildCoordinates::from_model(
-                    model,
-                    placements.get(&feature).copied().unwrap_or_default(),
-                ),
+                model: child.model.clone(),
+                placement: ChildCoordinates::from_model(model, child.coordinates),
                 rate,
                 activation: definition.emission.activation,
                 speed,

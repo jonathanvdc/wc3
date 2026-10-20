@@ -14,10 +14,9 @@ pub(super) mod model_particles;
 mod programmes;
 mod ribbons;
 mod world;
-use super::child_coordinates::CoordinatePolicy;
 use super::events::EventTraversal;
 use super::material::{ModelMaterial, SurfacePass};
-use super::ModelAsset;
+use crate::child_models::{ChildModelBinding, ChildModelKey};
 use crate::textures::TextureImages;
 pub use age_sprites::SpriteEmitter;
 use age_sprites::{AgeSpriteInstances, RuntimeAgeSprites};
@@ -97,15 +96,14 @@ impl RuntimeParticles {
         nodes: &HashMap<NodeId, usize>,
         images: &TextureImages,
         materials: &HashMap<MaterialId, Vec<SurfacePass>>,
-        children: &HashMap<FeatureId, Handle<ModelAsset>>,
-        placements: &HashMap<FeatureId, CoordinatePolicy>,
+        children: &HashMap<ChildModelKey, ChildModelBinding>,
         programmes: &HashMap<FeatureId, ParticleEffect>,
     ) -> Self {
         let programmes = RuntimeProgramParticles::compile(model, nodes, programmes);
         let age = RuntimeAgeSprites::compile(model, nodes, images, materials);
         let atlas = RuntimeAtlasParticles::compile(model, nodes, images);
         let ribbons = RuntimeRibbons::compile(model, nodes, images, materials);
-        let models = RuntimeModelParticles::compile(model, nodes, children, placements);
+        let models = RuntimeModelParticles::compile(model, nodes, children);
         let diagnostics = atlas
             .diagnostics()
             .iter()

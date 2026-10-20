@@ -1,6 +1,7 @@
 //! Native asset loading without lowering through Warcraft III records.
 use super::images::ImageLoadCache;
 use super::particle_program::resolve_programmes;
+use crate::child_models::{requests as child_model_requests, ChildModelBinding, ChildModelRole};
 use crate::diagnostics::{RenderDiagnosticKind, RenderDiagnosticSource};
 use crate::error::ModelError;
 use crate::textures::{texture_requests, TextureRequest, TextureRequestKey};
@@ -28,20 +29,8 @@ use wc3::model::formats::mdlx::{DynamicDocument, NoExtensions};
 use wc3::model::formats::{m2, wmo};
 use wc3::model::io::mdlx as semantic_mdlx;
 use wc3::model::io::{m2 as semantic_m2, wmo as semantic_wmo};
-use wc3::model::{
-    Attachment, FeatureId, Model, NodeFeature, ParticleEmitter, ResourceLocator as ModelResource,
-};
-use wc3::model::{ImageResource, MdlxParticle1Resource};
+use wc3::model::{FeatureId, ImageResource, Model, ResourceLocator as ModelResource};
 use wc3::visit_m2_model;
-
-/// Authored use of an optional child model.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ResourcePurpose {
-    /// External model mounted at an authored attachment.
-    Attachment,
-    /// External model instantiated for each particle birth.
-    Particle,
-}
 
 /// Per-load ancestry propagated to optional model dependencies.
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -235,7 +224,7 @@ pub trait ResourceResolver: Send + Sync + 'static {
     fn child_model_candidates(
         &self,
         _feature: FeatureId,
-        _purpose: ResourcePurpose,
+        _role: ChildModelRole,
         resource: &ModelResource<'_>,
         owner: &AssetPath<'_>,
     ) -> Vec<AssetPath<'static>> {
@@ -511,40 +500,25 @@ async fn compile_loaded(
             )
         })
         .collect::<Vec<_>>();
-    for (id, feature) in model.features() {
-        if options.child_models.contains_key(&id) {
+    let mut resolved_paths: HashMap<AssetPath<'static>, Handle<ModelAsset>> = HashMap::new();
+    for (key, resource_id) in child_model_requests(model) {
+        if options.child_models.contains_key(&key) {
             continue;
         }
-        let (purpose, resource) = match &feature.payload {
-            NodeFeature::Attachment(Attachment::Child(value)) => (
-                ResourcePurpose::Attachment,
-                model
-                    .model_resource(value.resource)
-                    .expect("validated model resource")
-                    .clone()
-                    .into_owned(),
-            ),
-            NodeFeature::Particle(ParticleEmitter::MdlxEmitter1(value)) => {
-                let definition = &value.details;
-                if definition.text_resource {
-                    continue;
-                }
-                (
-                    ResourcePurpose::Particle,
-                    match definition.resource {
-                        MdlxParticle1Resource::Model(Some(id)) => model
-                            .model_resource(id)
-                            .expect("validated particle model")
-                            .clone()
-                            .into_owned(),
-                        _ => continue,
-                    },
-                )
-            }
-            _ => continue,
-        };
+        let resource = model
+            .model_resource(resource_id)
+            .expect("validated child model resource")
+            .clone()
+            .into_owned();
         let mut resolved = false;
-        for path in resolver.child_model_candidates(id, purpose, &resource, owner) {
+        for path in resolver.child_model_candidates(key.feature, key.role, &resource, owner) {
+            if let Some(handle) = resolved_paths.get(&path) {
+                options
+                    .child_models
+                    .insert(key, ChildModelBinding::new(handle.clone()));
+                resolved = true;
+                break;
+            }
             match context.read_asset_bytes(path.clone()).await {
                 Ok(_) => {}
                 Err(ReadAssetBytesError::AssetReaderError(AssetReaderError::NotFound(_))) => {
@@ -565,9 +539,9 @@ async fn compile_loaded(
             {
                 child_diagnostics.push(RenderDiagnostic::new(
                     RenderDiagnosticKind::Resource,
-                    RenderDiagnosticSource::Feature(id),
+                    RenderDiagnosticSource::Feature(key.feature),
                     format!(
-                        "cyclic child model reference {resource:?} at {path} is not instantiated"
+                        "cyclic child model reference {resource:?} for {:?} at {path} is not instantiated", key.role
                     ),
                 ));
                 resolved = true;
@@ -580,16 +554,22 @@ async fn compile_loaded(
                 .with_settings::<ModelLoaderSettings>(move |settings| {
                     settings.ancestry = ancestry.clone()
                 })
-                .load(path);
-            options.child_models.insert(id, handle);
+                .load(path.clone());
+            resolved_paths.insert(path, handle.clone());
+            options
+                .child_models
+                .insert(key, ChildModelBinding::new(handle));
             resolved = true;
             break;
         }
         if !resolved {
             child_diagnostics.push(RenderDiagnostic::new(
                 RenderDiagnosticKind::Resource,
-                RenderDiagnosticSource::Feature(id),
-                format!("optional {purpose:?} child model {resource:?} could not be resolved"),
+                RenderDiagnosticSource::Feature(key.feature),
+                format!(
+                    "optional {:?} child model {resource:?} could not be resolved",
+                    key.role
+                ),
             ));
         }
     }

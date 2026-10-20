@@ -1,6 +1,5 @@
 //! Compile semantic graphs into owned immutable render definitions.
 use super::bounds::rest_bounds;
-use super::child_coordinates::CoordinatePolicy;
 use super::coordinates::{axis, basis};
 use super::effects::{ParticleEffect, RuntimeParticles};
 use super::events::RuntimeEvents;
@@ -16,10 +15,10 @@ use super::textures::TextureImages;
 use super::world::WorldRuntime;
 use super::world_lighting::{illumination, ColorAdjustment};
 use super::{
-    CompiledModel, DrawSource, ModelAsset, ModelMaterial, RenderDiagnostic, TextureInput,
-    TextureRequest,
+    CompiledModel, DrawSource, ModelMaterial, RenderDiagnostic, TextureInput, TextureRequest,
 };
 use crate::animation_targets::AnimationTargets;
+use crate::child_models::{validate as validate_child_models, ChildModelBinding, ChildModelKey};
 use crate::compiled::{ClipTiming, RuntimeDraw, RuntimeLiquid, RuntimeNode, RuntimeSkin};
 use crate::composition::DrawSelection;
 use crate::diagnostics::{RenderDiagnosticKind, RenderDiagnosticSource};
@@ -72,10 +71,8 @@ pub struct CompileOptions {
     pub material: MaterialSelection,
     /// Authored geometry selection, independent of automatic LOD.
     pub draws: DrawSelection,
-    /// Resolved optional child models, keyed by the authored attachment or emitter.
-    pub child_models: HashMap<FeatureId, Handle<ModelAsset>>,
-    /// Child coordinate policies; omitted features use the host authored frame.
-    pub child_coordinates: HashMap<FeatureId, CoordinatePolicy>,
+    /// Resolved optional models, keyed by their source feature and authored role.
+    pub child_models: HashMap<ChildModelKey, ChildModelBinding>,
     /// Prepared external particle programmes, keyed by their Universal model feature.
     pub particle_effects: HashMap<FeatureId, ParticleEffect>,
 }
@@ -103,6 +100,7 @@ pub fn compile_model_with_options(
     mut resolve_image: impl FnMut(TextureRequest<'_, '_>) -> Option<Handle<Image>>,
 ) -> Result<CompiledModel, ModelError> {
     model.validate().map_err(|e| ModelError(e.to_string()))?;
+    validate_child_models(model, &options.child_models)?;
     let targets = AnimationTargets::new(model);
     let node_map: HashMap<_, _> = model
         .nodes()
@@ -423,7 +421,6 @@ pub fn compile_model_with_options(
         &images,
         &materials,
         &options.child_models,
-        &options.child_coordinates,
         &options.particle_effects,
     ));
     diagnostics.extend(
@@ -432,11 +429,7 @@ pub fn compile_model_with_options(
             .iter()
             .map(|(feature, issue)| issue.clone().at(RenderDiagnosticSource::Feature(*feature))),
     );
-    let features = Arc::new(RuntimeFeatures::compile(
-        model,
-        &options.child_models,
-        &options.child_coordinates,
-    ));
+    let features = Arc::new(RuntimeFeatures::compile(model, &options.child_models));
     diagnostics.extend(features.light_diagnostics().map(|(feature, message)| {
         RenderDiagnostic::new(
             RenderDiagnosticKind::Approximation,
@@ -458,7 +451,7 @@ pub fn compile_model_with_options(
             NodeFeature::Light(SemanticLight::SingleEmission(_) | SemanticLight::AmbientDiffuse(_)) =>
                 "direct illumination uses Bevy scene lights; ambient terms remain available through ModelLight metadata".to_string(),
             NodeFeature::Light(SemanticLight::World(_) | SemanticLight::Point(_)) => continue,
-            NodeFeature::Attachment(Attachment::Child(_)) if options.child_models.contains_key(&id) => continue,
+            NodeFeature::Attachment(Attachment::Child(_)) if options.child_models.contains_key(&ChildModelKey::attachment(id)) => continue,
             NodeFeature::Attachment(Attachment::Child(_)) =>
                 "external attachment identity and activation are exposed; application resource instantiation is required".to_string(),
             _ => format!("{} requires a visual interpreter or application integration", feature_name(&feature.payload)),

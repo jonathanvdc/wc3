@@ -34,6 +34,7 @@ mod baking;
 mod bounds;
 mod camera;
 mod child_coordinates;
+mod child_models;
 mod compiled;
 mod compiler;
 mod composition;
@@ -69,13 +70,14 @@ pub mod wow;
 
 pub use assets::{
     AssetSettings, BlpImageLoader, ModelAsset, ModelLoader, ModelLoaderSettings, PathResolver,
-    ResourcePurpose, ResourceResolver,
+    ResourceResolver,
 };
 pub use baking::{
     BakeSpace, BakedPart, BakedPose, BakedSource, PoseBaker, PoseOptions, PreparedPart,
 };
 pub use camera::CameraBinding;
 pub use child_coordinates::CoordinatePolicy;
+pub use child_models::{ChildModelBinding, ChildModelKey, ChildModelRole};
 pub use compiled::{CompiledModel, DrawSource, PreparedModel, PreparedMount};
 pub use compiler::{compile_model, compile_model_with_options, CompileOptions};
 pub use composition::{DrawSelection, JointMap, ModelPart, PartBinding};

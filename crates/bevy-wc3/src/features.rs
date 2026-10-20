@@ -3,6 +3,7 @@ use super::child_coordinates::{ChildCoordinates, CoordinatePolicy};
 use super::runtime::{ModelDraw, ModelNode};
 use super::world::WorldLiquidSurface;
 use super::{ModelAsset, ModelInstance, ModelRig, Playback};
+use crate::child_models::{ChildModelBinding, ChildModelKey};
 use crate::layers::ModelOwnedRenderEntity;
 use bevy::math::{Quat, Vec3};
 use bevy::prelude::*;
@@ -198,8 +199,7 @@ impl RuntimeFeatures {
     }
     pub fn compile(
         model: &Model<'_>,
-        children: &HashMap<FeatureId, Handle<ModelAsset>>,
-        placements: &HashMap<FeatureId, CoordinatePolicy>,
+        children: &HashMap<ChildModelKey, ChildModelBinding>,
     ) -> Self {
         let mut result = Self::default();
         for (id, value) in model.features() {
@@ -236,9 +236,15 @@ impl RuntimeFeatures {
                             .clone()
                             .into_owned()
                     }),
-                    model: value.child().and_then(|_| children.get(&id).cloned()),
+                    model: value.child().and_then(|_| {
+                        children
+                            .get(&ChildModelKey::attachment(id))
+                            .map(|binding| binding.model.clone())
+                    }),
                     placement: value.mount(id, feature.node).map(|mut placement| {
-                        placement.coordinates = placements.get(&id).copied().unwrap_or_default();
+                        placement.coordinates = children
+                            .get(&ChildModelKey::attachment(id))
+                            .map_or(CoordinatePolicy::default(), |binding| binding.coordinates);
                         placement
                     }),
                     parent_basis: ChildCoordinates::from_model(model, CoordinatePolicy::Host)
@@ -683,7 +689,7 @@ mod tests {
                 draft.finish()
             }
             .unwrap();
-            RuntimeFeatures::compile(&model, &HashMap::new(), &HashMap::new())
+            RuntimeFeatures::compile(&model, &HashMap::new())
         };
         assert!(
             matches!(compiled.attachments[0].resource.as_ref(), Some(ResourceLocator::Path(std::borrow::Cow::Owned(path))) if path == b"child.mdx")
