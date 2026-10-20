@@ -1,13 +1,13 @@
 //! Native asset loading without lowering through Warcraft III records.
+use super::images::ImageLoadCache;
 use crate::diagnostics::{RenderDiagnosticKind, RenderDiagnosticSource};
 use crate::error::ModelError;
-use crate::textures::{texture_requests, ImageKey, TextureRequest, TextureRequestKey};
-use crate::{compile_model_with_options, CompileOptions, CompiledModel, RenderDiagnostic};
+use crate::textures::{TextureRequest, TextureRequestKey, texture_requests};
+use crate::{CompileOptions, CompiledModel, RenderDiagnostic, compile_model_with_options};
 use bevy::asset::{
-    io::{AssetReaderError, Reader, SliceReader},
     AssetLoader, AssetPath, LoadContext, ReadAssetBytesError,
+    io::{AssetReaderError, Reader},
 };
-use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::*;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -25,8 +25,7 @@ use wc3::model::formats::{m2, wmo};
 use wc3::model::io::mdlx as semantic_mdlx;
 use wc3::model::io::{m2 as semantic_m2, wmo as semantic_wmo};
 use wc3::model::{
-    AddressMode, Attachment, FeatureId, Model, NodeFeature, ParticleEmitter,
-    ResourceLocator as ModelResource,
+    Attachment, FeatureId, Model, NodeFeature, ParticleEmitter, ResourceLocator as ModelResource,
 };
 use wc3::model::{ImageResource, MdlxParticle1Resource};
 use wc3::visit_m2_model;
@@ -554,9 +553,7 @@ async fn compile_loaded(
         }
     }
     let mut images = HashMap::new();
-    let mut variants: HashMap<_, Handle<Image>> = HashMap::new();
-    let mut encoded = HashMap::new();
-    let mut missing = HashSet::new();
+    let mut image_cache = ImageLoadCache::default();
     let indices: HashMap<_, _> = model
         .dependencies()
         .images()
@@ -570,69 +567,9 @@ async fn compile_loaded(
         let image_key = request.key();
         let resource = request.resource.clone().into_owned();
         let candidates = resolver.texture_candidates(indices[&id.resource], &request, owner);
-        let srgb = request.color_space.is_srgb();
-        let mut resolved = None;
-        for path in candidates {
-            let key = ImageKey {
-                source: path.clone(),
-                color_space: request.color_space,
-                sampler: request.sampler,
-            };
-            if let Some(handle) = variants.get(&key) {
-                resolved = Some(handle.clone());
-                break;
-            }
-            if missing.contains(&path) {
-                continue;
-            }
-            if !encoded.contains_key(&path) {
-                match context.read_asset_bytes(path.clone()).await {
-                    Ok(bytes) => {
-                        encoded.insert(path.clone(), bytes);
-                    }
-                    Err(ReadAssetBytesError::AssetReaderError(AssetReaderError::NotFound(_))) => {
-                        missing.insert(path);
-                        continue;
-                    }
-                    Err(error) => {
-                        return Err(ModelError(format!(
-                            "cannot load image {resource:?}: {error}"
-                        )));
-                    }
-                }
-            }
-            let mut sampler = ImageSamplerDescriptor::linear();
-            let address = |mode| match mode {
-                AddressMode::Repeat => ImageAddressMode::Repeat,
-                AddressMode::Mirror => ImageAddressMode::MirrorRepeat,
-                _ => ImageAddressMode::ClampToEdge,
-            };
-            sampler.address_mode_u = address(request.sampler.u);
-            sampler.address_mode_v = address(request.sampler.v);
-            let mut reader = SliceReader::new(&encoded[&path]);
-            let loaded = context
-                .load_builder()
-                .with_settings::<ImageLoaderSettings>(move |settings| {
-                    settings.sampler = ImageSampler::Descriptor(sampler.clone());
-                    settings.is_srgb = srgb;
-                })
-                .load_untyped_value_from_reader(path, &mut reader)
-                .await
-                .map_err(|error| {
-                    ModelError(format!("cannot decode image {resource:?}: {error}"))
-                })?;
-            let handle = context.add_labeled_asset(
-                format!("Image{}", variants.len()),
-                loaded.take::<Image>().ok_or_else(|| {
-                    ModelError(format!(
-                        "image resource {resource:?} resolved to a non-image asset"
-                    ))
-                })?,
-            );
-            variants.insert(key, handle.clone());
-            resolved = Some(handle);
-            break;
-        }
+        let resolved = image_cache
+            .resolve(context, candidates, request.color_space, request.sampler)
+            .await?;
         if let Some(handle) = resolved {
             images.insert(image_key, handle);
         } else if !unresolved_images.contains(&resource) {

@@ -1,14 +1,14 @@
 use super::*;
 use crate::BlpImageLoader;
 use bevy::asset::{AssetApp, AssetPlugin, LoadState};
-use bevy::image::ImageLoader;
+use bevy::image::{ImageAddressMode, ImageLoader, ImageSampler};
 use bevy::tasks::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool, TaskPoolBuilder};
 use std::collections::HashSet;
 use std::fs;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
+use wc3::model::{AddressMode, ModelMetadata};
 use wc3::model::common::ZeroVec;
-use wc3::model::ModelMetadata;
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 fn app(directory: &Path) -> App {
     app_with_resolver(directory, Arc::new(PathResolver))
@@ -75,12 +75,16 @@ fn path_provider_preserves_sources_and_does_not_guess_archive_id_names() {
             .collect::<Vec<_>>(),
         ["casc://units/unit00.skin"]
     );
-    assert!(resolver
-        .candidates(&ModelResource::FileDataId(42), &owner)
-        .is_empty());
-    assert!(resolver
-        .candidates(&ModelResource::Path(Cow::Borrowed(b"../outside")), &owner)
-        .is_empty());
+    assert!(
+        resolver
+            .candidates(&ModelResource::FileDataId(42), &owner)
+            .is_empty()
+    );
+    assert!(
+        resolver
+            .candidates(&ModelResource::Path(Cow::Borrowed(b"../outside")), &owner)
+            .is_empty()
+    );
 }
 #[cfg(unix)]
 #[test]
@@ -529,7 +533,7 @@ fn child_dependency_graph_rejects_cycles_between_independent_roots() {
 
 #[test]
 fn optional_attachment_models_load_with_extension_fallback_and_stop_cycles() {
-    use crate::{spawn_model, ModelInstance, ModelMaterial};
+    use crate::{ModelInstance, ModelMaterial, spawn_model};
     use bevy::ecs::world::CommandQueue;
     use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
     let directory = directory("child-models");
@@ -552,13 +556,15 @@ fn optional_attachment_models_load_with_extension_fallback_and_stop_cycles() {
     wait(&mut app, &child).unwrap();
     let assets = app.world().resource::<Assets<ModelAsset>>();
     assert_eq!(assets.len(), 2);
-    assert!(assets
-        .get(&child)
-        .unwrap()
-        .compiled
-        .diagnostics()
-        .iter()
-        .any(|diagnostic| diagnostic.message.contains("cyclic child model reference")));
+    assert!(
+        assets
+            .get(&child)
+            .unwrap()
+            .compiled
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("cyclic child model reference"))
+    );
     let compiled = assets.get(&root).unwrap().compiled.clone();
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<ModelMaterial>::default();
@@ -657,14 +663,18 @@ fn stale_reload_attempt_cannot_mutate_or_finish_newer_pending_edges() {
     let c = AssetPath::parse("c.mdl");
     let old = ModelDependencyLoad::begin(&graph, &a);
     let new = ModelDependencyLoad::begin(&graph, &a);
-    assert!(!graph
-        .lock()
-        .unwrap()
-        .insert_for_load(&a, old.generation, &b));
-    assert!(graph
-        .lock()
-        .unwrap()
-        .insert_for_load(&a, new.generation, &c));
+    assert!(
+        !graph
+            .lock()
+            .unwrap()
+            .insert_for_load(&a, old.generation, &b)
+    );
+    assert!(
+        graph
+            .lock()
+            .unwrap()
+            .insert_for_load(&a, new.generation, &c)
+    );
     drop(old);
     assert!(!graph.lock().unwrap().insert(&c, &a));
     new.commit();
@@ -720,7 +730,7 @@ fn native_import_loss_requires_opt_in_and_retains_diagnostic() {
 #[test]
 fn native_world_surface_sampler_variants_get_distinct_labeled_gpu_images() {
     use wc3::model::formats::wmo::{
-        codec::Array, records::Material as NativeMaterial, root::RootChunk, Classic, Root,
+        Classic, Root, codec::Array, records::Material as NativeMaterial, root::RootChunk,
     };
     struct WorldResolver;
     impl ResourceResolver for WorldResolver {
