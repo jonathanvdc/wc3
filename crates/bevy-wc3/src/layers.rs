@@ -5,6 +5,7 @@ use bevy::camera::visibility::RenderLayers;
 use bevy::ecs::change_detection::Tick;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use std::collections::HashSet;
 
 /// A render entity whose default camera layers are selected by its model root.
 #[derive(Component)]
@@ -45,18 +46,52 @@ pub(crate) struct LayerInputs<'w, 's> {
     removed_layers: RemovedComponents<'w, 's, RenderLayers>,
     removed_parents: RemovedComponents<'w, 's, ChildOf>,
     removed_roots: RemovedComponents<'w, 's, ModelRig>,
+    #[cfg(test)]
+    work: Option<ResMut<'w, LayerWork>>,
+}
+
+impl LayerInputs<'_, '_> {
+    fn owner(&self, entity: Entity) -> Option<Entity> {
+        self.particle_owners
+            .get(entity)
+            .map(ModelParticleChild::parent_model)
+            .ok()
+            .or_else(|| self.parents.get(entity).ok().map(ChildOf::parent))
+    }
+}
+
+/// Reusable event scratch; ordinary frames perform no topology traversal.
+#[derive(Default)]
+pub(crate) struct LayerTopology {
+    model_ancestors: HashSet<Entity>,
+}
+
+#[cfg(test)]
+#[derive(Resource, Default)]
+struct LayerWork {
+    render_entities: usize,
 }
 
 /// Reconcile only when model ownership, hierarchy, or application layer choices change.
-pub(crate) fn synchronize_model_layers(mut commands: Commands, mut inputs: LayerInputs<'_, '_>) {
+pub(crate) fn synchronize_model_layers(
+    mut commands: Commands,
+    mut inputs: LayerInputs<'_, '_>,
+    mut topology: Local<LayerTopology>,
+) {
     let roots = &inputs.roots;
     let render_entities = &inputs.render_entities;
     let mut removed = false;
     for entity in inputs.removed_layers.read() {
         removed |= roots.contains(entity) || render_entities.contains(entity);
     }
-    for _ in inputs.removed_parents.read() {
-        removed = true;
+    let affects_layers = |entity: Entity| {
+        topology.model_ancestors.contains(&entity)
+            || roots.contains(entity)
+            || render_entities.contains(entity)
+    };
+    let mut hierarchy_changed = inputs.changed_parents.iter().any(affects_layers);
+    for entity in inputs.removed_parents.read() {
+        hierarchy_changed |= affects_layers(entity);
     }
     for _ in inputs.removed_roots.read() {
         removed = true;
@@ -72,13 +107,21 @@ pub(crate) fn synchronize_model_layers(mut commands: Commands, mut inputs: Layer
         && !changed
         && inputs.new_roots.is_empty()
         && inputs.new_render_entities.is_empty()
-        && inputs.changed_parents.is_empty()
+        && !hierarchy_changed
     {
         return;
     }
-    // The parent count bounds malformed cycles without per-entity allocations.
+    // Cache only the owner paths that contributed inherited selections. Every
+    // way to change one of these paths changes a cached entity's parent or adds
+    // a new root/render entity, so unrelated hierarchy churn needs no traversal.
+    topology.model_ancestors.clear();
     let hierarchy_limit = inputs.parents.iter().len() + inputs.particle_owners.iter().len() + 1;
     for (entity, current, inherited) in &inputs.render_entities {
+        topology.model_ancestors.insert(entity);
+        #[cfg(test)]
+        if let Some(work) = &mut inputs.work {
+            work.render_entities += 1;
+        }
         if let Some(current) = &current {
             if inherited.is_none_or(|inherited| inherited.0 != current.last_changed()) {
                 // An explicit application write belongs to this render entity, including
@@ -89,13 +132,11 @@ pub(crate) fn synchronize_model_layers(mut commands: Commands, mut inputs: Layer
         let mut desired = RenderLayers::default();
         let mut ancestor = entity;
         for _ in 0..hierarchy_limit {
-            ancestor = if let Ok(particle) = inputs.particle_owners.get(ancestor) {
-                particle.parent_model()
-            } else if let Ok(parent) = inputs.parents.get(ancestor) {
-                parent.parent()
-            } else {
+            let Some(owner) = inputs.owner(ancestor) else {
                 break;
             };
+            ancestor = owner;
+            topology.model_ancestors.insert(ancestor);
             if let Ok(Some(layers)) = inputs.roots.get(ancestor) {
                 desired = layers.clone();
                 break;
@@ -114,3 +155,7 @@ pub(crate) fn synchronize_model_layers(mut commands: Commands, mut inputs: Layer
         });
     }
 }
+
+#[cfg(test)]
+#[path = "layers_tests.rs"]
+mod tests;
