@@ -256,3 +256,5 @@ pub use runtime::{EffectInstance, EffectLimits, EffectRuntimeError, EffectStats,
 
 mod lifetime;
 pub(crate) mod shapes;
+
+pub(crate) mod payload;

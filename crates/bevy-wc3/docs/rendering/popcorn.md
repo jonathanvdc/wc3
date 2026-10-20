@@ -9,6 +9,8 @@ fog and output processing as M2 sprites.
 
 This is a partial interpreter. Supported graphs can initialize and evolve particles,
 sample curves and event streams, generate timestamped children, and retire them.
+Typed routed payloads preserve birth-time values and native world-space frames
+independently across child and fanout particles.
 Unknown callbacks or unsupported graph contracts produce feature diagnostics;
 loading a model does not imply that every external programme can execute.
 
@@ -100,7 +102,7 @@ renderer diagnostics. Native ribbons, distortion and mesh outputs have no adapte
 
 `ParticleEffect::with_limits` selects `EffectLimits` for independent instances.
 The default pool contains 1,024 particle slots, including controllers. Event queues,
-generation handles, simulation steps, execution work and predicted storage are
+generation handles, payload copying, simulation steps, execution work and predicted storage are
 bounded separately. Omitted work advances time without a catch-up queue.
 `ParticleProgramEmitter` exposes living particles, sprite counts, omissions,
 suppressed births, skipped seconds and checked execution errors. Despawn removes

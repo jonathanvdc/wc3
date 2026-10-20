@@ -1,4 +1,5 @@
 //! Native baked graph lowering into owned, renderer-independent effect programmes.
+use super::effect_payload::{payload_layout, payload_policies, payload_reads};
 use super::{
     CompileLimits, CompilerBlob, Document, Effect, Instruction as NativeInstruction, LayerCache,
     LayerIndex, NativeType, ReadError,
@@ -8,6 +9,7 @@ use crate::model::scene::popcorn::graph::{
     BoundProgram, Callback, EffectGraph, EffectSampler, EventRoute, External,
 };
 use crate::model::scene::popcorn::layout::compact_registers;
+use crate::model::scene::popcorn::payload::Layout as PayloadLayout;
 use crate::model::scene::popcorn::shapes::{Domain, Primitive, Shape};
 use crate::model::scene::popcorn::{
     EffectAttribute, EffectEntry, EffectField, EffectFieldId, EffectLayer, EffectLayerId,
@@ -90,7 +92,7 @@ impl From<ReadError> for EffectCompileError {
         }
     }
 }
-fn error(message: impl Into<String>) -> EffectCompileError {
+pub(super) fn error(message: impl Into<String>) -> EffectCompileError {
     EffectCompileError {
         layer: None,
         stage: None,
@@ -265,6 +267,10 @@ impl<'a> Document<'a> {
                 lowering.attribute(*link)?;
             }
         }
+        let payloads = caches
+            .iter()
+            .map(|cache| payload_layout(&cache.root_event))
+            .collect::<Result<Vec<_>, _>>()?;
         let mut layers = Vec::new();
         let mut renderers = Vec::new();
         for (index, cache) in caches.iter().enumerate() {
@@ -434,6 +440,7 @@ impl<'a> Document<'a> {
                     spawner: spawner && cache.renderers.is_empty(),
                     rendered: !cache.renderers.is_empty(),
                     evolve_on_death: cache.evolve_on_death,
+                    payload: payloads[index].clone(),
                 };
                 compact_registers(
                     once(&mut compiled.init.program)
@@ -446,6 +453,45 @@ impl<'a> Document<'a> {
                 error
             })?);
         }
+        let mut events = Vec::new();
+        for event in &graph.events {
+            let payload = if let Some(parent) = event.parent {
+                let declaration = caches[parent.0 as usize]
+                    .events
+                    .iter()
+                    .find(|declaration| declaration.name == event.name)
+                    .ok_or_else(|| {
+                        error("owned graph event has no compiled payload declaration")
+                    })?;
+                payload_layout(declaration)?
+            } else {
+                PayloadLayout::default()
+            };
+            let mut maps = Vec::new();
+            for target in &event.targets {
+                let layer = &layers[target.0 as usize];
+                let mapping = payload.map_to(&layer.payload).map_err(error)?;
+                let mut reads = payload_reads(&layer.init, &layer.payload)?;
+                if let Some(evolve) = &layer.evolve {
+                    reads.extend(payload_reads(evolve, &layer.payload)?);
+                }
+                layer
+                    .payload
+                    .validate_reads(&mapping, &reads)
+                    .map_err(error)?;
+                maps.push(mapping);
+            }
+            events.push(EventRoute {
+                targets: event
+                    .targets
+                    .iter()
+                    .map(|target| EffectLayerId(target.0))
+                    .collect(),
+                payload,
+                maps: maps.into_boxed_slice(),
+            });
+        }
+        let payload_policies = payload_policies(&layers, &events);
         Ok(EffectProgram {
             inner: Arc::new(EffectGraph {
                 identity: Arc::new(()),
@@ -459,17 +505,7 @@ impl<'a> Document<'a> {
                     })
                     .collect(),
                 layers: layers.into_boxed_slice(),
-                events: graph
-                    .events
-                    .into_iter()
-                    .map(|event| EventRoute {
-                        targets: event
-                            .targets
-                            .into_iter()
-                            .map(|target| EffectLayerId(target.0))
-                            .collect(),
-                    })
-                    .collect(),
+                events: events.into_boxed_slice(),
                 renderers: renderers.into_boxed_slice(),
                 attributes: lowering.attributes.into_boxed_slice(),
                 limitations: {
@@ -485,6 +521,7 @@ impl<'a> Document<'a> {
                         EffectLimitation::CurveInterpolation,
                         EffectLimitation::OrientationPolicies,
                     ];
+                    limitations.extend(payload_policies);
                     if lowering
                         .samplers
                         .iter()
@@ -846,6 +883,39 @@ impl Lowering<'_, '_> {
                     Some(Int3),
                 )
             }
+            b"buildPayloadElement" => {
+                if bound.is_some()
+                    || arguments.len() != 5
+                    || arguments[0] != Int3
+                    || arguments[1] != arguments[2]
+                    || !matches!(arguments[1], Float | Float3 | Float4 | Quaternion | Int)
+                    || arguments[3] != Int
+                    || arguments[4] != Context
+                {
+                    return Err(error("payload element requires free batch, matching typed endpoints, semantic and context"));
+                }
+                (Callback::BuildElement, arguments.to_vec(), Some(Int))
+            }
+            b"appendPayload" => {
+                if !matches!(bound, Some(External::Event(_))) {
+                    return Err(error("payload append requires an owned event receiver"));
+                }
+                (Callback::Append, vec![Int, Int, Int, Context], Some(Int))
+            }
+            b"extractPayloadElementF1"
+            | b"extractPayloadElementF3"
+            | b"extractPayloadElementF4"
+            | b"extractPayloadElementI1"
+            | b"extractPayloadElementO" => {
+                let kind = match name {
+                    b"extractPayloadElementF1" => Float,
+                    b"extractPayloadElementF3" => Float3,
+                    b"extractPayloadElementF4" => Float4,
+                    b"extractPayloadElementI1" => Int,
+                    _ => Quaternion,
+                };
+                (Callback::Extract(kind), vec![Int, Context], Some(kind))
+            }
             b"initPayload" => {
                 if !matches!(bound, Some(External::Event(_))) {
                     return Err(error("initPayload requires an owned graph event"));
@@ -921,6 +991,7 @@ impl Lowering<'_, '_> {
         if matches!(
             callback,
             Callback::Age
+                | Callback::Extract(_)
                 | Callback::Running
                 | Callback::Kill
                 | Callback::Rand

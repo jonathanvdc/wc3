@@ -297,9 +297,13 @@ fn generator() -> EffectProgram {
     graph.layers = vec![controller, visible].into_boxed_slice();
     graph.events = vec![
         super::super::graph::EventRoute {
+            payload: Default::default(),
+            maps: Default::default(),
             targets: vec![EffectLayerId(0)].into_boxed_slice(),
         },
         super::super::graph::EventRoute {
+            payload: Default::default(),
+            maps: Default::default(),
             targets: vec![EffectLayerId(1)].into_boxed_slice(),
         },
     ]
@@ -695,3 +699,6 @@ fn trigger_in_initialization_can_route_at_zero_without_warmup_replay() {
     instance.advance(&program, 0., inputs()).unwrap();
     assert_eq!(instance.stats().spawned, spawned);
 }
+
+#[path = "payload_runtime_tests.rs"]
+mod payload;

@@ -168,13 +168,13 @@ Runtime errors stop advancement until the instance is restarted and leave earlie
 writes observable.
 
 The implemented callback subset covers effect age/running state, event-stream
-and rate generation, condition-triggered events, event initialization/kick, retirement, random intervals,
+and rate generation, condition-triggered events, typed payload construction, routing and extraction, retirement, random intervals,
 point transforms with masks 17/19, direction transforms with mask 18, RGB/HSV
 conversion, quaternion orientation and rotation, emitter axes, typed curve
 sampling, and primitive `samplePosition` callbacks. It
 executes the complete acquired HD LichAttack graph, including invisible
 controllers and its routed child layer. Broadcasts, spatial queries, unsupported payload
-operations, other transform masks, unknown callbacks and unresolved sampler
+semantics, other transform masks, unknown callbacks and unresolved sampler
 families fail explicitly. When a native curve omits dimensionality, lowering
 resolves it from the return registers of its bound `sample` calls. All uses across
 owning layers and programme stages must agree, and values/tangents must fit that width. The borrowed native
@@ -198,11 +198,42 @@ must diagnose unsupported enabled features before drawing.
 
 The caller chooses the coordinate frame carried by `SceneInputs`. Point mask 17
 adds translation only, point mask 19 applies the caller's basis and translation,
-and direction mask 18 applies its basis without translation. The basis includes
-any embedded scale; independently verified scale filtering, inverse transforms
-and populated payload frames remain unsupported. A graphics adapter using a
+and direction mask 18 applies its basis without translation. Mask 11 always uses
+the ordinary caller frame. Masks 17/19/18 select the routed payload frame when a
+Position or Orientation value was supplied; without either they use the caller
+frame. A supplied Position is already world-space. In the payload frame, absent
+Position means the origin, absent Orientation means identity, and scale is one;
+the ordinary emitter transform is replaced as a whole. The basis includes
+any embedded scale; independently verified scale filtering and inverse transforms
+remain unsupported. A graphics adapter using a
 fixed axis conversion should keep that conversion separate from authored T/Q
 filters and apply it once when extracting positions.
+
+Payload event declarations map by exact name, native type, footprint and role into
+root declarations. Target layouts may have unused extra channels. Lowering checks
+that every incoming route supplies channels explicitly read by selected scripts;
+missing reads, conflicting layouts, unknown semantics and stale capabilities fail
+explicitly. Position and Orientation also feed transforms implicitly, so they are
+retained even when no extraction callback reads them.
+
+Each invocation owns its batch, element and draft handles. Appending validates
+both event and batch ownership; element values can be reused by independent drafts.
+Controls 0–2 create independent drafts, retaining their raw control while its
+additional native routing meaning remains unverified. A kick creates one immutable
+bounded endpoint snapshot shared by queued fanout births. Each birth samples its
+own occurrence fraction and copies canonical values before initialization; queued
+ownership is released before that initializer may emit more children. Retiring,
+restarting and omission paths recycle storage without allocating.
+
+Constant endpoints preserve exact bits. Varying scalar/vector/color values use
+linear interpolation; varying orientations use normalized shortest-arc spherical
+interpolation. Emitted-count channels use zero-based cumulative occurrence indices.
+These interpolation and index policies remain unverified against the client and
+appear in `limitations()` only when the compiled graph can use them. Unknown
+semantic words are errors, rather than guesses about unobserved derivative data.
+`EffectLimits::payload_words_per_update` separately bounds endpoint-row preparation,
+snapshot copying, root-row clearing and interpolation. Exhaustion omits entire
+births through `EffectStats::omitted_births`, with no partial payload or backlog.
 
 Primitive sampling supports boxes, spheres, complex ellipsoids, cylinders,
 capsules and cones in surface or volume mode. Lowering applies explicit sparse

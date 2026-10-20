@@ -1,7 +1,8 @@
 //! Checked numeric callback dispatch with invocation-owned generation capabilities.
 use super::graph::*;
+use super::payload::{Element as PayloadElement, Storage as PayloadStorage};
 use super::runtime::{EffectLimits, EffectStats, FieldPlanes, RandomState, Spawn};
-use super::{color, orientation};
+use super::{color, orientation, payload};
 use super::{Host, Value, ValueType};
 use glam::{Mat4, Quat, Vec3};
 use std::array::from_fn;
@@ -9,6 +10,18 @@ use std::collections::BinaryHeap;
 use std::mem::size_of;
 
 type Result<T> = std::result::Result<T, &'static str>;
+#[derive(Clone, Copy)]
+struct Occurrence {
+    time: f64,
+    fraction: f32,
+    ordinal: u32,
+}
+#[derive(Clone, Copy)]
+struct BoundElement {
+    key: u32,
+    batch: usize,
+    element: PayloadElement,
+}
 #[derive(Clone, Copy)]
 struct Batch {
     key: u32,
@@ -22,31 +35,49 @@ struct Draft {
     batch: usize,
     event: usize,
     committed: bool,
+    control: u32,
+    omitted: bool,
 }
 pub(crate) struct Scratch {
-    times: Vec<f64>,
+    times: Vec<Occurrence>,
+    elements: Vec<BoundElement>,
+    payload_fields: Vec<Option<PayloadElement>>,
+    payload_width: usize,
     batches: Vec<Batch>,
     drafts: Vec<Draft>,
     next: u32,
 }
 impl Scratch {
-    pub fn new(limits: EffectLimits) -> Self {
+    pub fn new(limits: EffectLimits, payload_width: usize) -> Self {
         Self {
             times: Vec::with_capacity(limits.occurrences),
+            elements: Vec::with_capacity(limits.handles),
+            payload_fields: vec![None; limits.handles * payload_width],
+            payload_width,
             batches: Vec::with_capacity(limits.handles),
             drafts: Vec::with_capacity(limits.handles),
             next: 0,
         }
     }
-    pub fn storage_bytes(limits: EffectLimits) -> Option<usize> {
-        limits.occurrences.checked_mul(8)?.checked_add(
-            limits
-                .handles
-                .checked_mul(size_of::<Batch>() + size_of::<Draft>())?,
-        )
+    pub fn storage_bytes(limits: EffectLimits, payload_width: usize) -> Option<usize> {
+        limits
+            .occurrences
+            .checked_mul(size_of::<Occurrence>())?
+            .checked_add(
+                limits
+                    .handles
+                    .checked_mul(payload_width)?
+                    .checked_mul(size_of::<Option<PayloadElement>>())?,
+            )?
+            .checked_add(
+                limits.handles.checked_mul(
+                    size_of::<Batch>() + size_of::<Draft>() + size_of::<BoundElement>(),
+                )?,
+            )
     }
     pub fn clear(&mut self) {
         self.times.clear();
+        self.elements.clear();
         self.batches.clear();
         self.drafts.clear();
     }
@@ -71,6 +102,8 @@ pub(crate) struct ExecutionHost<'a> {
     pub running: bool,
     pub emitting: bool,
     pub world: Mat4,
+    pub payload_frame: Option<Mat4>,
+    pub payload: &'a mut PayloadStorage,
     pub attributes: &'a [Value],
     pub random: &'a mut RandomState,
     pub scratch: &'a mut Scratch,
@@ -171,8 +204,18 @@ impl ExecutionHost<'_> {
                 .filter(|next| *next <= i32::MAX as u32)
                 .ok_or("event cumulative count exceeds native accumulator")?;
             let kept = count.min(self.limits.occurrences - self.scratch.times.len());
-            for time in &times[end - kept..end] {
-                self.scratch.times.push(self.birth + f64::from(*time));
+            for (ordinal, time) in times[end - kept..end].iter().enumerate() {
+                let time = self.birth + f64::from(*time);
+                let fraction = if self.delta > 0. {
+                    ((time - (self.time - self.delta)) / self.delta).clamp(0., 1.) as f32
+                } else {
+                    0.
+                };
+                self.scratch.times.push(Occurrence {
+                    time,
+                    fraction,
+                    ordinal: total + (count - kept + ordinal) as u32,
+                });
             }
             self.batch(next, 0., start, (count - kept) as u64)
         } else {
@@ -211,9 +254,11 @@ impl ExecutionHost<'_> {
                 } else {
                     1.
                 };
-                self.scratch
-                    .times
-                    .push(self.time - self.delta + self.delta * f64::from(fraction));
+                self.scratch.times.push(Occurrence {
+                    time: self.time - self.delta + self.delta * f64::from(fraction),
+                    fraction,
+                    ordinal: total + index,
+                });
             }
             self.batch(
                 next,
@@ -314,98 +359,23 @@ impl Host for ExecutionHost<'_> {
                 let count = u32::from(self.running && a[0].words()[0] != 0);
                 let start = self.scratch.times.len();
                 let omitted = if count != 0 && start < self.limits.occurrences {
-                    self.scratch.times.push(
-                        self.time - self.delta + self.delta * f64::from(fraction.clamp(0., 1.)),
-                    );
+                    let fraction = fraction.clamp(0., 1.);
+                    self.scratch.times.push(Occurrence {
+                        time: self.time - self.delta + self.delta * f64::from(fraction),
+                        fraction,
+                        ordinal: 0,
+                    });
                     0
                 } else {
                     u64::from(count)
                 };
                 Some(self.batch(count, 0., start, omitted)?)
             }
-            Callback::InitPayload => {
-                self.context(a[2], false)?;
-                if a[0].words()[0] != 0 {
-                    return Err("unsupported native payload initialization control");
-                }
-                let External::Event(event) = self.external(
-                    receiver.ok_or("payload initialization requires an event receiver")?,
-                )?
-                else {
-                    return Err("payload initialization receiver is not an event");
-                };
-                let batch = self
-                    .scratch
-                    .batches
-                    .iter()
-                    .position(|batch| batch.key == a[1].words()[2])
-                    .ok_or(
-                        "generation batch capability is stale or belongs to another invocation",
-                    )?;
-                if self.scratch.drafts.len() >= self.limits.handles {
-                    return Err("effect payload draft capacity exhausted");
-                }
-                let key = self.scratch.key()?;
-                self.scratch.drafts.push(Draft {
-                    key,
-                    batch,
-                    event,
-                    committed: false,
-                });
-                Some(Value::from_words(ValueType::Int, [key, 0, 0, 0]))
-            }
-            Callback::Kick => {
-                self.context(a[1], true)?;
-                self.context(a[2], false)?;
-                let External::Event(event) =
-                    self.external(receiver.ok_or("event kick requires a bound receiver")?)?
-                else {
-                    return Err("event kick receiver is not an event");
-                };
-                let draft = self
-                    .scratch
-                    .drafts
-                    .iter_mut()
-                    .find(|draft| draft.key == a[0].words()[0])
-                    .ok_or("payload draft capability is stale or belongs to another invocation")?;
-                if draft.event != event || draft.committed {
-                    return Err("payload draft belongs to another event or was already committed");
-                }
-                draft.committed = true;
-                let batch = self.scratch.batches[draft.batch];
-                if self.running {
-                    let targets = &self.graph.events[event].targets;
-                    self.stats.omitted_births = self
-                        .stats
-                        .omitted_births
-                        .saturating_add(batch.omitted.saturating_mul(targets.len() as u64));
-                    self.random.counter = self.random.counter.wrapping_add(batch.omitted);
-                    for time in &self.scratch.times[batch.start..batch.end] {
-                        let seed = self.random.next();
-                        for layer in targets {
-                            if !self.emitting && self.graph.layers[layer.0 as usize].rendered {
-                                self.stats.suppressed_births =
-                                    self.stats.suppressed_births.saturating_add(1);
-                                continue;
-                            }
-                            if self.pending.len() >= self.limits.pending_events {
-                                self.stats.omitted_births =
-                                    self.stats.omitted_births.saturating_add(1);
-                            } else {
-                                self.pending.push(Spawn {
-                                    time: *time,
-                                    layer: *layer,
-                                    parent: Some(self.id),
-                                    seed,
-                                    order: *self.order,
-                                });
-                                *self.order = self.order.wrapping_add(1);
-                            }
-                        }
-                    }
-                }
-                None
-            }
+            Callback::InitPayload
+            | Callback::BuildElement
+            | Callback::Append
+            | Callback::Extract(_)
+            | Callback::Kick => self.payload_call(callback, receiver, a)?,
             Callback::Kill => {
                 let condition = if a.len() == 1 {
                     self.context(a[0], false)?;
@@ -449,7 +419,7 @@ impl Host for ExecutionHost<'_> {
                 self.context(a[2], false)?;
                 let words = a[0].words();
                 let point = transform(
-                    self.world,
+                    payload::select(self.world, self.payload_frame, a[1].words()[0])?,
                     Vec3::new(
                         f32::from_bits(words[0]),
                         f32::from_bits(words[1]),
@@ -548,7 +518,7 @@ impl Host for ExecutionHost<'_> {
 fn transform(world: Mat4, value: Vec3, mask: u32, direction: bool) -> Result<Vec3> {
     let transformed = match (direction, mask) {
         (false, 17) => value + world.w_axis.truncate(),
-        (false, 19) => world.transform_point3(value),
+        (false, 11 | 19) => world.transform_point3(value),
         (true, 18) => world.transform_vector3(value),
         _ => return Err("unsupported native local-to-world transform mask"),
     };
@@ -561,3 +531,6 @@ fn transform(world: Mat4, value: Vec3, mask: u32, direction: bool) -> Result<Vec
 #[cfg(test)]
 #[path = "callback_tests.rs"]
 mod tests;
+
+#[path = "callbacks/payload.rs"]
+mod payload_dispatch;

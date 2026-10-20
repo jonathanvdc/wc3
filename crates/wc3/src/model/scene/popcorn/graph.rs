@@ -1,4 +1,5 @@
 //! Immutable effect programmes and renderer-independent storage bindings.
+use super::payload::Layout as PayloadLayout;
 use super::shapes::Shape;
 use super::{Program, Value, ValueType};
 use glam::Mat4;
@@ -147,6 +148,14 @@ pub enum EffectLimitation {
     ShapeSampling,
     /// Pure orientation kernels retain explicit axis, normalization and degenerate-vector policies.
     OrientationPolicies,
+    /// Varying endpoint payloads use linear values and shortest-arc normalized quaternion interpolation.
+    PayloadInterpolation,
+    /// Emitted-count payloads use zero-based cumulative occurrence indices.
+    PayloadIndex,
+    /// Nonzero native draft controls retain independent ownership without a verified additional routing meaning.
+    PayloadDraftControl,
+    /// Present position/orientation channels replace the complete payload frame, with unit scale.
+    PayloadFrame,
     /// Native interpolation selector is restricted to the observed zero mode.
     CurveInterpolation,
 }
@@ -210,6 +219,7 @@ pub struct EffectLayer {
     pub(crate) spawner: bool,
     pub(crate) rendered: bool,
     pub(crate) evolve_on_death: bool,
+    pub(crate) payload: PayloadLayout,
 }
 #[derive(Debug)]
 pub(crate) struct EffectGraph {
@@ -250,6 +260,9 @@ pub(crate) enum Callback {
     StreamDuration,
     Generate,
     Trigger,
+    BuildElement,
+    Append,
+    Extract(ValueType),
     InitPayload,
     Kick,
     Kill,
@@ -270,6 +283,8 @@ pub(crate) enum Callback {
 #[derive(Debug)]
 pub(crate) struct EventRoute {
     pub targets: Box<[EffectLayerId]>,
+    pub payload: PayloadLayout,
+    pub maps: Box<[Box<[usize]>]>,
 }
 #[derive(Debug)]
 pub(crate) enum EffectSampler {

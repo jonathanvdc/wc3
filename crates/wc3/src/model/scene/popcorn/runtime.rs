@@ -2,7 +2,9 @@
 use super::callbacks::{ExecutionHost, Scratch};
 use super::graph::*;
 use super::lifetime::Lifetime;
+use super::payload::{Handle as PayloadHandle, Storage as PayloadStorage};
 use super::{Failure, State, Value, ValueType};
+use glam::Mat4;
 use std::array::from_fn;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -31,6 +33,8 @@ pub struct EffectLimits {
     pub steps_per_update: usize,
     /// Maximum predicted allocated storage in bytes.
     pub storage_bytes: usize,
+    /// Maximum payload component words copied or interpolated per update.
+    pub payload_words_per_update: usize,
 }
 impl Default for EffectLimits {
     fn default() -> Self {
@@ -43,6 +47,7 @@ impl Default for EffectLimits {
             step_seconds: 1. / 60.,
             steps_per_update: 4096,
             storage_bytes: 128 * 1024 * 1024,
+            payload_words_per_update: 1_048_576,
         }
     }
 }
@@ -151,6 +156,7 @@ struct Particle {
     cursor: f64,
     random: RandomState,
     parent: Option<EffectParticleId>,
+    payload_frame: Option<Mat4>,
 }
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Spawn {
@@ -159,6 +165,11 @@ pub(crate) struct Spawn {
     pub parent: Option<EffectParticleId>,
     pub seed: u64,
     pub order: u64,
+    pub payload: Option<PayloadHandle>,
+    pub payload_event: usize,
+    pub payload_target: usize,
+    pub payload_fraction: f32,
+    pub payload_ordinal: u32,
 }
 impl PartialEq for Spawn {
     fn eq(&self, other: &Self) -> bool {
@@ -212,6 +223,7 @@ pub struct EffectInstance {
     fields: FieldPlanes,
     pending: BinaryHeap<Spawn>,
     scratch: Scratch,
+    payload: PayloadStorage,
     vm_scratch: State,
     limits: EffectLimits,
     stats: EffectStats,
@@ -236,6 +248,7 @@ impl EffectProgram {
             || limits.occurrences == 0
             || limits.handles == 0
             || limits.work_per_update == 0
+            || limits.payload_words_per_update == 0
             || !limits.step_seconds.is_finite()
             || limits.step_seconds <= 0.
             || limits.steps_per_update == 0
@@ -273,6 +286,34 @@ impl EffectProgram {
                 *width = (*width).max(field.value_type.map_or(1, ValueType::components));
             }
         }
+        let payload_width = if self.inner.layers.iter().any(|layer| {
+            Some(&layer.init)
+                .into_iter()
+                .chain(layer.evolve.as_ref())
+                .any(|bound| {
+                    bound.callbacks.iter().any(|callback| {
+                        matches!(
+                            callback,
+                            Callback::BuildElement | Callback::Append | Callback::Extract(_)
+                        )
+                    })
+                })
+        }) {
+            self.inner
+                .layers
+                .iter()
+                .map(|layer| layer.payload.fields.len())
+                .chain(
+                    self.inner
+                        .events
+                        .iter()
+                        .map(|event| event.payload.fields.len()),
+                )
+                .max()
+                .unwrap_or(0)
+        } else {
+            0
+        };
         let words = counts[2..]
             .iter()
             .sum::<usize>()
@@ -288,10 +329,17 @@ impl EffectProgram {
             .and_then(|bytes| {
                 bytes.checked_add(limits.pending_events.checked_mul(size_of::<Spawn>())?)
             })
-            .and_then(|bytes| bytes.checked_add(Scratch::storage_bytes(limits)?))
+            .and_then(|bytes| bytes.checked_add(Scratch::storage_bytes(limits, payload_width)?))
             .and_then(|bytes| {
                 bytes.checked_add(limits.particles.checked_mul(2 * size_of::<usize>())?)
             });
+        let bytes = bytes.and_then(|bytes| {
+            bytes.checked_add(PayloadStorage::bytes(
+                limits.particles,
+                limits.pending_events,
+                payload_width,
+            )?)
+        });
         if bytes.is_none_or(|bytes| bytes > limits.storage_bytes) {
             return Err(failure("effect pool exceeds its configured storage budget"));
         }
@@ -307,6 +355,7 @@ impl EffectProgram {
                     counter: 0,
                 },
                 parent: None,
+                payload_frame: None,
             })
             .collect();
         Ok(EffectInstance {
@@ -322,7 +371,9 @@ impl EffectProgram {
             free: (0..limits.particles).rev().collect(),
             fields: FieldPlanes::new(&widths, limits.particles),
             pending: BinaryHeap::with_capacity(limits.pending_events),
-            scratch: Scratch::new(limits),
+            scratch: Scratch::new(limits, payload_width),
+            payload: PayloadStorage::new(limits.particles, limits.pending_events, payload_width)
+                .map_err(failure)?,
             vm_scratch: State::scratch_for_programs(programs.iter().copied()),
             limits,
             stats: EffectStats::default(),
@@ -376,6 +427,7 @@ impl EffectInstance {
         self.free.clear();
         self.free.extend((0..self.particles.len()).rev());
         self.pending.clear();
+        self.payload.clear();
         self.time = 0.;
         self.running = true;
         self.emitting = true;
@@ -389,6 +441,11 @@ impl EffectInstance {
                 parent: None,
                 seed: mix(self.seed ^ u64::from(target.0)),
                 order: self.order,
+                payload: None,
+                payload_event: 0,
+                payload_target: 0,
+                payload_fraction: 0.,
+                payload_ordinal: 0,
             });
         }
         for (index, layer) in program.inner.layers.iter().enumerate() {
@@ -403,6 +460,11 @@ impl EffectInstance {
                     parent: None,
                     seed: mix(self.seed ^ index as u64),
                     order: self.order,
+                    payload: None,
+                    payload_event: 0,
+                    payload_target: 0,
+                    payload_fraction: 0.,
+                    payload_ordinal: 0,
                 });
             }
         }
@@ -518,6 +580,7 @@ impl EffectInstance {
         if delta == 0. {
             return Ok(());
         }
+        self.payload.reset_work();
         let end = self.time + delta;
         let mut steps = 0;
         let mut work = 0;
@@ -598,7 +661,14 @@ impl EffectInstance {
                     .stats
                     .omitted_births
                     .saturating_add(1 + self.pending.len() as u64);
-                self.pending.clear();
+                if let Some(handle) = spawn.payload {
+                    self.payload.arena.release(handle).map_err(failure)?;
+                }
+                while let Some(spawn) = self.pending.pop() {
+                    if let Some(handle) = spawn.payload {
+                        self.payload.arena.release(handle).map_err(failure)?;
+                    }
+                }
                 break;
             }
             self.birth(program, spawn, end, inputs, work)?;
@@ -608,13 +678,44 @@ impl EffectInstance {
     fn birth(
         &mut self,
         program: &EffectProgram,
-        spawn: Spawn,
+        mut spawn: Spawn,
+        end: f64,
+        inputs: SceneInputs,
+        work: &mut usize,
+    ) -> Result<(), EffectRuntimeError> {
+        let result = self.birth_inner(program, &mut spawn, end, inputs, work);
+        if let Some(handle) = spawn.payload {
+            self.payload.arena.release(handle).map_err(failure)?;
+        }
+        result
+    }
+    fn birth_inner(
+        &mut self,
+        program: &EffectProgram,
+        spawn: &mut Spawn,
         end: f64,
         inputs: SceneInputs,
         work: &mut usize,
     ) -> Result<(), EffectRuntimeError> {
         if *work >= self.limits.work_per_update {
             self.stats.omitted_births += 1;
+            return Ok(());
+        }
+        let payload_words = self
+            .payload
+            .birth_words(
+                spawn.payload,
+                program.inner.layers[spawn.layer.0 as usize]
+                    .payload
+                    .fields
+                    .len(),
+            )
+            .map_err(failure)?;
+        if !self
+            .payload
+            .charge(payload_words, self.limits.payload_words_per_update)
+        {
+            self.stats.omitted_births = self.stats.omitted_births.saturating_add(1);
             return Ok(());
         }
         let Some(slot) = self.free.pop() else {
@@ -638,6 +739,32 @@ impl EffectInstance {
         particle.state.clear();
         for (field, definition) in layer.fields.iter().enumerate() {
             self.fields.write(field, slot, definition.initial);
+        }
+        let mapping = if spawn.payload.is_some() {
+            program.inner.events[spawn.payload_event]
+                .maps
+                .get(spawn.payload_target)
+                .ok_or_else(|| failure("queued payload target map is absent"))?
+                .as_ref()
+        } else {
+            &[]
+        };
+        self.payload
+            .initialize(
+                slot,
+                layer.payload.fields.len(),
+                spawn.payload,
+                mapping,
+                spawn.payload_fraction,
+                spawn.payload_ordinal,
+            )
+            .map_err(failure)?;
+        self.particles[slot].payload_frame =
+            self.payload.frame(slot, &layer.payload).map_err(failure)?;
+        // Canonical values and the frame now own everything the initializer needs.
+        // Release queued ownership before it can emit another bounded payload.
+        if let Some(handle) = spawn.payload.take() {
+            self.payload.arena.release(handle).map_err(failure)?;
         }
         self.active.push(slot);
         self.execute(program, slot, &layer.init, spawn.time, 0., inputs)?;
@@ -735,6 +862,8 @@ impl EffectInstance {
             running: self.running,
             emitting: self.emitting,
             world: inputs.world_from_effect,
+            payload_frame: particle.payload_frame,
+            payload: &mut self.payload,
             attributes: &self.attributes,
             random: &mut particle.random,
             scratch: &mut self.scratch,

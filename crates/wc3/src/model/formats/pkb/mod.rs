@@ -266,3 +266,5 @@ pub use effect_compile::{EffectCompileError, EffectCompileOptions, EffectEvoluti
 
 mod shape;
 pub use shape::ShapeSampler;
+
+mod effect_payload;
