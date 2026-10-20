@@ -1,12 +1,16 @@
 //! Native asset loading without lowering through Warcraft III records.
 use super::images::ImageLoadCache;
+use super::particle_program::resolve_programmes;
 use crate::diagnostics::{RenderDiagnosticKind, RenderDiagnosticSource};
 use crate::error::ModelError;
-use crate::textures::{TextureRequest, TextureRequestKey, texture_requests};
-use crate::{CompileOptions, CompiledModel, RenderDiagnostic, compile_model_with_options};
+use crate::textures::{texture_requests, TextureRequest, TextureRequestKey};
+use crate::{
+    compile_model_with_options, CompileOptions, CompiledModel, ParticleTextureRequest,
+    RenderDiagnostic,
+};
 use bevy::asset::{
-    AssetLoader, AssetPath, LoadContext, ReadAssetBytesError,
     io::{AssetReaderError, Reader},
+    AssetLoader, AssetPath, LoadContext, ReadAssetBytesError,
 };
 use bevy::prelude::*;
 use std::borrow::Cow;
@@ -250,6 +254,43 @@ pub trait ResourceResolver: Send + Sync + 'static {
             }
         }
         result
+    }
+    /// Baked external effect companions in provider lookup order.
+    /// Authored `.pkfx` resources resolve to `.pkb` companions at each location.
+    fn particle_effect_candidates(
+        &self,
+        _feature: FeatureId,
+        resource: &ModelResource<'_>,
+        owner: &AssetPath<'_>,
+    ) -> Vec<AssetPath<'static>> {
+        self.candidates(resource, owner)
+            .into_iter()
+            .map(|path| {
+                if path
+                    .path()
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("pkfx"))
+                {
+                    AssetPath::from(path.path().with_extension("pkb"))
+                        .with_source(path.source().clone_owned())
+                } else {
+                    path
+                }
+            })
+            .collect()
+    }
+    /// Image interpretations owned by a prepared external effect.
+    /// `owner` identifies the resolved baked companion, retaining its asset source.
+    fn particle_effect_texture_candidates(
+        &self,
+        _feature: FeatureId,
+        request: &ParticleTextureRequest<'_>,
+        owner: &AssetPath<'_>,
+    ) -> Vec<AssetPath<'static>> {
+        let resource: Option<ModelResource<'_>> = request.resource.clone().try_into().ok();
+        image_candidates(
+            resource.map_or_else(Vec::new, |resource| self.candidates(&resource, owner)),
+        )
     }
     /// Appearance and other semantic compilation choices for this asset.
     /// The borrowed imported graph exposes valid owner-local look and feature IDs;
@@ -576,6 +617,17 @@ async fn compile_loaded(
             unresolved_images.push(resource);
         }
     }
+    child_diagnostics.extend(
+        resolve_programmes(
+            model,
+            &mut options,
+            context,
+            resolver,
+            owner,
+            &mut image_cache,
+        )
+        .await?,
+    );
     let mut compiled = compile_model_with_options(model, options, |request| {
         images.get(&request.key()).cloned()
     })?;

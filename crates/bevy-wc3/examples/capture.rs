@@ -21,9 +21,9 @@ use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 use bevy_wc3::{
     spawn_model, AssetSettings, BakeSpace, CameraBinding, Lod, LodOverride, LodSettings,
-    ModelAsset, ModelInstance, ModelInstanceError, ModelMaterial, ModelRig, PhysicsSimulation,
-    Playback, PlaybackError, PoseBaker, PoseOptions, PreparedModel, RibbonEmitter, SpriteEmitter,
-    Wc3BevyPlugin, WorldSelection,
+    ModelAsset, ModelInstance, ModelInstanceError, ModelMaterial, ModelRig, ParticleProgramEmitter,
+    PhysicsSimulation, Playback, PlaybackError, PoseBaker, PoseOptions, PreparedModel,
+    RibbonEmitter, SpriteEmitter, Wc3BevyPlugin, WorldSelection,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::env::args;
@@ -865,6 +865,10 @@ fn capture(options: Options) -> CaptureResult<()> {
                     emitter.feature, emitter.alive, emitter.dropped, emitter.skipped_seconds
                 );
             }
+            let mut programmes = world.query::<&ParticleProgramEmitter>();
+            for emitter in programmes.iter(world) {
+                println!("Programme {:?}: alive={}, sprites={}, omitted={}, suppressed={}, skipped_seconds={:.6}, error={:?}",emitter.feature,emitter.alive,emitter.sprites,emitter.omitted,emitter.suppressed,emitter.skipped_seconds,emitter.error);
+            }
             let mut ribbons = world.query::<&RibbonEmitter>();
             for emitter in ribbons.iter(world) {
                 println!(
@@ -962,6 +966,18 @@ fn step(app: &mut App, dt: Duration) -> CaptureResult<()> {
                 return Err(format!("GPU pipeline failed: {error:?}").into());
             }
         }
+    }
+    let mut programmes = app.world_mut().query::<&ParticleProgramEmitter>();
+    if let Some(emitter) = programmes
+        .iter(app.world())
+        .find(|emitter| emitter.error.is_some())
+    {
+        return Err(format!(
+            "particle programme {:?} failed: {}",
+            emitter.feature,
+            emitter.error.as_deref().unwrap()
+        )
+        .into());
     }
     Ok(())
 }

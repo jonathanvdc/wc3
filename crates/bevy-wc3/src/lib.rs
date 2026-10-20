@@ -82,7 +82,10 @@ pub use composition::{DrawSelection, JointMap, ModelPart, PartBinding};
 pub use diagnostics::{
     RenderDiagnostic, RenderDiagnosticKind, RenderDiagnosticSeverity, RenderDiagnosticSource,
 };
-pub use effects::{ModelEmitter, RibbonEmitter, SpriteEmitter};
+pub use effects::{
+    ModelEmitter, ParticleEffect, ParticleProgramEmitter, ParticleTextureRequest, RibbonEmitter,
+    SpriteEmitter,
+};
 pub use error::ModelError;
 pub use events::{EventDispatchStats, EventProgram, EventSource, ModelEvent};
 pub use features::{

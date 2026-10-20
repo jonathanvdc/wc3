@@ -7,8 +7,8 @@ use std::collections::HashSet;
 use std::fs;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use wc3::model::{AddressMode, ModelMetadata};
 use wc3::model::common::ZeroVec;
+use wc3::model::{AddressMode, ModelMetadata};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 fn app(directory: &Path) -> App {
     app_with_resolver(directory, Arc::new(PathResolver))
@@ -75,16 +75,12 @@ fn path_provider_preserves_sources_and_does_not_guess_archive_id_names() {
             .collect::<Vec<_>>(),
         ["casc://units/unit00.skin"]
     );
-    assert!(
-        resolver
-            .candidates(&ModelResource::FileDataId(42), &owner)
-            .is_empty()
-    );
-    assert!(
-        resolver
-            .candidates(&ModelResource::Path(Cow::Borrowed(b"../outside")), &owner)
-            .is_empty()
-    );
+    assert!(resolver
+        .candidates(&ModelResource::FileDataId(42), &owner)
+        .is_empty());
+    assert!(resolver
+        .candidates(&ModelResource::Path(Cow::Borrowed(b"../outside")), &owner)
+        .is_empty());
 }
 #[cfg(unix)]
 #[test]
@@ -255,6 +251,7 @@ fn write_animated_m2(directory: &Path) {
         flags: MaterialFlags::from_bits_retain(4),
         blending_mode: BlendMode::Opaque,
     }]);
+    core.bone_combos = ZeroVec::alloc_from_slice(&[0]);
     core.texture_combos = ZeroVec::alloc_from_slice(&[0]);
     core.texture_weight_combos = ZeroVec::alloc_from_slice(&[u16::MAX]);
     core.texture_transform_combos = ZeroVec::alloc_from_slice(&[u16::MAX]);
@@ -266,6 +263,7 @@ fn write_animated_m2(directory: &Path) {
         sections: vec![SkinSection {
             vertex_count: 3,
             index_count: 3,
+            bone_count: 1,
             id: 17,
             ..Default::default()
         }],
@@ -533,7 +531,7 @@ fn child_dependency_graph_rejects_cycles_between_independent_roots() {
 
 #[test]
 fn optional_attachment_models_load_with_extension_fallback_and_stop_cycles() {
-    use crate::{ModelInstance, ModelMaterial, spawn_model};
+    use crate::{spawn_model, ModelInstance, ModelMaterial};
     use bevy::ecs::world::CommandQueue;
     use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
     let directory = directory("child-models");
@@ -556,15 +554,13 @@ fn optional_attachment_models_load_with_extension_fallback_and_stop_cycles() {
     wait(&mut app, &child).unwrap();
     let assets = app.world().resource::<Assets<ModelAsset>>();
     assert_eq!(assets.len(), 2);
-    assert!(
-        assets
-            .get(&child)
-            .unwrap()
-            .compiled
-            .diagnostics()
-            .iter()
-            .any(|diagnostic| diagnostic.message.contains("cyclic child model reference"))
-    );
+    assert!(assets
+        .get(&child)
+        .unwrap()
+        .compiled
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| diagnostic.message.contains("cyclic child model reference")));
     let compiled = assets.get(&root).unwrap().compiled.clone();
     let mut meshes = Assets::<Mesh>::default();
     let mut materials = Assets::<ModelMaterial>::default();
@@ -663,18 +659,14 @@ fn stale_reload_attempt_cannot_mutate_or_finish_newer_pending_edges() {
     let c = AssetPath::parse("c.mdl");
     let old = ModelDependencyLoad::begin(&graph, &a);
     let new = ModelDependencyLoad::begin(&graph, &a);
-    assert!(
-        !graph
-            .lock()
-            .unwrap()
-            .insert_for_load(&a, old.generation, &b)
-    );
-    assert!(
-        graph
-            .lock()
-            .unwrap()
-            .insert_for_load(&a, new.generation, &c)
-    );
+    assert!(!graph
+        .lock()
+        .unwrap()
+        .insert_for_load(&a, old.generation, &b));
+    assert!(graph
+        .lock()
+        .unwrap()
+        .insert_for_load(&a, new.generation, &c));
     drop(old);
     assert!(!graph.lock().unwrap().insert(&c, &a));
     new.commit();
@@ -730,7 +722,7 @@ fn native_import_loss_requires_opt_in_and_retains_diagnostic() {
 #[test]
 fn native_world_surface_sampler_variants_get_distinct_labeled_gpu_images() {
     use wc3::model::formats::wmo::{
-        Classic, Root, codec::Array, records::Material as NativeMaterial, root::RootChunk,
+        codec::Array, records::Material as NativeMaterial, root::RootChunk, Classic, Root,
     };
     struct WorldResolver;
     impl ResourceResolver for WorldResolver {
@@ -802,5 +794,88 @@ fn native_world_surface_sampler_variants_get_distinct_labeled_gpu_images() {
     }
     assert!(modes.contains(&ImageAddressMode::ClampToEdge));
     assert!(modes.contains(&ImageAddressMode::Repeat));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn baked_effect_provider_keeps_sources_and_resolves_images_beside_the_companion() {
+    use crate::{ParticleTextureRequest, TextureColorSpace, TextureRole};
+    use wc3::model::profiles::Universal;
+    use wc3::model::Sampler;
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+    let node = builder.add_named_node("effect").unwrap();
+    let feature = builder.reserve_feature(node);
+    let owner = AssetPath::parse("casc://Units/Lich.mdx");
+    let paths = PathResolver.particle_effect_candidates(
+        feature,
+        &ModelResource::Path(b"SharedFX/Lich/LichAttack.pkfx".as_slice().into()),
+        &owner,
+    );
+    assert_eq!(
+        paths.iter().map(ToString::to_string).collect::<Vec<_>>(),
+        [
+            "casc://Units/SharedFX/Lich/LichAttack.pkb",
+            "casc://SharedFX/Lich/LichAttack.pkb",
+        ]
+    );
+    let request = ParticleTextureRequest {
+        renderer: 0,
+        resource: ImageResource::Path(b"sprite.tif".as_slice().into()),
+        role: TextureRole::Color,
+        color_space: TextureColorSpace::Srgb,
+        sampler: Sampler::default(),
+    };
+    let images = PathResolver.particle_effect_texture_candidates(feature, &request, &paths[1]);
+    assert_eq!(images[0].to_string(), "casc://SharedFX/Lich/sprite.tif");
+    assert!(images
+        .iter()
+        .any(|path| path.to_string() == "casc://SharedFX/Lich/sprite.dds"));
+    assert!(images.iter().all(|path| path.source() == owner.source()));
+}
+
+#[test]
+fn native_popcorn_loader_prepares_the_baked_companion_and_external_image() {
+    let directory = directory("baked-programme");
+    fs::create_dir_all(directory.join("effects")).unwrap();
+    fs::write(
+        directory.join("effects/sprite.pkb"),
+        include_bytes!("../../../wc3/tests/fixtures/pkb/sprite.pkb"),
+    )
+    .unwrap();
+    fs::write(
+        directory.join("effects/sprite.tga"),
+        [
+            0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 24, 32, 0, 0, 255,
+        ],
+    )
+    .unwrap();
+    fs::write(
+        directory.join("unit.mdl"),
+        r#"
+        Version { FormatVersion 1000, }
+        Model "external" {}
+        ParticleEmitterPopcorn "sprite" { ObjectId 0, Path "effects/sprite.pkfx", }
+        PivotPoints 1 { { 0, 0, 0 }, }
+    "#,
+    )
+    .unwrap();
+    let mut app = app(&directory);
+    let handle = app.world().resource::<AssetServer>().load("unit.mdl");
+    wait(&mut app, &handle).unwrap();
+    let models = app.world().resource::<Assets<ModelAsset>>();
+    let asset = models.get(&handle).unwrap();
+    assert!(
+        asset.compiled.diagnostics.iter().all(|issue| !matches!(
+            issue.kind,
+            RenderDiagnosticKind::Resource | RenderDiagnosticKind::Unsupported
+        )),
+        "{:?}",
+        asset.compiled.diagnostics
+    );
+    assert!(app
+        .world()
+        .resource::<Assets<Image>>()
+        .iter()
+        .any(|(_, image)| image.width() == 1 && image.height() == 1));
     fs::remove_dir_all(directory).unwrap();
 }

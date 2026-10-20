@@ -2,7 +2,7 @@
 use super::bounds::rest_bounds;
 use super::child_coordinates::CoordinatePolicy;
 use super::coordinates::{axis, basis};
-use super::effects::RuntimeParticles;
+use super::effects::{ParticleEffect, RuntimeParticles};
 use super::events::RuntimeEvents;
 use super::features::RuntimeFeatures;
 use super::geometry::{apply_skin, compile_geometry_with_color};
@@ -76,6 +76,8 @@ pub struct CompileOptions {
     pub child_models: HashMap<FeatureId, Handle<ModelAsset>>,
     /// Child coordinate policies; omitted features use the host authored frame.
     pub child_coordinates: HashMap<FeatureId, CoordinatePolicy>,
+    /// Prepared external particle programmes, keyed by their Universal model feature.
+    pub particle_effects: HashMap<FeatureId, ParticleEffect>,
 }
 
 /// Compile geometry, skin bindings, default appearances, surfaces, and animation
@@ -422,6 +424,7 @@ pub fn compile_model_with_options(
         &materials,
         &options.child_models,
         &options.child_coordinates,
+        &options.particle_effects,
     ));
     diagnostics.extend(
         particles
@@ -444,7 +447,8 @@ pub fn compile_model_with_options(
     for (id, feature) in model.features() {
         let message = match &feature.payload {
             NodeFeature::Particle(ParticleEmitter::MdlxEmitter1(_) | ParticleEmitter::MdlxEmitter2(_) | ParticleEmitter::M2(_))
-            | NodeFeature::Ribbon(SemanticRibbonEmitter::Mdlx(_) | SemanticRibbonEmitter::M2(_)) => continue,
+            | NodeFeature::Ribbon(SemanticRibbonEmitter::Mdlx(_) | SemanticRibbonEmitter::M2(_))
+            | NodeFeature::ParticleProgram(_) => continue,
 
             NodeFeature::GeometryAnimation(value) if value.mesh.is_some() && !value.drop_shadow => continue,
             NodeFeature::GeometryAnimation(_) => "geometry tint and opacity are rendered; orphan controllers and authored drop shadows need application interpretation".to_string(),

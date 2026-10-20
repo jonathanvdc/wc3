@@ -75,12 +75,14 @@ possible. The effect guides describe simulation, playback, and resource needs:
 - [Sprite particles](pre2.md) use GPU-generated heads/tails from immutable MDLX births or compact M2 age-driven samples.
   Billboards and draw ordering follow each view independently.
 - [Ribbons](ribbons.md) retain birth-time cross sections and generate connected geometry on the GPU.
+- [External programmes](popcorn.md) execute supported baked graphs and send billboard outputs through the sampled sprite transport.
 
 Each family bounds populations and per-update work and exposes omitted-work
 counters. M2 multi-texture colors and alpha masks retain their independent
-modulation gains; native TXAC selectors, refraction, and bone generators still
-require further interpretation. External effects need resource providers and
-an executable programme interpreter.
+modulation gains. Bone generators use declared section palettes and posed joint
+spans; their exact game distribution remains unverified. Native TXAC selectors and
+refraction still require further interpretation. External effects need resource providers; their
+programme and renderer interpreters have partial coverage.
 
 ## Check a particular model
 

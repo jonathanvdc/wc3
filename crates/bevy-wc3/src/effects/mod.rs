@@ -11,6 +11,7 @@ mod generators;
 mod implosion;
 pub(super) mod model_particles;
 
+mod programmes;
 mod ribbons;
 mod world;
 use super::child_coordinates::CoordinatePolicy;
@@ -27,6 +28,8 @@ pub(super) use frame::EffectFrame;
 pub(crate) use model_particles::synchronize_model_particles;
 pub use model_particles::ModelEmitter;
 use model_particles::{ModelParticleInstances, RuntimeModelParticles};
+pub use programmes::{ParticleEffect, ParticleProgramEmitter, ParticleTextureRequest};
+use programmes::{ProgramInstances, RuntimeProgramParticles};
 pub use ribbons::RibbonEmitter;
 use ribbons::{RibbonInstancesState, RuntimeRibbons};
 use std::collections::HashMap;
@@ -39,6 +42,7 @@ pub(super) struct RuntimeParticles {
     atlas: RuntimeAtlasParticles,
     ribbons: RuntimeRibbons,
     models: RuntimeModelParticles,
+    programmes: RuntimeProgramParticles,
 
     diagnostics: Vec<(FeatureId, RenderIssue)>,
 }
@@ -49,6 +53,7 @@ pub(super) struct ParticleInstances {
     atlas: AtlasParticleInstances,
     ribbons: RibbonInstancesState,
     models: ModelParticleInstances,
+    programmes: ProgramInstances,
 }
 impl ParticleInstances {
     pub(super) fn effect_time(
@@ -75,6 +80,8 @@ impl RuntimeParticles {
             .append_remapped(&source.ribbons, indices, nodes, clips);
         self.models
             .append_remapped(&source.models, indices, nodes, clips);
+        self.programmes
+            .append_remapped(&source.programmes, indices, nodes, clips);
         self.diagnostics.extend(source.diagnostics.iter().cloned());
     }
 
@@ -83,6 +90,7 @@ impl RuntimeParticles {
             && self.atlas.is_empty()
             && self.ribbons.is_empty()
             && self.models.is_empty()
+            && self.programmes.is_empty()
     }
     pub fn compile(
         model: &Model<'_>,
@@ -91,7 +99,9 @@ impl RuntimeParticles {
         materials: &HashMap<MaterialId, Vec<SurfacePass>>,
         children: &HashMap<FeatureId, Handle<ModelAsset>>,
         placements: &HashMap<FeatureId, CoordinatePolicy>,
+        programmes: &HashMap<FeatureId, ParticleEffect>,
     ) -> Self {
+        let programmes = RuntimeProgramParticles::compile(model, nodes, programmes);
         let age = RuntimeAgeSprites::compile(model, nodes, images, materials);
         let atlas = RuntimeAtlasParticles::compile(model, nodes, images);
         let ribbons = RuntimeRibbons::compile(model, nodes, images, materials);
@@ -102,6 +112,7 @@ impl RuntimeParticles {
             .chain(models.diagnostics())
             .chain(ribbons.diagnostics())
             .chain(age.diagnostics())
+            .chain(programmes.diagnostics())
             .cloned()
             .collect();
         Self {
@@ -109,6 +120,7 @@ impl RuntimeParticles {
             atlas,
             ribbons,
             models,
+            programmes,
             diagnostics,
         }
     }
@@ -126,6 +138,7 @@ impl RuntimeParticles {
         let age = self.age.spawn(commands, meshes, materials, basis);
         ParticleInstances {
             clock: EffectClock::default(),
+            programmes: self.programmes.spawn(commands, meshes, basis),
             atlas: self.atlas.spawn(commands, meshes, basis),
             ribbons: self.ribbons.spawn(commands, meshes, basis),
             models: self.models.spawn(commands, basis),
@@ -168,6 +181,12 @@ impl RuntimeParticles {
             &mut world.trails,
             &mut world.ribbon_statistics,
         );
+        self.programmes.update(
+            &mut instances.programmes,
+            &frame,
+            &mut world.age_sprites,
+            &mut world.program_statistics,
+        );
         self.age.update(
             &mut instances.age,
             frame,
@@ -200,5 +219,6 @@ impl RuntimeParticles {
         self.age.map_images(map);
         self.atlas.map_images(map);
         self.ribbons.map_images(map);
+        self.programmes.map_images(map);
     }
 }
