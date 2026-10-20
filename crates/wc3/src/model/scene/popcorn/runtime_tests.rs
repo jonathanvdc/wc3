@@ -488,3 +488,210 @@ fn renderer_bearing_instant_lifetime_is_observable_at_zero_then_retires() {
     instance.advance(&program, 0.01, inputs()).unwrap();
     assert_eq!(instance.particles(EffectLayerId(0)).count(), 0);
 }
+
+fn triggered(condition: bool, fraction: f32) -> EffectProgram {
+    use super::super::graph::Callback;
+    let mut program = generator();
+    let graph = Arc::get_mut(&mut program.inner).unwrap();
+    let evolve = graph.layers[0].evolve.as_mut().unwrap();
+    evolve.callbacks[0] = Callback::Trigger;
+    let Instruction::Call { arguments, .. } = &mut evolve.program.operations[4].instruction else {
+        panic!()
+    };
+    *arguments = vec![
+        Source {
+            address: Address::Constant([if condition { u32::MAX } else { 0 }, 0, 0, 0]),
+            kind: ValueType::Bool,
+        },
+        Source {
+            address: Address::Constant([fraction.to_bits(), 0, 0, 0]),
+            kind: ValueType::Float,
+        },
+        Source {
+            address: Address::Slot { scope: 1, slot: 2 },
+            kind: ValueType::Context,
+        },
+    ];
+    program
+}
+#[test]
+fn trigger_has_no_edge_latch_and_false_retains_a_valid_empty_batch() {
+    for condition in [false, true] {
+        let program = triggered(condition, 1.);
+        let mut instance = program
+            .instantiate(
+                EffectLimits {
+                    step_seconds: 1.,
+                    ..Default::default()
+                },
+                0,
+            )
+            .unwrap();
+        instance.start(&program, 0, inputs()).unwrap();
+        instance.advance(&program, 0., inputs()).unwrap();
+        assert_eq!(instance.active_count(), 1);
+        instance.advance(&program, 0.25, inputs()).unwrap();
+        instance.advance(&program, 0.25, inputs()).unwrap();
+        let births: Vec<_> = instance
+            .particles(EffectLayerId(1))
+            .map(|particle| particle.birth_time)
+            .collect();
+        assert_eq!(births, if condition { vec![0.25, 0.5] } else { vec![] });
+    }
+}
+#[test]
+fn trigger_clamps_interval_fraction_and_rejects_nonfinite_values() {
+    for (fraction, expected) in [(-4., 0.), (0., 0.), (0.5, 0.125), (1., 0.25), (4., 0.25)] {
+        let program = triggered(true, fraction);
+        let mut instance = program
+            .instantiate(
+                EffectLimits {
+                    step_seconds: 1.,
+                    ..Default::default()
+                },
+                0,
+            )
+            .unwrap();
+        instance.start(&program, 0, inputs()).unwrap();
+        instance.advance(&program, 0.25, inputs()).unwrap();
+        assert_eq!(
+            instance
+                .particles(EffectLayerId(1))
+                .next()
+                .unwrap()
+                .birth_time,
+            expected
+        );
+    }
+    for fraction in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let program = triggered(true, fraction);
+        let mut instance = program.instantiate(Default::default(), 0).unwrap();
+        instance.start(&program, 0, inputs()).unwrap();
+        assert!(instance.advance(&program, 0.25, inputs()).is_err());
+    }
+}
+
+#[test]
+fn trigger_batches_are_bounded_even_when_empty_and_do_not_reuse_keys() {
+    for condition in [false, true] {
+        let mut program = triggered(condition, 0.);
+        let graph = Arc::get_mut(&mut program.inner).unwrap();
+        let evolve = graph.layers[0].evolve.as_mut().unwrap();
+        let repeated = evolve.program.operations[4].clone();
+        evolve.program.operations.insert(5, repeated);
+        let mut instance = program
+            .instantiate(
+                EffectLimits {
+                    handles: 1,
+                    ..Default::default()
+                },
+                0,
+            )
+            .unwrap();
+        instance.start(&program, 0, inputs()).unwrap();
+        let failure = instance.advance(&program, 0.25, inputs()).unwrap_err();
+        assert!(failure.to_string().contains("batch capacity"));
+    }
+}
+#[test]
+fn triggers_route_in_subframe_time_order_and_keep_distinct_invocation_batches() {
+    let mut program = triggered(true, 1.);
+    let graph = Arc::get_mut(&mut program.inner).unwrap();
+    let evolve = graph.layers[0].evolve.as_mut().unwrap();
+    // Commit the later event first, then a second event at interval start.
+    let mut repeated = evolve.program.operations[4..].to_vec();
+    let Instruction::Call { arguments, .. } = &mut repeated[0].instruction else {
+        panic!()
+    };
+    arguments[1].address = Address::Constant([0., 0., 0., 0.].map(f32::to_bits));
+    evolve.program.operations.extend(repeated);
+    let mut instance = program
+        .instantiate(
+            EffectLimits {
+                step_seconds: 1.,
+                ..Default::default()
+            },
+            0,
+        )
+        .unwrap();
+    instance.start(&program, 0, inputs()).unwrap();
+    instance.advance(&program, 0.25, inputs()).unwrap();
+    let births: Vec<_> = instance
+        .particles(EffectLayerId(1))
+        .map(|particle| particle.birth_time)
+        .collect();
+    assert_eq!(births, [0., 0.25]);
+}
+#[test]
+fn payload_drafts_created_by_trigger_expire_between_script_invocations() {
+    let mut program = triggered(true, 1.);
+    let graph = Arc::get_mut(&mut program.inner).unwrap();
+    let controller = &mut graph.layers[0];
+    let mut fields = controller.fields.to_vec();
+    fields.push(super::super::EffectField {
+        name: b"savedDraft".as_slice().into(),
+        native_type: 24,
+        value_type: Some(ValueType::Int),
+        initial: [0; 4],
+    });
+    controller.fields = fields.into_boxed_slice();
+    let mut init = controller.evolve.as_ref().unwrap().clone();
+    let mut externals = init.externals.to_vec();
+    externals.push(External::Field(7));
+    init.externals = externals.into_boxed_slice();
+    init.program.operations.pop(); // Retain trigger/initPayload, postpone kick.
+    init.program.operations.push(Operation {
+        offset: 8,
+        instruction: Instruction::Store {
+            source: Source {
+                address: Address::Slot { scope: 1, slot: 1 },
+                kind: ValueType::Int,
+            },
+            external: 5,
+        },
+    });
+    let mut evolve = controller.evolve.take().unwrap();
+    evolve.externals = init.externals.clone();
+    let kick = evolve.program.operations.pop().unwrap();
+    evolve.program.operations = vec![
+        Operation {
+            offset: 0,
+            instruction: Instruction::Load {
+                destination: Destination {
+                    scope: 1,
+                    slot: 1,
+                    kind: ValueType::Int,
+                },
+                external: 5,
+            },
+        },
+        init.program.operations[2].clone(),
+        init.program.operations[3].clone(),
+        kick,
+    ];
+    controller.init = init;
+    controller.evolve = Some(evolve);
+    let mut instance = program.instantiate(Default::default(), 0).unwrap();
+    instance.start(&program, 0, inputs()).unwrap();
+    let failure = instance.advance(&program, 0.25, inputs()).unwrap_err();
+    assert!(failure.to_string().contains("draft capability is stale"));
+}
+#[test]
+fn trigger_in_initialization_can_route_at_zero_without_warmup_replay() {
+    let mut program = triggered(true, 0.5);
+    let controller = &mut Arc::get_mut(&mut program.inner).unwrap().layers[0];
+    controller.init = controller.evolve.as_ref().unwrap().clone();
+    let mut instance = program.instantiate(Default::default(), 0).unwrap();
+    instance.start(&program, 0, inputs()).unwrap();
+    assert_eq!(
+        instance
+            .particles(EffectLayerId(1))
+            .next()
+            .unwrap()
+            .birth_time,
+        0.
+    );
+    let spawned = instance.stats().spawned;
+    instance.advance(&program, 0., inputs()).unwrap();
+    assert_eq!(instance.stats().spawned, spawned);
+}

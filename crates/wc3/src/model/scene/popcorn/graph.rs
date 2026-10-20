@@ -249,6 +249,7 @@ pub(crate) enum Callback {
     Running,
     StreamDuration,
     Generate,
+    Trigger,
     InitPayload,
     Kick,
     Kill,

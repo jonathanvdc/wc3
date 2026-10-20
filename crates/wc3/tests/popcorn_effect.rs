@@ -123,6 +123,19 @@ fn actual_lich_graph_initializes_generates_stops_and_retires_without_allocation(
         ),
         (4, 1, 7)
     );
+    // Native register addresses are sparse; a full pool must reserve only the
+    // referenced private slots while retaining the configured population.
+    let full_pool = program
+        .instantiate(
+            EffectLimits {
+                particles: 1024,
+                storage_bytes: 2 * 1024 * 1024,
+                ..Default::default()
+            },
+            42,
+        )
+        .expect("dense private registers must fit the full pool's storage budget");
+    drop(full_pool);
     let mut instance = program
         .instantiate(
             EffectLimits {

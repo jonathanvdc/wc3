@@ -305,6 +305,24 @@ impl Host for ExecutionHost<'_> {
                 })?)
             }
             Callback::Generate => Some(self.generate(receiver, a)?),
+            Callback::Trigger => {
+                self.context(a[2], false)?;
+                let fraction = number(a[1]);
+                if !fraction.is_finite() {
+                    return Err("trigger fraction must be finite");
+                }
+                let count = u32::from(self.running && a[0].words()[0] != 0);
+                let start = self.scratch.times.len();
+                let omitted = if count != 0 && start < self.limits.occurrences {
+                    self.scratch.times.push(
+                        self.time - self.delta + self.delta * f64::from(fraction.clamp(0., 1.)),
+                    );
+                    0
+                } else {
+                    u64::from(count)
+                };
+                Some(self.batch(count, 0., start, omitted)?)
+            }
             Callback::InitPayload => {
                 self.context(a[2], false)?;
                 if a[0].words()[0] != 0 {

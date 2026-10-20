@@ -132,6 +132,9 @@ A pool defaults to 1,024 slots, including controllers and generators. Configure
 occurrences, executions, steps and predicted storage. The instance preallocates
 field component planes, persistent particle registers, event storage and shared
 VM scratch. Starting, advancing, retiring and reusing particles allocate nothing.
+Checked effects compact referenced VM registers across their selected stages, so
+sparse native addresses do not determine per-particle storage. Native script views
+retain authored addresses, and execution failures retain instruction byte offsets.
 Borrowed `ParticleView` values expose canonical fields independently of temporary
 VM registers, and particle IDs include a generation to distinguish recycled slots.
 Instances require the same programme identity when starting or advancing.
@@ -152,6 +155,10 @@ policy rather than a `0 * infinity` NaN dependency. NaN, negative-infinite and
 negative inverse lifetimes remain errors. Restarting clears the live
 population and simulation counters while retaining allocated storage.
 
+A condition trigger emits zero or one occurrence on each invocation, without an
+implicit edge latch. Finite interval fractions clamp to 0–1; nonfinite fractions
+fail explicitly. False triggers still return valid empty batch capabilities.
+
 Events retain subframe birth times, fan-out ownership and invocation-specific
 batch/draft capabilities. Initialization runs once, and a newborn evolves only
 for the remaining portion of its birth interval. Budget omissions increment
@@ -161,7 +168,7 @@ Runtime errors stop advancement until the instance is restarted and leave earlie
 writes observable.
 
 The implemented callback subset covers effect age/running state, event-stream
-and rate generation, event initialization/kick, retirement, random intervals,
+and rate generation, condition-triggered events, event initialization/kick, retirement, random intervals,
 point transforms with masks 17/19, direction transforms with mask 18, RGB/HSV
 conversion, quaternion orientation and rotation, emitter axes, typed curve
 sampling, and primitive `samplePosition` callbacks. It

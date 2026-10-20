@@ -244,6 +244,7 @@ pub(crate) enum Instruction {
 mod callbacks;
 mod color;
 pub(crate) mod graph;
+pub(crate) mod layout;
 mod orientation;
 mod runtime;
 pub use graph::{

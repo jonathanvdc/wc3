@@ -7,6 +7,7 @@ use crate::model::common::PackedArray;
 use crate::model::scene::popcorn::graph::{
     BoundProgram, Callback, EffectGraph, EffectSampler, EventRoute, External,
 };
+use crate::model::scene::popcorn::layout::compact_registers;
 use crate::model::scene::popcorn::shapes::{Domain, Primitive, Shape};
 use crate::model::scene::popcorn::{
     EffectAttribute, EffectEntry, EffectField, EffectFieldId, EffectLayer, EffectLayerId,
@@ -18,6 +19,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::f32::consts::FRAC_PI_2;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::iter::once;
 use std::sync::Arc;
 
 /// One selected evolution programme per simulation step.
@@ -379,7 +381,7 @@ impl<'a> Document<'a> {
                     .callbacks
                     .iter()
                     .chain(evolve.iter().flat_map(|bound| bound.callbacks.iter()))
-                    .any(|callback| *callback == Callback::Generate);
+                    .any(|callback| matches!(callback, Callback::Generate | Callback::Trigger));
                 for link in &cache.renderers {
                     let renderer = self.renderer(*link)?;
                     let inputs = renderer
@@ -422,7 +424,7 @@ impl<'a> Document<'a> {
                             .collect(),
                     });
                 }
-                Ok(EffectLayer {
+                let mut compiled = EffectLayer {
                     fields: fields.into_boxed_slice(),
                     init,
                     evolve,
@@ -432,7 +434,12 @@ impl<'a> Document<'a> {
                     spawner: spawner && cache.renderers.is_empty(),
                     rendered: !cache.renderers.is_empty(),
                     evolve_on_death: cache.evolve_on_death,
-                })
+                };
+                compact_registers(
+                    once(&mut compiled.init.program)
+                        .chain(compiled.evolve.iter_mut().map(|bound| &mut bound.program)),
+                );
+                Ok(compiled)
             })();
             layers.push(result.map_err(|mut error| {
                 error.layer = Some(layer);
@@ -819,6 +826,12 @@ impl Lowering<'_, '_> {
                     return Err(error("duration receiver must be an event stream"));
                 }
                 (Callback::StreamDuration, vec![Context], Some(Float))
+            }
+            b"trigger" => {
+                if bound.is_some() {
+                    return Err(error("trigger requires a free function"));
+                }
+                (Callback::Trigger, vec![Bool, Float, Context], Some(Int3))
             }
             b"generate" => {
                 if let Some(bound) = bound {

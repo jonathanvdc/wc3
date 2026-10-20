@@ -146,3 +146,33 @@ fn orientation_callback_signatures_preserve_quaternion_types_and_reject_bound_re
         .callback(b"orientation_axisSide", &[ValueType::Float4], None, &[])
         .is_err());
 }
+
+#[test]
+fn trigger_is_a_typed_free_boolean_fraction_callback() {
+    let document = Document::read(FIXTURE).unwrap();
+    let options = EffectCompileOptions::default();
+    let lowering = Lowering {
+        document: &document,
+        options: &options,
+        samplers: vec![],
+        attributes: vec![],
+        attribute_slots: HashMap::new(),
+        curve_widths: HashMap::new(),
+    };
+    let args = [ValueType::Bool, ValueType::Float, ValueType::Context];
+    assert_eq!(
+        lowering.callback(b"trigger", &args, None, &[]).unwrap(),
+        (Callback::Trigger, Some(ValueType::Int3))
+    );
+    assert!(lowering
+        .callback(b"trigger", &args, Some(0), &[External::ParticleContext])
+        .is_err());
+    assert!(lowering
+        .callback(
+            b"trigger",
+            &[ValueType::Int, ValueType::Float, ValueType::Context],
+            None,
+            &[]
+        )
+        .is_err());
+}
