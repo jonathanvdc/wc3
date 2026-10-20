@@ -1,8 +1,8 @@
 use super::*;
 use bevy::math::{Quat, Vec2, Vec3};
 use std::f32::consts::TAU;
-use wc3::model::profiles::Universal;
 use wc3::model::ModelMetadata;
+use wc3::model::profiles::Universal;
 use wc3::model::{AnimationProgram, AnimationSample};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 fn emitter(slot_values: &mut SlotValues) -> Emitter {
@@ -31,6 +31,7 @@ fn emitter(slot_values: &mut SlotValues) -> Emitter {
         lifespan: slot_values.add(2.),
         generator: ParticleGenerator::Plane,
         spline: Vec::new(),
+        bones: None,
         flags,
         drag: 0.,
         wind: Vec3::ZERO,
@@ -49,6 +50,7 @@ fn emitter(slot_values: &mut SlotValues) -> Emitter {
             textures: [None, None, None],
             blend: ParticleBlend::Alpha,
             priority: 0.,
+            sort: SortPolicy::Far,
             composition: Default::default(),
             uv_flip_v: false,
             unlit: false,
@@ -220,7 +222,9 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
     }
     assert_eq!(
         mesh.indices().unwrap().iter().collect::<Vec<_>>(),
-        [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15],
+        [
+            0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15
+        ],
     );
     let pointer = positions.as_ptr();
     state.births.clear();
@@ -444,9 +448,11 @@ fn semantic_gravity_is_independent_of_the_emitter_bone_and_scalar_packing_flags(
     let (birth, _) = emitter
         .birth_in(&slot_values, 0., node, basis, Vec3::ZERO, 0)
         .unwrap();
-    assert!(birth
-        .acceleration
-        .abs_diff_eq(basis.transform_vector3(Vec3::new(1., -2., 3.)), 1e-6));
+    assert!(
+        birth
+            .acceleration
+            .abs_diff_eq(basis.transform_vector3(Vec3::new(1., -2., 3.)), 1e-6)
+    );
     emitter.flags.set_attached(true);
     let (birth, _) = emitter
         .birth_in(&slot_values, 0., node, basis, Vec3::ZERO, 0)
@@ -485,14 +491,18 @@ fn sphere_and_plane_use_distinct_polar_axes_and_head_flags_do_not_aim_velocity()
     let aimed = emitter
         .birth(&slot_values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
-    assert!(aimed
-        .velocity
-        .abs_diff_eq(Vec3::new(1., 0., -1.).normalize() * 2., 1e-6));
+    assert!(
+        aimed
+            .velocity
+            .abs_diff_eq(Vec3::new(1., 0., -1.).normalize() * 2., 1e-6)
+    );
 
-    assert!(emitter
-        .emitter_frame(Mat4::IDENTITY)
-        .transform_vector3(Vec3::X)
-        .abs_diff_eq(Vec3::Y, 1e-6));
+    assert!(
+        emitter
+            .emitter_frame(Mat4::IDENTITY)
+            .transform_vector3(Vec3::X)
+            .abs_diff_eq(Vec3::Y, 1e-6)
+    );
 }
 
 #[test]
@@ -797,9 +807,11 @@ fn spline_births_follow_authored_path_and_aim_from_the_source_height() {
     let birth = emitter
         .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
         .unwrap();
-    assert!(birth
-        .velocity
-        .abs_diff_eq((birth.origin - Vec3::Z).normalize() * 2., 1e-6));
+    assert!(
+        birth
+            .velocity
+            .abs_diff_eq((birth.origin - Vec3::Z).normalize() * 2., 1e-6)
+    );
 }
 
 #[test]
@@ -915,8 +927,14 @@ fn benchmark_compact_samples_against_cpu_corner_transport() {
         black_box(&scratch.order);
     }
     let samples_and_sort = start.elapsed().as_secs_f64() / f64::from(rounds);
-    println!("Matched single-view CPU preparation: indexed corners + sorting {corners:.6}s; compact samples + actual renderer sorting {samples_and_sort:.6}s; ratio {:.2}x (GPU upload/submission excluded)", corners / samples_and_sort);
-    println!("8192 head+tail particles: CPU indexed corners {corners:.6}s; compact samples {samples:.6}s; preparation ratio {:.2}x (compact-only measurement excludes renderer sorting)", corners / samples);
+    println!(
+        "Matched single-view CPU preparation: indexed corners + sorting {corners:.6}s; compact samples + actual renderer sorting {samples_and_sort:.6}s; ratio {:.2}x (GPU upload/submission excluded)",
+        corners / samples_and_sort
+    );
+    println!(
+        "8192 head+tail particles: CPU indexed corners {corners:.6}s; compact samples {samples:.6}s; preparation ratio {:.2}x (compact-only measurement excludes renderer sorting)",
+        corners / samples
+    );
     println!(
         "live payload: {} compact bytes vs {} indexed-corner bytes, excluding draw-order buffers",
         data.records.len() * size_of::<AgeSpriteRecord>(),
@@ -1268,7 +1286,9 @@ fn write_matched_particle_benchmark_births() {
     emitter.head_tail = ParticleHeadTail::Both;
     emitter.gpu_style.tail = true;
     emitter.tail_length = 0.4;
-    let mut output = String::from("# 8192 particles; sample_age=0.5; head=true; tail=true; tail_time=0.4; white_rgba=1; size_xy=1; spin=0; drag=0; identity_camera=true\norigin_x,origin_y,origin_z,velocity_x,velocity_y,velocity_z,acceleration_x,acceleration_y,acceleration_z,lifetime,scale_x,scale_y\n");
+    let mut output = String::from(
+        "# 8192 particles; sample_age=0.5; head=true; tail=true; tail_time=0.4; white_rgba=1; size_xy=1; spin=0; drag=0; identity_camera=true\norigin_x,origin_y,origin_z,velocity_x,velocity_y,velocity_z,acceleration_x,acceleration_y,acceleration_z,lifetime,scale_x,scale_y\n",
+    );
     for ordinal in 0..MAX_PARTICLES {
         let mut birth = emitter
             .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, ordinal as u64)
@@ -1320,7 +1340,11 @@ fn write_matched_particle_benchmark_births() {
                 }
             }
         }
-        println!("Previous input comparison: {changed_fields} changed f32 fields, maximum absolute difference {max_absolute_difference:e}; row counts {} previous / {} actual", previous.lines().count().saturating_sub(2), output.lines().count().saturating_sub(2));
+        println!(
+            "Previous input comparison: {changed_fields} changed f32 fields, maximum absolute difference {max_absolute_difference:e}; row counts {} previous / {} actual",
+            previous.lines().count().saturating_sub(2),
+            output.lines().count().saturating_sub(2)
+        );
     }
     write(path, output).unwrap();
     println!("Original deterministic benchmark births: {path}");
@@ -1426,4 +1450,94 @@ fn disabled_geometry_keeps_m2_simulation_and_statistics_without_live_records() {
         }
         assert_eq!(stats.dropped, 0);
     }
+}
+
+/// Body births place posed model joints once, independent of the emitter pivot.
+#[test]
+fn bone_births_use_posed_joint_origins_once_in_attached_and_detached_frames() {
+    use wc3::model::profiles::m2::MeshProperties as SectionProperties;
+    use wc3::model::{GeometryData, Mesh as ModelMesh, MeshInstance, MeshProperties};
+
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+    let mut joint = builder.new_node("offset joint");
+    joint.transform.pivot = Vec3::new(7., 8., 9.);
+    let joint = builder.add_node(joint).unwrap();
+    let mesh =
+        builder
+            .add_mesh(ModelMesh::new(GeometryData::empty()).with_properties(Some(
+                MeshProperties::M2(SectionProperties {
+                    bone_palette: Some(vec![joint]),
+                    center_bone: None,
+                    center: Vec3::ZERO,
+                    sorting: None,
+                }),
+            )))
+            .unwrap();
+    let mut instance = MeshInstance::new(joint, mesh);
+    instance.lod = Some(0);
+    builder.add_instance(instance).unwrap();
+    let model = builder.finish().unwrap();
+    let source = BoneSource::compile(&model, &HashMap::from([(joint, 0)]));
+    let mut values = SlotValues::default();
+    let mut emitter = emitter(&mut values);
+    emitter.generator = ParticleGenerator::Bone;
+    emitter.bones = Some(source);
+    let basis = Mat4::from_scale_rotation_translation(
+        Vec3::new(-2., 3., 1.),
+        Quat::from_rotation_y(0.4),
+        Vec3::new(20., -5., 3.),
+    );
+    let node = basis
+        * Mat4::from_rotation_translation(Quat::from_rotation_x(0.7), Vec3::new(11., 2., -4.));
+    let rest_point = Vec3::new(7., 8., 9.);
+    for attached in [false, true] {
+        emitter.flags.set_attached(attached);
+        for point in [rest_point, rest_point + Vec3::new(2., -3., 1.)] {
+            let birth = emitter
+                .birth_posed(&values, 0., node, basis, Vec3::ZERO, 0, |candidate| {
+                    assert_eq!(candidate.pivot, rest_point);
+                    Some((point, None))
+                })
+                .unwrap()
+                .0;
+            let expected_local = (node.inverse() * basis).transform_point3(point);
+            let expected = if attached {
+                expected_local
+            } else {
+                basis.transform_point3(point)
+            };
+            assert!(
+                birth.origin.abs_diff_eq(expected, 1e-4),
+                "{attached}: {:?} != {expected:?}",
+                birth.origin
+            );
+            let world = if attached {
+                node.transform_point3(birth.origin)
+            } else {
+                birth.origin
+            };
+            assert!(world.abs_diff_eq(basis.transform_point3(point), 1e-4));
+            let expected_direction = if attached {
+                Vec3::Z
+            } else {
+                node.transform_vector3(Vec3::Z)
+            };
+            assert!(
+                birth
+                    .velocity
+                    .normalize()
+                    .abs_diff_eq(expected_direction.normalize(), 1e-5)
+            );
+        }
+    }
+    emitter.flags.set_attached(true);
+    emitter.controls.as_mut().unwrap().z_source = values.add(3.);
+    let birth = emitter
+        .birth_posed(&values, 0., node, basis, Vec3::ZERO, 0, |_| {
+            Some((rest_point, None))
+        })
+        .unwrap()
+        .0;
+    let aimed = (birth.origin - Vec3::Z * 3.).normalize();
+    assert!(birth.velocity.normalize().abs_diff_eq(aimed, 1e-5));
 }

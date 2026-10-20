@@ -8,6 +8,7 @@ use bevy::pbr::{
 };
 use bevy::prelude::*;
 use bevy::render::{
+    Render, RenderApp, RenderStartup, RenderSystems,
     batching::gpu_preprocessing::BatchedInstanceBuffers,
     extract_component::ExtractComponentPlugin,
     mesh::RenderMesh,
@@ -18,7 +19,6 @@ use bevy::render::{
     sync_world::MainEntity,
     texture::{FallbackImage, GpuImage},
     view::{ExtractedView, RenderVisibleEntities},
-    Render, RenderApp, RenderStartup, RenderSystems,
 };
 #[cfg(test)]
 use std::sync::Arc;
@@ -26,9 +26,9 @@ use wc3::model::values::model::ParticleBlend;
 
 use super::records::{AgeSpriteData, AgeSpriteRecord, AgeSpriteUniform};
 use crate::effects::render::{
-    effect_texture_layout, effect_vertex_layout, effect_visible, transparent_effect_draw,
     DrawEffectInstances, EffectBuffer, PassResources, ResidentRecordBuffer, SortPolicy,
-    SortScratch,
+    SortScratch, effect_texture_layout, effect_vertex_layout, effect_visible,
+    transparent_effect_draw,
 };
 
 pub(crate) struct AgeSpriteRenderPlugin;
@@ -232,7 +232,7 @@ fn sort_indices(data: &AgeSpriteData, world_from_view: &Affine3A, scratch: &mut 
         let center = Vec3A::from(Vec3::from_slice(&record.position[..3]));
         scratch.push(index as u32, (center - eye).dot(forward));
     }
-    scratch.sort(false, |index, order| {
+    scratch.sort(data.style.sort == SortPolicy::Near, |index, order| {
         if data.style.head {
             order.push(index);
         }
@@ -326,7 +326,7 @@ fn prepare_age_sprites(
                     effect_visible(visible, *main_entity),
                 )
             }),
-            SortPolicy::Far,
+            data.style.sort,
             &mut order_scratch,
             &device,
             &queue,

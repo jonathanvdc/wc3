@@ -6,10 +6,12 @@ use super::age_sprites_gpu::{
     SampleBuffers,
 };
 use super::atlas_sprites::retimed_selection;
+use super::bones::{BoneCandidate, BoneSource};
 use super::emission::{EffectChange, EmissionClock};
 use super::frame::EffectFrame;
 use super::generators::spline;
 use super::implosion::{bounded_end, outward_crossing};
+use super::render::SortPolicy;
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::layers::ModelOwnedRenderEntity;
 #[cfg(test)]
@@ -81,6 +83,7 @@ struct Emitter {
     lifespan: Property<f32>,
     generator: ParticleGenerator,
     spline: Vec<Vec3>,
+    bones: Option<BoneSource>,
     flags: ParticleFlags,
     drag: f32,
     wind: Vec3,
@@ -215,10 +218,15 @@ impl RuntimeAgeSprites {
         nodes: &HashMap<NodeId, NodeId>,
         clips: &HashMap<ClipId, ClipId>,
     ) {
+        let mut bone_remaps = HashMap::new();
         self.emitters
             .extend(source.emitters.iter().cloned().map(|mut value| {
                 value.node = nodes[&value.node];
                 value.node_index = indices[value.node_index];
+                value.bones = value
+                    .bones
+                    .as_ref()
+                    .map(|bones| bones.remap_cached(indices, &mut bone_remaps));
 
                 value
             }));
@@ -248,6 +256,7 @@ impl RuntimeAgeSprites {
                 .collect(),
             ..Self::default()
         };
+        let mut bone_source = None;
         for (feature, value) in model.features() {
             let NodeFeature::Particle(ParticleEmitter::M2(definition)) = &value.payload else {
                 continue;
@@ -262,25 +271,57 @@ impl RuntimeAgeSprites {
             let appearance = &definition.appearance;
             if !matches!(
                 details.shape.generator,
-                ParticleGenerator::Plane | ParticleGenerator::Sphere | ParticleGenerator::Spline
+                ParticleGenerator::Plane
+                    | ParticleGenerator::Sphere
+                    | ParticleGenerator::Spline
+                    | ParticleGenerator::Bone
             ) {
                 diagnostic(
                     RenderDiagnosticKind::Unsupported,
-                    "M2 bone and unknown generators require a dedicated emission interpreter",
+                    "Unknown M2 particle generators require a dedicated emission interpreter",
                 );
                 continue;
             }
+            let bones = (details.shape.generator == ParticleGenerator::Bone).then(|| {
+                bone_source
+                    .get_or_insert_with(|| BoneSource::compile(model, node_indices))
+                    .clone()
+            });
+            if let Some(bones) = &bones {
+                diagnostic(
+                    RenderDiagnosticKind::Unverified,
+                    "M2 body particles sample posed joint spans in model space and convert once to the emitter frame; native Bone/Joint distinction and client frame fidelity remain unverified",
+                );
+                if bones.inferred {
+                    diagnostic(
+                        RenderDiagnosticKind::Approximation,
+                        "Body-particle eligibility without a declared section palette is inferred from positive drawn skin influences",
+                    );
+                }
+                if bones.is_empty() {
+                    diagnostic(
+                        RenderDiagnosticKind::Resource,
+                        "M2 body particles have no eligible first-LOD section palette joints; births are omitted",
+                    );
+                }
+            }
             if details.shape.generator == ParticleGenerator::Spline {
-                diagnostic(RenderDiagnosticKind::Unverified,
-                    "M2 spline particles sample the normalized authored path; exact client shape and frame fidelity remain unverified");
+                diagnostic(
+                    RenderDiagnosticKind::Unverified,
+                    "M2 spline particles sample the normalized authored path; exact client shape and frame fidelity remain unverified",
+                );
             }
             if details.shape.generator == ParticleGenerator::Sphere
                 && details.flags.implosion_filter()
             {
-                diagnostic(RenderDiagnosticKind::Approximation,
-                    "M2 sphere implosion retirement samples analytic movement at bounded 60 Hz intervals against the interpolated live emitter center; discrete native integration is approximated");
-                diagnostic(RenderDiagnosticKind::Budget,
-                    "M2 sphere implosion filtering bounds each emitter to 32768 particle-steps per update; emission and retirement omissions share one skipped-time counter and do not create a catch-up queue");
+                diagnostic(
+                    RenderDiagnosticKind::Approximation,
+                    "M2 sphere implosion retirement samples analytic movement at bounded 60 Hz intervals against the interpolated live emitter center; discrete native integration is approximated",
+                );
+                diagnostic(
+                    RenderDiagnosticKind::Budget,
+                    "M2 sphere implosion filtering bounds each emitter to 32768 particle-steps per update; emission and retirement omissions share one skipped-time counter and do not create a catch-up queue",
+                );
             }
             let (rate, speed, speed_variation, lifespan, lifespan_variation) = (
                 definition.emission.rate,
@@ -290,7 +331,8 @@ impl RuntimeAgeSprites {
                 definition.lifetime.variation,
             );
             if details.rendering.model.is_some() || details.rendering.child_model.is_some() {
-                diagnostic(RenderDiagnosticKind::Unsupported,
+                diagnostic(
+                    RenderDiagnosticKind::Unsupported,
                     "M2 model particles and child emitter resources are not instantiated by the sprite transport",
                 );
                 continue;
@@ -302,12 +344,14 @@ impl RuntimeAgeSprites {
                 .texture_program
                 .is_some_and(|hints| hints != [0, 0])
             {
-                diagnostic(RenderDiagnosticKind::Unsupported,
+                diagnostic(
+                    RenderDiagnosticKind::Unsupported,
                     "M2 particle TXAC selectors are retained without interpretation; recognized native composition flags remain active",
                 );
             }
             if details.flags.refraction() && !details.flags.multi_texture() {
-                diagnostic(RenderDiagnosticKind::Unsupported,
+                diagnostic(
+                    RenderDiagnosticKind::Unsupported,
                     "M2 refraction requires a scene-color postprocess interpreter; displaying the ordinary primary texture path",
                 );
             }
@@ -327,8 +371,10 @@ impl RuntimeAgeSprites {
                 details.rendering.blend,
                 ParticleBlend::Opaque | ParticleBlend::AlphaKey
             ) {
-                diagnostic(RenderDiagnosticKind::Approximation,
-                    "M2 opaque and cutout sprites write main-view depth but do not cast shadows or join depth, normal, and motion-vector prepasses");
+                diagnostic(
+                    RenderDiagnosticKind::Approximation,
+                    "M2 opaque and cutout sprites write main-view depth but do not cast shadows or join depth, normal, and motion-vector prepasses",
+                );
             }
             if details.wind_time != 0. {
                 diagnostic(
@@ -337,7 +383,8 @@ impl RuntimeAgeSprites {
                 );
             }
             if appearance.legacy_atlas.is_some() {
-                diagnostic(RenderDiagnosticKind::Approximation,
+                diagnostic(
+                    RenderDiagnosticKind::Approximation,
                     "Legacy particle atlas segments currently use normalized-age cell curves when present",
                 );
             }
@@ -345,14 +392,17 @@ impl RuntimeAgeSprites {
                 details.rendering.head_tail,
                 ParticleHeadTail::Tail | ParticleHeadTail::Both
             ) {
-                diagnostic(RenderDiagnosticKind::Unverified,
+                diagnostic(
+                    RenderDiagnosticKind::Unverified,
                     "M2 tails use velocity times the authored tail parameter; exact client time-versus-distance fidelity remains unverified",
                 );
             }
-            diagnostic(RenderDiagnosticKind::Approximation,
+            diagnostic(
+                RenderDiagnosticKind::Approximation,
                 "M2 particle motion interpolates application root transforms between updates; inherited velocity uses a frame-interval estimate",
             );
-            diagnostic(RenderDiagnosticKind::Budget,
+            diagnostic(
+                RenderDiagnosticKind::Budget,
                 "Sprite simulation limits each emitter to 8192 living particles, 8192 births and 4096 emission intervals per update; omitted births and long-update seconds are reported",
             );
             let image =
@@ -385,10 +435,13 @@ impl RuntimeAgeSprites {
                 | (1 << 29)
                 | (1 << 30);
             if details.flags.bits() & !supported_flags != 0 {
-                diagnostic(RenderDiagnosticKind::Unsupported, &format!(
-                    "M2 particle controls {:#010x} are retained but not evaluated by the sprite transport",
-                    details.flags.bits() & !supported_flags
-                ));
+                diagnostic(
+                    RenderDiagnosticKind::Unsupported,
+                    &format!(
+                        "M2 particle controls {:#010x} are retained but not evaluated by the sprite transport",
+                        details.flags.bits() & !supported_flags
+                    ),
+                );
             }
 
             result.emitters.push(Emitter {
@@ -413,6 +466,7 @@ impl RuntimeAgeSprites {
                 }),
                 generator: details.shape.generator,
                 spline: details.shape.spline.iter().collect(),
+                bones,
                 flags: details.flags,
                 drag: details.drag.max(0.),
                 wind: details.wind,
@@ -453,6 +507,7 @@ impl RuntimeAgeSprites {
                     }),
                     blend: details.rendering.blend,
                     priority: f32::from(details.rendering.texture_tile_rotation),
+                    sort: SortPolicy::Far,
                     composition: if multi_texture {
                         AgeSpriteComposition::Multi {
                             three_colors: details.flags.multi_texture_three_colors(),
@@ -785,13 +840,33 @@ impl BirthContext<'_, '_, '_> {
             return;
         }
         *births += 1;
-        if let Some((mut birth, appearance)) = emitter.birth_in(
+        if let Some((mut birth, appearance)) = emitter.birth_posed(
             &sample,
             time,
             birth_node,
             birth_basis,
             self.inherited,
             ordinal,
+            |candidate| {
+                if let Some(pose) = frame.pose {
+                    return Some(pose.at_offset(time - frame.time).sample_joint_span(
+                        candidate.node,
+                        &sample,
+                        &mut state.pose_scratch,
+                    ));
+                }
+                let joint = |index: usize, pivot: Vec3| {
+                    frame
+                        .node_poses
+                        .get(index)
+                        .map(|matrix| matrix.transform_point3(pivot))
+                };
+                let child = joint(candidate.node, candidate.pivot)?;
+                let parent = candidate
+                    .parent
+                    .and_then(|(index, pivot)| joint(index, pivot));
+                Some((child, parent))
+            },
         ) {
             if frame.time - birth.time < f64::from(birth.lifetime) {
                 // Newborns follow only emitter translation after occurrence.
@@ -904,6 +979,7 @@ impl Emitter {
         self.birth_in(sample, time, node, node, inherited, ordinal)
             .map(|(birth, _)| birth)
     }
+    #[cfg(test)]
     fn birth_in(
         &self,
         sample: &impl ValueSample,
@@ -912,6 +988,18 @@ impl Emitter {
         basis: Mat4,
         inherited: Vec3,
         ordinal: u64,
+    ) -> Option<(Birth, Option<BirthAppearance>)> {
+        self.birth_posed(sample, time, node, basis, inherited, ordinal, |_| None)
+    }
+    fn birth_posed(
+        &self,
+        sample: &impl ValueSample,
+        time: f64,
+        node: Mat4,
+        basis: Mat4,
+        inherited: Vec3,
+        ordinal: u64,
+        bone_pose: impl FnMut(BoneCandidate) -> Option<(Vec3, Option<Vec3>)>,
     ) -> Option<(Birth, Option<BirthAppearance>)> {
         if !node.is_finite() || node.determinant() == 0. {
             return None;
@@ -963,6 +1051,20 @@ impl Emitter {
                 let (position, tangent) = spline(&self.spline, length, width, random(&mut seed));
                 direction = tangent;
                 position
+            }
+            ParticleGenerator::Bone => {
+                let draws = [
+                    random(&mut seed),
+                    random(&mut seed),
+                    random(&mut seed),
+                    random(&mut seed),
+                ];
+                let model_origin = self
+                    .bones
+                    .as_ref()?
+                    .sample(draws, width, length, bone_pose)?;
+                direction = Vec3::Z;
+                (node.inverse() * basis).transform_point3(model_origin)
             }
             _ => return None,
         };

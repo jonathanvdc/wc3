@@ -72,6 +72,57 @@ impl PoseContext<'_> {
         sample: &RetimedAnimation<'_, '_, '_>,
         scratch: &mut Vec<usize>,
     ) -> (Mat4, bool) {
+        let (pose, visible) = self.sample_evaluated(index, sample, scratch);
+        (pose.matrix, visible)
+    }
+
+    /// Sample model-space joint pivots with one parent-chain evaluation.
+    /// Candidate eligibility and emitter visibility are independent of joint visibility.
+    pub fn sample_joint_span(
+        &self,
+        index: usize,
+        sample: &RetimedAnimation<'_, '_, '_>,
+        scratch: &mut Vec<usize>,
+    ) -> (Vec3, Option<Vec3>) {
+        scratch.clear();
+        let parent = self.nodes[index].parent.map(|parent| {
+            let (pose, _) = self.sample_evaluated(parent, sample, scratch);
+            (
+                pose,
+                pose.matrix.transform_point3(self.nodes[parent].rest.pivot),
+            )
+        });
+        let parent_pose = parent.map_or_else(EvaluatedPose::default, |(pose, _)| pose);
+        let child = self.evaluate_node(index, sample, parent_pose);
+        (
+            child.matrix.transform_point3(self.nodes[index].rest.pivot),
+            parent.map(|(_, position)| position),
+        )
+    }
+
+    fn evaluate_node(
+        &self,
+        index: usize,
+        sample: &RetimedAnimation<'_, '_, '_>,
+        parent: EvaluatedPose,
+    ) -> EvaluatedPose {
+        let node = &self.nodes[index];
+        let pose = match self.overrides.get(&node.id) {
+            Some(pose) => *pose,
+            None => {
+                let pose = node.sample(sample);
+                self.transition.map_or(pose, |view| view.blend(index, pose))
+            }
+        };
+        evaluate_pose(node, pose, parent, self.camera)
+    }
+
+    fn sample_evaluated(
+        &self,
+        index: usize,
+        sample: &RetimedAnimation<'_, '_, '_>,
+        scratch: &mut Vec<usize>,
+    ) -> (EvaluatedPose, bool) {
         scratch.clear();
         let mut next = Some(index);
         while let Some(index) = next {
@@ -81,18 +132,10 @@ impl PoseContext<'_> {
         let mut evaluated = EvaluatedPose::default();
         let mut visible = true;
         for &index in scratch.iter().rev() {
-            let node = &self.nodes[index];
-            let pose = match self.overrides.get(&node.id) {
-                Some(pose) => *pose,
-                None => {
-                    let pose = node.sample(sample);
-                    self.transition.map_or(pose, |view| view.blend(index, pose))
-                }
-            };
-            evaluated = evaluate_pose(node, pose, evaluated, self.camera);
-            visible &= node.sample_visibility(sample);
+            evaluated = self.evaluate_node(index, sample, evaluated);
+            visible &= self.nodes[index].sample_visibility(sample);
         }
-        (evaluated.matrix, visible)
+        (evaluated, visible)
     }
 }
 

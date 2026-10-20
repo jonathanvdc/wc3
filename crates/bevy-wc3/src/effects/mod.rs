@@ -4,6 +4,7 @@ mod age_appearance;
 mod age_sprites;
 pub(crate) mod age_sprites_gpu;
 mod atlas_sprites;
+mod bones;
 mod emission;
 mod frame;
 mod generators;

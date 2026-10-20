@@ -658,7 +658,8 @@ where
             index_count: (triangles.len() * 3) as u16,
             bone_count: u16::try_from(bone_combos.len() - palette_start)
                 .map_err(|_| Error::new("m2.mesh.bone_palette", "palette count exceeds u16"))?,
-            bone_combo_index: palette_start as u16,
+            bone_combo_index: u16::try_from(palette_start)
+                .map_err(|_| Error::new("m2.mesh.bone_palette", "palette start exceeds u16"))?,
             bone_influences: mesh
                 .influences()
                 .iter()

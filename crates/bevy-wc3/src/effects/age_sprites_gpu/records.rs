@@ -1,3 +1,4 @@
+use crate::effects::render::SortPolicy;
 use bevy::ecs::query::QueryItem;
 use bevy::prelude::*;
 use bevy::render::extract_component::ExtractComponent;
@@ -57,6 +58,7 @@ pub(crate) struct AgeSpriteStyle {
     pub textures: [Option<Handle<Image>>; 3],
     pub blend: ParticleBlend,
     pub priority: f32,
+    pub sort: SortPolicy,
     pub composition: AgeSpriteComposition,
     /// Reverse authored image V while keeping geometric corners unchanged.
     pub uv_flip_v: bool,

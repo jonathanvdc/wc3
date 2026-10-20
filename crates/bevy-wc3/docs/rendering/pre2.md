@@ -59,6 +59,20 @@ exact native spline framing remains unverified. M2 emitter frames include the
 native quarter turn around Z relative to the carrying bone, before conversion
 into the Bevy scene basis.
 
+Body emitters choose among the first LOD's declared section bone palettes,
+excluding joints marked `NoBodySpawn` and deduplicating shared members. An
+explicitly empty palette emits nothing, even when skinning weights name other
+joints. Models without a declaration approximate eligibility from positive
+influences in placed, drawn geometry and report that choice. Each birth samples
+the selected joint and its parent at the occurrence time, interpolates their
+posed model-space span, and scatters in a plane containing that span. The parent
+can remain a span endpoint even when excluded from candidate selection. Joint
+positions include their authored bind pivots; an unanimated limb therefore
+keeps its model-space placement. The result converts into the emitter frame
+once before normal attached or detached simulation. Initial velocity and
+source-height aiming use emitter-local axes. Native Bone/Joint distinctions,
+random distributions, and client frame fidelity remain unverified.
+
 The attached flag, native bit `0x10`, keeps particle motion in the current
 emitter frame. Detached particles transform their birth position and velocity
 once. Gravity and static wind for detached particles pass through the model
@@ -120,7 +134,7 @@ composition flags; they do not disable the supported multi-texture path. The
 refraction flag selects a scene-color postprocess only when multi-texture is
 inactive. This postprocess has no interpreter in the current Bevy pipeline;
 those emitters retain their ordinary primary texture with a diagnostic. Texture
-rotation programmes, bone generators, native keyed squirt emission, collisions,
+rotation programmes, native keyed squirt emission, collisions,
 external model particles and child emitters still require additional
 interpretation or application integration.
 

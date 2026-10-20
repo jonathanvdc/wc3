@@ -3,6 +3,7 @@ use crate::compile_model;
 use crate::compiled::RuntimeNode;
 use bevy::math::Vec3;
 use std::f32::consts::FRAC_PI_2;
+use std::sync::Arc;
 use wc3::model::ModelMetadata;
 use wc3::model::{AnimationSample, Curve, DynamicTrack, Node, Quat, Time, TimeSource, Track};
 use wc3::model::{BillboardAxis, BillboardFrame, BillboardScale, ModelBuilder, TransformSemantics};
@@ -552,4 +553,113 @@ fn channel_presence_keeps_late_clip_shared_animation_and_static_node_poses() {
         !visible,
         "animation visibility still propagates through static children"
     );
+}
+
+#[test]
+fn joint_spans_preserve_bind_pivots_and_match_individual_feature_frames() {
+    let mut values = SlotValues::default();
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
+    let parent = builder
+        .add_node(
+            Node::named("parent joint", &mut values)
+                .with_transform(
+                    ModelTransform {
+                        pivot: Vec3::new(3., 4., 5.),
+                        ..SlotConstruct::construct(&mut values)
+                    },
+                    &mut values,
+                )
+                .unwrap(),
+        )
+        .unwrap();
+    let child = builder
+        .add_node(
+            Node::named("child joint", &mut values)
+                .with_parent(parent)
+                .with_transform(
+                    ModelTransform {
+                        pivot: Vec3::new(8., 9., 10.),
+                        ..SlotConstruct::construct(&mut values)
+                    },
+                    &mut values,
+                )
+                .unwrap(),
+        )
+        .unwrap();
+    let time = |v| Time::seconds(v).unwrap();
+    builder
+        .add_global_track(DynamicTrack::Rotation(Track {
+            target: builder.model().node(parent).unwrap().transform.rotation,
+            clock: TimeSource::Animation,
+            curve: Curve::linear(
+                [time(0.), time(1.)],
+                [Quat::IDENTITY, Quat::from_rotation_z(FRAC_PI_2)],
+            )
+            .unwrap(),
+        }))
+        .unwrap();
+    builder.import_values(&values).unwrap();
+    let model = builder.finish().unwrap();
+    let mut compiled = compile_model(&model, |_| None).unwrap();
+    let parent = compiled
+        .nodes
+        .iter()
+        .position(|node| node.id == parent)
+        .unwrap();
+    let child = compiled
+        .nodes
+        .iter()
+        .position(|node| node.id == child)
+        .unwrap();
+    let sample = compiled
+        .animation
+        .sample(AnimationSample::default())
+        .unwrap();
+    let overrides = HashMap::new();
+    let camera = Transform::from_xyz(20., 30., 40.)
+        .looking_at(Vec3::ZERO, Vec3::Y)
+        .compute_affine();
+    let mut scratch = Vec::new();
+    for billboard in [
+        Billboard::None,
+        Billboard::Spherical {
+            frame: BillboardFrame::Yz,
+            scale: BillboardScale::SignedFactors,
+        },
+    ] {
+        Arc::make_mut(&mut compiled.nodes)[parent].billboard = billboard;
+        for mask in 0..8 {
+            let nodes = Arc::make_mut(&mut compiled.nodes);
+            nodes[child].inheritance.translation = mask & 1 == 0;
+            nodes[child].inheritance.rotation = mask & 2 == 0;
+            nodes[child].inheritance.scale = mask & 4 == 0;
+            let context = PoseContext {
+                nodes: &compiled.nodes,
+                transition: None,
+                overrides: &overrides,
+                camera: Some(camera),
+            };
+            for seconds in [0., 0.25, 0.5, 1.] {
+                let retimed = sample.at_times(time(seconds), time(seconds));
+                let actual = context.sample_joint_span(child, &retimed, &mut scratch);
+                let expected_child = context
+                    .sample_feature_node(child, &retimed, &mut scratch)
+                    .0
+                    .transform_point3(Vec3::ZERO);
+                let expected_parent = context
+                    .sample_feature_node(parent, &retimed, &mut scratch)
+                    .0
+                    .transform_point3(Vec3::ZERO);
+                assert!(actual.0.abs_diff_eq(expected_child, 1e-5));
+                assert!(actual.1.unwrap().abs_diff_eq(expected_parent, 1e-5));
+                let root = context.sample_joint_span(parent, &retimed, &mut scratch);
+                assert!(root.1.is_none());
+                assert!(root.0.abs_diff_eq(expected_parent, 1e-5));
+                if seconds == 0. && billboard == Billboard::None {
+                    assert!(actual.0.abs_diff_eq(Vec3::new(8., 9., 10.), 1e-5));
+                    assert!(actual.1.unwrap().abs_diff_eq(Vec3::new(3., 4., 5.), 1e-5));
+                }
+            }
+        }
+    }
 }

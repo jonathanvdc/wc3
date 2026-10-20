@@ -1,9 +1,9 @@
 use super::*;
 use crate::effects::age_sprites_gpu::AgeSpriteStyle;
 use bytemuck::Zeroable;
+use naga::TypeInner;
 use naga::front::wgsl::parse_str;
 use naga::valid::{Capabilities, ValidationFlags, Validator};
-use naga::TypeInner;
 use wc3::model::values::model::ParticleBlend;
 
 #[test]
@@ -12,7 +12,7 @@ fn two_views_sort_shared_heads_and_tails_independently() {
         position: [0., 0., z, 0.],
         ..Zeroable::zeroed()
     });
-    let data = AgeSpriteData {
+    let mut data = AgeSpriteData {
         records: Arc::new(records.into()),
         live_indices: Arc::new(vec![0, 0x8000_0000, 1, 0x8000_0001, 2, 0x8000_0002]),
         uniform: Default::default(),
@@ -20,6 +20,7 @@ fn two_views_sort_shared_heads_and_tails_independently() {
             textures: [None, None, None],
             blend: ParticleBlend::Alpha,
             priority: 0.,
+            sort: SortPolicy::Far,
             composition: Default::default(),
             uv_flip_v: false,
             unlit: false,
@@ -34,6 +35,11 @@ fn two_views_sort_shared_heads_and_tails_independently() {
     let other = Affine3A::from_quat(Quat::from_rotation_y(std::f32::consts::PI));
     assert_eq!(
         sorted_indices(&data, &other),
+        [1, 0x8000_0001, 2, 0x8000_0002, 0, 0x8000_0000]
+    );
+    data.style.sort = SortPolicy::Near;
+    assert_eq!(
+        sorted_indices(&data, &Affine3A::IDENTITY),
         [1, 0x8000_0001, 2, 0x8000_0002, 0, 0x8000_0000]
     );
     assert_eq!(data.records[0].position[2], -3.);

@@ -2579,3 +2579,21 @@ fn section_bone_palette_links_are_checked_before_publishing_edits() {
         .edit(|builder| builder.set_mesh(mesh_id, changed))
         .is_err());
 }
+
+#[test]
+fn declared_palette_start_overflow_is_a_checked_export_boundary() {
+    let mut source = native_triangle();
+    let core = source.model.core_mut();
+    core.bone_combos = ZeroVec::alloc_from_slice(&vec![0; 32768]);
+    let mut section = core.skins[0].sections[0].clone();
+    section.bone_count = 32768;
+    core.skins[0].sections = vec![section.clone(), section.clone(), section];
+    let model = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let error = io::m2::plan::<m2::Flat<m2::V256>>(&model, &ExportOptions::default()).unwrap_err();
+    assert!(
+        error.to_string().contains("palette start exceeds u16"),
+        "{error}"
+    );
+}
