@@ -136,9 +136,26 @@ where
                     sphere_radius: ((maximum - minimum) * 0.5).length(),
                 }
             });
+            let mut declared_palette = Vec::with_capacity(section.bone_count as usize);
+            for offset in 0..section.bone_count as usize {
+                let node = core
+                    .bone_combos
+                    .get(section.bone_combo_index as usize + offset)
+                    .and_then(|index| nodes.get(index as usize))
+                    .copied();
+                if let Some(node) = node {
+                    declared_palette.push(node);
+                } else {
+                    context.unsupported(
+                        "m2.mesh.bone_palette",
+                        "declared section palette references an absent bone or combination entry",
+                    )?;
+                }
+            }
             let mesh =
                 builder.add_mesh(
                     mesh.with_properties(profile::MeshProperties {
+                        bone_palette: Some(declared_palette),
                         center_bone: if nodes.is_empty() && section.center_bone_index == 0 {
                             None
                         } else {
@@ -485,7 +502,26 @@ where
         let first = profile.vertices.len();
         let core_start = vertices.len();
         let index_start = profile.indices.len();
+        let declared_palette = mesh
+            .properties
+            .as_ref()
+            .and_then(|properties| properties.bone_palette.as_deref());
         let mut palette = Vec::new();
+        if let Some(declared) = declared_palette {
+            for joint in declared {
+                let index = nodes.iter().position(|node| node == joint).ok_or_else(|| {
+                    Error::new(
+                        "m2.mesh.bone_palette",
+                        "declared palette requires an exported bone",
+                    )
+                })?;
+                palette.push(
+                    u16::try_from(index).map_err(|_| {
+                        Error::new("m2.mesh.bone_palette", "bone index exceeds u16")
+                    })?,
+                );
+            }
+        }
         let mut bone_maps = Vec::new();
         let skin = instance.skin.and_then(|id| model.skin(id));
         if let Some(skin) = skin {
@@ -555,13 +591,17 @@ where
                 v.bone_weights[slot] = scaled.floor() as u8;
                 total += u32::from(v.bone_weights[slot]);
                 remainder.push((slot, scaled - scaled.floor()));
-                let index = palette
-                    .iter()
-                    .position(|b| *b == joint as u16)
-                    .unwrap_or_else(|| {
-                        palette.push(joint as u16);
-                        palette.len() - 1
-                    });
+                let index = if let Some(index) =
+                    palette.iter().position(|bone| *bone == joint as u16)
+                {
+                    index
+                } else {
+                    if declared_palette.is_some() {
+                        context.unsupported("m2.mesh.bone_palette", "exporting a skin influence requires expanding the declared palette, which changes body-particle generator eligibility")?;
+                    }
+                    palette.push(joint as u16);
+                    palette.len() - 1
+                };
                 mapping[slot] = u8::try_from(index)
                     .map_err(|_| Error::new("m2.mesh.skin", "palette exceeds 256 bones"))?
             }
@@ -616,7 +656,8 @@ where
             vertex_count: count as u16,
             index_start: index_start as u16,
             index_count: (triangles.len() * 3) as u16,
-            bone_count: (bone_combos.len() - palette_start) as u16,
+            bone_count: u16::try_from(bone_combos.len() - palette_start)
+                .map_err(|_| Error::new("m2.mesh.bone_palette", "palette count exceeds u16"))?,
             bone_combo_index: palette_start as u16,
             bone_influences: mesh
                 .influences()

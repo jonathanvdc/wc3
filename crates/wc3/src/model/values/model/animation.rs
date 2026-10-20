@@ -80,6 +80,8 @@ bitfield! {
     pub transformed, set_transformed: 9;
     /// Returns or changes the kinematic bit.
     pub kinematic, set_kinematic: 10;
+    /// Excludes the bone from body-particle generator candidates.
+    pub no_body_spawn, set_no_body_spawn: 11;
     /// Returns or changes the helmet animation scaled bit.
     pub helmet_animation_scaled, set_helmet_animation_scaled: 12;
 }
@@ -146,6 +148,8 @@ bitfield! {
     pub transformed,set_transformed:9;
     /// Kinematic simulation participation.
     pub kinematic,set_kinematic:10;
+    /// Excludes the bone from body-particle generator candidates.
+    pub no_body_spawn,set_no_body_spawn:11;
     /// Scale helmet animation coordinates.
     pub helmet_animation_scaled,set_helmet_animation_scaled:12;
     /// Evaluate transforms in model coordinates.

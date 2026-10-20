@@ -99,6 +99,9 @@ impl ValidateLinks for ModelMetadata<'_> {
 /// Sorting and culling behavior attached directly to its logical geometry.
 #[derive(Clone, Debug)]
 pub struct MeshProperties {
+    /// Declared section bone palette, including unused joints. Absence permits
+    /// deriving a palette; an explicitly empty declaration remains empty.
+    pub bone_palette: Option<Vec<NodeId>>,
     /// Bone carrying the section's sorting frame.
     pub center_bone: Option<NodeId>,
     /// Section center in model coordinates.
@@ -108,6 +111,7 @@ pub struct MeshProperties {
 }
 impl ValidateLinks for MeshProperties {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        self.bone_palette.visit_links(visitor);
         self.center_bone.visit_links(visitor);
         if self.center.to_array().iter().any(|v| !v.is_finite())
             || self.sorting.is_some_and(|(center, radius)| {

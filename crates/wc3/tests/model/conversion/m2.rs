@@ -65,6 +65,7 @@ fn native_triangle() -> m2::Bundle<'static, m2::Flat<m2::V256>> {
     core.texture_weight_combos = ZeroVec::alloc_from_slice(&[u16::MAX]);
     core.texture_transform_combos = ZeroVec::alloc_from_slice(&[u16::MAX]);
     core.texture_transform_bone_map = ZeroVec::alloc_from_slice(&[0]);
+    core.bone_combos = ZeroVec::alloc_from_slice(&[0]);
     core.skins = vec![SkinProfile {
         vertices: ZeroVec::alloc_from_slice(&[0, 1, 2]),
         indices: ZeroVec::alloc_from_slice(&[0, 1, 2]),
@@ -72,6 +73,7 @@ fn native_triangle() -> m2::Bundle<'static, m2::Flat<m2::V256>> {
         sections: vec![SkinSection {
             vertex_count: 3,
             index_count: 3,
+            bone_count: 1,
             id: 17,
             ..Default::default()
         }],
@@ -2423,4 +2425,157 @@ fn modern_particle_fog_and_refraction_flags_round_trip_independently() {
             assert_eq!(particle.flags.refraction(), controls & 0x0010_0000 != 0);
         }
     }
+}
+
+#[test]
+fn declared_section_bone_palettes_preserve_unused_nodes_and_exclusions() {
+    use sm::profiles::{Universal, M2};
+    let mut source = native_triangle();
+    let core = source.model.core_mut();
+    core.bones = vec![Bone::new(); 3];
+    core.bones[1].flags.set_no_body_spawn(true);
+    core.bones[2].flags.set_billboard(true);
+    core.bone_combos = ZeroVec::alloc_from_slice(&[2, 0, 1]);
+    core.skins[0].sections[0].bone_count = 3;
+    let imported = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let nodes: Vec<_> = imported
+        .nodes()
+        .iter()
+        .filter_map(|(id, node)| node.properties.is_some().then_some(id))
+        .collect();
+    let mesh = imported.meshes().iter().next().unwrap().1;
+    assert_eq!(
+        mesh.properties.as_ref().unwrap().bone_palette.as_deref(),
+        Some([nodes[2], nodes[0], nodes[1]].as_slice())
+    );
+    assert!(imported
+        .node(nodes[1])
+        .unwrap()
+        .properties
+        .as_ref()
+        .unwrap()
+        .flags
+        .no_body_spawn());
+    assert!(!imported
+        .node(nodes[2])
+        .unwrap()
+        .properties
+        .as_ref()
+        .unwrap()
+        .flags
+        .no_body_spawn());
+    assert_ne!(
+        imported.node(nodes[2]).unwrap().billboard,
+        sm::Billboard::None
+    );
+    let universal: sm::Model<'_, Universal> = imported.clone().widen();
+    let Some(sm::MeshProperties::M2(properties)) =
+        &universal.meshes().iter().next().unwrap().1.properties
+    else {
+        panic!("widening lost M2 palette")
+    };
+    assert_eq!(
+        properties.bone_palette.as_deref(),
+        Some([nodes[2], nodes[0], nodes[1]].as_slice())
+    );
+    let narrowed = universal.try_narrow::<M2>().unwrap();
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&narrowed, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .value;
+    let section = &output.model.core().skins[0].sections[0];
+    assert_eq!(section.bone_count, 3);
+    let restored: Vec<_> = (0..section.bone_count as usize)
+        .map(|offset| {
+            output
+                .model
+                .core()
+                .bone_combos
+                .get(section.bone_combo_index as usize + offset)
+                .unwrap()
+        })
+        .collect();
+    assert_eq!(restored, [2, 0, 1]);
+    assert!(output.model.core().bones[1].flags.no_body_spawn());
+    assert!(output.model.core().bones[2].flags.billboard());
+}
+
+#[test]
+fn empty_declared_bone_palette_does_not_become_an_inferred_binding() {
+    let mut source = native_triangle();
+    source.model.core_mut().bone_combos = ZeroVec::default();
+    source.model.core_mut().skins[0].sections[0].bone_count = 0;
+    let imported = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    assert_eq!(
+        imported
+            .meshes()
+            .iter()
+            .next()
+            .unwrap()
+            .1
+            .properties
+            .as_ref()
+            .unwrap()
+            .bone_palette,
+        Some(Vec::new())
+    );
+    assert!(
+        !imported.skins().iter().next().unwrap().1.joints.is_empty(),
+        "skin binding and body-spawn eligibility are distinct"
+    );
+    let error =
+        io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default()).unwrap_err();
+    assert!(error.to_string().contains("bone_palette"));
+    let lossy = io::m2::plan::<m2::Flat<m2::V256>>(
+        &imported,
+        &ExportOptions {
+            loss_policy: LossPolicy::Drop,
+            ..Default::default()
+        },
+    )
+    .unwrap()
+    .execute();
+    assert!(!lossy.report.issues.is_empty());
+    assert_eq!(lossy.value.model.core().skins[0].sections[0].bone_count, 1);
+
+    // A declaration with no conflicting weighted use remains exactly empty on export.
+    let core = source.model.core_mut();
+    let vertices: Vec<_> = core
+        .vertices
+        .iter()
+        .map(|mut vertex| {
+            vertex.bone_weights = [0; 4];
+            vertex
+        })
+        .collect();
+    core.vertices = ZeroVec::alloc_from_slice(&vertices);
+    let unweighted = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let output = io::m2::plan::<m2::Flat<m2::V256>>(&unweighted, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .value;
+    assert_eq!(output.model.core().skins[0].sections[0].bone_count, 0);
+}
+
+#[test]
+fn section_bone_palette_links_are_checked_before_publishing_edits() {
+    use sm::profiles::Universal;
+    let source = native_triangle();
+    let mut model = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let mut foreign = sm::Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+    let absent = foreign.reserve_node();
+    let (mesh_id, mesh) = model.meshes().iter().next().unwrap();
+    let mut changed = mesh.clone();
+    changed.properties.as_mut().unwrap().bone_palette = Some(vec![absent]);
+    assert!(model
+        .edit(|builder| builder.set_mesh(mesh_id, changed))
+        .is_err());
 }

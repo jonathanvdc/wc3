@@ -98,6 +98,8 @@ bitfield! {
     pub transformed, set_transformed: 9;
     /// Returns or changes the kinematic bit.
     pub kinematic, set_kinematic: 10;
+    /// Excludes the bone from body-particle generator candidates.
+    pub no_body_spawn, set_no_body_spawn: 11;
     /// Returns or changes the helmet animation scaled bit.
     pub helmet_animation_scaled, set_helmet_animation_scaled: 12;
 }
@@ -133,3 +135,28 @@ impl Interpolation {
 wire_ule!(Interpolation, u16, raw, from_raw);
 wire_ule!(SequenceFlags, u32, bits, from_bits_retain);
 wire_ule!(BoneFlags, u32, bits, from_bits_retain);
+
+#[cfg(test)]
+mod tests {
+    use super::BoneFlags;
+    use crate::model::values::model::{BoneBehaviorFlags, BoneFlags as SemanticBoneFlags};
+
+    #[test]
+    fn body_spawn_exclusion_is_distinct_from_billboarding_and_preserves_unknown_bits() {
+        let mut native = BoneFlags::from_bits_retain(0x8000_0008);
+        let mut semantic = SemanticBoneFlags::from_bits_retain(native.bits());
+        native.set_no_body_spawn(true);
+        semantic.set_no_body_spawn(true);
+        assert_eq!(native.bits(), 0x8000_0808);
+        assert_eq!(native.bits(), semantic.bits());
+        assert!(native.billboard());
+        assert!(semantic.billboard());
+        let behavior = BoneBehaviorFlags::from_bits_retain(native.bits());
+        assert!(behavior.no_body_spawn());
+        assert_eq!(behavior.bits(), 0x8000_0800);
+        native.set_no_body_spawn(false);
+        semantic.set_no_body_spawn(false);
+        assert_eq!(native.bits(), 0x8000_0008);
+        assert_eq!(native.bits(), semantic.bits());
+    }
+}
