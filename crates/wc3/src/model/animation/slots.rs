@@ -112,6 +112,18 @@ macro_rules! tables {
             pub fn len(&self) -> usize { 0 $(+ self.$field.len())* }
             /// Whether no values have been allocated.
             pub fn is_empty(&self) -> bool { self.len() == 0 }
+            /// Reports the typed slot and value responsible for an invalid rest constant.
+            pub(crate) fn validate_constants(&self) -> Result<(), Error> {
+                $(for (id, value) in &self.$field {
+                    if !value.is_valid() {
+                        return Err(Error::new(
+                            format!("values.{}[{id:?}]", stringify!($variant)),
+                            format!("invalid rest value {value:?}"),
+                        ));
+                    }
+                })*
+                Ok(())
+            }
             /// Validates constants and visits any resources they reference.
             pub(crate) fn visit_values(&self, visitor: &mut dyn FnMut(Link)) {
                 for source in self.boolean_reads.values() { source.visit_links(visitor); }

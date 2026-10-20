@@ -5,6 +5,7 @@ use crate::model::{
     AppearanceSchema, BindingSchema as _, Error, GeometrySchema, Link, Model, SharedClock,
     SystemPayload, Time, ValidateLinks, VertexInfluences,
 };
+use std::cell::Cell;
 use std::collections::{BTreeSet, HashSet};
 use std::iter::once;
 impl<P: Profile> Model<'_, P> {
@@ -55,6 +56,7 @@ impl<P: Profile> Model<'_, P> {
 impl<P: Profile> Model<'_, P> {
     /// Checks values, graph relationships, metadata, and owned resources.
     pub fn validate(&self) -> Result<(), Error> {
+        self.values.validate_constants()?;
         self.appearance.validate()?;
         for (id, node) in self.nodes.iter() {
             node.transform.validate(&self.values)?;
@@ -102,70 +104,81 @@ impl<P: Profile> Model<'_, P> {
 }
 impl<P: Profile> Model<'_, P> {
     fn validate_relationships(&self) -> Result<(), Error> {
-        let mut missing = false;
+        let mut missing = None;
+        let location = Cell::new(("values", 0));
         let mut visit = |link| {
-            missing |= match link {
-                Link::Value(slot) => !self.values.contains(slot),
-                Link::ImageResource(id) => !self.dependencies.images.contains_key(id),
-                Link::ModelResource(id) => !self.dependencies.models.contains_key(id),
-                Link::EffectResource(id) => !self.dependencies.effects.contains_key(id),
-                Link::PhysicsResource(id) => !self.dependencies.physics.contains_key(id),
+            let invalid = match &link {
+                Link::Value(slot) => !self.values.contains(*slot),
+                Link::ImageResource(id) => !self.dependencies.images.contains_key(*id),
+                Link::ModelResource(id) => !self.dependencies.models.contains_key(*id),
+                Link::EffectResource(id) => !self.dependencies.effects.contains_key(*id),
+                Link::PhysicsResource(id) => !self.dependencies.physics.contains_key(*id),
                 Link::BoneOverrideResource(id) => {
-                    !self.dependencies.bone_overrides.contains_key(id)
+                    !self.dependencies.bone_overrides.contains_key(*id)
                 }
 
                 Link::SystemMember { system, member } => !self
                     .systems
-                    .get(system)
-                    .is_some_and(|value| value.contains(member)),
+                    .get(*system)
+                    .is_some_and(|value| value.contains(*member)),
                 Link::InvalidValue => true,
-                Link::Node(id) => !self.nodes.contains_key(id),
+                Link::Node(id) => !self.nodes.contains_key(*id),
                 Link::FeatureAlternatives { id, kinds } => self
                     .features
-                    .get(id)
+                    .get(*id)
                     .is_none_or(|feature| !kinds.contains(&feature.payload.kind())),
                 Link::TypedFeature { id, kind } => self
                     .features
-                    .get(id)
-                    .is_none_or(|feature| feature.payload.kind() != kind),
-                Link::EventSource(id) => !self.event_sources.contains_key(id),
-                Link::Event(id) => self.event(id).is_none(),
-                Link::Feature(id) => !self.features.contains_key(id),
-                Link::Instance(id) => !self.instances.contains_key(id),
+                    .get(*id)
+                    .is_none_or(|feature| feature.payload.kind() != *kind),
+                Link::EventSource(id) => !self.event_sources.contains_key(*id),
+                Link::Event(id) => self.event(*id).is_none(),
+                Link::Feature(id) => !self.features.contains_key(*id),
+                Link::Instance(id) => !self.instances.contains_key(*id),
                 Link::TypedMesh { id, kind } => self
                     .meshes
-                    .get(id)
-                    .is_none_or(|mesh| mesh.geometry.kind() != kind),
-                Link::Mesh(id) => !self.meshes.contains_key(id),
-                Link::Material(id) => !self.materials.contains_key(id),
+                    .get(*id)
+                    .is_none_or(|mesh| mesh.geometry.kind() != *kind),
+                Link::Mesh(id) => !self.meshes.contains_key(*id),
+                Link::Material(id) => !self.materials.contains_key(*id),
                 Link::SampledImage(_) => false,
-                Link::Clip(id) => !self.clips.contains_key(id),
-                Link::Skin(id) => !self.skins.contains_key(id),
-                Link::Clock(id) => !self.clocks.contains_key(id),
-                Link::Animation(id) => !self.animations.contains_key(id),
-                Link::System(id) => !self.systems.contains_key(id),
+                Link::Clip(id) => !self.clips.contains_key(*id),
+                Link::Skin(id) => !self.skins.contains_key(*id),
+                Link::Clock(id) => !self.clocks.contains_key(*id),
+                Link::Animation(id) => !self.animations.contains_key(*id),
+                Link::System(id) => !self.systems.contains_key(*id),
             };
+            if invalid && missing.is_none() {
+                missing = Some((location.get(), link));
+            }
         };
         self.values.visit_values(&mut visit);
-        for source in self.event_sources.values() {
+        for (index, source) in self.event_sources.values().enumerate() {
+            location.set(("event_sources", index));
             source.visit_links(&mut visit);
         }
-        for value in self.dependencies.images.values() {
+        for (index, value) in self.dependencies.images.values().enumerate() {
+            location.set(("image_resources", index));
             value.visit_links(&mut visit);
         }
-        for value in self.dependencies.models.values() {
+        for (index, value) in self.dependencies.models.values().enumerate() {
+            location.set(("model_resources", index));
             value.visit_links(&mut visit);
         }
-        for value in self.dependencies.effects.values() {
+        for (index, value) in self.dependencies.effects.values().enumerate() {
+            location.set(("effect_resources", index));
             value.visit_links(&mut visit);
         }
-        for value in self.dependencies.physics.values() {
+        for (index, value) in self.dependencies.physics.values().enumerate() {
+            location.set(("physics_resources", index));
             value.visit_links(&mut visit);
         }
-        for value in self.dependencies.bone_overrides.values() {
+        for (index, value) in self.dependencies.bone_overrides.values().enumerate() {
+            location.set(("bone_override_resources", index));
             value.visit_links(&mut visit);
         }
-        for node in self.nodes.values() {
+        for (index, node) in self.nodes.values().enumerate() {
+            location.set(("nodes", index));
             node.parent.visit_links(&mut visit);
             node.transform.translation.visit_links(&mut visit);
             node.transform.rotation.visit_links(&mut visit);
@@ -173,11 +186,14 @@ impl<P: Profile> Model<'_, P> {
             node.visible.visit_links(&mut visit);
             node.properties.visit_links(&mut visit);
         }
-        for clip in self.clips.values() {
+        for (index, clip) in self.clips.values().enumerate() {
+            location.set(("clips", index));
             clip.properties.visit_links(&mut visit);
         }
+        location.set(("global_animations", 0));
         self.global_animations.visit_links(&mut visit);
-        for animation in self.animations.values() {
+        for (index, animation) in self.animations.values().enumerate() {
+            location.set(("animations", index));
             for track in &animation.tracks {
                 track.visit_links(&mut visit);
             }
@@ -185,15 +201,18 @@ impl<P: Profile> Model<'_, P> {
                 event.visit_links(&mut visit);
             }
         }
-        for skin in self.skins.values() {
+        for (index, skin) in self.skins.values().enumerate() {
+            location.set(("skins", index));
             skin.joints.visit_links(&mut visit);
             skin.binding.visit_links(&mut visit);
         }
-        for mesh in self.meshes.values() {
+        for (index, mesh) in self.meshes.values().enumerate() {
+            location.set(("meshes", index));
             mesh.properties.visit_links(&mut visit);
             mesh.geometry.visit_links(&mut visit);
         }
-        for instance in self.instances.values() {
+        for (index, instance) in self.instances.values().enumerate() {
+            location.set(("instances", index));
             instance.properties.visit_links(&mut visit);
             instance.node.visit_links(&mut visit);
             instance.mesh.visit_links(&mut visit);
@@ -202,25 +221,31 @@ impl<P: Profile> Model<'_, P> {
                 draw.properties.visit_links(&mut visit);
             }
         }
-        for material in self.materials.values() {
+        for (index, material) in self.materials.values().enumerate() {
+            location.set(("materials", index));
             material.surface.visit_links(&mut visit);
         }
-        for clip in self.clips.values() {
+        for (index, clip) in self.clips.values().enumerate() {
+            location.set(("clips", index));
             clip.animations.visit_links(&mut visit);
         }
-        for feature in self.features.values() {
+        for (index, feature) in self.features.values().enumerate() {
+            location.set(("features", index));
             feature.node.visit_links(&mut visit);
             feature.payload.visit_links(&mut visit);
         }
+        location.set(("appearance", 0));
         self.appearance.visit_links(&mut visit);
+        location.set(("metadata", 0));
         self.metadata.visit_links(&mut visit);
-        for system in self.systems.values() {
+        for (index, system) in self.systems.values().enumerate() {
+            location.set(("systems", index));
             system.visit_links(&mut visit);
         }
-        if missing {
+        if let Some(((owner, index), link)) = missing {
             return Err(Error::new(
-                "relationships",
-                "an object reference is absent, belongs to another graph, has the wrong payload type, or a rest value is invalid",
+                format!("relationships.{owner}[{index}]"),
+                format!("invalid {link:?}: reference is absent, belongs to another graph, has the wrong payload type, or contains an invalid rest value"),
             ));
         }
 

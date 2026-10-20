@@ -47,20 +47,13 @@ macro_rules! named_model {
     })* }
 }
 named_model!(Mdlx, M2);
-macro_rules! required_bounds {
-    ($($profile:ty),*) => { $(impl Model<'_, $profile> {
-        /// Authored model bounding volume.
-        pub fn bounds(&self) -> Bounds { self.metadata().bounds }
-    })* }
-}
-required_bounds!(M2);
 macro_rules! optional_bounds {
     ($($profile:ty),*) => { $(impl Model<'_, $profile> {
         /// Authored model bounds, when the corresponding native declaration exists.
         pub fn bounds(&self) -> Option<Bounds> { self.metadata().bounds }
     })* }
 }
-optional_bounds!(Mdlx, Wmo);
+optional_bounds!(Mdlx, M2, Wmo);
 impl Model<'_, Universal> {
     /// Authored name when the selected native declarations supply one.
     pub fn name(&self) -> &str {
@@ -84,7 +77,7 @@ impl Model<'_, Universal> {
         match self.metadata() {
             ModelMetadata::Mdlx(value) => value.bounds,
             ModelMetadata::Wmo(value) => value.bounds,
-            ModelMetadata::M2(value) => Some(value.bounds),
+            ModelMetadata::M2(value) => value.bounds,
         }
     }
 }

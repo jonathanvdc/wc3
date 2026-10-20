@@ -53,7 +53,7 @@ where
 
     let mut bundle = Bundle::from_model(native::Document::<D>::new());
     let core = bundle.model.core_mut();
-    core.bounding = native_bounds(model.bounds());
+    core.bounding = native_optional_bounds(model.bounds());
     if let Some(family) = family {
         core.flags = ModelFlags::from_bits_retain(family.flags.bits());
     }
@@ -205,7 +205,7 @@ where
             replay_min: data.replay[0],
             replay_max: data.replay[1],
             blend_time: BlendField::make(data.blend_time, &mut context)?,
-            bounding: native_bounds(data.bounds),
+            bounding: native_optional_bounds(data.bounds),
             alias_next: clip
                 .properties
                 .alias
@@ -442,6 +442,13 @@ where
     physics::export(model, &nodes, &mut bundle, &mut context)?;
     bundle.validate_complete().map_err(failure)?;
     Ok(Plan::new(bundle, context.report))
+}
+fn native_optional_bounds(value: Option<semantic::Bounds>) -> native::records::Extent {
+    value.map(native_bounds).unwrap_or(native::records::Extent {
+        minimum: [f32::MAX; 3],
+        maximum: [-f32::MAX; 3],
+        radius: 0.0,
+    })
 }
 fn native_bounds(value: semantic::Bounds) -> native::records::Extent {
     native::records::Extent {

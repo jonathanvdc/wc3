@@ -120,7 +120,22 @@ where
             )?;
             let mut mesh = Mesh::new(geometry);
             mesh.name = Cow::Owned(format!("skin-{index}-section-{section_index}"));
-            mesh.bounds = bounds(core.bounding);
+            mesh.bounds = optional_bounds(core.bounding).unwrap_or_else(|| {
+                let Some(first) = (count > 0).then(|| Vec3::from_array(vertex(0).position)) else {
+                    return semantic::Bounds::default();
+                };
+                let (mut minimum, mut maximum) = (first, first);
+                for index in 1..count {
+                    let position = Vec3::from_array(vertex(index).position);
+                    minimum = minimum.min(position);
+                    maximum = maximum.max(position);
+                }
+                semantic::Bounds {
+                    minimum,
+                    maximum,
+                    sphere_radius: ((maximum - minimum) * 0.5).length(),
+                }
+            });
             let mesh =
                 builder.add_mesh(
                     mesh.with_properties(profile::MeshProperties {

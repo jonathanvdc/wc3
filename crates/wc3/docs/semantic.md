@@ -44,7 +44,12 @@ Universal construction requires an explicit `ModelMetadata` variant. Native
 profiles with authored names also accept a name string as shorthand. Metadata
 contains model-wide declarations such as bounds, blend time, and external animation
 references where the native family supports them. Read it with `metadata()` and
-edit it with the builder's `metadata_mut()` or `set_metadata()`.
+edit it with the builder's `metadata_mut()` or `set_metadata()`. Model bounds
+are optional for every native profile. M2 model and sequence empty-extent sentinels
+become `None`; real extents still require finite, ordered bounds and a nonnegative
+radius. M2 meshes derive conservative rest-position bounds when model bounds are
+absent. Semantic M2 export writes one canonical empty sentinel for absence. Use
+a native document when preserving the original sentinel representation matters.
 
 ## Follow the graph
 

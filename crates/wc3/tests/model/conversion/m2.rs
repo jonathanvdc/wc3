@@ -2099,3 +2099,90 @@ fn shared_bone_vectors_are_imported_once_at_model_scope_with_all_clips_retained(
         assert_eq!(model.clip_tracks(id).count(), 0);
     }
 }
+
+#[test]
+fn native_empty_model_and_sequence_extents_are_explicitly_absent() {
+    for limit in [10_000_000.0, f32::MAX] {
+        let mut source = native_triangle();
+        let empty = m2::records::Extent {
+            minimum: [limit; 3],
+            maximum: [-limit; 3],
+            radius: 0.0,
+        };
+        let mut slots = SlotValues::default();
+        source.model.core_mut().bounding = empty;
+        source
+            .model
+            .core_mut()
+            .sequences
+            .push(m2::records::Sequence {
+                bounding: empty,
+                variation_next: -1,
+                ..SlotConstruct::construct(&mut slots)
+            });
+        let imported = io::m2::import(&source, &ImportOptions::default())
+            .unwrap()
+            .value;
+        assert_eq!(imported.bounds(), None);
+        let mesh_bounds = imported.meshes().values().next().unwrap().bounds;
+        assert_eq!(mesh_bounds.minimum, Vec3::ZERO);
+        assert_eq!(mesh_bounds.maximum, Vec3::new(1.0, 1.0, 0.0));
+        assert!((mesh_bounds.sphere_radius - 0.5f32.sqrt()).abs() < 1e-6);
+        assert_eq!(
+            imported.clone().widen::<sm::profiles::Universal>().bounds(),
+            None
+        );
+        assert!(imported.clips().iter().all(|(id, _)| imported
+            .clip_properties(id)
+            .unwrap()
+            .bounds
+            .is_none()));
+        let exported = io::m2::plan::<m2::Flat<m2::V256>>(&imported, &ExportOptions::default())
+            .unwrap()
+            .execute()
+            .value;
+        assert_eq!(exported.model.core().bounding.minimum, [f32::MAX; 3]);
+        assert_eq!(
+            exported.model.core().sequences[0].bounding.maximum,
+            [-f32::MAX; 3]
+        );
+        assert_eq!(source.model.core().bounding.minimum, [limit; 3]);
+    }
+}
+
+#[test]
+fn malformed_real_extents_remain_strict_import_errors() {
+    for extent in [
+        m2::records::Extent {
+            minimum: [2.0; 3],
+            maximum: [1.0; 3],
+            radius: 0.0,
+        },
+        m2::records::Extent {
+            minimum: [f32::MAX; 3],
+            maximum: [-f32::MAX; 3],
+            radius: 1.0,
+        },
+        m2::records::Extent {
+            minimum: [0.0; 3],
+            maximum: [1.0; 3],
+            radius: -1.0,
+        },
+    ] {
+        let mut source = native_triangle();
+        source.model.core_mut().bounding = extent;
+        assert!(io::m2::import(&source, &ImportOptions::default()).is_err());
+        source.model.core_mut().bounding = Default::default();
+        let mut slots = SlotValues::default();
+        source
+            .model
+            .core_mut()
+            .sequences
+            .push(m2::records::Sequence {
+                bounding: extent,
+                variation_next: -1,
+                ..SlotConstruct::construct(&mut slots)
+            });
+        assert!(io::m2::import(&source, &ImportOptions::default()).is_err());
+    }
+}

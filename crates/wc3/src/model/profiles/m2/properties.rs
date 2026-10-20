@@ -21,8 +21,8 @@ pub struct SequenceProperties {
     pub replay: [u32; 2],
     /// Incoming and outgoing transition durations in milliseconds.
     pub blend_time: [u32; 2],
-    /// Conservative spatial bounds associated with this playback program.
-    pub bounds: Bounds,
+    /// Conservative spatial bounds, absent when the native sequence declares an empty extent.
+    pub bounds: Option<Bounds>,
     /// Next alternative playback program in this variation chain.
     pub next_variation: Option<ClipId>,
     /// Native alias selection; common playback shares the target animation identities directly.
@@ -38,7 +38,7 @@ impl Default for SequenceProperties {
             frequency: 1,
             replay: [0; 2],
             blend_time: [0; 2],
-            bounds: Bounds::default(),
+            bounds: None,
             next_variation: None,
             alias: None,
         }
@@ -48,7 +48,9 @@ impl ValidateLinks for SequenceProperties {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
         self.next_variation.visit_links(visitor);
         self.alias.visit_links(visitor);
-        if !self.movement_speed.is_finite() || self.bounds.validate().is_err() {
+        if !self.movement_speed.is_finite()
+            || self.bounds.is_some_and(|bounds| bounds.validate().is_err())
+        {
             visitor(Link::InvalidValue);
         }
     }
@@ -75,8 +77,8 @@ impl ValidateLinks for ShadowProperties {
 pub struct ModelMetadata<'a> {
     /// Authored model name.
     pub name: Cow<'a, str>,
-    /// Authored model bounding volume.
-    pub bounds: Bounds,
+    /// Authored model bounding volume, absent for native empty extents.
+    pub bounds: Option<Bounds>,
 
     /// Model behavior flags.
     pub flags: ModelFlags,
@@ -87,7 +89,7 @@ pub struct ModelMetadata<'a> {
 }
 impl ValidateLinks for ModelMetadata<'_> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
-        if self.bounds.validate().is_err() {
+        if self.bounds.is_some_and(|bounds| bounds.validate().is_err()) {
             v(Link::InvalidValue);
         }
         self.animation_lookup.visit_links(v);

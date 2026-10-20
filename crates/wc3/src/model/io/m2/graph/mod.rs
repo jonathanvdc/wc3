@@ -79,7 +79,7 @@ where
     let mut builder = GraphBuilder::with_profile(profile::ModelMetadata::default());
     let mut family = profile::ModelMetadata {
         name: Cow::Borrowed(name),
-        bounds: bounds(core.bounding),
+        bounds: optional_bounds(core.bounding),
         flags: profile::values::ModelFlags::from_bits_retain(core.flags.bits()),
         ..Default::default()
     };
@@ -268,7 +268,7 @@ where
                 frequency: sequence.frequency,
                 replay: [sequence.replay_min, sequence.replay_max],
                 blend_time: sequence.blend_time.parts(),
-                bounds: bounds(sequence.bounding),
+                bounds: optional_bounds(sequence.bounding),
                 next_variation: if sequence.variation_next >= 0 {
                     Some(
                         *clips
@@ -502,6 +502,16 @@ where
         report: context.report,
     })
 }
+// Native tools initialize empty accumulators with either of these extrema. Keep
+// other inverted extents as authored values so semantic validation rejects them.
+fn optional_bounds(value: native::records::Extent) -> Option<semantic::Bounds> {
+    let empty = value.radius == 0.0
+        && [10_000_000.0, f32::MAX]
+            .into_iter()
+            .any(|limit| value.minimum == [limit; 3] && value.maximum == [-limit; 3]);
+    (!empty).then(|| bounds(value))
+}
+
 pub(super) fn bounds(value: native::records::Extent) -> semantic::Bounds {
     semantic::Bounds {
         minimum: Vec3::from_array(value.minimum),
