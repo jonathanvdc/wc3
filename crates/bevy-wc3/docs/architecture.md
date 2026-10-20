@@ -70,9 +70,16 @@ render layers. Ribbon passes share section records. M2 age-driven sprites sample
 exact authored curves and motion on the CPU into one compact record per particle.
 The GPU expands shared heads and tails for each view; camera motion updates their
 billboards and sorting without rebuilding particle vertices. Paused, unchanged
-samples reuse GPU records. All effect transports cache bindings and skip identical
-uniform uploads. Model particles create
-independent child models with explicit cleanup when their owner disappears.
+samples reuse GPU records. All effect transports cache bindings, identical
+uniform data, and per-view draw orders. The shared `effects/view_orders.rs` cache
+invalidates ordering when its source, uniforms, policy, or camera frame changes;
+unchanged views avoid sorting and index uploads. Empty or hidden effects disable
+draws while retaining resident capacity, and removed views release their order
+buffers. Ring lineage distinguishes reset simulations from older snapshots with
+the same write cursor.
+
+Model particles create independent child models with explicit cleanup when their
+owner disappears.
 Population, birth, and long-update budgets bound work and expose omitted-work
 counters. The focused [effect guides](README.md#rendering-reference) describe their
 semantics and limits.

@@ -20,13 +20,15 @@ use bevy::render::{
     view::{ExtractedView, RenderVisibleEntities},
     Render, RenderApp, RenderStartup, RenderSystems,
 };
+#[cfg(test)]
 use std::sync::Arc;
 use wc3::model::values::model::ParticleBlend;
 
 use super::records::{AgeSpriteData, AgeSpriteRecord, AgeSpriteUniform};
 use crate::effects::render::{
     effect_texture_layout, effect_vertex_layout, effect_visible, transparent_effect_draw,
-    DrawEffectInstances, EffectBuffer, PassResources, ResidentRecordBuffer,
+    DrawEffectInstances, EffectBuffer, PassResources, ResidentRecordBuffer, SortPolicy,
+    SortScratch,
 };
 
 pub(crate) struct AgeSpriteRenderPlugin;
@@ -223,39 +225,37 @@ fn queue_age_sprites(
 
 type AgeSpriteBuffer = EffectBuffer<u32>;
 
-fn sorted_indices(data: &AgeSpriteData, world_from_view: &Affine3A) -> Vec<u32> {
+fn sort_indices(data: &AgeSpriteData, world_from_view: &Affine3A, scratch: &mut SortScratch<u32>) {
     let eye = world_from_view.translation;
     let forward = -world_from_view.matrix3.z_axis;
-    let mut depths: Vec<_> = data
-        .records
-        .iter()
-        .enumerate()
-        .map(|(index, record)| {
-            let center = Vec3A::from(Vec3::from_slice(&record.position[..3]));
-            (index as u32, (center - eye).dot(forward))
-        })
-        .collect();
-    depths.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
-    let mut order = Vec::with_capacity(data.live_indices.len());
-    for (index, _) in depths {
+    for (index, record) in data.records.iter().enumerate() {
+        let center = Vec3A::from(Vec3::from_slice(&record.position[..3]));
+        scratch.push(index as u32, (center - eye).dot(forward));
+    }
+    scratch.sort(false, |index, order| {
         if data.style.head {
             order.push(index);
         }
         if data.style.tail {
             order.push(index | 0x8000_0000);
         }
-    }
-    order
+    });
+}
+#[cfg(test)]
+fn sorted_indices(data: &AgeSpriteData, world_from_view: &Affine3A) -> Vec<u32> {
+    let mut scratch = SortScratch::default();
+    sort_indices(data, world_from_view, &mut scratch);
+    scratch.order
 }
 
 #[allow(clippy::too_many_arguments)]
 fn prepare_age_sprites(
     mut commands: Commands,
-    query: Query<(
+    mut query: Query<(
         Entity,
         &MainEntity,
         &AgeSpriteData,
-        Option<&AgeSpriteBuffer>,
+        Option<&mut AgeSpriteBuffer>,
     )>,
     device: Res<RenderDevice>,
     queue: Res<RenderQueue>,
@@ -263,22 +263,32 @@ fn prepare_age_sprites(
     images: Res<RenderAssets<GpuImage>>,
     fallback: Res<FallbackImage>,
     views: Query<(&ExtractedView, &RenderVisibleEntities)>,
+    mut order_scratch: Local<SortScratch<u32>>,
 ) {
-    for (entity, main_entity, data, previous) in &query {
+    for (entity, main_entity, data, mut previous) in &mut query {
+        if let Some(previous) = previous.as_deref_mut() {
+            previous.retain_order_views(|key| {
+                views
+                    .iter()
+                    .any(|(view, _)| view.retained_view_entity == key)
+            });
+        }
         if data.live_indices.is_empty()
             || !views
                 .iter()
                 .any(|(_, visible)| effect_visible(visible, *main_entity))
         {
+            if let Some(previous) = previous.as_deref_mut() {
+                previous.suspend_draws();
+            }
             // Keep resident records and allocated capacity across emission gaps.
             continue;
         }
         let records = ResidentRecordBuffer::prepare_slice(
             &data.records,
-            previous.map(|p| &p.records),
+            previous.as_deref().map(|p| &p.records),
             &device,
             &queue,
-            previous.is_none_or(|p| !Arc::ptr_eq(&p.live_indices, &data.live_indices)),
         );
         let textures = data.style.textures.each_ref().map(|handle| {
             handle
@@ -287,28 +297,32 @@ fn prepare_age_sprites(
                 .unwrap_or(&fallback.d2)
         });
         let [image, secondary, tertiary] = textures;
-        let sorted_orders = views
-            .iter()
-            .filter(|(_, visible)| effect_visible(visible, *main_entity))
-            .map(|(view, _)| {
-                (
-                    view.retained_view_entity,
-                    sorted_indices(data, &view.world_from_view.affine()),
-                )
-            });
-        let buffer = AgeSpriteBuffer::prepare_layers(
+        let mut buffer = AgeSpriteBuffer::prepare_layers(
             records,
             &data.live_indices,
             &data.uniform,
-            previous,
+            previous.as_deref_mut(),
             PassResources {
                 device: &device,
                 queue: &queue,
                 layout: &pipeline.texture_bind_group_layout,
                 image,
             },
-            sorted_orders,
             Some([secondary, tertiary]),
+        );
+        buffer.prepare_orders(
+            views.iter().map(|(view, visible)| {
+                (
+                    view.retained_view_entity,
+                    view.world_from_view.affine(),
+                    effect_visible(visible, *main_entity),
+                )
+            }),
+            SortPolicy::Far,
+            &mut order_scratch,
+            &device,
+            &queue,
+            |view, scratch| sort_indices(data, view, scratch),
         );
         commands.entity(entity).insert(buffer);
     }

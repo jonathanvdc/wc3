@@ -1,9 +1,12 @@
 //! GPU buffers, binding layouts, and draw plumbing shared by quads and ribbons.
+#[path = "view_orders.rs"]
+mod view_orders;
 use bevy::core_pipeline::core_3d::{Transparent3d, TransparentSortingInfo3d};
 use bevy::ecs::system::{
     lifetimeless::{Read, SRes},
     SystemParamItem,
 };
+use bevy::math::Affine3A;
 use bevy::mesh::VertexBufferLayout;
 use bevy::pbr::RenderMeshInstances;
 use bevy::prelude::*;
@@ -26,10 +29,13 @@ use bevy::render::texture::GpuImage;
 use bevy::render::view::ExtractedView;
 use bevy::render::view::{RenderVisibleEntities, RetainedViewEntity};
 use bytemuck::{bytes_of, cast_slice, Pod};
-use std::collections::HashMap;
+use std::any::Any;
 use std::marker::PhantomData;
+use std::mem::take;
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use view_orders::ViewOrders;
+pub(crate) use view_orders::{SortPolicy, SortScratch};
 
 use crate::effects::records::{upload_records, RecordRing, RingCursor};
 
@@ -37,23 +43,53 @@ use crate::effects::records::{upload_records, RecordRing, RingCursor};
 pub(crate) struct ResidentRecordBuffer {
     pub(crate) buffer: Buffer,
     capacity: usize,
-    cursor: RingCursor,
+    source: RecordSource,
+}
+#[derive(Clone)]
+enum RecordSource {
+    Ring {
+        cursor: RingCursor,
+        lineage: Arc<()>,
+    },
+    Sampled(Arc<dyn Any + Send + Sync>),
+}
+impl RecordSource {
+    fn same(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Ring {
+                    cursor: a,
+                    lineage: x,
+                },
+                Self::Ring {
+                    cursor: b,
+                    lineage: y,
+                },
+            ) => a == b && Arc::ptr_eq(x, y),
+            (Self::Sampled(a), Self::Sampled(b)) => Arc::ptr_eq(a, b),
+            _ => false,
+        }
+    }
 }
 impl ResidentRecordBuffer {
     /// Upload exactly sampled live records without allocating per-frame meshes.
     /// Immutable birth transports continue to use their write cursors instead.
-    pub(crate) fn prepare_slice<R: Pod>(
-        values: &[R],
+    pub(crate) fn prepare_slice<R: Pod + Send + Sync>(
+        values: &Arc<Vec<R>>,
         previous: Option<&Self>,
         device: &RenderDevice,
         queue: &RenderQueue,
-        changed: bool,
     ) -> Self {
+        let source = RecordSource::Sampled(values.clone());
         if let Some(previous) = previous.filter(|p| p.capacity >= values.len()) {
-            if changed && !values.is_empty() {
+            if !previous.source.same(&source) && !values.is_empty() {
                 queue.write_buffer(&previous.buffer, 0, cast_slice(values));
             }
-            return previous.clone();
+            return Self {
+                buffer: previous.buffer.clone(),
+                capacity: previous.capacity,
+                source,
+            };
         }
         let capacity = values.len().max(1).next_power_of_two();
         let buffer = device.create_buffer(&BufferDescriptor {
@@ -68,7 +104,7 @@ impl ResidentRecordBuffer {
         Self {
             buffer,
             capacity,
-            cursor: RingCursor::default(),
+            source,
         }
     }
 
@@ -84,7 +120,14 @@ impl ResidentRecordBuffer {
                 (
                     previous.buffer.clone(),
                     previous.capacity,
-                    Some(previous.cursor),
+                    match &previous.source {
+                        RecordSource::Ring { cursor, lineage }
+                            if Arc::ptr_eq(lineage, records.lineage()) =>
+                        {
+                            Some(*cursor)
+                        }
+                        _ => None,
+                    },
                 )
             } else {
                 let capacity = records.capacity();
@@ -100,7 +143,10 @@ impl ResidentRecordBuffer {
         Self {
             buffer,
             capacity,
-            cursor: records.cursor(),
+            source: RecordSource::Ring {
+                cursor: records.cursor(),
+                lineage: records.lineage().clone(),
+            },
         }
     }
 }
@@ -151,13 +197,43 @@ struct EffectBinding {
 #[derive(Component)]
 pub(crate) struct EffectBuffer<I: Send + Sync + 'static> {
     pub(crate) records: ResidentRecordBuffer,
-    pub(crate) live_indices: Arc<Vec<I>>,
+    draw: DrawState<I>,
     uniform: Buffer,
     uniform_bytes: Arc<[u8]>,
     binding: EffectBinding,
     pub(crate) order: DrawOrderBuffer,
     pub(crate) texture: BindGroup,
-    pub(crate) sorted: HashMap<RetainedViewEntity, DrawOrderBuffer>,
+    pub(crate) sorted: ViewOrders<RetainedViewEntity, DrawOrderBuffer>,
+}
+
+struct OrderRevision<'a, I> {
+    records: &'a RecordSource,
+    indices: &'a Arc<Vec<I>>,
+    uniform: &'a Arc<[u8]>,
+}
+impl<I> OrderRevision<'_, I> {
+    fn same(&self, other: &Self) -> bool {
+        self.records.same(other.records)
+            && Arc::ptr_eq(self.indices, other.indices)
+            && Arc::ptr_eq(self.uniform, other.uniform)
+    }
+}
+
+/// Residency and source identity survive frames which have no active draws.
+struct DrawState<I> {
+    source: Arc<Vec<I>>,
+    instances: u32,
+}
+impl<I> DrawState<I> {
+    fn new(source: &Arc<Vec<I>>) -> Self {
+        Self {
+            source: source.clone(),
+            instances: source.len() as u32,
+        }
+    }
+    fn suspend(&mut self) {
+        self.instances = 0;
+    }
 }
 
 pub(crate) struct PassResources<'a> {
@@ -171,28 +247,18 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
         records: ResidentRecordBuffer,
         indices: &Arc<Vec<I>>,
         uniform_data: &U,
-        previous: Option<&Self>,
+        previous: Option<&mut Self>,
         resources: PassResources<'_>,
-        sorted_orders: impl IntoIterator<Item = (RetainedViewEntity, Vec<I>)>,
     ) -> Self {
-        Self::prepare_layers(
-            records,
-            indices,
-            uniform_data,
-            previous,
-            resources,
-            sorted_orders,
-            None,
-        )
+        Self::prepare_layers(records, indices, uniform_data, previous, resources, None)
     }
 
     pub(crate) fn prepare_layers<U: Pod>(
         records: ResidentRecordBuffer,
         indices: &Arc<Vec<I>>,
         uniform_data: &U,
-        previous: Option<&Self>,
+        mut previous: Option<&mut Self>,
         resources: PassResources<'_>,
-        sorted_orders: impl IntoIterator<Item = (RetainedViewEntity, Vec<I>)>,
         extra_images: Option<[&GpuImage; 2]>,
     ) -> Self {
         let PassResources {
@@ -203,12 +269,13 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
         } = resources;
         let bytes = bytes_of(uniform_data);
         let uniform_bytes = previous
+            .as_deref()
             .filter(|previous| previous.uniform_bytes.as_ref() == bytes)
             .map_or_else(
                 || Arc::from(bytes),
                 |previous| previous.uniform_bytes.clone(),
             );
-        let uniform = if let Some(previous) = previous {
+        let uniform = if let Some(previous) = previous.as_deref() {
             if !Arc::ptr_eq(&uniform_bytes, &previous.uniform_bytes) {
                 queue.write_buffer(&previous.uniform, 0, bytes);
             }
@@ -222,10 +289,12 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
         };
         let order = DrawOrderBuffer::prepare(
             indices,
-            previous.map(|p| &p.order),
+            previous.as_deref().map(|p| &p.order),
             device,
             queue,
-            previous.is_none_or(|p| !Arc::ptr_eq(&p.live_indices, indices)),
+            previous
+                .as_deref()
+                .is_none_or(|p| !Arc::ptr_eq(&p.draw.source, indices)),
         );
         let binding = EffectBinding {
             layout: layout.id(),
@@ -235,7 +304,7 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
             uniform: uniform.id(),
             records: records.buffer.id(),
         };
-        let texture = if let Some(previous) = previous.filter(|p| p.binding == binding) {
+        let texture = if let Some(previous) = previous.as_deref().filter(|p| p.binding == binding) {
             previous.texture.clone()
         } else if let Some([secondary, tertiary]) = extra_images {
             device.create_bind_group(
@@ -264,28 +333,66 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
                 )),
             )
         };
-        let sorted = sorted_orders
-            .into_iter()
-            .map(|(view, indices)| {
-                let buffer = DrawOrderBuffer::prepare(
-                    &indices,
-                    previous.and_then(|p| p.sorted.get(&view)),
-                    device,
-                    queue,
-                    true,
-                );
-                (view, buffer)
+        let revision = OrderRevision {
+            records: &records.source,
+            indices,
+            uniform: &uniform_bytes,
+        };
+        let changed = previous.as_deref().is_none_or(|p| {
+            !revision.same(&OrderRevision {
+                records: &p.records.source,
+                indices: &p.draw.source,
+                uniform: &p.uniform_bytes,
             })
-            .collect();
+        });
+        let mut sorted = previous
+            .as_deref_mut()
+            .map(|p| take(&mut p.sorted))
+            .unwrap_or_default();
+        if changed {
+            sorted.invalidate();
+        }
         Self {
             records,
-            live_indices: indices.clone(),
+            draw: DrawState::new(indices),
             uniform,
             uniform_bytes,
             binding,
             order,
             texture,
             sorted,
+        }
+    }
+    pub(crate) fn suspend_draws(&mut self) {
+        self.draw.suspend();
+    }
+    pub(crate) fn retain_order_views(&mut self, live: impl FnMut(RetainedViewEntity) -> bool) {
+        self.sorted.retain(live);
+    }
+
+    pub(crate) fn prepare_orders(
+        &mut self,
+        views: impl Iterator<Item = (RetainedViewEntity, Affine3A, bool)>,
+        policy: SortPolicy,
+        scratch: &mut SortScratch<I>,
+        device: &RenderDevice,
+        queue: &RenderQueue,
+        mut sort: impl FnMut(&Affine3A, &mut SortScratch<I>),
+    ) {
+        self.sorted.set_policy(policy);
+        if policy == SortPolicy::None {
+            self.sorted.clear();
+            return;
+        }
+        for (view, affine, visible) in views {
+            if !visible {
+                continue;
+            }
+            self.sorted.prepare(view, affine, |previous| {
+                scratch.clear();
+                sort(&affine, scratch);
+                DrawOrderBuffer::prepare(&scratch.order, previous, device, queue, true)
+            });
         }
     }
 }
@@ -365,23 +472,26 @@ impl<P: PhaseItem, I: Send + Sync + 'static> RenderCommand<P>
         SRes<RenderMeshInstances>,
         SRes<MeshAllocator>,
     );
-    type ViewQuery = Read<ExtractedView>;
+    type ViewQuery = (Read<ExtractedView>, Read<RenderVisibleEntities>);
     type ItemQuery = Read<EffectBuffer<I>>;
     fn render<'w>(
         item: &P,
-        view: &'w ExtractedView,
+        (view, visible): (&'w ExtractedView, &'w RenderVisibleEntities),
         buffer: Option<&'w EffectBuffer<I>>,
         (meshes, instances, allocator): SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
+        let Some(buffer) = buffer.filter(|buffer| buffer.draw.instances != 0) else {
+            return RenderCommandResult::Skip;
+        };
+        if !effect_visible(visible, item.main_entity()) {
+            return RenderCommandResult::Skip;
+        }
         let allocator = allocator.into_inner();
         let Some(mesh_instance) = instances.render_mesh_queue_data(item.main_entity()) else {
             return RenderCommandResult::Skip;
         };
         let Some(mesh) = meshes.into_inner().get(mesh_instance.mesh_asset_id()) else {
-            return RenderCommandResult::Skip;
-        };
-        let Some(buffer) = buffer else {
             return RenderCommandResult::Skip;
         };
         let Some(vertex) = allocator.mesh_vertex_slice(&mesh_instance.mesh_asset_id()) else {
@@ -406,12 +516,10 @@ impl<P: PhaseItem, I: Send + Sync + 'static> RenderCommand<P>
                 pass.draw_indexed(
                     index.range.start..index.range.start + count,
                     vertex.range.start as i32,
-                    0..buffer.live_indices.len() as u32,
+                    0..buffer.draw.instances,
                 );
             }
-            RenderMeshBufferInfo::NonIndexed => {
-                pass.draw(vertex.range, 0..buffer.live_indices.len() as u32)
-            }
+            RenderMeshBufferInfo::NonIndexed => pass.draw(vertex.range, 0..buffer.draw.instances),
         }
 
         RenderCommandResult::Success

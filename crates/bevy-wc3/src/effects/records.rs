@@ -20,6 +20,7 @@ pub(crate) struct RingCursor {
 /// `writes % capacity`; retirement advances the logical head by reducing `len`.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct RecordRing<T> {
+    lineage: Arc<()>,
     blocks: Vec<Arc<Vec<T>>>,
     cursor: RingCursor,
     len: usize,
@@ -28,6 +29,7 @@ pub(crate) struct RecordRing<T> {
 impl<T> Default for RecordRing<T> {
     fn default() -> Self {
         Self {
+            lineage: Arc::new(()),
             blocks: Vec::new(),
             cursor: RingCursor::default(),
             len: 0,
@@ -36,6 +38,11 @@ impl<T> Default for RecordRing<T> {
 }
 
 impl<T> RecordRing<T> {
+    /// Cloned extraction snapshots retain identity; reset rings start a new
+    /// lineage even when their write cursor repeats a previous value.
+    pub(crate) fn lineage(&self) -> &Arc<()> {
+        &self.lineage
+    }
     #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.len

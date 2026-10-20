@@ -35,10 +35,11 @@ image input, independently of mesh inputs sharing the same image dependency.
 Motion and age curves sample once per particle into a compact live record shared
 by its head, tail, and every camera. The GPU expands corners against each view;
 camera changes update ordering without rebuilding vertex meshes or resampling
-appearance. Paused, unchanged effects retain their GPU records. Native head and
-tail style bits become a semantic head/tail selection during import. That
-selection can enable either geometry, both, or neither; it does not change the
-emission direction. Velocity-oriented heads use the projected particle velocity,
+appearance. Paused, unchanged effects retain their GPU records. Unchanged views
+also retain their sorted draw-order buffers across paused frames and temporary
+culling. Native head and tail style bits become a semantic head/tail selection
+during import. That selection can enable either geometry, both, or neither; it
+does not change the emission direction. Velocity-oriented heads use the projected particle velocity,
 while fixed-plane heads use the appropriate attached or detached XY frame. Tail
 extent uses velocity multiplied by the authored tail time, optionally clamped to
 particle age. Exact native tail geometry remains unverified.
@@ -117,7 +118,9 @@ interpretation or application integration.
 
 ## Budgets and limits
 
-Each sprite emitter is bounded to 8,192 living particles. The age-driven
+Each MDLX sprite emitter is bounded to 8,192 head/tail records; enabling both
+uses two records per particle. Each M2 age-driven emitter is bounded to 8,192
+particles, sharing one record between its head and tail. The age-driven
 simulation also bounds births and long-update integration intervals, reporting
 omitted births and skipped time through `SpriteEmitter`. Budgets discard work
 rather than creating an unbounded catch-up queue. Root despawn removes

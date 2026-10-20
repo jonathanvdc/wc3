@@ -113,3 +113,75 @@ fn effect_binding_invalidates_for_reloaded_images_and_reallocated_storage() {
         }
     );
 }
+
+#[test]
+fn empty_or_hidden_frames_suspend_resident_draws_without_discarding_source_identity() {
+    let source = Arc::new(vec![7u32, 4, 2]);
+    let weak = Arc::downgrade(&source);
+    let mut draw = DrawState::new(&source);
+    assert_eq!(draw.instances, 3);
+    drop(source);
+    draw.suspend();
+    assert_eq!(
+        draw.instances, 0,
+        "resident GPU records must not imply a live draw"
+    );
+    let retained = weak
+        .upgrade()
+        .expect("source identity must survive suspension");
+    assert!(Arc::ptr_eq(&retained, &draw.source));
+    let resumed = DrawState::new(&retained);
+    assert_eq!(resumed.instances, 3);
+    let empty = DrawState::new(&Arc::new(Vec::<u32>::new()));
+    assert_eq!(empty.instances, 0);
+}
+
+#[test]
+fn order_revisions_detect_motion_population_and_uniform_changes_without_scanning_records() {
+    let first = Arc::new(vec![1u32, 2]);
+    let same = RecordSource::Sampled(first.clone());
+    let source = RecordSource::Sampled(first);
+    let different = RecordSource::Sampled(Arc::new(vec![1u32, 2]));
+    let indices = Arc::new(vec![0u32, 1]);
+    let replaced = Arc::new(vec![0u32, 1]);
+    let uniform: Arc<[u8]> = Arc::from([0u8; 16]);
+    let changed_uniform: Arc<[u8]> = Arc::from([1u8; 16]);
+    let revision = OrderRevision {
+        records: &source,
+        indices: &indices,
+        uniform: &uniform,
+    };
+    assert!(revision.same(&OrderRevision {
+        records: &same,
+        indices: &indices,
+        uniform: &uniform
+    }));
+    assert!(!revision.same(&OrderRevision {
+        records: &different,
+        indices: &indices,
+        uniform: &uniform
+    }));
+    assert!(!revision.same(&OrderRevision {
+        records: &source,
+        indices: &replaced,
+        uniform: &uniform
+    }));
+    assert!(!revision.same(&OrderRevision {
+        records: &source,
+        indices: &indices,
+        uniform: &changed_uniform
+    }));
+}
+
+#[test]
+fn reset_ring_lineages_cannot_reuse_a_repeated_cursor_as_the_same_source() {
+    let first: RecordRing<u32> = vec![1, 2].into();
+    let second: RecordRing<u32> = vec![3, 4].into();
+    assert_eq!(first.cursor(), second.cursor());
+    let source = |ring: &RecordRing<u32>| RecordSource::Ring {
+        cursor: ring.cursor(),
+        lineage: ring.lineage().clone(),
+    };
+    assert!(source(&first).same(&source(&first.clone())));
+    assert!(!source(&first).same(&source(&second)));
+}

@@ -27,7 +27,8 @@ use super::records::{
 };
 use crate::effects::render::{
     effect_texture_layout, effect_vertex_layout, effect_visible, transparent_effect_draw,
-    DrawEffectInstances, EffectBuffer, PassResources, ResidentRecordBuffer,
+    DrawEffectInstances, EffectBuffer, PassResources, ResidentRecordBuffer, SortPolicy,
+    SortScratch,
 };
 
 pub(crate) struct RibbonRenderPlugin;
@@ -229,32 +230,35 @@ fn queue_ribbons(
 
 type RibbonBuffer = EffectBuffer<RibbonSegment>;
 
-fn sorted_indices(data: &RibbonInstances, world_from_view: &Affine3A) -> Vec<RibbonSegment> {
+fn sort_indices(
+    data: &RibbonInstances,
+    world_from_view: &Affine3A,
+    scratch: &mut SortScratch<RibbonSegment>,
+) {
     let eye = world_from_view.translation;
     let forward = -world_from_view.matrix3.z_axis;
-    // Evaluate each center once, rather than once per sort comparison.
-    let mut depths: Vec<_> = data
-        .live_indices
-        .iter()
-        .map(|&slot| {
-            let center = Vec3A::from(segment_center(&data.records, slot, &data.uniform));
-            (slot, (center - eye).dot(forward))
-        })
-        .collect();
-    depths.sort_by(|a, b| {
-        if data.sort_near {
-            a.1.total_cmp(&b.1)
-        } else {
-            b.1.total_cmp(&a.1)
-        }
-    });
-    depths.into_iter().map(|(slot, _)| slot).collect()
+    for &segment in data.live_indices.iter() {
+        let center = Vec3A::from(segment_center(&data.records, segment, &data.uniform));
+        scratch.push(segment, (center - eye).dot(forward));
+    }
+    scratch.sort(data.sort_near, |segment, order| order.push(segment));
+}
+#[cfg(test)]
+fn sorted_indices(data: &RibbonInstances, world_from_view: &Affine3A) -> Vec<RibbonSegment> {
+    let mut scratch = SortScratch::default();
+    sort_indices(data, world_from_view, &mut scratch);
+    scratch.order
 }
 
 #[allow(clippy::too_many_arguments)]
 fn prepare_ribbons(
     mut commands: Commands,
-    query: Query<(Entity, &MainEntity, &RibbonInstances, Option<&RibbonBuffer>)>,
+    mut query: Query<(
+        Entity,
+        &MainEntity,
+        &RibbonInstances,
+        Option<&mut RibbonBuffer>,
+    )>,
     device: Res<RenderDevice>,
     queue: Res<RenderQueue>,
     pipeline: Res<RibbonPipeline>,
@@ -262,16 +266,27 @@ fn prepare_ribbons(
     fallback: Res<FallbackImage>,
     views: Query<(&ExtractedView, &RenderVisibleEntities)>,
     mut scratch: Local<Vec<RibbonSection>>,
+    mut order_scratch: Local<SortScratch<RibbonSegment>>,
 ) {
     // All material layers of an emitter share the same resident section buffer.
     // Uniforms, texture bindings, and draw ordering remain specific to each pass.
     let mut shared_sections: HashMap<Entity, ResidentRecordBuffer> = HashMap::new();
-    for (entity, main_entity, data, previous) in &query {
+    for (entity, main_entity, data, mut previous) in &mut query {
+        if let Some(previous) = previous.as_deref_mut() {
+            previous.retain_order_views(|key| {
+                views
+                    .iter()
+                    .any(|(view, _)| view.retained_view_entity == key)
+            });
+        }
         if data.live_indices.is_empty()
             || !views
                 .iter()
                 .any(|(_, visible)| effect_visible(visible, *main_entity))
         {
+            if let Some(previous) = previous.as_deref_mut() {
+                previous.suspend_draws();
+            }
             // Keep resident records and allocated capacity across emission gaps.
             continue;
         }
@@ -280,7 +295,7 @@ fn prepare_ribbons(
         } else {
             ResidentRecordBuffer::prepare(
                 &data.records,
-                previous.map(|p| &p.records),
+                previous.as_deref().map(|p| &p.records),
                 &device,
                 &queue,
                 &mut scratch,
@@ -292,31 +307,39 @@ fn prepare_ribbons(
             .as_ref()
             .and_then(|handle| images.get(handle))
             .unwrap_or(&fallback.d2);
-        let sorted_orders = views
-            .iter()
-            .filter(|(_, visible)| {
-                (data.sort_far || data.sort_near) && effect_visible(visible, *main_entity)
-            })
-            .map(|(view, _)| {
-                (
-                    view.retained_view_entity,
-                    sorted_indices(data, &view.world_from_view.affine()),
-                )
-            });
-        let buffer = RibbonBuffer::prepare(
+        let mut buffer = RibbonBuffer::prepare(
             records,
             &data.live_indices,
             &data.uniform,
-            previous,
+            previous.as_deref_mut(),
             PassResources {
                 device: &device,
                 queue: &queue,
                 layout: &pipeline.texture_bind_group_layout,
                 image,
             },
-            sorted_orders,
         );
 
+        buffer.prepare_orders(
+            views.iter().map(|(view, visible)| {
+                (
+                    view.retained_view_entity,
+                    view.world_from_view.affine(),
+                    effect_visible(visible, *main_entity),
+                )
+            }),
+            if data.sort_near {
+                SortPolicy::Near
+            } else if data.sort_far {
+                SortPolicy::Far
+            } else {
+                SortPolicy::None
+            },
+            &mut order_scratch,
+            &device,
+            &queue,
+            |view, scratch| sort_indices(data, view, scratch),
+        );
         commands.entity(entity).insert(buffer);
     }
 }
