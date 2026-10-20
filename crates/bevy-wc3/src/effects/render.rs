@@ -257,7 +257,7 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
         records: ResidentRecordBuffer,
         indices: &Arc<Vec<I>>,
         uniform_data: &U,
-        mut previous: Option<&mut Self>,
+        previous: Option<&mut Self>,
         resources: PassResources<'_>,
         extra_images: Option<[&GpuImage; 2]>,
     ) -> Self {
@@ -345,10 +345,7 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
                 uniform: &p.uniform_bytes,
             })
         });
-        let mut sorted = previous
-            .as_deref_mut()
-            .map(|p| take(&mut p.sorted))
-            .unwrap_or_default();
+        let mut sorted = previous.map(|p| take(&mut p.sorted)).unwrap_or_default();
         if changed {
             sorted.invalidate();
         }

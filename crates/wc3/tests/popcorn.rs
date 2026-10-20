@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::slice::from_ref;
 use wc3::model::formats::pkb::{
     Argument, CompileLimits, Instruction, LocatedInstruction, Register, Script,
 };
@@ -36,10 +37,12 @@ fn scalar(value: f32) -> Value {
 fn store(source: Register, external: u16) -> Instruction {
     Instruction::Store { source, external }
 }
+type RecordedCall = (u16, Option<u16>, Vec<Value>, Vec<u8>, u8);
+
 #[derive(Default)]
 struct Fields {
     values: Vec<Value>,
-    calls: Vec<(u16, Option<u16>, Vec<Value>, Vec<u8>, u8)>,
+    calls: Vec<RecordedCall>,
     killed: bool,
 }
 impl Host for Fields {
@@ -488,7 +491,7 @@ fn malformed_addresses_layouts_and_controls_are_rejected_before_execution() {
                 arguments: vec![]
             }]
         )
-        .compile(&[], &[function.clone()])
+        .compile(&[], from_ref(&function))
         .is_err());
     }
     let mut enormous = script(&[], vec![]);

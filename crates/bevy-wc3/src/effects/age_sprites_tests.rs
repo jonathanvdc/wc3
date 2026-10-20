@@ -397,7 +397,6 @@ fn world_particles_follow_only_translation_after_their_birth() {
         emitters: vec![state],
         previous_time: Some(0.),
         previous_basis: Some(Mat4::IDENTITY),
-        ..SlotConstruct::construct(&mut slot_values)
     };
     let mut world = World::new();
     let mut gpu_world = World::new();
@@ -1389,9 +1388,10 @@ fn disabled_geometry_keeps_m2_simulation_and_statistics_without_live_records() {
     let mut world = World::new();
     let basis = world.spawn_empty().id();
     let mut queue = CommandQueue::default();
-    let mut commands = Commands::new(&mut queue, &world);
-    let mut instances = runtime.spawn(&mut commands, &mut meshes, &mut materials, basis);
-    drop(commands);
+    let mut instances = {
+        let mut commands = Commands::new(&mut queue, &world);
+        runtime.spawn(&mut commands, &mut meshes, &mut materials, basis)
+    };
     queue.apply(&mut world);
     let entity = instances.emitters[0].passes[0].entity;
     let program = AnimationProgram::compile(&model);

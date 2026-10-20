@@ -172,7 +172,7 @@ impl<'a> Script<'a> {
             input.word()?,
             input.word()?,
         ];
-        if constant_bytes % 32 != 0 {
+        if !constant_bytes.is_multiple_of(32) {
             return Err(input.error("compiled constants do not occupy complete 32-byte slots"));
         }
         let constants = input.take(constant_bytes)?;

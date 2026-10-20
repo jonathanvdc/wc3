@@ -1,9 +1,11 @@
 //! Small original baked-effect documents for public behavior tests.
+type NativeObject = (u32, Vec<(u16, Vec<u8>)>);
+
 #[derive(Default)]
 pub struct Builder {
     strings: Vec<Vec<u8>>,
     types: Vec<u32>,
-    objects: Vec<(u32, Vec<(u16, Vec<u8>)>)>,
+    objects: Vec<NativeObject>,
 }
 impl Builder {
     pub fn string(&mut self, value: &[u8]) -> u32 {

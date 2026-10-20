@@ -15,31 +15,24 @@ pub(crate) struct ModelOwnedRenderEntity;
 #[derive(Component)]
 struct InheritedModelLayers(Tick);
 
+type LayerChange = (
+    Entity,
+    Ref<'static, RenderLayers>,
+    Option<&'static InheritedModelLayers>,
+);
+type RenderLayerState = (
+    Entity,
+    Option<Ref<'static, RenderLayers>>,
+    Option<&'static InheritedModelLayers>,
+);
+
 #[derive(SystemParam)]
 pub(crate) struct LayerInputs<'w, 's> {
     roots: Query<'w, 's, Option<&'static RenderLayers>, With<ModelRig>>,
     new_roots: Query<'w, 's, Entity, Added<ModelRig>>,
-    changed_layers: Query<
-        'w,
-        's,
-        (
-            Entity,
-            Ref<'static, RenderLayers>,
-            Option<&'static InheritedModelLayers>,
-        ),
-        Changed<RenderLayers>,
-    >,
+    changed_layers: Query<'w, 's, LayerChange, Changed<RenderLayers>>,
     new_render_entities: Query<'w, 's, Entity, Added<ModelOwnedRenderEntity>>,
-    render_entities: Query<
-        'w,
-        's,
-        (
-            Entity,
-            Option<Ref<'static, RenderLayers>>,
-            Option<&'static InheritedModelLayers>,
-        ),
-        With<ModelOwnedRenderEntity>,
-    >,
+    render_entities: Query<'w, 's, RenderLayerState, With<ModelOwnedRenderEntity>>,
     parents: Query<'w, 's, &'static ChildOf>,
     particle_owners: Query<'w, 's, &'static ModelParticleChild>,
     changed_parents: Query<'w, 's, Entity, Changed<ChildOf>>,

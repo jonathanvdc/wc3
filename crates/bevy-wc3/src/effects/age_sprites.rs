@@ -991,6 +991,7 @@ impl Emitter {
     ) -> Option<(Birth, Option<BirthAppearance>)> {
         self.birth_posed(sample, time, node, basis, inherited, ordinal, |_| None)
     }
+    #[allow(clippy::too_many_arguments)]
     fn birth_posed(
         &self,
         sample: &impl ValueSample,
@@ -1619,11 +1620,9 @@ impl RuntimeAgeSprites {
         map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
     ) {
         for emitter in &mut self.emitters {
-            for texture in &mut emitter.gpu_style.textures {
-                if let Some(image) = texture {
-                    if let Some(replacement) = map(image) {
-                        *image = replacement;
-                    }
+            for image in emitter.gpu_style.textures.iter_mut().flatten() {
+                if let Some(replacement) = map(image) {
+                    *image = replacement;
                 }
             }
         }

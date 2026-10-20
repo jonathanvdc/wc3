@@ -2207,7 +2207,6 @@ fn modern_ribbon_uv_source() -> m2::Bundle<'static, m2::Flat<m2::V274>> {
                 timeline: ModernTimeline {
                     timestamps: vec![Array::Inline(ZeroVec::alloc_from_slice(&[0, 1000]))],
                 },
-                ..Default::default()
             },
             values: TrackValues::Values(vec![Array::Inline(ZeroVec::alloc_from_slice(&[
                 [0.; 3],
