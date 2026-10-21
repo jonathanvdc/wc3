@@ -436,9 +436,6 @@ impl RuntimeM2Particles {
                     RenderDiagnosticKind::Unsupported,
                     "M2 child emitter resources require the adopted-emitter interpreter",
                 );
-                if geometry.is_none() {
-                    continue;
-                }
             }
             let multi_texture =
                 details.flags.multi_texture() && details.rendering.textures.len() == 3;

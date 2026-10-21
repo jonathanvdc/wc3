@@ -173,7 +173,9 @@ Applications supply any underwater-camera policy through these controls.
 
 Texture rotation programmes, native keyed squirt emission, collisions, and pooled
 child emitters still require additional interpretation or application integration.
-M2 geometry-model particles use the separate [model-particle path](prem.md).
+An unsupported recursive child-emitter resource does not disable the parent
+emitter's own sprites or simulation. M2 geometry-model particles use the separate
+[model-particle path](prem.md).
 
 ## Budgets and limits
 

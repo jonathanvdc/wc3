@@ -1885,3 +1885,58 @@ fn lifetime_scale_is_half_extent_while_tail_time_is_full_displacement() {
         }
     }
 }
+
+#[test]
+fn unresolved_native_child_emitter_keeps_the_parent_sprite_interpreter() {
+    use super::super::fixture_tests::gravity_fixture;
+    use wc3::model::common::ZeroVec;
+    use wc3::model::conversion::ImportOptions;
+    use wc3::model::formats::m2::{DynamicDocument, File, FileKey};
+    use wc3::model::io::m2 as semantic_m2;
+
+    for recursive in [false, true] {
+        let mut native = gravity_fixture(false, 0.0f32.to_bits());
+        if recursive {
+            native.model.core_mut().particles[0].child_model_filename =
+                ZeroVec::alloc_from_slice(b"unresolved-child.m2\0");
+            // Strict native import requires every supporting model document.
+            // Runtime adoption remains unbound: compile() receives no children.
+            let child = gravity_fixture(false, 0.0f32.to_bits()).model;
+            native.insert(
+                FileKey::Path("unresolved-child.m2".into()),
+                File::Document(Box::new(DynamicDocument::Flat256(child))),
+            );
+        }
+        let model: Model<'_, Universal> = semantic_m2::import(&native, &ImportOptions::default())
+            .unwrap()
+            .value
+            .widen();
+        let node_indices = model
+            .nodes()
+            .iter()
+            .enumerate()
+            .map(|(index, (id, _))| (id, index))
+            .collect();
+        let compiled = RuntimeM2Particles::compile(
+            &model,
+            &node_indices,
+            &TextureImages::default(),
+            &HashMap::new(),
+        );
+        assert_eq!(
+            compiled.emitters.len(),
+            1,
+            "an unsupported child cannot remove parent sprites"
+        );
+        let emitter = &compiled.emitters[0];
+        assert!(emitter.model.is_none());
+        assert!(emitter.gpu_style.head);
+        assert_eq!(
+            compiled.diagnostics.iter().any(|(_, issue)| {
+                issue.kind == RenderDiagnosticKind::Unsupported
+                    && issue.message.contains("adopted-emitter interpreter")
+            }),
+            recursive
+        );
+    }
+}
