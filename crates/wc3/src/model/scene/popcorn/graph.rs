@@ -1,6 +1,7 @@
 //! Immutable effect programmes and renderer-independent storage bindings.
 use super::payload::Layout as PayloadLayout;
 use super::shapes::Shape;
+use super::turbulence::Turbulence;
 use super::{Program, Value, ValueType};
 use glam::{Mat4, Vec3};
 use std::sync::Arc;
@@ -185,6 +186,10 @@ pub enum EffectLimitation {
     PayloadFrame,
     /// Native interpolation selector is restricted to the observed zero mode.
     CurveInterpolation,
+    /// Original analytic scalar-potential curl field; native stochastic samples are not reproduced.
+    TurbulenceField,
+    /// At most 24 octaves with explicit finite spatial/temporal precision domains.
+    TurbulenceDomain,
 }
 /// Explicit interpretation of EventStream.duration, whose native loop contract is unresolved.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -305,6 +310,7 @@ pub(crate) enum Callback {
     HsvToRgb,
     RgbToHsv,
     SamplePosition,
+    TurbulenceSample,
     Orientation,
     Rotate,
     OrientationSide,
@@ -328,4 +334,5 @@ pub(crate) enum EffectSampler {
     },
     Events(Box<[f32]>),
     Shape(Shape),
+    Turbulence(Turbulence),
 }

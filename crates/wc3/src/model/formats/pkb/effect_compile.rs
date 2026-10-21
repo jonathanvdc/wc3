@@ -1,4 +1,6 @@
 //! Native baked graph lowering into owned, renderer-independent effect programmes.
+#[path = "effect_turbulence.rs"]
+mod turbulence;
 use super::effect_payload::{payload_layout, payload_policies, payload_reads};
 use super::{
     CompileLimits, CompilerBlob, Document, Effect, ExternalDeclaration,
@@ -549,6 +551,16 @@ impl<'a> Document<'a> {
                             EffectLimitation::ShapeSampling,
                         ]);
                     }
+                    if lowering
+                        .samplers
+                        .iter()
+                        .any(|sampler| matches!(sampler, EffectSampler::Turbulence(_)))
+                    {
+                        limitations.extend([
+                            EffectLimitation::TurbulenceField,
+                            EffectLimitation::TurbulenceDomain,
+                        ]);
+                    }
                     limitations.into_boxed_slice()
                 },
                 duration: options.stream_duration,
@@ -659,6 +671,7 @@ impl Lowering<'_, '_> {
                     tangents: pack(&curve.tangents)?,
                 }
             }
+            9 => EffectSampler::Turbulence(turbulence::prepare(self.document, link)?),
             5 => {
                 let native = self.document.shape_sampler(link)?;
                 let primitive = match native.shape_type.unwrap_or(0) {
@@ -1007,10 +1020,21 @@ impl Lowering<'_, '_> {
                 let Some(External::Sampler(index)) = bound else {
                     return Err(error("sample requires a bound sampler"));
                 };
-                let EffectSampler::Curve { kind, .. } = self.samplers[index] else {
-                    return Err(error("sample requires a supported curve"));
-                };
-                (Callback::Sample, vec![Float], Some(kind))
+                match &self.samplers[index] {
+                    EffectSampler::Curve { kind, .. } => {
+                        (Callback::Sample, vec![Float], Some(*kind))
+                    }
+                    EffectSampler::Turbulence(_) => (
+                        Callback::TurbulenceSample,
+                        vec![Float3, Context],
+                        Some(Float3),
+                    ),
+                    _ => {
+                        return Err(error(
+                            "sample requires a supported curve or procedural turbulence sampler",
+                        ))
+                    }
+                }
             }
             _ => {
                 return Err(error(format!(

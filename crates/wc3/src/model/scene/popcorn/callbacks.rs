@@ -2,6 +2,7 @@
 use super::graph::*;
 use super::payload::{Element as PayloadElement, Storage as PayloadStorage};
 use super::runtime::{EffectLimits, EffectStats, FieldPlanes, RandomState, Spawn};
+use super::turbulence::TemporalCache;
 use super::{color, orientation, random, transforms};
 use super::{Host, Value, ValueType};
 use glam::{Mat4, Quat, Vec3};
@@ -46,6 +47,7 @@ pub(crate) struct Scratch {
     batches: Vec<Batch>,
     drafts: Vec<Draft>,
     next: u32,
+    turbulence: TemporalCache,
 }
 impl Scratch {
     pub fn new(limits: EffectLimits, payload_width: usize) -> Self {
@@ -57,6 +59,7 @@ impl Scratch {
             batches: Vec::with_capacity(limits.handles),
             drafts: Vec::with_capacity(limits.handles),
             next: 0,
+            turbulence: TemporalCache::default(),
         }
     }
     pub fn storage_bytes(limits: EffectLimits, payload_width: usize) -> Option<usize> {
@@ -69,11 +72,10 @@ impl Scratch {
                     .checked_mul(payload_width)?
                     .checked_mul(size_of::<Option<PayloadElement>>())?,
             )?
-            .checked_add(
-                limits.handles.checked_mul(
-                    size_of::<Batch>() + size_of::<Draft>() + size_of::<BoundElement>(),
-                )?,
-            )
+            .checked_add(limits.handles.checked_mul(
+                size_of::<Batch>() + size_of::<Draft>() + size_of::<BoundElement>(),
+            )?)?
+            .checked_add(size_of::<TemporalCache>())
     }
     pub fn clear(&mut self) {
         self.times.clear();
@@ -521,6 +523,19 @@ impl Host for ExecutionHost<'_> {
                 let draws = from_fn(|_| random_unit(self.graph.random, self.random));
                 let position = shape.sample(draws)?;
                 Some(Value::from(position))
+            }
+            Callback::TurbulenceSample => {
+                self.scene_context(a[1])?;
+                let External::Sampler(index) =
+                    self.external(receiver.ok_or("turbulence sample requires a bound receiver")?)?
+                else {
+                    return Err("turbulence receiver is not a sampler");
+                };
+                let EffectSampler::Turbulence(resource) = &self.graph.samplers[index] else {
+                    return Err("turbulence receiver has the wrong resource family");
+                };
+                let phase = self.scratch.turbulence.phase(index, resource, self.time)?;
+                Some(Value::from(resource.sample(vector(a[0]), phase)?))
             }
             Callback::Sample => {
                 let External::Sampler(index) =

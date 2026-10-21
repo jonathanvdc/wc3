@@ -268,3 +268,6 @@ mod shape;
 pub use shape::ShapeSampler;
 
 mod effect_payload;
+
+mod turbulence;
+pub use turbulence::TurbulenceSampler;

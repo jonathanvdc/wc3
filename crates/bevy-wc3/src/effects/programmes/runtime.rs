@@ -24,8 +24,8 @@ use std::f32::consts::FRAC_PI_2;
 use std::sync::Arc;
 use wc3::model::profiles::mdlx::Popcorn;
 use wc3::model::scene::popcorn::{
-    EffectAttributeId, EffectFieldId, EffectInstance, EffectRuntimeError, ParticleView,
-    SceneContext, SceneInputs, Value, ValueType,
+    EffectAttributeId, EffectFieldId, EffectInstance, EffectLimitation, EffectRuntimeError,
+    ParticleView, SceneContext, SceneInputs, Value, ValueType,
 };
 use wc3::model::{ClipId, FeatureId, Model, NodeFeature, NodeId, Property};
 
@@ -148,7 +148,14 @@ impl RuntimeProgramParticles {
                     .push((feature, RenderIssue::new(issue.kind, issue.message.clone())));
             }
             for limitation in effect.program.limitations() {
-                result.diagnostics.push((feature,RenderIssue::new(RenderDiagnosticKind::Unverified,format!("external particle programme uses explicit {limitation:?} policy; native game fidelity remains unverified"))));
+                let (kind,message)=match limitation {
+                    EffectLimitation::TurbulenceField => (RenderDiagnosticKind::Approximation,"external procedural turbulence uses an original coherent analytic curl field; native stochastic samples are not reproduced".to_owned()),
+                    EffectLimitation::TurbulenceDomain => (RenderDiagnosticKind::Budget,"external procedural turbulence evaluates at most 24 octaves / 576 corner contributions per callback with checked spatial/temporal precision bounds".to_owned()),
+                    _=>(RenderDiagnosticKind::Unverified,format!("external particle programme uses explicit {limitation:?} policy; native game fidelity remains unverified")),
+                };
+                result
+                    .diagnostics
+                    .push((feature, RenderIssue::new(kind, message)));
             }
             result.diagnostics.push((feature,RenderIssue::new(RenderDiagnosticKind::Budget,"external programmes use finite particle pools, bounded event queues and per-update execution budgets; omissions are reported by ParticleProgramEmitter")));
             let mut attributes = Vec::new();

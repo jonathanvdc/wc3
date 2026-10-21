@@ -105,9 +105,23 @@ simulation still has one result per model instance; use separate instances for
 independent simulation cameras. Exact native camera behavior remains unverified.
 
 `SceneContext` is a checked host capability, not collision support. Scene
-intersection, spatial stores, procedural turbulence and unknown world-to-world
+intersection, spatial stores and unknown world-to-world
 operations still require additional interpreters; no literal-zero collision
 response is supplied.
+
+Procedural turbulence uses the checked core's original coherent curl-field
+approximation. Prepared samplers share immutable octave controls; each model
+instance owns its bounded effect-global oscillator cache. The sampler shares an
+original seeded scalar/quadrature basis with eight discrete temporal frequency bands;
+queries use analytic interpolation without per-particle trigonometry. Native axes and units are not
+converted a second time inside the sampler. Global scale changes both spatial
+wavelength and velocity amplitude. Field samples consume no particle RNG.
+The independent coordinate/channel hash and analytic gradients do not reproduce
+the native stochastic field; rendering diagnostics mark this as an approximation.
+At most 24 octaves execute per sample, with checked spatial/temporal precision
+bounds. External PKVF and unsupported flow/divergence controls remain diagnosed.
+Turbulence support alone does not make graphs requiring spatial or collision
+interpreters executable.
 
 Routed births retain their occurrence timestamps and are processed in chronological
 order. A newborn evolves only for the remaining portion of its birth step. The

@@ -151,3 +151,80 @@ fn scene_callback_rejects_other_context_owners_and_forged_zero_capability() {
         .message
         .contains("invalid scene context"));
 }
+
+fn turbulence_program(context: External, query: Vec3) -> EffectProgram {
+    use crate::model::scene::popcorn::graph::EffectSampler;
+    use crate::model::scene::popcorn::turbulence::{Parameters, Turbulence};
+    let mut program = camera_program(0, context);
+    let graph = Arc::get_mut(&mut program.inner).unwrap();
+    graph.samplers = vec![EffectSampler::Turbulence(
+        Turbulence::new(Parameters {
+            time_scale: 0.2,
+            ..Default::default()
+        })
+        .unwrap(),
+    )]
+    .into();
+    let init = &mut graph.layers[0].init;
+    init.externals = vec![context, External::Field(2), External::Sampler(0)].into();
+    init.callbacks = vec![Callback::TurbulenceSample].into();
+    let Instruction::Call {
+        arguments,
+        receiver,
+        ..
+    } = &mut init.program.operations[1].instruction
+    else {
+        panic!()
+    };
+    arguments[0] = Source {
+        address: Address::Constant([query.x.to_bits(), query.y.to_bits(), query.z.to_bits(), 0]),
+        kind: ValueType::Float3,
+    };
+    *receiver = Some(2);
+    graph.layers[0].evolve = Some(init.clone());
+    program
+}
+#[test]
+fn turbulence_host_uses_effect_time_not_particle_age_and_never_consumes_randomness() {
+    use crate::model::scene::popcorn::graph::EffectSampler;
+    use crate::model::scene::popcorn::turbulence::TemporalCache;
+    let query = Vec3::new(0.1, -0.2, 0.3);
+    let program = turbulence_program(External::SceneContext, query);
+    let mut instance = program.instantiate(Default::default(), 17).unwrap();
+    instance.start(&program, 0, inputs()).unwrap();
+    let slot = instance.active[0];
+    instance.particles[slot].birth = -0.25;
+    instance.advance(&program, 0.1, inputs()).unwrap();
+    let EffectSampler::Turbulence(resource) = &program.inner.samplers[0] else {
+        panic!()
+    };
+    let mut cache = TemporalCache::default();
+    let expected = resource
+        .sample(query, cache.phase(0, resource, 0.1).unwrap())
+        .unwrap();
+    assert_eq!(position(&instance), expected);
+    assert_eq!(instance.particles[slot].random.counter, 0);
+    instance.advance(&program, 0., inputs()).unwrap();
+    assert_eq!(position(&instance), expected);
+}
+#[test]
+fn turbulence_host_checks_scene_ownership_before_propagating_unavailability() {
+    for owner in [
+        External::ParticleContext,
+        External::RandomContext,
+        External::EffectContext,
+    ] {
+        let program = turbulence_program(owner, Vec3::splat(f32::INFINITY));
+        let mut instance = program.instantiate(Default::default(), 0).unwrap();
+        assert!(instance
+            .start(&program, 0, inputs())
+            .unwrap_err()
+            .message
+            .contains("ownership kind"));
+    }
+    let program = turbulence_program(External::SceneContext, Vec3::splat(f32::INFINITY));
+    let mut instance = program.instantiate(Default::default(), 0).unwrap();
+    instance.start(&program, 0, inputs()).unwrap();
+    assert_eq!(position(&instance), Vec3::splat(f32::INFINITY));
+    assert_eq!(instance.active_count(), 1);
+}

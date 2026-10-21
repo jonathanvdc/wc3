@@ -86,8 +86,10 @@ an absent `EnableRendering` differs from a present toggle with zero numeric data
 `named_sampler()` preserves each binding's symbol, native type, usage and checked
 object link. `shape_sampler()` exposes primitive parameters and preserves sparse
 omissions, raw authoring coordinates, localized names and editor metadata. Shape
-defaults and coordinate conversion belong to checked lowering. Turbulence and
-future payload families remain raw links. `curve_sampler()` and
+defaults and coordinate conversion belong to checked lowering.
+`turbulence_sampler()` retains procedural/external controls, numeric integer seeds,
+localized metadata and sparse omissions. Defaults are applied only during checked
+preparation; external vector-field metadata remains inspectable without execution. `curve_sampler()` and
 `event_stream_sampler()` expose borrowed native arrays
 without applying simulation policy. Curve type, interpolation and quality omissions
 remain `None`; the native view does not infer scalar width from sparse metadata.
@@ -183,7 +185,7 @@ and isotropic random vectors,
 point transforms with masks 11/17/19, direction transforms with mask 18, checked
 inverse point/direction transforms with masks 67/66, RGB/HSV
 conversion, quaternion orientation and rotation, emitter axes, typed curve
-sampling, and primitive `samplePosition` callbacks. It
+sampling, primitive `samplePosition` callbacks, and checked procedural turbulence sampling. It
 executes the complete acquired HD LichAttack graph, including invisible
 controllers and its routed child layer. Scene collision, broadcasts, spatial queries, unsupported payload
 semantics, other transform masks, unknown callbacks and unresolved sampler
@@ -270,6 +272,38 @@ scale and the hemisphere fold; other primitives ignore that hemisphere toggle.
 Fixed six-draw random consumption and sampling distributions remain explicit
 fidelity limitations. Zero-radius
 and zero-height shapes are legal; mesh shapes and other domain selectors fail.
+
+Procedural turbulence is an original coherent scalar-potential curl-field
+approximation. Global scale multiplies both wavelength and velocity strength;
+each octave multiplies wavelength by lacunarity and amplitude by gain times its
+additional multiplier. The analytic gradients are in lattice coordinates, so
+velocity does not acquire an extra inverse-wavelength factor. Linear, cubic and
+quintic interpolation are supported. Sparse controls select explicit prepared
+defaults, including numeric integer seed `1114229502`, while native omissions stay
+`None`. A zero octave count selects one; more than 24 octaves fail preparation.
+External PKVF resources, unknown data sources and authored nonzero flow/divergence
+or fake-flow controls remain unsupported.
+
+The immutable sampler shares octave data and an original 256-entry seeded
+quadrature basis through `EffectProgram`. Eight discrete temporal frequency bands
+are an explicit stochastic approximation. A bounded per-instance oscillator cache
+uses effect-global execution time, independently of particle age or invocation
+order; it evaluates eight sine/cosine pairs on a time-cache miss. Queries themselves
+use hashed table lookups and analytic interpolation, with no trigonometry. Frozen
+samplers share fully prepared scalar values. Time scale zero freezes the field, negative
+scale reverses time, and time base shifts its temporal phase. Sampling consumes
+no particle RNG and allocates nothing. Seeded coordinate/channel hashing and
+oscillating scalar corners define an independent stochastic basis; equal seeds
+do not imply native samples. `TurbulenceField` explicitly records this approximation.
+
+Each callback evaluates at most 576 corner contributions. Frequencies, amplitudes,
+queries and results are checked. Scaled lattice coordinates must have magnitude
+at most `2^40`; each varied frequency band's angular phase must also
+fit `2^40` radians. These f64 bounds preserve resolved fractions/phases rather than
+silently saturating coordinates or losing all time variation. The exact all-positive-
+infinity unavailable query propagates after resource/context/time validation;
+NaN, mixed infinities and overflow fail. These policies are explicit in
+`TurbulenceDomain`, and native client stochastic/numeric fidelity remains unverified.
 
 Color conversion treats hue as turns, wraps hue, clamps HSV saturation to 0–1,
 and clamps HSV value below zero while retaining HDR values above one. RGB-to-HSV
