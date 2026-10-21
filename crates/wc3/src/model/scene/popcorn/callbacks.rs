@@ -126,15 +126,14 @@ pub(crate) struct ExecutionHost<'a> {
     pub delta: f64,
     pub running: bool,
     pub emitting: bool,
-    pub world: Mat4,
-    pub scene: SceneContext,
-    pub payload_frame: Option<Mat4>,
+    pub inputs: &'a SceneInputs,
+    pub payload_frame: Option<&'a Mat4>,
     pub payload: &'a mut PayloadStorage,
     pub attributes: &'a [Value],
     pub random: &'a mut RandomState,
     pub scratch: &'a mut Scratch,
     pub pending: &'a mut BinaryHeap<Spawn>,
-    pub limits: EffectLimits,
+    pub limits: &'a EffectLimits,
     pub stats: &'a mut EffectStats,
     pub order: &'a mut u64,
 }
@@ -193,7 +192,7 @@ impl ExecutionHost<'_> {
         if !matches!(self.external(slot)?, External::SceneContext) {
             return Err("scene context capability has the wrong ownership kind");
         }
-        Ok(self.scene)
+        Ok(self.inputs.scene)
     }
     fn spatial_receiver(&self, receiver: Option<u16>) -> Result<usize> {
         let Some(receiver) = receiver else {
@@ -604,16 +603,16 @@ impl Host for ExecutionHost<'_> {
                     Callback::InverseTransform | Callback::InverseDirection
                 ) {
                     transforms::inverse(
-                        self.world,
-                        self.payload_frame,
+                        self.inputs.world_from_effect,
+                        self.payload_frame.copied(),
                         vector(a[0]),
                         a[1].words()[0],
                         direction,
                     )?
                 } else {
                     transforms::forward(
-                        self.world,
-                        self.payload_frame,
+                        self.inputs.world_from_effect,
+                        self.payload_frame.copied(),
                         vector(a[0]),
                         a[1].words()[0],
                         direction,
@@ -637,7 +636,7 @@ impl Host for ExecutionHost<'_> {
             Callback::EffectSide | Callback::EffectUp => {
                 self.context(a[0], false)?;
                 Some(Value::from(orientation::emitter_axis(
-                    self.world,
+                    self.inputs.world_from_effect,
                     callback == Callback::EffectUp,
                 )?))
             }
