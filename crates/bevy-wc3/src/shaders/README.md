@@ -46,7 +46,11 @@ Native additive inputs enter PBR emissive; ordinary diffuse stays in Bevy albedo
 
 `wc3_age_particle.wgsl` expands exactly sampled M2 and external-programme records
 against each camera. External capsule billboards use separate core/cap vertex
-selectors for flat face normals without changing the record layout. The native
+selectors for flat face normals without changing the record layout. Connected
+external ribbons use a specialized vertex path over the same 112-byte records,
+retaining endpoint colors, widths, texture U and LUT rows. View-facing ribbon
+cross sections are generated per view; point connectivity is fixed before depth
+sorting. The native
 M2 path evaluates independent two-color/three-alpha or three-color/three-alpha
 particle composition. The primary image retains atlas cells; additional images
 use their own offsets and scales. RGB and alpha gains remain independent, and

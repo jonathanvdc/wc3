@@ -112,8 +112,16 @@ fn facing_axes_bind_native_and_custom_semantics_with_checked_vector_layouts() {
             ]);
             renderer.inputs = inputs.into();
             let prepared = prepare(0, &renderer, &program).unwrap().unwrap();
-            assert_eq!(prepared.facing, facing);
-            assert_eq!(prepared.axes, [Some(position), Some(position)]);
+            let RendererGeometry::Billboard {
+                facing: actual,
+                axes,
+                ..
+            } = prepared.geometry
+            else {
+                panic!("expected billboard geometry");
+            };
+            assert_eq!(actual, facing);
+            assert_eq!(axes, [Some(position), Some(position)]);
             let mut inputs = renderer.inputs.to_vec();
             let scalar = inputs
                 .iter()
@@ -158,7 +166,13 @@ fn capsule_geometry_requires_longitudinal_axis_and_ignores_optional_second_axis(
     properties.push(property_value(b"BillboardingMode", [4, 0, 0, 0], None));
     renderer.properties = properties.into();
     let fallback = prepare(0, &renderer, &program).unwrap().unwrap();
-    assert_eq!(fallback.facing, SpriteFacing::Capsule);
+    assert!(matches!(
+        fallback.geometry,
+        RendererGeometry::Billboard {
+            facing: SpriteFacing::Capsule,
+            ..
+        }
+    ));
     assert!(!fallback.capsule_geometry());
     let mut axis = renderer
         .inputs
@@ -173,8 +187,11 @@ fn capsule_geometry_requires_longitudinal_axis_and_ignores_optional_second_axis(
     renderer.inputs = inputs.clone().into();
     let capsule = prepare(0, &renderer, &program).unwrap().unwrap();
     assert!(capsule.capsule_geometry());
-    assert!(capsule.facing.longitudinal_axis());
-    assert_eq!(capsule.facing.code(), 4);
+    let RendererGeometry::Billboard { facing, .. } = capsule.geometry else {
+        panic!("expected billboard geometry");
+    };
+    assert!(facing.longitudinal_axis());
+    assert_eq!(facing.code(), 4);
     axis.semantic = 5;
     inputs.push(axis);
     renderer.inputs = inputs.into();
@@ -182,4 +199,140 @@ fn capsule_geometry_requires_longitudinal_axis_and_ignores_optional_second_axis(
         .unwrap()
         .unwrap()
         .capsule_geometry());
+}
+
+#[test]
+fn ribbon_preparation_checks_class_family_modes_and_independent_scalar_streams() {
+    let bytes = include_bytes!("../../../../wc3/tests/fixtures/pkb/ribbon.pkb");
+    let program = Document::read(bytes)
+        .unwrap()
+        .compile_effect(1, &EffectCompileOptions::default())
+        .unwrap();
+    let mut renderer = program.renderers()[0].clone();
+    let prepared = prepare(0, &renderer, &program).unwrap().unwrap();
+    assert!(prepared.geometry.is_ribbon());
+    assert!(!prepared.capsule_geometry());
+    assert!(!prepared.style.uv_flip_v);
+    assert!(matches!(
+        prepared.style.composition,
+        AgeSpriteComposition::Ribbon { .. }
+    ));
+    let size = renderer
+        .inputs
+        .iter()
+        .find(|input| input.semantic == 1)
+        .unwrap()
+        .clone();
+    let mut inputs = renderer.inputs.to_vec();
+    for name in [b"TextureU".as_slice(), b"TextureID", b"Cursor"] {
+        let mut input = size.clone();
+        input.semantic = 100;
+        input.additional_name = Some(name.into());
+        inputs.push(input);
+    }
+    renderer.inputs = inputs.into();
+    let mut properties = renderer.properties.to_vec();
+    properties.extend([
+        property_value(b"CustomTextureU", [1, 0, 0, 0], None),
+        property_value(b"Atlas", [1, 0, 0, 0], None),
+        property_value(b"Atlas.SubDiv", [4, 1, 0, 0], None),
+        property_value(b"TransformUVs", [1, 0, 0, 0], None),
+        property_value(b"AlphaRemap", [1, 0, 0, 0], None),
+        property_value(b"AlphaRemap.AlphaMap", [0; 4], Some(b"lut.png")),
+    ]);
+    renderer.properties = properties.into();
+    let prepared = prepare(0, &renderer, &program).unwrap().unwrap();
+    assert_eq!(prepared.atlas, [1, 4]);
+    let RendererGeometry::Ribbon {
+        texture_u, cursor, ..
+    } = prepared.geometry
+    else {
+        panic!("expected ribbon geometry");
+    };
+    assert_eq!(texture_u, Some(size.field));
+    assert_eq!(cursor, Some(size.field));
+    assert_eq!(prepared.texture_id, Some(size.field));
+    assert!(matches!(
+        prepared.style.composition,
+        AgeSpriteComposition::Ribbon {
+            alpha_remap: true,
+            ..
+        }
+    ));
+    assert_eq!(image_requests(0, &renderer).count(), 2);
+    renderer.class = 0;
+    assert!(
+        prepare(0, &renderer, &program).is_err(),
+        "geometry flag cannot override renderer class"
+    );
+}
+
+#[test]
+fn ribbon_axis_modes_require_supported_mode_and_typed_axis_zero() {
+    let bytes = include_bytes!("../../../../wc3/tests/fixtures/pkb/ribbon.pkb");
+    let programme = Document::read(bytes)
+        .unwrap()
+        .compile_effect(1, &EffectCompileOptions::default())
+        .unwrap();
+    for mode in [1, 2] {
+        let mut renderer = programme.renderers()[0].clone();
+        let mut properties = renderer.properties.to_vec();
+        let value = properties
+            .iter_mut()
+            .find(|value| value.name.as_ref() == b"BillboardingMode")
+            .unwrap();
+        value.numeric[0] = mode;
+        renderer.properties = properties.into();
+        assert!(prepare(0, &renderer, &programme)
+            .unwrap()
+            .unwrap()
+            .geometry
+            .is_ribbon());
+        renderer.inputs = renderer
+            .inputs
+            .iter()
+            .filter(|input| input.semantic != 4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .into();
+        assert!(prepare(0, &renderer, &programme)
+            .err()
+            .unwrap()
+            .contains("requires Axis0"));
+    }
+}
+
+#[test]
+fn view_ribbon_does_not_bind_unused_axes_or_billboard_rotation() {
+    let bytes = include_bytes!("../../../../wc3/tests/fixtures/pkb/ribbon.pkb");
+    let programme = Document::read(bytes)
+        .unwrap()
+        .compile_effect(1, &EffectCompileOptions::default())
+        .unwrap();
+    let mut renderer = programme.renderers()[0].clone();
+    let enabled = renderer
+        .inputs
+        .iter()
+        .find(|input| input.semantic == 2)
+        .unwrap()
+        .clone();
+    let mut inputs = renderer.inputs.to_vec();
+    for input in &mut inputs {
+        if input.semantic == 4 {
+            input.field = enabled.field;
+        }
+    }
+    for semantic in [5, 6] {
+        let mut ignored = enabled.clone();
+        ignored.semantic = semantic;
+        inputs.push(ignored);
+    }
+    renderer.inputs = inputs.into();
+    assert!(matches!(
+        prepare(0, &renderer, &programme).unwrap().unwrap().geometry,
+        RendererGeometry::Ribbon {
+            mode: RibbonMode::View,
+            ..
+        }
+    ));
 }

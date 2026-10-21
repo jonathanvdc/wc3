@@ -7,7 +7,8 @@ use bytemuck::{Pod, Zeroable};
 use std::sync::Arc;
 use wc3::model::values::model::ParticleBlend;
 
-/// One exact CPU appearance/motion sample, shared by head and tail and all views.
+/// CPU samples shared across all views; the composition selects their interpretation.
+/// M2 and billboard records hold one point; ribbon records retain both endpoints.
 #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
 #[repr(C)]
 pub(crate) struct AgeSpriteRecord {
@@ -34,7 +35,7 @@ impl AgeSpriteRecord {
 #[repr(C)]
 pub(crate) struct AgeSpriteUniform {
     pub axes: [[f32; 4]; 2],
-    /// Fixed XY plane, velocity facing, unlit, fog enabled.
+    /// Family-specific geometry selectors followed by unlit and fog-enabled flags.
     pub flags: [u32; 4],
     /// Atlas rows, columns, composition flags plus V flip, blend code.
     pub atlas: [u32; 4],
@@ -59,6 +60,10 @@ pub(crate) enum AgeSpriteComposition {
         crossfade: bool,
         alpha_remap: bool,
     },
+    Ribbon {
+        uv: SpriteUv,
+        alpha_remap: bool,
+    },
     Multi {
         three_colors: bool,
         alpha_modulate4x: bool,
@@ -77,6 +82,12 @@ impl AgeSpriteComposition {
             } => {
                 32 | (u32::from(crossfade) << 6)
                     | (u32::from(alpha_remap) << 7)
+                    | (u32::from(uv.rotate) << 8)
+                    | (u32::from(uv.flip_u) << 9)
+                    | (u32::from(uv.flip_v) << 10)
+            }
+            Self::Ribbon { uv, alpha_remap } => {
+                32 | (u32::from(alpha_remap) << 7)
                     | (u32::from(uv.rotate) << 8)
                     | (u32::from(uv.flip_u) << 9)
                     | (u32::from(uv.flip_v) << 10)
@@ -234,5 +245,59 @@ mod tests {
         assert_eq!(records.as_ptr(), first_pointer);
         assert_eq!(second_records[0].position, [1.; 4]);
         assert_eq!(second_indices.as_slice(), &[24]);
+    }
+}
+
+/// Ribbon-only interpretation of the shared 112-byte sampled record.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RibbonSegmentParameters {
+    pub start: Vec3,
+    pub end: Vec3,
+    pub half_widths: [f32; 2],
+    /// Incoming/outgoing directions in view mode, or prepared cross sections otherwise.
+    pub sections: [Vec3; 2],
+    pub colors: [Vec4; 2],
+    pub texture_u: [f32; 2],
+    pub atlas_cell: u32,
+    pub cursors: [f32; 2],
+}
+impl AgeSpriteRecord {
+    pub(crate) fn ribbon_segment(parameters: RibbonSegmentParameters) -> Self {
+        Self {
+            position: parameters
+                .start
+                .extend(parameters.half_widths[0])
+                .to_array(),
+            velocity_tail: parameters.end.extend(parameters.half_widths[1]).to_array(),
+            size_spin: parameters.sections[0]
+                .extend(parameters.texture_u[0])
+                .to_array(),
+            color: parameters.colors[0].to_array(),
+            offsets: parameters.sections[1]
+                .extend(parameters.texture_u[1])
+                .to_array(),
+            scales: parameters.colors[1].to_array(),
+            cells: [
+                parameters.atlas_cell,
+                parameters.cursors[0].to_bits(),
+                parameters.cursors[1].to_bits(),
+                0,
+            ],
+        }
+    }
+    pub(crate) fn ribbon_parameters(&self) -> RibbonSegmentParameters {
+        RibbonSegmentParameters {
+            start: Vec3::from_slice(&self.position),
+            end: Vec3::from_slice(&self.velocity_tail),
+            half_widths: [self.position[3], self.velocity_tail[3]],
+            sections: [
+                Vec3::from_slice(&self.size_spin),
+                Vec3::from_slice(&self.offsets),
+            ],
+            colors: [Vec4::from_array(self.color), Vec4::from_array(self.scales)],
+            texture_u: [self.size_spin[3], self.offsets[3]],
+            atlas_cell: self.cells[0],
+            cursors: [f32::from_bits(self.cells[1]), f32::from_bits(self.cells[2])],
+        }
     }
 }

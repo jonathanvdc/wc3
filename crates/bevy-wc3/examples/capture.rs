@@ -1034,7 +1034,7 @@ fn capture(options: Options) -> CaptureResult<()> {
             }
             let mut programmes = world.query::<&ParticleProgramEmitter>();
             for emitter in programmes.iter(world) {
-                println!("Programme {:?}: alive={}, sprites={}, omitted={}, suppressed={}, skipped_seconds={:.6}, error={:?}",emitter.feature,emitter.alive,emitter.sprites,emitter.omitted,emitter.suppressed,emitter.skipped_seconds,emitter.error);
+                println!("Programme {:?}: alive={}, sprites={}, ribbon_segments={}, omitted_geometry={}, omitted={}, suppressed={}, skipped_seconds={:.6}, error={:?}",emitter.feature,emitter.alive,emitter.sprites,emitter.ribbon_segments,emitter.omitted_geometry,emitter.omitted,emitter.suppressed,emitter.skipped_seconds,emitter.error);
             }
             let mut ribbons = world.query::<&RibbonEmitter>();
             for emitter in ribbons.iter(world) {

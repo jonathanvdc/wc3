@@ -4,7 +4,8 @@ Ribbon emitters leave connected trails of birth-time cross sections. MDLX and M2
 families use the same GPU geometry transport, while retaining separate authored
 semantics. Material passes share section records but keep their own blend, depth,
 and texture state. `bevy_wc3::RibbonEmitter` exposes source identity, population,
-and omitted-work statistics.
+and omitted-work statistics. Connected ribbons produced by external baked graphs
+use living particle strands; see [external programme ribbons](popcorn.md#connected-ribbons).
 
 ## Cross sections and motion
 

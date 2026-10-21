@@ -322,7 +322,7 @@ fn owned_programme_integrates_its_initial_interval_before_extracting_sprites() {
 
 #[test]
 fn capsule_factory_selects_shared_geometry_only_for_bound_longitudinal_streams() {
-    use super::prepared::SpriteFacing;
+    use super::prepared::{RendererGeometry, SpriteFacing};
     use crate::effects::render::EffectGeometry;
     for axis_bound in [false, true] {
         let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
@@ -340,8 +340,11 @@ fn capsule_factory_selects_shared_geometry_only_for_bound_longitudinal_streams()
         let model = builder.finish().unwrap();
         let mut effect = effect();
         let renderer = &mut Arc::make_mut(&mut effect.renderers)[0];
-        renderer.facing = SpriteFacing::Capsule;
-        renderer.axes[0] = axis_bound.then_some(renderer.position);
+        renderer.geometry = RendererGeometry::Billboard {
+            facing: SpriteFacing::Capsule,
+            axes: [axis_bound.then_some(renderer.position), None],
+            rotation: None,
+        };
         let definitions = RuntimeProgramParticles::compile(
             &model,
             &HashMap::from([(node, 0)]),
@@ -368,5 +371,115 @@ fn capsule_factory_selects_shared_geometry_only_for_bound_longitudinal_streams()
             1,
             "unused selector geometry must not be allocated"
         );
+    }
+}
+
+#[test]
+fn universal_ribbon_program_emits_segments_and_preserves_paused_records() {
+    let bytes = include_bytes!("../../../../wc3/tests/fixtures/pkb/ribbon.pkb");
+    let programme = Document::read(bytes)
+        .unwrap()
+        .compile_effect(1, &EffectCompileOptions::default())
+        .unwrap();
+    let effect = ParticleEffect::new(programme, |request| {
+        assert_eq!(
+            request.binding,
+            super::prepared::ParticleTextureBinding::Diffuse
+        );
+        Some(Handle::default())
+    });
+    assert!(effect
+        .diagnostics()
+        .iter()
+        .all(|issue| issue.kind != RenderDiagnosticKind::Unsupported));
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+    let node = builder.add_named_node("ribbon").unwrap();
+    let mut emitter: Popcorn<'_> = builder.construct();
+    emitter.visibility = builder.add_value(1.);
+    emitter.life_span = builder.add_value(1.);
+    emitter.emission_rate = builder.add_value(1.);
+    emitter.speed = builder.add_value(1.);
+    emitter.color = builder.add_value(Vec3::ONE);
+    emitter.opacity = builder.add_value(1.);
+    let feature = builder
+        .add_feature(node, NodeFeature::ParticleProgram(Box::new(emitter)))
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let definitions = RuntimeProgramParticles::compile(
+        &model,
+        &HashMap::from([(node, 0)]),
+        &HashMap::from([(feature, effect)]),
+    );
+    let mut world = World::new();
+    let basis = world.spawn_empty().id();
+    let mut meshes = Assets::<Mesh>::default();
+    let mut queue = CommandQueue::default();
+    let mut instances = {
+        let mut commands = Commands::new(&mut queue, &world);
+        definitions.spawn(&mut commands, &mut meshes, basis)
+    };
+    queue.apply(&mut world);
+    assert_eq!(meshes.len(), 1, "all segments use one immutable quad");
+    assert_eq!(
+        world.query::<&Mesh3d>().iter(&world).count(),
+        0,
+        "procedural geometry has no ordinary mesh-instance uniform"
+    );
+    let program = AnimationProgram::compile(&model);
+    let sample = program.sample(AnimationSample::default()).unwrap();
+    let poses = [Mat4::IDENTITY];
+    let visibility = [true];
+    let mut queries = SystemState::<(
+        Query<&mut AgeSpriteData>,
+        Query<&mut ParticleProgramEmitter>,
+    )>::new(&mut world);
+    let mut retained = None;
+    for (step, (time, change, segments, alive)) in [
+        (0., EffectChange::Continuous, 2, 4),
+        (0., EffectChange::Continuous, 2, 4),
+        (6., EffectChange::Continuous, 0, 1),
+        (0., EffectChange::Reset, 2, 4),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let (mut sprites, mut stats) = queries.get_mut(&mut world).unwrap();
+        definitions.update(
+            &mut instances,
+            &EffectFrame {
+                pose: None,
+                root_visible: true,
+                traversal: Default::default(),
+                change,
+                time,
+                selection: Default::default(),
+                sample: &sample,
+                node_poses: &poses,
+                node_visible: &visibility,
+                basis_world: Mat4::IDENTITY,
+            },
+            &mut sprites,
+            &mut stats,
+        );
+        let output = stats.single().unwrap();
+        assert_eq!(output.sprites, 0);
+        assert_eq!(output.ribbon_segments, segments);
+        assert_eq!(output.alive, alive);
+        assert_eq!(output.omitted_geometry, 0);
+        assert!(output.error.is_none(), "{:?}", output.error);
+        let data = sprites.single().unwrap();
+        assert_eq!(data.records.len(), segments);
+        if step == 0 {
+            let a = data.records[0].ribbon_parameters();
+            let b = data.records[1].ribbon_parameters();
+            assert_eq!(a.start, Vec3::new(-200., 0., 0.));
+            assert_eq!(a.end, Vec3::ZERO);
+            assert_eq!(b.end, Vec3::new(0., 200., 0.));
+            assert_eq!(a.end, b.start);
+            assert_eq!(a.sections[1], b.sections[0]);
+            retained = Some(data.records.clone());
+        } else if step == 1 {
+            assert!(Arc::ptr_eq(retained.as_ref().unwrap(), &data.records));
+        }
     }
 }

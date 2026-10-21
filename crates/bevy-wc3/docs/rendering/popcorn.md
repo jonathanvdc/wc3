@@ -3,7 +3,7 @@
 MDLX Popcorn features reference baked effects rather than ordinary sprite-emitter
 parameters. The model loader imports the feature into `Model<Universal>`, resolves
 its `.pkb` companion, and compiles a shared `wc3::model::scene::popcorn::EffectProgram`.
-Each spawned model owns an independent bounded simulation. Supported billboard
+Each spawned model owns an independent bounded simulation. Supported billboard and connected-ribbon
 outputs use the same compact sampled records, per-view sorting, Bevy lighting,
 fog and output processing as M2 sprites.
 
@@ -138,14 +138,43 @@ explicit original random policy, with native fidelity unverified. Colors retain 
 components and alpha above one. Authored soft intersections retain ordinary
 billboard geometry with an unsupported-feature diagnostic. Unsupported facing
 modes, two-dimensional size, general UV programmes and additional material
-features produce renderer diagnostics. Native ribbons, distortion and mesh
-outputs have no adapter.
+features produce renderer diagnostics. Distortion and mesh outputs have no adapter.
+
+### Connected ribbons
+
+Connected ribbons group enabled living particles by their exact parent slot and
+incarnation, then connect neighbors in monotonic birth order. Pool reuse and
+identical birth times do not reorder a strand. Disabled, expired and invalid
+points are absent from connectivity; collapsed segments are omitted. Adjacent
+segments share the same endpoint cross section rather than averaging a bend.
+Ribbon mode 0 uses incoming segment direction and the current eye; mode 1 uses
+`Axis0` crossed with that direction; mode 2 uses normalized `Axis0` as its side axis.
+Axis modes require a typed `Axis0` stream. Degenerate cross sections use world +X.
+These finite edge policies and native client fidelity remain unverified.
+
+Ribbon size is half width, with endpoint color and width interpolated along each
+segment. Default U runs from zero to one per segment. `CustomTextureU` instead
+uses each endpoint's `TextureU`. The start point's `TextureID` selects the atlas
+cell using absolute value, clamp and truncation; ribbons do not crossfade cells.
+Canonical V is zero on the positive cross-section edge. `RotateTexture` and UV
+flips precede atlas placement. With alpha remap, endpoint `Cursor` supplies the
+interpolated LUT row, defaulting to zero when absent; it does not use the billboard
+random row. General UV programmes and deformation corrections retain connected
+geometry with explicit diagnostics. Ribbon segments use the shared immutable quad
+and 112-byte records, including per-view geometry and sorting without changing
+strand connectivity. They use ordinary effect lighting and fog, with no shadow or
+ordinary mesh-prepass draw.
+
+### Simulation budgets
 
 `ParticleEffect::with_limits` selects `EffectLimits` for independent instances.
 The default pool contains 1,024 particle slots, including controllers. Event queues,
 generation handles, payload copying, simulation steps, execution work and predicted storage are
 bounded separately. Omitted work advances time without a catch-up queue.
-`ParticleProgramEmitter` exposes living particles, sprite counts, omissions,
+Programmes inside particle-owned models also consume the enclosing
+[model-particle tree's shared emission-step allowance](prem.md#limits).
+`ParticleProgramEmitter` exposes living particles (including controllers), billboard
+`sprites` counts, `ribbon_segments`, `omitted_geometry`, simulation omissions,
 suppressed births, skipped seconds and checked execution errors. Despawn removes
 the simulation and its render entities.
 

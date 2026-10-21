@@ -1,5 +1,6 @@
-//! Universal feature controls, independent instances and compact sprite extraction.
-use super::prepared::{ParticleEffect, SpriteRenderer};
+//! Universal controls, independent instances and compact renderer extraction.
+use super::prepared::{ParticleEffect, ProgrammeRenderer, RendererGeometry};
+use super::ribbon::{RibbonMode, RibbonSample, RibbonSamples};
 use super::sampling::{atlas_sample, lut_cursor};
 use super::visibility::VisibilityGuide;
 use crate::coordinates::render_basis;
@@ -22,8 +23,8 @@ use std::f32::consts::FRAC_PI_2;
 use std::sync::Arc;
 use wc3::model::profiles::mdlx::Popcorn;
 use wc3::model::scene::popcorn::{
-    EffectAttributeId, EffectInstance, EffectRuntimeError, ParticleView, SceneInputs, Value,
-    ValueType,
+    EffectAttributeId, EffectFieldId, EffectInstance, EffectRuntimeError, ParticleView,
+    SceneInputs, Value, ValueType,
 };
 use wc3::model::{ClipId, FeatureId, Model, NodeFeature, NodeId, Property};
 
@@ -40,8 +41,12 @@ pub struct ParticleProgramEmitter {
     pub node: NodeId,
     /// Living particles, including structural controllers.
     pub alive: usize,
-    /// Sprite records prepared for all renderer declarations.
+    /// Billboard sprite records prepared for all renderer declarations.
     pub sprites: usize,
+    /// Connected ribbon segments prepared for all renderer declarations.
+    pub ribbon_segments: usize,
+    /// Invalid ribbon samples and collapsed segments omitted in the current extraction.
+    pub omitted_geometry: usize,
     /// Omitted births and particle executions from finite work budgets.
     pub omitted: u64,
     /// Births intentionally suppressed while emission is inactive.
@@ -90,6 +95,7 @@ pub(crate) struct RuntimeProgramParticles {
 struct RendererState {
     entity: Entity,
     samples: SampleBuffers,
+    ribbons: RibbonSamples,
 }
 struct State {
     entity: Entity,
@@ -98,6 +104,8 @@ struct State {
     started: bool,
     sampled: bool,
     sprites: usize,
+    ribbon_segments: usize,
+    omitted_geometry: usize,
     error: Option<String>,
 }
 #[derive(Default)]
@@ -189,7 +197,7 @@ impl RuntimeProgramParticles {
             .emitters
             .iter()
             .flat_map(|e| e.effect.renderers.iter())
-            .any(SpriteRenderer::capsule_geometry);
+            .any(ProgrammeRenderer::capsule_geometry);
         let needs_quad = self
             .emitters
             .iter()
@@ -209,6 +217,8 @@ impl RuntimeProgramParticles {
                                 node: emitter.node,
                                 alive: 0,
                                 sprites: 0,
+                                ribbon_segments: 0,
+                                omitted_geometry: 0,
                                 omitted: 0,
                                 suppressed: 0,
                                 skipped_seconds: 0.,
@@ -257,6 +267,7 @@ impl RuntimeProgramParticles {
                             RendererState {
                                 entity,
                                 samples: Default::default(),
+                                ribbons: Default::default(),
                             }
                         })
                         .collect();
@@ -284,6 +295,8 @@ impl RuntimeProgramParticles {
                         started: false,
                         sampled: false,
                         sprites: 0,
+                        ribbon_segments: 0,
+                        omitted_geometry: 0,
                         error,
                     }
                 })
@@ -423,6 +436,8 @@ impl RuntimeProgramParticles {
                 || frame.change == EffectChange::Reset
             {
                 let mut sprite_count = 0;
+                let mut ribbon_count = 0;
+                let mut omitted_geometry = 0;
                 for (renderer, output) in emitter.effect.renderers.iter().zip(&mut state.renderers)
                 {
                     if let Ok(mut data) = sprites.get_mut(output.entity) {
@@ -431,7 +446,29 @@ impl RuntimeProgramParticles {
                             if let Some(instance) = &state.instance {
                                 let record_values = Arc::get_mut(records).unwrap();
                                 let order = Arc::get_mut(indices).unwrap();
+                                output.ribbons.begin();
                                 for particle in instance.particles(renderer.layer) {
+                                    if renderer.geometry.is_ribbon() {
+                                        if renderer
+                                            .enabled
+                                            .and_then(|field| particle.field(field))
+                                            .is_some_and(|value| value.words()[0] == 0)
+                                        {
+                                            continue;
+                                        }
+                                        if let Some(point) = ribbon_sample(
+                                            renderer,
+                                            &particle,
+                                            emitter.world_from_space,
+                                        ) {
+                                            if !output.ribbons.push(point) {
+                                                omitted_geometry += 1;
+                                            }
+                                        } else {
+                                            omitted_geometry += 1;
+                                        }
+                                        continue;
+                                    }
                                     if let Some(record) =
                                         sprite_record(renderer, &particle, emitter.world_from_space)
                                     {
@@ -439,17 +476,30 @@ impl RuntimeProgramParticles {
                                         record_values.push(record);
                                     }
                                 }
+                                if let RendererGeometry::Ribbon { mode, .. } = renderer.geometry {
+                                    omitted_geometry += output.ribbons.emit(
+                                        mode,
+                                        renderer.atlas[0] * renderer.atlas[1],
+                                        record_values,
+                                        order,
+                                    );
+                                }
                             }
                         }
-                        sprite_count += records.len();
+                        if renderer.geometry.is_ribbon() {
+                            ribbon_count += records.len();
+                        } else {
+                            sprite_count += records.len();
+                        }
                         data.records = records.clone();
                         data.live_indices = indices.clone();
                         data.uniform = AgeSpriteUniform {
                             axes: [[0.; 4]; 2],
                             flags: [
-                                renderer.facing.code(),
-                                u32::from(renderer.axes[0].is_some())
-                                    | (u32::from(renderer.axes[1].is_some()) << 1),
+                                renderer.geometry.code(),
+                                u32::from(renderer.geometry.axis_fields()[0].is_some())
+                                    | (u32::from(renderer.geometry.axis_fields()[1].is_some())
+                                        << 1),
                                 u32::from(data.style.unlit),
                                 u32::from(!emitter.unfogged),
                             ],
@@ -464,10 +514,14 @@ impl RuntimeProgramParticles {
                     }
                 }
                 state.sprites = sprite_count;
+                state.ribbon_segments = ribbon_count;
+                state.omitted_geometry = omitted_geometry;
                 state.sampled = true;
             }
             if let Ok(mut output) = statistics.get_mut(state.entity) {
                 output.sprites = state.sprites;
+                output.ribbon_segments = state.ribbon_segments;
+                output.omitted_geometry = state.omitted_geometry;
                 if output.error.as_deref() != state.error.as_deref() {
                     output.error = state.error.clone();
                 }
@@ -604,11 +658,19 @@ fn scalar(value: f32) -> Value {
 fn floats(value: Value) -> [f32; 4] {
     value.words().map(f32::from_bits)
 }
-fn sprite_record(
-    renderer: &SpriteRenderer,
+struct SampledPoint {
+    position: Vec3,
+    half_extent: f32,
+    rotation: f32,
+    axes: [Vec3; 2],
+    color: Vec4,
+    texture_id: f32,
+}
+fn sample_point(
+    renderer: &ProgrammeRenderer,
     particle: &ParticleView<'_>,
     world_from_space: Mat4,
-) -> Option<AgeSpriteRecord> {
+) -> Option<SampledPoint> {
     if renderer
         .enabled
         .and_then(|field| particle.field(field))
@@ -620,50 +682,115 @@ fn sprite_record(
         Vec3::from_slice(&floats(particle.field(renderer.position)?)[..3])
             * MODEL_UNITS_PER_EFFECT_UNIT,
     );
-    let size = floats(particle.field(renderer.size)?)[0] * MODEL_UNITS_PER_EFFECT_UNIT * 2.;
-    let rotation = renderer
-        .rotation
-        .and_then(|field| particle.field(field))
-        .map_or(0., |value| floats(value)[0]);
-    let mut axes = renderer.axes.map(|field| {
+    let half_extent = floats(particle.field(renderer.size)?)[0] * MODEL_UNITS_PER_EFFECT_UNIT;
+    let sample_axis = |field: Option<EffectFieldId>| {
         field
             .and_then(|field| particle.field(field))
             .map_or(Vec3::ZERO, |value| {
                 world_from_space.transform_vector3(Vec3::from_slice(&floats(value)[..3]))
             })
-    });
-    if renderer.facing.longitudinal_axis() {
-        axes[0] *= MODEL_UNITS_PER_EFFECT_UNIT;
-    }
+    };
+    let (rotation, axes) = match renderer.geometry {
+        RendererGeometry::Billboard {
+            facing,
+            rotation,
+            axes,
+        } => {
+            let rotation = rotation
+                .and_then(|field| particle.field(field))
+                .map_or(0., |value| floats(value)[0]);
+            let mut axes = axes.map(sample_axis);
+            if facing.longitudinal_axis() {
+                axes[0] *= MODEL_UNITS_PER_EFFECT_UNIT;
+            }
+            (rotation, axes)
+        }
+        RendererGeometry::Ribbon { mode, axis, .. } => (
+            0.,
+            [
+                if mode == RibbonMode::View {
+                    Vec3::ZERO
+                } else {
+                    sample_axis(axis)
+                },
+                Vec3::ZERO,
+            ],
+        ),
+    };
     let color = renderer
         .color
         .and_then(|field| particle.field(field))
         .map_or([1.; 4], floats);
     let cursor = renderer
-        .cursor
+        .texture_id
         .and_then(|field| particle.field(field))
         .map_or(0., |value| floats(value)[0]);
     if !position.is_finite()
-        || !size.is_finite()
+        || !(half_extent * 2.).is_finite()
         || !rotation.is_finite()
-        || size <= 0.
+        || half_extent <= 0.
         || axes.iter().any(|axis| !axis.is_finite())
         || color.iter().any(|component| !component.is_finite())
     {
         return None;
     }
+    Some(SampledPoint {
+        position,
+        half_extent,
+        rotation,
+        axes,
+        color: Vec4::from_array(color).max(Vec4::ZERO),
+        texture_id: cursor,
+    })
+}
+fn sprite_record(
+    renderer: &ProgrammeRenderer,
+    particle: &ParticleView<'_>,
+    world_from_space: Mat4,
+) -> Option<AgeSpriteRecord> {
+    let point = sample_point(renderer, particle, world_from_space)?;
     let count = renderer.atlas[0] * renderer.atlas[1];
-    let (cell, next, fraction) = atlas_sample(cursor, count);
+    let (cell, next, fraction) = atlas_sample(point.texture_id, count);
     let lut_v = lut_cursor(particle.id.slot, particle.id.generation, particle.layer.0);
+    let size = point.half_extent * 2.;
     let mut record = AgeSpriteRecord {
-        position: position.extend(1.).to_array(),
-        velocity_tail: axes[0].extend(0.).to_array(),
-        size_spin: [size, size, rotation.cos(), rotation.sin()],
-        color: color.map(|value| value.max(0.)),
-        offsets: axes[1].extend(0.).to_array(),
+        position: point.position.extend(1.).to_array(),
+        velocity_tail: point.axes[0].extend(0.).to_array(),
+        size_spin: [size, size, point.rotation.cos(), point.rotation.sin()],
+        color: point.color.to_array(),
+        offsets: point.axes[1].extend(0.).to_array(),
         scales: [1.; 4],
         cells: [cell, 0, 0, 0],
     };
     record.set_sampled_appearance(next, fraction, lut_v);
     Some(record)
+}
+
+fn ribbon_sample(
+    renderer: &ProgrammeRenderer,
+    particle: &ParticleView<'_>,
+    world_from_space: Mat4,
+) -> Option<RibbonSample> {
+    let RendererGeometry::Ribbon {
+        texture_u, cursor, ..
+    } = renderer.geometry
+    else {
+        return None;
+    };
+    let sampled = sample_point(renderer, particle, world_from_space)?;
+    Some(RibbonSample {
+        parent: particle.parent,
+        serial: particle.birth_serial,
+        position: sampled.position,
+        half_width: sampled.half_extent,
+        color: sampled.color,
+        axis: sampled.axes[0],
+        texture_u: texture_u
+            .and_then(|field| particle.field(field))
+            .map(|value| floats(value)[0]),
+        texture_id: sampled.texture_id,
+        cursor: cursor
+            .and_then(|field| particle.field(field))
+            .map_or(0., |value| floats(value)[0]),
+    })
 }

@@ -101,8 +101,46 @@ fn sampled_axes(particle: Particle, camera_right: vec3<f32>, camera_up: vec3<f32
     return mat2x3(right * cs + up * sn, up * cs - right * sn);
 }
 #endif
+#ifdef SAMPLED_RIBBON
+// Ribbon fields are packed by RibbonSegmentParameters; positions remain exact
+// endpoint samples so adjacent segments reuse identical world cross sections.
+fn ribbon_vertex(input: VertexInput) -> VertexOutput {
+    let segment = particles[input.particle_index & 0x7fffffffu];
+    let endpoint = input.corner.y > 0.0;
+    let position = select(segment.position.xyz, segment.velocity_tail.xyz, endpoint);
+    let half_width = select(segment.position.w, segment.velocity_tail.w, endpoint);
+    let section = select(segment.size_spin.xyz, segment.offsets.xyz, endpoint);
+    var across = section;
+    if emitter.flags.x == 0u {
+        across = normalize_or(cross(section, normalize_or(position - view.world_position, vec3(0.0))), vec3(1.0, 0.0, 0.0));
+    }
+    let world = position + across * (half_width * input.corner.x);
+    let normal = normalize_or(cross(across, normalize_or(segment.velocity_tail.xyz - segment.position.xyz, vec3(0.0))), vec3(0.0, 0.0, 1.0));
+    var uv = vec2(select(segment.size_spin.w, segment.offsets.w, endpoint), (1.0 - input.corner.x) * 0.5);
+    // Canonical ribbon UVs already have V0 at +cross-section; no image flip.
+    if (emitter.atlas.z & 256u) != 0u { uv = vec2(uv.y, 1.0 - uv.x); }
+    if (emitter.atlas.z & 512u) != 0u { uv.x = 1.0 - uv.x; }
+    if (emitter.atlas.z & 1024u) != 0u { uv.y = 1.0 - uv.y; }
+    let rows = max(emitter.atlas.x, 1u);
+    let columns = max(emitter.atlas.y, 1u);
+    let cell = segment.cells.x % (rows * columns);
+    var output: VertexOutput;
+    output.position = position_world_to_clip(world);
+    output.uv = (vec2(f32(cell % columns), f32(cell / columns)) + uv) / vec2(f32(columns), f32(rows));
+    output.color = select(segment.color, segment.scales, endpoint);
+    output.world_position = world;
+    output.world_normal = normal;
+    output.uv_secondary = vec2(0.0);
+    output.uv_tertiary = vec2(0.0);
+    output.sampled_appearance = vec2(0.0, select(bitcast<f32>(segment.cells.y), bitcast<f32>(segment.cells.z), endpoint));
+    return output;
+}
+#endif
 @vertex
 fn vertex(input: VertexInput) -> VertexOutput {
+#ifdef SAMPLED_RIBBON
+    return ribbon_vertex(input);
+#else
     let particle = particles[input.particle_index & 0x7fffffffu];
     let tail = (input.particle_index & 0x80000000u) != 0u;
     let camera_back = safe_normalize(view.world_from_view[2].xyz);
@@ -193,6 +231,7 @@ fn vertex(input: VertexInput) -> VertexOutput {
     output.world_position = world;
     output.world_normal = normal;
     return output;
+#endif
 }
 @fragment
 fn fragment(input: VertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {

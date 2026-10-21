@@ -80,8 +80,9 @@ pipeline, or readback failures terminate with an error. Add `--particle-stats`
 to report live sprite populations, dropped births, and skipped simulation time,
 alongside model-particle populations and omissions, ribbon sections, connected
 segments, and omitted sections.
-External programmes report living controllers and particles, extracted sprites,
-omissions and checked execution errors; an execution error terminates the capture.
+External programmes report living controllers and particles, extracted billboard
+sprites and ribbon segments, geometry omissions, simulation omissions and checked
+execution errors; an execution error terminates the capture.
 These counters help distinguish simulation and visibility problems; inspect the
 images to assess appearance.
 

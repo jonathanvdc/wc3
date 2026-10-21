@@ -103,6 +103,7 @@ struct AgeSpriteKey {
     filter: u8,
     refraction: bool,
     sampled: bool,
+    ribbon: bool,
 }
 impl SpecializedMeshPipeline for AgeSpritePipeline {
     type Key = AgeSpriteKey;
@@ -115,6 +116,9 @@ impl SpecializedMeshPipeline for AgeSpritePipeline {
         descriptor.vertex.shader = self.shader.clone();
         if key.sampled {
             descriptor.vertex.shader_defs.push("SAMPLED_SPRITE".into());
+        }
+        if key.ribbon {
+            descriptor.vertex.shader_defs.push("SAMPLED_RIBBON".into());
         }
         if key.filter == 1 {
             descriptor
@@ -272,7 +276,11 @@ fn queue_age_sprites(
                 AgeSpriteKey {
                     mesh: mesh_key,
                     refraction: data.style.composition == AgeSpriteComposition::Refraction,
-                    sampled: matches!(data.style.composition, AgeSpriteComposition::Sampled { .. }),
+                    sampled: matches!(
+                        data.style.composition,
+                        AgeSpriteComposition::Sampled { .. } | AgeSpriteComposition::Ribbon { .. }
+                    ),
+                    ribbon: matches!(data.style.composition, AgeSpriteComposition::Ribbon { .. }),
                     filter: match data.style.blend {
                         ParticleBlend::Unknown(_) => 2,
                         blend => blend.raw() as u8,
@@ -307,7 +315,12 @@ fn sort_indices(data: &AgeSpriteData, world_from_view: &Affine3A, scratch: &mut 
     let eye = world_from_view.translation;
     let forward = -world_from_view.matrix3.z_axis;
     for (index, record) in data.records.iter().enumerate() {
-        let center = Vec3A::from(Vec3::from_slice(&record.position[..3]));
+        let center = if matches!(data.style.composition, AgeSpriteComposition::Ribbon { .. }) {
+            let parameters = record.ribbon_parameters();
+            Vec3A::from(parameters.start * 0.5 + parameters.end * 0.5)
+        } else {
+            Vec3A::from(Vec3::from_slice(&record.position[..3]))
+        };
         scratch.push(index as u32, (center - eye).dot(forward));
     }
     scratch.sort(data.style.sort == SortPolicy::Near, |index, order| {

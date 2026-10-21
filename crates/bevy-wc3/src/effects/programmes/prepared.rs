@@ -1,4 +1,5 @@
 //! Prepared external-effect images and renderer bindings.
+use super::ribbon::RibbonMode;
 use crate::diagnostics::{RenderDiagnostic, RenderDiagnosticKind, RenderDiagnosticSource};
 use crate::effects::age_sprites_gpu::{AgeSpriteComposition, AgeSpriteStyle, SpriteUv};
 use crate::effects::render::SortPolicy;
@@ -52,7 +53,7 @@ pub struct ParticleTextureRequest<'a> {
 #[derive(Clone)]
 pub struct ParticleEffect {
     pub(crate) program: EffectProgram,
-    pub(crate) renderers: Arc<[SpriteRenderer]>,
+    pub(crate) renderers: Arc<[ProgrammeRenderer]>,
     pub(crate) limits: EffectLimits,
     pub(crate) overrides: Arc<Vec<(EffectAttributeId, Value)>>,
     diagnostics: Arc<[RenderDiagnostic]>,
@@ -68,20 +69,49 @@ impl Debug for ParticleEffect {
     }
 }
 #[derive(Clone)]
-pub(crate) struct SpriteRenderer {
+pub(crate) struct ProgrammeRenderer {
     pub(crate) layer: EffectLayerId,
     pub(crate) position: EffectFieldId,
     pub(crate) size: EffectFieldId,
     pub(crate) enabled: Option<EffectFieldId>,
-    pub(crate) rotation: Option<EffectFieldId>,
     pub(crate) color: Option<EffectFieldId>,
-    pub(crate) cursor: Option<EffectFieldId>,
-    pub(crate) axes: [Option<EffectFieldId>; 2],
-    pub(crate) facing: SpriteFacing,
+    pub(crate) texture_id: Option<EffectFieldId>,
+    pub(crate) geometry: RendererGeometry,
     pub(crate) atlas: [u32; 2],
     pub(crate) style: AgeSpriteStyle,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RendererGeometry {
+    Billboard {
+        facing: SpriteFacing,
+        axes: [Option<EffectFieldId>; 2],
+        rotation: Option<EffectFieldId>,
+    },
+    Ribbon {
+        mode: RibbonMode,
+        axis: Option<EffectFieldId>,
+        texture_u: Option<EffectFieldId>,
+        cursor: Option<EffectFieldId>,
+    },
+}
+impl RendererGeometry {
+    pub(super) fn is_ribbon(self) -> bool {
+        matches!(self, Self::Ribbon { .. })
+    }
+    pub(super) fn code(self) -> u32 {
+        match self {
+            Self::Billboard { facing, .. } => facing.code(),
+            Self::Ribbon { mode, .. } => mode.code(),
+        }
+    }
+    pub(super) fn axis_fields(self) -> [Option<EffectFieldId>; 2] {
+        match self {
+            Self::Billboard { axes, .. } => axes,
+            Self::Ribbon { axis, .. } => [axis, None],
+        }
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SpriteFacing {
     Camera,
@@ -104,9 +134,16 @@ impl SpriteFacing {
         matches!(self, Self::Axial | Self::Spheroid | Self::Capsule)
     }
 }
-impl SpriteRenderer {
+impl ProgrammeRenderer {
     pub(super) fn capsule_geometry(&self) -> bool {
-        self.facing == SpriteFacing::Capsule && self.axes[0].is_some()
+        matches!(
+            self.geometry,
+            RendererGeometry::Billboard {
+                facing: SpriteFacing::Capsule,
+                axes: [Some(_), _],
+                ..
+            }
+        )
     }
 }
 impl ParticleEffect {
@@ -125,31 +162,31 @@ impl ParticleEffect {
                         diagnostics.push(RenderDiagnostic::new(
                             RenderDiagnosticKind::Unsupported,
                             RenderDiagnosticSource::Model,
-                            "external particle soft intersections are not applied; retaining ordinary billboard geometry",
+                            "external particle soft intersections are not applied; retaining ordinary particle geometry",
                         ));
                     }
-                    let missing_axes = match prepared.facing {
-                        SpriteFacing::Camera => false,
-                        SpriteFacing::Axial | SpriteFacing::Spheroid | SpriteFacing::Capsule => {
-                            prepared.axes[0].is_none()
-                        }
-                        SpriteFacing::Planar => prepared.axes.iter().any(Option::is_none),
-                    };
-                    if missing_axes {
-                        diagnostics.push(RenderDiagnostic::new(
+                    if let RendererGeometry::Billboard { facing, axes, .. } = prepared.geometry {
+                        let missing_axes = match facing {
+                            SpriteFacing::Camera => false,
+                            SpriteFacing::Axial
+                            | SpriteFacing::Spheroid
+                            | SpriteFacing::Capsule => axes[0].is_none(),
+                            SpriteFacing::Planar => axes.iter().any(Option::is_none),
+                        };
+                        if missing_axes {
+                            diagnostics.push(RenderDiagnostic::new(
                             RenderDiagnosticKind::Approximation,
                             RenderDiagnosticSource::Model,
                             format!("external particle renderer {index} is missing facing axes; using a camera-facing quad"),
                         ));
-                    }
-                    if prepared.facing != SpriteFacing::Camera
-                        || prepared.axes.iter().all(Option::is_some)
-                    {
-                        diagnostics.push(RenderDiagnostic::new(
+                        }
+                        if facing != SpriteFacing::Camera || axes.iter().all(Option::is_some) {
+                            diagnostics.push(RenderDiagnostic::new(
                             RenderDiagnosticKind::Unverified,
                             RenderDiagnosticSource::Model,
                             "external particle authored-axis facing uses per-view geometry; exact native facing and degenerate-axis fidelity remain unverified",
                         ));
+                        }
                     }
                     for request in image_requests(index, renderer) {
                         let binding = request.binding;
@@ -159,7 +196,8 @@ impl ParticleEffect {
                                 RenderDiagnosticSource::Model,
                                 format!("external particle renderer {index} has an unresolved {binding:?} image")));
                             if binding == ParticleTextureBinding::AlphaRemap {
-                                if let AgeSpriteComposition::Sampled { alpha_remap, .. } =
+                                if let AgeSpriteComposition::Sampled { alpha_remap, .. }
+                                | AgeSpriteComposition::Ribbon { alpha_remap, .. } =
                                     &mut prepared.style.composition
                                 {
                                     *alpha_remap = false;
@@ -178,15 +216,31 @@ impl ParticleEffect {
                             RenderDiagnosticSource::Model,
                             format!("external particle renderer {index} enables alpha remap without an image; preserving diffuse alpha")));
                     }
-                    if toggle(renderer, b"AlphaRemap", false) {
-                        diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Unverified,
+                    match prepared.geometry {
+                        RendererGeometry::Billboard { .. } => {
+                            if toggle(renderer, b"AlphaRemap", false) {
+                                diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Unverified,
                             RenderDiagnosticSource::Model,
                             "billboard alpha-remap V uses a stable slot-incarnation hash; native random fidelity remains unverified"));
-                    }
-                    if toggle(renderer, b"Atlas", false) {
-                        diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Unverified,
+                            }
+                            if toggle(renderer, b"Atlas", false) {
+                                diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Unverified,
                             RenderDiagnosticSource::Model,
                             "billboard atlas uses adjacent-frame RGBA crossfade; authored atlas blending-mode fidelity remains unverified"));
+                            }
+                        }
+                        RendererGeometry::Ribbon { .. } => {
+                            diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Unverified,
+                            RenderDiagnosticSource::Model,
+                            "external ribbons connect surviving particles by exact parent identity and birth order; degenerate cross sections use world +X and collapsed segments are omitted; native client fidelity remains unverified"));
+                            for feature in [b"TransformUVs".as_slice(), b"CorrectDeformation"] {
+                                if toggle(renderer, feature, false) {
+                                    diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Unsupported,
+                                    RenderDiagnosticSource::Model,
+                                    "external ribbon UV programme and deformation corrections are not applied; retaining connected ribbon geometry"));
+                                }
+                            }
+                        }
                     }
                     renderers.push(prepared);
                 }
@@ -333,11 +387,16 @@ fn prepare(
     _index: usize,
     renderer: &EffectRenderer,
     program: &EffectProgram,
-) -> Result<Option<SpriteRenderer>, &'static str> {
+) -> Result<Option<ProgrammeRenderer>, &'static str> {
     if !toggle(renderer, b"EnableRendering", true) {
         return Ok(None);
     }
-    let family = b"popcorn/library/popcornfxcore/materials/default_billboard.pkma";
+    let ribbon_geometry = renderer.class == 1 && toggle(renderer, b"GeometryRibbon", false);
+    let family = if ribbon_geometry {
+        b"popcorn/library/popcornfxcore/materials/default_ribbon.pkma".as_slice()
+    } else {
+        b"popcorn/library/popcornfxcore/materials/default_billboard.pkma".as_slice()
+    };
     if renderer.feature_set.len() != family.len()
         || !renderer
             .feature_set
@@ -354,7 +413,7 @@ fn prepare(
     {
         return Err("the material feature family has no renderer interpreter");
     }
-    if renderer.class != 0 || !toggle(renderer, b"GeometryBillboard", false) {
+    if !ribbon_geometry && (renderer.class != 0 || !toggle(renderer, b"GeometryBillboard", false)) {
         return Err("only billboard sprite geometry is supported");
     }
     for feature in [
@@ -367,18 +426,11 @@ fn prepare(
         b"GeometryMesh",
         b"Distortion",
     ] {
-        if toggle(renderer, feature, false) {
+        if toggle(renderer, feature, false) && !(ribbon_geometry && feature == b"TransformUVs") {
             return Err("an enabled material feature has no interpreter");
         }
     }
-    let facing = match property(renderer, b"BillboardingMode").map_or(0, |value| value.numeric[0]) {
-        0 => SpriteFacing::Camera,
-        2 => SpriteFacing::Axial,
-        3 => SpriteFacing::Spheroid,
-        4 => SpriteFacing::Capsule,
-        5 => SpriteFacing::Planar,
-        _ => return Err("the billboard facing mode is unsupported"),
-    };
+    let mode = property(renderer, b"BillboardingMode").map_or(0, |value| value.numeric[0]);
     let field = |semantic| {
         renderer
             .inputs
@@ -398,7 +450,7 @@ fn prepare(
     let enabled = field(2);
     let rotation = field(6);
     let color = custom(b"Color");
-    let cursor = custom(b"TextureID");
+    let texture_id = custom(b"TextureID");
     let axis = |semantics: &[u32], names: &[&[u8]]| {
         renderer
             .inputs
@@ -419,6 +471,53 @@ fn prepare(
         axis(&[4, 8], &[b"Axis0", b"Axis"]),
         axis(&[5], &[b"Axis1", b"NormalAxis"]),
     ];
+    let geometry = if ribbon_geometry {
+        let mode = match mode {
+            0 => RibbonMode::View,
+            1 => RibbonMode::NormalAxis,
+            2 => RibbonMode::SideAxis,
+            _ => return Err("the ribbon facing mode is unsupported"),
+        };
+        if mode != RibbonMode::View && axes[0].is_none() {
+            return Err("the ribbon facing mode requires Axis0");
+        }
+        let texture_u = if toggle(renderer, b"CustomTextureU", false) {
+            Some(custom(b"TextureU").ok_or("custom ribbon UVs require TextureU")?)
+        } else {
+            None
+        };
+        RendererGeometry::Ribbon {
+            mode,
+            axis: if mode == RibbonMode::View {
+                None
+            } else {
+                axes[0]
+            },
+            texture_u,
+            cursor: custom(b"Cursor"),
+        }
+    } else {
+        let facing = match mode {
+            0 => SpriteFacing::Camera,
+            2 => SpriteFacing::Axial,
+            3 => SpriteFacing::Spheroid,
+            4 => SpriteFacing::Capsule,
+            5 => SpriteFacing::Planar,
+            _ => return Err("the billboard facing mode is unsupported"),
+        };
+        RendererGeometry::Billboard {
+            facing,
+            axes,
+            rotation,
+        }
+    };
+    let (rotation, extra_scalars) = match geometry {
+        RendererGeometry::Billboard { rotation, .. } => (rotation, [None, None]),
+        RendererGeometry::Ribbon {
+            texture_u, cursor, ..
+        } => (None, [texture_u, cursor]),
+    };
+    let axes = geometry.axis_fields();
     let fields = &program
         .layers()
         .get(renderer.layer.0 as usize)
@@ -430,13 +529,15 @@ fn prepare(
         (enabled, ValueType::Bool),
         (rotation, ValueType::Float),
         (color, ValueType::Float4),
-        (cursor, ValueType::Float),
+        (texture_id, ValueType::Float),
         (axes[0], ValueType::Float3),
         (axes[1], ValueType::Float3),
+        (extra_scalars[0], ValueType::Float),
+        (extra_scalars[1], ValueType::Float),
     ] {
         if let Some(id) = id {
             if fields.get(id.0 as usize).and_then(|field| field.value_type) != Some(kind) {
-                return Err("a sprite stream has an unsupported value layout");
+                return Err("a renderer stream has an unsupported value layout");
             }
         }
     }
@@ -466,40 +567,42 @@ fn prepare(
     if atlas[0].checked_mul(atlas[1]).is_none() {
         return Err("atlas dimensions exceed the cell index range");
     }
-    Ok(Some(SpriteRenderer {
+    let uv = SpriteUv {
+        rotate: toggle(renderer, b"RotateTexture", false),
+        flip_u: toggle(renderer, b"FlipUVs", false) || toggle(renderer, b"TextureUVs.FlipU", false),
+        flip_v: toggle(renderer, b"FlipUVs", false) || toggle(renderer, b"TextureUVs.FlipV", false),
+    };
+    let alpha_remap = toggle(renderer, b"AlphaRemap", false)
+        && renderer
+            .property(b"AlphaRemap.AlphaMap")
+            .and_then(|property| property.text.as_deref())
+            .is_some();
+    Ok(Some(ProgrammeRenderer {
         layer: renderer.layer,
         position,
         size,
         enabled,
-        rotation,
         color,
-        cursor,
-        axes,
-        facing,
+        texture_id,
+        geometry,
         atlas,
         style: AgeSpriteStyle {
             textures: [None, None, None],
             blend,
             priority: renderer.draw_order as f32,
-            composition: AgeSpriteComposition::Sampled {
-                uv: SpriteUv {
-                    rotate: toggle(renderer, b"RotateTexture", false),
-                    flip_u: toggle(renderer, b"FlipUVs", false)
-                        || toggle(renderer, b"TextureUVs.FlipU", false),
-                    flip_v: toggle(renderer, b"FlipUVs", false)
-                        || toggle(renderer, b"TextureUVs.FlipV", false),
-                },
-                crossfade: toggle(renderer, b"Atlas", false),
-                alpha_remap: toggle(renderer, b"AlphaRemap", false)
-                    && renderer
-                        .property(b"AlphaRemap.AlphaMap")
-                        .and_then(|p| p.text.as_deref())
-                        .is_some(),
+            composition: if geometry.is_ribbon() {
+                AgeSpriteComposition::Ribbon { uv, alpha_remap }
+            } else {
+                AgeSpriteComposition::Sampled {
+                    uv,
+                    crossfade: toggle(renderer, b"Atlas", false),
+                    alpha_remap,
+                }
             },
             unlit: !toggle(renderer, b"Lit", false) && !toggle(renderer, b"LegacyLit", false),
             head: true,
             tail: false,
-            uv_flip_v: true,
+            uv_flip_v: !geometry.is_ribbon(),
             sort: SortPolicy::Far,
         },
     }))
