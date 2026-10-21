@@ -139,7 +139,10 @@ does not establish that its external water programme is implemented.
 Root skybox resources remain source-model metadata and require application scene
 integration. Placement illumination and linked-light controls remain hooks rather
 than automatic child-material changes. Dedicated native shadow batches retain
-their geometry, but their separate shadow-only pass role is not interpreted.
+their geometry as `DrawPurpose::ShadowOnly`: ordinary Bevy lights can see those
+casters, while camera color and prepasses exclude them. Normal surfaces retain
+their material-controlled shadow casting. Native shadow-batch supplemental controls
+and whether they replace particular surface casters remain unverified.
 
 The implemented equations, portal attenuation and native color preparation still
 need broader validation across game versions. Native falloff, regional light sets,

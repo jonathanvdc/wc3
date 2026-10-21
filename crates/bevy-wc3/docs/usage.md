@@ -135,8 +135,10 @@ options.child_models.insert(
 
 Each binding contains its own coordinate policy. Keys belong to the source
 model; foreign feature IDs and roles without an authored dependency are rejected.
-M2 geometry and adopted-emitter resources can resolve independently, but their
-runtime interpreters remain unsupported.
+M2 geometry and adopted-emitter resources resolve independently. See
+[model particles](rendering/prem.md) for geometry children and
+[sprite particles](rendering/pre2.md) for adopted emitter templates and their
+remaining limits.
 
 BLP0/1/2 decoding is included. BLP0 needs its sibling `.b00` in the same asset
 source; compatibility with real beta-game BLP0 assets remains unverified. Only
@@ -273,7 +275,12 @@ let pose = baker.bake(&prepared, &meshes, &inverse_bindposes,
 
 Output includes every prepared geometry pass and generated liquid grid, with typed
 source identity, material snapshot, visibility, clocks, optional LOD selection, and
-posed bounds. Aggregate bounds cover visible surfaces. Default output includes the
+posed bounds. Geometry provenance includes `ModelDraw::purpose`: a dedicated
+`DrawPurpose::ShadowOnly` caster can be visible to lights while excluded from camera
+passes. When spawning baked meshes yourself, call its `configure_visibility`
+method on the entity's `VisibilityClass` after inserting `Mesh3d`, whose hook adds
+the camera class. The capture tool applies this routing for baked poses.
+Aggregate bounds cover visible surfaces. Default output includes the
 Bevy frame conversion; `BakeSpace::Authored` retains authored units.
 Camera-sensitive nodes require an explicit camera in authored coordinates.
 

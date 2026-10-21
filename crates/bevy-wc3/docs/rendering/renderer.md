@@ -66,7 +66,9 @@ role, visibility, and lens parameters, and bind to
 application-owned views on request. [Events](events.md) publish occurrences
 for application handling. [Static-world APIs](worlds.md) expose groups, portal
 selection, placement sets, liquids, and regional environment samples while leaving
-scene lighting, fog, and camera containment to the application.
+scene lighting, fog, and camera containment to the application. Dedicated WMO
+shadow batches remain geometry for Bevy's light-shadow views and are excluded from
+camera color and prepasses.
 
 ## Effects
 

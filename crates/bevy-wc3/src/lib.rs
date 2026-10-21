@@ -78,7 +78,7 @@ pub use baking::{
 pub use camera::CameraBinding;
 pub use child_coordinates::CoordinatePolicy;
 pub use child_models::{ChildModelBinding, ChildModelKey, ChildModelRole};
-pub use compiled::{CompiledModel, DrawSource, PreparedModel, PreparedMount};
+pub use compiled::{CompiledModel, DrawPurpose, DrawSource, PreparedModel, PreparedMount};
 pub use compiler::{compile_model, compile_model_with_options, CompileOptions};
 pub use composition::{DrawSelection, JointMap, ModelPart, PartBinding};
 pub use diagnostics::{

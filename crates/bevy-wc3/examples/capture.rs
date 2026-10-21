@@ -2,6 +2,7 @@
 //! Run `cargo run -p bevy-wc3 --example capture -- --help` for options.
 use bevy::app::PluginsState;
 use bevy::asset::AssetPlugin;
+use bevy::camera::visibility::VisibilityClass;
 use bevy::camera::{Hdr, MainPassResolutionOverride, RenderTarget, ShadowLodOrigin, Viewport};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::Tonemapping;
@@ -9,11 +10,13 @@ use bevy::ecs::schedule::{Schedules, SingleThreadedExecutor};
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::math::Vec3;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-use bevy::pbr::{DistanceFog, FogFalloff};
+use bevy::pbr::{material_uses_bindless_resources, DistanceFog, FogFalloff};
 use bevy::prelude::*;
+use bevy::render::batching::NoAutomaticBatching;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::render_resource::{CachedPipelineState, PipelineCache, TextureFormat};
 use bevy::render::renderer::RenderDevice;
+use bevy::render::settings::{WgpuFeatures, WgpuSettings};
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured};
 use bevy::render::{RenderApp, RenderPlugin};
 use bevy::shader::ShaderCacheError;
@@ -22,11 +25,11 @@ use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 use bevy_wc3::{
     spawn_model, AdoptedParticleSource, AdoptedParticleTemplate, AssetSettings, BakeSpace,
-    CameraBinding, Lod, LodOverride, LodSettings, ModelAsset, ModelEmitter, ModelInstance,
-    ModelInstanceError, ModelMaterial, ModelParticleLimits, ModelParticleTreeStats, ModelRig,
-    ParticleProgramEmitter, ParticleRefraction, PhysicsSimulation, Playback, PlaybackError,
-    PoseBaker, PoseOptions, PreparedModel, RibbonEmitter, SpriteEmitter, Wc3BevyPlugin,
-    WorldSelection,
+    BakedSource, CameraBinding, DrawPurpose, Lod, LodOverride, LodSettings, ModelAsset, ModelDraw,
+    ModelEmitter, ModelInstance, ModelInstanceError, ModelMaterial, ModelParticleLimits,
+    ModelParticleTreeStats, ModelRig, ParticleProgramEmitter, ParticleRefraction,
+    PhysicsSimulation, Playback, PlaybackError, PoseBaker, PoseOptions, PreparedModel,
+    RibbonEmitter, SpriteEmitter, Wc3BevyPlugin, WorldSelection,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::env::args;
@@ -66,6 +69,8 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --bake-pose           Render offline-baked geometry instead of the live hierarchy
   --prepasses           Enable depth/normal/motion prepasses and shadows
   --no-default-light    Omit the capture scene light (isolate model lights)
+  --no-bindless         Disable texture binding arrays to validate material fallback
+  --no-batching         Disable automatic batching for authored model draws
   --bevy-reference      Add a StandardMaterial sphere at (0, 2, 0)
   --tonemapping MODE    none or tony-mcmapface (default: none)
   --refraction-strength N  Nonnegative particle distortion multiplier (default: 1)
@@ -123,6 +128,8 @@ struct Options {
     guild_palette: Option<GuildPalette>,
     bevy_reference: bool,
     no_default_light: bool,
+    no_bindless: bool,
+    no_batching: bool,
     tonemapping: Tonemapping,
     msaa: Msaa,
     hdr: bool,
@@ -177,6 +184,8 @@ impl Options {
             guild_palette: None,
             bevy_reference: false,
             no_default_light: false,
+            no_bindless: false,
+            no_batching: false,
             tonemapping: Tonemapping::None,
             msaa: Msaa::Sample4,
             hdr: false,
@@ -227,6 +236,14 @@ impl Options {
             }
             if option == "--no-default-light" {
                 options.no_default_light = true;
+                continue;
+            }
+            if option == "--no-batching" {
+                options.no_batching = true;
+                continue;
+            }
+            if option == "--no-bindless" {
+                options.no_bindless = true;
                 continue;
             }
             if option == "--allow-loss" {
@@ -561,6 +578,7 @@ fn replace_with_baked_pose(
     root: Entity,
     camera: Entity,
     entities: &mut Vec<Entity>,
+    no_batching: bool,
 ) -> CaptureResult<()> {
     let world = app.world_mut();
     for entity in entities.drain(..) {
@@ -587,11 +605,21 @@ fn replace_with_baked_pose(
         let Some(material) = part.material else {
             continue;
         };
+        let purpose = match part.source {
+            BakedSource::Geometry(source) => source.purpose,
+            BakedSource::Liquid(_) => DrawPurpose::Surface,
+        };
         let casts_shadows = material.extension.casts_shadows();
         let receives_shadows = material.extension.receives_shadows();
         let mesh = world.resource_mut::<Assets<Mesh>>().add(part.mesh);
         let material = world.resource_mut::<Assets<ModelMaterial>>().add(material);
         let mut entity = world.spawn((Mesh3d(mesh), MeshMaterial3d(material), Transform::IDENTITY));
+        if let Some(mut visibility) = entity.get_mut::<VisibilityClass>() {
+            purpose.configure_visibility(&mut visibility);
+        }
+        if no_batching {
+            entity.insert(NoAutomaticBatching);
+        }
         if !casts_shadows {
             entity.insert(NotShadowCaster);
         }
@@ -656,6 +684,13 @@ fn capture(options: Options) -> CaptureResult<()> {
             })
             .set(RenderPlugin {
                 synchronous_pipeline_compilation: true,
+                render_creation: WgpuSettings {
+                    disabled_features: options
+                        .no_bindless
+                        .then_some(WgpuFeatures::TEXTURE_BINDING_ARRAY),
+                    ..default()
+                }
+                .into(),
                 ..default()
             })
             .disable::<WinitPlugin>()
@@ -672,6 +707,22 @@ fn capture(options: Options) -> CaptureResult<()> {
     }
     app.finish();
     app.cleanup();
+    let device = app.world().resource::<RenderDevice>();
+    let bindless = material_uses_bindless_resources::<ModelMaterial>(device);
+    eprintln!(
+        "Model material bindings: {}",
+        if bindless { "bindless" } else { "fallback" }
+    );
+    if options.no_bindless
+        && (bindless
+            || device
+                .features()
+                .contains(WgpuFeatures::TEXTURE_BINDING_ARRAY))
+    {
+        return Err(
+            "--no-bindless did not disable texture binding arrays and bindless materials".into(),
+        );
+    }
     if options.single_threaded {
         for (_, schedule) in app.world_mut().resource_mut::<Schedules>().iter_mut() {
             schedule.set_executor(SingleThreadedExecutor::new());
@@ -967,6 +1018,7 @@ fn capture(options: Options) -> CaptureResult<()> {
                 root,
                 camera,
                 &mut baked_entities,
+                options.no_batching,
             )?;
             settle(&mut app)?;
         }
@@ -975,6 +1027,10 @@ fn capture(options: Options) -> CaptureResult<()> {
             for (_, material) in materials.iter_mut() {
                 material.extension.set_guild_palette(palette)?;
             }
+            settle(&mut app)?;
+        }
+        if options.no_batching {
+            disable_model_batching(&mut app);
             settle(&mut app)?;
         }
         if let Some(frames) = options.benchmark_frames {
@@ -1071,7 +1127,7 @@ fn capture(options: Options) -> CaptureResult<()> {
             }
             let mut programmes = world.query::<&ParticleProgramEmitter>();
             for emitter in programmes.iter(world) {
-                println!("Programme {:?}: alive={}, sprites={}, ribbon_segments={}, omitted_geometry={}, omitted={}, suppressed={}, skipped_seconds={:.6}, error={:?}",emitter.feature,emitter.alive,emitter.sprites,emitter.ribbon_segments,emitter.omitted_geometry,emitter.omitted,emitter.suppressed,emitter.skipped_seconds,emitter.error);
+                println!("Programme {:?}: alive={}, sprites={}, ribbon_segments={}, omitted_geometry={}, omitted={}, suppressed={}, omitted_spatial_writes={}, omitted_spatial_queries={}, skipped_seconds={:.6}, error={:?}",emitter.feature,emitter.alive,emitter.sprites,emitter.ribbon_segments,emitter.omitted_geometry,emitter.omitted,emitter.suppressed,emitter.omitted_spatial_writes,emitter.omitted_spatial_queries,emitter.skipped_seconds,emitter.error);
             }
             let mut ribbons = world.query::<&RibbonEmitter>();
             for emitter in ribbons.iter(world) {
@@ -1190,6 +1246,18 @@ fn step(app: &mut App, dt: Duration) -> CaptureResult<()> {
     Ok(())
 }
 
+fn disable_model_batching(app: &mut App) {
+    let mut draws = app
+        .world_mut()
+        .query_filtered::<Entity, (With<ModelDraw>, Without<NoAutomaticBatching>)>();
+    let entities: Vec<_> = draws.iter(app.world()).collect();
+    for entity in entities {
+        app.world_mut()
+            .entity_mut(entity)
+            .insert(NoAutomaticBatching);
+    }
+}
+
 fn settle(app: &mut App) -> CaptureResult<()> {
     let deadline = Instant::now() + TIMEOUT;
     let mut frames = 0;
@@ -1263,6 +1331,26 @@ mod semantic;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_bindless_is_an_explicit_flag_and_preserves_following_options() {
+        assert!(!parse(&[]).unwrap().unwrap().no_bindless);
+        let options = parse(&["--no-bindless", "--times", "0,1"])
+            .unwrap()
+            .unwrap();
+        assert!(options.no_bindless);
+        assert_eq!(options.times, vec![0., 1.]);
+    }
+
+    #[test]
+    fn no_batching_is_explicit_and_keeps_following_options() {
+        assert!(!parse(&[]).unwrap().unwrap().no_batching);
+        let options = parse(&["--no-batching", "--times", "0,1"])
+            .unwrap()
+            .unwrap();
+        assert!(options.no_batching);
+        assert_eq!(options.times, vec![0., 1.]);
+    }
 
     #[test]
     fn guild_palette_requires_three_complete_finite_linear_rgb_colors() {

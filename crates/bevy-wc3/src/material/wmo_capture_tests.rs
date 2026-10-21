@@ -263,3 +263,6 @@ fn write_native_world_capture_fixtures() {
     }
     write_fixture(directory, "layer-13-alpha-key", alpha_key);
 }
+
+#[path = "wmo_shadow_tests.rs"]
+mod shadow;

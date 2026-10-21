@@ -31,6 +31,14 @@ transition lighting uses the authored transition draw ranges. Unclassified nativ
 flag bits are discarded by semantic import and do not affect portal traversal or
 expand those ranges. Native regional lighting fidelity remains unverified.
 
+Native dedicated shadow batches participate only in light-shadow views. Their
+`ModelDraw::purpose` is also retained by prepared parts and baked geometry; custom
+spawn paths should apply `DrawPurpose::configure_visibility` after inserting
+`Mesh3d`. This removes its camera visibility class while retaining ordinary
+inherited visibility, render layers and light-shadow culling. It does not change
+which normal surfaces cast shadows. Keep ordinary camera visibility selection for
+these casters: Bevy's opt-in `NoCpuCulling` bypasses this class-based routing and is
+not supported for shadow-only geometry. GPU mesh preprocessing can remain enabled.
 
 See [WMO materials](wmo-materials.md) for surface and vertex-light interpretation,
 and [application integration](../usage.md) for model loading and resource lookup.

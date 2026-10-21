@@ -15,7 +15,8 @@ use super::textures::TextureImages;
 use super::world::WorldRuntime;
 use super::world_lighting::{illumination, ColorAdjustment};
 use super::{
-    CompiledModel, DrawSource, ModelMaterial, RenderDiagnostic, TextureInput, TextureRequest,
+    CompiledModel, DrawPurpose, DrawSource, ModelMaterial, RenderDiagnostic, TextureInput,
+    TextureRequest,
 };
 use crate::animation_targets::AnimationTargets;
 use crate::child_models::{validate as validate_child_models, ChildModelBinding, ChildModelKey};
@@ -29,6 +30,8 @@ use bevy::asset::uuid::Uuid;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use wc3::model::profiles::wmo::Pass as WorldPass;
+use wc3::model::properties::DrawProperties;
 
 use wc3::model::profiles::Universal;
 use wc3::model::systems::ModelMetadata;
@@ -383,6 +386,9 @@ pub fn compile_model_with_options(
                                 mesh_state(value, instance.mesh)
                             }),
                         pass,
+                        purpose: if matches!(draw_controls, Some(DrawProperties::Wmo(controls)) if matches!(&controls.pass, WorldPass::Shadow { .. })) {
+                            DrawPurpose::ShadowOnly
+                        } else { DrawPurpose::Surface },
                         node: node_map[&instance.node],
                         skin: *skin,
                         lod: instance.lod,

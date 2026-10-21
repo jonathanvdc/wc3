@@ -6,7 +6,7 @@ use super::super::pose::{
 };
 use super::super::skin_bounds::SkinBounds;
 use super::super::transition::TransitionState;
-use super::super::{ModelMaterial, PreparedModel, WorldLiquidSurface};
+use super::super::{DrawPurpose, ModelMaterial, PreparedModel, WorldLiquidSurface};
 use super::current_affine::NodePoseSource;
 use super::evaluation::EvaluationState;
 use super::model_driver::ModelParticleDriver;
@@ -20,6 +20,7 @@ use crate::effects::RuntimeParticles;
 use crate::instances::PreparedModelRequest;
 use crate::layers::ModelOwnedRenderEntity;
 use crate::physics::PhysicsState;
+use bevy::camera::visibility::VisibilityClass;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::mesh::skinning::SkinnedMesh;
 use bevy::prelude::*;
@@ -213,6 +214,7 @@ pub(crate) fn populate_model_with_context(
                 mesh: draw.mesh_id,
                 material: draw.material_id,
                 pass: draw.pass,
+                purpose: draw.purpose,
                 lod: draw.lod,
             },
             ModelOwnedRenderEntity,
@@ -232,6 +234,15 @@ pub(crate) fn populate_model_with_context(
                     .unwrap_or(nodes[draw.node]),
             ),
         ));
+        if draw.purpose == DrawPurpose::ShadowOnly {
+            // Execute after the spawn bundle and Mesh3d's on-add hook. A class
+            // override in that bundle would be modified again by the hook.
+            entity.queue(|mut entity: EntityWorldMut| {
+                if let Some(mut visibility) = entity.get_mut::<VisibilityClass>() {
+                    DrawPurpose::ShadowOnly.configure_visibility(&mut visibility);
+                }
+            });
+        }
         if !draw.material.extension.casts_shadows() {
             entity.insert(NotShadowCaster);
         }

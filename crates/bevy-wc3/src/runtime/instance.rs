@@ -5,7 +5,7 @@ use super::super::lod::LodDefinition;
 use super::super::material::SurfaceAnimation;
 use super::super::pose::{EvaluatedPose, PoseContext};
 use super::super::transition::TransitionState;
-use super::super::{DrawSource, ModelMaterial, PreparedModel, SampledCamera};
+use super::super::{DrawPurpose, DrawSource, ModelMaterial, PreparedModel, SampledCamera};
 use super::evaluation::EvaluationState;
 use super::Playback;
 use crate::physics::PhysicsState;
@@ -38,6 +38,8 @@ pub struct ModelDraw {
     pub material: MaterialId,
     /// Pass ordinal in the selected material.
     pub pass: usize,
+    /// Camera surface or dedicated shadow-only geometry.
+    pub purpose: DrawPurpose,
     /// Authored geometry detail level; absent means shared across levels.
     pub lod: Option<u32>,
 }

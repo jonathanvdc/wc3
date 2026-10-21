@@ -16,8 +16,10 @@ use crate::{
     WorldLiquid, WorldPortal, WorldRegion, WorldSelection,
 };
 use bevy::camera::primitives::Aabb;
+use bevy::camera::visibility::VisibilityClass;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use wc3::model::systems::model_physics::Joint;
@@ -44,6 +46,30 @@ pub enum DrawSource {
     Draw(DrawId),
 }
 
+/// Render-view role of an authored geometry pass.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum DrawPurpose {
+    /// Ordinary camera color/prepasses, with material-controlled shadow casting.
+    #[default]
+    Surface,
+    /// Authored caster geometry excluded from camera color/depth/normal/motion passes.
+    ShadowOnly,
+}
+impl DrawPurpose {
+    /// Apply this role after inserting `Mesh3d`, whose hook adds its camera class.
+    ///
+    /// Other visibility classes, inherited visibility and render layers are retained.
+    /// Ordinary light-shadow visibility queries `Mesh3d` independently of this class.
+    /// Bevy's opt-in `NoCpuCulling` bypasses this routing and is unsupported for
+    /// shadow-only meshes. GPU mesh preprocessing can remain enabled.
+    /// `Surface` leaves the existing classes unchanged; apply the role again if
+    /// `Mesh3d` is removed and reinserted.
+    pub fn configure_visibility(self, visibility: &mut VisibilityClass) {
+        if self == Self::ShadowOnly {
+            visibility.retain(|class| *class != TypeId::of::<Mesh3d>());
+        }
+    }
+}
 #[derive(Clone)]
 pub(crate) struct RuntimeDraw<M> {
     pub(crate) instance: InstanceId,
@@ -53,6 +79,7 @@ pub(crate) struct RuntimeDraw<M> {
     pub(crate) mesh_state: MeshMaterialState,
     pub(crate) world_state: [u32; 4],
     pub(crate) pass: usize,
+    pub(crate) purpose: DrawPurpose,
     pub(crate) node: usize,
     pub(crate) skin: Option<usize>,
     pub(crate) lod: Option<u32>,
@@ -294,6 +321,7 @@ impl CompiledModel {
                     mesh_state: draw.mesh_state,
                     world_state: draw.world_state,
                     pass: draw.pass,
+                    purpose: draw.purpose,
                     node: draw.node,
                     skin: draw.skin,
                     lod: draw.lod,
