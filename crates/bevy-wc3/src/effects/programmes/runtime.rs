@@ -8,6 +8,7 @@ use crate::effects::age_sprites_gpu::{
 };
 use crate::effects::emission::EffectChange;
 use crate::effects::render::SortPolicy;
+use crate::effects::render::{effect_quad, EffectGeometry};
 use crate::effects::EffectFrame;
 use crate::layers::ModelOwnedRenderEntity;
 use bevy::camera::visibility::NoFrustumCulling;
@@ -181,7 +182,7 @@ impl RuntimeProgramParticles {
         meshes: &mut Assets<Mesh>,
         basis: Entity,
     ) -> ProgramInstances {
-        let quad = (!self.emitters.is_empty()).then(|| meshes.add(Rectangle::new(2., 2.)));
+        let quad = (!self.emitters.is_empty()).then(|| effect_quad(meshes));
         let states =
             self.emitters
                 .iter()
@@ -216,7 +217,7 @@ impl RuntimeProgramParticles {
                             style.unlit |= emitter.unlit;
                             let entity = commands
                                 .spawn((
-                                    Mesh3d(quad.as_ref().unwrap().clone()),
+                                    EffectGeometry(quad.as_ref().unwrap().clone()),
                                     ModelOwnedRenderEntity,
                                     AgeSpriteData {
                                         records: Default::default(),

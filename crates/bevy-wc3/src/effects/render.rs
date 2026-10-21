@@ -8,7 +8,9 @@ use bevy::ecs::system::{
 };
 use bevy::math::Affine3A;
 use bevy::mesh::VertexBufferLayout;
-use bevy::pbr::RenderMeshInstances;
+use bevy::pbr::MeshPipelineKey;
+#[path = "geometry.rs"]
+mod geometry;
 use bevy::prelude::*;
 use bevy::render::mesh::{allocator::MeshAllocator, RenderMesh, RenderMeshBufferInfo};
 use bevy::render::render_asset::RenderAssets;
@@ -29,6 +31,9 @@ use bevy::render::texture::GpuImage;
 use bevy::render::view::ExtractedView;
 use bevy::render::view::{RenderVisibleEntities, RetainedViewEntity};
 use bytemuck::{bytes_of, cast_slice, Pod};
+pub(crate) use geometry::{
+    effect_quad, EffectGeometry, EffectGeometryPlugin, ExtractedEffectGeometry,
+};
 use std::any::Any;
 use std::marker::PhantomData;
 use std::mem::take;
@@ -394,15 +399,30 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
     }
 }
 
-/// Reuse Bevy's per-view mesh selection, including render layers and visibility.
+/// Reuse native per-view procedural visibility, including render layers.
 pub(crate) fn effect_visible(visible: &RenderVisibleEntities, entity: MainEntity) -> bool {
-    visible.get::<Mesh3d>().is_some_and(|meshes| {
+    visible.get::<EffectGeometry>().is_some_and(|meshes| {
         meshes.entities_gpu_culling.contains_key(&entity)
             || meshes
                 .entities_cpu_culling
                 .binary_search_by_key(&entity, |(_, main)| *main)
                 .is_ok()
     })
+}
+
+/// Resolve immutable vertex/index geometry without creating a mesh uniform or preprocessing row.
+pub(crate) fn effect_mesh<'a>(
+    geometry: &ExtractedEffectGeometry,
+    meshes: &'a RenderAssets<RenderMesh>,
+    view_key: MeshPipelineKey,
+) -> Option<(&'a RenderMesh, MeshPipelineKey)> {
+    let mesh = meshes.get(geometry.mesh)?;
+    let key = view_key
+        | MeshPipelineKey::from_primitive_topology_and_strip_index(
+            mesh.primitive_topology(),
+            mesh.index_format(),
+        );
+    Some((mesh, key))
 }
 
 /// Both effect shaders bind a texture, sampler, uniform, and resident birth records.
@@ -464,34 +484,28 @@ pub(crate) struct DrawEffectInstances<B>(PhantomData<B>);
 impl<P: PhaseItem, I: Send + Sync + 'static> RenderCommand<P>
     for DrawEffectInstances<EffectBuffer<I>>
 {
-    type Param = (
-        SRes<RenderAssets<RenderMesh>>,
-        SRes<RenderMeshInstances>,
-        SRes<MeshAllocator>,
-    );
+    type Param = (SRes<RenderAssets<RenderMesh>>, SRes<MeshAllocator>);
     type ViewQuery = (Read<ExtractedView>, Read<RenderVisibleEntities>);
-    type ItemQuery = Read<EffectBuffer<I>>;
+    type ItemQuery = (Read<EffectBuffer<I>>, Read<ExtractedEffectGeometry>);
     fn render<'w>(
         item: &P,
         (view, visible): (&'w ExtractedView, &'w RenderVisibleEntities),
-        buffer: Option<&'w EffectBuffer<I>>,
-        (meshes, instances, allocator): SystemParamItem<'w, '_, Self::Param>,
+        item_data: Option<(&'w EffectBuffer<I>, &'w ExtractedEffectGeometry)>,
+        (meshes, allocator): SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        let Some(buffer) = buffer.filter(|buffer| buffer.draw.instances != 0) else {
+        let Some((buffer, geometry)) = item_data.filter(|(buffer, _)| buffer.draw.instances != 0)
+        else {
             return RenderCommandResult::Skip;
         };
         if !effect_visible(visible, item.main_entity()) {
             return RenderCommandResult::Skip;
         }
         let allocator = allocator.into_inner();
-        let Some(mesh_instance) = instances.render_mesh_queue_data(item.main_entity()) else {
+        let Some(mesh) = meshes.into_inner().get(geometry.mesh) else {
             return RenderCommandResult::Skip;
         };
-        let Some(mesh) = meshes.into_inner().get(mesh_instance.mesh_asset_id()) else {
-            return RenderCommandResult::Skip;
-        };
-        let Some(vertex) = allocator.mesh_vertex_slice(&mesh_instance.mesh_asset_id()) else {
+        let Some(vertex) = allocator.mesh_vertex_slice(&geometry.mesh) else {
             return RenderCommandResult::Skip;
         };
         pass.set_vertex_buffer(0, vertex.buffer.slice(..));
@@ -506,7 +520,7 @@ impl<P: PhaseItem, I: Send + Sync + 'static> RenderCommand<P>
                 index_format,
                 count,
             } => {
-                let Some(index) = allocator.mesh_index_slice(&mesh_instance.mesh_asset_id()) else {
+                let Some(index) = allocator.mesh_index_slice(&geometry.mesh) else {
                     return RenderCommandResult::Skip;
                 };
                 pass.set_index_buffer(index.buffer.slice(..), *index_format);

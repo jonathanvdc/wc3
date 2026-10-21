@@ -69,7 +69,11 @@ scene lighting, fog, and camera containment to the application.
 ## Effects
 
 The renderer keeps native emitter families distinct while sharing transport where
-possible. The effect guides describe simulation, playback, and resource needs:
+possible. Sprite and ribbon emitters share one immutable quad and participate
+in Bevy visibility and render layers through a procedural geometry component.
+Their resident records define the world geometry, so these emitters do not create
+ordinary mesh-instance uniforms. Model-particle child geometry uses the usual
+mesh pipeline. The effect guides describe simulation, playback, and resource needs:
 
 - [Model particles](prem.md) instantiate independent animated MDLX PREM and M2 geometry-model children. M2 emitter-template trails remain unsupported.
 - [Sprite particles](pre2.md) use GPU-generated heads/tails from immutable MDLX births or compact M2 age-driven samples.

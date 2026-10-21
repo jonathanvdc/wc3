@@ -3,6 +3,7 @@ use super::emission::{EffectChange, EmissionClock};
 use super::{EffectFrame, SpriteEmitter};
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::effects::blend::EffectBlend;
+use crate::effects::render::{effect_quad, EffectGeometry};
 use crate::effects::simulation::{EmissionPhase, EmissionRounding, EmitterRng, LiveRecords};
 use crate::effects::sprites::{
     ParticleEmitterUniform, ParticleInstance, ParticleInstances as SpriteInstances,
@@ -278,7 +279,7 @@ impl RuntimeAtlasParticles {
         meshes: &mut Assets<Mesh>,
         root: Entity,
     ) -> AtlasParticleInstances {
-        let quad = (!self.emitters.is_empty()).then(|| meshes.add(Rectangle::new(2., 2.)));
+        let quad = (!self.emitters.is_empty()).then(|| effect_quad(meshes));
         AtlasParticleInstances {
             states: self
                 .emitters
@@ -287,7 +288,7 @@ impl RuntimeAtlasParticles {
                     let entity = commands
                         .spawn((
                             ModelOwnedRenderEntity,
-                            Mesh3d(quad.as_ref().unwrap().clone()),
+                            EffectGeometry(quad.as_ref().unwrap().clone()),
                             SpriteInstances {
                                 records: Default::default(),
                                 live_indices: Default::default(),

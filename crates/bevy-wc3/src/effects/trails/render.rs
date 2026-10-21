@@ -4,7 +4,7 @@ use bevy::core_pipeline::core_3d::Transparent3d;
 use bevy::math::{Affine3A, Vec3A};
 use bevy::mesh::MeshVertexBufferLayoutRef;
 use bevy::pbr::{
-    MeshPipeline, MeshPipelineKey, MeshPipelineSystems, RenderMeshInstances, SetMeshViewBindGroup,
+    MeshPipeline, MeshPipelineKey, MeshPipelineSystems, SetMeshViewBindGroup,
     SetMeshViewBindingArrayBindGroup, ViewKeyCache,
 };
 use bevy::prelude::*;
@@ -26,9 +26,9 @@ use super::records::{
     segment_center, RibbonInstances, RibbonSection, RibbonSegment, RibbonUniform,
 };
 use crate::effects::render::{
-    effect_texture_layout, effect_vertex_layout, effect_visible, transparent_effect_draw,
-    DrawEffectInstances, EffectBuffer, PassResources, ResidentRecordBuffer, SortPolicy,
-    SortScratch,
+    effect_mesh, effect_texture_layout, effect_vertex_layout, effect_visible,
+    transparent_effect_draw, DrawEffectInstances, EffectBuffer, ExtractedEffectGeometry,
+    PassResources, ResidentRecordBuffer, SortPolicy, SortScratch,
 };
 
 pub(crate) struct RibbonRenderPlugin;
@@ -163,15 +163,19 @@ fn queue_ribbons(
     mut pipelines: ResMut<SpecializedMeshPipelines<RibbonPipeline>>,
     cache: Res<PipelineCache>,
     meshes: Res<RenderAssets<RenderMesh>>,
-    mesh_instances: Res<RenderMeshInstances>,
-    ribbons: Query<(Entity, &MainEntity, &RibbonInstances)>,
+    ribbons: Query<(
+        Entity,
+        &MainEntity,
+        &RibbonInstances,
+        &ExtractedEffectGeometry,
+    )>,
     mut phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
     views: Query<(&ExtractedView, &RenderVisibleEntities)>,
     view_keys: Res<ViewKeyCache>,
 ) {
     let draw = draws.read().id::<DrawRibbons>();
     let mut ordered: Vec<_> = ribbons.iter().collect();
-    ordered.sort_by_key(|(_, _, data)| (data.emitter.to_bits(), data.layer_index));
+    ordered.sort_by_key(|(_, _, data, _)| (data.emitter.to_bits(), data.layer_index));
     for (view, visible) in &views {
         let Some(phase) = phases.get_mut(&view.retained_view_entity) else {
             continue;
@@ -179,21 +183,13 @@ fn queue_ribbons(
         let Some(&view_key) = view_keys.get(&view.retained_view_entity) else {
             continue;
         };
-        for &(entity, main_entity, data) in &ordered {
+        for &(entity, main_entity, data, geometry) in &ordered {
             if data.live_indices.is_empty() || !effect_visible(visible, *main_entity) {
                 continue;
             }
-            let Some(mesh_instance) = mesh_instances.render_mesh_queue_data(*main_entity) else {
+            let Some((mesh, mesh_key)) = effect_mesh(geometry, &meshes, view_key) else {
                 continue;
             };
-            let Some(mesh) = meshes.get(mesh_instance.mesh_asset_id()) else {
-                continue;
-            };
-            let mesh_key = view_key
-                | MeshPipelineKey::from_primitive_topology_and_strip_index(
-                    mesh.primitive_topology(),
-                    mesh.index_format(),
-                );
             let Ok(id) = pipelines.specialize(
                 &cache,
                 &pipeline,

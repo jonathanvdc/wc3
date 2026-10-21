@@ -3,7 +3,7 @@ use bevy::render::view::visibility::RenderVisibleEntitiesClass;
 use std::any::TypeId;
 
 #[test]
-fn effect_selection_obeys_each_views_cpu_and_gpu_mesh_visibility() {
+fn effect_selection_obeys_each_views_procedural_visibility() {
     let mut world = World::new();
     let first: MainEntity = world.spawn_empty().id().into();
     let second: MainEntity = world.spawn_empty().id().into();
@@ -17,10 +17,10 @@ fn effect_selection_obeys_each_views_cpu_and_gpu_mesh_visibility() {
     let mut right = RenderVisibleEntities::default();
     let mut cpu = RenderVisibleEntitiesClass::default();
     cpu.update_cpu_culled_entities(&[(render_first, first)]);
-    left.classes.insert(TypeId::of::<Mesh3d>(), cpu);
+    left.classes.insert(TypeId::of::<EffectGeometry>(), cpu);
     let mut gpu = RenderVisibleEntitiesClass::default();
     gpu.entities_gpu_culling.insert(second, render_second);
-    right.classes.insert(TypeId::of::<Mesh3d>(), gpu);
+    right.classes.insert(TypeId::of::<EffectGeometry>(), gpu);
 
     assert!(effect_visible(&left, first));
     assert!(!effect_visible(&left, second));
@@ -43,7 +43,9 @@ fn cpu_visibility_membership_uses_main_world_identity() {
         (world.spawn_empty().id(), entities[4]),
     ]);
     let mut visible = RenderVisibleEntities::default();
-    visible.classes.insert(TypeId::of::<Mesh3d>(), meshes);
+    visible
+        .classes
+        .insert(TypeId::of::<EffectGeometry>(), meshes);
     for (index, entity) in entities.into_iter().enumerate() {
         assert_eq!(effect_visible(&visible, entity), index % 2 == 0);
     }

@@ -1,5 +1,5 @@
 use bevy::asset::{AssetApp, AssetPlugin};
-use bevy::camera::visibility::{RenderLayers, VisibilityPlugin, VisibleEntities};
+use bevy::camera::visibility::{RenderLayers, VisibilityClass, VisibilityPlugin, VisibleEntities};
 use bevy::ecs::world::CommandQueue;
 use bevy::image::ImagePlugin;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
@@ -8,7 +8,6 @@ use bevy::prelude::*;
 use bevy::render::view::NoIndirectDrawing;
 use bevy::shader::Shader;
 use bevy_wc3::{compile_model, spawn_model, ModelMaterial, SpriteEmitter, Wc3BevyPlugin};
-use std::any::TypeId;
 use wc3::model::{conversion::ImportOptions, io, profiles::Universal};
 
 fn app() -> App {
@@ -43,7 +42,7 @@ fn plugin_preserves_application_camera_preprocessing_choices() {
 }
 
 #[test]
-fn procedural_emitters_join_bevy_per_camera_mesh_visibility_and_render_layers() {
+fn procedural_emitters_join_native_per_camera_visibility_and_render_layers() {
     let mut app = app();
     particle_model(&mut app);
     let first_view = app
@@ -62,6 +61,7 @@ fn procedural_emitters_join_bevy_per_camera_mesh_visibility_and_render_layers() 
         .collect();
     assert!(!emitters.is_empty());
     for &emitter in &emitters {
+        assert!(!app.world().entity(emitter).contains::<Mesh3d>());
         assert!(visible(&app, first_view, emitter));
         assert!(!visible(&app, second_view, emitter));
         app.world_mut()
@@ -76,15 +76,18 @@ fn procedural_emitters_join_bevy_per_camera_mesh_visibility_and_render_layers() 
 }
 
 fn visible(app: &App, view: Entity, entity: Entity) -> bool {
+    let visible = app.world().get::<VisibleEntities>(view).unwrap();
     app.world()
-        .get::<VisibleEntities>(view)
-        .unwrap()
-        .get(TypeId::of::<Mesh3d>())
-        .contains(&entity)
+        .get::<VisibilityClass>(entity)
+        .is_some_and(|classes| {
+            classes
+                .iter()
+                .any(|class| visible.get(*class).contains(&entity))
+        })
 }
 
 #[test]
-fn ribbon_material_passes_join_bevy_per_view_mesh_visibility() {
+fn ribbon_material_passes_join_native_per_view_visibility() {
     use bevy_wc3::RibbonEmitter;
     let mut app = app();
     fixture_model(&mut app, include_str!("fixtures/ribbon_capture.mdl"));
@@ -92,7 +95,7 @@ fn ribbon_material_passes_join_bevy_per_view_mesh_visibility() {
     app.update();
     let passes: Vec<_> = app
         .world_mut()
-        .query_filtered::<(Entity, &ChildOf), With<Mesh3d>>()
+        .query_filtered::<(Entity, &ChildOf), With<VisibilityClass>>()
         .iter(app.world())
         .filter_map(|(entity, parent)| {
             app.world()

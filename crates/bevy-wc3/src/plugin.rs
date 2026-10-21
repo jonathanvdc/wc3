@@ -2,6 +2,7 @@
 use crate::assets::BlpImageLoader;
 use crate::effects::age_sprites_gpu::AgeSpriteRenderPlugin;
 use crate::effects::model_ownership::ModelParticleBirths;
+use crate::effects::render::EffectGeometryPlugin;
 use crate::effects::sprites::ParticleRenderPlugin;
 use crate::effects::trails::RibbonRenderPlugin;
 use crate::image_replacements::{refresh_image_replacements, ReplacementImages};
@@ -52,6 +53,7 @@ impl Plugin for Wc3BevyPlugin {
         app.init_resource::<LodSettings>();
         app.add_plugins((
             MaterialPlugin::<ModelMaterial>::default(),
+            EffectGeometryPlugin,
             ParticleRenderPlugin,
             AgeSpriteRenderPlugin,
             RibbonRenderPlugin,

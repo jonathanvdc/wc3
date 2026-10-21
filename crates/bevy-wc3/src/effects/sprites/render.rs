@@ -4,12 +4,11 @@ use bevy::core_pipeline::core_3d::Transparent3d;
 use bevy::math::{Affine3A, Vec3A};
 use bevy::mesh::MeshVertexBufferLayoutRef;
 use bevy::pbr::{
-    self, MeshInputUniform, MeshPipeline, MeshPipelineKey, MeshPipelineSystems, MeshUniform,
-    RenderMeshInstances, SetMeshViewBindGroup, SetMeshViewBindingArrayBindGroup, ViewKeyCache,
+    MeshPipeline, MeshPipelineKey, MeshPipelineSystems, SetMeshViewBindGroup,
+    SetMeshViewBindingArrayBindGroup, ViewKeyCache,
 };
 use bevy::prelude::*;
 use bevy::render::{
-    batching::gpu_preprocessing::BatchedInstanceBuffers,
     extract_component::ExtractComponentPlugin,
     mesh::RenderMesh,
     render_asset::RenderAssets,
@@ -26,9 +25,9 @@ use super::records::{ParticleEmitterUniform, ParticleInstance, ParticleInstances
 #[cfg(test)]
 use crate::effects::records::RecordRing;
 use crate::effects::render::{
-    effect_texture_layout, effect_vertex_layout, effect_visible, transparent_effect_draw,
-    DrawEffectInstances, EffectBuffer, PassResources, ResidentRecordBuffer, SortPolicy,
-    SortScratch,
+    effect_mesh, effect_texture_layout, effect_vertex_layout, effect_visible,
+    transparent_effect_draw, DrawEffectInstances, EffectBuffer, ExtractedEffectGeometry,
+    PassResources, ResidentRecordBuffer, SortPolicy, SortScratch,
 };
 
 pub(crate) struct ParticleRenderPlugin;
@@ -152,9 +151,12 @@ fn queue_particles(
     mut pipelines: ResMut<SpecializedMeshPipelines<ParticlePipeline>>,
     cache: Res<PipelineCache>,
     meshes: Res<RenderAssets<RenderMesh>>,
-    mesh_instances: Res<RenderMeshInstances>,
-    batched: Option<Res<BatchedInstanceBuffers<MeshUniform, MeshInputUniform>>>,
-    particles: Query<(Entity, &MainEntity, &ParticleInstances)>,
+    particles: Query<(
+        Entity,
+        &MainEntity,
+        &ParticleInstances,
+        &ExtractedEffectGeometry,
+    )>,
     mut phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
     views: Query<(&ExtractedView, &RenderVisibleEntities)>,
     view_keys: Res<ViewKeyCache>,
@@ -167,21 +169,13 @@ fn queue_particles(
         let Some(&view_key) = view_keys.get(&view.retained_view_entity) else {
             continue;
         };
-        for (entity, main_entity, data) in &particles {
+        for (entity, main_entity, data, geometry) in &particles {
             if data.live_indices.is_empty() || !effect_visible(visible, *main_entity) {
                 continue;
             }
-            let Some(mesh_instance) = mesh_instances.render_mesh_queue_data(*main_entity) else {
+            let Some((mesh, mesh_key)) = effect_mesh(geometry, &meshes, view_key) else {
                 continue;
             };
-            let Some(mesh) = meshes.get(mesh_instance.mesh_asset_id()) else {
-                continue;
-            };
-            let mesh_key = view_key
-                | MeshPipelineKey::from_primitive_topology_and_strip_index(
-                    mesh.primitive_topology(),
-                    mesh.index_format(),
-                );
             let Ok(id) = pipelines.specialize(
                 &cache,
                 &pipeline,
@@ -193,13 +187,7 @@ fn queue_particles(
             ) else {
                 continue;
             };
-            let center = pbr::get_mesh_instance_world_from_local(
-                *main_entity,
-                mesh_instance.current_uniform_index,
-                &mesh_instances,
-                batched.as_deref(),
-            )
-            .transform_point3(mesh.aabb_center);
+            let center = geometry.world_center;
             phase.add_transient(transparent_effect_draw(
                 entity,
                 *main_entity,

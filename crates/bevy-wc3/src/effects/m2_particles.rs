@@ -20,6 +20,7 @@ use super::ModelEmitter;
 use crate::child_coordinates::ChildCoordinates;
 use crate::child_models::{ChildModelBinding, ChildModelKey};
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
+use crate::effects::render::{effect_quad, EffectGeometry};
 use crate::layers::ModelOwnedRenderEntity;
 #[cfg(test)]
 use crate::mesh_attributes::EXTRA_TEXCOORD;
@@ -641,7 +642,7 @@ impl RuntimeM2Particles {
             .emitters
             .iter()
             .any(|emitter| emitter.model.is_none())
-            .then(|| meshes.add(Rectangle::new(2., 2.)));
+            .then(|| effect_quad(meshes));
         let emitters = self
             .emitters
             .iter()
@@ -665,7 +666,7 @@ impl RuntimeM2Particles {
                 } else {
                     commands
                         .spawn((
-                            Mesh3d(mesh.clone()),
+                            EffectGeometry(mesh.clone()),
                             ModelOwnedRenderEntity,
                             AgeSpriteData {
                                 records: Default::default(),

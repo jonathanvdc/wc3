@@ -8,6 +8,7 @@ use super::EffectFrame;
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::effects::blend::EffectBlend;
 use crate::effects::records::RingCursor;
+use crate::effects::render::{effect_quad, EffectGeometry};
 use crate::effects::simulation::{split_time, EmissionPhase, EmissionRounding, LiveRecords};
 use crate::effects::trails::{RibbonInstances, RibbonSection, RibbonSegment, RibbonUniform};
 use crate::layers::ModelOwnedRenderEntity;
@@ -288,7 +289,7 @@ impl RuntimeRibbons {
         meshes: &mut Assets<Mesh>,
         root: Entity,
     ) -> RibbonInstancesState {
-        let quad = (!self.emitters.is_empty()).then(|| meshes.add(Rectangle::new(2., 2.)));
+        let quad = (!self.emitters.is_empty()).then(|| effect_quad(meshes));
         RibbonInstancesState {
             emitters: self
                 .emitters
@@ -332,7 +333,7 @@ impl RuntimeRibbons {
                                 commands
                                     .spawn((
                                         ModelOwnedRenderEntity,
-                                        Mesh3d(quad.as_ref().unwrap().clone()),
+                                        EffectGeometry(quad.as_ref().unwrap().clone()),
                                         render,
                                         Transform::default(),
                                         Visibility::default(),
