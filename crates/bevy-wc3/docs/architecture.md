@@ -78,8 +78,17 @@ draws while retaining resident capacity, and removed views release their order
 buffers. Ring lineage distinguishes reset simulations from older snapshots with
 the same write cursor.
 
-Model particles create independent child models with explicit cleanup when their
-owner disappears.
+Model particles create ordinary independently animated child models. Their
+linked lifetime ownership is independent of world-space Transform parenting.
+`runtime/model_driver.rs` evaluates only roots with model-particle emitters and
+their automatic actor subtrees before propagation. It orders detached ownership
+and mounted dependencies explicitly. `NodePoseSource` identifies each node's
+owning rig and pose index, so sparse current-frame resolution uses the complete
+posed matrix once instead of recomposing informational node Transforms. The
+ordinary and targeted paths share the same factory and pose/material evaluator;
+owned actors are excluded from the global pose pass and do not integrate physics
+twice. Ready newborns populate within that early step, while pending requests
+retain the same checked lifetime.
 Population, birth, and long-update budgets bound work and expose omitted-work
 counters. The focused [effect guides](README.md#rendering-reference) describe their
 semantics and limits.
@@ -93,11 +102,12 @@ application system.
 | Schedule | Set | Contract |
 | --- | --- | --- |
 | `Update` | `SpawnInstances` | Populate ready requests and replace invalidated definitions. |
-| `Update` | `AdvanceAnimation` | Synchronize mount controls, advance clocks, and update existing model-particle playback. |
+| `Update` | `AdvanceAnimation` | Synchronize mount controls and advance clocks. |
 | `PostUpdate` | `AnimateCameras` | Sample bound views before Bevy projection updates and node poses. |
 | `PostUpdate` | `EvaluateNodePoses` | Evaluate attachment restarts, poses, secondary motion, materials, and scene features before propagation. |
+| `PostUpdate` | `SimulateModelParticles` | Project model-particle sources, populate ready births, and evaluate owned actor subtrees before propagation. |
 | `PostUpdate` | `SelectLod` | Select geometry after camera updates and transform propagation, before visibility. |
-| `PostUpdate` | `SimulateEffects` | Sample births and advance effects after propagation. |
+| `PostUpdate` | `SimulateEffects` | Advance sprite-only roots and publish remaining effects from already observed model-particle clocks. |
 | `PostUpdate` | `DispatchEvents` | Emit crossed events with their occurrence poses after propagation. |
 
 Move roots and camera parents before `AnimateCameras` when using authored camera

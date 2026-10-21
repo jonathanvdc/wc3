@@ -4,7 +4,11 @@ use super::runtime::{ModelDraw, ModelNode};
 use super::world::WorldLiquidSurface;
 use super::{ModelAsset, ModelInstance, ModelRig, Playback};
 use crate::child_models::{ChildModelBinding, ChildModelKey};
+use crate::effects::model_children::ParticleModelSubtree;
+use crate::effects::model_ownership::queue_model_birth;
 use crate::layers::ModelOwnedRenderEntity;
+use bevy::ecs::query::QueryFilter;
+use bevy::ecs::system::SystemParam;
 use bevy::math::{Quat, Vec3};
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -333,6 +337,7 @@ impl RuntimeFeatures {
         commands: &mut Commands,
         nodes: &HashMap<NodeId, Entity>,
         parents: &HashMap<FeatureId, Entity>,
+        owned: bool,
     ) -> RuntimeFeatureInstances {
         let mut instances = RuntimeFeatureInstances::default();
         for (feature, definition, origin) in &self.lights {
@@ -417,6 +422,9 @@ impl RuntimeFeatures {
                 ChildOf(parent),
             ));
             if let (Some(model), Some(placement)) = (&definition.model, definition.placement) {
+                if owned {
+                    entity.insert(ParticleModelSubtree);
+                }
                 entity.insert((
                     ModelInstance(model.clone()),
                     ChildCoordinates {
@@ -425,7 +433,11 @@ impl RuntimeFeatures {
                     },
                 ));
             }
-            instances.attachments.push(entity.id());
+            let entity = entity.id();
+            if owned && definition.model.is_some() && definition.placement.is_some() {
+                queue_model_birth(commands, entity);
+            }
+            instances.attachments.push(entity);
         }
         instances
     }
@@ -700,61 +712,98 @@ mod tests {
 #[cfg(test)]
 mod imported_light_tests {}
 
-type AttachmentParentData = (&'static ModelRig, &'static Playback);
+type AttachmentParentData = (Entity, &'static ModelRig, &'static Playback);
 type AttachmentChildData = (
     &'static mut AttachmentState,
-    &'static mut Playback,
+    Option<&'static mut Playback>,
     &'static mut Visibility,
 );
 
-/// Sample parent activation before child pose evaluation, then apply restarts.
-pub(crate) fn restart_attachments(
-    mut queries: ParamSet<(Query<AttachmentParentData>, Query<AttachmentChildData>)>,
-    mut pending: Local<Vec<(Entity, f32, AttachmentClock)>>,
-) {
-    pending.clear();
-    for (instance, playback) in &queries.p0() {
-        let model = instance.model();
-        if model.features.attachments.is_empty() {
-            continue;
-        }
-        let Ok(selection) = playback.selection() else {
-            continue;
-        };
-        let Ok(sample) = model.animation.sample(selection) else {
-            continue;
-        };
-        for (definition, entity) in model
-            .features
-            .attachments
-            .iter()
-            .zip(&instance.feature_instances().attachments)
+/// Shared activation/restart sampling for ordinary and owner-ordered model roots.
+#[derive(SystemParam)]
+pub(crate) struct AttachmentClocks<'w, 's, F: QueryFilter + 'static = ()> {
+    queries: ParamSet<
+        'w,
+        's,
+        (
+            Query<'static, 'static, AttachmentParentData, F>,
+            Query<'static, 'static, AttachmentChildData>,
+        ),
+    >,
+    pending: Local<'s, Vec<(Entity, f32, AttachmentClock)>>,
+}
+pub(crate) type OwnedAttachmentClocks<'w, 's> =
+    AttachmentClocks<'w, 's, With<ParticleModelSubtree>>;
+impl<F: QueryFilter + 'static> AttachmentClocks<'_, '_, F> {
+    /// Sample the current parent clock before its pose evaluation overwrites activation state.
+    pub(crate) fn restart(&mut self, root: Entity) {
+        self.pending.clear();
         {
-            let activation = definition.visibility(&sample);
-            pending.push((
-                *entity,
-                activation,
-                AttachmentClock {
-                    clip: playback.clip,
-                    time: playback.clip_time,
-                },
-            ));
+            let parents = self.queries.p0();
+            let Ok((_, instance, playback)) = parents.get(root) else {
+                return;
+            };
+            let model = instance.model();
+            if model.features.attachments.is_empty() {
+                return;
+            }
+            let Ok(selection) = playback.selection() else {
+                return;
+            };
+            let Ok(sample) = model.animation.sample(selection) else {
+                return;
+            };
+            for (definition, entity) in model
+                .features
+                .attachments
+                .iter()
+                .zip(&instance.feature_instances().attachments)
+            {
+                self.pending.push((
+                    *entity,
+                    definition.visibility(&sample),
+                    AttachmentClock {
+                        clip: playback.clip,
+                        time: playback.clip_time,
+                    },
+                ));
+            }
+        }
+        let mut attachments = self.queries.p1();
+        for &(entity, activation, clock) in self.pending.iter() {
+            let Ok((mut point, playback, mut visibility)) = attachments.get_mut(entity) else {
+                continue;
+            };
+            if let Some(mut playback) = playback {
+                observe_attachment_clock(&mut point, &mut playback, activation, clock);
+            } else {
+                // A queued model request has no clock yet; retain activation now
+                // so its first ready population cannot flash a hidden attachment.
+                point.clock = Some(clock);
+                point.visibility = activation;
+            }
+            let next = if activation > 0. {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+            if *visibility != next {
+                *visibility = next;
+            }
         }
     }
-    let mut attachments = queries.p1();
-    for &(entity, activation, clock) in pending.iter() {
-        let Ok((mut point, mut playback, mut visibility)) = attachments.get_mut(entity) else {
-            continue;
-        };
-        observe_attachment_clock(&mut point, &mut playback, activation, clock);
-        let next_visibility = if activation > 0. {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
-        if *visibility != next_visibility {
-            *visibility = next_visibility;
-        }
+}
+
+/// Ordinary roots sample activation before child pose evaluation.
+/// Particle-owned roots use the same operation after their current clocks are projected.
+pub(crate) fn restart_attachments(
+    mut clocks: AttachmentClocks<'_, '_, Without<ParticleModelSubtree>>,
+    mut roots: Local<Vec<Entity>>,
+) {
+    roots.clear();
+    roots.extend(clocks.queries.p0().iter().map(|(entity, _, _)| entity));
+    for &root in roots.iter() {
+        clocks.restart(root);
     }
 }
 

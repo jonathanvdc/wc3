@@ -1,7 +1,7 @@
 //! Independently rigged rigid equipment mounted beneath a host's animated nodes.
 use super::Playback;
 use crate::child_coordinates::ChildCoordinates;
-use crate::effects::model_particles::ModelParticleChild;
+use crate::effects::model_children::ModelParticleChild;
 use crate::events::EventTraversal;
 use crate::physics::PhysicsSimulation;
 use crate::transition::TransitionRequest;
@@ -412,7 +412,7 @@ mod camera_tests {
 mod activation_tests {
     use super::super::animate_instances;
     use super::*;
-    use crate::effects::model_particles::hierarchy_visible;
+    use crate::effects::model_children::hierarchy_visible;
     use crate::{
         compile_model, spawn_model, AttachmentState, ModelAttachment, ModelMaterial, ModelPart,
         ModelRig, PartBinding,

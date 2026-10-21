@@ -33,6 +33,7 @@ fn emitter(slot_values: &mut SlotValues) -> Emitter {
         spline: Vec::new(),
         bones: None,
         flags,
+        model: None,
         drag: 0.,
         wind: Vec3::ZERO,
         inherit_velocity: 0.,
@@ -135,6 +136,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         births: vec![birth],
         order: Vec::new(),
         age_appearances: Vec::new(),
+        models: None,
         fraction: 0.,
         ordinal: 0,
         previous_node: Mat4::IDENTITY,
@@ -258,11 +260,11 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
     let mut query_state = world.query::<&mut SpriteEmitter>();
     let mut materials = Assets::<ModelMaterial>::default();
     emitter.rate = emitter.speed;
-    let runtime = RuntimeAgeSprites {
+    let runtime = RuntimeM2Particles {
         emitters: vec![emitter],
         ..SlotConstruct::construct(&mut slot_values)
     };
-    let mut instances = AgeSpriteInstances {
+    let mut instances = M2ParticleInstances {
         emitters: vec![state],
         previous_time: Some(0.),
         ..SlotConstruct::construct(&mut slot_values)
@@ -382,6 +384,7 @@ fn world_particles_follow_only_translation_after_their_birth() {
         births: vec![prior_birth],
         order: Vec::new(),
         age_appearances: Vec::new(),
+        models: None,
         fraction: 0.,
         ordinal: 1,
         previous_node: Mat4::IDENTITY,
@@ -389,11 +392,11 @@ fn world_particles_follow_only_translation_after_their_birth() {
         dropped: 0,
         skipped_seconds: 0.,
     };
-    let runtime = RuntimeAgeSprites {
+    let runtime = RuntimeM2Particles {
         emitters: vec![emitter],
         ..SlotConstruct::construct(&mut slot_values)
     };
-    let mut instances = AgeSpriteInstances {
+    let mut instances = M2ParticleInstances {
         emitters: vec![state],
         previous_time: Some(0.),
         previous_basis: Some(Mat4::IDENTITY),
@@ -673,6 +676,7 @@ fn gpu_live_samples_preserve_cpu_geometry_across_views_and_coordinate_frames() {
         passes: Vec::new(),
         births: vec![birth],
         age_appearances: Vec::new(),
+        models: None,
         order: Vec::new(),
         fraction: 0.,
         ordinal: 0,
@@ -836,6 +840,7 @@ fn benchmark_compact_samples_against_cpu_corner_transport() {
         passes: Vec::new(),
         births,
         age_appearances: Vec::new(),
+        models: None,
         order: Vec::new(),
         fraction: 0.,
         ordinal: 0,
@@ -938,6 +943,7 @@ fn implosion_state(births: Vec<Birth>) -> EmitterInstance {
         passes: Vec::new(),
         births,
         age_appearances: Vec::new(),
+        models: None,
         order: Vec::new(),
         fraction: 0.,
         ordinal: 0,
@@ -1099,7 +1105,7 @@ fn implosion_long_update_reports_omitted_time_once_per_emitter() {
         node_visible: &[true],
         basis_world: Mat4::IDENTITY,
     };
-    let runtime = RuntimeAgeSprites {
+    let runtime = RuntimeM2Particles {
         emitters: vec![emitter],
         ..Default::default()
     };
@@ -1113,7 +1119,7 @@ fn implosion_long_update_reports_omitted_time_once_per_emitter() {
     for _ in clock.by_ref() {}
     for population in [4, MAX_PARTICLES] {
         let state = implosion_state(vec![birth.clone(); population]);
-        let mut instances = AgeSpriteInstances {
+        let mut instances = M2ParticleInstances {
             emitters: vec![state],
             previous_time: Some(0.),
             previous_basis: Some(Mat4::IDENTITY),
@@ -1189,7 +1195,7 @@ fn opaque_txac_selectors_do_not_disable_known_multi_texture_controls() {
                 model
                     .edit(|builder| builder.set_feature(feature, changed))
                     .unwrap();
-                let compiled = RuntimeAgeSprites::compile(
+                let compiled = RuntimeM2Particles::compile(
                     &model,
                     &node_indices,
                     &TextureImages::default(),
@@ -1246,7 +1252,7 @@ fn refraction_has_an_explicit_diagnostic_without_disabling_scene_fog() {
         .enumerate()
         .map(|(index, (id, _))| (id, index))
         .collect();
-    let compiled = RuntimeAgeSprites::compile(
+    let compiled = RuntimeM2Particles::compile(
         &model,
         &node_indices,
         &TextureImages::default(),
@@ -1372,7 +1378,7 @@ fn disabled_geometry_keeps_m2_simulation_and_statistics_without_live_records() {
         .enumerate()
         .map(|(index, (id, _))| (id, index))
         .collect();
-    let runtime = RuntimeAgeSprites::compile(
+    let runtime = RuntimeM2Particles::compile(
         &model,
         &node_indices,
         &TextureImages::default(),
@@ -1550,7 +1556,7 @@ fn authored_sort_flag_selects_transport_policy_without_unknown_flag_diagnostic()
             .enumerate()
             .map(|(i, (id, _))| (id, i))
             .collect();
-        let runtime = RuntimeAgeSprites::compile(
+        let runtime = RuntimeM2Particles::compile(
             &model,
             &indices,
             &TextureImages::default(),

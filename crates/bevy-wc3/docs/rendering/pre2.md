@@ -137,9 +137,9 @@ composition flags; they do not disable the supported multi-texture path. The
 refraction flag selects a scene-color postprocess only when multi-texture is
 inactive. This postprocess has no interpreter in the current Bevy pipeline;
 those emitters retain their ordinary primary texture with a diagnostic. Texture
-rotation programmes, native keyed squirt emission, collisions,
-external model particles and child emitters still require additional
-interpretation or application integration.
+rotation programmes, native keyed squirt emission, collisions, and pooled child
+emitters still require additional interpretation or application integration.
+M2 geometry-model particles use the separate [model-particle path](prem.md).
 
 ## Budgets and limits
 

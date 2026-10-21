@@ -8,7 +8,9 @@ use bevy::transform::TransformSystems;
 ///
 /// `SpawnInstances`, `BindTextures`, `AdvanceAnimation`, and `AnimateInstances`
 /// run in `Update`. Spawning precedes the other sets; animation advances before
-/// instance animation. Texture binding updates may run alongside animation.
+/// the `AnimateInstances` application hook. Authored pose, material, and feature
+/// sampling occurs later in `PostUpdate`. Texture binding updates may run
+/// alongside clock advancement.
 ///
 /// The remaining sets run in `PostUpdate`: cameras precede node poses and model particles,
 /// both precede transform propagation, and quad particles/ribbons and event
@@ -22,13 +24,15 @@ pub enum Wc3Systems {
     BindTextures,
     /// Synchronizes mounted equipment and advances playback clocks in `Update`.
     AdvanceAnimation,
-    /// Samples materials, lights, attachments, and child-particle animation in `Update`.
+    /// Application hook after clock advancement in `Update`; authored sampling
+    /// occurs in the PostUpdate pose and model-particle stages.
     AnimateInstances,
     /// Plays authored views on bound application cameras in `PostUpdate`.
     AnimateCameras,
     /// Evaluates animation and optional secondary motion before propagation.
     EvaluateNodePoses,
-    /// Spawns and advances Classic model particles before transform propagation.
+    /// Advances MDLX and M2 model-particle sources, then samples their owned
+    /// actor subtrees and ready births before transform propagation.
     SimulateModelParticles,
     /// Samples quad-particle births and ribbon sections after transform propagation.
     SimulateEffects,

@@ -113,7 +113,6 @@ pub use world::{
 };
 
 pub(crate) use camera::animate_cameras;
-pub(crate) use effects::synchronize_model_particles;
 pub(crate) use features::restart_attachments;
 pub(crate) use instances::{invalidate_models, spawn_loaded_models, PreparedModelCache};
 pub(crate) use lod::update_lod;

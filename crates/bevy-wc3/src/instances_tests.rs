@@ -584,3 +584,65 @@ fn categories_follow_only_authored_owners_and_nearest_category_wins() {
         Some(&child_image)
     );
 }
+
+#[test]
+fn targeted_ready_factory_populates_only_requested_particle_and_keeps_its_current_age() {
+    use bevy::ecs::system::SystemState;
+    use wc3::model::Clip;
+
+    let mut app = app();
+    let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
+    let clip = builder.add_clip(Clip::named("first")).unwrap();
+    builder.add_named_node("root").unwrap();
+    let values = SlotValues::default();
+    builder.import_values(&values).unwrap();
+    let model = builder.finish().unwrap();
+    let asset = ModelAsset {
+        compiled: compile_model(&model, |_| None).unwrap(),
+        images: HashMap::new(),
+        unresolved_images: Vec::new(),
+    };
+    let handle = app
+        .world_mut()
+        .resource_mut::<Assets<ModelAsset>>()
+        .add(asset);
+    let owner = app.world_mut().spawn_empty().id();
+    let particle = app
+        .world_mut()
+        .spawn((
+            ModelInstance(handle.clone()),
+            ModelParticleChild {
+                root: owner,
+                birth: 0.,
+                lifetime: 1.,
+                visible: true,
+                first_clip_pending: true,
+            },
+            Playback {
+                clip_time: 0.3,
+                shared_time: 0.3,
+                paused: true,
+                ..Default::default()
+            },
+        ))
+        .id();
+    let unrelated = app.world_mut().spawn(ModelInstance(handle)).id();
+    let mut factory = SystemState::<OwnedModelFactory>::new(app.world_mut());
+    factory.get_mut(app.world_mut()).unwrap().populate(particle);
+    factory.apply(app.world_mut());
+    assert!(app.world().get::<ModelRig>(particle).is_some());
+    assert!(app.world().get::<ParticleModelSubtree>(particle).is_some());
+    assert!(app.world().get::<ModelInstance>(particle).is_none());
+    assert!(
+        !app.world()
+            .get::<ModelParticleChild>(particle)
+            .unwrap()
+            .first_clip_pending
+    );
+    let playback = app.world().get::<Playback>(particle).unwrap();
+    assert_eq!(playback.clip, Some(clip));
+    assert_eq!((playback.clip_time, playback.shared_time), (0.3, 0.3));
+    assert!(playback.paused);
+    assert!(app.world().get::<ModelRig>(unrelated).is_none());
+    assert!(app.world().get::<ModelInstance>(unrelated).is_some());
+}

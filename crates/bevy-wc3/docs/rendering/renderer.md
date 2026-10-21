@@ -71,7 +71,7 @@ scene lighting, fog, and camera containment to the application.
 The renderer keeps native emitter families distinct while sharing transport where
 possible. The effect guides describe simulation, playback, and resource needs:
 
-- [Model particles](prem.md) instantiate independent animated child models.
+- [Model particles](prem.md) instantiate independent animated MDLX PREM and M2 geometry-model children. M2 emitter-template trails remain unsupported.
 - [Sprite particles](pre2.md) use GPU-generated heads/tails from immutable MDLX births or compact M2 age-driven samples.
   Billboards and draw ordering follow each view independently.
 - [Ribbons](ribbons.md) retain birth-time cross sections and generate connected geometry on the GPU.

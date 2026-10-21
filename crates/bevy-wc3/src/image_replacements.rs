@@ -1,6 +1,6 @@
 //! Instance-local image sources and immutable request interpretation variants.
 use crate::child_coordinates::ChildCoordinates;
-use crate::effects::model_particles::ModelParticleChild;
+use crate::effects::model_children::ModelParticleChild;
 use crate::textures::{ImageKey, TextureRequestKey, TextureRole};
 use crate::{ModelAsset, ModelInstance, ModelSource, PreparedModel};
 use bevy::asset::{AssetEvent, AssetId};

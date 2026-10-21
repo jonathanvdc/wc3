@@ -1,5 +1,5 @@
 //! Render-layer inheritance limited to entities owned by a model instance.
-use crate::effects::model_particles::ModelParticleChild;
+use crate::effects::model_children::ModelParticleChild;
 use crate::ModelRig;
 use bevy::camera::visibility::RenderLayers;
 use bevy::ecs::change_detection::Tick;

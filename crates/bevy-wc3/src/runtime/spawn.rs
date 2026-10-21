@@ -7,10 +7,15 @@ use super::super::pose::{
 use super::super::skin_bounds::SkinBounds;
 use super::super::transition::TransitionState;
 use super::super::{ModelMaterial, PreparedModel, WorldLiquidSurface};
+use super::current_affine::NodePoseSource;
 use super::evaluation::EvaluationState;
+use super::model_driver::ModelParticleDriver;
 use super::mounts::MountedModel;
 use super::{ModelDraw, ModelNode, ModelRig, Playback, PlaybackError, PoseOverrides};
 use crate::bounds::transform_bounds;
+use crate::effects::model_children::ParticleModelSubtree;
+use crate::effects::model_ownership::queue_model_birth;
+use crate::effects::RuntimeParticles;
 use crate::layers::ModelOwnedRenderEntity;
 use crate::physics::PhysicsState;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
@@ -44,6 +49,34 @@ pub(crate) fn populate_model(
     model: &PreparedModel,
     root: Entity,
 ) {
+    populate_model_with_context(
+        commands,
+        meshes,
+        materials,
+        model,
+        root,
+        false,
+        Playback::default(),
+    );
+}
+
+pub(crate) fn populate_model_with_context(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<ModelMaterial>,
+    model: &PreparedModel,
+    root: Entity,
+    owned: bool,
+    initial_playback: Playback,
+) {
+    if owned {
+        commands.entity(root).insert(ParticleModelSubtree);
+    }
+    if model.particles.has_model_actors() {
+        commands.entity(root).insert(ModelParticleDriver::default());
+    } else {
+        commands.entity(root).remove::<ModelParticleDriver>();
+    }
     let basis_entity = commands
         .spawn((
             Name::new("Model coordinate frame"),
@@ -52,9 +85,14 @@ pub(crate) fn populate_model(
             ChildOf(root),
         ))
         .id();
-    let particles = model
+    let mut particles = model
         .particles
         .spawn(commands, meshes, materials, basis_entity);
+    if owned {
+        if let Ok(selection) = initial_playback.selection() {
+            RuntimeParticles::start_owned_clock(&mut particles, selection);
+        }
+    }
     let mut nodes = Vec::with_capacity(model.nodes.len());
     let mut poses = vec![Mat4::IDENTITY; model.nodes.len()];
     let mut evaluated = vec![EvaluatedPose::default(); model.nodes.len()];
@@ -77,6 +115,7 @@ pub(crate) fn populate_model(
                 .spawn((
                     Name::new(node.name.clone()),
                     ModelNode { id: node.id },
+                    NodePoseSource { rig: root, index },
                     if hierarchical(node) {
                         local_transform(node.rest)
                     } else {
@@ -106,9 +145,10 @@ pub(crate) fn populate_model(
         .map(|(i, node)| (node.id, nodes[i]))
         .collect();
     let world_parents = model.world.spawn_gates(commands, root, &feature_nodes);
-    let feature_instances = model
-        .features
-        .spawn(commands, &feature_nodes, &world_parents.features);
+    let feature_instances =
+        model
+            .features
+            .spawn(commands, &feature_nodes, &world_parents.features, owned);
     let lod = model
         .draws
         .iter()
@@ -256,7 +296,38 @@ pub(crate) fn populate_model(
             .rest_bounds
             .map(|bounds| transform_bounds(bounds, inverse_basis));
         child_model.basis = Transform::IDENTITY;
-        let child = spawn_model(commands, meshes, materials, &child_model, mount.transform);
+        let child = if owned {
+            let child = commands
+                .spawn((Name::new("Model"), mount.transform, Visibility::default()))
+                .id();
+            let mut playback = child_model
+                .clips
+                .first()
+                .map_or_else(Playback::default, |(clip, _)| Playback::for_clip(*clip));
+            playback.speed = initial_playback.speed;
+            playback.paused = initial_playback.paused;
+            playback.driving_camera = initial_playback.driving_camera;
+            if let Some(clip) = initial_playback
+                .clip
+                .and_then(|clip| mount.clips.get(&clip).copied())
+            {
+                playback = initial_playback.clone();
+                playback.clip = Some(clip);
+            }
+            populate_model_with_context(
+                commands,
+                meshes,
+                materials,
+                &child_model,
+                child,
+                true,
+                playback,
+            );
+            queue_model_birth(commands, child);
+            child
+        } else {
+            spawn_model(commands, meshes, materials, &child_model, mount.transform)
+        };
         mounted_roots.push(child);
         let parent = mount
             .socket
@@ -271,8 +342,10 @@ pub(crate) fn populate_model(
                 inherited_from: None,
             },
         ));
-        if let Some((clip, _)) = child_model.clips.first() {
-            commands.entity(child).insert(Playback::for_clip(*clip));
+        if !owned {
+            if let Some((clip, _)) = child_model.clips.first() {
+                commands.entity(child).insert(Playback::for_clip(*clip));
+            }
         }
     }
     commands.entity(root).insert((
@@ -298,7 +371,7 @@ pub(crate) fn populate_model(
         },
         Playback {
             lod,
-            ..Default::default()
+            ..initial_playback
         },
         PlaybackError::default(),
         EventDispatchStats::default(),

@@ -1,18 +1,21 @@
 //! Registration and scheduling for the Universal renderer.
 use crate::assets::BlpImageLoader;
 use crate::effects::age_sprites_gpu::AgeSpriteRenderPlugin;
+use crate::effects::model_ownership::ModelParticleBirths;
 use crate::effects::sprites::ParticleRenderPlugin;
 use crate::effects::trails::RibbonRenderPlugin;
 use crate::image_replacements::{refresh_image_replacements, ReplacementImages};
 use crate::layers::synchronize_model_layers;
-use crate::runtime::{publish_affine_poses, synchronize_model_cameras, synchronize_mounted_models};
+use crate::runtime::{
+    publish_affine_poses, simulate_model_particles, synchronize_model_cameras,
+    synchronize_mounted_models,
+};
 use crate::schedule::{configure, Wc3Systems};
 use crate::{
     advance_animation, animate_cameras, animate_instances, apply_lod_visibility,
     apply_world_selection, dispatch_events, invalidate_models, restart_attachments,
-    simulate_particles, spawn_loaded_models, synchronize_model_particles, update_lod,
-    update_skin_bounds, AssetSettings, LodSettings, ModelAsset, ModelEvent, ModelLoader,
-    ModelMaterial, PreparedModelCache,
+    simulate_particles, spawn_loaded_models, update_lod, update_skin_bounds, AssetSettings,
+    LodSettings, ModelAsset, ModelEvent, ModelLoader, ModelMaterial, PreparedModelCache,
 };
 use bevy::asset::embedded_asset;
 use bevy::camera::visibility::VisibilitySystems;
@@ -44,6 +47,7 @@ impl Plugin for Wc3BevyPlugin {
         app.register_asset_loader(ModelLoader::new(resolver));
         app.init_asset_loader::<BlpImageLoader>();
         app.init_resource::<PreparedModelCache>();
+        app.init_resource::<ModelParticleBirths>();
         app.init_resource::<ReplacementImages>();
         app.init_resource::<LodSettings>();
         app.add_plugins((
@@ -66,11 +70,7 @@ impl Plugin for Wc3BevyPlugin {
         );
         app.add_systems(
             Update,
-            (
-                synchronize_mounted_models,
-                advance_animation,
-                synchronize_model_particles,
-            )
+            (synchronize_mounted_models, advance_animation)
                 .chain()
                 .in_set(Wc3Systems::AdvanceAnimation),
         );
@@ -87,6 +87,10 @@ impl Plugin for Wc3BevyPlugin {
             )
                 .chain()
                 .in_set(Wc3Systems::EvaluateNodePoses),
+        );
+        app.add_systems(
+            PostUpdate,
+            simulate_model_particles.in_set(Wc3Systems::SimulateModelParticles),
         );
         app.add_systems(
             PostUpdate,

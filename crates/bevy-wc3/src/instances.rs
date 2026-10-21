@@ -1,9 +1,9 @@
 //! Asset-backed instance requests and shared GPU preparation.
 use super::bounds::transform_bounds;
 use super::child_coordinates::ChildCoordinates;
-use super::effects::model_particles::ModelParticleChild;
+use super::effects::model_children::{ModelParticleChild, ParticleModelSubtree};
 use super::events::EventClocks;
-use super::runtime::populate_model;
+use super::runtime::populate_model_with_context;
 use super::{ModelAsset, ModelMaterial, ModelRig, Playback, PoseOverrides, PreparedModel};
 use crate::image_replacements::{effective_replacements, ImageOwners, ReplacementImages};
 use bevy::asset::{
@@ -313,6 +313,8 @@ type ModelRequests<'world, 'state> = Query<
         Option<&'static ChildCoordinates>,
         Option<&'static PoseOverrides>,
         Option<&'static ModelInstanceError>,
+        Has<ParticleModelSubtree>,
+        Option<&'static ModelParticleChild>,
     ),
 >;
 
@@ -328,37 +330,53 @@ pub(crate) struct LoaderResources<'w> {
     images: ResMut<'w, Assets<Image>>,
 }
 
-pub(crate) fn spawn_loaded_models(
-    mut commands: Commands,
-    requests: ModelRequests<'_, '_>,
-    hierarchy: ModelHierarchy<'_, '_>,
-    owners: ImageOwners<'_, '_>,
-    resources: LoaderResources<'_>,
-) {
-    let LoaderResources {
-        server,
-        assets,
-        mut meshes,
-        mut binds,
-        mut materials,
-        mut cache,
-        mut image_cache,
-        mut images,
-    } = resources;
-    for (root, request, playback, previous, placement, overrides, failure) in &requests {
+/// The ordinary loader and same-frame particle factory share one checked population path.
+#[derive(SystemParam)]
+pub(crate) struct OwnedModelFactory<'w, 's> {
+    commands: Commands<'w, 's>,
+    requests: ModelRequests<'w, 's>,
+    hierarchy: ModelHierarchy<'w, 's>,
+    owners: ImageOwners<'w, 's>,
+    resources: LoaderResources<'w>,
+}
+impl OwnedModelFactory<'_, '_> {
+    /// Populate only this requested root; pending assets leave its request intact.
+    pub(crate) fn populate(&mut self, root: Entity) {
+        let Self {
+            commands,
+            requests,
+            hierarchy,
+            owners,
+            resources,
+        } = self;
+        let Ok((_, request, playback, previous, placement, overrides, failure, owned, particle)) =
+            requests.get(root)
+        else {
+            return;
+        };
+        let LoaderResources {
+            server,
+            assets,
+            meshes,
+            binds,
+            materials,
+            cache,
+            image_cache,
+            images,
+        } = resources;
         // Ancestor replacement may despawn this renderer-owned request. Defer
         // surviving application children until that replacement has completed.
-        if pending_ancestor(root, &hierarchy) {
-            continue;
+        if pending_ancestor(root, hierarchy) {
+            return;
         }
-        if let Some(ancestor) = cyclic_ancestor(root, request.0.id(), &hierarchy) {
+        if let Some(ancestor) = cyclic_ancestor(root, request.0.id(), hierarchy) {
             commands.entity(root).remove::<ModelInstance>().insert(
                 ModelInstanceError::CyclicDependency {
                     model: request.0.id(),
                     ancestor,
                 },
             );
-            continue;
+            return;
         }
         // Asset-backed requests wait for their recursive defaults. Assets inserted
         // directly by applications have no server load state and are already usable.
@@ -368,25 +386,25 @@ pub(crate) fn spawn_loaded_models(
                     if failure.is_none_or(|failure| !failure.same_failure(&next)) {
                         commands.entity(root).insert(next);
                     }
-                    continue;
+                    return;
                 }
                 if !server.is_loaded_with_dependencies(request.0.id()) {
-                    continue;
+                    return;
                 }
             }
         }
         let Some(source) = assets.get(&request.0) else {
-            continue;
+            return;
         };
         let prepared = cache
             .0
             .entry(request.0.id())
-            .or_insert_with(|| source.compiled.prepare(&mut meshes, &mut binds));
-        let replacements = effective_replacements(root, &owners);
+            .or_insert_with(|| source.compiled.prepare(meshes, binds));
+        let replacements = effective_replacements(root, owners);
         let Some((prepared, bound)) =
-            image_cache.prepare(request.0.id(), prepared, replacements, &mut images)
+            image_cache.prepare(request.0.id(), prepared, replacements, images)
         else {
-            continue;
+            return;
         };
         let prepared = &prepared;
         commands.entity(root).insert(bound);
@@ -395,6 +413,15 @@ pub(crate) fn spawn_loaded_models(
             if let Some((clip, _)) = prepared.clips.first() {
                 rebound_playback.play_immediately(*clip);
             }
+        }
+        if let Some(particle) = particle.filter(|particle| particle.first_clip_pending) {
+            if rebound_playback.clip.is_none() {
+                rebound_playback.clip = prepared.clips.first().map(|(clip, _)| *clip);
+            }
+            commands.entity(root).insert(ModelParticleChild {
+                first_clip_pending: false,
+                ..*particle
+            });
         }
         let (report, rebound_overrides) = rebind_state(
             previous.map(ModelRig::model),
@@ -409,7 +436,7 @@ pub(crate) fn spawn_loaded_models(
             commands.entity(root).insert(overrides);
         }
         if let Some(previous) = previous {
-            previous.despawn_owned_subtree(&mut commands);
+            previous.despawn_owned_subtree(commands);
         }
         if let Some(placement) = placement {
             let mut mounted = prepared.clone();
@@ -420,11 +447,27 @@ pub(crate) fn spawn_loaded_models(
                     mounted.basis.to_matrix() * prepared.basis.to_matrix().inverse(),
                 )
             });
-            populate_model(&mut commands, &mut meshes, &mut materials, &mounted, root);
+            populate_model_with_context(
+                commands,
+                meshes,
+                materials,
+                &mounted,
+                root,
+                owned,
+                rebound_playback.clone(),
+            );
         } else {
-            populate_model(&mut commands, &mut meshes, &mut materials, prepared, root);
+            populate_model_with_context(
+                commands,
+                meshes,
+                materials,
+                prepared,
+                root,
+                owned,
+                rebound_playback.clone(),
+            );
         }
-        if playback.is_some() || previous.is_some() || placement.is_some() {
+        if playback.is_some() || previous.is_some() || placement.is_some() || owned {
             commands.entity(root).insert(rebound_playback);
         }
         commands
@@ -432,6 +475,17 @@ pub(crate) fn spawn_loaded_models(
             .remove::<ModelInstance>()
             .remove::<ModelInstanceError>()
             .insert(ModelSource(request.0.clone()));
+    }
+}
+
+pub(crate) fn spawn_loaded_models(
+    mut factory: OwnedModelFactory<'_, '_>,
+    mut pending: Local<Vec<Entity>>,
+) {
+    pending.clear();
+    pending.extend(factory.requests.iter().map(|request| request.0));
+    for &root in pending.iter() {
+        factory.populate(root);
     }
 }
 

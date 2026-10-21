@@ -1,4 +1,4 @@
-//! Deterministic M2 age-driven sprite simulation, independent of native codecs.
+//! Shared M2 particle motion and sprite/model transports, independent of native codecs.
 use super::super::material::{ModelMaterial, SurfacePass};
 use super::age_appearance::{AgeAppearance, AgeParticleAppearance};
 use super::age_sprites_gpu::{
@@ -11,7 +11,14 @@ use super::emission::{EffectChange, EmissionClock};
 use super::frame::EffectFrame;
 use super::generators::spline;
 use super::implosion::{bounded_end, outward_crossing};
+use super::m2_model_geometry::{tumble, ModelBasis};
+use super::m2_models::{
+    ModelChildren, ModelOutputs, ModelProjection, ModelProjectionContext, ModelTemplate,
+};
 use super::render::SortPolicy;
+use super::ModelEmitter;
+use crate::child_coordinates::ChildCoordinates;
+use crate::child_models::{ChildModelBinding, ChildModelKey};
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::layers::ModelOwnedRenderEntity;
 #[cfg(test)]
@@ -85,6 +92,7 @@ struct Emitter {
     spline: Vec<Vec3>,
     bones: Option<BoneSource>,
     flags: ParticleFlags,
+    model: Option<GeometryEmitter>,
     drag: f32,
     wind: Vec3,
     inherit_velocity: f32,
@@ -102,7 +110,7 @@ struct Emitter {
     gpu_style: AgeSpriteStyle,
 }
 #[derive(Clone, Default)]
-pub(super) struct RuntimeAgeSprites {
+pub(super) struct RuntimeM2Particles {
     clips: HashMap<ClipId, (f64, bool)>,
     emitters: Vec<Emitter>,
     diagnostics: Vec<(FeatureId, RenderIssue)>,
@@ -110,6 +118,32 @@ pub(super) struct RuntimeAgeSprites {
 
 enum BirthAppearance {
     Age(AgeParticleAppearance),
+}
+#[derive(Clone)]
+struct GeometryEmitter {
+    template: ModelTemplate,
+    minimum: Vec3,
+    maximum: Vec3,
+}
+struct GeometryBirth {
+    ordinal: u64,
+    basis: ModelBasis,
+    omega: Vec3,
+    appearance: AgeParticleAppearance,
+}
+#[derive(Default)]
+struct GeometryInstances {
+    births: Vec<GeometryBirth>,
+    children: ModelChildren,
+    projections: Vec<ModelProjection>,
+}
+pub(crate) struct GeometryWorld<'a, 'w, 's> {
+    pub commands: &'a mut Commands<'w, 's>,
+    pub outputs: &'a mut ModelOutputs<'w, 's>,
+    pub statistics: &'a mut Query<'w, 's, &'static mut ModelEmitter>,
+    pub root: Entity,
+    pub driving_camera: Option<Entity>,
+    pub allow_births: bool,
 }
 #[derive(Clone)]
 struct Birth {
@@ -133,6 +167,7 @@ struct EmitterInstance {
     births: Vec<Birth>,
 
     age_appearances: Vec<AgeParticleAppearance>,
+    models: Option<GeometryInstances>,
     #[cfg(test)]
     order: Vec<(usize, f32)>,
     fraction: f64,
@@ -152,6 +187,7 @@ impl EmitterInstance {
     fn retain(&mut self, mut keep: impl FnMut(&Birth) -> bool) {
         let mut retained = 0;
         let age_appearances = &mut self.age_appearances;
+        let mut model_births = self.models.as_mut().map(|state| &mut state.births);
         self.births.retain_mut(|birth| {
             if !keep(birth) {
                 return false;
@@ -159,18 +195,26 @@ impl EmitterInstance {
             if birth.appearance_index != u32::MAX {
                 let index = birth.appearance_index as usize;
                 if index != retained {
-                    age_appearances.swap(index, retained);
+                    if let Some(models) = model_births.as_mut() {
+                        models.swap(index, retained);
+                    } else {
+                        age_appearances.swap(index, retained);
+                    }
                 }
                 birth.appearance_index = retained as u32;
                 retained += 1;
             }
             true
         });
-        age_appearances.truncate(retained);
+        if let Some(models) = model_births {
+            models.truncate(retained);
+        } else {
+            age_appearances.truncate(retained);
+        }
     }
 }
 #[derive(Default)]
-pub(super) struct AgeSpriteInstances {
+pub(super) struct M2ParticleInstances {
     emitters: Vec<EmitterInstance>,
     previous_time: Option<f64>,
     previous_basis: Option<Mat4>,
@@ -210,7 +254,7 @@ fn signed(seed: &mut u64) -> f32 {
     2.0 * random(seed) - 1.0
 }
 
-impl RuntimeAgeSprites {
+impl RuntimeM2Particles {
     pub(super) fn append_remapped(
         &mut self,
         source: &Self,
@@ -242,11 +286,24 @@ impl RuntimeAgeSprites {
         self.emitters.is_empty()
     }
 
+    #[cfg(test)]
     pub fn compile(
+        model: &Model<'_>,
+        nodes: &HashMap<NodeId, usize>,
+        images: &TextureImages,
+        materials: &HashMap<MaterialId, Vec<SurfacePass>>,
+    ) -> Self {
+        Self::compile_with_children(model, nodes, images, materials, &HashMap::new())
+    }
+    pub fn has_models(&self) -> bool {
+        self.emitters.iter().any(|emitter| emitter.model.is_some())
+    }
+    pub fn compile_with_children(
         model: &Model<'_>,
         node_indices: &HashMap<NodeId, usize>,
         images: &TextureImages,
         _materials: &HashMap<MaterialId, Vec<SurfacePass>>,
+        children: &HashMap<ChildModelKey, ChildModelBinding>,
     ) -> Self {
         let mut result = Self {
             clips: model
@@ -330,51 +387,77 @@ impl RuntimeAgeSprites {
                 definition.lifetime.duration,
                 definition.lifetime.variation,
             );
-            if details.rendering.model.is_some() || details.rendering.child_model.is_some() {
+            let geometry = if details.rendering.model.is_some() {
+                let Some(binding) = children.get(&ChildModelKey::particle_geometry(feature)) else {
+                    diagnostic(
+                        RenderDiagnosticKind::Resource,
+                        "M2 geometry particle child model is unresolved; births are omitted",
+                    );
+                    continue;
+                };
+                diagnostic(RenderDiagnosticKind::Unverified,"M2 model particles own ordinary child animation and materials; exact native model size, tumble and nonuniform-frame fidelity remains unverified");
+                diagnostic(RenderDiagnosticKind::Approximation,"Model-particle orientation uses finite ordinary Bevy TRS; shear is orthogonalized and collapsed birth frames are omitted");
+                diagnostic(RenderDiagnosticKind::Unsupported,"Nested geometry-model particle services are omitted by the first model-particle adapter");
+                Some(GeometryEmitter {
+                    template: ModelTemplate {
+                        model: binding.model.clone(),
+                        coordinates: ChildCoordinates::from_model(model, binding.coordinates),
+                    },
+                    minimum: details.tumble_minimum,
+                    maximum: details.tumble_maximum,
+                })
+            } else {
+                None
+            };
+            if details.rendering.child_model.is_some() {
                 diagnostic(
                     RenderDiagnosticKind::Unsupported,
-                    "M2 model particles and child emitter resources are not instantiated by the sprite transport",
+                    "M2 child emitter resources require the adopted-emitter interpreter",
                 );
-                continue;
+                if geometry.is_none() {
+                    continue;
+                }
             }
             let multi_texture =
                 details.flags.multi_texture() && details.rendering.textures.len() == 3;
-            if details
-                .rendering
-                .texture_program
-                .is_some_and(|hints| hints != [0, 0])
-            {
-                diagnostic(
+            if geometry.is_none() {
+                if details
+                    .rendering
+                    .texture_program
+                    .is_some_and(|hints| hints != [0, 0])
+                {
+                    diagnostic(
                     RenderDiagnosticKind::Unsupported,
                     "M2 particle TXAC selectors are retained without interpretation; recognized native composition flags remain active",
                 );
-            }
-            if details.flags.refraction() && !details.flags.multi_texture() {
-                diagnostic(
+                }
+                if details.flags.refraction() && !details.flags.multi_texture() {
+                    diagnostic(
                     RenderDiagnosticKind::Unsupported,
                     "M2 refraction requires a scene-color postprocess interpreter; displaying the ordinary primary texture path",
                 );
-            }
-            if details.rendering.textures.len() > 1 && !multi_texture {
-                diagnostic(
+                }
+                if details.rendering.textures.len() > 1 && !multi_texture {
+                    diagnostic(
                     RenderDiagnosticKind::Unsupported,
                     "M2 extra particle textures require the three-input multi-texture programme",
                 );
-            }
-            if let ParticleBlend::Unknown(_) = details.rendering.blend {
-                diagnostic(
-                    RenderDiagnosticKind::Approximation,
-                    "Unknown M2 particle blending uses an explicit alpha-blend approximation",
-                );
-            }
-            if matches!(
-                details.rendering.blend,
-                ParticleBlend::Opaque | ParticleBlend::AlphaKey
-            ) {
-                diagnostic(
+                }
+                if let ParticleBlend::Unknown(_) = details.rendering.blend {
+                    diagnostic(
+                        RenderDiagnosticKind::Approximation,
+                        "Unknown M2 particle blending uses an explicit alpha-blend approximation",
+                    );
+                }
+                if matches!(
+                    details.rendering.blend,
+                    ParticleBlend::Opaque | ParticleBlend::AlphaKey
+                ) {
+                    diagnostic(
                     RenderDiagnosticKind::Approximation,
                     "M2 opaque and cutout sprites write main-view depth but do not cast shadows or join depth, normal, and motion-vector prepasses",
                 );
+                }
             }
             if details.wind_time != 0. {
                 diagnostic(
@@ -382,16 +465,18 @@ impl RuntimeAgeSprites {
                     "M2 wind timing is retained but not evaluated",
                 );
             }
-            if appearance.legacy_atlas.is_some() {
+            if geometry.is_none() && appearance.legacy_atlas.is_some() {
                 diagnostic(
                     RenderDiagnosticKind::Approximation,
                     "Legacy particle atlas segments currently use normalized-age cell curves when present",
                 );
             }
-            if matches!(
-                details.rendering.head_tail,
-                ParticleHeadTail::Tail | ParticleHeadTail::Both
-            ) {
+            if geometry.is_none()
+                && matches!(
+                    details.rendering.head_tail,
+                    ParticleHeadTail::Tail | ParticleHeadTail::Both
+                )
+            {
                 diagnostic(
                     RenderDiagnosticKind::Unverified,
                     "M2 tails use velocity times the authored tail parameter; exact client time-versus-distance fidelity remains unverified",
@@ -403,13 +488,17 @@ impl RuntimeAgeSprites {
             );
             diagnostic(
                 RenderDiagnosticKind::Budget,
-                "Sprite simulation limits each emitter to 8192 living particles, 8192 births and 4096 emission intervals per update; omitted births and long-update seconds are reported",
+                if geometry.is_some() {
+                    "Model simulation limits each emitter to 1024 living models, 8192 births and 4096 emission intervals per update; excess births are omitted"
+                } else {
+                    "Sprite simulation limits each emitter to 8192 living particles, 8192 births and 4096 emission intervals per update; omitted births and long-update seconds are reported"
+                },
             );
             let image =
                 details.rendering.textures.first().and_then(|id| {
                     particle_image(model, &images.particle(feature, 0), *id).cloned()
                 });
-            if image.is_none() && !details.rendering.textures.is_empty() {
+            if geometry.is_none() && image.is_none() && !details.rendering.textures.is_empty() {
                 diagnostic(
                     RenderDiagnosticKind::Resource,
                     "Unresolved primary particle image uses a visible white sprite fallback",
@@ -432,6 +521,7 @@ impl RuntimeAgeSprites {
                 | (1 << 19)
                 | (1 << 20)
                 | (1 << 23)
+                | if geometry.is_some() { 1 << 9 } else { 0 }
                 | (1 << 28)
                 | (1 << 29)
                 | (1 << 30);
@@ -469,6 +559,7 @@ impl RuntimeAgeSprites {
                 spline: details.shape.spline.iter().collect(),
                 bones,
                 flags: details.flags,
+                model: geometry,
                 drag: details.drag.max(0.),
                 wind: details.wind,
                 inherit_velocity: if details.flags.inherit_velocity() {
@@ -545,37 +636,58 @@ impl RuntimeAgeSprites {
         meshes: &mut Assets<Mesh>,
         _materials: &mut Assets<ModelMaterial>,
         basis: Entity,
-    ) -> AgeSpriteInstances {
-        let quad = (!self.emitters.is_empty()).then(|| meshes.add(Rectangle::new(2., 2.)));
+    ) -> M2ParticleInstances {
+        let quad = self
+            .emitters
+            .iter()
+            .any(|emitter| emitter.model.is_none())
+            .then(|| meshes.add(Rectangle::new(2., 2.)));
         let emitters = self
             .emitters
             .iter()
             .map(|emitter| {
-                let mesh = quad.as_ref().unwrap().clone();
-                let entity = commands
-                    .spawn((
-                        Mesh3d(mesh.clone()),
-                        ModelOwnedRenderEntity,
-                        AgeSpriteData {
-                            records: Default::default(),
-                            live_indices: Default::default(),
-                            uniform: Default::default(),
-                            style: emitter.gpu_style.clone(),
-                        },
-                        SpriteEmitter {
-                            feature: emitter.feature,
-                            node: emitter.node,
-                            alive: 0,
-                            dropped: 0,
-                            skipped_seconds: 0.,
-                        },
-                        Transform::default(),
-                        Visibility::default(),
-                        NoFrustumCulling,
-                        NotShadowCaster,
-                        ChildOf(basis),
-                    ))
-                    .id();
+                let mesh = quad.as_ref().cloned().unwrap_or_default();
+                let entity = if emitter.model.is_some() {
+                    commands
+                        .spawn((
+                            ModelEmitter {
+                                feature: emitter.feature,
+                                node: emitter.node,
+                                alive: 0,
+                                omitted: 0,
+                                skipped_seconds: 0.,
+                            },
+                            Transform::default(),
+                            Visibility::default(),
+                            ChildOf(basis),
+                        ))
+                        .id()
+                } else {
+                    commands
+                        .spawn((
+                            Mesh3d(mesh.clone()),
+                            ModelOwnedRenderEntity,
+                            AgeSpriteData {
+                                records: Default::default(),
+                                live_indices: Default::default(),
+                                uniform: Default::default(),
+                                style: emitter.gpu_style.clone(),
+                            },
+                            SpriteEmitter {
+                                feature: emitter.feature,
+                                node: emitter.node,
+                                alive: 0,
+                                dropped: 0,
+                                skipped_seconds: 0.,
+                            },
+                            Transform::default(),
+                            Visibility::default(),
+                            NoFrustumCulling,
+                            NotShadowCaster,
+                            ChildOf(basis),
+                        ))
+                        .id()
+                };
                 let passes = vec![MaterialPassInstance { entity }];
                 EmitterInstance {
                     samples: Default::default(),
@@ -584,6 +696,7 @@ impl RuntimeAgeSprites {
                     passes,
                     births: Vec::new(),
                     age_appearances: Vec::new(),
+                    models: emitter.model.as_ref().map(|_| GeometryInstances::default()),
                     #[cfg(test)]
                     order: Vec::new(),
                     fraction: 0.,
@@ -595,7 +708,7 @@ impl RuntimeAgeSprites {
                 }
             })
             .collect();
-        AgeSpriteInstances {
+        M2ParticleInstances {
             emitters,
             previous_time: None,
             previous_basis: None,
@@ -603,12 +716,23 @@ impl RuntimeAgeSprites {
     }
     pub fn update(
         &self,
-        instances: &mut AgeSpriteInstances,
+        instances: &mut M2ParticleInstances,
         frame: EffectFrame<'_, '_, '_>,
         _meshes: &mut Assets<Mesh>,
         gpu_sprites: &mut Query<&mut AgeSpriteData>,
         statistics: &mut Query<&mut SpriteEmitter>,
         _materials: &mut Assets<ModelMaterial>,
+    ) {
+        self.update_with_models(instances, frame, _meshes, gpu_sprites, statistics, None);
+    }
+    pub fn update_with_models(
+        &self,
+        instances: &mut M2ParticleInstances,
+        frame: EffectFrame<'_, '_, '_>,
+        _meshes: &mut Assets<Mesh>,
+        gpu_sprites: &mut Query<&mut AgeSpriteData>,
+        statistics: &mut Query<&mut SpriteEmitter>,
+        mut model_world: Option<GeometryWorld>,
     ) {
         if !frame.time.is_finite() {
             return;
@@ -624,6 +748,12 @@ impl RuntimeAgeSprites {
             if instances.previous_time.is_none() || backwards {
                 state.births.clear();
                 state.age_appearances.clear();
+                if let Some(models) = &mut state.models {
+                    models.births.clear();
+                    if let Some(world) = model_world.as_mut() {
+                        models.children.reset(world.commands);
+                    }
+                }
                 state.fraction = 0.;
                 state.ordinal = 0;
                 state.previous_node = node;
@@ -651,6 +781,7 @@ impl RuntimeAgeSprites {
                 emitter,
                 clips: &self.clips,
                 frame,
+                allow_models: model_world.as_ref().is_none_or(|world| world.allow_births),
                 previous_basis: instances.previous_basis.unwrap_or(frame.basis_world),
                 node,
                 start,
@@ -741,7 +872,7 @@ impl RuntimeAgeSprites {
                 || instances.previous_basis != Some(frame.basis_world)
                 || node_changed
                 || (!had_births && !state.births.is_empty());
-            if redraw && (had_births || !state.births.is_empty()) {
+            if emitter.model.is_none() && redraw && (had_births || !state.births.is_empty()) {
                 if let Some(pass) = state.passes.first() {
                     if let Ok(mut data) = gpu_sprites.get_mut(pass.entity) {
                         emitter.sample_gpu(state, &frame, node, &mut data);
@@ -751,6 +882,88 @@ impl RuntimeAgeSprites {
                 if state.passes.is_empty() {
                     if let Some(mut mesh) = _meshes.get_mut(&state.mesh) {
                         emitter.draw(state, &frame, node, &mut mesh, Mat4::IDENTITY);
+                    }
+                }
+            }
+            if let (Some(model), Some(models), Some(world), Some(pass)) = (
+                &emitter.model,
+                &mut state.models,
+                model_world.as_mut(),
+                state.passes.first(),
+            ) {
+                models.projections.clear();
+                for birth in &state.births {
+                    let projection = (|| {
+                        let sidecar = models.births.get(birth.appearance_index as usize)?;
+                        let seconds = (frame.time - birth.time).max(0.) as f32;
+                        let style = emitter
+                            .age_appearance
+                            .as_ref()
+                            .map(|appearance| appearance.sample(&sidecar.appearance, seconds))
+                            .unwrap_or_default();
+                        let age = ModelTime::seconds(
+                            (f64::from(seconds) / f64::from(birth.lifetime)).clamp(0., 1.),
+                        )
+                        .ok()?;
+                        let size = emitter
+                            .appearance
+                            .scale
+                            .as_ref()
+                            .and_then(|curve| curve.sample(age))
+                            .unwrap_or(Vec2::ONE);
+                        let (position, _) = emitter.motion(birth, frame.time);
+                        let position = if emitter.flags.attached() {
+                            node.transform_point3(position)
+                        } else {
+                            position
+                        };
+                        let basis = if emitter.flags.attached() {
+                            ModelBasis::from_frame(node)?
+                        } else {
+                            sidecar.basis
+                        };
+                        let transform = basis.sample(
+                            position,
+                            size,
+                            style.scale,
+                            model.template.coordinates.parent_basis.scale,
+                            sidecar.omega,
+                            seconds,
+                        )?;
+                        Some(ModelProjection {
+                            ordinal: sidecar.ordinal,
+                            birth: birth.time,
+                            lifetime: f64::from(birth.lifetime),
+                            age: f64::from(seconds),
+                            transform,
+                            visible: style.visible,
+                        })
+                    })();
+                    if let Some(projection) = projection {
+                        models.projections.push(projection);
+                    }
+                }
+                models.children.synchronize(
+                    world.commands,
+                    ModelProjectionContext {
+                        root: world.root,
+                        owner: pass.entity,
+                        visible: frame.root_visible,
+                        driving_camera: world.driving_camera,
+                    },
+                    &model.template,
+                    world.outputs,
+                    models.projections.drain(..),
+                );
+                if let Ok(mut stats) = world.statistics.get_mut(pass.entity) {
+                    if stats.alive != state.births.len() {
+                        stats.alive = state.births.len();
+                    }
+                    if stats.omitted != state.dropped {
+                        stats.omitted = state.dropped;
+                    }
+                    if stats.skipped_seconds != state.skipped_seconds {
+                        stats.skipped_seconds = state.skipped_seconds;
                     }
                 }
             }
@@ -786,6 +999,7 @@ struct ImplosionInterval {
 struct BirthContext<'a, 'view, 'data> {
     emitter: &'a Emitter,
     clips: &'a HashMap<ClipId, (f64, bool)>,
+    allow_models: bool,
     frame: EffectFrame<'a, 'view, 'data>,
     previous_basis: Mat4,
     node: Mat4,
@@ -845,6 +1059,10 @@ impl BirthContext<'_, '_, '_> {
             return;
         }
         *births += 1;
+        if emitter.model.is_some() && !self.allow_models {
+            state.dropped = state.dropped.saturating_add(1);
+            return;
+        }
         if let Some((mut birth, appearance)) = emitter.birth_posed(
             &sample,
             time,
@@ -876,7 +1094,34 @@ impl BirthContext<'_, '_, '_> {
             if frame.time - birth.time < f64::from(birth.lifetime) {
                 // Newborns follow only emitter translation after occurrence.
                 birth.origin += self.follow * (1. - fraction.clamp(0., 1.));
-                if let Some(appearance) = appearance {
+                if let (Some(model), Some(models)) = (&emitter.model, &mut state.models) {
+                    let Some(basis) = ModelBasis::from_frame(birth_node) else {
+                        state.dropped = state.dropped.saturating_add(1);
+                        return;
+                    };
+                    let mut seed = emitter.seed ^ ordinal.wrapping_mul(0x9e3779b97f4a7c15);
+                    let unit = Vec3::new(random(&mut seed), random(&mut seed), random(&mut seed));
+                    let negate = if emitter.flags.negate_spin_random() {
+                        [
+                            random(&mut seed) < 0.5,
+                            random(&mut seed) < 0.5,
+                            random(&mut seed) < 0.5,
+                        ]
+                    } else {
+                        [false; 3]
+                    };
+                    let appearance = match appearance {
+                        Some(BirthAppearance::Age(value)) => value,
+                        None => Default::default(),
+                    };
+                    birth.appearance_index = models.births.len() as u32;
+                    models.births.push(GeometryBirth {
+                        ordinal,
+                        basis,
+                        omega: tumble(model.minimum, model.maximum, unit, negate),
+                        appearance,
+                    });
+                } else if let Some(appearance) = appearance {
                     birth.appearance_index = match appearance {
                         BirthAppearance::Age(value) => {
                             let index = state.age_appearances.len();
@@ -969,7 +1214,11 @@ impl Emitter {
         displacement * scale
     }
     fn capacity(&self) -> usize {
-        MAX_PARTICLES
+        if self.model.is_some() {
+            1024
+        } else {
+            MAX_PARTICLES
+        }
     }
 
     #[cfg(test)]
@@ -1622,10 +1871,10 @@ impl SpriteMeshBuffers {
 }
 
 #[cfg(test)]
-#[path = "age_sprites_tests.rs"]
+#[path = "m2_particles_tests.rs"]
 mod tests;
 
-impl RuntimeAgeSprites {
+impl RuntimeM2Particles {
     pub(crate) fn map_images(
         &mut self,
         map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
