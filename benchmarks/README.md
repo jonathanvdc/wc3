@@ -146,7 +146,31 @@ The CSV records each frame's wall time, and the tool prints median and p95.
 Always inspect the companion images before drawing conclusions about rendering.
 Keep model, resolution, camera, LOD, prepasses, lighting, simulation FPS, and
 capture times fixed between comparisons. The timed pose is frozen, including its
-live effect population; use the CPU runtime suite for advancing simulation costs.
+live effect population. Use `crowd` for advancing GPU workloads and the CPU
+runtime suite for headless simulation costs.
 For effect GPU cases, use the checked-in particle and ribbon capture fixtures
 with the same flag. Native GPU access is required, and device/pipeline/readback
 failures are errors rather than successful performance measurements.
+
+The `material_effects_crowd.mdl` fixture combines a skinned quad, animated
+material opacity and four detached particle heads per actor. Measure advancing,
+completed frames with the ordinary model path:
+
+```sh
+cargo run --release -p bevy-wc3 --example crowd -- \
+  crates/bevy-wc3/tests/fixtures/material_effects_crowd.mdl - \
+  crates/bevy-wc3/tests/fixtures /tmp/wc3-material-crowd.json \
+  --count 100 --warmup 120 --frames 300 --msaa 1 \
+  --serial-completed-frames --completion-wait spin \
+  --screenshot /tmp/wc3-material-crowd.png
+```
+
+At these settings, expect 100 visible skinned draws, 200 mesh triangles and 400
+live particle records without omissions. Four heads coincide within each actor;
+inspect the image and published populations together. The 120 warmup and 300
+measured steps keep all staggered phases before the next ten-second loop and
+before particle expiry. Repeat the same command with `--count 0` to expose fixed
+renderer cost. Keep `--single-threaded` as a separate executor experiment, and
+compare repeated runs in alternating order. See the
+[crowd measurement guide](../crates/bevy-wc3/docs/performance.md#measure-model-and-character-crowds)
+for completion policies, report fields and timing limits.

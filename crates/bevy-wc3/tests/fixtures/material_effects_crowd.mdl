@@ -1,0 +1,110 @@
+Version {
+	FormatVersion 800,
+}
+Model "Quad" {
+	MinimumExtent { -0.4, -0.4, 0.0 },
+	MaximumExtent { 0.4, 0.4, 2.0 },
+	BoundsRadius 2.0,
+}
+Sequences 1 {
+	Anim "Stand" {
+		Interval { 0, 10000 },
+		MinimumExtent { -0.4, -0.4, 0.0 },
+		MaximumExtent { 0.4, 0.4, 2.0 },
+		BoundsRadius 2.0,
+	}
+}
+Textures 1 {
+	Bitmap {
+		Image "capture_white.png",
+	}
+}
+Materials 1 {
+	Material {
+		Layer {
+			FilterMode Blend,
+            Unshaded, TwoSided,
+            Alpha 3 { Linear, 0: 0.4, 5000: 0.9, 10000: 0.4, }
+			static TextureID 0,
+		}
+	}
+}
+Geoset {
+	Vertices 4 {
+		{ -0.4, -0.4, 0.0 },
+		{  0.4, -0.4, 0.0 },
+		{  0.4,  0.4, 0.0 },
+		{ -0.4,  0.4, 0.0 },
+	}
+	Normals 4 {
+		{ 0.0, 0.0, 1.0 },
+		{ 0.0, 0.0, 1.0 },
+		{ 0.0, 0.0, 1.0 },
+		{ 0.0, 0.0, 1.0 },
+	}
+	TVertices 4 {
+		{ 0.0, 1.0 },
+		{ 1.0, 1.0 },
+		{ 1.0, 0.0 },
+		{ 0.0, 0.0 },
+	}
+	VertexGroup {
+		0,
+		0,
+		0,
+		0,
+	}
+	Faces 1 6 {
+		Triangles {
+			{ 0, 1, 2, 0, 2, 3 },
+		}
+	}
+	Groups 1 1 {
+		Matrices { 0 },
+	}
+	MaterialID 0,
+	SelectionGroup 0,
+	MinimumExtent { -0.4, -0.4, 0.0 },
+	MaximumExtent { 0.4, 0.4, 0.0 },
+	BoundsRadius 2.0,
+}
+Bone "Bone_Root" {
+	ObjectId 0,
+	GeosetId 0,
+	GeosetAnimId None,
+    Translation 3 { Linear, 0: { 0,0,0 }, 5000: { 0,0,0.3 }, 10000: { 0,0,0 }, }
+}
+ParticleEmitter2 "World particles" {
+    ObjectId 1,
+    Parent 0,
+    Squirt 1,
+    Unshaded,
+    SortPrimsFarZ,
+    static Speed 0.0,
+    static Variation 0.0,
+    static Latitude 0.0,
+    static Gravity 0.0,
+    LifeSpan 20.0,
+    EmissionRate 3 { DontInterp, 0: 0, 2000: 4, 2100: 0, }
+    static Length 0.0,
+    static Width 0.0,
+    Blend,
+    Rows 1,
+    Columns 1,
+    Head,
+    TailLength 0.2,
+    Time 0.5,
+    SegmentColor {
+        Color { 1.0, 1.0, 1.0 },
+        Color { 1.0, 1.0, 1.0 },
+        Color { 1.0, 1.0, 1.0 },
+    }
+    Alpha { 255, 255, 255 },
+    ParticleScaling { 0.12, 0.12, 0.12 },
+    LifeSpanUVAnim { 0, 1, 1 },
+    DecayUVAnim { 0, 1, 1 },
+    TailUVAnim { 0, 1, 1 },
+    TailDecayUVAnim { 0, 1, 1 },
+    TextureID 0,
+}
+PivotPoints 2 { { 0,0,0 }, { 0,0,1 }, }
