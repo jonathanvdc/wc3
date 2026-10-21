@@ -103,6 +103,7 @@ fn particle_shader_validates_and_matches_host_buffer_layouts() {
     let imports = r#"
 struct View { world_from_view: mat4x4<f32>, clip_from_view: mat4x4<f32> };
 @group(0) @binding(0) var<uniform> view: View;
+fn srgb_to_linear_rgb(color: vec3<f32>) -> vec3<f32> { return color; }
 fn position_world_to_clip(p: vec3<f32>) -> vec4<f32> { return vec4(p, 1.0); }
 fn shade_effect(color: vec4<f32>, position: vec3<f32>, normal: vec3<f32>,
     frag_coord: vec4<f32>, unlit: bool, fog_enabled: bool, fog_blend: u32) -> vec4<f32> { return color; }

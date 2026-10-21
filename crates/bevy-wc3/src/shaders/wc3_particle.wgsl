@@ -3,6 +3,7 @@
     view_transformations::position_world_to_clip,
 }
 #import "embedded://bevy_wc3/shaders/effect_lighting.wgsl"::shade_effect
+#import bevy_render::color_operations::srgb_to_linear_rgb
 
 @group(2) @binding(0) var particle_texture: texture_2d<f32>;
 @group(2) @binding(1) var particle_sampler: sampler;
@@ -57,7 +58,8 @@ fn vertex(input: VertexInput) -> VertexOutput {
         phase = 1u;
         factor = (life - middle) / (1.0 - middle);
     }
-    let color = mix(emitter.colors[phase], emitter.colors[phase + 1u], factor);
+    let authored_color = mix(emitter.colors[phase], emitter.colors[phase + 1u], factor);
+    let color = vec4(srgb_to_linear_rgb(authored_color.rgb), authored_color.a);
     let scale = mix(emitter.scaling[phase], emitter.scaling[phase + 1u], factor);
     let tail = particle.lifetime_tail_birth.y > 0.5;
     let interval = emitter.intervals[phase + select(0u, 2u, tail)];
@@ -96,16 +98,16 @@ fn vertex(input: VertexInput) -> VertexOutput {
     let right = view.world_from_view[0].xyz;
     let up = view.world_from_view[1].xyz;
     let forward = -view.world_from_view[2].xyz;
-    let half_size = max(scale, 0.0) * 0.5;
+    let half_extent = max(scale, 0.0);
     let size_scale = particle.scale_facing.xyz;
     // Billboard heads and tails use the camera-facing lighting normal;
     // XYQuad heads override it with world +Z.
     var normal = -forward;
-    var side = right * half_size;
-    var vertical = up * half_size;
+    var side = right * half_extent;
+    var vertical = up * half_extent;
     if tail {
         let axis = safe_normalize(velocity);
-        side = safe_normalize(cross(axis, forward)) * half_size * size_scale;
+        side = safe_normalize(cross(axis, forward)) * half_extent * size_scale;
         // Velocity already contains the motion scale. Scale only the width
         // here; scaling the tail length again would apply that scale twice.
         vertical = velocity * emitter.clock_tail.z * 0.5;
@@ -117,8 +119,8 @@ fn vertex(input: VertexInput) -> VertexOutput {
         let sn = sin(facing);
         let axis_x = emitter.plane_axes[0].xyz;
         let axis_y = emitter.plane_axes[1].xyz;
-        side = (axis_x * cs + axis_y * sn) * half_size * size_scale;
-        vertical = (-axis_x * sn + axis_y * cs) * half_size * size_scale;
+        side = (axis_x * cs + axis_y * sn) * half_extent * size_scale;
+        vertical = (-axis_x * sn + axis_y * cs) * half_extent * size_scale;
         normal = safe_normalize(cross(axis_x, axis_y));
     } else {
         // Scale world components after orienting the billboard.

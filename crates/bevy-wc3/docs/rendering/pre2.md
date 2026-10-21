@@ -29,6 +29,13 @@ use Bevy lighting; unlit sprites retain texture/color directly. Authored blend
 and depth states remain separate from lighting. Per-view particle ordering
 changes draw indices rather than birth records.
 
+MDLX `ParticleScaling` values are head half extents and tail half widths; tail
+length still follows velocity and the authored tail time. Staged RGB interpolates
+in its authored display color space before conversion to linear Bevy lighting
+and blending. Alpha interpolates independently. This preserves authored color
+without changing the source values or imposing byte quantization. Linear scene
+blending can still differ from legacy game output.
+
 M2 age-driven particles sample independent color, opacity, scale, and cell
 curves. Import expands their native always-repeat addressing into each particle
 image input, independently of mesh inputs sharing the same image dependency.
