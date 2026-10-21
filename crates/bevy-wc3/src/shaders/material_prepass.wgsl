@@ -127,6 +127,7 @@ fn fragment(
     pbr_functions::visibility_range_dither(in.position, in.visibility_range_dither);
 #endif  // VISIBILITY_RANGE_DITHER
 
+    if combiner.clip.x != 0.0 && composed_alpha(in) < combiner.clip.x { discard; }
     if world.flags.x != 0u && world.flags.y != 0u {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK
@@ -245,6 +246,7 @@ fn fragment(vertex_output: VertexOutput) {
 #endif
     let flags = pbr_bindings::material.flags;
     let uv_transform = pbr_bindings::material.uv_transform;
+    if combiner.clip.x != 0.0 && composed_alpha(in) < combiner.clip.x { discard; }
     if world.flags.x != 0u && world.flags.y != 0u {
         let alpha_mode=flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode==pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK && pbr_bindings::material.base_color.a < pbr_bindings::material.alpha_cutoff {discard;}

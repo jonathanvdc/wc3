@@ -210,7 +210,15 @@ impl SurfaceAnimation {
         sample: &SampledAnimation<'_, '_>,
         material: &mut ModelMaterial,
     ) -> bool {
-        let mut changed = self.apply(sample, &mut material.base);
+        let (mut changed, mesh_opacity) = self.apply_base(sample, &mut material.base);
+        if let Some(opacity) = material.extension.m2_opacity {
+            changed |= opacity.apply(&mut material.base, &mut material.extension);
+        } else if let Some(authored) = self.untinted_alpha_mode.filter(|_| self.mesh.is_some()) {
+            changed |= replace(
+                &mut material.base.alpha_mode,
+                mesh_alpha_mode(authored, mesh_opacity),
+            );
+        }
         if self.secondary_transform.is_some() || self.uv_scroll[1] != Vec2::ZERO {
             let base = self
                 .secondary_transform
@@ -262,12 +270,13 @@ impl SurfaceAnimation {
         changed
     }
     /// Updates only changed values and reports whether the material needs a write.
-    pub(crate) fn apply(
+    fn apply_base(
         &self,
         sample: &SampledAnimation<'_, '_>,
         material: &mut StandardMaterial,
-    ) -> bool {
+    ) -> (bool, f32) {
         let mut changed = false;
+        let mut mesh_opacity = 1.;
         if self.color.is_some()
             || self.rgba.is_some()
             || self.opacity.is_some()
@@ -282,6 +291,7 @@ impl SurfaceAnimation {
                 .mesh
                 .as_ref()
                 .map_or([1.; 4], |mesh| (mesh.sample(sample)).to_array());
+            mesh_opacity = tint[3];
             let rgba = SurfaceColor {
                 color: self.color.as_ref(),
                 rgba: self.rgba.as_ref(),
@@ -296,15 +306,6 @@ impl SurfaceAnimation {
             if material.base_color != next {
                 material.base_color = next;
                 changed = true;
-            }
-            if self.mesh.is_some() {
-                if let Some(authored) = self.untinted_alpha_mode {
-                    let mode = mesh_alpha_mode(authored, tint[3]);
-                    if material.alpha_mode != mode {
-                        material.alpha_mode = mode;
-                        changed = true;
-                    }
-                }
             }
         }
         if let Some(texture) = &self.texture {
@@ -356,7 +357,7 @@ impl SurfaceAnimation {
                 changed = true;
             }
         }
-        changed
+        (changed, mesh_opacity)
     }
 }
 

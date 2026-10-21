@@ -230,7 +230,9 @@ impl PoseBaker {
                 && prepared
                     .world
                     .instance_visible(draw.instance, &world_visibility)
-                && material.base.base_color.alpha() > 0.
+                && material
+                    .extension
+                    .has_visible_opacity(material.base.base_color.alpha())
                 && options
                     .lod
                     .is_none_or(|lod| draw.lod.is_none_or(|level| level == lod));
@@ -276,9 +278,11 @@ impl PoseBaker {
                         .instance_lod(liquid.instance)
                         .is_none_or(|level| level == lod)
                 })
-                && material
-                    .as_ref()
-                    .is_none_or(|material| material.base.base_color.alpha() > 0.);
+                && material.as_ref().is_none_or(|material| {
+                    material
+                        .extension
+                        .has_visible_opacity(material.base.base_color.alpha())
+                });
             let bounds = mesh.compute_aabb();
             include_bounds(&mut result.bounds, bounds.filter(|_| visible));
             result.parts.push(BakedPart {

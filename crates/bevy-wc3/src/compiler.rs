@@ -360,6 +360,17 @@ pub fn compile_model_with_options(
                     illumination(model, instance, draw_controls, surface.exterior_lit);
                 let world_state = extension.set_world_illumination(ambient, lighting);
                 for (mesh, skin) in meshes {
+                    let mut material = ModelMaterial {
+                        base: surface.material.clone(),
+                        extension: extension.clone(),
+                    };
+                    if let Some(value) = mesh_animation.get(&instance.mesh) {
+                        material.base.base_color =
+                            multiply(material.base.base_color, value.defaults());
+                        material.base.alpha_mode =
+                            mesh_alpha_mode(material.base.alpha_mode, value.default_opacity());
+                    }
+                    material.extension.apply_opacity(&mut material.base);
                     draws.push(RuntimeDraw {
                         instance: instance_id,
                         source: draw_source,
@@ -376,21 +387,7 @@ pub fn compile_model_with_options(
                         skin: *skin,
                         lod: instance.lod,
                         mesh: mesh.clone(),
-                        material: ModelMaterial {
-                            base: {
-                                let mut material = surface.material.clone();
-                                if let Some(value) = mesh_animation.get(&instance.mesh) {
-                                    material.base_color =
-                                        multiply(material.base_color, value.defaults());
-                                    material.alpha_mode = mesh_alpha_mode(
-                                        material.alpha_mode,
-                                        value.default_opacity(),
-                                    );
-                                }
-                                material
-                            },
-                            extension: extension.clone(),
-                        },
+                        material,
                         animation: Arc::new(surface.animation.clone().with_mesh(
                             surface.material.base_color,
                             surface.material.alpha_mode,

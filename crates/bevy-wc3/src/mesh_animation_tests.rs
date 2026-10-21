@@ -39,17 +39,17 @@ fn geometry_controllers_isolate_meshes_without_marking_constants_dynamic() {
             ..Default::default()
         })
         .unwrap();
-    let mut material = right.material.base.clone();
-    right.animation.apply(&sample, &mut material);
-    assert!((material.base_color.alpha() - 0.5).abs() < 1e-5);
-    assert_eq!(material.alpha_mode, AlphaMode::AlphaToCoverage);
-    let first = material.base_color;
-    assert!(!right.animation.apply(&sample, &mut material));
-    assert_eq!(first, material.base_color);
+    let mut material = right.material.clone();
+    right.animation.apply_to_material(&sample, &mut material);
+    assert!((material.base.base_color.alpha() - 0.5).abs() < 1e-5);
+    assert_eq!(material.base.alpha_mode, AlphaMode::AlphaToCoverage);
+    let first = material.base.base_color;
+    assert!(!right.animation.apply_to_material(&sample, &mut material));
+    assert_eq!(first, material.base.base_color);
     // Authored constant tint is independent of the second mesh's controller.
     assert_ne!(
         left.material.base.base_color.to_linear(),
-        material.base_color.to_linear()
+        material.base.base_color.to_linear()
     );
 }
 #[test]
@@ -171,4 +171,62 @@ fn geometry_alpha_hides_draw_and_materials_share_only_matching_mesh_states() {
     assert_ne!(first[1].0, second[1].0);
     assert_eq!(first[1].1, Visibility::Hidden);
     assert_eq!(first[0].1, Visibility::Inherited);
+}
+
+#[test]
+fn m2_surface_weight_and_geometry_opacity_share_one_phase_classification() {
+    use crate::material::native_fixtures::m2;
+    use wc3::model::values::model::BatchFlags;
+    use wc3::model::Material;
+
+    for unweighted in [false, true] {
+        let mut model = source();
+        let id = model.materials().iter().next().unwrap().0;
+        model
+            .edit(|builder| {
+                let mut surface: m2::Material = builder.construct();
+                surface.opacity = builder.add_value(0.8);
+                surface.batch_flags =
+                    BatchFlags::from_bits_retain(if unweighted { 0x40 } else { 0 });
+                let mut input: m2::TextureUnit = builder.construct();
+                input.contribution = builder.add_value(0.5);
+                surface.textures.push(input);
+                builder.set_material(
+                    id,
+                    Material {
+                        name: "M2 opacity".into(),
+                        surface: surface.into(),
+                    },
+                )
+            })
+            .unwrap();
+        let compiled = compile_model(&model, |_| None).unwrap();
+        let clip = model.clips().iter().next().unwrap().0;
+        let sample = model
+            .animation_sample(AnimationSample {
+                clip: Some(clip),
+                clip_time: time(0.75),
+                ..Default::default()
+            })
+            .unwrap();
+        let surface_opacity = if unweighted { 0.8 } else { 0.4 };
+        for (draw, geometry_opacity) in compiled.draws.iter().zip([1., 0.5]) {
+            assert_eq!(
+                draw.material.base.alpha_mode,
+                AlphaMode::Blend,
+                "constant surface opacity must classify before its first update"
+            );
+            let mut material = draw.material.clone();
+            draw.animation.apply_to_material(&sample, &mut material);
+            assert!(
+                (material.base.base_color.alpha() - surface_opacity * geometry_opacity).abs()
+                    < 1e-6
+            );
+            assert_eq!(material.base.alpha_mode, AlphaMode::Blend);
+            assert!(
+                !draw.animation.apply_to_material(&sample, &mut material),
+                "phase restoration must not transiently dirty unchanged materials"
+            );
+        }
+    }
 }

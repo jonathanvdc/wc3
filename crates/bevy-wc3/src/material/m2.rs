@@ -1,5 +1,6 @@
 //! Native model texture composition within Bevy lighting.
 use super::compile::{blend, depth, image, rasterization};
+use super::opacity::M2Opacity;
 use super::{Blend, SurfacePass, UvConvention};
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::textures::TextureImages;
@@ -264,6 +265,9 @@ pub(super) fn compile_m2(
     {
         pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Approximation, format!("M2 shader with {} texture inputs or unsupported coordinates is approximated by its first input; authored combiners are not evaluated",inputs.len())));
     }
+    let opacity = M2Opacity::new(pass.material.alpha_mode, pass.state.blend);
+    pass.state.m2_opacity = Some(opacity);
+    opacity.apply(&mut pass.material, &mut pass.state);
     Ok(pass)
 }
 

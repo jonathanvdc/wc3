@@ -55,7 +55,12 @@ fn m2_bound_without_channels_preserves_defaults_and_allows_shared_materials() {
     );
     let sample = model.animation_sample(AnimationSample::default()).unwrap();
     let before = pass.material.base_color;
-    pass.animation.apply(&sample, &mut pass.material);
+    let mut material = ModelMaterial {
+        base: pass.material.clone(),
+        extension: pass.state.clone(),
+    };
+    pass.animation.apply_to_material(&sample, &mut material);
+    pass.material = material.base;
     assert_eq!(pass.material.base_color, before);
 }
 
@@ -324,17 +329,20 @@ fn constant_track_different_from_fallback_cannot_be_folded() {
         .remove(0);
     assert!(pass.animation.is_animated());
     let sample = model.animation_sample(AnimationSample::default()).unwrap();
-    let mut unselected = pass.material.clone();
-    pass.animation.apply(&sample, &mut unselected);
-    assert_eq!(unselected.base_color.alpha(), 1.);
+    let mut unselected = ModelMaterial {
+        base: pass.material.clone(),
+        extension: pass.state.clone(),
+    };
+    pass.animation.apply_to_material(&sample, &mut unselected);
+    assert_eq!(unselected.base.base_color.alpha(), 1.);
     let sample = model
         .animation_sample(AnimationSample {
             clip: Some(clip),
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
-    pass.animation.apply(&sample, &mut unselected);
-    assert_eq!(unselected.base_color.alpha(), 0.5);
+    pass.animation.apply_to_material(&sample, &mut unselected);
+    assert_eq!(unselected.base.base_color.alpha(), 0.5);
 }
 
 #[test]
@@ -426,15 +434,18 @@ fn folding_constant_weights_preserves_changing_uv_channels() {
         .remove(0);
     assert!(pass.animation.weight.is_some());
     assert!(pass.animation.is_animated());
-    let mut value = pass.material;
+    let mut value = ModelMaterial {
+        base: pass.material,
+        extension: pass.state,
+    };
     let sample = model
         .animation_sample(AnimationSample {
             clip_time: ModelTime::seconds(0.5).unwrap(),
             ..SlotConstruct::construct(&mut slot_values)
         })
         .unwrap();
-    pass.animation.apply(&sample, &mut value);
-    assert!((value.uv_transform.translation.y - 0.5).abs() < 1e-6);
+    pass.animation.apply_to_material(&sample, &mut value);
+    assert!((value.base.uv_transform.translation.y - 0.5).abs() < 1e-6);
 }
 
 fn opacity(builder: &ModelBuilder<'static>, id: MaterialId) -> Property<f32> {
@@ -444,4 +455,51 @@ fn opacity(builder: &ModelBuilder<'static>, id: MaterialId) -> Property<f32> {
         panic!("M2")
     };
     step.declaration().opacity
+}
+
+#[test]
+fn animated_m2_surface_opacity_restores_opaque_phase_after_a_complete_fade() {
+    let (mut builder, id) = scalar_material();
+    builder
+        .add_global_track(DynamicTrack::Scalar(Track {
+            target: opacity(&builder, id),
+            clock: TimeSource::Animation,
+            curve: Curve::step(
+                [0., 0.25, 0.5, 0.75].map(|time| ModelTime::seconds(time).unwrap()),
+                [1., 0.25, 0., 1.],
+            )
+            .unwrap(),
+        }))
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let pass = compile_material_with_images(&model, id, Arc::default())
+        .unwrap()
+        .remove(0);
+    assert!(pass.animation.is_animated());
+    let mut material = ModelMaterial {
+        base: pass.material,
+        extension: pass.state,
+    };
+    let depth = material.extension.depth_write;
+    for (time, alpha) in [(0., 1.), (0.25, 0.25), (0.5, 0.), (0.75, 1.)] {
+        let sample = model
+            .animation_sample(AnimationSample {
+                clip_time: ModelTime::seconds(time).unwrap(),
+                ..Default::default()
+            })
+            .unwrap();
+        pass.animation.apply_to_material(&sample, &mut material);
+        assert_eq!(material.base.base_color.alpha(), alpha);
+        assert_eq!(
+            material.base.alpha_mode,
+            if alpha == 1. {
+                AlphaMode::Opaque
+            } else {
+                AlphaMode::Blend
+            }
+        );
+        assert_eq!(material.extension.has_visible_opacity(alpha), alpha > 0.);
+        assert_eq!(material.extension.depth_write, depth);
+        assert!(!pass.animation.apply_to_material(&sample, &mut material));
+    }
 }

@@ -531,7 +531,7 @@ impl RuntimeRibbons {
             };
             let [high, low] = split_time(frame.time);
             for (pass, (entity, material)) in emitter.passes.iter().zip(&mut state.passes) {
-                pass.animation.apply(frame.sample, &mut material.base);
+                pass.animation.apply_to_material(frame.sample, material);
                 if pass.override_texture
                     && material.base.base_color_texture != pass.material.base.base_color_texture
                 {

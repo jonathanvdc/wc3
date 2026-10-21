@@ -270,3 +270,49 @@ fn malformed_skin_and_normal_streams_are_rejected() {
             .is_err());
     }
 }
+
+#[test]
+fn zero_alpha_blend_add_remains_visible_in_baked_m2_surfaces() {
+    use wc3::model::materials::{m2, state::BlendOperations};
+    use wc3::model::values::model::ModelBlend;
+    use wc3::model::{Material, MaterialSurface};
+
+    for blend_add in [false, true] {
+        let mut model = io::mdlx::import_owned(&source(), &ImportOptions::default())
+            .unwrap()
+            .value
+            .widen::<Universal>();
+        let id = model.materials().iter().next().unwrap().0;
+        model
+            .edit(|builder| {
+                let mut step: m2::DiffuseMaterialStep = builder.construct();
+                step.declaration.color = builder.add_value(Vec3::ONE);
+                step.declaration.opacity = builder.add_value(0.);
+                step.diffuse.contribution = builder.add_value(1.);
+                step.declaration.state.blend = if blend_add {
+                    BlendOperations::Extension(ModelBlend::BlendAdd)
+                } else {
+                    BlendOperations::Opaque
+                };
+                builder.set_material(
+                    id,
+                    Material {
+                        name: "zero opacity".into(),
+                        surface: MaterialSurface::from(m2::MaterialStep::Diffuse(step)),
+                    },
+                )
+            })
+            .unwrap();
+        let mut meshes = Assets::default();
+        let mut binds = Assets::default();
+        let prepared = compile_model(&model, |_| None)
+            .unwrap()
+            .prepare(&mut meshes, &mut binds);
+        let baked = PoseBaker::default()
+            .bake(&prepared, &meshes, &binds, PoseOptions::default())
+            .unwrap();
+        assert!(!baked.parts.is_empty());
+        assert!(baked.parts.iter().all(|part| part.visible == blend_add));
+        assert_eq!(baked.bounds.is_some(), blend_add);
+    }
+}

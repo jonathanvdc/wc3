@@ -1,6 +1,6 @@
 # M2 texture composition
 
-M2 surfaces retain their authored framebuffer blend and depth states while
+M2 surfaces use their authored framebuffer blend and depth states as defaults,
 combining supported texture inputs inside `ModelMaterial`. Diffuse composition
 feeds Bevy albedo. Native additive texture contributions feed emissive, so they
 remain visible alongside Bevy lighting without replacing its PBR pipeline. This
@@ -66,6 +66,23 @@ multiplies global opacity. Batch flag `0x40` suppresses that opacity multiplier
 while retaining the weight as an independent shader control. Secondary and third
 weights affect the particular equations that author them; they are not
 unconditionally multiplied into diffuse opacity.
+
+The combined surface, primary-weight and geometry opacity selects the Bevy phase
+both at compilation and during animation. Authored opaque and cutout surfaces
+use ordinary alpha blending below `0.99999` opacity, then recover their authored
+mode when the fade ends. Factors below `0.0001` hide the surface, except that
+`BlendAdd` retains its RGB contribution at zero alpha. Authored depth testing and writing
+remain independent of these phase changes.
+
+Cutout coverage scales its `128 / 255` threshold with the combined opacity, so a
+fade preserves texture holes. Other transparent blend modes use a `1 / 255`
+fragment threshold; opaque and `BlendAdd` surfaces have no positive threshold.
+The same coverage rule applies to shadow fragments. Shadows retain binary
+coverage rather than fractional opacity. Faded surfaces follow Bevy's transparent
+phase and do not contribute to ordinary depth, normal or motion-vector prepasses,
+even when they retain authored depth writes in the color pass. A dedicated native
+depth-prefill pass and complete native pass ordering are not implemented. Native
+game fidelity for fades and shadows remains unverified.
 
 Guild colours are explicit application settings with neutral white defaults.
 Palettes can be supplied on the semantic pass or changed through the live material

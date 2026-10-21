@@ -91,9 +91,11 @@ fn update_draw_visibility(
 ) {
     for (entity, level, material) in draws {
         if let Ok(mut current) = visibility.get_mut(*entity) {
-            let has_opacity = materials
-                .get(material)
-                .is_some_and(|material| material.base.base_color.alpha() > 0.);
+            let has_opacity = materials.get(material).is_some_and(|material| {
+                material
+                    .extension
+                    .has_visible_opacity(material.base.base_color.alpha())
+            });
             let next = if has_opacity && level.is_none_or(|level| level == lod) {
                 Visibility::Inherited
             } else {

@@ -3,6 +3,7 @@ mod animation;
 mod bindings;
 mod compile;
 mod m2;
+mod opacity;
 
 #[path = "ribbon_material.rs"]
 mod ribbon_material;
@@ -30,6 +31,7 @@ pub(crate) use compile::compile_materials_with_images;
 use compile::{blend, depth};
 #[cfg(test)]
 use native_fixtures::wmo as wmo_shader;
+use opacity::M2Opacity;
 pub(crate) use ribbon_material::effect_state;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -86,6 +88,7 @@ pub struct ModelMaterialExtension {
     world: WorldUniform,
 
     blend: Option<Blend>,
+    m2_opacity: Option<M2Opacity>,
     depth_test: bool,
     depth_write: Option<bool>,
     cast_shadows: bool,
@@ -220,6 +223,7 @@ impl Default for ModelMaterialExtension {
             world: WorldUniform::default(),
 
             blend: None,
+            m2_opacity: None,
             depth_test: true,
             depth_write: None,
             cast_shadows: true,

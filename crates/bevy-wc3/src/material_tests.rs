@@ -308,7 +308,7 @@ fn legacy_selectors_keep_texture_alpha_roles_independent() {
 #[test]
 fn sampling_static_bindings_does_not_request_repeated_asset_writes() {
     let mut slot_values = SlotValues::default();
-    let mut material = StandardMaterial::default();
+    let mut material = ModelMaterial::default();
     let animation = SurfaceAnimation {
         color: Some(slot_values.add(Vec3::from_array([0.25, 0.5, 0.75]))),
         opacity: Some(slot_values.add(0.6)),
@@ -322,10 +322,10 @@ fn sampling_static_bindings_does_not_request_repeated_asset_writes() {
     }
     .unwrap();
     let sampled = model.animation_sample(AnimationSample::default()).unwrap();
-    assert!(animation.apply(&sampled, &mut material));
-    assert!(!animation.apply(&sampled, &mut material));
+    assert!(animation.apply_to_material(&sampled, &mut material));
+    assert!(!animation.apply_to_material(&sampled, &mut material));
     assert_eq!(
-        material.base_color,
+        material.base.base_color,
         Color::linear_rgba(0.25, 0.5, 0.75, 0.3)
     );
 }

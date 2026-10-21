@@ -31,8 +31,9 @@ produces geometry and material snapshots without a live ECS hierarchy.
 Authored material steps compile into Bevy material passes. Supported native texture
 combinations run within `ModelMaterial`, an extension of `StandardMaterial`.
 Blend/depth state, animated images, UV transforms, and color/opacity remain
-explicit. Constant materials share assets; animated appearances retain independent
-instance state.
+explicit. Faded M2 opaque and cutout surfaces enter Bevy's transparent phase,
+retaining their authored depth operations and texture coverage. Constant materials
+share assets; animated appearances retain independent instance state.
 
 Each material or effect input owns its sampling settings. Image requests preserve
 sampler and color-space distinctions, and equal resolved interpretations share GPU
