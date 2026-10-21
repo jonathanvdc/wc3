@@ -52,6 +52,55 @@ fn safe_normalize(value: vec3<f32>) -> vec3<f32> {
     if magnitude == 0.0 { return vec3(0.0); }
     return value / magnitude;
 }
+#ifdef SAMPLED_SPRITE
+fn normalize_or(value: vec3<f32>, fallback: vec3<f32>) -> vec3<f32> {
+    let scale = max(max(abs(value.x), abs(value.y)), abs(value.z));
+    if scale == 0.0 { return fallback; }
+    return normalize(value / scale);
+}
+fn sampled_axes(particle: Particle, camera_right: vec3<f32>, camera_up: vec3<f32>,
+    camera_back: vec3<f32>) -> mat2x3<f32> {
+    let mode = emitter.flags.x;
+    let has_axis0 = (emitter.flags.y & 1u) != 0u;
+    let has_axis1 = (emitter.flags.y & 2u) != 0u;
+    let axis0 = particle.velocity_tail.xyz;
+    let axis1 = particle.offsets.xyz;
+    let size = particle.size_spin.x * 0.5;
+    var right = camera_right * size;
+    var up = camera_up * size;
+    if mode == 0u && has_axis0 && has_axis1 {
+        right = axis0 * size;
+        up = axis1 * size;
+    }
+    if mode == 2u && has_axis0 {
+        let direction = normalize_or(particle.position.xyz - view.world_position, -camera_back);
+        right = normalize_or(cross(direction, normalize_or(axis0, vec3(0.0))), camera_right) * size;
+        return mat2x3(right, axis0 * 0.5);
+    }
+    if mode == 3u && has_axis0 {
+        let direction = normalize_or(particle.position.xyz - view.world_position, -camera_back);
+        let width = normalize_or(cross(normalize_or(axis0, vec3(0.0)), direction), camera_right) * size;
+        return mat2x3(-width, axis0 * 0.5 + cross(direction, width));
+    }
+    if mode == 2u || mode == 3u { return mat2x3(right, up); }
+    if mode == 5u && has_axis0 && has_axis1 {
+        var normal = normalize_or(cross(normalize_or(axis0, vec3(0.0)),
+            normalize_or(axis1, vec3(0.0))), vec3(0.0));
+        if length(normal) == 0.0 {
+            let axis = normalize_or(axis1, vec3(0.0));
+            var helper = vec3(1.0, 0.0, 0.0);
+            if abs(axis.x) > 0.9 { helper = vec3(0.0, 1.0, 0.0); }
+            normal = safe_normalize(cross(axis, helper));
+        }
+        right = normal * size;
+        up = cross(axis1, normal) * size;
+    }
+    let cs = particle.size_spin.z;
+    var sn = particle.size_spin.w;
+    if mode == 5u { sn = -sn; }
+    return mat2x3(right * cs + up * sn, up * cs - right * sn);
+}
+#endif
 @vertex
 fn vertex(input: VertexInput) -> VertexOutput {
     let particle = particles[input.particle_index & 0x7fffffffu];
@@ -61,6 +110,13 @@ fn vertex(input: VertexInput) -> VertexOutput {
     var up = safe_normalize(view.world_from_view[1].xyz);
     var center = particle.position.xyz;
     let velocity = particle.velocity_tail.xyz;
+    var side: vec3<f32>;
+    var vertical: vec3<f32>;
+#ifdef SAMPLED_SPRITE
+    let axes = sampled_axes(particle, right, up, camera_back);
+    side = axes[0];
+    vertical = axes[1];
+#else
     if emitter.flags.x != 0u {
         right = emitter.axes[0].xyz;
         up = emitter.axes[1].xyz;
@@ -71,8 +127,9 @@ fn vertex(input: VertexInput) -> VertexOutput {
     }
     let cs = particle.size_spin.z;
     let sn = particle.size_spin.w;
-    var side = (right * cs + up * sn) * particle.size_spin.x * 0.5;
-    var vertical = (up * cs - right * sn) * particle.size_spin.y * 0.5;
+    side = (right * cs + up * sn) * particle.size_spin.x * 0.5;
+    vertical = (up * cs - right * sn) * particle.size_spin.y * 0.5;
+#endif
     var cell = particle.cells.x;
     if tail {
         let extent = velocity * particle.velocity_tail.w;

@@ -67,3 +67,79 @@ fn sampled_appearance_resolves_color_and_lut_as_distinct_interpretations() {
         }
     );
 }
+
+#[test]
+fn facing_axes_bind_native_and_custom_semantics_with_checked_vector_layouts() {
+    use wc3::model::scene::popcorn::EffectRendererInput;
+    let document = Document::read(include_bytes!(
+        "../../../../wc3/tests/fixtures/pkb/sprite.pkb"
+    ))
+    .unwrap();
+    let program = document
+        .compile_effect(1, &EffectCompileOptions::default())
+        .unwrap();
+    for (mode, facing) in [
+        (0, SpriteFacing::Camera),
+        (2, SpriteFacing::Axial),
+        (3, SpriteFacing::Spheroid),
+        (5, SpriteFacing::Planar),
+    ] {
+        for (semantic, name) in [(4, None), (8, None), (101, Some(b"Axis".as_slice()))] {
+            let mut renderer = program.renderers()[0].clone();
+            let mut properties = renderer.properties.to_vec();
+            properties.push(property_value(b"BillboardingMode", [mode, 0, 0, 0], None));
+            renderer.properties = properties.into();
+            let position = renderer
+                .inputs
+                .iter()
+                .find(|input| input.semantic == 0)
+                .unwrap()
+                .field;
+            let mut inputs = renderer.inputs.to_vec();
+            inputs.extend([
+                EffectRendererInput {
+                    semantic,
+                    field: position,
+                    additional_name: name.map(Into::into),
+                    additional_type: None,
+                },
+                EffectRendererInput {
+                    semantic: 102,
+                    field: position,
+                    additional_name: Some(b"NormalAxis".as_slice().into()),
+                    additional_type: None,
+                },
+            ]);
+            renderer.inputs = inputs.into();
+            let prepared = prepare(0, &renderer, &program).unwrap().unwrap();
+            assert_eq!(prepared.facing, facing);
+            assert_eq!(prepared.axes, [Some(position), Some(position)]);
+            let mut inputs = renderer.inputs.to_vec();
+            let scalar = inputs
+                .iter()
+                .find(|input| input.semantic == 1)
+                .unwrap()
+                .field;
+            inputs.last_mut().unwrap().field = scalar;
+            renderer.inputs = inputs.into();
+            assert!(prepare(0, &renderer, &program).is_err());
+        }
+    }
+}
+
+#[test]
+fn soft_intersections_do_not_discard_supported_billboard_geometry() {
+    let document = Document::read(include_bytes!(
+        "../../../../wc3/tests/fixtures/pkb/sprite.pkb"
+    ))
+    .unwrap();
+    let program = document
+        .compile_effect(1, &EffectCompileOptions::default())
+        .unwrap();
+    let mut renderer = program.renderers()[0].clone();
+    let mut properties = renderer.properties.to_vec();
+    properties.push(property_value(b"SoftParticles", [u32::MAX, 0, 0, 0], None));
+    renderer.properties = properties.into();
+    assert!(prepare(0, &renderer, &program).unwrap().is_some());
+    assert_eq!(image_requests(0, &renderer).count(), 1);
+}

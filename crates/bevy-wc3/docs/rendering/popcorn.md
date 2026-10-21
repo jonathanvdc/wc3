@@ -33,7 +33,8 @@ Only enabled, supported renderer inputs request images. A disabled distortion
 fallback does not make an otherwise ordinary diffuse effect fail loading. Missing
 diffuse images use a white fallback and retain a resource diagnostic. Alpha-remap
 LUTs request linear data sampling. Missing LUTs preserve diffuse alpha and report
-the unresolved resource. Cache handles by `(request.renderer, request.binding)`;
+the unresolved resource. Within one programme, cache handles by
+`(request.renderer, request.binding)`;
 one renderer can request multiple distinct images.
 
 ## Compile an in-memory model
@@ -101,9 +102,26 @@ visibility reset and per-cycle restart conventions remain unverified.
 
 ## Rendering and budgets
 
-The initial billboard adapter supports screen-facing scalar size, rotation,
+The billboard adapter supports scalar size, rotation,
 enabled state, HDR color, diffuse textures, rectangular atlas crossfade,
-alpha-remap LUTs and native transparent blend choices. Size is a half extent.
+alpha-remap LUTs and native transparent blend choices. Facing is evaluated for
+each particle and view from shared records:
+
+| Mode | Geometry | Axis interpretation |
+| --- | --- | --- |
+| 0 | Screen-facing quad, or two authored axes | Both axes retain their lengths and may shear the quad. |
+| 2 | Axial quad | Axis0 gives full longitudinal extent; size gives half width. |
+| 3 | Spheroid quad | Axis0 gives the central extent; size adds view-facing padding at both ends. |
+| 5 | Planar quad | Axis0 and Axis1 define an orthogonal plane; Axis1 retains its length. |
+
+`Axis0`/`Axis` and `Axis1`/`NormalAxis` custom streams bind the same typed vectors
+as their native numeric selectors. Axial and spheroid facing use the particle's
+direction from the eye and ignore scalar rotation. Planar rotation has the
+opposite sign to screen rotation. Missing required axis streams use camera-facing quads;
+degenerate axes have finite fallbacks. These edge policies and exact native
+facing fidelity remain unverified. Capsule facing has no adapter yet.
+
+Size is a half extent for screen and planar quads. Nonpositive sizes omit geometry.
 Atlas cursors use absolute
 value and clamp to the final cell; nonfinite cursors select zero. Their fractional
 part blends adjacent sampled RGBA frames before particle-color modulation.
@@ -114,9 +132,11 @@ Alpha remap replaces the modulated alpha with the LUT red channel while retainin
 RGB. Billboard LUT V uses a deterministic hash of layer, pool slot and incarnation,
 so sorting and swap removal do not change a living particle's lookup. This is an
 explicit original random policy, with native fidelity unverified. Colors retain HDR
-components and alpha above one. Unsupported facing modes, two-dimensional size,
-soft intersections, general UV programmes and additional material features produce
-renderer diagnostics. Native ribbons, distortion and mesh outputs have no adapter.
+components and alpha above one. Authored soft intersections retain ordinary
+billboard geometry with an unsupported-feature diagnostic. Unsupported facing
+modes, two-dimensional size, general UV programmes and additional material
+features produce renderer diagnostics. Native ribbons, distortion and mesh
+outputs have no adapter.
 
 `ParticleEffect::with_limits` selects `EffectLimits` for independent instances.
 The default pool contains 1,024 particle slots, including controllers. Event queues,

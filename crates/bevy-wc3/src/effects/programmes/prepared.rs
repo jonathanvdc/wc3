@@ -76,8 +76,31 @@ pub(crate) struct SpriteRenderer {
     pub(crate) rotation: Option<EffectFieldId>,
     pub(crate) color: Option<EffectFieldId>,
     pub(crate) cursor: Option<EffectFieldId>,
+    pub(crate) axes: [Option<EffectFieldId>; 2],
+    pub(crate) facing: SpriteFacing,
     pub(crate) atlas: [u32; 2],
     pub(crate) style: AgeSpriteStyle,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SpriteFacing {
+    Camera,
+    Axial,
+    Spheroid,
+    Planar,
+}
+impl SpriteFacing {
+    pub(super) fn code(self) -> u32 {
+        match self {
+            Self::Camera => 0,
+            Self::Axial => 2,
+            Self::Spheroid => 3,
+            Self::Planar => 5,
+        }
+    }
+    pub(super) fn longitudinal_axis(self) -> bool {
+        matches!(self, Self::Axial | Self::Spheroid)
+    }
 }
 impl ParticleEffect {
     /// Prepare renderer bindings once, resolving external images through the caller.
@@ -91,6 +114,34 @@ impl ParticleEffect {
         for (index, renderer) in program.renderers().iter().enumerate() {
             match prepare(index, renderer, &program) {
                 Ok(Some(mut prepared)) => {
+                    if toggle(renderer, b"SoftParticles", false) {
+                        diagnostics.push(RenderDiagnostic::new(
+                            RenderDiagnosticKind::Unsupported,
+                            RenderDiagnosticSource::Model,
+                            "external particle soft intersections are not applied; retaining ordinary billboard geometry",
+                        ));
+                    }
+                    let missing_axes = match prepared.facing {
+                        SpriteFacing::Camera => false,
+                        SpriteFacing::Axial | SpriteFacing::Spheroid => prepared.axes[0].is_none(),
+                        SpriteFacing::Planar => prepared.axes.iter().any(Option::is_none),
+                    };
+                    if missing_axes {
+                        diagnostics.push(RenderDiagnostic::new(
+                            RenderDiagnosticKind::Approximation,
+                            RenderDiagnosticSource::Model,
+                            format!("external particle renderer {index} is missing facing axes; using a camera-facing quad"),
+                        ));
+                    }
+                    if prepared.facing != SpriteFacing::Camera
+                        || prepared.axes.iter().all(Option::is_some)
+                    {
+                        diagnostics.push(RenderDiagnostic::new(
+                            RenderDiagnosticKind::Unverified,
+                            RenderDiagnosticSource::Model,
+                            "external particle authored-axis facing uses per-view geometry; exact native facing and degenerate-axis fidelity remain unverified",
+                        ));
+                    }
                     for request in image_requests(index, renderer) {
                         let binding = request.binding;
                         let image = resolve(request);
@@ -298,8 +349,7 @@ fn prepare(
         return Err("only billboard sprite geometry is supported");
     }
     for feature in [
-        b"SoftParticles".as_slice(),
-        b"NormalBend",
+        b"NormalBend".as_slice(),
         b"NormalWrap",
         b"DiffuseRamp",
         b"Emissive",
@@ -312,9 +362,13 @@ fn prepare(
             return Err("an enabled material feature has no interpreter");
         }
     }
-    if property(renderer, b"BillboardingMode").is_some_and(|value| value.numeric[0] != 0) {
-        return Err("the billboard facing mode is unsupported");
-    }
+    let facing = match property(renderer, b"BillboardingMode").map_or(0, |value| value.numeric[0]) {
+        0 => SpriteFacing::Camera,
+        2 => SpriteFacing::Axial,
+        3 => SpriteFacing::Spheroid,
+        5 => SpriteFacing::Planar,
+        _ => return Err("the billboard facing mode is unsupported"),
+    };
     let field = |semantic| {
         renderer
             .inputs
@@ -335,6 +389,26 @@ fn prepare(
     let rotation = field(6);
     let color = custom(b"Color");
     let cursor = custom(b"TextureID");
+    let axis = |semantics: &[u32], names: &[&[u8]]| {
+        renderer
+            .inputs
+            .iter()
+            .find(|input| {
+                match input
+                    .additional_name
+                    .as_deref()
+                    .filter(|name| !name.is_empty())
+                {
+                    Some(name) => names.contains(&name),
+                    None => semantics.contains(&input.semantic),
+                }
+            })
+            .map(|input| input.field)
+    };
+    let axes = [
+        axis(&[4, 8], &[b"Axis0", b"Axis"]),
+        axis(&[5], &[b"Axis1", b"NormalAxis"]),
+    ];
     let fields = &program
         .layers()
         .get(renderer.layer.0 as usize)
@@ -347,6 +421,8 @@ fn prepare(
         (rotation, ValueType::Float),
         (color, ValueType::Float4),
         (cursor, ValueType::Float),
+        (axes[0], ValueType::Float3),
+        (axes[1], ValueType::Float3),
     ] {
         if let Some(id) = id {
             if fields.get(id.0 as usize).and_then(|field| field.value_type) != Some(kind) {
@@ -388,6 +464,8 @@ fn prepare(
         rotation,
         color,
         cursor,
+        axes,
+        facing,
         atlas,
         style: AgeSpriteStyle {
             textures: [None, None, None],

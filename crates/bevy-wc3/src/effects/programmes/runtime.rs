@@ -409,8 +409,9 @@ impl RuntimeProgramParticles {
                         data.uniform = AgeSpriteUniform {
                             axes: [[0.; 4]; 2],
                             flags: [
-                                0,
-                                0,
+                                renderer.facing.code(),
+                                u32::from(renderer.axes[0].is_some())
+                                    | (u32::from(renderer.axes[1].is_some()) << 1),
                                 u32::from(data.style.unlit),
                                 u32::from(!emitter.unfogged),
                             ],
@@ -586,6 +587,16 @@ fn sprite_record(
         .rotation
         .and_then(|field| particle.field(field))
         .map_or(0., |value| floats(value)[0]);
+    let mut axes = renderer.axes.map(|field| {
+        field
+            .and_then(|field| particle.field(field))
+            .map_or(Vec3::ZERO, |value| {
+                world_from_space.transform_vector3(Vec3::from_slice(&floats(value)[..3]))
+            })
+    });
+    if renderer.facing.longitudinal_axis() {
+        axes[0] *= MODEL_UNITS_PER_EFFECT_UNIT;
+    }
     let color = renderer
         .color
         .and_then(|field| particle.field(field))
@@ -597,6 +608,8 @@ fn sprite_record(
     if !position.is_finite()
         || !size.is_finite()
         || !rotation.is_finite()
+        || size <= 0.
+        || axes.iter().any(|axis| !axis.is_finite())
         || color.iter().any(|component| !component.is_finite())
     {
         return None;
@@ -606,10 +619,10 @@ fn sprite_record(
     let lut_v = lut_cursor(particle.id.slot, particle.id.generation, particle.layer.0);
     let mut record = AgeSpriteRecord {
         position: position.extend(1.).to_array(),
-        velocity_tail: [0.; 4],
+        velocity_tail: axes[0].extend(0.).to_array(),
         size_spin: [size, size, rotation.cos(), rotation.sin()],
         color: color.map(|value| value.max(0.)),
-        offsets: [0.; 4],
+        offsets: axes[1].extend(0.).to_array(),
         scales: [1.; 4],
         cells: [cell, 0, 0, 0],
     };
