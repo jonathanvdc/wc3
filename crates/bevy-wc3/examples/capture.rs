@@ -22,10 +22,10 @@ use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 use bevy_wc3::{
     spawn_model, AssetSettings, BakeSpace, CameraBinding, Lod, LodOverride, LodSettings,
-    ModelAsset, ModelEmitter, ModelInstance, ModelInstanceError, ModelMaterial, ModelRig,
-    ParticleProgramEmitter, ParticleRefraction, PhysicsSimulation, Playback, PlaybackError,
-    PoseBaker, PoseOptions, PreparedModel, RibbonEmitter, SpriteEmitter, Wc3BevyPlugin,
-    WorldSelection,
+    ModelAsset, ModelEmitter, ModelInstance, ModelInstanceError, ModelMaterial,
+    ModelParticleLimits, ModelParticleTreeStats, ModelRig, ParticleProgramEmitter,
+    ParticleRefraction, PhysicsSimulation, Playback, PlaybackError, PoseBaker, PoseOptions,
+    PreparedModel, RibbonEmitter, SpriteEmitter, Wc3BevyPlugin, WorldSelection,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::env::args;
@@ -52,6 +52,7 @@ const HELP: &str = "Usage: capture MODEL OUTPUT_DIR [options]
 Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --character-recipe PATH  Assemble a resolved modern M2 character recipe (JSON)
   --particle-stats      Report effect populations and omitted simulation work at each capture
+  --model-particle-limits A,B,S  Owned actors, admission work and emission work per frame
   --guild-palette RGB:RGB:RGB  Linear background, emblem and border RGB multipliers
   --physics             Enable authored rigid-body secondary motion
   --allow-loss          Explicitly discard unsupported native data, retaining diagnostics
@@ -113,6 +114,7 @@ struct Options {
     bake_pose: bool,
     prepasses: bool,
     particle_stats: bool,
+    model_particle_limits: Option<ModelParticleLimits>,
     guild_palette: Option<GuildPalette>,
     bevy_reference: bool,
     no_default_light: bool,
@@ -166,6 +168,7 @@ impl Options {
             bake_pose: false,
             prepasses: false,
             particle_stats: false,
+            model_particle_limits: None,
             guild_palette: None,
             bevy_reference: false,
             no_default_light: false,
@@ -318,6 +321,22 @@ impl Options {
                     if options.fog_color.min_element() < 0. {
                         return Err("fog color must be nonnegative".into());
                     }
+                }
+                "--model-particle-limits" => {
+                    let fields = value
+                        .split(',')
+                        .map(str::parse)
+                        .collect::<Result<Vec<u32>, _>>()?;
+                    let [actors, births, steps] = fields.as_slice() else {
+                        return Err(
+                            "model-particle-limits must be ACTORS,BIRTH_WORK,EMISSION_WORK".into(),
+                        );
+                    };
+                    options.model_particle_limits = Some(ModelParticleLimits {
+                        actors_per_tree: *actors,
+                        birth_work_per_frame: *births,
+                        emission_steps_per_frame: *steps,
+                    });
                 }
                 "--guild-palette" => options.guild_palette = Some(parse_guild_palette(&value)?),
                 "--illuminance" => options.illuminance = value.parse()?,
@@ -841,6 +860,9 @@ fn capture(options: Options) -> CaptureResult<()> {
     app.world_mut()
         .entity_mut(root)
         .insert((options.lod, LodOverride(options.lod_settings.clone())));
+    if let Some(limits) = options.model_particle_limits {
+        app.world_mut().entity_mut(root).insert(limits);
+    }
     if options.physics {
         app.world_mut()
             .entity_mut(root)
@@ -1003,6 +1025,12 @@ fn capture(options: Options) -> CaptureResult<()> {
                     "Model particles {:?}: alive={}, omitted={}, skipped_seconds={:.6}",
                     emitter.feature, emitter.alive, emitter.omitted, emitter.skipped_seconds
                 );
+            }
+            let mut trees = world.query::<(Entity, &ModelParticleTreeStats)>();
+            for (entity, stats) in trees.iter(world) {
+                println!("Model tree {entity:?}: actors={}, ready={}, pending={}, omitted_actors={}, omitted_work={}, skipped_seconds={:.6}",
+                    stats.actors, stats.ready(), stats.pending, stats.omitted_actor_limit,
+                    stats.omitted_birth_work, stats.skipped_emission_seconds);
             }
             let mut programmes = world.query::<&ParticleProgramEmitter>();
             for emitter in programmes.iter(world) {
@@ -1312,6 +1340,28 @@ mod tests {
         }
         for value in ["0", "-1", "NaN", "inf", "1e-40"] {
             assert!(parse(&["--refraction-fade-distance", value]).is_err());
+        }
+    }
+
+    #[test]
+    fn validates_owned_model_limits_and_allows_disabling_work() {
+        for values in ["8,2,16", "0,0,0"] {
+            let options = parse(&["--model-particle-limits", values])
+                .unwrap()
+                .unwrap();
+            let limits = options.model_particle_limits.unwrap();
+            let fields: Vec<u32> = values.split(',').map(|v| v.parse().unwrap()).collect();
+            assert_eq!(
+                [
+                    limits.actors_per_tree,
+                    limits.birth_work_per_frame,
+                    limits.emission_steps_per_frame
+                ],
+                fields.as_slice()
+            );
+        }
+        for values in ["1,2", "1,2,3,4", "-1,2,3", "1.5,2,3", "4294967296,2,3"] {
+            assert!(parse(&["--model-particle-limits", values]).is_err());
         }
     }
 

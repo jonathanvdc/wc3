@@ -85,6 +85,13 @@ omissions and checked execution errors; an execution error terminates the captur
 These counters help distinguish simulation and visibility problems; inspect the
 images to assess appearance.
 
+Model-particle trees also report accepted actors, pending readiness and exclusive
+actor-limit or work-limit omissions. Use `--model-particle-limits 8,2,16` to
+set the actor ceiling, admission work and examined emission work per application
+frame on the captured model root. Zero disables the corresponding allowance.
+These limits include nested particle-owned models, rigid parts and automatic
+attachments; see [model-particle limits](rendering/prem.md#limits).
+
 For M2 guild materials, `--guild-palette 0.2,0.4,0.8:1,0.8,0.1:0.1,0.2,0.3`
 sets background, emblem, and border multipliers in linear RGB. All three triples
 are required and must be finite; values above one are accepted. These application
