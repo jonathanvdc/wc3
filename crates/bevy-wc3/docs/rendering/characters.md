@@ -123,6 +123,13 @@ One representative point is used per fixture pair; stable multipoint manifolds
 are not implemented. Authored hull mass uses declared volume and centroid with
 a diagnosed spherical tensor approximation.
 
+Contact admission follows `Physics::collision_pairs` in semantic physics systems.
+Pair endpoints are `Body::node` placement identities. Native M2 imports currently
+leave this list empty, so imported PHYS systems run their bodies and constraints
+without contacts; the capture tool's `--physics` option adds no pairs. Applications
+enabling contacts must supply permitted pairs before compiling the Universal
+model. Native game contact filtering has not been established.
+
 Kinematic target motion interpolates over the available fixed steps and supplies
 point velocities to contacts. Body scale changes retain compiled mass and transform
 its centered second moments, with native scale/mass fidelity unverified. The
