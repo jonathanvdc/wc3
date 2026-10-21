@@ -14,6 +14,17 @@ impl EmitterRng {
     pub(crate) fn new(object_id: u32) -> Self {
         Self(u64::from(object_id) + 1)
     }
+    /// Independent packet for one scheduled occurrence. Packet zero uses the
+    /// emitter seed; omitted births cannot shift later packets.
+    pub(crate) fn at_occurrence(object_id: u32, ordinal: u64) -> Self {
+        let base = u64::from(object_id) + 1;
+        let mut mixed = ordinal.wrapping_mul(0x9e3779b97f4a7c15);
+        mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+        mixed = (mixed ^ (mixed >> 27)).wrapping_mul(0x94d049bb133111eb);
+        mixed ^= mixed >> 31;
+        let seed = base ^ mixed;
+        Self(if seed == 0 { base } else { seed })
+    }
     pub(crate) fn random(&mut self) -> f32 {
         self.0 ^= self.0 << 13;
         self.0 ^= self.0 >> 7;
@@ -43,6 +54,8 @@ pub(crate) struct EmissionPhase {
 
 pub(crate) struct BirthSchedule {
     pub(crate) count: f64,
+    /// All integral authored occurrences, including those discarded by a cap.
+    pub(crate) authored_count: f64,
     rate: f64,
     remainder: f64,
     dt: f64,
@@ -82,22 +95,23 @@ impl EmissionPhase {
         rounding: EmissionRounding,
     ) -> BirthSchedule {
         let remainder = self.remainder;
-        let count = self.accumulate(rate * dt, limit, rounding);
+        let (count, authored_count) = self.accumulate(rate * dt, limit, rounding);
         BirthSchedule {
             count,
+            authored_count,
             rate,
             remainder,
             dt,
         }
     }
     pub(crate) fn burst(&mut self, amount: f64, limit: usize) -> usize {
-        self.accumulate(amount, limit, EmissionRounding::Quad) as usize
+        self.accumulate(amount, limit, EmissionRounding::Quad).0 as usize
     }
-    fn accumulate(&mut self, amount: f64, limit: usize, rounding: EmissionRounding) -> f64 {
+    fn accumulate(&mut self, amount: f64, limit: usize, rounding: EmissionRounding) -> (f64, f64) {
         let total = self.remainder + amount;
         if !total.is_finite() {
             self.reset();
-            return 0.0;
+            return (0.0, 0.0);
         }
         let tolerance = match rounding {
             EmissionRounding::Ribbon => 1e-9,
@@ -120,7 +134,7 @@ impl EmissionPhase {
             }
             EmissionRounding::Ribbon => (total - births).max(0.0),
         };
-        count
+        (count, births)
     }
 }
 

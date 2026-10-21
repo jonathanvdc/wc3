@@ -73,3 +73,31 @@ fn live_metadata_and_records_stay_aligned_across_wrap_and_snapshots() {
     assert_eq!(live.len(), 0);
     assert!(live.records.is_empty());
 }
+
+#[test]
+fn authored_counts_include_discarded_model_births_without_retaining_backlog() {
+    let mut phase = EmissionPhase::default();
+    let first = phase.continuous(10., 1.05, 2, EmissionRounding::Model);
+    assert_eq!((first.count, first.authored_count), (2., 10.));
+    let next = phase.continuous(10., 0.05, 2, EmissionRounding::Model);
+    assert_eq!((next.count, next.authored_count), (1., 1.));
+    assert_eq!(
+        phase.continuous(10., 0., 2, EmissionRounding::Model).count,
+        0.
+    );
+    let huge = phase.continuous(1e12, 1., 0, EmissionRounding::Model);
+    assert_eq!((huge.count, huge.authored_count), (0., 1e12));
+    let invalid = phase.continuous(f64::INFINITY, 1., 2, EmissionRounding::Model);
+    assert_eq!((invalid.count, invalid.authored_count), (0., 0.));
+}
+#[test]
+fn occurrence_zero_preserves_the_original_first_random_packet() {
+    for object in [0, 1, 10, u32::MAX] {
+        let mut old = EmitterRng::new(object);
+        let mut packet = EmitterRng::at_occurrence(object, 0);
+        assert_eq!(
+            [packet.random(), packet.signed(), packet.random()],
+            [old.random(), old.signed(), old.random()]
+        );
+    }
+}

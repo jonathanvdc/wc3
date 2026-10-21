@@ -21,7 +21,13 @@ Application root motion interpolates observed update endpoints. MDLX PREM retain
 world-space origins, velocities, sampled scale, and random headings. Analytic
 constant-gravity motion follows the authored model-up axis after coordinate
 conversion. Its established latitude interpretation remains unverified against
-the native game.
+the native game. Each scheduled PREM occurrence owns a deterministic yaw, pitch,
+and spin packet. Per-birth rejection for pose visibility, invalid values,
+population limits or missing resources does not shift later packets. Emitter
+activation and hierarchy visibility gate scheduling first. Reset restarts the
+source sequence; native game random-sequence fidelity remains unverified.
+Missing child assets consume the current authored interval without queuing
+historical births.
 
 M2 geometry particles share births, motion, attachment, follow response, and
 retirement with [M2 sprites](pre2.md). Their child scale samples the lifetime size
@@ -90,7 +96,12 @@ Emitter activation stops births without destroying existing particles.
 
 Each emitter is limited to 1,024 live child models and a bounded per-update birth
 budget. `ModelEmitter` exposes population, omitted births, and skipped simulation
-time. Excess work is discarded rather than queued after a stall. The initial
+time. PREM counts authored occurrences discarded by its per-update cap, including
+those skipped without evaluating each birth. The same omitted birth is counted
+once when the population or generation boundary also prevents it. Unexamined
+time beyond the simulation-step budget is reported separately as skipped seconds.
+Excess work
+is discarded rather than queued after a stall. The initial
 adapter permits one geometry-model particle generation: child models retain
 ordinary mesh, sprite, ribbon, light, and attachment behavior, but further
 model-particle births are omitted and diagnosed. Recursive geometry actors and

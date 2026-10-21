@@ -10,7 +10,7 @@ use super::model_ownership::spawn_owned_model;
 use super::EffectFrame;
 use crate::child_models::{ChildModelBinding, ChildModelKey};
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
-use crate::effects::simulation::{EmissionPhase, EmissionRounding, EmitterRng};
+use crate::effects::simulation::{BirthSchedule, EmissionPhase, EmissionRounding, EmitterRng};
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::f32::consts::TAU;
@@ -59,11 +59,28 @@ struct State {
     entity: Entity,
     children: Vec<(Entity, f64, f64)>,
     phase: EmissionPhase,
-    rng: EmitterRng,
+    ordinal: u64,
     scratch: Vec<usize>,
     previous_node: Mat4,
     omitted: u64,
     skipped_seconds: f64,
+}
+impl State {
+    fn reset_emission(&mut self) {
+        self.phase.reset();
+        self.ordinal = 0;
+    }
+    fn schedule(&mut self, rate: f64, dt: f64, limit: usize) -> (BirthSchedule, u64) {
+        let schedule = self
+            .phase
+            .continuous(rate, dt, limit, EmissionRounding::Model);
+        let first = self.ordinal;
+        self.ordinal = self.ordinal.wrapping_add(schedule.authored_count as u64);
+        self.omitted = self
+            .omitted
+            .saturating_add((schedule.authored_count - schedule.count).max(0.) as u64);
+        (schedule, first)
+    }
 }
 #[derive(Default)]
 pub(crate) struct ModelParticleInstances {
@@ -168,6 +185,7 @@ impl RuntimeModelParticles {
                 definition.lifetime.duration,
             );
             diagnostic(RenderDiagnosticKind::Unsupported, "Model-particle longitude is retained but unused; latitude uses the Warcraft III radian convention");
+            diagnostic(RenderDiagnosticKind::Unverified, "Model-particle yaw, pitch, and spin use deterministic occurrence-indexed random packets; native game random sequences remain unverified");
             diagnostic(RenderDiagnosticKind::Budget, "External-model particles retain at most 1024 children and 1024 births per update; rates use the shared bounded 60 Hz emission clock");
             diagnostic(RenderDiagnosticKind::Unsupported, "Nested geometry-model particle births are omitted by the first model-particle adapter; child meshes and other effect families remain active");
             result.emitters.push(Emitter {
@@ -209,7 +227,7 @@ impl RuntimeModelParticles {
                         .id(),
                     children: Vec::new(),
                     phase: Default::default(),
-                    rng: EmitterRng::new(emitter.anchor as u32),
+                    ordinal: 0,
                     scratch: Vec::new(),
                     previous_node: Mat4::IDENTITY,
                     omitted: 0,
@@ -251,7 +269,7 @@ impl RuntimeModelParticles {
                 for (entity, _, _) in state.children.drain(..) {
                     commands.entity(entity).try_despawn();
                 }
-                state.phase.reset();
+                state.reset_emission();
             }
             state.children.retain(|(entity, birth, lifetime)| {
                 if frame.time - birth >= *lifetime {
@@ -261,10 +279,7 @@ impl RuntimeModelParticles {
                     true
                 }
             });
-            let Some(asset) = assets.get(&emitter.model) else {
-                state.previous_node = current_node;
-                continue;
-            };
+            let asset = assets.get(&emitter.model);
             let start = if reset { frame.time } else { previous };
             let mut clock = EmissionClock::new(start, frame.time);
             let mut budget = CAPACITY;
@@ -292,17 +307,15 @@ impl RuntimeModelParticles {
                 } else {
                     0.
                 };
-                let schedule = state.phase.continuous(
-                    rate,
-                    step.end - step.start,
-                    budget,
-                    EmissionRounding::Model,
-                );
+                let (schedule, first_ordinal) = state.schedule(rate, step.end - step.start, budget);
                 budget = budget.saturating_sub(schedule.count as usize);
                 if !allow_births {
                     state.omitted = state.omitted.saturating_add(schedule.count as u64);
                     continue;
                 }
+                let Some(asset) = asset else {
+                    continue;
+                };
                 for index in 0..schedule.count as usize {
                     if state.children.len() >= CAPACITY {
                         state.omitted = state.omitted.saturating_add(1);
@@ -336,8 +349,12 @@ impl RuntimeModelParticles {
                         interpolated(state.previous_node, current_node, alpha)
                     };
                     let (scale, rotation, origin) = node.to_scale_rotation_translation();
-                    let yaw = state.rng.random() * TAU;
-                    let pitch = state.rng.signed() * latitude;
+                    let mut rng = EmitterRng::at_occurrence(
+                        emitter.anchor as u32,
+                        first_ordinal.wrapping_add(index as u64),
+                    );
+                    let yaw = rng.random() * TAU;
+                    let pitch = rng.signed() * latitude;
                     let direction =
                         Quat::from_rotation_z(yaw) * Quat::from_rotation_y(pitch) * Vec3::Z;
                     let velocity = (rotation * direction) * speed * scale;
@@ -345,7 +362,7 @@ impl RuntimeModelParticles {
                         -self.gravity_axis * sample.animated(&emitter.gravity) * scale.z;
                     let age = frame.time - time;
                     let (_, source_rotation, _) = frame.basis_world.to_scale_rotation_translation();
-                    let spin = source_rotation * Quat::from_rotation_z(state.rng.random() * TAU);
+                    let spin = source_rotation * Quat::from_rotation_z(rng.random() * TAU);
                     let entity = spawn_owned_model(
                         commands,
                         instances.owner.unwrap(),
@@ -416,3 +433,7 @@ fn interpolated(a: Mat4, b: Mat4, t: f32) -> Mat4 {
     let (sb, rb, tb) = b.to_scale_rotation_translation();
     Mat4::from_scale_rotation_translation(sa.lerp(sb, t), ra.slerp(rb, t), ta.lerp(tb, t))
 }
+
+#[cfg(test)]
+#[path = "model_particles_tests.rs"]
+mod tests;
