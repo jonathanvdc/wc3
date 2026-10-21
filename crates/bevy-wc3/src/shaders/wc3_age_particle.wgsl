@@ -82,7 +82,7 @@ fn sampled_axes(particle: Particle, camera_right: vec3<f32>, camera_up: vec3<f32
         let width = normalize_or(cross(normalize_or(axis0, vec3(0.0)), direction), camera_right) * size;
         return mat2x3(-width, axis0 * 0.5 + cross(direction, width));
     }
-    if mode == 2u || mode == 3u { return mat2x3(right, up); }
+    if mode == 2u || mode == 3u || mode == 4u { return mat2x3(right, up); }
     if mode == 5u && has_axis0 && has_axis1 {
         var normal = normalize_or(cross(normalize_or(axis0, vec3(0.0)),
             normalize_or(axis1, vec3(0.0))), vec3(0.0));
@@ -139,14 +139,40 @@ fn vertex(input: VertexInput) -> VertexOutput {
         center -= vertical;
         cell = particle.cells.y;
     }
-    let world = center + side * input.corner.x + vertical * input.corner.y;
-    let normal = safe_normalize(cross(side, vertical));
+    var world = center + side * input.corner.x + vertical * input.corner.y;
+    var normal = safe_normalize(cross(side, vertical));
+#ifdef SAMPLED_SPRITE
+    let capsule = emitter.flags.x == 4u && (emitter.flags.y & 1u) != 0u;
+    if capsule {
+        let axis = particle.velocity_tail.xyz;
+        let direction = normalize_or(center - view.world_position, -camera_back);
+        let width = normalize_or(cross(normalize_or(axis, vec3(0.0)), direction), right)
+            * particle.size_spin.x * 0.5;
+        let padding = cross(direction, width);
+        world = center + axis * (input.corner.y * 0.5) + width * input.corner.x;
+        normal = normalize_or(cross(normalize_or(axis, vec3(0.0)),
+            normalize_or(width, vec3(0.0))), camera_back);
+        if abs(input.corner.z) > 0.0 {
+            normal = normalize_or(cross(normalize_or(padding, vec3(0.0)),
+                normalize_or(width, vec3(0.0))), camera_back);
+        }
+        if abs(input.corner.z) == 2.0 {
+            world = center + (axis * 0.5 + padding) * input.corner.y;
+        }
+    }
+#endif
     let rows = max(emitter.atlas.x, 1u);
     let columns = max(emitter.atlas.y, 1u);
     cell %= rows * columns;
     var corner = (input.corner.xy + vec2(1.0)) * 0.5;
     if (emitter.atlas.z & 8u) != 0u { corner.y = 1.0 - corner.y; }
 #ifdef SAMPLED_SPRITE
+    if capsule {
+        corner = vec2((input.corner.x + 1.0) * 0.5);
+        if abs(input.corner.z) == 2.0 {
+            corner = select(vec2(0.0, 1.0), vec2(1.0, 0.0), input.corner.y > 0.0);
+        }
+    }
     if (emitter.atlas.z & 256u) != 0u { corner = vec2(corner.y, 1.0 - corner.x); }
     if (emitter.atlas.z & 512u) != 0u { corner.x = 1.0 - corner.x; }
     if (emitter.atlas.z & 1024u) != 0u { corner.y = 1.0 - corner.y; }

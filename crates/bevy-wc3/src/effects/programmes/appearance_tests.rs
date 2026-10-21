@@ -143,3 +143,43 @@ fn soft_intersections_do_not_discard_supported_billboard_geometry() {
     assert!(prepare(0, &renderer, &program).unwrap().is_some());
     assert_eq!(image_requests(0, &renderer).count(), 1);
 }
+
+#[test]
+fn capsule_geometry_requires_longitudinal_axis_and_ignores_optional_second_axis() {
+    let document = Document::read(include_bytes!(
+        "../../../../wc3/tests/fixtures/pkb/sprite.pkb"
+    ))
+    .unwrap();
+    let program = document
+        .compile_effect(1, &EffectCompileOptions::default())
+        .unwrap();
+    let mut renderer = program.renderers()[0].clone();
+    let mut properties = renderer.properties.to_vec();
+    properties.push(property_value(b"BillboardingMode", [4, 0, 0, 0], None));
+    renderer.properties = properties.into();
+    let fallback = prepare(0, &renderer, &program).unwrap().unwrap();
+    assert_eq!(fallback.facing, SpriteFacing::Capsule);
+    assert!(!fallback.capsule_geometry());
+    let mut axis = renderer
+        .inputs
+        .iter()
+        .find(|input| input.semantic == 0)
+        .unwrap()
+        .clone();
+    axis.semantic = 4;
+    axis.additional_name = None;
+    let mut inputs = renderer.inputs.to_vec();
+    inputs.push(axis.clone());
+    renderer.inputs = inputs.clone().into();
+    let capsule = prepare(0, &renderer, &program).unwrap().unwrap();
+    assert!(capsule.capsule_geometry());
+    assert!(capsule.facing.longitudinal_axis());
+    assert_eq!(capsule.facing.code(), 4);
+    axis.semantic = 5;
+    inputs.push(axis);
+    renderer.inputs = inputs.into();
+    assert!(prepare(0, &renderer, &program)
+        .unwrap()
+        .unwrap()
+        .capsule_geometry());
+}

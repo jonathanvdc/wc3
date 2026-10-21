@@ -32,7 +32,7 @@ use bevy::render::view::ExtractedView;
 use bevy::render::view::{RenderVisibleEntities, RetainedViewEntity};
 use bytemuck::{bytes_of, cast_slice, Pod};
 pub(crate) use geometry::{
-    effect_quad, EffectGeometry, EffectGeometryPlugin, ExtractedEffectGeometry,
+    effect_capsule, effect_quad, EffectGeometry, EffectGeometryPlugin, ExtractedEffectGeometry,
 };
 use std::any::Any;
 use std::marker::PhantomData;

@@ -70,7 +70,8 @@ scene lighting, fog, and camera containment to the application.
 ## Effects
 
 The renderer keeps native emitter families distinct while sharing transport where
-possible. Sprite and ribbon emitters share one immutable quad and participate
+possible. Sprite and ribbon emitters share immutable vertex-selector geometry;
+external capsule billboards use a shared four-triangle selector. They participate
 in Bevy visibility and render layers through a procedural geometry component.
 Their resident records define the world geometry, so these emitters do not create
 ordinary mesh-instance uniforms. Model-particle child geometry uses the usual

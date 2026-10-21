@@ -319,3 +319,54 @@ fn owned_programme_integrates_its_initial_interval_before_extracting_sprites() {
     assert_eq!(statistics.single().unwrap().alive, 0);
     assert!(statistics.single().unwrap().error.is_none());
 }
+
+#[test]
+fn capsule_factory_selects_shared_geometry_only_for_bound_longitudinal_streams() {
+    use super::prepared::SpriteFacing;
+    use crate::effects::render::EffectGeometry;
+    for axis_bound in [false, true] {
+        let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+        let node = builder.add_named_node("capsule").unwrap();
+        let mut source: Popcorn<'_> = builder.construct();
+        source.visibility = builder.add_value(1.);
+        source.life_span = builder.add_value(1.);
+        source.emission_rate = builder.add_value(1.);
+        source.speed = builder.add_value(1.);
+        source.color = builder.add_value(Vec3::ONE);
+        source.opacity = builder.add_value(1.);
+        let feature = builder
+            .add_feature(node, NodeFeature::ParticleProgram(Box::new(source)))
+            .unwrap();
+        let model = builder.finish().unwrap();
+        let mut effect = effect();
+        let renderer = &mut Arc::make_mut(&mut effect.renderers)[0];
+        renderer.facing = SpriteFacing::Capsule;
+        renderer.axes[0] = axis_bound.then_some(renderer.position);
+        let definitions = RuntimeProgramParticles::compile(
+            &model,
+            &HashMap::from([(node, 0)]),
+            &HashMap::from([(feature, effect)]),
+        );
+        let mut world = World::new();
+        let basis = world.spawn_empty().id();
+        let mut meshes = Assets::<Mesh>::default();
+        let mut queue = CommandQueue::default();
+        {
+            let mut commands = Commands::new(&mut queue, &world);
+            let _instances = definitions.spawn(&mut commands, &mut meshes, basis);
+        }
+        queue.apply(&mut world);
+        let geometry = world.query::<&EffectGeometry>().single(&world).unwrap();
+        let mesh = meshes.get(&geometry.0).unwrap();
+        assert_eq!(mesh.count_vertices(), if axis_bound { 10 } else { 4 });
+        assert_eq!(
+            mesh.indices().unwrap().len(),
+            if axis_bound { 12 } else { 6 }
+        );
+        assert_eq!(
+            meshes.len(),
+            1,
+            "unused selector geometry must not be allocated"
+        );
+    }
+}

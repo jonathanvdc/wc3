@@ -112,14 +112,17 @@ each particle and view from shared records:
 | 0 | Screen-facing quad, or two authored axes | Both axes retain their lengths and may shear the quad. |
 | 2 | Axial quad | Axis0 gives full longitudinal extent; size gives half width. |
 | 3 | Spheroid quad | Axis0 gives the central extent; size adds view-facing padding at both ends. |
+| 4 | Capsule, four triangles | Axis0 gives the constant-width core; view-facing pointed caps extend beyond its ends. |
 | 5 | Planar quad | Axis0 and Axis1 define an orthogonal plane; Axis1 retains its length. |
 
 `Axis0`/`Axis` and `Axis1`/`NormalAxis` custom streams bind the same typed vectors
-as their native numeric selectors. Axial and spheroid facing use the particle's
+as their native numeric selectors. Axial, spheroid and capsule facing use the particle's
 direction from the eye and ignore scalar rotation. Planar rotation has the
 opposite sign to screen rotation. Missing required axis streams use camera-facing quads;
 degenerate axes have finite fallbacks. These edge policies and exact native
-facing fidelity remain unverified. Capsule facing has no adapter yet.
+facing fidelity remain unverified. Capsules use shared immutable selectors with
+separate core/cap normals and diagonal cap UVs; they are not stretched quads.
+Their missing-axis fallback uses an ordinary quad while still ignoring rotation.
 
 Size is a half extent for screen and planar quads. Nonpositive sizes omit geometry.
 Atlas cursors use absolute

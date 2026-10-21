@@ -10,7 +10,7 @@ use crate::effects::age_sprites_gpu::{
 use crate::effects::emission::EffectChange;
 use crate::effects::frame::EffectStart;
 use crate::effects::render::SortPolicy;
-use crate::effects::render::{effect_quad, EffectGeometry};
+use crate::effects::render::{effect_capsule, effect_quad, EffectGeometry};
 use crate::effects::EffectFrame;
 use crate::layers::ModelOwnedRenderEntity;
 use bevy::camera::visibility::NoFrustumCulling;
@@ -184,7 +184,18 @@ impl RuntimeProgramParticles {
         meshes: &mut Assets<Mesh>,
         basis: Entity,
     ) -> ProgramInstances {
-        let quad = (!self.emitters.is_empty()).then(|| effect_quad(meshes));
+        let needs_capsule = self
+            .emitters
+            .iter()
+            .flat_map(|e| e.effect.renderers.iter())
+            .any(SpriteRenderer::capsule_geometry);
+        let needs_quad = self
+            .emitters
+            .iter()
+            .flat_map(|e| e.effect.renderers.iter())
+            .any(|r| !r.capsule_geometry());
+        let capsule = needs_capsule.then(|| effect_capsule(meshes));
+        let quad = needs_quad.then(|| effect_quad(meshes));
         let states =
             self.emitters
                 .iter()
@@ -219,7 +230,15 @@ impl RuntimeProgramParticles {
                             style.unlit |= emitter.unlit;
                             let entity = commands
                                 .spawn((
-                                    EffectGeometry(quad.as_ref().unwrap().clone()),
+                                    EffectGeometry(
+                                        if renderer.capsule_geometry() {
+                                            capsule.as_ref()
+                                        } else {
+                                            quad.as_ref()
+                                        }
+                                        .unwrap()
+                                        .clone(),
+                                    ),
                                     ModelOwnedRenderEntity,
                                     AgeSpriteData {
                                         records: Default::default(),

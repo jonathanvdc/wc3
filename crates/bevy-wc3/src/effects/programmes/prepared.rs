@@ -87,6 +87,7 @@ pub(crate) enum SpriteFacing {
     Camera,
     Axial,
     Spheroid,
+    Capsule,
     Planar,
 }
 impl SpriteFacing {
@@ -95,11 +96,17 @@ impl SpriteFacing {
             Self::Camera => 0,
             Self::Axial => 2,
             Self::Spheroid => 3,
+            Self::Capsule => 4,
             Self::Planar => 5,
         }
     }
     pub(super) fn longitudinal_axis(self) -> bool {
-        matches!(self, Self::Axial | Self::Spheroid)
+        matches!(self, Self::Axial | Self::Spheroid | Self::Capsule)
+    }
+}
+impl SpriteRenderer {
+    pub(super) fn capsule_geometry(&self) -> bool {
+        self.facing == SpriteFacing::Capsule && self.axes[0].is_some()
     }
 }
 impl ParticleEffect {
@@ -123,7 +130,9 @@ impl ParticleEffect {
                     }
                     let missing_axes = match prepared.facing {
                         SpriteFacing::Camera => false,
-                        SpriteFacing::Axial | SpriteFacing::Spheroid => prepared.axes[0].is_none(),
+                        SpriteFacing::Axial | SpriteFacing::Spheroid | SpriteFacing::Capsule => {
+                            prepared.axes[0].is_none()
+                        }
                         SpriteFacing::Planar => prepared.axes.iter().any(Option::is_none),
                     };
                     if missing_axes {
@@ -366,6 +375,7 @@ fn prepare(
         0 => SpriteFacing::Camera,
         2 => SpriteFacing::Axial,
         3 => SpriteFacing::Spheroid,
+        4 => SpriteFacing::Capsule,
         5 => SpriteFacing::Planar,
         _ => return Err("the billboard facing mode is unsupported"),
     };
