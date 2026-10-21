@@ -1,5 +1,6 @@
 //! Profiling and frame pacing for the crowd benchmark.
 use super::completion::{self, CompletionWait};
+use bevy::app::SubApp;
 use bevy::diagnostic::DiagnosticsStore;
 use bevy::prelude::*;
 use bevy::render::diagnostic::DiagnosticsRecorder;
@@ -98,7 +99,7 @@ struct Shared(Arc<Mutex<Measurements>>, Arc<Condvar>);
 #[derive(Resource, Default)]
 struct TimeSource(Option<Instant>);
 
-pub fn install(app: &mut App) {
+pub fn install(app: &mut App, render_stages: bool) {
     let shared = Shared::default();
     let mut extract = app.sub_app_mut(RenderApp).take_extract().unwrap();
     let extraction = shared.clone();
@@ -142,6 +143,107 @@ pub fn install(app: &mut App) {
         .init_resource::<TimeSource>()
         .add_systems(Render, start.before(RenderSystems::ExtractCommands))
         .add_systems(Render, finish_render.after(RenderSystems::PostCleanup));
+    if render_stages {
+        install_render_stage_windows(app.sub_app_mut(RenderApp));
+    }
+}
+/// Adjacent phase constraints keep markers beside their target sets. Nested
+/// windows belong to their parent set, so they cannot span earlier phases.
+fn install_render_stage_windows(render: &mut SubApp) {
+    install_render_windows(
+        render,
+        &[
+            (
+                RenderSystems::ExtractCommands,
+                "render_extract_commands_window_ms",
+            ),
+            (
+                RenderSystems::PrepareAssets,
+                "render_prepare_assets_window_ms",
+            ),
+            (
+                RenderSystems::PrepareMeshes,
+                "render_prepare_meshes_window_ms",
+            ),
+            (RenderSystems::CreateViews, "render_create_views_window_ms"),
+            (RenderSystems::Specialize, "render_specialize_window_ms"),
+            (
+                RenderSystems::PrepareViews,
+                "render_prepare_views_window_ms",
+            ),
+            (RenderSystems::Queue, "render_queue_window_ms"),
+            (RenderSystems::PhaseSort, "render_phase_sort_window_ms"),
+            (RenderSystems::Prepare, "render_prepare_window_ms"),
+            (RenderSystems::Render, "render_commands_window_ms"),
+            (RenderSystems::Cleanup, "render_cleanup_window_ms"),
+            (RenderSystems::PostCleanup, "render_post_cleanup_window_ms"),
+        ],
+        None,
+    );
+    install_render_windows(
+        render,
+        &[
+            (RenderSystems::QueueMeshes, "render_queue_meshes_window_ms"),
+            (RenderSystems::QueueSweep, "render_queue_sweep_window_ms"),
+        ],
+        Some(RenderSystems::Queue),
+    );
+    install_render_windows(
+        render,
+        &[
+            (
+                RenderSystems::PrepareResources,
+                "render_prepare_resources_window_ms",
+            ),
+            (
+                RenderSystems::PrepareResourcesBatchPhases,
+                "render_batch_phases_window_ms",
+            ),
+            (
+                RenderSystems::PrepareResourcesWritePhaseBuffers,
+                "render_write_phase_buffers_window_ms",
+            ),
+            (
+                RenderSystems::PrepareResourcesCollectPhaseBuffers,
+                "render_collect_phase_buffers_window_ms",
+            ),
+            (
+                RenderSystems::PrepareResourcesFlush,
+                "render_flush_resources_window_ms",
+            ),
+            (
+                RenderSystems::PrepareBindGroups,
+                "render_prepare_bind_groups_window_ms",
+            ),
+        ],
+        Some(RenderSystems::Prepare),
+    );
+}
+fn install_render_windows(
+    render: &mut SubApp,
+    stages: &[(RenderSystems, &'static str)],
+    parent: Option<RenderSystems>,
+) {
+    for (index, (set, name)) in stages.iter().enumerate() {
+        let name = *name;
+        let mut begin = (move |shared: Res<Shared>| stage_start(&shared, name))
+            .after(start)
+            .before(set.clone());
+        let mut end = (move |shared: Res<Shared>| stage_end(&shared, name))
+            .after(set.clone())
+            .before(finish_render);
+        if let Some((previous, _)) = index.checked_sub(1).map(|index| &stages[index]) {
+            begin = begin.after(previous.clone());
+        }
+        if let Some((next, _)) = stages.get(index + 1) {
+            end = end.before(next.clone());
+        }
+        if let Some(parent) = &parent {
+            begin = begin.in_set(parent.clone());
+            end = end.in_set(parent.clone());
+        }
+        render.add_systems(Render, (begin, end));
+    }
 }
 fn stage_start(shared: &Shared, name: &str) {
     let mut data = shared.0.lock().unwrap();
@@ -378,5 +480,5 @@ pub fn report(app: &App, policy: FramePolicy) -> Value {
         sorted.sort_by(f64::total_cmp);
         result.insert(name.clone(), json!({"samples":sorted.len(), "median": sorted[sorted.len()/2], "p95":sorted[(sorted.len()*95/100).min(sorted.len()-1)]}));
     }
-    json!({"frame_policy":policy,"maximum_queued_frames":policy.queue_depth(), "gpu_pass_timestamps_available":data.gpu_pass_timestamps, "spans":result, "note":"Main and render schedules overlap in pipelined mode; serial mode disables the pipelined renderer. The first two fresh asynchronous reports per diagnostic are discarded after warmup. Set spans are scheduling windows and can include unrelated concurrent systems; they are not exclusive function CPU time. Render-pass CPU spans measure command recording, not GPU completion. GPU spans require supported timestamp features; macOS encoder timestamps are suppressed by Bevy, so only pass spans can be valid GPU timings."})
+    json!({"frame_policy":policy,"maximum_queued_frames":policy.queue_depth(), "gpu_pass_timestamps_available":data.gpu_pass_timestamps, "spans":result, "note":"Main and render schedules overlap in pipelined mode; serial mode disables the pipelined renderer. The first two fresh asynchronous reports per diagnostic are discarded after warmup. Set spans are scheduling windows and can include unrelated concurrent systems; they are not exclusive function CPU time. Render *_window_ms spans include overlapping parent/child sets and must not be summed. Profiling markers also add scheduling and mutex overhead; compare an instrumented zero-crowd control. Render-pass CPU spans measure command recording, not GPU completion. GPU spans require supported timestamp features; macOS encoder timestamps are suppressed by Bevy, so only pass spans can be valid GPU timings."})
 }

@@ -64,6 +64,7 @@ struct Options {
     allow_loss: bool,
     lod: Lod,
     frame_policy: FramePolicy,
+    render_stages: bool,
     msaa: Msaa,
     file_ids: HashMap<u32, String>,
     wmo_profile: Option<WmoProfile>,
@@ -74,7 +75,7 @@ impl Options {
     }
     fn parse_args(arguments: impl IntoIterator<Item = String>) -> Result<Self> {
         let mut args = arguments.into_iter();
-        let help = "crowd MODEL RECIPE_OR_- ASSET_ROOT OUTPUT.json [--count 100] [--frames 300] [--warmup 120] [--sequence 0] [--frozen] [--prepasses] [--shadows] [--allow-loss] [--lod 0|auto] [--msaa 1|2|4|8] [--serial-completed-frames [--completion-wait spin|blocking]] [--file-id ID=PATH] [--wmo-profile PROFILE] [--screenshot OUTPUT.png]";
+        let help = "crowd MODEL RECIPE_OR_- ASSET_ROOT OUTPUT.json [--count 100] [--frames 300] [--warmup 120] [--sequence 0] [--frozen] [--prepasses] [--shadows] [--allow-loss] [--lod 0|auto] [--msaa 1|2|4|8] [--serial-completed-frames [--completion-wait spin|blocking]] [--file-id ID=PATH] [--wmo-profile PROFILE] [--screenshot OUTPUT.png] [--render-stages]";
         let Some(model) = args.next() else {
             return Err(help.into());
         };
@@ -101,6 +102,7 @@ impl Options {
             allow_loss: false,
             lod: Lod::Fixed(0),
             frame_policy: FramePolicy::Pipelined,
+            render_stages: false,
             msaa: Msaa::Sample4,
             file_ids: HashMap::new(),
             wmo_profile: None,
@@ -111,6 +113,7 @@ impl Options {
                     options.screenshot = Some(args.next().ok_or("missing screenshot path")?.into());
                 }
                 "--frozen" => options.frozen = true,
+                "--render-stages" => options.render_stages = true,
                 "--serial-completed-frames" => serial = true,
                 "--completion-wait" => {
                     wait = Some(
@@ -249,7 +252,7 @@ fn main() -> Result<()> {
         default_lod: options.lod,
         ..Default::default()
     });
-    profiling::install(&mut app);
+    profiling::install(&mut app, options.render_stages);
     app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::ZERO));
     let deadline = Instant::now() + Duration::from_secs(120);
     while app.plugins_state() != PluginsState::Ready {
@@ -432,6 +435,7 @@ fn main() -> Result<()> {
     let Value::Object(workload) = serde_json::json!({
         "workload":source.kind(), "model":&options.model, "recipe":&options.recipe,
         "instances":options.count, "frame_policy":options.frame_policy, "effects":effects,
+        "render_stage_windows": options.render_stages,
         "completion_wait_wall":options.frame_policy.is_serial().then(|| summary(wait_times)),
         "update_and_backpressure_wall":summary(update_times),
     }) else {

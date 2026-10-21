@@ -160,6 +160,13 @@ than measured frames because two initial asynchronous reports per diagnostic are
 discarded to exclude delayed warmup samples, and the diagnostic transport
 retains the most recent completed report.
 
+Add `--render-stages` for `*_window_ms` spans bracketing adjacent Bevy phases,
+including asset preparation, resource uploads and bind-group preparation. Nested queue and
+preparation windows overlap their parent windows; do not add them together.
+These are scheduling windows rather than exclusive function timings. The markers
+also add scheduling and locking overhead and are disabled by default. Compare an
+instrumented zero-instance control before attributing a small difference to model work.
+
 The report's `effects` object records published sprite/model-emitter
 populations, ribbon sections and segments, programme particles and extracted
 geometry, model actor-tree residency, and omission counters. These remain
