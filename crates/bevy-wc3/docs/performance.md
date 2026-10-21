@@ -10,7 +10,9 @@ root and use [captures](tools.md) separately to check visual quality.
 Pass `--benchmark-frames N` to measure completed frames at each requested capture
 pose. The tool warms the pose with eight synchronized frames, then measures `N`
 frames while keeping simulation time fixed. It writes a timing CSV beside the
-PNG and prints median and p95 wall times.
+PNG and prints median and p95 wall times. CSV columns separate the complete
+`wall_ms` sample, CPU/update/submission `step_ms`, and completion `wait_ms`;
+component medians are independent and need not add to the wall median.
 
 Use `--msaa 1`, `2`, `4` or `8` to select the sample count; the default is four.
 Keep this count, tone mapping, viewport, camera and scene lighting fixed when
@@ -20,6 +22,14 @@ given different step sequences.
 
 Each sample includes CPU update, render submission, and waiting for the submitted
 GPU work to finish. Loading, screenshot readback, and file writes are excluded.
+Completion uses nonblocking device polling until the queue is empty, with a
+timeout. This busy wait avoids platform blocking-wait timer granularity but
+consumes CPU while waiting. The result includes this wait policy and does not
+isolate GPU execution. `--single-threaded` runs both example schedules serially
+to assess scheduling overhead in small scenes. This changes only the example's
+schedule executors; applications using the plugin retain their configured
+executors. Record this choice when comparing runs.
+
 Use the [benchmark guide](../../../benchmarks/README.md#host-gpu-measurements)
 for synthetic asset export and instructions for comparing renderer revisions.
 

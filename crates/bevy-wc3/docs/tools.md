@@ -78,7 +78,8 @@ Images are named `frame-0000-0.000s.png`, and so on; reruns overwrite matching
 files. The tool requires a GPU even though it does not open a window. Loading,
 pipeline, or readback failures terminate with an error. Add `--particle-stats`
 to report live sprite populations, dropped births, and skipped simulation time,
-alongside ribbon sections, connected segments, and omitted sections.
+alongside model-particle populations and omissions, ribbon sections, connected
+segments, and omitted sections.
 External programmes report living controllers and particles, extracted sprites,
 omissions and checked execution errors; an execution error terminates the capture.
 These counters help distinguish simulation and visibility problems; inspect the
@@ -171,6 +172,11 @@ also do not establish equivalence to Warcraft III.
 
 `--msaa 1`, `2`, `4` or `8` selects the samples per pixel; the default is four.
 Keep the sample count fixed alongside the camera and viewport.
+`--hdr` enables an HDR camera before the selected tonemapping operation; choosing
+tonemapping alone does not enable HDR. `--viewport X,Y,W,H` restricts the camera
+to a positive physical rectangle inside the output image.
+`--main-pass-size WIDTHxHEIGHT` overrides the main-pass render resolution while
+retaining the output dimensions, for checking dynamic-resolution composition.
 
 Use `--fog START,END --fog-color R,G,B` to check linear Bevy distance fog in
 world units with a linear RGB color. Keep fog distances, tonemapping, and lighting

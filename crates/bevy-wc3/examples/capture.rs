@@ -2,9 +2,10 @@
 //! Run `cargo run -p bevy-wc3 --example capture -- --help` for options.
 use bevy::app::PluginsState;
 use bevy::asset::{AssetPlugin, LoadState, RecursiveDependencyLoadState};
-use bevy::camera::{RenderTarget, ShadowLodOrigin};
+use bevy::camera::{Hdr, MainPassResolutionOverride, RenderTarget, ShadowLodOrigin, Viewport};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::Tonemapping;
+use bevy::ecs::schedule::{Schedules, SingleThreadedExecutor};
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::math::Vec3;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
@@ -21,14 +22,15 @@ use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 use bevy_wc3::{
     spawn_model, AssetSettings, BakeSpace, CameraBinding, Lod, LodOverride, LodSettings,
-    ModelAsset, ModelInstance, ModelInstanceError, ModelMaterial, ModelRig, ParticleProgramEmitter,
-    PhysicsSimulation, Playback, PlaybackError, PoseBaker, PoseOptions, PreparedModel,
-    RibbonEmitter, SpriteEmitter, Wc3BevyPlugin, WorldSelection,
+    ModelAsset, ModelEmitter, ModelInstance, ModelInstanceError, ModelMaterial, ModelRig,
+    ParticleProgramEmitter, PhysicsSimulation, Playback, PlaybackError, PoseBaker, PoseOptions,
+    PreparedModel, RibbonEmitter, SpriteEmitter, Wc3BevyPlugin, WorldSelection,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::env::args;
 use std::error::Error;
 use std::fs::{create_dir_all, File};
+use std::hint::spin_loop;
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -48,7 +50,7 @@ const HELP: &str = "Usage: capture MODEL OUTPUT_DIR [options]
 
 Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --character-recipe PATH  Assemble a resolved modern M2 character recipe (JSON)
-  --particle-stats      Report sprite and ribbon populations and omitted simulation work at each capture
+  --particle-stats      Report effect populations and omitted simulation work at each capture
   --guild-palette RGB:RGB:RGB  Linear background, emblem and border RGB multipliers
   --physics             Enable authored rigid-body secondary motion
   --allow-loss          Explicitly discard unsupported native data, retaining diagnostics
@@ -59,12 +61,16 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --no-default-light    Omit the capture scene light (isolate model lights)
   --bevy-reference      Add a StandardMaterial sphere at (0, 2, 0)
   --tonemapping MODE    none or tony-mcmapface (default: none)
+  --hdr                 Render the camera in HDR before tonemapping
+  --viewport X,Y,W,H    Restrict the camera to a physical image rectangle
+  --main-pass-size WxH  Override main-pass render resolution
   --msaa SAMPLES        1, 2, 4 or 8 samples per pixel (default: 4)
   --fog START,END       Linear Bevy distance fog in world units
   --fog-color R,G,B     Fog color in linear RGB (default: white)
   --illuminance LUX     Scene directional light intensity (default: 5000)
   --times SECONDS,...    Increasing capture times (default: 1)
   --benchmark-frames N   Measure N synchronized frames at each captured pose; write CSV
+  --single-threaded     Run schedules serially to measure small-scene scheduling cost
   --lod LEVEL|auto       Geometry LOD (default: 0)
   --lod-bias NUMBER       Automatic quality bias (default: 1)
   --lod-thresholds PIXELS,...  Descending LOD transition diameters
@@ -109,6 +115,9 @@ struct Options {
     no_default_light: bool,
     tonemapping: Tonemapping,
     msaa: Msaa,
+    hdr: bool,
+    viewport: Option<Viewport>,
+    main_pass_size: Option<UVec2>,
     illuminance: f32,
     fog: Option<(f32, f32)>,
     fog_color: Vec3,
@@ -116,6 +125,7 @@ struct Options {
     output: PathBuf,
     times: Vec<f64>,
     benchmark_frames: Option<usize>,
+    single_threaded: bool,
     sequence: usize,
     lod: Lod,
     lod_settings: LodSettings,
@@ -157,6 +167,9 @@ impl Options {
             no_default_light: false,
             tonemapping: Tonemapping::None,
             msaa: Msaa::Sample4,
+            hdr: false,
+            viewport: None,
+            main_pass_size: None,
             illuminance: 5_000.0,
             fog: None,
             fog_color: Vec3::ONE,
@@ -164,6 +177,7 @@ impl Options {
             output: output.into(),
             times: vec![1.0],
             benchmark_frames: None,
+            single_threaded: false,
             sequence: 0,
             lod: Lod::Fixed(0),
             lod_settings: LodSettings::default(),
@@ -184,6 +198,14 @@ impl Options {
             }
             if option == "--particle-stats" {
                 options.particle_stats = true;
+                continue;
+            }
+            if option == "--hdr" {
+                options.hdr = true;
+                continue;
+            }
+            if option == "--single-threaded" {
+                options.single_threaded = true;
                 continue;
             }
             if option == "--physics" {
@@ -228,6 +250,30 @@ impl Options {
                         "none" => Tonemapping::None,
                         _ => return Err("tonemapping must be none or tony-mcmapface".into()),
                     };
+                }
+                "--viewport" => {
+                    let parts = value
+                        .split(',')
+                        .map(str::parse::<u32>)
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let [x, y, width, height] = parts.as_slice() else {
+                        return Err("viewport must be X,Y,WIDTH,HEIGHT".into());
+                    };
+                    options.viewport = Some(Viewport {
+                        physical_position: UVec2::new(*x, *y),
+                        physical_size: UVec2::new(*width, *height),
+                        ..default()
+                    });
+                }
+                "--main-pass-size" => {
+                    let (width, height) = value
+                        .split_once('x')
+                        .ok_or("main-pass-size must be WIDTHxHEIGHT")?;
+                    let size = UVec2::new(width.parse()?, height.parse()?);
+                    if size.min_element() == 0 {
+                        return Err("main-pass-size dimensions must be positive".into());
+                    }
+                    options.main_pass_size = Some(size);
                 }
                 "--msaa" => {
                     options.msaa = match value.as_str() {
@@ -355,6 +401,24 @@ impl Options {
         if options.size.min_element() == 0 {
             return Err("image dimensions must be positive".into());
         }
+        if let Some(viewport) = &options.viewport {
+            let position = viewport.physical_position;
+            let size = viewport.physical_size;
+            if size.min_element() == 0
+                || position
+                    .x
+                    .checked_add(size.x)
+                    .is_none_or(|end| end > options.size.x)
+                || position
+                    .y
+                    .checked_add(size.y)
+                    .is_none_or(|end| end > options.size.y)
+            {
+                return Err(
+                    "viewport must have positive dimensions and fit inside the image".into(),
+                );
+            }
+        }
         if options.times.is_empty()
             || options
                 .times
@@ -385,7 +449,11 @@ impl Options {
             .map_or(1., |bounds| bounds.half_extents.length())
             .max(0.1);
         let target = self.target.unwrap_or(center);
-        let aspect = self.size.x as f32 / self.size.y as f32;
+        let size = self
+            .viewport
+            .as_ref()
+            .map_or(self.size, |viewport| viewport.physical_size);
+        let aspect = size.x as f32 / size.y as f32;
         let eye = self.eye.unwrap_or(
             target + Vec3::new(0.7, 0.55, 1.5).normalize() * radius * 4. * (1. / aspect).max(1.),
         );
@@ -559,6 +627,19 @@ fn capture(options: Options) -> CaptureResult<()> {
     }
     app.finish();
     app.cleanup();
+    if options.single_threaded {
+        for (_, schedule) in app.world_mut().resource_mut::<Schedules>().iter_mut() {
+            schedule.set_executor(SingleThreadedExecutor::new());
+        }
+        for (_, schedule) in app
+            .sub_app_mut(RenderApp)
+            .world_mut()
+            .resource_mut::<Schedules>()
+            .iter_mut()
+        {
+            schedule.set_executor(SingleThreadedExecutor::new());
+        }
+    }
     let limit = app
         .world()
         .resource::<RenderDevice>()
@@ -655,6 +736,21 @@ fn capture(options: Options) -> CaptureResult<()> {
             options.camera(&prepared)?,
         ))
         .id();
+    if options.hdr {
+        app.world_mut().entity_mut(camera).insert(Hdr);
+    }
+    if let Some(viewport) = &options.viewport {
+        app.world_mut()
+            .entity_mut(camera)
+            .get_mut::<Camera>()
+            .expect("camera exists")
+            .viewport = Some(viewport.clone());
+    }
+    if let Some(size) = options.main_pass_size {
+        app.world_mut()
+            .entity_mut(camera)
+            .insert(MainPassResolutionOverride(size));
+    }
     if let Some((start, end)) = options.fog {
         app.world_mut().entity_mut(camera).insert(DistanceFog {
             color: Color::linear_rgb(
@@ -877,6 +973,13 @@ fn capture(options: Options) -> CaptureResult<()> {
                     emitter.feature, emitter.alive, emitter.dropped, emitter.skipped_seconds
                 );
             }
+            let mut models = world.query::<&ModelEmitter>();
+            for emitter in models.iter(world) {
+                println!(
+                    "Model particles {:?}: alive={}, omitted={}, skipped_seconds={:.6}",
+                    emitter.feature, emitter.alive, emitter.omitted, emitter.skipped_seconds
+                );
+            }
             let mut programmes = world.query::<&ParticleProgramEmitter>();
             for emitter in programmes.iter(world) {
                 println!("Programme {:?}: alive={}, sprites={}, omitted={}, suppressed={}, skipped_seconds={:.6}, error={:?}",emitter.feature,emitter.alive,emitter.sprites,emitter.omitted,emitter.suppressed,emitter.skipped_seconds,emitter.error);
@@ -916,15 +1019,14 @@ fn benchmark_pose(
         .output
         .join(format!("timings-{index:04}-{time:.3}s.csv"));
     let mut output = File::create(&path)?;
-    writeln!(output, "frame,pose_seconds,wall_ms")?;
+    writeln!(output, "frame,pose_seconds,wall_ms,step_ms,wait_ms")?;
     let synchronize = |app: &App| -> CaptureResult<()> {
-        app.sub_app(RenderApp)
-            .world()
-            .resource::<RenderDevice>()
-            .poll(PollType::Wait {
-                submission_index: None,
-                timeout: Some(TIMEOUT),
-            })?;
+        let device = app.sub_app(RenderApp).world().resource::<RenderDevice>();
+        let deadline = Instant::now() + TIMEOUT;
+        while !device.poll(PollType::Poll)?.is_queue_empty() {
+            check_deadline(deadline, "waiting for benchmark GPU completion")?;
+            spin_loop();
+        }
         Ok(())
     };
     synchronize(app)?;
@@ -934,22 +1036,36 @@ fn benchmark_pose(
         synchronize(app)?;
     }
     let mut samples = Vec::with_capacity(frames);
+    let mut step_samples = Vec::with_capacity(frames);
+    let mut wait_samples = Vec::with_capacity(frames);
     for frame in 0..frames {
         let start = Instant::now();
         step(app, Duration::ZERO)?;
+        let submitted = Instant::now();
         synchronize(app)?;
-        let milliseconds = start.elapsed().as_secs_f64() * 1000.0;
+        let completed = Instant::now();
+        let step_ms = (submitted - start).as_secs_f64() * 1000.0;
+        let wait_ms = (completed - submitted).as_secs_f64() * 1000.0;
+        let milliseconds = (completed - start).as_secs_f64() * 1000.0;
         samples.push(milliseconds);
+        step_samples.push(step_ms);
+        wait_samples.push(wait_ms);
         // File writes and image readback are outside the measured interval.
-        writeln!(output, "{frame},{time:.9},{milliseconds:.6}")?;
+        writeln!(
+            output,
+            "{frame},{time:.9},{milliseconds:.6},{step_ms:.6},{wait_ms:.6}"
+        )?;
     }
     samples.sort_by(f64::total_cmp);
+    step_samples.sort_by(f64::total_cmp);
+    wait_samples.sort_by(f64::total_cmp);
     println!(
         "{}: {frames} synchronized frames, median {:.3} ms, p95 {:.3} ms",
         path.display(),
         samples[frames / 2],
         samples[frames - frames / 20 - 1]
     );
+    println!("Frame components: median update/submission {:.3} ms; median completion wait {:.3} ms (component medians are independent)", step_samples[frames / 2], wait_samples[frames / 2]);
     Ok(())
 }
 
@@ -1120,6 +1236,37 @@ mod tests {
             "1=skin.blp"
         ])
         .is_err());
+    }
+
+    #[test]
+    fn viewport_dimensions_fit_without_overflow_and_accept_later_image_size() {
+        let options = parse(&[
+            "--hdr",
+            "--viewport",
+            "10,20,800,600",
+            "--size",
+            "900x700",
+            "--main-pass-size",
+            "400x300",
+        ])
+        .unwrap()
+        .unwrap();
+        assert!(options.hdr);
+        assert_eq!(
+            options.viewport.unwrap().physical_size,
+            UVec2::new(800, 600)
+        );
+        assert_eq!(options.main_pass_size, Some(UVec2::new(400, 300)));
+        for value in [
+            "0,0,0,1",
+            "0,0,641,480",
+            "4294967295,0,2,1",
+            "0,0,1",
+            "0,0,-1,1",
+        ] {
+            assert!(parse(&["--viewport", value]).is_err(), "{value}");
+        }
+        assert!(parse(&["--main-pass-size", "0x1"]).is_err());
     }
 
     #[test]
