@@ -704,3 +704,57 @@ fn trigger_in_initialization_can_route_at_zero_without_warmup_replay() {
 mod payload;
 #[path = "vrand_runtime_tests.rs"]
 mod vrand;
+
+#[test]
+fn shared_step_permission_omits_tail_without_replay_and_keeps_local_ceiling() {
+    let program = sprite();
+    let mut instance = program
+        .instantiate(
+            EffectLimits {
+                particles: 1,
+                steps_per_update: 1,
+                ..Default::default()
+            },
+            0,
+        )
+        .unwrap();
+    instance.start(&program, 0, inputs()).unwrap();
+    let mut calls = 0;
+    instance
+        .advance_with_step_budget(&program, 0., inputs(), || {
+            calls += 1;
+            true
+        })
+        .unwrap();
+    assert_eq!(calls, 0, "a zero-delta readiness update spends no steps");
+    instance
+        .advance_with_step_budget(&program, 0.1, inputs(), || {
+            calls += 1;
+            true
+        })
+        .unwrap();
+    assert_eq!(
+        calls, 1,
+        "the existing per-instance step ceiling still applies"
+    );
+    assert!(instance.stats().skipped_seconds > 0.08);
+    let skipped = instance.stats().skipped_seconds;
+    instance
+        .advance_with_step_budget(&program, 4., inputs(), || false)
+        .unwrap();
+    assert_eq!(
+        instance.active_count(),
+        0,
+        "denied time still retires expired particles"
+    );
+    assert_eq!(instance.time(), 4.1);
+    assert!((instance.stats().skipped_seconds - skipped - 4.).abs() < 1e-10);
+    instance
+        .advance_with_step_budget(&program, 0.01, inputs(), || true)
+        .unwrap();
+    assert_eq!(
+        instance.stats().spawned,
+        1,
+        "the omitted interval has no deferred births"
+    );
+}

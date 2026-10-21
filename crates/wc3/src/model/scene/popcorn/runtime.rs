@@ -567,6 +567,19 @@ impl EffectInstance {
         delta: f64,
         inputs: SceneInputs,
     ) -> Result<(), EffectRuntimeError> {
+        self.advance_with_step_budget(program, delta, inputs, || true)
+    }
+    /// Advance with an additional shared step allowance. The callback is queried
+    /// immediately before each real simulation step, after the local limit. On
+    /// denial the remaining time is omitted and particles age/retire normally,
+    /// without deferred execution. Zero delta never queries the callback.
+    pub fn advance_with_step_budget(
+        &mut self,
+        program: &EffectProgram,
+        delta: f64,
+        inputs: SceneInputs,
+        mut permit_step: impl FnMut() -> bool,
+    ) -> Result<(), EffectRuntimeError> {
         self.compatible(program)?;
         if !delta.is_finite()
             || delta < 0.
@@ -587,6 +600,9 @@ impl EffectInstance {
         while self.time < end && steps < self.limits.steps_per_update {
             let next = (self.time + self.limits.step_seconds).min(end);
             if next <= self.time {
+                break;
+            }
+            if !permit_step() {
                 break;
             }
             if let Err(error) = self.step(program, next, inputs, &mut work) {
