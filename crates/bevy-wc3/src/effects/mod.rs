@@ -27,6 +27,7 @@ use bevy::prelude::*;
 pub(crate) use emission::EffectChange;
 use emission::EffectClock;
 pub(super) use frame::EffectFrame;
+use frame::EffectStart;
 pub(crate) use m2_models::ModelOutputs;
 pub(crate) use m2_particles::GeometryWorld;
 pub use m2_particles::SpriteEmitter;
@@ -173,10 +174,25 @@ impl RuntimeParticles {
     pub(crate) fn has_model_actors(&self) -> bool {
         self.m2.has_models() || !self.models.is_empty()
     }
-    pub(crate) fn start_owned_clock(instances: &mut ParticleInstances, selection: AnimationSample) {
-        instances
-            .clock
-            .observe(0., selection.clip, Default::default());
+    pub(crate) fn seed_owned(
+        &self,
+        instances: &mut ParticleInstances,
+        frame: EffectFrame<'_, '_, '_>,
+    ) {
+        let start = EffectStart { frame };
+        self.atlas.seed_owned(&mut instances.atlas, &start);
+        self.ribbons.seed_owned(&mut instances.ribbons, &start);
+        self.m2.seed_owned(&mut instances.m2, &start);
+        self.models.seed_owned(&mut instances.models, &start);
+        self.programmes
+            .seed_owned(&mut instances.programmes, &start);
+    }
+    pub(crate) fn start_owned_clock(
+        instances: &mut ParticleInstances,
+        selection: AnimationSample,
+        traversal: EventTraversal,
+    ) {
+        instances.clock.observe(0., selection.clip, traversal);
     }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn update_model_actors<'w, 's>(

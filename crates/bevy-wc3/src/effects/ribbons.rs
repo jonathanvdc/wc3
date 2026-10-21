@@ -3,6 +3,7 @@ use super::super::coordinates::{axis, basis};
 use super::super::material::{effect_state, ModelMaterial, SurfaceAnimation, SurfacePass};
 use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
+use super::frame::EffectStart;
 use super::ribbon_definition::{TrailAtlasSlot, TrailBehavior, TrailEmitter, TrailRendering};
 use super::EffectFrame;
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
@@ -127,6 +128,22 @@ impl State {
     }
 }
 impl RuntimeRibbons {
+    pub(super) fn seed_owned(
+        &self,
+        instances: &mut RibbonInstancesState,
+        start: &EffectStart<'_, '_, '_>,
+    ) {
+        if instances.previous_time.is_some() {
+            return;
+        }
+        instances.previous_time = Some(0.);
+        instances.previous_clip = start.frame.selection.clip;
+        for (emitter, state) in self.emitters.iter().zip(&mut instances.emitters) {
+            state.previous_node = start.feature(emitter.anchor, &mut state.pose_scratch);
+            state.previous_basis = start.frame.basis_world;
+        }
+    }
+
     pub(super) fn append_remapped(
         &mut self,
         source: &Self,

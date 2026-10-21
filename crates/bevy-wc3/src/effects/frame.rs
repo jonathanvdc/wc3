@@ -30,3 +30,34 @@ impl EffectFrame<'_, '_, '_> {
         self.node_poses[index] * Mat4::from_translation(pivot)
     }
 }
+
+/// Initial occurrence frame, used once when a model actor is ready at birth.
+pub(crate) struct EffectStart<'a, 'view, 'data> {
+    pub frame: EffectFrame<'a, 'view, 'data>,
+}
+impl EffectStart<'_, '_, '_> {
+    pub fn feature(&self, index: usize, scratch: &mut Vec<usize>) -> Mat4 {
+        self.sample_feature(index, scratch).0
+    }
+    pub fn sample_feature(&self, index: usize, scratch: &mut Vec<usize>) -> (Mat4, bool) {
+        let (matrix, visible) = self.frame.pose.map_or_else(
+            || {
+                (
+                    self.frame.feature_matrix(index),
+                    self.frame.node_visible[index],
+                )
+            },
+            |pose| {
+                pose.sample_feature_node(
+                    index,
+                    &self.frame.sample.at_times(
+                        self.frame.selection.clip_time,
+                        self.frame.selection.shared_time,
+                    ),
+                    scratch,
+                )
+            },
+        );
+        (self.frame.basis_world * matrix, visible)
+    }
+}

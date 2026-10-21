@@ -424,6 +424,21 @@ pub fn compile_model_with_options(
         )
     }));
     for (id, feature) in model.features() {
+        if let NodeFeature::Attachment(attachment) = &feature.payload {
+            if options
+                .child_models
+                .contains_key(&ChildModelKey::attachment(id))
+                && attachment
+                    .socket()
+                    .is_some_and(|socket| targets.contains(&socket.visibility))
+            {
+                diagnostics.push(RenderDiagnostic::new(
+                    RenderDiagnosticKind::Approximation,
+                    RenderDiagnosticSource::Feature(id),
+                    "particle-owned attachment startup with animated activation begins at readiness; its first subframe activation crossings are not replayed",
+                ));
+            }
+        }
         let message = match &feature.payload {
             NodeFeature::Particle(ParticleEmitter::MdlxEmitter1(_) | ParticleEmitter::MdlxEmitter2(_) | ParticleEmitter::M2(_))
             | NodeFeature::Ribbon(SemanticRibbonEmitter::Mdlx(_) | SemanticRibbonEmitter::M2(_))

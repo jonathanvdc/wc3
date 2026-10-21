@@ -4,7 +4,8 @@ use super::super::coordinates::basis;
 use super::super::{ModelAsset, ModelInstance, Playback};
 use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
-use super::model_children::{ModelParticleChild, ModelParticleMotion};
+use super::frame::EffectStart;
+use super::model_children::{ModelParticleChild, ModelParticleMotion, ModelParticleStart};
 use super::model_ownership::spawn_owned_model;
 use super::EffectFrame;
 use crate::child_models::{ChildModelBinding, ChildModelKey};
@@ -74,6 +75,22 @@ pub(crate) struct ModelParticleInstances {
 }
 
 impl RuntimeModelParticles {
+    pub(super) fn seed_owned(
+        &self,
+        instances: &mut ModelParticleInstances,
+        start: &EffectStart<'_, '_, '_>,
+    ) {
+        if instances.previous_time.is_some() {
+            return;
+        }
+        instances.previous_time = Some(0.);
+        instances.previous_clip = start.frame.selection.clip;
+        instances.previous_basis = start.frame.basis_world;
+        for (emitter, state) in self.emitters.iter().zip(&mut instances.states) {
+            state.previous_node = start.feature(emitter.anchor, &mut state.scratch);
+        }
+    }
+
     pub(super) fn append_remapped(
         &mut self,
         source: &Self,
@@ -341,6 +358,12 @@ impl RuntimeModelParticles {
                                 lifetime,
                                 visible: true,
                                 first_clip_pending: false,
+                            },
+                            ModelParticleStart {
+                                basis: Mat4::from_scale_rotation_translation(scale, spin, origin),
+                                source: root,
+                                observed_time: None,
+                                interval: age,
                             },
                             ModelParticleMotion {
                                 origin,

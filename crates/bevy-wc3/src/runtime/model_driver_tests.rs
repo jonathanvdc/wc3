@@ -45,6 +45,8 @@ fn scene() -> (App, Entity, Handle<ModelAsset>) {
         .init_resource::<ReplacementImages>()
         .init_resource::<ModelParticleBirths>()
         .add_systems(Update, simulate_model_particles);
+    // Establish the ordinary application root's initial effect-clock origin.
+    app.update();
     (app, root, handle)
 }
 fn birth(app: &mut App, root: Entity, handle: Handle<ModelAsset>, lifetime: f64) -> Entity {
@@ -158,4 +160,342 @@ fn pending_birth_dies_before_loading_and_cannot_be_populated_later() {
         .shared_time = 0.006;
     app.update();
     assert!(app.world().get_entity(child).is_err());
+}
+
+fn effect_asset(app: &mut App, source: &str) -> Handle<ModelAsset> {
+    use wc3::model::{conversion::ImportOptions, io::mdlx};
+    let model = mdlx::decode_mdl(source, &ImportOptions::default())
+        .unwrap()
+        .value
+        .widen::<Universal>();
+    let image = app
+        .world_mut()
+        .resource_mut::<Assets<Image>>()
+        .add(Image::default());
+    let compiled = compile_model(&model, |_| Some(image.clone())).unwrap();
+    app.world_mut()
+        .resource_mut::<Assets<ModelAsset>>()
+        .add(ModelAsset {
+            compiled,
+            images: HashMap::new(),
+            unresolved_images: Vec::new(),
+        })
+}
+fn enable_effect_publication(app: &mut App) {
+    use bevy::transform::{TransformPlugin, TransformSystems};
+    app.add_plugins(TransformPlugin).add_systems(
+        PostUpdate,
+        super::super::simulate_particles.after(TransformSystems::Propagate),
+    );
+}
+fn start_child(app: &mut App, root: Entity, handle: Handle<ModelAsset>) -> Entity {
+    let child = birth(app, root, handle, 10.);
+    app.world_mut()
+        .entity_mut(child)
+        .insert(ModelParticleStart {
+            basis: Mat4::from_translation(Vec3::new(3., 4., 5.)),
+            source: root,
+            observed_time: None,
+            interval: 0.,
+        });
+    child
+}
+fn sprite_population(app: &mut App) -> usize {
+    let mut query = app.world_mut().query::<&crate::effects::SpriteEmitter>();
+    query.iter(app.world()).map(|value| value.alive).sum()
+}
+fn ribbon_population(app: &mut App) -> usize {
+    let mut query = app.world_mut().query::<&crate::effects::RibbonEmitter>();
+    query.iter(app.world()).map(|value| value.sections).sum()
+}
+#[test]
+fn ready_child_sprites_and_ribbons_integrate_the_first_subframe_once() {
+    for (source, population) in [
+        (
+            include_str!("../../tests/fixtures/particle_capture.mdl"),
+            sprite_population as fn(&mut App) -> usize,
+        ),
+        (
+            include_str!("../../tests/fixtures/ribbon_capture.mdl"),
+            ribbon_population,
+        ),
+    ] {
+        let (mut app, root, _) = scene();
+        enable_effect_publication(&mut app);
+        let handle = effect_asset(&mut app, source);
+        let child = start_child(&mut app, root, handle.clone());
+        app.world_mut()
+            .get_mut::<Playback>(root)
+            .unwrap()
+            .shared_time = 0.1;
+        app.update();
+        let first = population(&mut app);
+        assert!(
+            first > 0,
+            "ready child must integrate 0..0.1 rather than start at its endpoint"
+        );
+        assert!(app.world().get::<ModelParticleStart>(child).is_none());
+        app.update();
+        assert_eq!(
+            population(&mut app),
+            first,
+            "paused frames cannot replay startup births"
+        );
+        // Replacing an already populated asset has no birth token. Its history
+        // starts at the present time, regardless of the owning particle's age.
+        app.world_mut()
+            .entity_mut(child)
+            .insert(ModelInstance(handle));
+        app.update();
+        assert_eq!(
+            population(&mut app),
+            0,
+            "reload must not recreate old effects"
+        );
+    }
+}
+#[test]
+fn pending_child_startup_survives_paused_loading_but_expires_when_age_advances() {
+    for advance in [false, true] {
+        let (mut app, root, _) = scene();
+        enable_effect_publication(&mut app);
+        let ready = effect_asset(
+            &mut app,
+            include_str!("../../tests/fixtures/particle_capture.mdl"),
+        );
+        let asset = app
+            .world()
+            .resource::<Assets<ModelAsset>>()
+            .get(&ready)
+            .unwrap();
+        let asset = ModelAsset {
+            compiled: asset.compiled.clone(),
+            images: asset.images.clone(),
+            unresolved_images: asset.unresolved_images.clone(),
+        };
+        let pending = app
+            .world_mut()
+            .resource_mut::<Assets<ModelAsset>>()
+            .reserve_handle();
+        let child = start_child(&mut app, root, pending.clone());
+        app.world_mut()
+            .get_mut::<Playback>(root)
+            .unwrap()
+            .shared_time = 0.1;
+        app.update();
+        assert!(app.world().get::<ModelParticleStart>(child).is_some());
+        if advance {
+            app.world_mut()
+                .get_mut::<Playback>(root)
+                .unwrap()
+                .shared_time = 0.2;
+        }
+        app.world_mut()
+            .resource_mut::<Assets<ModelAsset>>()
+            .insert(pending.id(), asset)
+            .unwrap();
+        app.update();
+        assert_eq!(
+            sprite_population(&mut app) > 0,
+            !advance,
+            "only the unchanged first observed age may replay its initial subframe"
+        );
+        assert!(app.world().get::<ModelParticleStart>(child).is_none());
+    }
+}
+
+#[test]
+fn independent_attachment_start_applies_only_its_own_speed_once() {
+    for (speed, paused, expected) in [(1., false, 0.1), (2., false, 0.2), (2., true, 0.)] {
+        let mut clock = Playback {
+            speed,
+            paused,
+            ..Default::default()
+        };
+        assert!(seed_independent_clock(&mut clock, 0.1));
+        assert_eq!((clock.clip_time, clock.shared_time), (expected, expected));
+        assert_eq!(clock.speed, speed);
+        assert_eq!(clock.paused, paused);
+    }
+    let mut clock = Playback {
+        shared_time: 3.,
+        clip_time: 2.,
+        ..Default::default()
+    };
+    assert!(!seed_independent_clock(&mut clock, 0.1));
+    assert_eq!((clock.clip_time, clock.shared_time), (2., 3.));
+    assert!(!seed_independent_clock(&mut Playback::default(), -1.));
+}
+#[test]
+fn only_constant_active_fresh_attachments_receive_an_initial_interval() {
+    use crate::child_coordinates::CoordinatePolicy;
+    for (visibility, expected) in [
+        ("", true),
+        ("Visibility 1 { DontInterp, 0: 0.0, }", false),
+        ("Visibility 2 { Linear, 0: 1.0, 1000: 1.0, }", false),
+    ] {
+        let source = format!(
+            r#"
+            Version {{ FormatVersion 800, }}
+            Model "startup" {{}}
+            Sequences 1 {{ Anim "Stand" {{ Interval {{ 0, 1000 }}, }} }}
+            Attachment "socket" {{ ObjectId 0, AttachmentID 0, {visibility} }}
+            PivotPoints 1 {{ {{ 0., 0., 0. }}, }}
+        "#
+        );
+        let (mut app, root, _) = scene();
+        let handle = effect_asset(&mut app, &source);
+        let parent = birth(&mut app, root, handle, 10.);
+        app.update();
+        let mut query = app
+            .world_mut()
+            .query_filtered::<Entity, With<ModelAttachment>>();
+        let point = query.single(app.world()).unwrap();
+        app.world_mut().entity_mut(point).insert((
+            ChildCoordinates {
+                coordinates: CoordinatePolicy::Host,
+                parent_basis: Transform::IDENTITY,
+            },
+            Playback {
+                speed: 2.,
+                ..Default::default()
+            },
+        ));
+        app.world_mut().get_mut::<Playback>(parent).unwrap().speed = 7.;
+        let mut pipeline = ModelPipeline::new(app.world_mut());
+        pipeline.birth_roots.insert(
+            parent,
+            BirthActor {
+                root: Mat4::IDENTITY,
+                basis: Mat4::IDENTITY,
+                camera: None,
+                elapsed: 0.1,
+            },
+        );
+        assert_eq!(
+            initialize_attachment_start(app.world_mut(), &mut pipeline, point),
+            expected
+        );
+        assert_eq!(
+            app.world().get::<Playback>(point).unwrap().shared_time,
+            if expected { 0.2 } else { 0. }
+        );
+        if expected {
+            app.world_mut()
+                .entity_mut(point)
+                .remove::<(Playback, ModelParticleStart)>();
+            assert!(!initialize_attachment_start(
+                app.world_mut(),
+                &mut pipeline,
+                point
+            ));
+            assert!(
+                app.world().get::<ModelParticleStart>(point).is_some(),
+                "pending attachment captures the same startup token as direct children"
+            );
+            pipeline.birth_roots.clear();
+            app.world_mut().entity_mut(point).insert(Playback {
+                speed: 3.,
+                ..Default::default()
+            });
+            assert!(
+                initialize_attachment_start(app.world_mut(), &mut pipeline, point),
+                "unchanged owner age retains paused loading history"
+            );
+            assert!((app.world().get::<Playback>(point).unwrap().shared_time - 0.3).abs() < 1e-10);
+            app.world_mut()
+                .get_mut::<Playback>(parent)
+                .unwrap()
+                .shared_time = 0.2;
+            app.world_mut()
+                .entity_mut(point)
+                .insert(Playback::default());
+            assert!(!initialize_attachment_start(
+                app.world_mut(),
+                &mut pipeline,
+                point
+            ));
+            assert!(app.world().get::<ModelParticleStart>(point).is_none());
+        }
+        // A later ready load or reload has no same-stage parent birth entry.
+        pipeline.birth_roots.clear();
+        assert!(!initialize_attachment_start(
+            app.world_mut(),
+            &mut pipeline,
+            point
+        ));
+    }
+}
+
+#[test]
+fn global_loader_ready_attachment_consumes_its_captured_interval_before_pose() {
+    use crate::child_coordinates::CoordinatePolicy;
+    use crate::instances::spawn_loaded_models;
+    let (mut app, root, _) = scene();
+    enable_effect_publication(&mut app);
+    let parent_asset = effect_asset(
+        &mut app,
+        r#"
+        Version { FormatVersion 800, }
+        Model "startup" {}
+        Sequences 1 { Anim "Stand" { Interval { 0, 1000 }, } }
+        Attachment "socket" { ObjectId 0, AttachmentID 0, }
+        PivotPoints 1 { { 0., 0., 0. }, }
+    "#,
+    );
+    let parent = start_child(&mut app, root, parent_asset);
+    let mut factory = SystemState::<OwnedModelFactory>::new(app.world_mut());
+    factory.get_mut(app.world_mut()).unwrap().populate(parent);
+    factory.apply(app.world_mut());
+    let mut points = app
+        .world_mut()
+        .query_filtered::<Entity, With<ModelAttachment>>();
+    let point = points.single(app.world()).unwrap();
+    let pending = app
+        .world_mut()
+        .resource_mut::<Assets<ModelAsset>>()
+        .reserve_handle();
+    app.world_mut().entity_mut(point).insert((
+        ModelInstance(pending.clone()),
+        ParticleModelSubtree,
+        ChildCoordinates {
+            coordinates: CoordinatePolicy::Host,
+            parent_basis: Transform::IDENTITY,
+        },
+    ));
+    app.world_mut()
+        .resource_mut::<ModelParticleBirths>()
+        .0
+        .push_back(point);
+    app.world_mut()
+        .get_mut::<Playback>(root)
+        .unwrap()
+        .shared_time = 0.1;
+    app.update();
+    assert!(app.world().get::<Playback>(point).is_none());
+    assert!(app.world().get::<ModelParticleStart>(point).is_some());
+    let ready = effect_asset(
+        &mut app,
+        include_str!("../../tests/fixtures/particle_capture.mdl"),
+    );
+    let asset = app
+        .world_mut()
+        .resource_mut::<Assets<ModelAsset>>()
+        .remove(ready.id())
+        .unwrap();
+    app.world_mut()
+        .resource_mut::<Assets<ModelAsset>>()
+        .insert(pending.id(), asset)
+        .unwrap();
+    app.add_systems(Update, spawn_loaded_models.before(simulate_model_particles));
+    app.update();
+    assert!((app.world().get::<Playback>(point).unwrap().shared_time - 0.1).abs() < 1e-10);
+    assert!(
+        sprite_population(&mut app) > 0,
+        "global readiness must not erase the accepted initial interval"
+    );
+    assert!(app.world().get::<ModelParticleStart>(point).is_none());
+    let count = sprite_population(&mut app);
+    app.update();
+    assert_eq!(sprite_population(&mut app), count);
 }

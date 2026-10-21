@@ -56,6 +56,14 @@ particle shorter than one frame can still appear. Roots containing both model
 and sprite emitters observe the shared effect clock once; their other effects
 publish after propagation. Sprite-only roots retain the ordinary late path.
 
+Ready children seed their sprite, ribbon, model-emitter, and external programme
+histories at the captured birth frame before advancing over their initial
+particle-age interval. Their occurrence poses use the shared evaluator without a
+second physics step. Paused warmup frames do not repeat births. A pending child
+can retain this initial interval while its source age stays unchanged; once that
+age advances, later readiness starts effects at the current time. Asset reloads
+also start at the current time rather than replaying old emissions.
+
 Pending asset requests have the same birth identity and lifetime as ready
 children. A late load cannot resurrect a dead or reset particle. World-space
 children use a linked ownership relationship independent of transform parenting,
@@ -63,6 +71,16 @@ so renderer-owner despawn also removes detached requests and populated rigs.
 Cyclic asset dependencies are rejected. Automatic attachments and rigid mounts
 inside an owned actor use the same current-frame evaluation; unrelated
 application models retain ordinary scheduling.
+
+Fresh rigid descendants resolve their birth placement through their owner's
+birth pose. Constant-active or socketless automatic attachments advance their
+independent clock over the accepted particle-age interval, applying their own
+playback speed once; mapped ancestor speeds do not multiply it again. Explicit
+nonzero or paused child clocks retain their policy. Animated attachment activation
+starts at readiness and reports an approximation: initial activation crossings
+are not reconstructed. Pending automatic attachments retain their captured interval while the owner's
+observed clock stays unchanged. Once that clock advances, later readiness starts
+at the endpoint without replaying the owner's startup interval.
 
 Current hierarchy visibility hides living particles and suppresses new births.
 An explicit `Visibility::Visible` override follows Bevy ancestry semantics.

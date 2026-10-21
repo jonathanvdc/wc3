@@ -1,5 +1,6 @@
 //! Direct staged sprite simulation using the resident immutable GPU transport.
 use super::emission::{EffectChange, EmissionClock};
+use super::frame::EffectStart;
 use super::{EffectFrame, SpriteEmitter};
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::effects::blend::EffectBlend;
@@ -121,6 +122,21 @@ pub(crate) struct AtlasParticleInstances {
     previous_time: Option<f64>,
 }
 impl RuntimeAtlasParticles {
+    pub(super) fn seed_owned(
+        &self,
+        instances: &mut AtlasParticleInstances,
+        start: &EffectStart<'_, '_, '_>,
+    ) {
+        if instances.previous_time.is_some() {
+            return;
+        }
+        instances.previous_time = Some(0.);
+        for (emitter, state) in self.emitters.iter().zip(&mut instances.states) {
+            state.previous_node = start.feature(emitter.anchor, &mut state.pose_scratch);
+            state.previous_basis = start.frame.basis_world;
+        }
+    }
+
     pub(super) fn append_remapped(
         &mut self,
         source: &Self,

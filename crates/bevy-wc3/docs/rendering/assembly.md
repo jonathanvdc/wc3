@@ -112,6 +112,14 @@ require matching clip source starts. `PoseBaker` includes
 composed components and attachment visibility; explicit mounted playback snapshots
 can supply independent child clocks.
 
+Assemblies inside [model particles](prem.md) use the same owner-ordered startup
+path. Ready parts resolve their initial placement through the owner's birth pose.
+Constant-active automatic attachments apply their independent playback rate once
+over that initial particle-age interval; mapped rigid clocks keep their existing
+mapping. Animated attachment activation does not replay initial crossings and
+reports an approximation. Pending automatic attachments can retain the initial interval across unchanged
+owner clocks; elapsed owner history and reload do not reconstruct old effects.
+
 ## Compile and reuse
 
 `compile_assembly` accepts the resolved plan, semantic model map, Bevy image store

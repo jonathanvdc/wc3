@@ -17,6 +17,16 @@ impl ModelParticleChild {
         self.root
     }
 }
+
+/// Captured occurrence placement for one initial effect interval. Pending assets
+/// may retain it across paused loading frames, but never across elapsed history.
+#[derive(Component, Clone, Copy, Debug)]
+pub(crate) struct ModelParticleStart {
+    pub basis: Mat4,
+    pub source: Entity,
+    pub observed_time: Option<f64>,
+    pub interval: f64,
+}
 /// Optional closed-form motion used by independent ballistic model particles.
 /// Sampled age-driven children receive their Transform in the early effect step.
 #[derive(Component, Clone, Copy, Debug)]
@@ -75,6 +85,31 @@ pub(crate) fn current_hierarchy_visible(world: &World, mut entity: Entity) -> bo
     }
     false
 }
+/// Validate a captured startup frame against the exact owning clock. Initial
+/// observations establish the finite residual once; elapsed source history expires it.
+pub(crate) fn observe_model_start(
+    world: &mut World,
+    entity: Entity,
+    source: Entity,
+    time: f64,
+    interval: f64,
+) -> Option<ModelParticleStart> {
+    let mut start = world.get::<ModelParticleStart>(entity).copied()?;
+    if start.source != source
+        || !start.basis.is_finite()
+        || !time.is_finite()
+        || start.observed_time.is_some_and(|previous| previous != time)
+    {
+        world.entity_mut(entity).remove::<ModelParticleStart>();
+        return None;
+    }
+    if start.observed_time.is_none() {
+        start.observed_time = Some(time);
+        start.interval = interval;
+        world.entity_mut(entity).insert(start);
+    }
+    Some(start)
+}
 /// Synchronize an owned birth after its source's current emission/motion step.
 /// Ready and still-loading requests share this lifecycle, so late assets cannot
 /// bring a dead or reset particle back to life.
@@ -98,6 +133,7 @@ pub(crate) fn synchronize_child(world: &mut World, entity: Entity) -> bool {
         world.despawn(entity);
         return false;
     }
+    observe_model_start(world, entity, particle.root, parent_time, age);
     let desired = if particle.visible && current_hierarchy_visible(world, particle.root) {
         Visibility::Inherited
     } else {

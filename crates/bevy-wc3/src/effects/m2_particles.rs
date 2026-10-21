@@ -9,6 +9,7 @@ use super::atlas_sprites::retimed_selection;
 use super::bones::{BoneCandidate, BoneSource};
 use super::emission::{EffectChange, EmissionClock};
 use super::frame::EffectFrame;
+use super::frame::EffectStart;
 use super::generators::spline;
 use super::implosion::{bounded_end, outward_crossing};
 use super::m2_model_geometry::{tumble, ModelBasis};
@@ -256,6 +257,22 @@ fn signed(seed: &mut u64) -> f32 {
 }
 
 impl RuntimeM2Particles {
+    pub(super) fn seed_owned(
+        &self,
+        instances: &mut M2ParticleInstances,
+        start: &EffectStart<'_, '_, '_>,
+    ) {
+        if instances.previous_time.is_some() {
+            return;
+        }
+        instances.previous_time = Some(0.);
+        instances.previous_basis = Some(start.frame.basis_world);
+        for (emitter, state) in self.emitters.iter().zip(&mut instances.emitters) {
+            state.previous_node =
+                emitter.emitter_frame(start.feature(emitter.node_index, &mut state.pose_scratch));
+        }
+    }
+
     pub(super) fn append_remapped(
         &mut self,
         source: &Self,

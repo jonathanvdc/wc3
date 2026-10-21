@@ -1,6 +1,6 @@
 //! Ordinary Bevy model instances owned by shared age-driven particle births.
 use super::m2_model_geometry::ParticleKey;
-use super::model_children::{ModelParticleChild, ParticleModelSubtree};
+use super::model_children::{ModelParticleChild, ModelParticleStart, ParticleModelSubtree};
 use super::model_ownership::spawn_owned_model;
 use crate::child_coordinates::ChildCoordinates;
 use crate::{ModelAsset, ModelInstance, Playback};
@@ -94,6 +94,12 @@ impl ModelChildren {
                             paused: true,
                             driving_camera: context.driving_camera,
                             ..Default::default()
+                        },
+                        ModelParticleStart {
+                            basis: sample.initial_transform.to_matrix(),
+                            source: context.root,
+                            observed_time: None,
+                            interval: sample.age,
                         },
                         sample.transform.unwrap_or(sample.initial_transform),
                         if effective_visible {

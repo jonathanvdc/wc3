@@ -8,6 +8,7 @@ use crate::effects::age_sprites_gpu::{
     AgeSpriteData, AgeSpriteRecord, AgeSpriteUniform, SampleBuffers,
 };
 use crate::effects::emission::EffectChange;
+use crate::effects::frame::EffectStart;
 use crate::effects::render::SortPolicy;
 use crate::effects::render::{effect_quad, EffectGeometry};
 use crate::effects::EffectFrame;
@@ -272,6 +273,53 @@ impl RuntimeProgramParticles {
             previous: None,
         }
     }
+    pub(crate) fn seed_owned(
+        &self,
+        instances: &mut ProgramInstances,
+        start: &EffectStart<'_, '_, '_>,
+    ) {
+        if instances.previous.is_some() {
+            return;
+        }
+        instances.previous = Some(0.);
+        let frame = &start.frame;
+        let clip = frame
+            .selection
+            .clip
+            .and_then(|id| self.clips.get(&id))
+            .map_or("", String::as_str);
+        let mut scratch = Vec::new();
+        for (emitter, state) in self.emitters.iter().zip(&mut instances.states) {
+            let (matrix, visible) = start.sample_feature(emitter.anchor, &mut scratch);
+            if state.error.is_some()
+                || !frame.root_visible
+                || !visible
+                || frame.sample.animated(&emitter.activation) <= 0.
+                || !emitter.guide.visible(clip)
+            {
+                continue;
+            }
+            let (inputs, scale) = emitter.inputs_at(matrix);
+            if let Some(instance) = &mut state.instance {
+                let result = emitter
+                    .controls(instance, frame, scale, inputs)
+                    .and_then(|()| {
+                        instance.start(
+                            &emitter.effect.program,
+                            emitter.effect.program.default_entry(),
+                            inputs,
+                        )
+                    });
+                match result {
+                    Ok(()) => state.started = true,
+                    Err(error) => {
+                        instance.stop();
+                        state.error = Some(error.to_string());
+                    }
+                }
+            }
+        }
+    }
     pub fn update(
         &self,
         instances: &mut ProgramInstances,
@@ -456,10 +504,10 @@ impl Emitter {
         }
     }
     fn inputs(&self, frame: &EffectFrame<'_, '_, '_>) -> (SceneInputs, f32) {
-        let mut matrix = self.space_from_world
-            * frame.basis_world
-            * frame.feature_matrix(self.anchor)
-            * Mat4::from_rotation_z(FRAC_PI_2);
+        self.inputs_at(frame.basis_world * frame.feature_matrix(self.anchor))
+    }
+    fn inputs_at(&self, matrix: Mat4) -> (SceneInputs, f32) {
+        let mut matrix = self.space_from_world * matrix * Mat4::from_rotation_z(FRAC_PI_2);
         let lengths = Vec3::new(
             matrix.x_axis.truncate().length(),
             matrix.y_axis.truncate().length(),

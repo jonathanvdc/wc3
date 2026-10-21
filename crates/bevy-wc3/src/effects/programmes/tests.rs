@@ -251,3 +251,71 @@ fn live_programme_sprites(effect: ParticleEffect) -> usize {
     }
     total
 }
+
+#[test]
+fn owned_programme_integrates_its_initial_interval_before_extracting_sprites() {
+    use crate::effects::frame::EffectStart;
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+    let node = builder.add_named_node("external").unwrap();
+    let mut emitter: Popcorn<'_> = builder.construct();
+    emitter.visibility = builder.add_value(1.);
+    emitter.emission_rate = builder.add_value(1.);
+    emitter.speed = builder.add_value(1.);
+    emitter.life_span = builder.add_value(1.);
+    emitter.color = builder.add_value(Vec3::ONE);
+    emitter.opacity = builder.add_value(1.);
+    let feature = builder
+        .add_feature(node, NodeFeature::ParticleProgram(Box::new(emitter)))
+        .unwrap();
+    let model = builder.finish().unwrap();
+    let runtime = RuntimeProgramParticles::compile(
+        &model,
+        &HashMap::from([(node, 0)]),
+        &HashMap::from([(feature, effect())]),
+    );
+    let mut world = World::new();
+    let basis = world.spawn_empty().id();
+    let mut meshes = Assets::<Mesh>::default();
+    let mut queue = CommandQueue::default();
+    let mut instances = runtime.spawn(&mut Commands::new(&mut queue, &world), &mut meshes, basis);
+    queue.apply(&mut world);
+    let animation = AnimationProgram::compile(&model);
+    let sample = animation.sample(AnimationSample::default()).unwrap();
+    let poses = [Mat4::IDENTITY];
+    let visible = [true];
+    let birth = EffectFrame {
+        pose: None,
+        root_visible: true,
+        traversal: Default::default(),
+        change: Default::default(),
+        time: 0.,
+        selection: Default::default(),
+        sample: &sample,
+        node_poses: &poses,
+        node_visible: &visible,
+        basis_world: Mat4::from_translation(Vec3::X * 3.),
+    };
+    runtime.seed_owned(&mut instances, &EffectStart { frame: birth });
+    let mut queries = SystemState::<(
+        Query<&mut AgeSpriteData>,
+        Query<&mut ParticleProgramEmitter>,
+    )>::new(&mut world);
+    let (mut sprites, mut statistics) = queries.get_mut(&mut world).unwrap();
+    runtime.update(
+        &mut instances,
+        &EffectFrame {
+            time: 2.25,
+            basis_world: Mat4::from_translation(Vec3::X * 20.),
+            ..birth
+        },
+        &mut sprites,
+        &mut statistics,
+    );
+    let data = sprites.single().unwrap();
+    // The original fixture creates one stationary sprite at start, with two
+    // seconds of lifetime. First observing age 2.25 must retire it, rather than
+    // start a fresh sprite at the endpoint with zero elapsed simulation.
+    assert!(data.records.is_empty());
+    assert_eq!(statistics.single().unwrap().alive, 0);
+    assert!(statistics.single().unwrap().error.is_none());
+}

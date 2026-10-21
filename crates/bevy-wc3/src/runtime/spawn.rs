@@ -90,7 +90,11 @@ pub(crate) fn populate_model_with_context(
         .spawn(commands, meshes, materials, basis_entity);
     if owned {
         if let Ok(selection) = initial_playback.selection() {
-            RuntimeParticles::start_owned_clock(&mut particles, selection);
+            RuntimeParticles::start_owned_clock(
+                &mut particles,
+                selection,
+                initial_playback.event_traversal,
+            );
         }
     }
     let mut nodes = Vec::with_capacity(model.nodes.len());
