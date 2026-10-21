@@ -91,6 +91,17 @@ independent game meaning remains unverified. Popcorn scaling routes average
 emitter scale through `Game.Scale` and removes it from the input basis; without
 that flag the basis retains its authored scale.
 
+Routed births retain their occurrence timestamps and are processed in chronological
+order. A newborn evolves only for the remaining portion of its birth step. The
+loader uses the last authored event timestamp as an event stream's duration, or
+zero for an empty stream; applications compiling programmes themselves can choose
+an explicit duration through `EffectCompileOptions`. Lifetime uses the canonical
+`self.lifeRatio` and `self.invLife` fields: elapsed time advances the ratio, and a
+ratio of at least one retires the particle, including a value written by its
+programme. Authored death-step controls select terminal evolution. These timing,
+duration and lifetime policies are implemented; exact native-game fidelity
+remains unverified.
+
 Playback pause retains both simulation and immutable GPU records. Seeking skips
 the crossed simulation interval; sequence changes and backwards traversal restart
 the graph. Initial graph execution waits until the first active frame.
