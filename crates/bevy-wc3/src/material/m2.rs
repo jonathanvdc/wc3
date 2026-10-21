@@ -47,6 +47,7 @@ pub(super) fn program(step: &m2::MaterialStep<'_>) -> Option<ShaderProgram> {
         }
         m2::MaterialStep::MaskedDoubledModulation(_) => (UVec4::new(2, 0, 0, 0), 2, false),
         m2::MaterialStep::OpaqueAdditiveAlpha(_) => (UVec4::new(3, 0, 0, 0), 2, false),
+        m2::MaterialStep::Illumination(_) => (UVec4::new(27, 0, 0, 0), 2, false),
         m2::MaterialStep::InverseMaskedOpaqueAdditiveAlpha(_) => (UVec4::new(4, 0, 0, 0), 2, false),
         m2::MaterialStep::MaskedDoubledModulationGlow(_) => (UVec4::new(5, 0, 0, 0), 3, false),
         m2::MaterialStep::ModulatedAdditiveAlpha(_) => (UVec4::new(6, 0, 0, 0), 2, false),
@@ -173,6 +174,10 @@ pub(super) fn compile_m2(
     }
     if let Some(program) = supported {
         pass.state.combiner.mode = program.mode;
+        if matches!(surface, m2::MaterialStep::Illumination(_)) {
+            pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Unverified,
+                "M2 illumination uses a primary-modulated emissive interpretation; native game fidelity has no representative asset validation"));
+        }
         let palette = surface.guild_palette().unwrap_or_default();
         pass.state.combiner.guild_background = palette.background.extend(1.);
         pass.state.combiner.guild_emblem = palette.emblem.extend(1.);

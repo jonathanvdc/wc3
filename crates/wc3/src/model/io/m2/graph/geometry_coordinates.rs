@@ -8,6 +8,11 @@ const T1: Route = Route {
     source: 0,
     transform: Some(0),
 };
+// Illumination independently transforms the same raw UV0 in its second slot.
+const T1_SECOND: Route = Route {
+    source: 0,
+    transform: Some(1),
+};
 const T2: Route = Route {
     source: 1,
     transform: Some(1),
@@ -53,6 +58,7 @@ pub(super) fn routes(shader: u16, count: usize) -> Option<&'static [Route]> {
             22 => &[T1, T1, T1, T2],
             25 => &[ENV],
             26 | 28 => &[T1, T2, T1],
+            29 => &[T1, T1_SECOND],
             _ => return None,
         }
     };

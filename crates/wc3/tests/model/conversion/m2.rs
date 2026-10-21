@@ -2591,3 +2591,148 @@ fn declared_palette_start_overflow_is_a_checked_export_boundary() {
         "{error}"
     );
 }
+
+#[test]
+fn illumination_preserves_two_uv0_transform_owners_through_modern_native_and_universal() {
+    let source = material_routes(0x801d, 2);
+    let imported = io::m2::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let modern = io::m2::plan::<m2::Chunked<m2::V274>>(&imported, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .value;
+    assert_eq!(
+        modern.skin(0, false).unwrap().profile.batches[0].shader_id,
+        0x801d
+    );
+    let encoded = modern.encode().unwrap();
+    let decoded = m2::Bundle::<m2::Chunked<m2::V274>>::decode(
+        &encoded.model,
+        m2::FileKey::Root,
+        |dependency| Ok(encoded.files.get(&dependency.key).map(Vec::as_slice)),
+    )
+    .unwrap();
+    let imported = io::m2::import(&decoded, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let step = &imported.materials().iter().next().unwrap().1.surface.steps[0];
+    assert!(matches!(step, mp::MaterialStep::Illumination(_)));
+    let inputs = step.inputs();
+    assert_eq!(
+        inputs
+            .iter()
+            .map(|input| input.coordinates.source)
+            .collect::<Vec<_>>(),
+        [0, 0]
+    );
+    assert_ne!(
+        inputs[0].coordinates.transform.translation,
+        inputs[1].coordinates.transform.translation
+    );
+    let mut slots = SlotValues::default();
+    let program = sm::AnimationProgram::compile(&imported);
+    let sample = program
+        .sample(sm::AnimationSample {
+            shared_time: sm::Time::seconds(0.5).unwrap(),
+            ..SlotConstruct::construct(&mut slots)
+        })
+        .unwrap();
+    assert_eq!(
+        sample.animated(&inputs[0].coordinates.transform.translation),
+        Vec3::new(10., 0., 0.)
+    );
+    assert_eq!(
+        sample.animated(&inputs[1].coordinates.transform.translation),
+        Vec3::new(20., 0., 0.)
+    );
+    let mut imported = imported
+        .widen::<sm::profiles::Universal>()
+        .try_narrow::<sm::profiles::M2>()
+        .unwrap();
+    let target = imported.materials().iter().next().unwrap().1.surface.steps[0].inputs()[1]
+        .coordinates
+        .transform
+        .translation
+        .slot();
+    let (id, mut animation) = imported
+        .animations()
+        .iter()
+        .find(|(_, animation)| {
+            animation
+                .tracks
+                .iter()
+                .any(|track| track.target() == target)
+        })
+        .map(|(id, animation)| (id, animation.clone()))
+        .unwrap();
+    // Edit the secondary curve without orphaning its original animated slot.
+    let sm::DynamicTrack::Vector3(track) = animation
+        .tracks
+        .iter_mut()
+        .find(|track| track.target() == target)
+        .unwrap()
+    else {
+        panic!("secondary translation track")
+    };
+    track.curve = sm::Curve::step(
+        vec![sm::Time::seconds(0.).unwrap()],
+        vec![Vec3::new(0.25, 0.5, 0.)].into_packed_array(),
+    )
+    .unwrap();
+    imported
+        .edit(|builder| builder.set_animation(id, animation))
+        .unwrap();
+    let native = io::m2::plan::<m2::Chunked<m2::V274>>(&imported, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .value;
+    assert_eq!(
+        native.skin(0, false).unwrap().profile.batches[0].shader_id,
+        0x801d
+    );
+    let reread = io::m2::import(&native, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let step = &reread.materials().iter().next().unwrap().1.surface.steps[0];
+    assert!(matches!(step, mp::MaterialStep::Illumination(_)));
+    let inputs = step.inputs();
+    let program = sm::AnimationProgram::compile(&reread);
+    let sample = program
+        .sample(sm::AnimationSample {
+            shared_time: sm::Time::seconds(0.5).unwrap(),
+            ..SlotConstruct::construct(&mut slots)
+        })
+        .unwrap();
+    assert_eq!(
+        sample.animated(&inputs[0].coordinates.transform.translation),
+        Vec3::new(10., 0., 0.)
+    );
+    assert_eq!(
+        sample.animated(&inputs[1].coordinates.transform.translation),
+        Vec3::new(0.25, 0.5, 0.)
+    );
+}
+
+#[test]
+fn illumination_arity_checks_preserve_unresolved_payloads_and_constant_programmes() {
+    for (shader, count) in [(0x801d, 1), (0x801d, 3), (0x801e, 3), (0x801f, 3)] {
+        let mut values = SlotValues::default();
+        let declaration = mp::MaterialDeclaration::construct(&mut values);
+        let textures: Vec<mp::TextureUnit> = (0..count)
+            .map(|_| SlotConstruct::construct(&mut values))
+            .collect();
+        let step = mp::MaterialStep::from_native(
+            shader,
+            declaration.clone(),
+            textures.clone(),
+            Default::default(),
+        );
+        let mp::MaterialStep::Unresolved(value) = step else {
+            panic!("unsupported layout must retain its payload")
+        };
+        assert_eq!(value.shader, shader);
+        assert_eq!(value.declaration, declaration);
+        assert_eq!(value.textures, textures);
+    }
+}

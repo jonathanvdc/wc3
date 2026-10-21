@@ -41,7 +41,7 @@ fn compile(surface: &m2::Material<'_>, slot_values: &SlotValues) -> SurfacePass 
 
 #[test]
 fn programs_require_exact_input_counts_and_do_not_wrap_unknown_tables() {
-    for offset in (0..=28).chain([32, 33, 34, 35]) {
+    for offset in (0..=29).chain([32, 33, 34, 35]) {
         let count = match offset {
             3 | 9 | 17 | 18 | 20 | 24 | 26 | 28 => 3,
             19 | 25 | 32 | 34 => 1,
@@ -288,4 +288,58 @@ fn program(shader: u16, count: usize) -> Option<ShaderProgram> {
         }
         .into(),
     )
+}
+
+#[test]
+fn illumination_keeps_diffuse_opacity_weights_and_uv_transforms_independent() {
+    let mut values = SlotValues::default();
+    let mut shader = surface(&mut values, 0x801d, &[0, 0]);
+    shader.textures[0].coordinates.transform.translation = values.add(Vec3::new(0.125, 0., 0.));
+    shader.textures[1].coordinates.transform.translation = values.add(Vec3::new(0.5, 0.25, 0.));
+    let primary = shader.textures[0].contribution;
+    let secondary = shader.textures[1].contribution;
+    let mut opacity = None;
+    for weight in [0., 0.5, 1., 2.] {
+        values.set(secondary, weight).unwrap();
+        let pass = compile(&shader, &values);
+        assert_eq!(pass.state.combiner.mode, UVec4::new(27, 0, 0, 0));
+        assert_eq!(pass.state.combiner.weights.y, weight);
+        assert_eq!(pass.animation.weight, Some(primary));
+        assert_eq!(pass.animation.input_weights[1], Some(secondary));
+        assert_eq!(pass.coordinate, 0);
+        assert_eq!(
+            pass.secondary_coordinate, None,
+            "equal raw UV sources do not require another stream"
+        );
+        assert_ne!(
+            Mat3::from(pass.material.uv_transform),
+            pass.state.combiner.uv_transform
+        );
+        assert!(
+            !pass.material.unlit,
+            "illumination does not force unlit shading"
+        );
+        let alpha = pass.material.base_color.alpha();
+        assert_eq!(
+            *opacity.get_or_insert(alpha),
+            alpha,
+            "secondary weight must not fade diffuse coverage"
+        );
+        assert!(pass
+            .diagnostics
+            .iter()
+            .any(|issue| issue.kind == RenderDiagnosticKind::Unverified));
+        assert!(!pass
+            .diagnostics
+            .iter()
+            .any(|issue| issue.message.contains("first input")));
+    }
+    shader.batch_flags = BatchFlags::from_bits_retain(0x40);
+    let pass = compile(&shader, &values);
+    assert_eq!(pass.animation.weight, None);
+    assert!((pass.material.base_color.alpha() - 0.8).abs() < 1e-6);
+    assert_eq!(
+        pass.state.combiner.weights.y, 2.,
+        "emission weights are not saturated"
+    );
 }

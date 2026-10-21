@@ -37,7 +37,7 @@ including all four supported inputs. Rotation and scale therefore share a
 half-unit pivot, with translation applied before either. Native game fidelity
 remains unverified.
 
-The high-bit shader table interprets entries 0 through 28 and 32 through 35. The [programme inventory](m2-programmes.md) lists every established
+The high-bit shader table interprets entries 0 through 29 and 32 through 35. The [programme inventory](m2-programmes.md) lists every established
 entry, resource requirement and unresolved family. These include environment modulation, masked additive contributions,
 weighted and masked crossfades, guild composition, glow and edge opacity. Input counts
 must match the selected programme. Legacy selectors with surplus bindings use
@@ -46,7 +46,8 @@ Supported inputs retain independent transforms and can select mesh streams or
 established environment coordinates. Four-input masking reuses at most three raw
 coordinate streams; a fourth environment route or four distinct raw streams
 produces a diagnosed fallback. The native UV0/UV0/UV0/UV1 routing is supported. Native
-import resolves repeated routes into shared controls; see the [texture ownership
+import resolves repeated routes into shared controls, except illumination whose two
+UV0 inputs use independent transform slots zero and one; see the [texture ownership
 guide](../../../wc3/docs/materials.md#texture-ownership-and-animation).
 Unknown table entries and unsupported input counts produce an explicit first-input
 fallback diagnostic instead of wrapping the table index.
@@ -57,6 +58,15 @@ not surface transparency. Forward, depth, normal and shadow passes share the
 same composition function, including the independent alpha rules of other
 supported shaders. Generated coordinates also remain available in depth-only
 and shadow vertex layouts.
+
+Illumination has a distinct diffuse/emission split: surface RGB tints the primary
+sample for albedo, while primary RGB multiplied by secondary RGB and its weight
+contributes emission independently of that tint. Secondary alpha does not mask
+emission or surface coverage. Primary alpha and the ordinary combined opacity
+still feed the shared forward/prepass coverage rule. A zero secondary weight
+removes emission without hiding diffuse; HDR emission weights are not saturated.
+Bevy lighting affects diffuse while emission remains unlit. This inferred equation
+reports unverified game fidelity because no representative game asset is available.
 
 ## Animation and opacity
 
@@ -98,7 +108,7 @@ sharing; source textures and unchanged material definitions retain their sharing
 
 ## Remaining interpretation limits
 
-Illumination and constant programmes, the modern six-binding guild resource layout,
+Constant programmes, the modern six-binding guild resource layout,
 and special projective/waterfall families remain unsupported. Historical
 combiner and blend-override normalization also remains unresolved. The
 [programme inventory](m2-programmes.md) defines these boundaries and their missing

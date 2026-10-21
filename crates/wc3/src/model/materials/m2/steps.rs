@@ -95,6 +95,20 @@ pub struct OpaqueAdditiveAlphaMaterialStep<'a> {
     /// The emission shader input.
     pub emission: TextureUnit,
 }
+/// Inputs for primary-modulated self illumination.
+///
+/// Diffuse RGB is tinted by the surface; emission is the product of diffuse and
+/// illumination RGB times the illumination contribution. Only diffuse texture
+/// alpha contributes to opacity. Native game fidelity remains unverified.
+#[derive(Clone, Debug, Construct, PartialEq)]
+pub struct IlluminationMaterialStep<'a> {
+    /// Draw state and animated surface response.
+    pub declaration: MaterialDeclaration<'a>,
+    /// Diffuse RGB and texture coverage.
+    pub diffuse: TextureUnit,
+    /// Unlit RGB modulation; its alpha does not affect emission or coverage.
+    pub illumination: TextureUnit,
+}
 /// Inputs for the M2 InverseMaskedOpaqueAdditiveAlpha equation.
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct InverseMaskedOpaqueAdditiveAlphaMaterialStep<'a> {
@@ -380,6 +394,8 @@ pub enum MaterialStep<'a> {
     MaskedDoubledModulation(MaskedDoubledModulationMaterialStep<'a>),
     /// The OpaqueAdditiveAlpha equation.
     OpaqueAdditiveAlpha(OpaqueAdditiveAlphaMaterialStep<'a>),
+    /// Primary-modulated self illumination with independent diffuse coverage.
+    Illumination(IlluminationMaterialStep<'a>),
     /// The InverseMaskedOpaqueAdditiveAlpha equation.
     InverseMaskedOpaqueAdditiveAlpha(InverseMaskedOpaqueAdditiveAlphaMaterialStep<'a>),
     /// The MaskedDoubledModulationGlow equation.
@@ -452,7 +468,7 @@ impl<'a> MaterialStep<'a> {
             3 | 9 | 17 | 18 | 20 | 24 | 26 | 28 => 3,
             19 | 25 | 32 | 34 => 1,
             22 => 4,
-            0..=28 | 33 | 35 => 2,
+            0..=29 | 33 | 35 => 2,
             _ => 0,
         };
         if (legacy
@@ -666,6 +682,11 @@ impl<'a> MaterialStep<'a> {
                 border: inputs.next().expect("validated input count"),
                 palette: guild_palette,
             })),
+            29 => Self::Illumination(IlluminationMaterialStep {
+                declaration,
+                diffuse: inputs.next().expect("validated input count"),
+                illumination: inputs.next().expect("validated input count"),
+            }),
             32 => Self::DiffuseWithoutTextureAlpha(DiffuseWithoutTextureAlphaMaterialStep {
                 declaration,
                 diffuse: inputs.next().expect("validated input count"),
@@ -693,6 +714,7 @@ impl<'a> MaterialStep<'a> {
             Self::Additive(v) => &v.declaration,
             Self::MaskedDoubledModulation(v) => &v.declaration,
             Self::OpaqueAdditiveAlpha(v) => &v.declaration,
+            Self::Illumination(v) => &v.declaration,
             Self::InverseMaskedOpaqueAdditiveAlpha(v) => &v.declaration,
             Self::MaskedDoubledModulationGlow(v) => &v.declaration,
             Self::ModulatedAdditiveAlpha(v) => &v.declaration,
@@ -728,6 +750,7 @@ impl<'a> MaterialStep<'a> {
             Self::Additive(v) => &mut v.declaration,
             Self::MaskedDoubledModulation(v) => &mut v.declaration,
             Self::OpaqueAdditiveAlpha(v) => &mut v.declaration,
+            Self::Illumination(v) => &mut v.declaration,
             Self::InverseMaskedOpaqueAdditiveAlpha(v) => &mut v.declaration,
             Self::MaskedDoubledModulationGlow(v) => &mut v.declaration,
             Self::ModulatedAdditiveAlpha(v) => &mut v.declaration,
@@ -771,6 +794,7 @@ impl<'a> MaterialStep<'a> {
             }
             Self::MaskedDoubledModulation(v) => vec![&v.diffuse, &v.modulation],
             Self::OpaqueAdditiveAlpha(v) => vec![&v.diffuse, &v.emission],
+            Self::Illumination(v) => vec![&v.diffuse, &v.illumination],
             Self::InverseMaskedOpaqueAdditiveAlpha(v) => vec![&v.diffuse, &v.emission],
             Self::MaskedDoubledModulationGlow(v) => vec![&v.diffuse, &v.modulation, &v.glow],
             Self::ModulatedAdditiveAlpha(v) => vec![&v.diffuse, &v.emission],
@@ -818,6 +842,7 @@ impl<'a> MaterialStep<'a> {
             }
             Self::MaskedDoubledModulation(v) => vec![&mut v.diffuse, &mut v.modulation],
             Self::OpaqueAdditiveAlpha(v) => vec![&mut v.diffuse, &mut v.emission],
+            Self::Illumination(v) => vec![&mut v.diffuse, &mut v.illumination],
             Self::InverseMaskedOpaqueAdditiveAlpha(v) => vec![&mut v.diffuse, &mut v.emission],
             Self::MaskedDoubledModulationGlow(v) => {
                 vec![&mut v.diffuse, &mut v.modulation, &mut v.glow]
@@ -939,6 +964,7 @@ impl<'a> MaterialStep<'a> {
             Self::Guild(_) => 0x8000 | (26),
             Self::GuildEmblem(_) => 0x8000 | (27),
             Self::OpaqueGuild(_) => 0x8000 | (28),
+            Self::Illumination(_) => 0x801d,
             Self::DiffuseWithoutTextureAlpha(_) => 0x8000 | (32),
             Self::DoubledModulatedFacingOpacity(_) => 0x8000 | (33),
             Self::DepthModulatedFacingOpacity(_) => 0x8000 | (35),

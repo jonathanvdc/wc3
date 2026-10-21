@@ -30,7 +30,7 @@ fn m2_table_contracts_project_to_stable_typed_equations() {
         );
         assert_eq!(
             matches!(step, m2::MaterialStep::Unresolved(_)),
-            matches!(index, 29..=31),
+            matches!(index, 30..=31),
             "table entry {index}"
         );
         step.validate().unwrap();
@@ -83,7 +83,8 @@ fn m2_legacy_equations_normalize_flags_and_retain_unsampled_bindings() {
 fn m2_unresolved_layouts_retain_raw_selection_and_bindings() {
     let mut slot_values = SlotValues::default();
     for (shader, count) in [
-        (0x801d, 2),
+        (0x801d, 1),
+        (0x801d, 3),
         (0x801e, 3),
         (0x801f, 3),
         (0x801c, 6),
@@ -156,6 +157,7 @@ fn native_profiles_use_the_same_shader_specific_steps_as_universal() {
                 &mut slot_values,
             ))),
             m2::MaterialStep::Diffuse(SlotConstruct::construct(&mut slot_values)),
+            m2::MaterialStep::Illumination(SlotConstruct::construct(&mut slot_values)),
         ],
     };
     let id = draft

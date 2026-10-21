@@ -70,6 +70,12 @@ fn compose(a:vec4<f32>,b:vec4<f32>,c:vec4<f32>,d:vec4<f32>,tint:vec4<f32>) -> Co
             if mode!=25u {rgb=mix(rgb,c.rgb*combiner.guild_border.rgb,c.a);}
             if mode!=26u {alpha=a.a;}
         }
+        case 27u: {
+            // Surface tint affects diffuse only; both alpha masks are independent
+            // of the primary-modulated, weighted emissive contribution.
+            emission=a.rgb*b.rgb*weights.y;
+            alpha=a.a;
+        }
         case 19u: {rgb=mix(mix(2.0*a.rgb*b.rgb,c.rgb,c.a),a.rgb,a.a);}
         case 20u: {emission=b.rgb*(1.0-a.a); alpha=a.a+b.a;}
         case 21u: {alpha=1.0;}

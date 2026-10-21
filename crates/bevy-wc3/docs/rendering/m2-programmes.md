@@ -16,7 +16,8 @@ Bevy PBR lighting and native framebuffer blend/depth choices; additive texture
 contributions enter emissive.
 
 `U` denotes UV0 with native transform slot zero, `V` denotes UV1 with its native
-transform, and `E` denotes sphere environment coordinates. Entries 20 and 24
+transform, `U′` denotes UV0 with native transform slot one, and `E` denotes
+sphere environment coordinates. Entries 20 and 24
 read the UV1 transform from native slot two. Repeated `U` routes share their
 controls during native import. Native lighting and exact game pass ordering
 remain approximate even for implemented equations.
@@ -52,13 +53,20 @@ remain approximate even for implemented equations.
 | 26 | Guild base, emblem and border | 3: U, V, U | Implemented with application-supplied guild palette |
 | 27 | Guild base and emblem | 2: U, V | Implemented with application-supplied guild palette |
 | 28 | Opaque guild base, emblem and border | 3: U, V, U | Implemented with application-supplied guild palette; six-binding variant unresolved |
-| 29 | Illumination | 2: U, U | Unsupported: established RGB interpretation missing |
+| 29 | Primary-modulated illumination | 2: U, U′ | Implemented inferred equation; game fidelity unverified |
 | 30 | Three-image constant product | 3; third route unresolved | Unsupported: coordinate interpretation and constant sourcing missing |
 | 31 | Three-image constant product with colour vertex programme | 3; routes unresolved | Unsupported: vertex colour/coordinate interpretation and constant sourcing missing |
 | 32 | Opaque | 1: U | Implemented |
 | 33 | Doubled modulated product and edge opacity | 2: U, V | Implemented facing fade |
 | 34 | Modulated edge opacity | 1: U | Implemented facing fade |
 | 35 | Modulated product and depth/edge opacity | 2: U, V | Implemented facing fade; no scene-depth intersection |
+
+Illumination tints primary RGB for diffuse and adds primary RGB multiplied by
+secondary RGB and the secondary weight as unlit emission. Secondary alpha does
+not affect emission or coverage; primary alpha supplies texture coverage. Its
+two UV0 inputs use independent native transform slots. This is an inferred
+interpretation with an explicit unverified diagnostic; no representative game
+asset establishes its native fidelity.
 
 Unsupported selectors and incompatible input counts produce fallback diagnostics.
 The renderer does not wrap table indices or guess an equation from texture count.
