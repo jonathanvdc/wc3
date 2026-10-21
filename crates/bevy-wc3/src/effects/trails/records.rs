@@ -57,7 +57,8 @@ pub(super) fn segment_center(
 #[repr(C)]
 pub(crate) struct RibbonUniform {
     pub(crate) color: [f32; 4],
-    pub(crate) clock_gravity: [f32; 4],
+    pub(crate) clock_gravity: [f32; 3],
+    pub(crate) alpha_cutoff: f32,
     pub(crate) atlas_flags: [u32; 4],
     pub(crate) uv_transform: [[f32; 4]; 4],
     pub(crate) gravity_axis: [f32; 4],

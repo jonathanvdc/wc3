@@ -19,7 +19,7 @@ fn sorting_preserves_endpoint_pairs_and_uv_ranks_with_split_clock_gravity() {
     ];
     let [high, low] = split_time(clock + 0.5);
     let uniform = RibbonUniform {
-        clock_gravity: [high, low, 8.0, 0.0],
+        clock_gravity: [high, low, 8.0],
         ..default()
     };
     assert_eq!(records[0].center(&uniform), Vec3::new(0.0, 0.0, -1.0));
@@ -72,39 +72,39 @@ fn position_world_to_clip(p: vec3<f32>) -> vec4<f32> { return vec4(p, 1.0); }
 fn shade_effect(color: vec4<f32>, position: vec3<f32>, normal: vec3<f32>,
     frag_coord: vec4<f32>, unlit: bool, fog_enabled: bool, fog_blend: u32) -> vec4<f32> { return color; }
 "#;
-    for alpha_key in [false, true] {
-        let mut enabled = true;
-        let mut source = imports.to_owned();
-        for line in body.lines() {
-            match line.trim() {
-                "#ifdef ALPHA_KEY" => enabled = alpha_key,
-                "#endif" => enabled = true,
-                _ if enabled => {
-                    source.push_str(line);
-                    source.push('\n');
-                }
-                _ => {}
-            }
-        }
-        let module =
-            parse_str(&source).unwrap_or_else(|error| panic!("{}", error.emit_to_string(&source)));
-        Validator::new(ValidationFlags::all(), Capabilities::all())
-            .validate(&module)
-            .unwrap();
-        for (name, size) in [
-            ("Section", size_of::<RibbonSection>()),
-            ("Emitter", size_of::<RibbonUniform>()),
-        ] {
-            let ty = module
-                .types
-                .iter()
-                .find(|(_, ty)| ty.name.as_deref() == Some(name))
-                .unwrap()
-                .1;
-            let TypeInner::Struct { span, .. } = ty.inner else {
-                panic!("expected struct")
+    let source = format!("{imports}{body}");
+    let module =
+        parse_str(&source).unwrap_or_else(|error| panic!("{}", error.emit_to_string(&source)));
+    Validator::new(ValidationFlags::all(), Capabilities::all())
+        .validate(&module)
+        .unwrap();
+    for (name, size) in [
+        ("Section", size_of::<RibbonSection>()),
+        ("Emitter", size_of::<RibbonUniform>()),
+    ] {
+        let ty = module
+            .types
+            .iter()
+            .find(|(_, ty)| ty.name.as_deref() == Some(name))
+            .unwrap()
+            .1;
+        let TypeInner::Struct { span, .. } = ty.inner else {
+            panic!("expected struct")
+        };
+        assert_eq!(span as usize, size);
+        if name == "Emitter" {
+            let TypeInner::Struct { ref members, .. } = ty.inner else {
+                unreachable!()
             };
-            assert_eq!(span as usize, size);
+            let cutoff = members
+                .iter()
+                .find(|field| field.name.as_deref() == Some("alpha_cutoff"))
+                .unwrap();
+            assert_eq!(
+                cutoff.offset, 28,
+                "cutoff replaces the reserved fourth clock lane"
+            );
+            assert_eq!(size, 144, "cutoff adds no uniform or resident record bytes");
         }
     }
 }

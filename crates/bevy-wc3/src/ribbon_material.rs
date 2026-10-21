@@ -6,6 +6,7 @@ use bevy::prelude::AlphaMode;
 /// Fixed render operations expressible by the shared GPU trail transport.
 pub(crate) struct EffectState {
     pub blend: EffectBlend,
+    pub alpha_cutoff: f32,
     pub depth_test: bool,
     pub depth_write: bool,
 }
@@ -30,12 +31,19 @@ pub(crate) fn effect_state(material: &ModelMaterial) -> Option<EffectState> {
         Blend::Modulate2x => EffectBlend::Modulate2x,
         Blend::Premultiplied | Blend::ModulateAdd | Blend::InverseSourceAlphaAdd => return None,
     };
-    if state.combiner.clip.x > 0. && !matches!(blend, EffectBlend::Opaque | EffectBlend::Cutout) {
-        return None;
-    }
+    let material_cutoff = match material.base.alpha_mode {
+        AlphaMode::Mask(cutoff) => cutoff,
+        _ => 0.,
+    };
+    let alpha_cutoff = material_cutoff.max(state.combiner.clip.x).max(0.);
     Some(EffectState {
         blend,
+        alpha_cutoff,
         depth_test: state.depth_test,
         depth_write: state.depth_write.unwrap_or(authored_blend == Blend::Opaque),
     })
 }
+
+#[cfg(test)]
+#[path = "ribbon_material_tests.rs"]
+mod tests;

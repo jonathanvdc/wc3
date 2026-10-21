@@ -13,7 +13,8 @@ struct Section {
 };
 struct Emitter {
     color: vec4<f32>,
-    clock_gravity: vec4<f32>,
+    clock_gravity: vec3<f32>,
+    alpha_cutoff: f32,
     atlas_flags: vec4<u32>,
     uv_transform: mat4x4<f32>,
     gravity_axis: vec4<f32>,
@@ -79,9 +80,7 @@ fn fragment(input: VertexOutput, @builtin(front_facing) front_facing: bool) -> @
     // Zero-alpha ribbons must also disappear with modulation blend modes.
     if input.color.a <= 0.0 { discard; }
     let color = textureSample(ribbon_texture, ribbon_sampler, input.uv) * input.color;
-#ifdef ALPHA_KEY
-    if color.a < 0.5 { discard; }
-#endif
+    if color.a < emitter.alpha_cutoff { discard; }
     let normal = select(-input.world_normal, input.world_normal, front_facing);
     return shade_effect(color, input.world_position, normal, input.position,
         emitter.atlas_flags.w != 0u, emitter.render_flags.x != 0u, emitter.render_flags.y);

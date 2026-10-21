@@ -48,6 +48,7 @@ struct Pass {
     ribbon_transform: Option<TextureTransform>,
     override_texture: bool,
     blend: EffectBlend,
+    alpha_cutoff: f32,
     depth_test: bool,
     depth_write: bool,
     two_sided: bool,
@@ -231,7 +232,7 @@ impl RuntimeRibbons {
                             None
                         };
                     let Some(state) = effect_state(&material) else {
-                        diagnostic(RenderDiagnosticKind::Unsupported, "Trail blend/cutout combination requires a transport shader extension and is not drawn");
+                        diagnostic(RenderDiagnosticKind::Unsupported, "Trail blend equation is unsupported by the transport and is not drawn");
                         continue;
                     };
                     if surface.coordinate != 0 {
@@ -247,6 +248,7 @@ impl RuntimeRibbons {
                         ribbon_transform,
                         override_texture: matches!(&definition.rendering, TrailRendering::Surfaces(rendering) if !rendering.textures.is_empty()),
                         blend: state.blend,
+                        alpha_cutoff: state.alpha_cutoff,
                         depth_test: state.depth_test,
                         depth_write: state.depth_write,
                     });
@@ -335,7 +337,10 @@ impl RuntimeRibbons {
                             let render = RibbonInstances {
                                 records: Default::default(),
                                 live_indices: Default::default(),
-                                uniform: Default::default(),
+                                uniform: RibbonUniform {
+                                    alpha_cutoff: pass.alpha_cutoff,
+                                    ..Default::default()
+                                },
                                 texture: pass.material.base.base_color_texture.clone(),
                                 filter: pass.blend,
                                 priority_plane: pass.priority,
@@ -559,6 +564,13 @@ impl RuntimeRibbons {
                     });
                 let color = material.base.base_color.to_linear();
                 if let Ok(mut data) = render.get_mut(*entity) {
+                    let Some(render_state) = effect_state(material) else {
+                        Arc::make_mut(&mut data.live_indices).clear();
+                        continue;
+                    };
+                    data.filter = render_state.blend;
+                    data.no_depth_test = !render_state.depth_test;
+                    data.no_depth_set = !render_state.depth_write;
                     data.records = state.live.records.clone();
                     data.live_indices = state.segments.clone();
                     data.texture = material.base.base_color_texture.clone();
@@ -569,13 +581,14 @@ impl RuntimeRibbons {
                             rgb[2] * color.blue,
                             (opacity * color.alpha).clamp(0., 1.),
                         ],
-                        clock_gravity: [high, low, gravity, 0.],
+                        clock_gravity: [high, low, gravity],
+                        alpha_cutoff: render_state.alpha_cutoff,
                         atlas_flags: [rows, columns, slot, u32::from(material.base.unlit)],
                         uv_transform: affine_uv(uv).to_cols_array_2d(),
                         gravity_axis: self.gravity_axis.extend(0.).to_array(),
                         render_flags: [
                             u32::from(material.base.fog_enabled),
-                            pass.blend.fog_blend(),
+                            render_state.blend.fog_blend(),
                             0,
                             0,
                         ],

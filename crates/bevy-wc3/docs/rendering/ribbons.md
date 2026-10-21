@@ -24,7 +24,15 @@ joins between unrelated spans. Atlas cells map over connected chains.
 Every supported compiled material pass receives shared trail geometry. Primary
 texture/color/opacity and UV transforms sample the semantic animation programme.
 Authored alpha testing, additive/modulate factors, culling, depth controls, unlit
-state, priority bias, and supported segment sorting remain explicit. HD normal, ORM,
+state, priority bias, and supported segment sorting remain explicit. Each pass
+retains its scalar alpha cutoff independently of blend and depth state. The
+shader tests final texture × emitter × material alpha before lighting; equality
+with the cutoff survives. Animated material cutoffs update without rebuilding
+resident sections, and supported fade classification follows the sampled pass.
+Native family-specific threshold defaults remain unverified; this transport uses
+the compiled material policy. Zero emitter opacity continues to hide every
+trail mode, including opaque and unweighted additive passes; this is a renderer
+policy rather than a verified native opaque-alpha convention. HD normal, ORM,
 reflection and secondary compositing do not have full ribbon transport
 equivalents and produce limitations.
 

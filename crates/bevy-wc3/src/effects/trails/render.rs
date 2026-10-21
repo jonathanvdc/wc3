@@ -92,14 +92,6 @@ impl SpecializedMeshPipeline for RibbonPipeline {
     ) -> Result<RenderPipelineDescriptor, SpecializedMeshPipelineError> {
         let mut descriptor = self.mesh_pipeline.specialize(key.mesh, layout)?;
         descriptor.vertex.shader = self.shader.clone();
-        if key.filter == 1 {
-            descriptor
-                .fragment
-                .as_mut()
-                .unwrap()
-                .shader_defs
-                .push("ALPHA_KEY".into());
-        }
         descriptor
             .vertex
             .buffers
