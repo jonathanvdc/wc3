@@ -84,6 +84,7 @@ pub use composition::{DrawSelection, JointMap, ModelPart, PartBinding};
 pub use diagnostics::{
     RenderDiagnostic, RenderDiagnosticKind, RenderDiagnosticSeverity, RenderDiagnosticSource,
 };
+pub use effects::age_sprites_gpu::ParticleRefraction;
 pub use effects::{
     ModelEmitter, ParticleEffect, ParticleProgramEmitter, ParticleTextureRequest, RibbonEmitter,
     SpriteEmitter,

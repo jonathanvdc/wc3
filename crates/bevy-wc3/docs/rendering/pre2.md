@@ -2,7 +2,7 @@
 
 Sprite emitters draw small textured heads and trails with authored motion and
 lifetime appearance. MDLX `ParticleEmitter2` uses GPU birth records; M2
-`ParticleEmitter` uses exactly sampled live records and GPU-generated quads.
+`ParticleEmitter` uses compact sampled live records and GPU-generated quads.
 Both paths have bounded populations and independent instance clocks, with
 different geometry and material coverage. Inspect `SpriteEmitter` for live
 populations and omitted-work counters.
@@ -141,11 +141,29 @@ twinkle patterns and stochastic distribution fidelity remain unverified.
 Container-level TXAC selectors are retained on each emitter without invented
 byte semantics. Nonzero selectors produce a diagnostic independently of known
 composition flags; they do not disable the supported multi-texture path. The
-refraction flag selects a scene-color postprocess only when multi-texture is
-inactive. This postprocess has no interpreter in the current Bevy pipeline;
-those emitters retain their ordinary primary texture with a diagnostic. Texture
-rotation programmes, native keyed squirt emission, collisions, and pooled child
-emitters still require additional interpretation or application integration.
+refraction flag selects a separate distortion mask only when multi-texture is
+inactive. The primary image is sampled as numeric data, preserving explicit
+semantic transfer overrides. Atlas UVs and two independently scrolling UV pairs
+sample this same image; particle red controls height and alpha controls mask
+contribution. Mask blend factors retain their own native interpretation rather
+than using the ordinary sprite color pass.
+
+The mask shares the view's depth and sample count, resolves before composition,
+and distorts the completed transparent scene before tonemapping. Targets exist
+only for views with visible refraction particles. Each view retains its own mask,
+settings and scene bindings. Unsupported mask sample counts produce a warning
+and omit distortion. Native game fidelity of displacement and overlapping masks
+remains unverified.
+
+Add `ParticleRefraction` to a camera to control displacement strength and view-space
+fade distance. Defaults are strength one and 100 scene units, independent of
+model and bone scale. Applications converting native yards to metres can set
+91.44 explicitly; native import leaves the numerical model units unchanged.
+Strength zero skips mask allocation and composition.
+Applications supply any underwater-camera policy through these controls.
+
+Texture rotation programmes, native keyed squirt emission, collisions, and pooled
+child emitters still require additional interpretation or application integration.
 M2 geometry-model particles use the separate [model-particle path](prem.md).
 
 ## Budgets and limits

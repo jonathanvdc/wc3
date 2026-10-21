@@ -177,6 +177,8 @@ tonemapping alone does not enable HDR. `--viewport X,Y,W,H` restricts the camera
 to a positive physical rectangle inside the output image.
 `--main-pass-size WIDTHxHEIGHT` overrides the main-pass render resolution while
 retaining the output dimensions, for checking dynamic-resolution composition.
+`--refraction-strength` and `--refraction-fade-distance` override camera distortion
+settings; strength zero provides an identity comparison for authored refraction.
 
 Use `--fog START,END --fog-color R,G,B` to check linear Bevy distance fog in
 world units with a linear RGB color. Keep fog distances, tonemapping, and lighting

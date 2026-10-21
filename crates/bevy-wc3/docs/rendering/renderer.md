@@ -84,8 +84,9 @@ mesh pipeline. The effect guides describe simulation, playback, and resource nee
 Each family bounds populations and per-update work and exposes omitted-work
 counters. M2 multi-texture colors and alpha masks retain their independent
 modulation gains. Bone generators use declared section palettes and posed joint
-spans; their exact game distribution remains unverified. Native TXAC selectors and
-refraction still require further interpretation. External effects need resource providers; their
+spans; their exact game distribution remains unverified. Particle refraction uses
+conditional per-view masks and scene composition. Native TXAC selectors still
+require further interpretation. External effects need resource providers; their
 programme and renderer interpreters have partial coverage.
 
 ## Check a particular model

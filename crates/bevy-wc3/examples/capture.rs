@@ -23,8 +23,9 @@ use bevy::winit::WinitPlugin;
 use bevy_wc3::{
     spawn_model, AssetSettings, BakeSpace, CameraBinding, Lod, LodOverride, LodSettings,
     ModelAsset, ModelEmitter, ModelInstance, ModelInstanceError, ModelMaterial, ModelRig,
-    ParticleProgramEmitter, PhysicsSimulation, Playback, PlaybackError, PoseBaker, PoseOptions,
-    PreparedModel, RibbonEmitter, SpriteEmitter, Wc3BevyPlugin, WorldSelection,
+    ParticleProgramEmitter, ParticleRefraction, PhysicsSimulation, Playback, PlaybackError,
+    PoseBaker, PoseOptions, PreparedModel, RibbonEmitter, SpriteEmitter, Wc3BevyPlugin,
+    WorldSelection,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::env::args;
@@ -61,6 +62,8 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --no-default-light    Omit the capture scene light (isolate model lights)
   --bevy-reference      Add a StandardMaterial sphere at (0, 2, 0)
   --tonemapping MODE    none or tony-mcmapface (default: none)
+  --refraction-strength N  Nonnegative particle distortion multiplier (default: 1)
+  --refraction-fade-distance N  Positive distortion fade distance (default: 100)
   --hdr                 Render the camera in HDR before tonemapping
   --viewport X,Y,W,H    Restrict the camera to a physical image rectangle
   --main-pass-size WxH  Override main-pass render resolution
@@ -116,6 +119,7 @@ struct Options {
     tonemapping: Tonemapping,
     msaa: Msaa,
     hdr: bool,
+    refraction: Option<ParticleRefraction>,
     viewport: Option<Viewport>,
     main_pass_size: Option<UVec2>,
     illuminance: f32,
@@ -168,6 +172,7 @@ impl Options {
             tonemapping: Tonemapping::None,
             msaa: Msaa::Sample4,
             hdr: false,
+            refraction: None,
             viewport: None,
             main_pass_size: None,
             illuminance: 5_000.0,
@@ -250,6 +255,22 @@ impl Options {
                         "none" => Tonemapping::None,
                         _ => return Err("tonemapping must be none or tony-mcmapface".into()),
                     };
+                }
+                "--refraction-strength" | "--refraction-fade-distance" => {
+                    let number: f32 = value.parse()?;
+                    if !number.is_finite()
+                        || number < 0.
+                        || (option == "--refraction-fade-distance"
+                            && (number == 0. || !number.recip().is_finite()))
+                    {
+                        return Err("refraction requires finite nonnegative strength and positive fade distance".into());
+                    }
+                    let settings = options.refraction.get_or_insert_with(Default::default);
+                    if option == "--refraction-strength" {
+                        settings.strength = number;
+                    } else {
+                        settings.fade_distance = number;
+                    }
                 }
                 "--viewport" => {
                     let parts = value
@@ -736,6 +757,9 @@ fn capture(options: Options) -> CaptureResult<()> {
             options.camera(&prepared)?,
         ))
         .id();
+    if let Some(settings) = options.refraction {
+        app.world_mut().entity_mut(camera).insert(settings);
+    }
     if options.hdr {
         app.world_mut().entity_mut(camera).insert(Hdr);
     }
@@ -1267,6 +1291,28 @@ mod tests {
             assert!(parse(&["--viewport", value]).is_err(), "{value}");
         }
         assert!(parse(&["--main-pass-size", "0x1"]).is_err());
+    }
+
+    #[test]
+    fn validates_particle_refraction_settings() {
+        let settings = parse(&[
+            "--refraction-strength",
+            "0",
+            "--refraction-fade-distance",
+            "50",
+        ])
+        .unwrap()
+        .unwrap()
+        .refraction
+        .unwrap();
+        assert_eq!(settings.strength, 0.);
+        assert_eq!(settings.fade_distance, 50.);
+        for value in ["-1", "NaN", "inf"] {
+            assert!(parse(&["--refraction-strength", value]).is_err());
+        }
+        for value in ["0", "-1", "NaN", "inf", "1e-40"] {
+            assert!(parse(&["--refraction-fade-distance", value]).is_err());
+        }
     }
 
     #[test]

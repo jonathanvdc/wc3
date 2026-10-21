@@ -99,20 +99,27 @@ fn age_shader_validates_and_matches_host_record_layout() {
     let shader = include_str!("../../shaders/wc3_age_particle.wgsl");
     let body = &shader[shader.find("struct Particle").unwrap()..];
     let imports = r#"
-struct View { world_from_view: mat4x4<f32>, world_position: vec3<f32> };
+struct View { world_from_view: mat4x4<f32>, view_from_world: mat4x4<f32>, world_position: vec3<f32> };
 @group(0) @binding(0) var<uniform> view: View;
 fn position_world_to_clip(p: vec3<f32>) -> vec4<f32> { return vec4(p, 1.0); }
 fn shade_effect(color: vec4<f32>, position: vec3<f32>, normal: vec3<f32>,
     frag_coord: vec4<f32>, unlit: bool, fog_enabled: bool, fog_blend: u32) -> vec4<f32> { return color; }
 "#;
-    for alpha_key in [false, true] {
-        let mut enabled = true;
+    for (alpha_key, refraction) in [(false, false), (true, false), (false, true), (true, true)] {
+        let mut enabled = vec![true];
         let mut source = imports.to_owned();
         for line in body.lines() {
             match line.trim() {
-                "#ifdef ALPHA_KEY" => enabled = alpha_key,
-                "#endif" => enabled = true,
-                _ if enabled => {
+                "#ifdef ALPHA_KEY" => enabled.push(*enabled.last().unwrap() && alpha_key),
+                "#ifdef REFRACTION" => enabled.push(*enabled.last().unwrap() && refraction),
+                "#else" => {
+                    let branch = enabled.pop().unwrap();
+                    enabled.push(*enabled.last().unwrap() && !branch);
+                }
+                "#endif" => {
+                    enabled.pop().unwrap();
+                }
+                _ if *enabled.last().unwrap() => {
                     source.push_str(line);
                     source.push('\n');
                 }
@@ -176,4 +183,16 @@ fn native_particle_blends_keep_their_distinct_gpu_factors() {
         assert_eq!(state.color.dst_factor, destination);
         assert_eq!(state.alpha, BlendComponent::OVER);
     }
+}
+
+#[test]
+fn refraction_composition_shader_validates() {
+    let source = include_str!("../../shaders/particle_refraction.wgsl");
+    let body = &source[source.find("struct RefractionView").unwrap()..];
+    let source = format!("struct FullscreenVertexOutput {{ @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32> }};\n{body}");
+    let module =
+        parse_str(&source).unwrap_or_else(|error| panic!("{}", error.emit_to_string(&source)));
+    Validator::new(ValidationFlags::all(), Capabilities::all())
+        .validate(&module)
+        .unwrap();
 }

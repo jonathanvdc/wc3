@@ -41,6 +41,7 @@ impl Plugin for Wc3BevyPlugin {
         embedded_asset!(app, "shaders/effect_lighting.wgsl");
         embedded_asset!(app, "shaders/wc3_particle.wgsl");
         embedded_asset!(app, "shaders/wc3_age_particle.wgsl");
+        embedded_asset!(app, "shaders/particle_refraction.wgsl");
         embedded_asset!(app, "shaders/wc3_ribbon.wgsl");
         app.init_asset::<ModelAsset>();
         app.init_resource::<AssetSettings>();

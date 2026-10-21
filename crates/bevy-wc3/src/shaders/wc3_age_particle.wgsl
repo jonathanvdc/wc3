@@ -23,6 +23,14 @@ struct Emitter {
 @group(2) @binding(5) var secondary_sampler: sampler;
 @group(2) @binding(6) var tertiary: texture_2d<f32>;
 @group(2) @binding(7) var tertiary_sampler: sampler;
+#ifdef REFRACTION
+struct RefractionView {
+    projection_scale: vec2<f32>,
+    strength: f32,
+    fade_distance_inverse: f32,
+};
+@group(3) @binding(0) var<uniform> refraction_view: RefractionView;
+#endif
 struct VertexInput {
     @location(0) corner: vec3<f32>,
     @location(3) particle_index: u32,
@@ -92,6 +100,14 @@ fn vertex(input: VertexInput) -> VertexOutput {
 @fragment
 fn fragment(input: VertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
     let a = textureSample(primary, primary_sampler, input.uv);
+#ifdef REFRACTION
+    let b = textureSample(primary, primary_sampler, input.uv_secondary);
+    let c = textureSample(primary, primary_sampler, input.uv_tertiary);
+    let depth = abs((view.view_from_world * vec4(input.world_position, 1.0)).z);
+    let fade = 1.0 - clamp(depth * refraction_view.fade_distance_inverse, 0.0, 1.0);
+    let mask = a.r * b.g * c.b * 4.0 * fade;
+    return vec4(mask * input.color.r * 0.5, 0.0, 0.0, mask * input.color.a);
+#else
     var color = a * input.color;
     var alpha_test = color.a;
     let multi = (emitter.atlas.z & 1u) != 0u;
@@ -117,4 +133,5 @@ fn fragment(input: VertexOutput, @builtin(front_facing) front_facing: bool) -> @
     if emitter.atlas.w == 6u { fog_blend = 3u; }
     return shade_effect(color, input.world_position, select(-input.world_normal, input.world_normal, front_facing), input.position,
         emitter.flags.z != 0u, emitter.flags.w != 0u, fog_blend);
+#endif
 }

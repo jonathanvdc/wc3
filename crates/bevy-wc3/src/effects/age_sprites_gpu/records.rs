@@ -35,6 +35,7 @@ pub(crate) struct AgeSpriteUniform {
 pub(crate) enum AgeSpriteComposition {
     #[default]
     Single,
+    Refraction,
     Multi {
         three_colors: bool,
         alpha_modulate4x: bool,
@@ -45,6 +46,7 @@ impl AgeSpriteComposition {
     pub(crate) fn flags(self) -> u32 {
         match self {
             Self::Single => 0,
+            Self::Refraction => 16,
             Self::Multi {
                 three_colors,
                 alpha_modulate4x,

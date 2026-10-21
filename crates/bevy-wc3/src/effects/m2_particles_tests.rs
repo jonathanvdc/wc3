@@ -1233,44 +1233,6 @@ fn opaque_txac_selectors_do_not_disable_known_multi_texture_controls() {
 }
 
 #[test]
-fn refraction_has_an_explicit_diagnostic_without_disabling_scene_fog() {
-    use super::super::fixture_tests::gravity_fixture;
-    use wc3::model::conversion::ImportOptions;
-    use wc3::model::io::m2 as semantic_m2;
-
-    let mut source = gravity_fixture(false, 0.0f32.to_bits());
-    source.model.core_mut().particles[0]
-        .flags
-        .set_refraction(true);
-    let model = semantic_m2::import(&source, &ImportOptions::default())
-        .unwrap()
-        .value
-        .widen();
-    let node_indices = model
-        .nodes()
-        .iter()
-        .enumerate()
-        .map(|(index, (id, _))| (id, index))
-        .collect();
-    let compiled = RuntimeM2Particles::compile(
-        &model,
-        &node_indices,
-        &TextureImages::default(),
-        &HashMap::new(),
-    );
-    assert_eq!(compiled.emitters.len(), 1);
-    assert!(compiled.emitters[0].flags.refraction());
-    assert!(!compiled.emitters[0].flags.unfogged());
-    assert_eq!(
-        compiled.emitters[0].gpu_style.composition,
-        AgeSpriteComposition::Single
-    );
-    assert!(compiled.diagnostics.iter().any(|(_, issue)| {
-        issue.kind == RenderDiagnosticKind::Unsupported
-            && issue.message.contains("refraction requires")
-    }));
-}
-#[test]
 #[ignore = "exports original deterministic benchmark births under /tmp for matched independent CPU comparisons"]
 fn write_matched_particle_benchmark_births() {
     use std::fmt::Write as _;
@@ -1636,4 +1598,104 @@ fn natural_and_sorted_transport_orders_preserve_every_living_particle() {
             .collect();
         assert_eq!(centers, expected);
     }
+}
+
+#[test]
+fn collapsed_attached_model_projection_keeps_live_birth_identity_and_finite_fallback() {
+    use crate::child_coordinates::ChildCoordinates;
+    use crate::CoordinatePolicy;
+    let mut values = SlotValues::default();
+    let mut emitter = emitter(&mut values);
+    emitter.flags.set_attached(true);
+    let birth = emitter
+        .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, 7)
+        .unwrap();
+    let sidecar = GeometryBirth {
+        ordinal: 7,
+        initial_transform: Transform::IDENTITY,
+        basis: ModelBasis::from_frame(Mat4::IDENTITY).unwrap(),
+        omega: Vec3::ZERO,
+        appearance: Default::default(),
+    };
+    let model = GeometryEmitter {
+        template: ModelTemplate {
+            model: Handle::default(),
+            coordinates: ChildCoordinates {
+                coordinates: CoordinatePolicy::Host,
+                parent_basis: Transform::IDENTITY,
+            },
+        },
+        minimum: Vec3::ZERO,
+        maximum: Vec3::ZERO,
+    };
+    let collapsed =
+        emitter.model_projection(&birth, &sidecar, &model, 0.5, Mat4::from_scale(Vec3::ZERO));
+    assert!(collapsed.transform.is_none());
+    assert_eq!(collapsed.ordinal, 7);
+    assert_eq!(collapsed.age, 0.5);
+    assert_eq!(collapsed.initial_transform, Transform::IDENTITY);
+    let recovered = emitter.model_projection(
+        &birth,
+        &sidecar,
+        &model,
+        0.75,
+        Mat4::from_translation(Vec3::X * 9.),
+    );
+    assert!(recovered.transform.is_some());
+    assert_eq!(recovered.ordinal, collapsed.ordinal);
+    emitter.flags.set_attached(false);
+    assert!(emitter
+        .model_projection(&birth, &sidecar, &model, 0.75, Mat4::from_scale(Vec3::ZERO))
+        .transform
+        .is_some());
+}
+
+#[test]
+fn refraction_keeps_scene_fog_and_uses_data_texture_with_independent_uv_motion() {
+    use super::super::fixture_tests::gravity_fixture;
+    use crate::textures::{texture_requests, TextureColorSpace, TextureInput, TextureRole};
+    use wc3::model::conversion::ImportOptions;
+    use wc3::model::io::m2 as semantic_m2;
+    let mut native = gravity_fixture(false, 0.0f32.to_bits());
+    native.model.core_mut().particles[0]
+        .flags
+        .set_refraction(true);
+    let model: Model<'_, Universal> = semantic_m2::import(&native, &ImportOptions::default())
+        .unwrap()
+        .value
+        .widen();
+    let requests = texture_requests(&model);
+    let particle = requests
+        .iter()
+        .find(|request| matches!(request.input, Some(TextureInput::Particle { slot: 0, .. })))
+        .unwrap();
+    assert_eq!(particle.role, TextureRole::Data);
+    assert_eq!(particle.color_space, TextureColorSpace::Linear);
+    let image = Handle::<Image>::default();
+    let images = TextureImages::resolve(&model, |_| Some(image.clone()));
+    let nodes = model
+        .nodes()
+        .iter()
+        .enumerate()
+        .map(|(i, (id, _))| (id, i))
+        .collect();
+    let runtime = RuntimeM2Particles::compile(&model, &nodes, &images, &HashMap::new());
+    let emitter = &runtime.emitters[0];
+    assert!(emitter.flags.refraction());
+    assert!(!emitter.flags.unfogged());
+    assert_eq!(
+        emitter.gpu_style.composition,
+        AgeSpriteComposition::Refraction
+    );
+    assert_eq!(emitter.gpu_style.textures[0], Some(image));
+    assert!(emitter.gpu_style.unlit);
+    assert!(emitter
+        .age_appearance
+        .as_ref()
+        .unwrap()
+        .needs_particle_state());
+    assert!(!runtime.diagnostics.iter().any(|(_, issue)| issue
+        .message
+        .contains("ordinary primary texture")
+        || issue.message.contains("write main-view depth")));
 }

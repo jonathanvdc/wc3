@@ -222,13 +222,12 @@ pub(super) struct M2ParticleInstances {
     previous_basis: Option<Mat4>,
 }
 
-fn particle_image<'a>(
-    _model: &Model<'_>,
-    images: &'a TextureImages,
+fn particle_image(
+    images: &TextureImages,
     id: Texture,
-) -> Option<&'a Handle<Image>> {
-    let texture = id;
-    images.get_with_sampler(id, texture.color_space, TextureRole::Color, texture.sampler)
+    role: TextureRole,
+) -> Option<&Handle<Image>> {
+    images.get_with_sampler(id, id.color_space, role, id.sampler)
 }
 
 fn owned_curve<T: CurveValue>(value: &Option<Curve<'_, T>>) -> Option<Curve<'static, T>> {
@@ -422,7 +421,16 @@ impl RuntimeM2Particles {
             }
             let multi_texture =
                 details.flags.multi_texture() && details.rendering.textures.len() == 3;
+            let refraction = details.flags.refraction() && !details.flags.multi_texture();
+            let image_role = if refraction {
+                TextureRole::Data
+            } else {
+                TextureRole::Color
+            };
             if geometry.is_none() {
+                if refraction {
+                    diagnostic(RenderDiagnosticKind::Unverified, "M2 particle refraction uses a per-view scene mask; exact native displacement and mask overlap fidelity remain unverified");
+                }
                 if details
                     .rendering
                     .texture_program
@@ -431,12 +439,6 @@ impl RuntimeM2Particles {
                     diagnostic(
                     RenderDiagnosticKind::Unsupported,
                     "M2 particle TXAC selectors are retained without interpretation; recognized native composition flags remain active",
-                );
-                }
-                if details.flags.refraction() && !details.flags.multi_texture() {
-                    diagnostic(
-                    RenderDiagnosticKind::Unsupported,
-                    "M2 refraction requires a scene-color postprocess interpreter; displaying the ordinary primary texture path",
                 );
                 }
                 if details.rendering.textures.len() > 1 && !multi_texture {
@@ -451,10 +453,12 @@ impl RuntimeM2Particles {
                         "Unknown M2 particle blending uses an explicit alpha-blend approximation",
                     );
                 }
-                if matches!(
-                    details.rendering.blend,
-                    ParticleBlend::Opaque | ParticleBlend::AlphaKey
-                ) {
+                if !refraction
+                    && matches!(
+                        details.rendering.blend,
+                        ParticleBlend::Opaque | ParticleBlend::AlphaKey
+                    )
+                {
                     diagnostic(
                     RenderDiagnosticKind::Approximation,
                     "M2 opaque and cutout sprites write main-view depth but do not cast shadows or join depth, normal, and motion-vector prepasses",
@@ -496,10 +500,9 @@ impl RuntimeM2Particles {
                     "Sprite simulation limits each emitter to 8192 living particles, 8192 births and 4096 emission intervals per update; omitted births and long-update seconds are reported"
                 },
             );
-            let image =
-                details.rendering.textures.first().and_then(|id| {
-                    particle_image(model, &images.particle(feature, 0), *id).cloned()
-                });
+            let image = details.rendering.textures.first().and_then(|id| {
+                particle_image(&images.particle(feature, 0), *id, image_role).cloned()
+            });
             if geometry.is_none() && image.is_none() && !details.rendering.textures.is_empty() {
                 diagnostic(
                     RenderDiagnosticKind::Resource,
@@ -578,14 +581,14 @@ impl RuntimeM2Particles {
                         details,
                         details.id.wrapping_add(result.emitters.len() as u32),
                     );
-                    if multi_texture {
+                    if multi_texture || refraction {
                         appearance
                     } else {
                         appearance.primary_only()
                     }
                 }),
                 #[cfg(test)]
-                multi_texture,
+                multi_texture: multi_texture || refraction,
                 #[cfg(test)]
                 head_tail: details.rendering.head_tail,
                 tail_length: details.rendering.tail_length,
@@ -595,7 +598,7 @@ impl RuntimeM2Particles {
                 gpu_style: AgeSpriteStyle {
                     textures: from_fn(|index| {
                         details.rendering.textures.get(index).and_then(|id| {
-                            particle_image(model, &images.particle(feature, index as u32), *id)
+                            particle_image(&images.particle(feature, index as u32), *id, image_role)
                                 .cloned()
                         })
                     }),
@@ -611,11 +614,13 @@ impl RuntimeM2Particles {
                             three_colors: details.flags.multi_texture_three_colors(),
                             alpha_modulate4x: details.flags.multi_texture_modulate4x(),
                         }
+                    } else if refraction {
+                        AgeSpriteComposition::Refraction
                     } else {
                         AgeSpriteComposition::Single
                     },
                     uv_flip_v: false,
-                    unlit: multi_texture || details.flags.disable_lighting(),
+                    unlit: multi_texture || refraction || details.flags.disable_lighting(),
                     head: matches!(
                         details.rendering.head_tail,
                         ParticleHeadTail::Head | ParticleHeadTail::Both

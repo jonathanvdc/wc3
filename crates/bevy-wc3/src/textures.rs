@@ -250,6 +250,14 @@ pub fn texture_requests<'view, 'data>(
                 }
                 _ => Vec::new(),
             };
+            let role = match particle {
+                ParticleEmitter::M2(value)
+                    if value.details.flags.refraction() && !value.details.flags.multi_texture() =>
+                {
+                    TextureRole::Data
+                }
+                _ => TextureRole::Color,
+            };
             for (slot, image) in images.into_iter().enumerate() {
                 add(
                     Some(TextureInput::Particle {
@@ -257,7 +265,7 @@ pub fn texture_requests<'view, 'data>(
                         slot: slot as u32,
                     }),
                     image,
-                    TextureRole::Color,
+                    role,
                     None,
                 );
             }
