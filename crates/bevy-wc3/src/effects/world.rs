@@ -1,7 +1,9 @@
 //! ECS services shared by the single semantic effect simulation system.
 use super::super::ModelAsset;
 use super::age_sprites_gpu::AgeSpriteData;
-use super::{ModelEmitter, ParticleProgramEmitter, RibbonEmitter, SpriteEmitter};
+use super::{
+    ModelEmitter, ParticleProgramControls, ParticleProgramEmitter, RibbonEmitter, SpriteEmitter,
+};
 use crate::effects::sprites::ParticleInstances as SpriteInstances;
 use crate::effects::trails::RibbonInstances;
 use bevy::ecs::system::SystemParam;
@@ -11,6 +13,7 @@ use bevy::prelude::*;
 pub(crate) struct EffectWorld<'w, 's> {
     pub commands: Commands<'w, 's>,
     pub models: Res<'w, Assets<ModelAsset>>,
+    pub program_controls: Query<'w, 's, &'static ParticleProgramControls>,
     pub program_statistics: Query<'w, 's, &'static mut ParticleProgramEmitter>,
     pub age_statistics: Query<'w, 's, &'static mut SpriteEmitter>,
     pub age_sprites: Query<'w, 's, &'static mut AgeSpriteData>,

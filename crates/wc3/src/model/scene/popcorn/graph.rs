@@ -230,6 +230,12 @@ pub struct EffectProgram {
     pub(crate) inner: Arc<EffectGraph>,
 }
 impl EffectProgram {
+    /// Whether two handles refer to the same immutable compiled programme.
+    /// Clones share identity; independently compiled equal graphs do not.
+    pub fn same_program(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.inner.identity, &other.inner.identity)
+    }
+
     /// Checked extraction policy retained from graph compilation.
     pub fn missing_payload_policy(&self) -> MissingPayloadPolicy {
         self.inner.missing_payload

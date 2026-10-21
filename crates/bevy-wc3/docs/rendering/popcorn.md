@@ -75,7 +75,64 @@ selects a typed exposed control for every new instance. Unknown names and
 incompatible layouts fail during preparation; explicit values take precedence
 over model control bindings. Other attributes retain their declared defaults.
 
-## Playback and controls
+## Change attributes on one living instance
+
+`ParticleProgramControls` is an input component beside each
+`ParticleProgramEmitter`. Find the emitter through the ready root's
+`ModelRig::particle_program(feature)`; mounted and particle-owned child rigs have
+their own lookups. The returned entity owns both controls and statistics. Resolve
+an attribute once, then retain its typed handle and emitter entity for subsequent
+updates:
+
+```rust
+use bevy::prelude::*;
+use bevy_wc3::{ModelRig, ParticleProgramControls};
+use wc3::model::FeatureId;
+
+# fn configure(rig: &ModelRig, feature: FeatureId,
+#              inputs: &mut Query<&mut ParticleProgramControls>)
+#              -> Result<(), Box<dyn std::error::Error>> {
+let emitter = rig.particle_program(feature).ok_or("programme is unavailable")?;
+let mut inputs = inputs.get_mut(emitter)?;
+let rate = inputs.attribute("Game.EmissionRateMultiplier")?;
+inputs.set(&rate, 2.0f32)?;
+// Cache (emitter, rate) in application state; later writes use no name lookup.
+# Ok(())
+# }
+```
+
+A handle belongs to its immutable core programme and works across actors sharing
+that programme. Independently compiling equal bytes creates another programme:
+its handles are rejected. Replacing a model can despawn the emitter entity, so
+repeat the lookup after readiness; a handle remains valid only if the replacement
+intentionally uses the same compiled programme. Unknown names, foreign handles
+and wrong value layouts return `ParticleProgramControlError` without changing
+valid overrides or stopping simulation.
+
+Live values take precedence over prepared `with_attribute` values, current sampled
+model controls and declaration defaults, in that order. `remove` and `clear`
+restore the current lower-precedence values. Removing the whole controls component
+also restores those values. Moving a component from another programme is ignored
+and reported through `ParticleProgramEmitter::control_error`; ordinary simulation
+continues. `get` reads only an explicit live override, rather than the effective
+sampled value.
+
+Write controls in `Update`. For `PostUpdate`, order writes before both
+`Wc3Systems::SimulateModelParticles` and `Wc3Systems::SimulateEffects`, so existing
+ordinary and particle-owned actors observe them at their next invocation.
+Automatically owned actors can initialize within the early simulation stage;
+controls discovered afterward cannot rewrite that initial history. Preparation
+still supplies their initial defaults.
+
+Changing a value preserves living particle identities and clocks. Programmes
+observe it only when their authored instructions next read the attribute; changing
+a birth-only value does not rerun initialization. Paused zero-delta updates can
+install values without forcing evolution or consuming random state. Existing
+execution faults stay stopped until explicit playback reset, which retries with
+the current controls. Instance-creation failures still require corrected
+preparation limits and a new instance.
+
+## Playback and authored controls
 
 Authored lifespan, emission rate and speed feed the programme's exposed multiplier
 attributes directly. RGB and opacity feed `Game.ColorMultiplier`; scale and target

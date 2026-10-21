@@ -5,7 +5,7 @@ from pathlib import Path
 w = lambda n: struct.pack("<I", n)
 a = lambda ns: w(len(ns)) + b"".join(w(n) for n in ns)
 
-def fixture(with_curve=False):
+def fixture(with_curve=False, with_controls=False):
     types=[b'CParticleEffect',b'CParticleAttributeList',b'CLayerGraphCompileCache',b'CLayerGraphCompileCache_EntrySlot',b'CLayerGraphCompileCache_LayerSlot',b'CLayerGraphCompileCache_EventSlot',b'CLayerCompileCache',b'CLayerCompileCacheField',b'CLayerCompileCacheEvent',b'CCompilerBlobCache',b'CLayerCompileCacheRenderer',b'CLayerCompileCacheRendererParticleInput',b'CLayerCompileCacheRendererProperty']
     strings=types.copy()
     def st(s):
@@ -54,6 +54,37 @@ def fixture(with_curve=False):
         script=b''.join(w(n) for n in [0,0,32,len(code),0,0,1,0,0])+w(0)*8+code
         script+=b'\x00'*((-len(script))%4)
         objects[14]=(types.index(b'CCompilerBlobCache'),[(2,w(len(script)//4)+script),(3,a([28])),(4,a([29]))])
+    if with_controls:
+        assert not with_curve
+        for name in [b'CLayerCompileCacheAttrib', b'CCompilerBlobCacheExternal',
+                     b'CLayerCompileCacheSampler', b'CParticleNodeSamplerData_Curve',
+                     b'CCompilerBlobCacheFunctionDef', b'CCompilerBlobCacheFunctionArg']:
+            types.append(name)
+            st(name)
+        # Attribute slots26/27; external declarations28..31; sampler32/33;
+        # function34/35; physics36. All content is original.
+        obj('CLayerCompileCacheAttrib',[(0,st('__a_Game.EmissionRateMultiplier')),(2,w(31)),(10,w(0x3f800000)+w(0)*3)])
+        obj('CLayerCompileCacheAttrib',[(0,st('__a_Custom.SizeMultiplier')),(2,w(31)),(10,w(0x40000000)+w(0)*3)])
+        for name in ['__a_Game.EmissionRateMultiplier','__a_Custom.SizeMultiplier','size']:
+            obj('CCompilerBlobCacheExternal',[(0,st(name)),(1,st('float')),(2,w(31)),(3,w(4)),(4,w(2)),(6,w(1 if name!='size' else 2))])
+        obj('CCompilerBlobCacheExternal',[(0,st('validityCurve')),(1,st('CurveSampler')),(2,w(0xffffffff)),(3,w(4)),(4,w(0)),(6,w(1))])
+        obj('CLayerCompileCacheSampler',[(0,st('validityCurve')),(1,w(33)),(3,w(3))])
+        obj('CParticleNodeSamplerData_Curve',[(9,w(1)),(16,a([0,0x3f800000])),(17,a([0x3f800000,0x3f800000]))])
+        obj('CCompilerBlobCacheFunctionDef',[(0,st('sample')),(1,w(3)),(2,w(0)),(3,a([35]))])
+        obj('CCompilerBlobCacheFunctionArg',[(0,w(31)),(1,st('float'))])
+        r=lambda slot: 0x20010000+slot
+        code=b'\x43'+w(r(0))+struct.pack('<H',0)+b'\x43'+w(r(1))+struct.pack('<H',1)
+        code+=b'\x4e\x02'+w(r(2))+w(r(0))+w(r(1))
+        code+=b'\x44'+w(r(2))+struct.pack('<H',2)
+        code+=b'\x53\x00'+struct.pack('<hHB',3,0,1)+w(r(3))+b'\x00'+w(r(1))
+        script=b''.join(w(n) for n in [0,0,0,len(code),0,0,4,0,0])+code
+        script+=b'\x00'*((-len(script))%4)
+        fs=[(2,w(len(script)//4)+script),(3,a([28,29,30,31])),(4,a([34]))]
+        objects[14]=(types.index(b'CCompilerBlobCache'),fs)
+        obj('CCompilerBlobCache',[(1,w(3))]+fs)
+        fields=objects[6][1]
+        fields[:]=[(key,a([15,36]) if key==10 else value) for key,value in fields]
+        fields.extend([(3,a([26,27])),(7,a([32]))])
     bodies=b''
     for ty,fs in objects:
      body=b'\x20'+w(ty)+struct.pack('<H',len(fs))+b''.join(struct.pack('<H',f)+v for f,v in fs)
@@ -66,3 +97,4 @@ if __name__ == "__main__":
     directory = Path("crates/wc3/tests/fixtures/pkb")
     (directory / "sprite.pkb").write_bytes(fixture())
     (directory / "sparse_curve.pkb").write_bytes(fixture(with_curve=True))
+    (directory / "controls.pkb").write_bytes(fixture(with_controls=True))

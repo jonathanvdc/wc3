@@ -38,7 +38,8 @@ use model_budget::ActorFrame;
 pub use model_particles::ModelEmitter;
 use model_particles::{ModelParticleInstances, RuntimeModelParticles};
 pub use programmes::{
-    ParticleEffect, ParticleProgramEmitter, ParticleTextureBinding, ParticleTextureRequest,
+    ParticleEffect, ParticleProgramAttribute, ParticleProgramControlError, ParticleProgramControls,
+    ParticleProgramEmitter, ParticleTextureBinding, ParticleTextureRequest,
 };
 use programmes::{ProgramInstances, RuntimeProgramParticles};
 pub use ribbons::RibbonEmitter;
@@ -78,6 +79,14 @@ impl ParticleInstances {
     }
 }
 impl RuntimeParticles {
+    pub(crate) fn programme_entity(
+        &self,
+        instances: &ParticleInstances,
+        feature: FeatureId,
+    ) -> Option<Entity> {
+        self.programmes.entity(&instances.programmes, feature)
+    }
+
     pub(crate) fn append_remapped(
         &mut self,
         source: &Self,
@@ -197,8 +206,11 @@ impl RuntimeParticles {
             &mut world.commands,
         );
         self.models.seed_owned(&mut instances.models, &start);
-        self.programmes
-            .seed_owned(&mut instances.programmes, &start);
+        self.programmes.seed_owned(
+            &mut instances.programmes,
+            &start,
+            Some(&world.program_controls),
+        );
     }
     pub(crate) fn start_owned_clock(
         instances: &mut ParticleInstances,
@@ -302,6 +314,7 @@ impl RuntimeParticles {
             &frame,
             &mut world.age_sprites,
             &mut world.program_statistics,
+            Some(&world.program_controls),
             actor,
         );
         if simulate_models {

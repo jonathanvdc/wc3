@@ -78,6 +78,16 @@ pub struct ModelRig {
     pub(super) physics_locals: Vec<ModelTransform>,
 }
 impl ModelRig {
+    /// This rig's live external programme entity for an authored feature.
+    /// The entity owns programme statistics and controls. Mounted and
+    /// particle-owned child rigs have independent lookups; replacement may
+    /// despawn the returned entity. Missing or foreign features return `None`.
+    pub fn particle_program(&self, feature: FeatureId) -> Option<Entity> {
+        self.model
+            .particles
+            .programme_entity(&self.particles, feature)
+    }
+
     pub(crate) fn feature_instances(&self) -> &RuntimeFeatureInstances {
         &self.features
     }

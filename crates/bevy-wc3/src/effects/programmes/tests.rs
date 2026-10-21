@@ -295,7 +295,7 @@ fn owned_programme_integrates_its_initial_interval_before_extracting_sprites() {
         node_visible: &visible,
         basis_world: Mat4::from_translation(Vec3::X * 3.),
     };
-    runtime.seed_owned(&mut instances, &EffectStart { frame: birth });
+    runtime.seed_owned(&mut instances, &EffectStart { frame: birth }, None);
     let mut queries = SystemState::<(
         Query<&mut AgeSpriteData>,
         Query<&mut ParticleProgramEmitter>,

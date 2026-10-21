@@ -1,4 +1,5 @@
 //! Universal controls, independent instances and compact renderer extraction.
+use super::controls::{ParticleProgramControlError, ParticleProgramControls};
 use super::prepared::{ParticleEffect, ProgrammeRenderer, RendererGeometry};
 use super::ribbon::{RibbonMode, RibbonSample, RibbonSamples};
 use super::sampling::{atlas_sample, lut_cursor};
@@ -63,6 +64,9 @@ pub struct ParticleProgramEmitter {
     /// or limit failures require correcting the cause before respawning.
     /// Format the value with `Display` for logs.
     pub error: Option<EffectRuntimeError>,
+    /// A moved controls component belongs to another immutable programme.
+    /// Its overrides are ignored; ordinary simulation continues with baseline values.
+    pub control_error: Option<ParticleProgramControlError>,
 }
 #[derive(Clone)]
 struct Emitter {
@@ -115,6 +119,8 @@ struct State {
     ribbon_segments: usize,
     omitted_geometry: usize,
     error: Option<EffectRuntimeError>,
+    applied_controls: Vec<EffectAttributeId>,
+    control_error: Option<ParticleProgramControlError>,
 }
 #[derive(Default)]
 pub(crate) struct ProgramInstances {
@@ -122,6 +128,17 @@ pub(crate) struct ProgramInstances {
     previous: Option<f64>,
 }
 impl RuntimeProgramParticles {
+    pub(crate) fn entity(
+        &self,
+        instances: &ProgramInstances,
+        feature: FeatureId,
+    ) -> Option<Entity> {
+        self.emitters
+            .iter()
+            .zip(&instances.states)
+            .find_map(|(emitter, state)| (emitter.feature == feature).then_some(state.entity))
+    }
+
     pub fn is_empty(&self) -> bool {
         self.emitters.is_empty()
     }
@@ -221,104 +238,109 @@ impl RuntimeProgramParticles {
             .any(|r| !r.capsule_geometry());
         let capsule = needs_capsule.then(|| effect_capsule(meshes));
         let quad = needs_quad.then(|| effect_quad(meshes));
-        let states =
-            self.emitters
-                .iter()
-                .enumerate()
-                .map(|(ordinal, emitter)| {
-                    let entity = commands
-                        .spawn((
-                            ParticleProgramEmitter {
-                                feature: emitter.feature,
-                                node: emitter.node,
-                                alive: 0,
-                                sprites: 0,
-                                ribbon_segments: 0,
-                                omitted_geometry: 0,
-                                omitted: 0,
-                                suppressed: 0,
-                                skipped_seconds: 0.,
-                                omitted_spatial_writes: 0,
-                                omitted_spatial_queries: 0,
-                                error: None,
-                            },
-                            ChildOf(basis),
-                        ))
-                        .id();
-                    let renderers = emitter
-                        .effect
-                        .renderers
-                        .iter()
-                        .map(|renderer| {
-                            let mut style = renderer.style.clone();
-                            style.sort = if emitter.sort {
-                                SortPolicy::Far
-                            } else {
-                                SortPolicy::None
-                            };
-                            style.unlit |= emitter.unlit;
-                            let entity = commands
-                                .spawn((
-                                    EffectGeometry(
-                                        if renderer.capsule_geometry() {
-                                            capsule.as_ref()
-                                        } else {
-                                            quad.as_ref()
-                                        }
-                                        .unwrap()
-                                        .clone(),
-                                    ),
-                                    ModelOwnedRenderEntity,
-                                    AgeSpriteData {
-                                        records: Default::default(),
-                                        live_indices: Default::default(),
-                                        uniform: Default::default(),
-                                        style,
-                                    },
-                                    Transform::default(),
-                                    Visibility::default(),
-                                    NoFrustumCulling,
-                                    NotShadowCaster,
-                                    ChildOf(basis),
-                                ))
-                                .id();
-                            RendererState {
-                                entity,
-                                samples: Default::default(),
-                                ribbons: Default::default(),
-                            }
-                        })
-                        .collect();
-                    let (instance, error) = match emitter
-                        .effect
-                        .program
-                        .instantiate(emitter.effect.limits, ordinal as u64)
-                    {
-                        Ok(mut instance) => {
-                            let configured =
-                                emitter.effect.overrides.iter().try_for_each(|(id, value)| {
-                                    instance.set_attribute(*id, *value)
-                                });
-                            match configured {
-                                Ok(()) => (Some(instance), None),
-                                Err(error) => (None, Some(error)),
-                            }
+        let states = self
+            .emitters
+            .iter()
+            .enumerate()
+            .map(|(ordinal, emitter)| {
+                let entity = commands
+                    .spawn((
+                        ParticleProgramEmitter {
+                            feature: emitter.feature,
+                            node: emitter.node,
+                            alive: 0,
+                            sprites: 0,
+                            ribbon_segments: 0,
+                            omitted_geometry: 0,
+                            omitted: 0,
+                            suppressed: 0,
+                            skipped_seconds: 0.,
+                            omitted_spatial_writes: 0,
+                            omitted_spatial_queries: 0,
+                            error: None,
+                            control_error: None,
+                        },
+                        ParticleProgramControls::new(&emitter.effect.program),
+                        ChildOf(basis),
+                    ))
+                    .id();
+                let renderers = emitter
+                    .effect
+                    .renderers
+                    .iter()
+                    .map(|renderer| {
+                        let mut style = renderer.style.clone();
+                        style.sort = if emitter.sort {
+                            SortPolicy::Far
+                        } else {
+                            SortPolicy::None
+                        };
+                        style.unlit |= emitter.unlit;
+                        let entity = commands
+                            .spawn((
+                                EffectGeometry(
+                                    if renderer.capsule_geometry() {
+                                        capsule.as_ref()
+                                    } else {
+                                        quad.as_ref()
+                                    }
+                                    .unwrap()
+                                    .clone(),
+                                ),
+                                ModelOwnedRenderEntity,
+                                AgeSpriteData {
+                                    records: Default::default(),
+                                    live_indices: Default::default(),
+                                    uniform: Default::default(),
+                                    style,
+                                },
+                                Transform::default(),
+                                Visibility::default(),
+                                NoFrustumCulling,
+                                NotShadowCaster,
+                                ChildOf(basis),
+                            ))
+                            .id();
+                        RendererState {
+                            entity,
+                            samples: Default::default(),
+                            ribbons: Default::default(),
                         }
-                        Err(error) => (None, Some(error)),
-                    };
-                    State {
-                        entity,
-                        instance,
-                        renderers,
-                        started: false,
-                        sampled: false,
-                        sprites: 0,
-                        ribbon_segments: 0,
-                        omitted_geometry: 0,
-                        error,
+                    })
+                    .collect();
+                let (instance, error) = match emitter
+                    .effect
+                    .program
+                    .instantiate(emitter.effect.limits, ordinal as u64)
+                {
+                    Ok(mut instance) => {
+                        let configured = emitter
+                            .effect
+                            .overrides
+                            .iter()
+                            .try_for_each(|(id, value)| instance.set_attribute(*id, *value));
+                        match configured {
+                            Ok(()) => (Some(instance), None),
+                            Err(error) => (None, Some(error)),
+                        }
                     }
-                })
-                .collect();
+                    Err(error) => (None, Some(error)),
+                };
+                State {
+                    entity,
+                    instance,
+                    renderers,
+                    started: false,
+                    sampled: false,
+                    sprites: 0,
+                    ribbon_segments: 0,
+                    omitted_geometry: 0,
+                    error,
+                    applied_controls: Vec::with_capacity(emitter.effect.program.attributes().len()),
+                    control_error: None,
+                }
+            })
+            .collect();
         ProgramInstances {
             states,
             previous: None,
@@ -328,6 +350,7 @@ impl RuntimeProgramParticles {
         &self,
         instances: &mut ProgramInstances,
         start: &EffectStart<'_, '_, '_>,
+        controls: Option<&Query<&ParticleProgramControls>>,
     ) {
         if instances.previous.is_some() {
             return;
@@ -341,6 +364,10 @@ impl RuntimeProgramParticles {
             .map_or("", String::as_str);
         let mut scratch = Vec::new();
         for (emitter, state) in self.emitters.iter().zip(&mut instances.states) {
+            let live = emitter.live_controls(
+                controls.and_then(|controls| controls.get(state.entity).ok()),
+                &mut state.control_error,
+            );
             let (matrix, visible) = start.sample_feature(emitter.anchor, &mut scratch);
             if state.error.is_some()
                 || !frame.root_visible
@@ -353,7 +380,14 @@ impl RuntimeProgramParticles {
             let (inputs, scale) = emitter.inputs_at(matrix, emitter.scene(frame));
             if let Some(instance) = &mut state.instance {
                 let result = emitter
-                    .controls(instance, frame, scale, inputs)
+                    .controls(
+                        instance,
+                        &mut state.applied_controls,
+                        live,
+                        frame,
+                        scale,
+                        inputs,
+                    )
                     .and_then(|()| {
                         instance.start(
                             &emitter.effect.program,
@@ -379,7 +413,7 @@ impl RuntimeProgramParticles {
         sprites: &mut Query<&mut AgeSpriteData>,
         statistics: &mut Query<&mut ParticleProgramEmitter>,
     ) {
-        self.update_bounded(instances, frame, sprites, statistics, None);
+        self.update_bounded(instances, frame, sprites, statistics, None, None);
     }
     pub fn update_bounded(
         &self,
@@ -387,11 +421,16 @@ impl RuntimeProgramParticles {
         frame: &EffectFrame<'_, '_, '_>,
         sprites: &mut Query<&mut AgeSpriteData>,
         statistics: &mut Query<&mut ParticleProgramEmitter>,
+        controls: Option<&Query<&ParticleProgramControls>>,
         actor: Option<&ActorFrame>,
     ) {
         let previous = instances.previous.unwrap_or(frame.time);
         let delta = (frame.time - previous).max(0.);
         for (emitter, state) in self.emitters.iter().zip(&mut instances.states) {
+            let live = emitter.live_controls(
+                controls.and_then(|controls| controls.get(state.entity).ok()),
+                &mut state.control_error,
+            );
             let (inputs, scale) = emitter.inputs(frame);
             if frame.change == EffectChange::Reset {
                 state.started = false;
@@ -403,7 +442,14 @@ impl RuntimeProgramParticles {
             if state.error.is_none() {
                 if let Some(instance) = &mut state.instance {
                     let result = (|| {
-                        emitter.controls(instance, frame, scale, inputs)?;
+                        emitter.controls(
+                            instance,
+                            &mut state.applied_controls,
+                            live,
+                            frame,
+                            scale,
+                            inputs,
+                        )?;
                         let clip = frame
                             .selection
                             .clip
@@ -540,6 +586,9 @@ impl RuntimeProgramParticles {
                 output.sprites = state.sprites;
                 output.ribbon_segments = state.ribbon_segments;
                 output.omitted_geometry = state.omitted_geometry;
+                if output.control_error != state.control_error {
+                    output.control_error = state.control_error.clone();
+                }
                 if output.error != state.error {
                     output.error = state.error.clone();
                 }
@@ -651,34 +700,94 @@ impl Emitter {
             if self.scaling { scale } else { 1. },
         )
     }
+    fn live_controls<'a>(
+        &self,
+        controls: Option<&'a ParticleProgramControls>,
+        error: &mut Option<ParticleProgramControlError>,
+    ) -> Option<&'a ParticleProgramControls> {
+        match controls {
+            Some(controls) if !controls.matches(&self.effect.program) => {
+                *error = Some(ParticleProgramControlError::WrongProgram);
+                None
+            }
+            controls => {
+                *error = None;
+                controls
+            }
+        }
+    }
+    fn control_value(
+        &self,
+        binding: Attribute,
+        frame: &EffectFrame<'_, '_, '_>,
+        scale: f32,
+        inputs: SceneInputs,
+    ) -> Value {
+        match binding {
+            Attribute::Rate => scalar(frame.sample.animated(&self.rate)),
+            Attribute::Speed => scalar(frame.sample.animated(&self.speed)),
+            Attribute::Lifetime => scalar(frame.sample.animated(&self.lifetime)),
+            Attribute::Scale => scalar(scale),
+            Attribute::Color => Value::from_words(
+                ValueType::Float4,
+                frame
+                    .sample
+                    .animated(&self.color)
+                    .extend(frame.sample.animated(&self.opacity))
+                    .to_array()
+                    .map(f32::to_bits),
+            ),
+            Attribute::Target => Value::from_words(
+                ValueType::Float3,
+                inputs.world_from_effect.w_axis.to_array().map(f32::to_bits),
+            ),
+        }
+    }
     fn controls(
         &self,
         instance: &mut EffectInstance,
+        applied: &mut Vec<EffectAttributeId>,
+        live: Option<&ParticleProgramControls>,
         frame: &EffectFrame<'_, '_, '_>,
         scale: f32,
         inputs: SceneInputs,
     ) -> Result<(), EffectRuntimeError> {
-        for (id, binding) in &self.attributes {
-            let value = match binding {
-                Attribute::Rate => scalar(frame.sample.animated(&self.rate)),
-                Attribute::Speed => scalar(frame.sample.animated(&self.speed)),
-                Attribute::Lifetime => scalar(frame.sample.animated(&self.lifetime)),
-                Attribute::Scale => scalar(scale),
-                Attribute::Color => Value::from_words(
-                    ValueType::Float4,
-                    frame
-                        .sample
-                        .animated(&self.color)
-                        .extend(frame.sample.animated(&self.opacity))
-                        .to_array()
-                        .map(f32::to_bits),
-                ),
-                Attribute::Target => Value::from_words(
-                    ValueType::Float3,
-                    inputs.world_from_effect.w_axis.to_array().map(f32::to_bits),
-                ),
-            };
-            instance.set_attribute(*id, value)?;
+        // Restore only removed live IDs, using this observation's current baseline.
+        for &id in applied.iter() {
+            if live.is_some_and(|controls| controls.contains(id)) {
+                continue;
+            }
+            let value = self
+                .effect
+                .overrides
+                .iter()
+                .find(|(key, _)| *key == id)
+                .map(|(_, value)| *value)
+                .or_else(|| {
+                    self.attributes
+                        .iter()
+                        .find(|(key, _)| *key == id)
+                        .map(|(_, binding)| self.control_value(*binding, frame, scale, inputs))
+                })
+                .unwrap_or(self.effect.program.attributes()[id.0 as usize].default);
+            instance.set_attribute(id, value)?;
+        }
+        for &(id, binding) in &self.attributes {
+            if !live.is_some_and(|controls| controls.contains(id)) {
+                instance.set_attribute(id, self.control_value(binding, frame, scale, inputs))?;
+            }
+        }
+        // A small bounded numeric table is reapplied on every observation.
+        // Replacing a same-programme component is observed directly, without
+        // a second copy of its values or a change-tick cache.
+        if let Some(live) = live {
+            for &(id, value) in live.values() {
+                instance.set_attribute(id, value)?;
+            }
+        }
+        applied.clear();
+        if let Some(live) = live {
+            applied.extend(live.values().iter().map(|(id, _)| *id));
         }
         Ok(())
     }
@@ -851,3 +960,7 @@ mod camera_tests;
 #[cfg(test)]
 #[path = "runtime_error_tests.rs"]
 mod runtime_error_tests;
+
+#[cfg(test)]
+#[path = "runtime_controls_tests.rs"]
+mod runtime_controls_tests;
