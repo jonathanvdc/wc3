@@ -7,6 +7,7 @@ use crate::effects::sprites::ParticleRenderPlugin;
 use crate::effects::trails::RibbonRenderPlugin;
 use crate::image_replacements::{refresh_image_replacements, ReplacementImages};
 use crate::layers::synchronize_model_layers;
+use crate::material::register_material_uniform_buffers;
 use crate::runtime::{
     publish_affine_poses, simulate_model_particles, synchronize_model_cameras,
     synchronize_mounted_models,
@@ -63,6 +64,7 @@ impl Plugin for Wc3BevyPlugin {
             AgeSpriteRenderPlugin,
             RibbonRenderPlugin,
         ));
+        register_material_uniform_buffers(app);
         app.add_message::<ModelEvent>();
         configure(app);
         app.add_systems(

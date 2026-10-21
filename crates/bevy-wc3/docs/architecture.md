@@ -20,7 +20,9 @@ Loading, compilation, preparation, and spawning have separate ownership boundari
 Source bytes and the semantic graph can be released after compilation. Complete
 equal meshes and bind palettes share storage; constant materials share handles.
 Animated materials remain private to an instance and only change their Bevy assets
-when sampled values change. Channel indexes avoid repeatedly sampling properties
+when sampled values change. Extension uniform buffers with identical GPU encodings
+share immutable render-device resources in bounded caches. Cache hits reuse these
+buffers across base-opacity changes. Channel indexes avoid repeatedly sampling properties
 with no effective animation while retaining every authored node for overrides.
 
 `instances.rs` waits for required dependencies and rejects cyclic ownership.

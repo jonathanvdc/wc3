@@ -1,6 +1,7 @@
 //! Direct semantic surface preparation for the Bevy PBR pipeline.
 mod animation;
 mod bindings;
+pub(crate) use bindings::register_material_uniform_buffers;
 mod compile;
 mod m2;
 mod opacity;
