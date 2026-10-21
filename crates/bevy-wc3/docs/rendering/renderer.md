@@ -78,9 +78,9 @@ Their resident records define the world geometry, so these emitters do not creat
 ordinary mesh-instance uniforms. Model-particle child geometry uses the usual
 mesh pipeline. The effect guides describe simulation, playback, and resource needs:
 
-- [Model particles](prem.md) instantiate independent animated MDLX PREM and M2 geometry-model children. M2 emitter-template trails remain unsupported.
+- [Model particles](prem.md) instantiate independent animated MDLX PREM and M2 geometry-model children.
 - [Sprite particles](pre2.md) use GPU-generated heads/tails from immutable MDLX births or compact M2 age-driven samples.
-  Billboards and draw ordering follow each view independently.
+  Billboards and draw ordering follow each view independently; M2 emitter-template resources drive shared child pools without creating model actors.
 - [Ribbons](ribbons.md) retain birth-time cross sections and generate connected geometry on the GPU.
 - [External programmes](popcorn.md) execute supported baked graphs and send billboard and connected-ribbon outputs through shared sampled transport.
 

@@ -31,9 +31,9 @@ use emission::EffectClock;
 pub(super) use frame::EffectFrame;
 use frame::EffectStart;
 pub(crate) use m2_models::ModelOutputs;
-pub(crate) use m2_particles::GeometryWorld;
 pub use m2_particles::SpriteEmitter;
-use m2_particles::{M2ParticleInstances, RuntimeM2Particles};
+pub use m2_particles::{AdoptedParticleSource, AdoptedParticleTemplate, AdoptedTemplateStatus};
+use m2_particles::{GeometryContext, M2ParticleInstances, M2World, RuntimeM2Particles};
 use model_budget::ActorFrame;
 pub use model_particles::ModelEmitter;
 use model_particles::{ModelParticleInstances, RuntimeModelParticles};
@@ -185,11 +185,17 @@ impl RuntimeParticles {
         &self,
         instances: &mut ParticleInstances,
         frame: EffectFrame<'_, '_, '_>,
+        world: &mut EffectWorld<'_, '_>,
     ) {
         let start = EffectStart { frame };
         self.atlas.seed_owned(&mut instances.atlas, &start);
         self.ribbons.seed_owned(&mut instances.ribbons, &start);
-        self.m2.seed_owned(&mut instances.m2, &start);
+        self.m2.seed_owned(
+            &mut instances.m2,
+            &start,
+            &world.models,
+            &mut world.commands,
+        );
         self.models.seed_owned(&mut instances.models, &start);
         self.programmes
             .seed_owned(&mut instances.programmes, &start);
@@ -229,20 +235,23 @@ impl RuntimeParticles {
             allow_births,
             actor,
         );
-        self.m2.update_with_models(
+        self.m2.update_bounded(
             &mut instances.m2,
             frame,
             &mut world.age_sprites,
             &mut world.age_statistics,
-            Some(GeometryWorld {
+            M2World {
                 commands: &mut world.commands,
-                outputs,
-                statistics: &mut world.model_statistics,
-                root,
-                driving_camera,
-                allow_births,
-                actor,
-            }),
+                models: &world.models,
+                geometry: Some(GeometryContext {
+                    outputs,
+                    statistics: &mut world.model_statistics,
+                    root,
+                    driving_camera,
+                    allow_births,
+                }),
+            },
+            actor,
         );
         (time, change)
     }
@@ -301,6 +310,11 @@ impl RuntimeParticles {
                 frame,
                 &mut world.age_sprites,
                 &mut world.age_statistics,
+                M2World {
+                    commands: &mut world.commands,
+                    models: &world.models,
+                    geometry: None,
+                },
                 actor,
             );
         }

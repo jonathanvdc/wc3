@@ -595,6 +595,7 @@ fn process_actor(
                                 node_visible: visible,
                                 basis_world: birth_basis,
                             },
+                            &mut effects,
                         );
                         seeded = true;
                     }

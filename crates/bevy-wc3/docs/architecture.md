@@ -65,7 +65,7 @@ Atlas sprites and trails store immutable births in bounded rings. GPU updates
 upload changed ranges, and per-view sorting uses separate indices. Effect draws
 bind their own emitter records after Bevy's view bindings, leaving application
 cameras and their GPU mesh preprocessing settings unchanged. Queueing, per-view
-sorting, and uploads follow Bevy's visible mesh selections, including camera
+sorting, and uploads follow Bevy's per-view visible-entity selections, including camera
 render layers. Ribbon passes share section records. M2 age-driven sprites sample
 exact authored curves and motion on the CPU into one compact record per particle.
 The GPU expands shared heads and tails for each view; camera motion updates their
@@ -77,6 +77,15 @@ unchanged views avoid sorting and index uploads. Empty or hidden effects disable
 draws while retaining resident capacity, and removed views release their order
 buffers. Ring lineage distinguishes reset simulations from older snapshots with
 the same write cursor.
+
+M2 template adoption shares immutable birth/motion kernels, age curves and child
+image bindings with ordinary M2 sprites. `effects/m2_particles/templates.rs`
+prepares a first-four-slot catalogue from Universal declarations; `sources.rs`
+retains bounded motion snapshots across parent endpoint retirement, and
+`adopted_pool.rs` owns one phase and child pool per source/template pair.
+`evaluation.rs` samples ordinary occurrence frames and admission, while
+`update.rs` owns the shared parent intervals and publication. Adoption never
+instantiates or evaluates the template model's skeleton or other scene features.
 
 Model particles create ordinary independently animated child models. Their
 linked lifetime ownership is independent of world-space Transform parenting.

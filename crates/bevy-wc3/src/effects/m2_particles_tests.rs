@@ -5,7 +5,7 @@ use wc3::model::profiles::Universal;
 use wc3::model::ModelMetadata;
 use wc3::model::{AnimationProgram, AnimationSample};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
-fn emitter(slot_values: &mut SlotValues) -> Emitter {
+pub(super) fn emitter(slot_values: &mut SlotValues) -> Emitter {
     let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
     let node = builder.reserve_node();
     let feature = builder.reserve_feature(node);
@@ -261,7 +261,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
     let mut query_state = world.query::<&mut SpriteEmitter>();
     emitter.rate = emitter.speed;
     let runtime = RuntimeM2Particles {
-        emitters: vec![emitter],
+        emitters: vec![Arc::new(emitter)],
         ..SlotConstruct::construct(&mut slot_values)
     };
     let mut instances = M2ParticleInstances {
@@ -398,13 +398,14 @@ fn world_particles_follow_only_translation_after_their_birth() {
         skipped_seconds: 0.,
     };
     let runtime = RuntimeM2Particles {
-        emitters: vec![emitter],
+        emitters: vec![Arc::new(emitter)],
         ..SlotConstruct::construct(&mut slot_values)
     };
     let mut instances = M2ParticleInstances {
         emitters: vec![state],
         previous_time: Some(0.),
         previous_basis: Some(Mat4::IDENTITY),
+        adopted: HashMap::new(),
     };
     let mut world = World::new();
     let mut gpu_world = World::new();
@@ -1108,7 +1109,7 @@ fn implosion_long_update_reports_omitted_time_once_per_emitter() {
         basis_world: Mat4::IDENTITY,
     };
     let runtime = RuntimeM2Particles {
-        emitters: vec![emitter],
+        emitters: vec![Arc::new(emitter)],
         ..Default::default()
     };
     let mut meshes = Assets::<Mesh>::default();
@@ -1124,6 +1125,7 @@ fn implosion_long_update_reports_omitted_time_once_per_emitter() {
             emitters: vec![state],
             previous_time: Some(0.),
             previous_basis: Some(Mat4::IDENTITY),
+            adopted: HashMap::new(),
         };
         runtime.update(
             &mut instances,
@@ -1933,8 +1935,10 @@ fn unresolved_native_child_emitter_keeps_the_parent_sprite_interpreter() {
         assert!(emitter.gpu_style.head);
         assert_eq!(
             compiled.diagnostics.iter().any(|(_, issue)| {
-                issue.kind == RenderDiagnosticKind::Unsupported
-                    && issue.message.contains("adopted-emitter interpreter")
+                issue.kind == RenderDiagnosticKind::Resource
+                    && issue
+                        .message
+                        .contains("adopted-emitter source is unresolved")
             }),
             recursive
         );
@@ -2068,4 +2072,496 @@ fn ordinary_birth_packets_match_the_pre_extraction_export() {
         assert_eq!(birth.lifetime, 2.);
         assert_eq!(birth.scale_variation, Vec2::ONE);
     }
+}
+
+#[test]
+fn adopted_catalogue_preserves_rejected_candidate_slots_and_never_promotes_fifth() {
+    use super::super::fixture_tests::gravity_fixture;
+    use wc3::model::common::ZeroVec;
+    use wc3::model::conversion::ImportOptions;
+    use wc3::model::formats::m2::records::ParticleGenerator as NativeGenerator;
+    use wc3::model::formats::m2::{DynamicDocument, File, FileKey};
+    use wc3::model::io::m2 as semantic_m2;
+
+    let mut native = gravity_fixture(false, 0.0f32.to_bits());
+    let core = native.model.core_mut();
+    core.particles = vec![core.particles[0].clone(); 5];
+    core.particles[0].flags.set_attached(true);
+    core.particles[1].kind.emitter = NativeGenerator::Bone;
+    core.particles[2].child_model_filename = ZeroVec::alloc_from_slice(b"nested.m2\0");
+    core.particles[3].particle_model_filename = ZeroVec::alloc_from_slice(b"geometry.m2\0");
+    for name in ["nested.m2", "geometry.m2"] {
+        let child = gravity_fixture(false, 0.0f32.to_bits()).model;
+        native.insert(
+            FileKey::Path(name.into()),
+            File::Document(Box::new(DynamicDocument::Flat256(child))),
+        );
+    }
+    let model: Model<'_, Universal> = semantic_m2::import(&native, &ImportOptions::default())
+        .unwrap()
+        .value
+        .widen();
+    let candidates = model
+        .features()
+        .iter()
+        .filter_map(|(feature, value)| {
+            matches!(value.payload, NodeFeature::Particle(ParticleEmitter::M2(_)))
+                .then_some(feature)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(candidates.len(), 5);
+    let nodes = model
+        .nodes()
+        .iter()
+        .enumerate()
+        .map(|(index, (node, _))| (node, index))
+        .collect();
+    let runtime =
+        RuntimeM2Particles::compile(&model, &nodes, &TextureImages::default(), &HashMap::new());
+    assert!(
+        runtime
+            .emitters
+            .iter()
+            .any(|emitter| emitter.feature == candidates[4]),
+        "the fifth is a supported ordinary sprite"
+    );
+    assert_eq!(
+        runtime
+            .templates
+            .slots
+            .iter()
+            .map(|slot| slot.feature)
+            .collect::<Vec<_>>(),
+        candidates[..4]
+    );
+    assert!(
+        runtime
+            .templates
+            .slots
+            .iter()
+            .all(|slot| slot.template.is_err()),
+        "rejected slots consume their authored positions"
+    );
+}
+
+#[test]
+fn adopted_controls_freeze_time_zero_force_activation_and_share_scoped_images() {
+    use super::super::fixture_tests::gravity_fixture;
+    use wc3::model::common::ZeroVec;
+    use wc3::model::conversion::ImportOptions;
+    use wc3::model::formats::m2::records::LegacyValues;
+    use wc3::model::io::m2 as semantic_m2;
+
+    let mut native = gravity_fixture(false, 0.0f32.to_bits());
+    let particle = &mut native.model.core_mut().particles[0];
+    particle.emission_rate.base.timeline.timestamps = ZeroVec::alloc_from_slice(&[0, 500]);
+    particle.emission_rate.values = LegacyValues::Values(ZeroVec::alloc_from_slice(&[12., 0.]));
+    particle.enabled.values = LegacyValues::Values(ZeroVec::alloc_from_slice(&[0]));
+    let model: Model<'_, Universal> = semantic_m2::import(&native, &ImportOptions::default())
+        .unwrap()
+        .value
+        .widen();
+    let mut images = Assets::<Image>::default();
+    let image = images.add(Image::default());
+    let bindings = TextureImages::resolve(&model, |_| Some(image.clone()));
+    let nodes = model
+        .nodes()
+        .iter()
+        .enumerate()
+        .map(|(index, (node, _))| (node, index))
+        .collect();
+    let mut runtime = RuntimeM2Particles::compile(&model, &nodes, &bindings, &HashMap::new());
+    let template = runtime.templates.slots[0].template.as_ref().unwrap();
+    assert!(Arc::ptr_eq(template.kernel(), &runtime.emitters[0]));
+    assert_eq!(
+        template.kernel().gpu_style.textures[0].as_ref(),
+        Some(&image)
+    );
+    let later = model
+        .animation_sample(AnimationSample {
+            clip_time: ModelTime::seconds(0.75).unwrap(),
+            shared_time: ModelTime::seconds(0.75).unwrap(),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(later.animated(&runtime.emitters[0].rate), 0.);
+    assert_eq!(template.rate, 12.);
+    let node = Mat4::from_translation(Vec3::new(2., 3., 4.));
+    assert!(runtime.emitters[0]
+        .birth(&later, 0.75, node, Vec3::ZERO, 0)
+        .is_none());
+    let birth = template
+        .birth(BirthFrame {
+            time: 0.75,
+            node,
+            basis: Mat4::IDENTITY,
+            inherited: Vec3::ZERO,
+            ordinal: 0,
+        })
+        .unwrap()
+        .0;
+    assert_eq!(birth.origin, Vec3::new(2., 3., 4.));
+    let replacement = images.add(Image::default());
+    let mut image_visits = 0;
+    runtime.map_images(&mut |_| {
+        image_visits += 1;
+        Some(replacement.clone())
+    });
+    let mapped = runtime.templates.slots[0].template.as_ref().unwrap();
+    assert_eq!(
+        image_visits, 1,
+        "one shared immutable kernel has one image mapping"
+    );
+    assert!(Arc::ptr_eq(mapped.kernel(), &runtime.emitters[0]));
+    assert_eq!(
+        mapped.kernel().gpu_style.textures[0].as_ref(),
+        Some(&replacement)
+    );
+}
+
+fn adopted_pool(rate: f32, lifetime: f32, inherit: bool) -> adopted_pool::AdoptedPool {
+    let mut values = SlotValues::default();
+    let mut definition = emitter(&mut values);
+    values.set(definition.rate, rate).unwrap();
+    values.set(definition.speed, 0.).unwrap();
+    values.set(definition.lifespan, lifetime).unwrap();
+    values
+        .set(definition.controls.as_ref().unwrap().activation, false)
+        .unwrap();
+    definition.flags.set_inherit_velocity(inherit);
+    definition.inherit_velocity = 0.;
+    let template = templates::FrozenTemplate::new(&Arc::new(definition), &values);
+    adopted_pool::AdoptedPool::new(Arc::new(template))
+}
+
+fn drive(start: f64, end: f64, x: f32) -> adopted_pool::SourceDrive {
+    adopted_pool::SourceDrive {
+        start,
+        end,
+        placement: Mat4::from_translation(Vec3::X * x),
+        basis: Mat4::IDENTITY,
+        velocity: Vec3::ZERO,
+        emission_scale: 1.,
+    }
+}
+
+#[test]
+fn adopted_sources_share_one_fractional_phase_without_a_bridge() {
+    let mut pool = adopted_pool(1., 2., false);
+    pool.finish(0.25);
+    assert!(
+        pool.storage.births.is_empty(),
+        "templates have no autonomous emission"
+    );
+    let mut work = adopted_pool::AdoptionWork::default();
+    pool.drive(drive(0., 0.25, 2.), &mut work);
+    pool.drive(drive(0., 0.25, 9.), &mut work);
+    assert!(pool.storage.births.is_empty());
+    pool.drive(drive(0.25, 0.5, 2.), &mut work);
+    pool.drive(drive(0.25, 0.5, 9.), &mut work);
+    assert_eq!(pool.storage.births.len(), 1);
+    assert_eq!(pool.storage.births[0].origin, Vec3::X * 9.);
+    assert_eq!(pool.storage.births[0].time, 0.5);
+    let mut independent = adopted_pool(1., 2., false);
+    independent.drive(drive(0.25, 0.5, 9.), &mut work);
+    assert!(
+        independent.storage.births.is_empty(),
+        "separate parent emitters do not share carry"
+    );
+}
+
+#[test]
+fn adopted_children_age_once_and_outlive_their_source() {
+    let mut pool = adopted_pool(4., 0.5, false);
+    let mut work = adopted_pool::AdoptionWork::default();
+    for x in [1., 2., 3., 4.] {
+        pool.drive(drive(0., 0.25, x), &mut work);
+    }
+    assert_eq!(pool.storage.births.len(), 4);
+    assert!(pool.storage.births.iter().all(|birth| birth.time == 0.25));
+    // No source survives after .25; independent child lifetimes continue.
+    pool.finish(0.5);
+    assert_eq!(pool.storage.births.len(), 4);
+    pool.finish(0.75);
+    assert!(pool.storage.births.is_empty());
+}
+
+#[test]
+fn adopted_capacity_omits_births_without_phase_backlog() {
+    let mut pool = adopted_pool(4096., 10., false);
+    let mut work = adopted_pool::AdoptionWork::default();
+    pool.drive(drive(0., 1., 1.), &mut work);
+    assert_eq!(pool.storage.births.len(), adopted_pool::POOL_CAPACITY);
+    pool.drive(drive(1., 2., 2.), &mut work);
+    assert_eq!(pool.storage.dropped, 4096);
+    pool.finish(11.);
+    assert!(pool.storage.births.is_empty());
+    let mut work = adopted_pool::AdoptionWork::default();
+    pool.drive(drive(11., 11.25, 3.), &mut work);
+    assert_eq!(pool.storage.births.len(), 1024);
+    assert!(pool
+        .storage
+        .births
+        .iter()
+        .all(|birth| birth.origin == Vec3::X * 3.));
+}
+
+#[test]
+fn adopted_inherited_velocity_is_flag_gated_and_variation_is_about_one() {
+    for inherit in [false, true] {
+        let mut pool = adopted_pool(4., 2., inherit);
+        let mut source = drive(0., 0.25, 2.);
+        source.basis = Mat4::from_scale(Vec3::splat(0.01));
+        source.velocity = Vec3::X * 3.;
+        pool.drive(source, &mut adopted_pool::AdoptionWork::default());
+        assert_eq!(
+            pool.storage.births[0].velocity,
+            if inherit { Vec3::X * 3. } else { Vec3::ZERO }
+        );
+    }
+}
+
+#[test]
+fn adopted_reset_clears_particles_and_fractional_phase() {
+    let mut pool = adopted_pool(1., 2., false);
+    let mut work = adopted_pool::AdoptionWork::default();
+    pool.drive(drive(0., 0.75, 1.), &mut work);
+    pool.reset();
+    pool.drive(drive(0.75, 1., 2.), &mut work);
+    assert!(pool.storage.births.is_empty());
+    assert_eq!(pool.storage.dropped, 0);
+}
+
+#[test]
+fn source_spans_preserve_trails_from_parents_born_and_dead_inside_one_update() {
+    let mut values = SlotValues::default();
+    let parent = emitter(&mut values);
+    values.set(parent.speed, 0.).unwrap();
+    values.set(parent.lifespan, 0.2).unwrap();
+    let birth = parent
+        .birth(
+            &values,
+            0.1,
+            Mat4::from_translation(Vec3::X * 7.),
+            Vec3::ZERO,
+            0,
+        )
+        .unwrap();
+    assert!(
+        1. - birth.time >= f64::from(birth.lifetime),
+        "normal endpoint publication omits this parent"
+    );
+    let mut snapshots = sources::SourceSpans::default();
+    snapshots.begin(&[], Vec3::ZERO);
+    snapshots.newborn(&birth, Vec3::ZERO, 0.1);
+    let mut pool = adopted_pool(60., 2., false);
+    let mut work = adopted_pool::AdoptionWork::default();
+    for step in EmissionClock::new(0., 1.) {
+        assert!(snapshots.drive(
+            sources::SourceStep {
+                emitter: &parent,
+                start: step.start,
+                end: step.end,
+                frame_start: 0.,
+                frame_end: 1.,
+                follow: Vec3::ZERO,
+                centers: [Vec3::ZERO; 2],
+                node: Mat4::IDENTITY,
+                basis: Mat4::IDENTITY
+            },
+            &mut work,
+            |drive, work| pool.drive(drive, work)
+        ));
+    }
+    pool.finish(1.);
+    assert!(
+        !pool.storage.births.is_empty(),
+        "earlier surviving source steps leave independently living children"
+    );
+    assert!(pool
+        .storage
+        .births
+        .iter()
+        .all(|birth| birth.origin == Vec3::X * 7. && birth.time >= 0.1 && birth.time < 0.31));
+}
+
+#[test]
+fn source_examination_budget_bounds_dead_sources_and_has_no_implicit_drive() {
+    let mut values = SlotValues::default();
+    let parent = emitter(&mut values);
+    let birth = parent
+        .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .unwrap();
+    let mut snapshots = sources::SourceSpans::default();
+    snapshots.begin(&[birth.clone(), birth], Vec3::ZERO);
+    let mut work = adopted_pool::AdoptionWork {
+        source_checks: 1,
+        child_births: 10,
+        ..Default::default()
+    };
+    let mut drives = 0;
+    assert!(!snapshots.drive(
+        sources::SourceStep {
+            emitter: &parent,
+            start: 3.,
+            end: 3.1,
+            frame_start: 3.,
+            frame_end: 3.1,
+            follow: Vec3::ZERO,
+            centers: [Vec3::ZERO; 2],
+            node: Mat4::IDENTITY,
+            basis: Mat4::IDENTITY
+        },
+        &mut work,
+        |_, _| drives += 1
+    ));
+    assert_eq!(drives, 0);
+    assert_eq!(work.source_checks, 0);
+}
+
+#[test]
+fn undriven_expired_children_do_not_spend_motion_work() {
+    let mut values = SlotValues::default();
+    let mut kernel = emitter(&mut values);
+    values.set(kernel.rate, 60.).unwrap();
+    values.set(kernel.speed, 0.).unwrap();
+    values.set(kernel.lifespan, 0.05).unwrap();
+    kernel.flags.set_follow_position(true);
+    kernel.follow = [Vec2::new(0., 1.), Vec2::new(1., 1.)];
+    let template = templates::FrozenTemplate::new(&Arc::new(kernel), &values);
+    let mut pool = adopted_pool::AdoptedPool::new(Arc::new(template));
+    let mut work = adopted_pool::AdoptionWork::default();
+    pool.begin_frame(Mat4::IDENTITY);
+    pool.drive(drive(0., 1. / 60., 0.), &mut work);
+    assert_eq!(pool.storage.births.len(), 1);
+    // No surviving parent drives after this interval. At this point every child
+    // has expired; charging even one motion check would spuriously omit time.
+    work.motion_checks = 0;
+    pool.advance_owner(1. / 60., 1., Mat4::from_translation(Vec3::X), 1., &mut work);
+    assert!(pool.storage.births.is_empty());
+    assert_eq!(pool.finish_frame(1.), 0.);
+    assert_eq!(pool.storage.skipped_seconds, 0.);
+}
+
+#[test]
+fn adopted_diagnostics_ignore_autonomous_squirt_without_hiding_other_controls() {
+    use super::super::fixture_tests::gravity_fixture;
+    use wc3::model::conversion::ImportOptions;
+    use wc3::model::io::m2 as semantic_m2;
+    for ground_clamp in [false, true] {
+        let mut native = gravity_fixture(false, 0.0f32.to_bits());
+        let flags = &mut native.model.core_mut().particles[0].flags;
+        flags.set_squirt(true);
+        flags.set_ground_clamp(ground_clamp);
+        let model: Model<'_, Universal> = semantic_m2::import(&native, &ImportOptions::default())
+            .unwrap()
+            .value
+            .widen();
+        let nodes = model
+            .nodes()
+            .iter()
+            .enumerate()
+            .map(|(index, (node, _))| (node, index))
+            .collect();
+        let runtime =
+            RuntimeM2Particles::compile(&model, &nodes, &TextureImages::default(), &HashMap::new());
+        assert!(runtime
+            .diagnostics
+            .iter()
+            .any(|(_, issue)| issue.kind == RenderDiagnosticKind::Unsupported));
+        let template = runtime.templates.slots[0].template.as_ref().unwrap();
+        assert_eq!(
+            template
+                .issues
+                .iter()
+                .any(|issue| issue.kind == RenderDiagnosticKind::Unsupported),
+            ground_clamp,
+            "template roles ignore autonomous squirt, while ground projection remains unsupported"
+        );
+    }
+}
+
+#[test]
+fn undriven_long_lived_pools_skip_resident_scans_across_a_full_long_jump() {
+    let mut pool = adopted_pool(4096., 1000., false);
+    let mut work = adopted_pool::AdoptionWork::default();
+    pool.begin_frame(Mat4::IDENTITY);
+    pool.drive(drive(0., 1., 0.), &mut work);
+    assert_eq!(pool.storage.births.len(), adopted_pool::POOL_CAPACITY);
+    assert_eq!(pool.retirement_visits, 0);
+    let mut steps = 0;
+    for step in EmissionClock::new(1., 100.) {
+        pool.advance_owner(step.start, step.end, Mat4::IDENTITY, 1., &mut work);
+        steps += 1;
+    }
+    assert_eq!(
+        steps, 4096,
+        "exercise the entire permitted long-jump prefix"
+    );
+    assert_eq!(
+        pool.retirement_visits, 0,
+        "long-lived residents must not be revisited for every undriven quantum"
+    );
+    assert_eq!(pool.storage.births.len(), adopted_pool::POOL_CAPACITY);
+    assert_eq!(work.motion_checks, adopted_pool::SOURCE_CHECKS);
+    assert_eq!(pool.finish_frame(100.), 0.);
+    pool.finish(1001.);
+    assert!(pool.storage.births.is_empty());
+    assert_eq!(pool.retirement_visits, adopted_pool::POOL_CAPACITY);
+    pool.finish(2000.);
+    assert_eq!(
+        pool.retirement_visits,
+        adopted_pool::POOL_CAPACITY,
+        "empty pools stay constant work"
+    );
+}
+#[test]
+fn expiry_boundary_releases_capacity_before_the_next_adopted_admission() {
+    let mut pool = adopted_pool(4096., 1., false);
+    let mut work = adopted_pool::AdoptionWork::default();
+    pool.drive(drive(0., 1., 0.), &mut work);
+    let first = pool.storage.births[0].clone();
+    let death = first.time + f64::from(first.lifetime);
+    pool.finish(death.next_down());
+    assert_eq!(pool.storage.births.len(), adopted_pool::POOL_CAPACITY);
+    pool.finish(death);
+    assert_eq!(pool.storage.births.len(), adopted_pool::POOL_CAPACITY - 1);
+    let mut birth = drive(death, death + 1. / (4096. * 4096.), 3.);
+    birth.emission_scale = 4096.;
+    pool.drive(birth, &mut work);
+    assert_eq!(pool.storage.births.len(), adopted_pool::POOL_CAPACITY);
+    assert_eq!(pool.storage.dropped, 0);
+    assert_eq!(pool.storage.births.last().unwrap().origin, Vec3::X * 3.);
+    pool.reset();
+    pool.finish(2000.);
+    assert_eq!(pool.retirement_visits, 0);
+    assert!(pool.storage.births.is_empty());
+}
+#[test]
+fn expiry_wake_up_never_delays_the_existing_subtraction_boundary() {
+    let mut values = SlotValues::default();
+    let kernel = emitter(&mut values);
+    let mut birth = kernel
+        .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, 0)
+        .unwrap();
+    for (time, lifetime) in [(0., 1.), (-1., 1.), (1e12, 0.25), (-1e12, 0.25)] {
+        birth.time = time;
+        birth.lifetime = lifetime;
+        let expiry = time + f64::from(lifetime);
+        for now in [expiry.next_down(), expiry, expiry.next_up()] {
+            if now - birth.time >= f64::from(birth.lifetime) {
+                assert!(
+                    now >= birth.retirement_bound(),
+                    "cached wake-up must precede actual retirement"
+                );
+            }
+        }
+    }
+    // At cancellation, a negative value far below rounded birth+lifetime=0
+    // already subtracts to the full lifetime. A next_down(sum)-only cache fails.
+    birth.time = -1.;
+    birth.lifetime = 1.;
+    let now = -f64::EPSILON * 0.25;
+    assert_eq!(now - birth.time, 1.);
+    assert!(now >= birth.retirement_bound());
 }

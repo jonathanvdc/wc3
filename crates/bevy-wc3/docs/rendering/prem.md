@@ -10,8 +10,9 @@ models and pooled emitter-template models have separate dependency roles.
 Image-based PREM and external effect-only resources need other interpreters.
 The resource variant distinguishes a model from an image; an absent resource
 retains the authored mode without declaring a dependency. M2 emitter-template
-children (`RPID`) are a separate dependency role and do not yet have a runtime
-interpreter. Resolving their model does not make them ordinary geometry actors.
+children (`RPID`) use the separate [pooled sprite path](pre2.md#m2-adopted-emitter-templates),
+including when their source is a geometry-model particle. Resolving their model
+does not make them ordinary geometry actors.
 
 ## Emission and motion
 
@@ -128,8 +129,9 @@ on the application root reports pending/ready actors, current-frame work and
 cumulative exclusive omission reasons. Its skipped seconds sum across effect
 sources, rather than measuring elapsed scene wall time.
 
-Cyclic resource dependencies remain rejected. M2 pooled emitter-template trails
-need their separate interpreter; resolving `RPID` does not activate it.
+Cyclic resource dependencies remain rejected. Adopted sprite-template pools have
+separate particle and source-work limits; their children do not reserve geometry
+actor slots.
 
 This is a CPU hierarchy/model simulation and can cost substantially more than
 sprite particles at comparable populations. Synthetic tests cover lifecycle and

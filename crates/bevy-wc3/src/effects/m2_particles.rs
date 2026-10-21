@@ -1,25 +1,36 @@
 //! Shared M2 particle motion and sprite/model transports, independent of native codecs.
+#[path = "m2_particles/adopted.rs"]
+mod adopted;
+#[path = "m2_particles/adopted_pool.rs"]
+mod adopted_pool;
 #[path = "m2_particles/birth.rs"]
 mod birth;
+#[path = "m2_particles/evaluation.rs"]
+mod evaluation;
 #[path = "m2_particles/motion.rs"]
 mod motion;
+#[path = "m2_particles/sources.rs"]
+mod sources;
+#[path = "m2_particles/update.rs"]
+mod update;
+pub use adopted::{AdoptedParticleSource, AdoptedParticleTemplate, AdoptedTemplateStatus};
+#[path = "m2_particles/templates.rs"]
+mod templates;
 use super::super::material::SurfacePass;
 use super::age_appearance::{AgeAppearance, AgeParticleAppearance};
 use super::age_sprites_gpu::{
     AgeSpriteComposition, AgeSpriteData, AgeSpriteRecord, AgeSpriteStyle, AgeSpriteUniform,
     SampleBuffers,
 };
-use super::atlas_sprites::retimed_selection;
 use super::bones::{BoneCandidate, BoneSource};
+#[cfg(test)]
 use super::emission::{EffectChange, EmissionClock};
 use super::frame::EffectFrame;
 use super::frame::EffectStart;
-use super::implosion::{bounded_end, outward_crossing};
-use super::m2_model_geometry::{tumble, ModelBasis};
-use super::m2_models::{
-    ModelChildren, ModelOutputs, ModelProjection, ModelProjectionContext, ModelTemplate,
-};
-use super::model_budget::{ActorFrame, ModelActorLease};
+use super::implosion::outward_crossing;
+use super::m2_model_geometry::ModelBasis;
+use super::m2_models::{ModelChildren, ModelOutputs, ModelProjection, ModelTemplate};
+use super::model_budget::ModelActorLease;
 use super::render::SortPolicy;
 use super::ModelEmitter;
 use crate::child_coordinates::ChildCoordinates;
@@ -30,6 +41,8 @@ use crate::layers::ModelOwnedRenderEntity;
 #[cfg(test)]
 use crate::mesh_attributes::EXTRA_TEXCOORD;
 use crate::textures::{TextureImages, TextureRole};
+use crate::ModelAsset;
+use adopted::AdoptedSource;
 #[cfg(test)]
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
@@ -43,6 +56,7 @@ use std::array::from_fn;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
 use std::sync::Arc;
+use templates::TemplateCatalogue;
 use wc3::model::values::model::{
     ParticleBlend, ParticleFlags, ParticleGenerator, ParticleHeadTail,
 };
@@ -120,8 +134,10 @@ struct Emitter {
 #[derive(Clone, Default)]
 pub(super) struct RuntimeM2Particles {
     clips: HashMap<ClipId, (f64, bool)>,
-    emitters: Vec<Emitter>,
+    emitters: Vec<Arc<Emitter>>,
     diagnostics: Vec<(FeatureId, RenderIssue)>,
+    templates: Arc<TemplateCatalogue>,
+    sources: HashMap<usize, ChildModelBinding>,
 }
 
 enum BirthAppearance {
@@ -147,14 +163,17 @@ struct GeometryInstances {
     children: ModelChildren,
     projections: Vec<ModelProjection>,
 }
-pub(crate) struct GeometryWorld<'a, 'w, 's> {
-    pub commands: &'a mut Commands<'w, 's>,
+pub(crate) struct GeometryContext<'a, 'w, 's> {
     pub outputs: &'a mut ModelOutputs<'w, 's>,
     pub statistics: &'a mut Query<'w, 's, &'static mut ModelEmitter>,
     pub root: Entity,
     pub driving_camera: Option<Entity>,
     pub allow_births: bool,
-    pub actor: Option<&'a ActorFrame>,
+}
+pub(crate) struct M2World<'a, 'w, 's> {
+    pub commands: &'a mut Commands<'w, 's>,
+    pub models: &'a Assets<ModelAsset>,
+    pub geometry: Option<GeometryContext<'a, 'w, 's>>,
 }
 #[derive(Clone)]
 struct Birth {
@@ -169,6 +188,14 @@ struct Birth {
     random_cell: u32,
     size_scale: Vec2,
     appearance_index: u32,
+}
+impl Birth {
+    /// Conservative wake-up bound, not a replacement retirement predicate.
+    /// Directed rounding also handles cancellation at negative birth times:
+    /// subtraction can reach the lifetime before rounded birth+lifetime does.
+    fn retirement_bound(&self) -> f64 {
+        (self.time + f64::from(self.lifetime).next_down()).next_down()
+    }
 }
 struct EmitterInstance {
     samples: SampleBuffers,
@@ -192,8 +219,44 @@ struct MaterialPassInstance {
     entity: Entity,
 }
 impl EmitterInstance {
+    fn new(models: bool) -> Self {
+        Self {
+            samples: Default::default(),
+            #[cfg(test)]
+            mesh: Handle::default(),
+            passes: Vec::new(),
+            births: Vec::new(),
+            age_appearances: Vec::new(),
+            models: models.then(GeometryInstances::default),
+            #[cfg(test)]
+            order: Vec::new(),
+            fraction: 0.,
+            ordinal: 0,
+            previous_node: Mat4::IDENTITY,
+            pose_scratch: Vec::new(),
+            dropped: 0,
+            skipped_seconds: 0.,
+        }
+    }
+    fn push_sprite(&mut self, mut birth: Birth, appearance: Option<BirthAppearance>) {
+        debug_assert!(self.models.is_none());
+        if let Some(BirthAppearance::Age(appearance)) = appearance {
+            birth.appearance_index = self.age_appearances.len() as u32;
+            self.age_appearances.push(appearance);
+        }
+        self.births.push(birth);
+    }
     fn retire(&mut self, now: f64) {
-        self.retain(|birth| now - birth.time < f64::from(birth.lifetime));
+        self.retire_with(now, |_| {});
+    }
+    fn retire_with(&mut self, now: f64, mut surviving: impl FnMut(&Birth)) {
+        self.retain(|birth| {
+            let alive = now - birth.time < f64::from(birth.lifetime);
+            if alive {
+                surviving(birth);
+            }
+            alive
+        });
     }
     fn retain(&mut self, mut keep: impl FnMut(&Birth) -> bool) {
         let mut retained = 0;
@@ -229,6 +292,7 @@ pub(super) struct M2ParticleInstances {
     emitters: Vec<EmitterInstance>,
     previous_time: Option<f64>,
     previous_basis: Option<Mat4>,
+    adopted: HashMap<usize, AdoptedSource>,
 }
 
 fn particle_image(
@@ -269,6 +333,8 @@ impl RuntimeM2Particles {
         &self,
         instances: &mut M2ParticleInstances,
         start: &EffectStart<'_, '_, '_>,
+        models: &Assets<ModelAsset>,
+        commands: &mut Commands,
     ) {
         if instances.previous_time.is_some() {
             return;
@@ -279,6 +345,23 @@ impl RuntimeM2Particles {
             state.previous_node =
                 emitter.emitter_frame(start.feature(emitter.node_index, &mut state.pose_scratch));
         }
+        self.prepare_adopted_start(instances, start, models, commands);
+    }
+    /// Capture actual template readiness with the accepted owner birth frame,
+    /// rather than inferring it later from a zero previous simulation time.
+    fn prepare_adopted_start(
+        &self,
+        instances: &mut M2ParticleInstances,
+        start: &EffectStart<'_, '_, '_>,
+        models: &Assets<ModelAsset>,
+        commands: &mut Commands,
+    ) {
+        // Preserve authored source order for deterministic draw identities.
+        for index in 0..self.emitters.len() {
+            if let Some(source) = instances.adopted.get_mut(&index) {
+                source.refresh(start.frame.time, models, commands);
+            }
+        }
     }
 
     pub(super) fn append_remapped(
@@ -288,9 +371,20 @@ impl RuntimeM2Particles {
         nodes: &HashMap<NodeId, NodeId>,
         clips: &HashMap<ClipId, ClipId>,
     ) {
+        // The catalogue belongs to this original source asset. Appended assembly
+        // emitters retain their own prepared kernel/role bindings and do not
+        // become extra native template slots for this source catalogue.
+        let offset = self.emitters.len();
+        self.sources.extend(
+            source
+                .sources
+                .iter()
+                .map(|(index, binding)| (offset + index, binding.clone())),
+        );
         let mut bone_remaps = HashMap::new();
         self.emitters
-            .extend(source.emitters.iter().cloned().map(|mut value| {
+            .extend(source.emitters.iter().cloned().map(|mut shared| {
+                let value = Arc::make_mut(&mut shared);
                 value.node = nodes[&value.node];
                 value.node_index = indices[value.node_index];
                 value.bones = value
@@ -298,7 +392,7 @@ impl RuntimeM2Particles {
                     .as_ref()
                     .map(|bones| bones.remap_cached(indices, &mut bone_remaps));
 
-                value
+                shared
             }));
         self.diagnostics.extend(source.diagnostics.iter().cloned());
         for (&host, &part) in clips {
@@ -340,16 +434,20 @@ impl RuntimeM2Particles {
             ..Self::default()
         };
         let mut bone_source = None;
+        let mut template_issues = HashMap::new();
         for (feature, value) in model.features() {
             let NodeFeature::Particle(ParticleEmitter::M2(definition)) = &value.payload else {
                 continue;
             };
 
             let details = &definition.details;
+            let mut kernel_issues = Vec::new();
             let mut diagnostic = |kind, message: &str| {
-                result
-                    .diagnostics
-                    .push((feature, RenderIssue::new(kind, message)));
+                let issue = RenderIssue::new(kind, message);
+                if kind != RenderDiagnosticKind::Budget {
+                    kernel_issues.push(issue.clone());
+                }
+                result.diagnostics.push((feature, issue));
             };
             let appearance = &definition.appearance;
             if !matches!(
@@ -435,10 +533,15 @@ impl RuntimeM2Particles {
             } else {
                 None
             };
-            if details.rendering.child_model.is_some() {
+            let template_source = details
+                .rendering
+                .child_model
+                .and_then(|_| children.get(&ChildModelKey::particle_emitters(feature)))
+                .cloned();
+            if details.rendering.child_model.is_some() && template_source.is_none() {
                 diagnostic(
-                    RenderDiagnosticKind::Unsupported,
-                    "M2 child emitter resources require the adopted-emitter interpreter",
+                    RenderDiagnosticKind::Resource,
+                    "M2 adopted-emitter source is unresolved; parent output remains active",
                 );
             }
             let multi_texture =
@@ -556,17 +659,25 @@ impl RuntimeM2Particles {
                 | (1 << 28)
                 | (1 << 29)
                 | (1 << 30);
-            if details.flags.bits() & !supported_flags != 0 {
-                diagnostic(
-                    RenderDiagnosticKind::Unsupported,
-                    &format!(
-                        "M2 particle controls {:#010x} are retained but not evaluated by the sprite transport",
-                        details.flags.bits() & !supported_flags
-                    ),
-                );
+            let unsupported = details.flags.bits() & !supported_flags;
+            if unsupported != 0 {
+                result
+                    .diagnostics
+                    .push((feature, unsupported_controls(unsupported)));
             }
+            // Autonomous squirt is deliberately ignored by template adoption;
+            // it must not leak an ordinary-emitter Unsupported issue into that
+            // role. Other unsupported controls remain explicitly diagnosed.
+            let template_unsupported = unsupported & !(1 << 15);
+            if template_unsupported != 0 {
+                kernel_issues.push(unsupported_controls(template_unsupported));
+            }
+            template_issues.insert(feature, kernel_issues);
 
-            result.emitters.push(Emitter {
+            if let Some(binding) = template_source {
+                result.sources.insert(result.emitters.len(), binding);
+            }
+            result.emitters.push(Arc::new(Emitter {
                 feature,
 
                 node: value.node,
@@ -660,8 +771,13 @@ impl RuntimeM2Particles {
                         ParticleHeadTail::Tail | ParticleHeadTail::Both
                     ),
                 },
-            });
+            }));
         }
+        result.templates = Arc::new(TemplateCatalogue::compile(
+            model,
+            &result.emitters,
+            &template_issues,
+        ));
         result
     }
     pub fn diagnostics(&self) -> &[(FeatureId, RenderIssue)] {
@@ -673,12 +789,10 @@ impl RuntimeM2Particles {
         meshes: &mut Assets<Mesh>,
         basis: Entity,
     ) -> M2ParticleInstances {
-        let quad = self
-            .emitters
-            .iter()
-            .any(|emitter| emitter.model.is_none())
-            .then(|| effect_quad(meshes));
-        let emitters = self
+        let quad = (self.emitters.iter().any(|emitter| emitter.model.is_none())
+            || !self.sources.is_empty())
+        .then(|| effect_quad(meshes));
+        let emitters: Vec<EmitterInstance> = self
             .emitters
             .iter()
             .map(|emitter| {
@@ -725,324 +839,40 @@ impl RuntimeM2Particles {
                         .id()
                 };
                 let passes = vec![MaterialPassInstance { entity }];
-                EmitterInstance {
-                    samples: Default::default(),
-                    #[cfg(test)]
-                    mesh,
-                    passes,
-                    births: Vec::new(),
-                    age_appearances: Vec::new(),
-                    models: emitter.model.as_ref().map(|_| GeometryInstances::default()),
-                    #[cfg(test)]
-                    order: Vec::new(),
-                    fraction: 0.,
-                    ordinal: 0,
-                    previous_node: Mat4::IDENTITY,
-                    pose_scratch: Vec::new(),
-                    dropped: 0,
-                    skipped_seconds: 0.,
+                let mut state = EmitterInstance::new(emitter.model.is_some());
+                state.passes = passes;
+                #[cfg(test)]
+                {
+                    state.mesh = mesh;
                 }
+                state
+            })
+            .collect();
+        let adopted = emitters
+            .iter()
+            .enumerate()
+            .filter_map(|(index, instance)| {
+                let binding = self.sources.get(&index)?.clone();
+                let emitter = &self.emitters[index];
+                let owner = instance.passes.first()?.entity;
+                Some((
+                    index,
+                    AdoptedSource::new(
+                        binding,
+                        owner,
+                        emitter.feature,
+                        emitter.node,
+                        quad.as_ref().unwrap().clone(),
+                    ),
+                ))
             })
             .collect();
         M2ParticleInstances {
+            adopted,
             emitters,
             previous_time: None,
             previous_basis: None,
         }
-    }
-    #[cfg(test)]
-    pub fn update(
-        &self,
-        instances: &mut M2ParticleInstances,
-        frame: EffectFrame<'_, '_, '_>,
-        meshes: &mut Assets<Mesh>,
-        gpu_sprites: &mut Query<&mut AgeSpriteData>,
-        statistics: &mut Query<&mut SpriteEmitter>,
-    ) {
-        let had_births: Vec<_> = instances
-            .emitters
-            .iter()
-            .map(|state| !state.births.is_empty())
-            .collect();
-        self.update_bounded(instances, frame, gpu_sprites, statistics, None);
-        for ((emitter, state), had_births) in self
-            .emitters
-            .iter()
-            .zip(&mut instances.emitters)
-            .zip(had_births)
-        {
-            // The CPU oracle must preserve the resident sentinel on empty-to-empty
-            // updates, while publishing it when the final live birth expires.
-            if state.passes.is_empty() && (had_births || !state.births.is_empty()) {
-                if let Some(mut mesh) = meshes.get_mut(&state.mesh) {
-                    let node = emitter.emitter_frame(
-                        frame.basis_world * frame.feature_matrix(emitter.node_index),
-                    );
-                    emitter.draw(state, &frame, node, &mut mesh, Mat4::IDENTITY);
-                }
-            }
-        }
-    }
-    pub fn update_bounded(
-        &self,
-        instances: &mut M2ParticleInstances,
-        frame: EffectFrame<'_, '_, '_>,
-        gpu_sprites: &mut Query<&mut AgeSpriteData>,
-        statistics: &mut Query<&mut SpriteEmitter>,
-        actor: Option<&ActorFrame>,
-    ) {
-        self.update_inner(instances, frame, gpu_sprites, statistics, None, actor);
-    }
-    pub fn update_with_models(
-        &self,
-        instances: &mut M2ParticleInstances,
-        frame: EffectFrame<'_, '_, '_>,
-        gpu_sprites: &mut Query<&mut AgeSpriteData>,
-        statistics: &mut Query<&mut SpriteEmitter>,
-        model_world: Option<GeometryWorld>,
-    ) {
-        let actor = model_world.as_ref().and_then(|world| world.actor).cloned();
-        self.update_inner(
-            instances,
-            frame,
-            gpu_sprites,
-            statistics,
-            model_world,
-            actor.as_ref(),
-        );
-    }
-    fn update_inner(
-        &self,
-        instances: &mut M2ParticleInstances,
-        frame: EffectFrame<'_, '_, '_>,
-        gpu_sprites: &mut Query<&mut AgeSpriteData>,
-        statistics: &mut Query<&mut SpriteEmitter>,
-        mut model_world: Option<GeometryWorld>,
-        actor: Option<&ActorFrame>,
-    ) {
-        if !frame.time.is_finite() {
-            return;
-        }
-        let previous = instances.previous_time.unwrap_or(frame.time);
-        let backwards = frame.time < previous || frame.change == EffectChange::Reset;
-        let start = if backwards { frame.time } else { previous };
-        let delta = frame.time - start;
-        for (emitter, state) in self.emitters.iter().zip(&mut instances.emitters) {
-            let had_births = !state.births.is_empty();
-            let node =
-                emitter.emitter_frame(frame.basis_world * frame.feature_matrix(emitter.node_index));
-            if instances.previous_time.is_none() || backwards {
-                state.births.clear();
-                state.age_appearances.clear();
-                if let Some(models) = &mut state.models {
-                    models.births.clear();
-                    if let Some(world) = model_world.as_mut() {
-                        models.children.reset(world.commands);
-                    }
-                }
-                state.fraction = 0.;
-                state.ordinal = 0;
-                state.previous_node = node;
-                state.dropped = 0;
-                state.skipped_seconds = 0.;
-            }
-            state.retire(frame.time);
-            if frame.change == EffectChange::Seek {
-                state.previous_node = node;
-            }
-            let follow = emitter.follow_displacement(state.previous_node, node, delta);
-            if follow != Vec3::ZERO {
-                for birth in &mut state.births {
-                    birth.origin += follow;
-                }
-            }
-            let inherited = if delta > 0. {
-                (node.w_axis.truncate() - state.previous_node.w_axis.truncate()) / delta as f32
-                    * emitter.inherit_velocity
-            } else {
-                Vec3::ZERO
-            };
-            let mut births_this_update = 0;
-            let births = BirthContext {
-                emitter,
-                clips: &self.clips,
-                frame,
-                allow_models: model_world.as_ref().is_none_or(|world| world.allow_births),
-                actor,
-                previous_basis: instances.previous_basis.unwrap_or(frame.basis_world),
-                node,
-                start,
-                inherited,
-                follow,
-            };
-
-            let mut clock = EmissionClock::new(start, frame.time);
-            let mut checked_end = start;
-            for step in clock.by_ref() {
-                if actor
-                    .filter(|actor| actor.owned || emitter.model.is_some())
-                    .is_some_and(|actor| !actor.step())
-                {
-                    break;
-                }
-                checked_end = step.end;
-                let at = step.start;
-                let end = step.end;
-                let tick = step.tick;
-                let rate_time = step.sample_time;
-                let Some((clip, shared)) = retimed_selection(&frame, rate_time) else {
-                    continue;
-                };
-                let sample = frame.sample.at_times(clip, shared);
-                let ended = frame
-                    .selection
-                    .clip
-                    .and_then(|id| self.clips.get(&id))
-                    .is_some_and(|(duration, looping)| !*looping && clip.as_seconds() >= *duration);
-                let visible = if let Some(pose) = frame.pose {
-                    pose.sample_feature_node(emitter.node_index, &sample, &mut state.pose_scratch)
-                        .1
-                } else {
-                    frame
-                        .node_visible
-                        .get(emitter.node_index)
-                        .copied()
-                        .unwrap_or(true)
-                };
-                let controls = emitter.controls.as_ref().expect("M2 controls");
-                let active = if visible && !ended && sample.animated(&controls.activation) {
-                    1.
-                } else {
-                    0.
-                };
-                let base_rate = sample.animated(&emitter.rate).max(0.) * active;
-                let mut rate_seed = emitter.seed ^ (tick as u64).wrapping_mul(0x517cc1b727220a95);
-                let rate = (base_rate + signed(&mut rate_seed) * emitter.rate_variation * active)
-                    .max(0.) as f64;
-                if rate > 0. {
-                    let prior = state.fraction;
-                    let amount = prior + (end - at) * rate;
-                    let count = amount.floor() as usize;
-                    state.fraction = amount - count as f64;
-                    let available = MAX_BIRTHS_PER_UPDATE
-                        .saturating_sub(births_this_update)
-                        .min(emitter.capacity().saturating_sub(state.births.len()));
-                    let local_accepted = count.min(available);
-                    let accepted = if emitter.model.is_some() && births.allow_models {
-                        births.actor.map_or(local_accepted, |actor| {
-                            local_accepted.min(actor.remaining())
-                        })
-                    } else {
-                        local_accepted
-                    };
-                    if let Some(actor) = births
-                        .actor
-                        .filter(|_| emitter.model.is_some() && births.allow_models)
-                    {
-                        actor.budget.omit_work((local_accepted - accepted) as u64);
-                    }
-                    let omitted = count - accepted;
-                    state.dropped = state.dropped.saturating_add(omitted as u64);
-                    for index in 0..accepted {
-                        let time = at + (index as f64 + 1. - prior) / rate;
-                        births.push(state, time, &mut births_this_update);
-                    }
-                    state.ordinal = state.ordinal.wrapping_add(omitted as u64);
-                }
-            }
-            let emission_omitted = (frame.time - checked_end).max(0.);
-            if let Some(actor) = actor.filter(|actor| actor.owned || emitter.model.is_some()) {
-                actor.budget.skip_seconds(emission_omitted);
-            }
-            if emitter.generator == ParticleGenerator::Sphere && emitter.flags.implosion_filter() {
-                checked_end = bounded_end(start, checked_end, state.births.len());
-            }
-            let retirement_omitted = (frame.time - checked_end).max(0.);
-            state.skipped_seconds += emission_omitted.max(retirement_omitted);
-            let centers = [
-                state.previous_node.w_axis.truncate(),
-                node.w_axis.truncate(),
-            ];
-            emitter.retire_implosion(
-                state,
-                ImplosionInterval {
-                    start,
-                    end: frame.time,
-                    checked_end,
-                    centers,
-                    follow,
-                },
-            );
-
-            let node_changed = state.previous_node != node;
-            state.previous_node = node;
-            let redraw = backwards
-                || delta != 0.
-                || instances.previous_basis != Some(frame.basis_world)
-                || node_changed
-                || (!had_births && !state.births.is_empty());
-            if emitter.model.is_none() && redraw && (had_births || !state.births.is_empty()) {
-                if let Some(pass) = state.passes.first() {
-                    if let Ok(mut data) = gpu_sprites.get_mut(pass.entity) {
-                        emitter.sample_gpu(state, &frame, node, &mut data);
-                    }
-                }
-            }
-            if let (Some(model), Some(models), Some(world), Some(pass)) = (
-                &emitter.model,
-                &mut state.models,
-                model_world.as_mut(),
-                state.passes.first(),
-            ) {
-                models.projections.clear();
-                for birth in &state.births {
-                    if let Some(sidecar) = models.births.get_mut(birth.appearance_index as usize) {
-                        let mut projection =
-                            emitter.model_projection(birth, sidecar, model, frame.time, node);
-                        projection.lease = sidecar.lease.take();
-                        models.projections.push(projection);
-                    }
-                }
-                models.children.synchronize(
-                    world.commands,
-                    ModelProjectionContext {
-                        root: world.root,
-                        owner: pass.entity,
-                        visible: frame.root_visible,
-                        driving_camera: world.driving_camera,
-                    },
-                    &model.template,
-                    world.outputs,
-                    models.projections.drain(..),
-                );
-                if let Ok(mut stats) = world.statistics.get_mut(pass.entity) {
-                    if stats.alive != state.births.len() {
-                        stats.alive = state.births.len();
-                    }
-                    if stats.omitted != state.dropped {
-                        stats.omitted = state.dropped;
-                    }
-                    if stats.skipped_seconds != state.skipped_seconds {
-                        stats.skipped_seconds = state.skipped_seconds;
-                    }
-                }
-            }
-            if let Some(pass) = state.passes.first() {
-                if let Ok(mut stats) = statistics.get_mut(pass.entity) {
-                    if stats.alive != state.births.len() {
-                        stats.alive = state.births.len();
-                    }
-                    if stats.dropped != state.dropped {
-                        stats.dropped = state.dropped;
-                    }
-                    if stats.skipped_seconds != state.skipped_seconds {
-                        stats.skipped_seconds = state.skipped_seconds;
-                    }
-                }
-            }
-        }
-        instances.previous_time = Some(frame.time);
-        instances.previous_basis = Some(frame.basis_world);
     }
 }
 
@@ -1053,189 +883,6 @@ struct ImplosionInterval {
     checked_end: f64,
     centers: [Vec3; 2],
     follow: Vec3,
-}
-
-/// Common occurrence-pose evaluation for continuous and keyed emission.
-struct BirthContext<'a, 'view, 'data> {
-    emitter: &'a Emitter,
-    clips: &'a HashMap<ClipId, (f64, bool)>,
-    allow_models: bool,
-    actor: Option<&'a ActorFrame>,
-    frame: EffectFrame<'a, 'view, 'data>,
-    previous_basis: Mat4,
-    node: Mat4,
-    start: f64,
-    inherited: Vec3,
-    follow: Vec3,
-}
-impl BirthContext<'_, '_, '_> {
-    fn push(&self, state: &mut EmitterInstance, time: f64, births: &mut usize) {
-        let frame = &self.frame;
-        let emitter = self.emitter;
-        let ordinal = state.ordinal;
-        state.ordinal = state.ordinal.wrapping_add(1);
-        if emitter.model.is_some() && !self.allow_models {
-            state.dropped = state.dropped.saturating_add(1);
-            return;
-        }
-        let lease = if emitter.model.is_some() {
-            match self.actor.map(ActorFrame::reserve).transpose() {
-                Ok(lease) => lease,
-                Err(_) => {
-                    state.dropped = state.dropped.saturating_add(1);
-                    return;
-                }
-            }
-        } else {
-            None
-        };
-        let delta = frame.time - self.start;
-        let fraction = if delta > 0. {
-            ((time - self.start) / delta) as f32
-        } else {
-            1.
-        };
-        let birth_basis = interpolated_transform(self.previous_basis, frame.basis_world, fraction);
-        let Some((clip, shared)) = retimed_selection(frame, time) else {
-            return;
-        };
-        if frame
-            .selection
-            .clip
-            .and_then(|id| self.clips.get(&id))
-            .is_some_and(|(duration, looping)| !*looping && clip.as_seconds() >= *duration)
-        {
-            return;
-        }
-        let sample = frame.sample.at_times(clip, shared);
-        let birth_node = if let Some(pose) = frame.pose {
-            let (authored, visible) = pose.at_offset(time - frame.time).sample_feature_node(
-                emitter.node_index,
-                &sample,
-                &mut state.pose_scratch,
-            );
-            if !visible || !frame.root_visible {
-                return;
-            }
-            emitter.emitter_frame(birth_basis * authored)
-        } else {
-            if !frame.root_visible
-                || !frame
-                    .node_visible
-                    .get(emitter.node_index)
-                    .copied()
-                    .unwrap_or(true)
-            {
-                return;
-            }
-            interpolated_transform(state.previous_node, self.node, fraction)
-        };
-        if state.births.len() >= emitter.capacity() || *births >= MAX_BIRTHS_PER_UPDATE {
-            state.dropped = state.dropped.saturating_add(1);
-            return;
-        }
-        *births += 1;
-        if let Some((mut birth, appearance)) = emitter.birth_posed(
-            &sample,
-            time,
-            birth_node,
-            birth_basis,
-            self.inherited,
-            ordinal,
-            |candidate| {
-                if let Some(pose) = frame.pose {
-                    return Some(pose.at_offset(time - frame.time).sample_joint_span(
-                        candidate.node,
-                        &sample,
-                        &mut state.pose_scratch,
-                    ));
-                }
-                let joint = |index: usize, pivot: Vec3| {
-                    frame
-                        .node_poses
-                        .get(index)
-                        .map(|matrix| matrix.transform_point3(pivot))
-                };
-                let child = joint(candidate.node, candidate.pivot)?;
-                let parent = candidate
-                    .parent
-                    .and_then(|(index, pivot)| joint(index, pivot));
-                Some((child, parent))
-            },
-        ) {
-            if frame.time - birth.time < f64::from(birth.lifetime) {
-                // Newborns follow only emitter translation after occurrence.
-                birth.origin += self.follow * (1. - fraction.clamp(0., 1.));
-                if let (Some(model), Some(models)) = (&emitter.model, &mut state.models) {
-                    let Some(basis) = ModelBasis::from_frame(birth_node) else {
-                        state.dropped = state.dropped.saturating_add(1);
-                        return;
-                    };
-                    let mut seed = emitter.seed ^ ordinal.wrapping_mul(0x9e3779b97f4a7c15);
-                    let unit = Vec3::new(random(&mut seed), random(&mut seed), random(&mut seed));
-                    let negate = if emitter.flags.negate_spin_random() {
-                        [
-                            random(&mut seed) < 0.5,
-                            random(&mut seed) < 0.5,
-                            random(&mut seed) < 0.5,
-                        ]
-                    } else {
-                        [false; 3]
-                    };
-                    let appearance = match appearance {
-                        Some(BirthAppearance::Age(value)) => value,
-                        None => Default::default(),
-                    };
-                    let initial_size = emitter
-                        .appearance
-                        .scale
-                        .as_ref()
-                        .and_then(|curve| curve.sample(ModelTime::seconds(0.).unwrap()))
-                        .unwrap_or(Vec2::ONE);
-                    let initial_twinkle = emitter
-                        .age_appearance
-                        .as_ref()
-                        .map_or(1., |style| style.sample(&appearance, 0.).scale);
-                    let original_origin =
-                        birth.origin - self.follow * (1. - fraction.clamp(0., 1.));
-                    let initial_position = if emitter.flags.attached() {
-                        birth_node.transform_point3(original_origin)
-                    } else {
-                        original_origin
-                    };
-                    let Some(initial_transform) = basis.sample(
-                        initial_position,
-                        initial_size,
-                        initial_twinkle,
-                        model.template.coordinates.parent_basis.scale,
-                        Vec3::ZERO,
-                        0.,
-                    ) else {
-                        state.dropped = state.dropped.saturating_add(1);
-                        return;
-                    };
-                    birth.appearance_index = models.births.len() as u32;
-                    models.births.push(GeometryBirth {
-                        lease,
-                        initial_transform,
-                        ordinal,
-                        basis,
-                        omega: tumble(model.minimum, model.maximum, unit, negate),
-                        appearance,
-                    });
-                } else if let Some(appearance) = appearance {
-                    birth.appearance_index = match appearance {
-                        BirthAppearance::Age(value) => {
-                            let index = state.age_appearances.len();
-                            state.age_appearances.push(value);
-                            index as u32
-                        }
-                    };
-                }
-                state.births.push(birth);
-            }
-        }
-    }
 }
 
 fn interpolated_transform(a: Mat4, b: Mat4, t: f32) -> Mat4 {
@@ -1353,11 +1000,14 @@ impl Emitter {
     /// Follow is explicitly enabled by the authored flag. The authored knots
     /// define a line; the solved response, rather than the input speed, clamps.
     fn follow_displacement(&self, previous: Mat4, current: Mat4, delta: f64) -> Vec3 {
+        self.follow_in_units(previous, current, delta, self.follow_unit_scale)
+    }
+    fn follow_in_units(&self, previous: Mat4, current: Mat4, delta: f64, unit_scale: f32) -> Vec3 {
         const EPSILON: f32 = 2.3841858e-7;
         if !self.flags.follow_position()
             || self.flags.attached()
-            || !self.follow_unit_scale.is_finite()
-            || self.follow_unit_scale <= 0.
+            || !unit_scale.is_finite()
+            || unit_scale <= 0.
             || delta <= f64::from(EPSILON)
             || !delta.is_finite()
         {
@@ -1369,7 +1019,7 @@ impl Emitter {
             return Vec3::ZERO;
         }
         let displacement = current.w_axis.truncate() - previous.w_axis.truncate();
-        let speed = displacement.length() / (delta as f32 * self.follow_unit_scale);
+        let speed = displacement.length() / (delta as f32 * unit_scale);
         let slope = (scale_b - scale_a) / width;
         let scale = (speed * slope + scale_a - slope * speed_a).clamp(0., 1.);
         displacement * scale
@@ -1904,12 +1554,28 @@ impl RuntimeM2Particles {
         &mut self,
         map: &mut impl FnMut(&Handle<Image>) -> Option<Handle<Image>>,
     ) {
+        let mut kernels = HashMap::new();
         for emitter in &mut self.emitters {
-            for image in emitter.gpu_style.textures.iter_mut().flatten() {
-                if let Some(replacement) = map(image) {
-                    *image = replacement;
+            let original = Arc::as_ptr(emitter);
+            {
+                let definition = Arc::make_mut(emitter);
+                for image in definition.gpu_style.textures.iter_mut().flatten() {
+                    if let Some(replacement) = map(image) {
+                        *image = replacement;
+                    }
                 }
             }
+            kernels.insert(original, emitter.clone());
         }
+        Arc::make_mut(&mut self.templates).remap_images(&kernels, map);
     }
+}
+
+#[cfg(test)]
+#[path = "m2_particles/runtime_tests.rs"]
+mod runtime_tests;
+
+fn unsupported_controls(bits: u32) -> RenderIssue {
+    RenderIssue::new(RenderDiagnosticKind::Unsupported,
+        format!("M2 particle controls {bits:#010x} are retained but not evaluated by the sprite transport"))
 }

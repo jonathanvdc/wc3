@@ -171,11 +171,50 @@ model and bone scale. Applications converting native yards to metres can set
 Strength zero skips mask allocation and composition.
 Applications supply any underwater-camera policy through these controls.
 
-Texture rotation programmes, native keyed squirt emission, collisions, and pooled
-child emitters still require additional interpretation or application integration.
-An unsupported recursive child-emitter resource does not disable the parent
-emitter's own sprites or simulation. M2 geometry-model particles use the separate
-[model-particle path](prem.md).
+Texture rotation programmes, native keyed squirt emission and collisions still
+require additional interpretation or application integration. M2 geometry-model
+particles use the separate [model-particle path](prem.md).
+
+## M2 adopted emitter templates
+
+An M2 emitter-template resource (`RPID`, or a legacy child-emitter filename)
+supplies pooled sprite emitters. Resolve it with
+`ChildModelKey::particle_emitters`; it does not create a model actor per parent
+particle. The parent's own sprite or model output remains active. Each source
+emitter considers the first four authored M2 candidate slots, retaining rejected
+slots rather than promoting later candidates. Nested template resources,
+geometry-model outputs, Bone generators and attached templates are diagnosed
+and omitted. Other geometry and scene features in the template model are not
+instantiated.
+
+The template's emission controls freeze at its first clip and time zero. Its
+own activation does not gate sourcing, and it never emits autonomously. Lifetime
+appearance curves still sample each child's age. Images retain the template
+model's scope. Each source emitter owns one carry, random stream and child pool
+per accepted template, shared by all its living parent particles. Each surviving
+parent drives that shared pool at its current point, using the source emitter's
+axes; unrelated parents are never joined by a birth interpolation segment.
+The template's inherit-velocity flag controls inherited parent velocity. Parent
+particle color, opacity and size do not override the child's appearance.
+
+Children age once per simulation interval and can survive the parent that
+emitted them. Sources born and retired within a long update can still leave
+living children from their earlier surviving intervals. Reset clears every pool.
+A newly created model-particle owner captures actual template readiness at its
+accepted birth frame. Available templates share that initial interval; pending
+templates cannot later recover it. Late resource readiness and replacement start
+at the current observed time without replaying old drives; paused readiness does
+not create historical births.
+The common analytical motion and age policy remains an approximation of native
+discrete stepping. Attached-parent framing, advanced template texture routing,
+random distributions and exact game fidelity remain unverified.
+
+Query `AdoptedParticleTemplate` alongside `SpriteEmitter` for each pool's live
+counts and provenance. `SpriteEmitter.feature` and `.node` stay local to the
+owning parent model; the provenance component's IDs belong to its template
+`ModelAsset`. The parent emitter carries `AdoptedParticleSource` with typed
+readiness, accepted-slot count and template-scoped diagnostics. These resource
+issues update when readiness or the compiled template generation changes.
 
 ## Budgets and limits
 
@@ -192,6 +231,14 @@ chronological prefix of the emission integration window; overlapping omitted
 tails are reported once per emitter rather than once per particle. Clocks still
 advance to the requested time, and omitted retirement checks are discarded
 without a catch-up queue.
+
+Adopted pools retain at most 4,096 children each. Per parent-emitter update,
+they share 8,192 child construction attempts, 32,768 source examinations and
+32,768 child-motion checks. They also consume the owning model tree's shared
+emission-step allowance when present. Capacity omissions and skipped intervals
+appear in each pool's `SpriteEmitter`; overlapping omitted source and motion
+tails count once per pool. These limits constrain source driving independently
+of the normal parent output and never queue catch-up work.
 
 Game-specific ordering across effect and mesh families is not reproduced by the
 shared transport. GPU sprites receive Bevy lighting and shadows when lit, but do
