@@ -179,11 +179,13 @@ workload, then use matched `capture` images to check rendering equivalence. The
 `simulate_effects_cpu_ms` span brackets the public simulation system set; like
 the other scheduling windows, it can contain unrelated concurrent work.
 
-The report also records the adapter, build mode, visible draw entities, unique
-mesh and material handles, model nodes, skinned draw entities, visible triangle
-references, and total draw-palette joint references. These describe resource
-sharing and scaling; draw entities are not hardware draw calls, and palette
-references are not unique skeleton bones. Use the zero-instance scene to expose
+The report also records the adapter, build mode, actual bindless model-material
+selection, schedule executor choice, visible draw entities, unique mesh and
+material handles, model nodes, skinned draw entities, visible triangle references,
+and total draw-palette joint references. Keep material binding mode fixed when
+comparing schedule choices. The resource counts describe sharing and scaling;
+draw entities are not hardware draw calls, and palette references are not unique
+skeleton bones. Use the zero-instance scene to expose
 fixed scene/renderer cost. Use animated versus frozen instances to distinguish
 changing-pose work from repeated render preparation and GPU drawing. The
 benchmark reports measurements rather than asserting a production FPS target or

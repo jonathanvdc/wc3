@@ -18,13 +18,16 @@ use bevy::app::PluginsState;
 use bevy::camera::{RenderTarget, ShadowLodOrigin};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::Tonemapping;
+use bevy::ecs::schedule::{Schedules, SingleThreadedExecutor};
 use bevy::mesh::skinning::SkinnedMesh;
+use bevy::pbr::material_uses_bindless_resources;
 use bevy::prelude::*;
 use bevy::render::diagnostic::RenderDiagnosticsPlugin;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::render_resource::TextureFormat;
 use bevy::render::renderer::{RenderAdapterInfo, RenderDevice};
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured};
+use bevy::render::RenderApp;
 use bevy::time::TimeUpdateStrategy;
 use bevy::window::{ExitCondition, WindowPlugin};
 use bevy::winit::WinitPlugin;
@@ -65,6 +68,7 @@ struct Options {
     lod: Lod,
     frame_policy: FramePolicy,
     render_stages: bool,
+    single_threaded: bool,
     msaa: Msaa,
     file_ids: HashMap<u32, String>,
     wmo_profile: Option<WmoProfile>,
@@ -75,7 +79,7 @@ impl Options {
     }
     fn parse_args(arguments: impl IntoIterator<Item = String>) -> Result<Self> {
         let mut args = arguments.into_iter();
-        let help = "crowd MODEL RECIPE_OR_- ASSET_ROOT OUTPUT.json [--count 100] [--frames 300] [--warmup 120] [--sequence 0] [--frozen] [--prepasses] [--shadows] [--allow-loss] [--lod 0|auto] [--msaa 1|2|4|8] [--serial-completed-frames [--completion-wait spin|blocking]] [--file-id ID=PATH] [--wmo-profile PROFILE] [--screenshot OUTPUT.png] [--render-stages]";
+        let help = "crowd MODEL RECIPE_OR_- ASSET_ROOT OUTPUT.json [--count 100] [--frames 300] [--warmup 120] [--sequence 0] [--frozen] [--prepasses] [--shadows] [--allow-loss] [--lod 0|auto] [--msaa 1|2|4|8] [--serial-completed-frames [--completion-wait spin|blocking]] [--file-id ID=PATH] [--wmo-profile PROFILE] [--screenshot OUTPUT.png] [--render-stages] [--single-threaded]";
         let Some(model) = args.next() else {
             return Err(help.into());
         };
@@ -103,6 +107,7 @@ impl Options {
             lod: Lod::Fixed(0),
             frame_policy: FramePolicy::Pipelined,
             render_stages: false,
+            single_threaded: false,
             msaa: Msaa::Sample4,
             file_ids: HashMap::new(),
             wmo_profile: None,
@@ -114,6 +119,7 @@ impl Options {
                 }
                 "--frozen" => options.frozen = true,
                 "--render-stages" => options.render_stages = true,
+                "--single-threaded" => options.single_threaded = true,
                 "--serial-completed-frames" => serial = true,
                 "--completion-wait" => {
                     wait = Some(
@@ -262,6 +268,20 @@ fn main() -> Result<()> {
         sleep(Duration::from_millis(5));
     }
     app.finish();
+    if options.single_threaded {
+        for (_, schedule) in app.world_mut().resource_mut::<Schedules>().iter_mut() {
+            schedule.set_executor(SingleThreadedExecutor::new());
+        }
+        // Pipelined rendering transfers RenderApp during cleanup.
+        for (_, schedule) in app
+            .sub_app_mut(RenderApp)
+            .world_mut()
+            .resource_mut::<Schedules>()
+            .iter_mut()
+        {
+            schedule.set_executor(SingleThreadedExecutor::new());
+        }
+    }
     app.cleanup();
     let source = CrowdModel::load(
         &mut app,
@@ -436,6 +456,8 @@ fn main() -> Result<()> {
         "workload":source.kind(), "model":&options.model, "recipe":&options.recipe,
         "instances":options.count, "frame_policy":options.frame_policy, "effects":effects,
         "render_stage_windows": options.render_stages,
+        "single_threaded_schedules": options.single_threaded,
+        "bindless_model_materials": material_uses_bindless_resources::<ModelMaterial>(app.world().resource::<RenderDevice>()),
         "completion_wait_wall":options.frame_policy.is_serial().then(|| summary(wait_times)),
         "update_and_backpressure_wall":summary(update_times),
     }) else {
@@ -526,6 +548,7 @@ mod tests {
         let options = options(&[]).unwrap();
         assert!(options.recipe.is_none());
         assert_eq!(options.frame_policy, FramePolicy::Pipelined);
+        assert!(!options.single_threaded);
         assert_eq!(options.msaa, Msaa::Sample4);
         assert_eq!(
             (options.count, options.frames, options.warmup),
@@ -558,6 +581,28 @@ mod tests {
         assert!(options(&["--completion-wait", "spin"]).is_err());
         assert!(options(&["--serial-completed-frames", "--completion-wait", "event"]).is_err());
     }
+    #[test]
+    fn single_threaded_schedules_preserve_the_selected_frame_boundary() {
+        let pipelined = options(&["--single-threaded", "--count", "0"]).unwrap();
+        assert!(pipelined.single_threaded);
+        assert_eq!(pipelined.count, 0);
+        assert_eq!(pipelined.frame_policy, FramePolicy::Pipelined);
+        let serial = options(&[
+            "--single-threaded",
+            "--serial-completed-frames",
+            "--completion-wait",
+            "spin",
+        ])
+        .unwrap();
+        assert!(serial.single_threaded);
+        assert_eq!(
+            serial.frame_policy,
+            FramePolicy::SerialCompleted {
+                wait: CompletionWait::SpinPoll
+            }
+        );
+    }
+
     #[test]
     fn invalid_quality_or_resource_controls_fail_before_loading() {
         assert!(options(&["--msaa", "3"]).is_err());

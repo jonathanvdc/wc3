@@ -26,6 +26,8 @@ pub struct Programmes {
     pub sprites: usize,
     pub ribbon_segments: usize,
     pub omitted_geometry: usize,
+    pub omitted_spatial_writes: u64,
+    pub omitted_spatial_queries: u64,
     pub omitted: u64,
     pub suppressed: u64,
     pub skipped_seconds: f64,
@@ -80,6 +82,14 @@ pub fn collect(world: &mut World) -> EffectPopulations {
         result.programmes.ribbon_segments += emitter.ribbon_segments;
         result.programmes.omitted_geometry += emitter.omitted_geometry;
         result.programmes.omitted = result.programmes.omitted.saturating_add(emitter.omitted);
+        result.programmes.omitted_spatial_writes = result
+            .programmes
+            .omitted_spatial_writes
+            .saturating_add(emitter.omitted_spatial_writes);
+        result.programmes.omitted_spatial_queries = result
+            .programmes
+            .omitted_spatial_queries
+            .saturating_add(emitter.omitted_spatial_queries);
         result.programmes.suppressed = result
             .programmes
             .suppressed

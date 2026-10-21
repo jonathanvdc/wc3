@@ -9,6 +9,7 @@ use bevy::render::render_resource::{CachedPipelineState, PipelineCache, PollType
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::render::{Render, RenderApp, RenderSystems};
 use bevy::tasks::block_on;
+use bevy::time::TimeReceiver;
 use bevy::transform::TransformSystems;
 use bevy_wc3::Wc3Systems;
 use serde::Serialize;
@@ -461,11 +462,21 @@ pub fn resume_rendering(app: &mut App) -> Result<()> {
         let render_app = app
             .remove_sub_app(RenderApp)
             .ok_or("cannot resume: the drained render world is not available locally")?;
+        // The render world is owned here, so its TimeSender cannot race this
+        // drain. The render-only resume frame needs space for a fresh timestamp;
+        // consuming these messages does not run time_system or advance clocks.
+        discard_render_timestamps(app.world());
         app.world_mut()
             .resource_mut::<RenderAppChannels>()
             .send_blocking(render_app);
     }
     Ok(())
+}
+
+fn discard_render_timestamps(world: &World) {
+    if let Some(receiver) = world.get_resource::<TimeReceiver>() {
+        while receiver.0.try_recv().is_ok() {}
+    }
 }
 
 pub fn report(app: &App, policy: FramePolicy) -> Value {
@@ -481,4 +492,42 @@ pub fn report(app: &App, policy: FramePolicy) -> Value {
         result.insert(name.clone(), json!({"samples":sorted.len(), "median": sorted[sorted.len()/2], "p95":sorted[(sorted.len()*95/100).min(sorted.len()-1)]}));
     }
     json!({"frame_policy":policy,"maximum_queued_frames":policy.queue_depth(), "gpu_pass_timestamps_available":data.gpu_pass_timestamps, "spans":result, "note":"Main and render schedules overlap in pipelined mode; serial mode disables the pipelined renderer. The first two fresh asynchronous reports per diagnostic are discarded after warmup. Set spans are scheduling windows and can include unrelated concurrent systems; they are not exclusive function CPU time. Render *_window_ms spans include overlapping parent/child sets and must not be summed. Profiling markers also add scheduling and mutex overhead; compare an instrumented zero-crowd control. Render-pass CPU spans measure command recording, not GPU completion. GPU spans require supported timestamp features; macOS encoder timestamps are suppressed by Bevy, so only pass spans can be valid GPU timings."})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::time::{create_time_channels, Real, TrySendError};
+
+    #[test]
+    fn resume_discards_all_pending_render_times_without_advancing_time() {
+        let (sender, receiver) = create_time_channels();
+        let mut world = World::new();
+        let mut time = Time::<Real>::default();
+        time.advance_by(Duration::from_secs(3));
+        world.insert_resource(time);
+        world.insert_resource(receiver);
+        let timestamp = Instant::now();
+        sender.0.try_send(timestamp).unwrap();
+        sender.0.try_send(timestamp).unwrap();
+        assert!(matches!(
+            sender.0.try_send(timestamp),
+            Err(TrySendError::Full(_))
+        ));
+
+        discard_render_timestamps(&world);
+
+        assert!(world.resource::<TimeReceiver>().0.is_empty());
+        assert_eq!(
+            world.resource::<Time<Real>>().elapsed(),
+            Duration::from_secs(3)
+        );
+        // Both slots, not just one, are available for normal pipelined handoff.
+        sender.0.try_send(timestamp).unwrap();
+        sender.0.try_send(timestamp).unwrap();
+        assert!(matches!(
+            sender.0.try_send(timestamp),
+            Err(TrySendError::Full(_))
+        ));
+    }
 }

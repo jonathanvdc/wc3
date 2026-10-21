@@ -188,6 +188,15 @@ retaining the output dimensions, for checking dynamic-resolution composition.
 `--refraction-strength` and `--refraction-fade-distance` override camera distortion
 settings; strength zero provides an identity comparison for authored refraction.
 
+Add `--no-bindless` to compare the material fallback on the same GPU. It disables
+texture binding arrays when creating the device, affecting every material in the
+capture. The tool reports whether model materials use bindless bindings or the
+fallback; keep this setting fixed when comparing performance.
+
+Use `--no-batching` to disable automatic batching on authored model draws when
+isolating a batching or material-binding difference. Keep this diagnostic setting
+fixed across paired captures; it does not change the default application pipeline.
+
 Use `--fog START,END --fog-color R,G,B` to check linear Bevy distance fog in
 world units with a linear RGB color. Keep fog distances, tonemapping, and lighting
 identical across comparisons. Unlit sprites and trails still receive camera
@@ -214,6 +223,13 @@ cargo run -p bevy-wc3 --example capture -- --help
 The [performance guide](performance.md) covers synchronized completed-frame timing
 and pipelined character crowds, including report interpretation and measurement
 limits. Use optimized builds and hold scene and quality settings fixed.
+
+For a small-scene scheduling experiment, add `--single-threaded` to `capture` or
+`crowd`. It runs main and render schedules with serial executors while retaining
+the selected frame completion policy and task-pool configuration. Crowd reports
+record this choice as `single_threaded_schedules`. Compare otherwise identical
+runs and check their images and populations before interpreting the timing;
+this configuration does not imply a renderer speedup for every workload.
 
 ## Validate without rendering
 
