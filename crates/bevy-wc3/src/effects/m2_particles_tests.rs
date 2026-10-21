@@ -38,6 +38,7 @@ fn emitter(slot_values: &mut SlotValues) -> Emitter {
         wind: Vec3::ZERO,
         inherit_velocity: 0.,
         follow: [Vec2::ZERO; 2],
+        follow_unit_scale: 1.,
         spin: [0.; 4],
         appearance: M2ParticleAppearance::default(),
         atlas: [1, 1],
@@ -315,14 +316,20 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
 }
 
 #[test]
-fn emitter_follow_interpolates_speed_knots_and_preserves_local_motion() {
+fn emitter_follow_requires_its_flag_and_clamps_the_solved_response() {
     let mut slot_values = SlotValues::default();
     let mut emitter = emitter(&mut slot_values);
     emitter.follow = [Vec2::new(2., 0.25), Vec2::new(6., 0.75)];
     let translated = |distance| Mat4::from_translation(Vec3::X * distance);
     assert_eq!(
+        emitter.follow_displacement(Mat4::IDENTITY, translated(4.), 1.),
+        Vec3::ZERO,
+        "nonzero authored defaults do not enable follow"
+    );
+    emitter.flags.set_follow_position(true);
+    assert_eq!(
         emitter.follow_displacement(Mat4::IDENTITY, translated(1.), 1.),
-        Vec3::X * 0.25
+        Vec3::X * 0.125
     );
     assert_eq!(
         emitter.follow_displacement(Mat4::IDENTITY, translated(4.), 1.),
@@ -330,7 +337,7 @@ fn emitter_follow_interpolates_speed_knots_and_preserves_local_motion() {
     );
     assert_eq!(
         emitter.follow_displacement(Mat4::IDENTITY, translated(8.), 1.),
-        Vec3::X * 6.
+        Vec3::X * 8.
     );
     assert_eq!(
         emitter.follow_displacement(Mat4::IDENTITY, translated(4.), 0.),
@@ -350,7 +357,7 @@ fn emitter_follow_interpolates_speed_knots_and_preserves_local_motion() {
     emitter.follow = [Vec2::new(2., 0.5); 2];
     assert_eq!(
         emitter.follow_displacement(Mat4::IDENTITY, translated(4.), 1.),
-        Vec3::X * 2.
+        Vec3::ZERO
     );
 }
 
@@ -358,6 +365,7 @@ fn emitter_follow_interpolates_speed_knots_and_preserves_local_motion() {
 fn world_particles_follow_only_translation_after_their_birth() {
     let mut slot_values = SlotValues::default();
     let mut emitter = emitter(&mut slot_values);
+    emitter.flags.set_follow_position(true);
     emitter.follow = [Vec2::new(0., 0.5), Vec2::new(1., 0.5)];
     emitter.rate = slot_values.add(2.);
     emitter.speed = slot_values.add(0.);
@@ -1690,4 +1698,83 @@ fn refraction_keeps_scene_fog_and_uses_data_texture_with_independent_uv_motion()
         .message
         .contains("ordinary primary texture")
         || issue.message.contains("write main-view depth")));
+}
+
+#[test]
+fn follow_default_knots_extrapolate_in_native_model_units() {
+    let mut values = SlotValues::default();
+    let mut emitter = emitter(&mut values);
+    emitter.flags.set_follow_position(true);
+    emitter.follow = [Vec2::new(2.5, 0.7), Vec2::new(7., 0.9)];
+    for (speed, response) in [(1., 0.6333333), (2.5, 0.7), (7., 0.9), (14., 1.)] {
+        let translation = Mat4::from_translation(Vec3::X * speed);
+        assert!(
+            (emitter
+                .follow_displacement(Mat4::IDENTITY, translation, 1.)
+                .x
+                - speed * response)
+                .abs()
+                < 2e-6
+        );
+        emitter.follow_unit_scale = 100.;
+        let translation = Mat4::from_translation(Vec3::X * speed * 100.);
+        assert!(
+            (emitter
+                .follow_displacement(Mat4::IDENTITY, translation, 1.)
+                .x
+                / 100.
+                - speed * response)
+                .abs()
+                < 2e-6
+        );
+        emitter.follow_unit_scale = 1.;
+    }
+    emitter.follow = [Vec2::new(0., -2.), Vec2::new(1., -1.)];
+    assert_eq!(
+        emitter.follow_displacement(Mat4::IDENTITY, Mat4::from_translation(Vec3::X), 1.),
+        Vec3::ZERO
+    );
+    emitter.follow = [Vec2::new(0., 0.5), Vec2::new(1e-8, 0.9)];
+    assert_eq!(
+        emitter.follow_displacement(Mat4::IDENTITY, Mat4::from_translation(Vec3::X), 1.),
+        Vec3::ZERO
+    );
+}
+#[test]
+fn native_follow_flag_is_retained_as_a_known_compiled_control() {
+    use super::super::fixture_tests::gravity_fixture;
+    use wc3::model::conversion::ImportOptions;
+    use wc3::model::io::m2 as semantic_m2;
+    for enabled in [false, true] {
+        let mut native = gravity_fixture(false, 0.0f32.to_bits());
+        native.model.core_mut().particles[0]
+            .flags
+            .set_follow_position(enabled);
+        let model = semantic_m2::import(&native, &ImportOptions::default())
+            .unwrap()
+            .value
+            .widen();
+        let indices = model
+            .nodes()
+            .iter()
+            .enumerate()
+            .map(|(index, (id, _))| (id, index))
+            .collect();
+        let runtime = RuntimeM2Particles::compile(
+            &model,
+            &indices,
+            &TextureImages::default(),
+            &HashMap::new(),
+        );
+        assert_eq!(runtime.emitters[0].flags.follow_position(), enabled);
+        assert_eq!(
+            runtime.emitters[0].follow_unit_scale, 1.,
+            "unspecified native units retain numerical scale one"
+        );
+        assert!(!runtime
+            .diagnostics()
+            .iter()
+            .any(|(_, issue)| issue.kind == RenderDiagnosticKind::Unsupported
+                && issue.message.contains("particle controls")));
+    }
 }

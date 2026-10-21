@@ -96,12 +96,16 @@ remain unsupported.
 Motion evaluates constant acceleration and linear drag analytically. Rendered
 size inherits bone scale only when its authored flag requests it; emitter
 position and initial velocity still follow the emitter transform. Detached
-particles can follow emitter translation through the authored speed/scale ramp.
-The ramp interpolates between its two speed knots and clamps at the endpoints;
-new births receive only translation after their occurrence. Attached particles
-already follow their emitter and receive no extra displacement. Emitter speed
-uses the observed update interval, so inherited velocity and follow response
-remain approximations of the native simulation.
+particles follow emitter translation only when `FollowPosition` (native bit 14)
+is enabled. The two speed/response pairs define a line; the solved response
+clamps to 0..1 while speed can extrapolate beyond either knot. Equal or nearly
+equal speed knots disable follow. Speed uses the model's declared native-unit
+conversion; unspecified units retain a numerical scale of one. New births
+receive only translation after their occurrence. Attached particles retain their
+emitter attachment without additional follow carry. Emitter speed uses the
+observed outer update interval. The analytical carry does not reproduce native
+live-step age gates or additional attached-particle follow; those behaviors
+remain partial.
 
 Sphere emitters can retire imploding particles when their attempted movement
 points outward relative to the live emitter center. The filter checks analytic

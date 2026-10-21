@@ -43,8 +43,8 @@ use wc3::model::values::model::{
     ParticleBlend, ParticleFlags, ParticleGenerator, ParticleHeadTail,
 };
 use wc3::model::{
-    ClipId, Curve, CurveValue, FeatureId, M2ParticleAppearance, MaterialId, Model, NodeFeature,
-    NodeId, ParticleEmitter, Property, Texture, Time as ModelTime, ValueSample,
+    ClipId, Curve, CurveValue, FeatureId, LengthUnit, M2ParticleAppearance, MaterialId, Model,
+    NodeFeature, NodeId, ParticleEmitter, Property, Texture, Time as ModelTime, ValueSample,
 };
 
 const MAX_PARTICLES: usize = 8192;
@@ -100,6 +100,7 @@ struct Emitter {
     wind: Vec3,
     inherit_velocity: f32,
     follow: [Vec2; 2],
+    follow_unit_scale: f32,
     spin: [f32; 4],
     appearance: M2ParticleAppearance<'static>,
     atlas: [u16; 2],
@@ -529,6 +530,9 @@ impl RuntimeM2Particles {
                     "Unresolved primary particle image uses a visible white sprite fallback",
                 );
             }
+            if details.flags.follow_position() {
+                diagnostic(RenderDiagnosticKind::Approximation, "M2 follow carry uses observed outer updates; native live-step age gates and additional attached follow are not implemented");
+            }
             let supported_flags = (1 << 0)
                 | (1 << 1)
                 | (1 << 2)
@@ -540,6 +544,7 @@ impl RuntimeM2Particles {
                 | (1 << 7)
                 | (1 << 10)
                 | (1 << 12)
+                | (1 << 14)
                 | (1 << 16)
                 | (1 << 17)
                 | (1 << 18)
@@ -593,6 +598,10 @@ impl RuntimeM2Particles {
                     0.
                 },
                 follow: details.follow,
+                follow_unit_scale: match model.units() {
+                    LengthUnit::Unspecified => 1.,
+                    LengthUnit::MetersPerUnit(meters) => meters as f32,
+                },
                 spin: (details.spin).to_array(),
                 appearance: owned_age(appearance),
                 atlas: details.rendering.atlas,
@@ -1340,26 +1349,28 @@ impl Emitter {
             basis.y_axis.truncate().length() * inherited,
         )
     }
-    /// Native follow pairs describe the fraction of emitter translation at two
-    /// emitter speeds. Rotation remains detached for world-space particles.
+    /// Follow is explicitly enabled by the authored flag. The authored knots
+    /// define a line; the solved response, rather than the input speed, clamps.
     fn follow_displacement(&self, previous: Mat4, current: Mat4, delta: f64) -> Vec3 {
-        if self.flags.attached()
-            || (self.follow[0][1] == 0. && self.follow[1][1] == 0.)
-            || delta <= 0.
+        const EPSILON: f32 = 2.3841858e-7;
+        if !self.flags.follow_position()
+            || self.flags.attached()
+            || !self.follow_unit_scale.is_finite()
+            || self.follow_unit_scale <= 0.
+            || delta <= f64::from(EPSILON)
             || !delta.is_finite()
         {
             return Vec3::ZERO;
         }
-        let displacement = current.w_axis.truncate() - previous.w_axis.truncate();
-        let speed = displacement.length() / delta as f32;
         let [[speed_a, scale_a], [speed_b, scale_b]] = self.follow.map(|v| v.to_array());
-        let scale = if speed_a == speed_b {
-            // Equal knots describe a constant rather than an undefined slope.
-            scale_a
-        } else {
-            let fraction = ((speed - speed_a) / (speed_b - speed_a)).clamp(0., 1.);
-            scale_a + (scale_b - scale_a) * fraction
-        };
+        let width = speed_b - speed_a;
+        if width.abs() < EPSILON {
+            return Vec3::ZERO;
+        }
+        let displacement = current.w_axis.truncate() - previous.w_axis.truncate();
+        let speed = displacement.length() / (delta as f32 * self.follow_unit_scale);
+        let slope = (scale_b - scale_a) / width;
+        let scale = (speed * slope + scale_a - slope * speed_a).clamp(0., 1.);
         displacement * scale
     }
     fn capacity(&self) -> usize {
