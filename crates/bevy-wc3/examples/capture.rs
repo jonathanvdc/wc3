@@ -21,11 +21,12 @@ use bevy::time::TimeUpdateStrategy;
 use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 use bevy_wc3::{
-    spawn_model, AssetSettings, BakeSpace, CameraBinding, Lod, LodOverride, LodSettings,
-    ModelAsset, ModelEmitter, ModelInstance, ModelInstanceError, ModelMaterial,
-    ModelParticleLimits, ModelParticleTreeStats, ModelRig, ParticleProgramEmitter,
-    ParticleRefraction, PhysicsSimulation, Playback, PlaybackError, PoseBaker, PoseOptions,
-    PreparedModel, RibbonEmitter, SpriteEmitter, Wc3BevyPlugin, WorldSelection,
+    spawn_model, AdoptedParticleSource, AdoptedParticleTemplate, AssetSettings, BakeSpace,
+    CameraBinding, Lod, LodOverride, LodSettings, ModelAsset, ModelEmitter, ModelInstance,
+    ModelInstanceError, ModelMaterial, ModelParticleLimits, ModelParticleTreeStats, ModelRig,
+    ParticleProgramEmitter, ParticleRefraction, PhysicsSimulation, Playback, PlaybackError,
+    PoseBaker, PoseOptions, PreparedModel, RibbonEmitter, SpriteEmitter, Wc3BevyPlugin,
+    WorldSelection,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::env::args;
@@ -1016,12 +1017,44 @@ fn capture(options: Options) -> CaptureResult<()> {
         println!("{} (Universal, time {time:.6}s)", path.display());
         if options.particle_stats {
             let world = app.world_mut();
-            let mut sprites = world.query::<&SpriteEmitter>();
-            for emitter in sprites.iter(world) {
+            let mut sprites = world.query::<(&SpriteEmitter, Option<&AdoptedParticleTemplate>)>();
+            for (emitter, adopted) in sprites.iter(world) {
+                if let Some(template) = adopted {
+                    let model = model_asset_label(world.resource::<AssetServer>(), &template.model);
+                    println!(
+                        "Adopted sprite owner={:?}/{:?}: model={}, template={:?}/{:?}, slot={}, alive={}, dropped={}, skipped_seconds={:.6}",
+                        emitter.feature, emitter.node, model, template.feature, template.node,
+                        template.slot, emitter.alive, emitter.dropped, emitter.skipped_seconds,
+                    );
+                } else {
+                    // Keep the ordinary emitter report stable for existing scripts.
+                    println!(
+                        "Sprite {:?}: alive={}, dropped={}, skipped_seconds={:.6}",
+                        emitter.feature, emitter.alive, emitter.dropped, emitter.skipped_seconds
+                    );
+                }
+            }
+            let mut sources = world.query::<(
+                Entity,
+                &AdoptedParticleSource,
+                Option<&SpriteEmitter>,
+                Option<&ModelEmitter>,
+            )>();
+            for (entity, source, sprite, model) in sources.iter(world) {
+                let owner = sprite
+                    .map(|value| (value.feature, value.node))
+                    .or_else(|| model.map(|value| (value.feature, value.node)));
+                let asset = model_asset_label(world.resource::<AssetServer>(), &source.model);
                 println!(
-                    "Sprite {:?}: alive={}, dropped={}, skipped_seconds={:.6}",
-                    emitter.feature, emitter.alive, emitter.dropped, emitter.skipped_seconds
+                    "Adopted source {entity:?} owner={owner:?}: model={}, status={:?}, accepted={}, issues={}",
+                    asset, source.status, source.accepted, source.diagnostics.len(),
                 );
+                for issue in &source.diagnostics {
+                    println!(
+                        "  Adopted template issue {:?} {:?}: {}",
+                        issue.kind, issue.source, issue.message
+                    );
+                }
             }
             let mut models = world.query::<&ModelEmitter>();
             for emitter in models.iter(world) {
@@ -1050,6 +1083,13 @@ fn capture(options: Options) -> CaptureResult<()> {
         }
     }
     Ok(())
+}
+
+fn model_asset_label(server: &AssetServer, model: &Handle<ModelAsset>) -> String {
+    server
+        .get_path(model.id())
+        .map(|path| path.to_string())
+        .unwrap_or_else(|| format!("{:?}", model.id()))
 }
 
 fn benchmark_pose(
