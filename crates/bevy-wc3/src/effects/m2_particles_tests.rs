@@ -14,6 +14,7 @@ pub(super) fn emitter(slot_values: &mut SlotValues) -> Emitter {
         feature,
         node,
         node_index: 0,
+        emission: EmissionMode::Continuous,
         rate: slot_values.add(10.),
         rate_variation: 0.,
         controls: Some(AgeDrivenControls {
@@ -139,6 +140,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         age_appearances: Vec::new(),
         models: None,
         fraction: 0.,
+        squirt: SquirtState::default(),
         ordinal: 0,
         previous_node: Mat4::IDENTITY,
         pose_scratch: Vec::new(),
@@ -391,6 +393,7 @@ fn world_particles_follow_only_translation_after_their_birth() {
         age_appearances: Vec::new(),
         models: None,
         fraction: 0.,
+        squirt: SquirtState::default(),
         ordinal: 1,
         previous_node: Mat4::IDENTITY,
         pose_scratch: Vec::new(),
@@ -682,6 +685,7 @@ fn gpu_live_samples_preserve_cpu_geometry_across_views_and_coordinate_frames() {
         models: None,
         order: Vec::new(),
         fraction: 0.,
+        squirt: SquirtState::default(),
         ordinal: 0,
         previous_node: Mat4::IDENTITY,
         pose_scratch: Vec::new(),
@@ -846,6 +850,7 @@ fn benchmark_compact_samples_against_cpu_corner_transport() {
         models: None,
         order: Vec::new(),
         fraction: 0.,
+        squirt: SquirtState::default(),
         ordinal: 0,
         previous_node: Mat4::IDENTITY,
         pose_scratch: Vec::new(),
@@ -949,6 +954,7 @@ fn implosion_state(births: Vec<Birth>) -> EmitterInstance {
         models: None,
         order: Vec::new(),
         fraction: 0.,
+        squirt: SquirtState::default(),
         ordinal: 0,
         previous_node: Mat4::IDENTITY,
         pose_scratch: Vec::new(),
@@ -1820,6 +1826,7 @@ fn lifetime_scale_is_half_extent_while_tail_time_is_full_displacement() {
         models: None,
         order: Vec::new(),
         fraction: 0.,
+        squirt: SquirtState::default(),
         ordinal: 0,
         previous_node: Mat4::IDENTITY,
         pose_scratch: Vec::new(),
@@ -2465,10 +2472,13 @@ fn adopted_diagnostics_ignore_autonomous_squirt_without_hiding_other_controls() 
             .collect();
         let runtime =
             RuntimeM2Particles::compile(&model, &nodes, &TextureImages::default(), &HashMap::new());
-        assert!(runtime
-            .diagnostics
-            .iter()
-            .any(|(_, issue)| issue.kind == RenderDiagnosticKind::Unsupported));
+        assert_eq!(
+            runtime
+                .diagnostics
+                .iter()
+                .any(|(_, issue)| issue.kind == RenderDiagnosticKind::Unsupported),
+            ground_clamp
+        );
         let template = runtime.templates.slots[0].template.as_ref().unwrap();
         assert_eq!(
             template

@@ -422,3 +422,26 @@ fn queued_owner_despawn_prevents_deferred_publication_from_resurrecting_draws() 
         "try_insert cannot resurrect a cascaded draw entity"
     );
 }
+
+#[test]
+fn squirt_endpoint_births_do_not_source_adopted_children_in_historical_quanta() {
+    let mut test = Harness::new(10., 2., true);
+    let emitter = Arc::make_mut(&mut test.runtime.emitters[0]);
+    emitter.flags.set_squirt(true);
+    emitter.emission = EmissionMode::Squirt;
+    test.step(0., EffectChange::Continuous);
+    test.step(0.5, EffectChange::Continuous);
+    assert_eq!(test.instances.emitters[0].births.len(), 10);
+    assert!(test.instances.emitters[0]
+        .births
+        .iter()
+        .all(|birth| birth.time == 0.5));
+    assert_eq!(
+        test.child_draws()[0].1,
+        0,
+        "new endpoint parents never drive historical intervals"
+    );
+    test.step(0.6, EffectChange::Continuous);
+    assert_eq!(test.instances.emitters[0].births.len(), 10);
+    assert!(test.child_draws()[0].1 > 0);
+}

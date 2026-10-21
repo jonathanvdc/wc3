@@ -1,9 +1,10 @@
 //! Parent emission, adopted source observation and transport publication.
+use super::birth::BirthPlan;
 use super::evaluation::BirthContext;
 use super::sources::SourceStep;
+use super::squirt::EmissionMode;
 use super::{
     signed, ImplosionInterval, M2ParticleInstances, M2World, RuntimeM2Particles, SpriteEmitter,
-    MAX_BIRTHS_PER_UPDATE,
 };
 use crate::effects::age_sprites_gpu::AgeSpriteData;
 use crate::effects::atlas_sprites::retimed_selection;
@@ -110,6 +111,7 @@ impl RuntimeM2Particles {
                 }
                 state.fraction = 0.;
                 state.ordinal = 0;
+                state.squirt.reset();
                 state.previous_node = node;
                 state.dropped = 0;
                 state.skipped_seconds = 0.;
@@ -162,6 +164,10 @@ impl RuntimeM2Particles {
                 follow,
             };
 
+            let squirt = (emitter.emission == EmissionMode::Squirt)
+                .then(|| births.observe_squirt(state, delta));
+            let mut squirt_invalid = false;
+            let mut authorized_step = false;
             let mut clock = EmissionClock::new(start, frame.time);
             let mut checked_end = start;
             for step in clock.by_ref() {
@@ -171,6 +177,7 @@ impl RuntimeM2Particles {
                 {
                     break;
                 }
+                authorized_step = true;
                 checked_end = step.end;
                 let at = step.start;
                 let end = step.end;
@@ -180,60 +187,57 @@ impl RuntimeM2Particles {
                     continue;
                 };
                 let sample = frame.sample.at_times(clip, shared);
-                let ended = frame
-                    .selection
-                    .clip
-                    .and_then(|id| self.clips.get(&id))
-                    .is_some_and(|(duration, looping)| !*looping && clip.as_seconds() >= *duration);
-                let visible = if let Some(pose) = frame.pose {
-                    pose.sample_feature_node(emitter.node_index, &sample, &mut state.pose_scratch)
+                if emitter.emission == EmissionMode::Continuous {
+                    let ended = frame
+                        .selection
+                        .clip
+                        .and_then(|id| self.clips.get(&id))
+                        .is_some_and(|(duration, looping)| {
+                            !*looping && clip.as_seconds() >= *duration
+                        });
+                    let visible = if let Some(pose) = frame.pose {
+                        pose.sample_feature_node(
+                            emitter.node_index,
+                            &sample,
+                            &mut state.pose_scratch,
+                        )
                         .1
-                } else {
-                    frame
-                        .node_visible
-                        .get(emitter.node_index)
-                        .copied()
-                        .unwrap_or(true)
-                };
-                let controls = emitter.controls.as_ref().expect("M2 controls");
-                let active = if visible && !ended && sample.animated(&controls.activation) {
-                    1.
-                } else {
-                    0.
-                };
-                let base_rate = sample.animated(&emitter.rate).max(0.) * active;
-                let mut rate_seed = emitter.seed ^ (tick as u64).wrapping_mul(0x517cc1b727220a95);
-                let rate = (base_rate + signed(&mut rate_seed) * emitter.rate_variation * active)
-                    .max(0.) as f64;
-                if rate > 0. {
-                    let prior = state.fraction;
-                    let amount = prior + (end - at) * rate;
-                    let count = amount.floor() as usize;
-                    state.fraction = amount - count as f64;
-                    let available = MAX_BIRTHS_PER_UPDATE
-                        .saturating_sub(births_this_update)
-                        .min(emitter.capacity().saturating_sub(state.births.len()));
-                    let local_accepted = count.min(available);
-                    let accepted = if emitter.model.is_some() && births.allow_models {
-                        births.actor.map_or(local_accepted, |actor| {
-                            local_accepted.min(actor.remaining())
-                        })
                     } else {
-                        local_accepted
+                        frame
+                            .node_visible
+                            .get(emitter.node_index)
+                            .copied()
+                            .unwrap_or(true)
                     };
-                    if let Some(actor) = births
-                        .actor
-                        .filter(|_| emitter.model.is_some() && births.allow_models)
-                    {
-                        actor.budget.omit_work((local_accepted - accepted) as u64);
+                    let controls = emitter.controls.as_ref().expect("M2 controls");
+                    let active = if visible && !ended && sample.animated(&controls.activation) {
+                        1.
+                    } else {
+                        0.
+                    };
+                    let base_rate = sample.animated(&emitter.rate).max(0.) * active;
+                    let mut rate_seed =
+                        emitter.seed ^ (tick as u64).wrapping_mul(0x517cc1b727220a95);
+                    let rate = (base_rate
+                        + signed(&mut rate_seed) * emitter.rate_variation * active)
+                        .max(0.) as f64;
+                    if rate > 0. {
+                        let prior = state.fraction;
+                        let amount = prior + (end - at) * rate;
+                        let count = amount.floor() as usize;
+                        state.fraction = amount - count as f64;
+                        let plan = BirthPlan::new(
+                            count as u64,
+                            births.available(state, births_this_update, true),
+                        );
+                        births.admit(
+                            state,
+                            plan,
+                            &mut births_this_update,
+                            |index| at + (index as f64 + 1. - prior) / rate,
+                            adopted.as_deref_mut(),
+                        );
                     }
-                    let omitted = count - accepted;
-                    state.dropped = state.dropped.saturating_add(omitted as u64);
-                    for index in 0..accepted {
-                        let time = at + (index as f64 + 1. - prior) / rate;
-                        births.push(state, time, &mut births_this_update, adopted.as_deref_mut());
-                    }
-                    state.ordinal = state.ordinal.wrapping_add(omitted as u64);
                 }
                 if let Some(source) = adopted.as_deref_mut() {
                     let (clip, shared) =
@@ -264,11 +268,37 @@ impl RuntimeM2Particles {
                     );
                 }
             }
+            // Endpoint births are inserted only after historical source quanta.
+            // They become RPID sources on the next real interval, not retroactively.
+            if let Some(result) = squirt {
+                match result {
+                    Ok(Some(burst)) => {
+                        let mut seed = emitter.seed
+                            ^ 0xc6bc279692b5cc83
+                            ^ burst.ordinal.wrapping_mul(0x9e3779b97f4a7c15);
+                        let jitter = signed(&mut seed); // one packet even for empty/denied requests
+                        let limit = births.available(state, births_this_update, authorized_step);
+                        match burst.plan(emitter.rate_variation, jitter, limit) {
+                            Ok(plan) => births.admit(
+                                state,
+                                plan,
+                                &mut births_this_update,
+                                |_| frame.time,
+                                adopted.as_deref_mut(),
+                            ),
+                            Err(_) => squirt_invalid = true,
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(_) => squirt_invalid = true,
+                }
+            }
             if let (Some(source), Some(services)) = (adopted, world.as_mut()) {
                 source.finish_frame(&frame, checked_end, node, actor);
                 source.publish(&frame, node, gpu_sprites, statistics, services.commands);
             }
-            let emission_omitted = (frame.time - checked_end).max(0.);
+            let emission_omitted =
+                (frame.time - checked_end).max(if squirt_invalid { delta } else { 0. });
             if let Some(actor) = actor.filter(|actor| actor.owned || emitter.model.is_some()) {
                 actor.budget.skip_seconds(emission_omitted);
             }

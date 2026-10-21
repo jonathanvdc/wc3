@@ -34,8 +34,9 @@ Missing child assets consume the current authored interval without queuing
 historical births.
 
 M2 geometry particles share births, motion, attachment, follow response, and
-retirement with [M2 sprites](pre2.md). Their child scale samples the lifetime size
-curve: X and Y use the authored components, and Z uses their mean. Twinkle scales
+retirement with [M2 sprites](pre2.md), including their
+[sampled-rate burst policy](pre2.md#m2-sampled-bursts). Their child scale samples
+the lifetime size curve: X and Y use the authored components, and Z uses their mean. Twinkle scales
 and hides the child; sprite atlas cells and size variation do not alter model
 geometry. Detached orientation freezes the normalized emitter frame at birth;
 attached orientation follows the live emitter. A birth samples angular velocity

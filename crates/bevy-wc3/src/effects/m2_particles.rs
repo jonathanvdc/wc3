@@ -11,6 +11,8 @@ mod evaluation;
 mod motion;
 #[path = "m2_particles/sources.rs"]
 mod sources;
+#[path = "m2_particles/squirt.rs"]
+mod squirt;
 #[path = "m2_particles/update.rs"]
 mod update;
 pub use adopted::{AdoptedParticleSource, AdoptedParticleTemplate, AdoptedTemplateStatus};
@@ -52,6 +54,7 @@ use bevy::math::{Vec2, Vec3};
 use bevy::mesh::{Indices, MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::*;
 use birth::{BirthFrame, BirthInputs};
+use squirt::{EmissionMode, SquirtState};
 use std::array::from_fn;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
@@ -104,6 +107,7 @@ struct Emitter {
     feature: FeatureId,
     node: NodeId,
     node_index: usize,
+    emission: EmissionMode,
     rate: Property<f32>,
     rate_variation: f32,
     controls: Option<AgeDrivenControls>,
@@ -209,6 +213,7 @@ struct EmitterInstance {
     #[cfg(test)]
     order: Vec<(usize, f32)>,
     fraction: f64,
+    squirt: SquirtState,
     ordinal: u64,
     previous_node: Mat4,
     pose_scratch: Vec<usize>,
@@ -231,6 +236,7 @@ impl EmitterInstance {
             #[cfg(test)]
             order: Vec::new(),
             fraction: 0.,
+            squirt: SquirtState::default(),
             ordinal: 0,
             previous_node: Mat4::IDENTITY,
             pose_scratch: Vec::new(),
@@ -637,6 +643,14 @@ impl RuntimeM2Particles {
             if details.flags.follow_position() {
                 diagnostic(RenderDiagnosticKind::Approximation, "M2 follow carry uses observed outer updates; native live-step age gates and additional attached follow are not implemented");
             }
+            if details.flags.squirt() {
+                // These policies belong to autonomous parent emission; adopted
+                // templates force continuous external drives and do not inherit them.
+                result.diagnostics.push((feature, RenderIssue::new(RenderDiagnosticKind::Approximation,
+                    "M2 Squirt samples rate edges once per advancing actor update and places bursts at that endpoint; native first-substep ages and per-distance/global emission scaling are not reproduced")));
+                result.diagnostics.push((feature, RenderIssue::new(RenderDiagnosticKind::Budget,
+                    "M2 Squirt shares ordinary birth and model-tree limits; unrepresentable numeric counts consume the request and report skipped emission time without a catch-up queue")));
+            }
             let supported_flags = (1 << 0)
                 | (1 << 1)
                 | (1 << 2)
@@ -649,6 +663,7 @@ impl RuntimeM2Particles {
                 | (1 << 10)
                 | (1 << 12)
                 | (1 << 14)
+                | (1 << 15)
                 | (1 << 16)
                 | (1 << 17)
                 | (1 << 18)
@@ -682,6 +697,11 @@ impl RuntimeM2Particles {
 
                 node: value.node,
                 node_index: node_indices[&value.node],
+                emission: if details.flags.squirt() {
+                    EmissionMode::Squirt
+                } else {
+                    EmissionMode::Continuous
+                },
                 rate,
                 rate_variation: definition.emission.variation,
                 speed,
@@ -1579,3 +1599,7 @@ fn unsupported_controls(bits: u32) -> RenderIssue {
     RenderIssue::new(RenderDiagnosticKind::Unsupported,
         format!("M2 particle controls {bits:#010x} are retained but not evaluated by the sprite transport"))
 }
+
+#[cfg(test)]
+#[path = "m2_particles/squirt_runtime_tests.rs"]
+mod squirt_runtime_tests;

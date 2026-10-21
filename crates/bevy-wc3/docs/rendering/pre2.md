@@ -9,7 +9,7 @@ populations and omitted-work counters.
 
 ## Births and motion
 
-Continuous emission uses bounded 60 Hz midpoint integration. Supported staged
+Continuous emission uses bounded 60 Hz midpoint integration. MDLX staged
 bursts follow crossed keys and cycles instead of observing only the update
 endpoint. Birth parameters and hierarchy transforms sample occurrence times,
 including transitions and nonlinear parent motion. Application root movement
@@ -20,6 +20,33 @@ World particles retain their birth frame; local particles follow the current
 emitter. Gravity and fixed-plane geometry follow authored axes after coordinate
 conversion. Sprite lighting uses Bevy's PBR pipeline, so supported native motion
 and materials do not imply exact game lighting.
+
+### M2 sampled bursts
+
+M2's `Squirt` flag (native bit 15) selects sampled-rate bursts instead of
+continuous streaming. Each advancing actor update observes its effective rate
+once. A transition from at most 0.02 to above 0.02 requests one burst; positive
+rate changes do not repeat it. A newly initialized or reset emitter also has one
+startup request for its first advancing update. Activation and hierarchy
+visibility gate the effective rate before observation. A pulse entirely between
+two actor samples can be missed; this is distinct from MDLX keyed emission.
+
+A burst adds signed random variation to the rate, clamps the result to zero or
+above, and truncates it to a whole particle count. It has no duration multiplier or fractional carry. Empty requests
+and births omitted by capacity or work limits are consumed without catch-up.
+Each accepted birth uses the current endpoint pose and starts at age zero,
+through the same motion, appearance and model-child admission as continuous M2
+births. Native first-substep ages and discrete stepping differ; camera-distance
+and global emission-count scaling are not evaluated. Exact game timing and
+random-sequence fidelity remain unverified.
+
+Zero-delta warmup and pause neither observe new edges nor consume startup or
+random packets. Seek rebases the destination without replaying skipped keys;
+positive authorized time after that destination can still produce a sampled
+edge. Reset clears living particles and rearms startup, while a natural animation
+loop only bursts if a low rate was observed before a later high rate. Adopted
+emitter templates retain their externally driven continuous policy and do not
+run autonomous squirts.
 
 ## Geometry and appearance
 
@@ -171,9 +198,9 @@ model and bone scale. Applications converting native yards to metres can set
 Strength zero skips mask allocation and composition.
 Applications supply any underwater-camera policy through these controls.
 
-Texture rotation programmes, native keyed squirt emission and collisions still
-require additional interpretation or application integration. M2 geometry-model
-particles use the separate [model-particle path](prem.md).
+Texture rotation programmes and collisions still require additional
+interpretation or application integration. M2 geometry-model particles use the
+separate [model-particle path](prem.md).
 
 ## M2 adopted emitter templates
 
@@ -222,9 +249,11 @@ Each MDLX sprite emitter is bounded to 8,192 head/tail records; enabling both
 uses two records per particle. Each M2 age-driven emitter is bounded to 8,192
 particles, sharing one record between its head and tail. The age-driven
 simulation also bounds births and long-update integration intervals, reporting
-omitted births and skipped time through `SpriteEmitter`. Budgets discard work
-rather than creating an unbounded catch-up queue. Root despawn removes
-simulation and render state. Hierarchy visibility gates rendering; effect
+omitted births and skipped time through `SpriteEmitter`. Burst requests share
+these limits. Nonfinite or unrepresentable burst counts consume the request and
+report skipped emission time, without inventing an omitted-birth count. Budgets
+discard work rather than creating an unbounded catch-up queue. Root despawn
+removes simulation and render state. Hierarchy visibility gates rendering; effect
 activation controls births. Implosion filtering also limits the combined
 population to 32,768 particle-step checks per update. It examines a common
 chronological prefix of the emission integration window; overlapping omitted

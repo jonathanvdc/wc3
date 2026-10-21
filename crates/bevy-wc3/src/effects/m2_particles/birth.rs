@@ -8,6 +8,24 @@ use bevy::prelude::{Mat4, Vec2, Vec3};
 use wc3::model::values::model::ParticleGenerator;
 use wc3::model::ValueSample;
 
+/// Shared bounded occurrence count, independent of continuous/burst policy.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct BirthPlan {
+    pub requested: u64,
+    pub accepted: usize,
+    pub omitted: u64,
+}
+impl BirthPlan {
+    pub(super) fn new(requested: u64, limit: usize) -> Self {
+        let accepted = requested.min(limit as u64) as usize;
+        Self {
+            requested,
+            accepted,
+            omitted: requested - accepted as u64,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(super) struct BirthInputs {
     pub enabled: bool,

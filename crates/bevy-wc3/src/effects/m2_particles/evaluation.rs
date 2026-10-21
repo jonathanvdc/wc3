@@ -1,10 +1,13 @@
 //! Shared occurrence-time pose and ordinary birth admission.
 use super::adopted::AdoptedSource;
+use super::birth::BirthPlan;
+use super::squirt::{SquirtBurst, SquirtError, SquirtSample, SquirtUpdate};
 use super::{
     interpolated_transform, random, Birth, BirthAppearance, Emitter, EmitterInstance,
     GeometryBirth, MAX_BIRTHS_PER_UPDATE,
 };
 use crate::effects::atlas_sprites::retimed_selection;
+use crate::effects::emission::EffectChange;
 use crate::effects::frame::EffectFrame;
 use crate::effects::m2_model_geometry::{tumble, ModelBasis};
 use crate::effects::model_budget::{ActorFrame, ModelActorLease};
@@ -66,6 +69,106 @@ impl BirthContext<'_, '_, '_> {
             basis,
             fraction,
             visible,
+        }
+    }
+    pub(super) fn available(
+        &self,
+        state: &EmitterInstance,
+        used: usize,
+        authorized: bool,
+    ) -> usize {
+        if !authorized {
+            return 0;
+        }
+        MAX_BIRTHS_PER_UPDATE
+            .saturating_sub(used)
+            .min(self.emitter.capacity().saturating_sub(state.births.len()))
+    }
+    /// Both continuous and sampled-burst sources share bounded admission, model
+    /// work and occurrence packet accounting. The placement function only picks
+    /// when each already planned birth occurs.
+    pub(super) fn admit(
+        &self,
+        state: &mut EmitterInstance,
+        plan: BirthPlan,
+        used: &mut usize,
+        occurrence: impl Fn(usize) -> f64,
+        mut adopted: Option<&mut AdoptedSource>,
+    ) {
+        let accepted = if self.emitter.model.is_some() && self.allow_models {
+            self.actor
+                .map_or(plan.accepted, |actor| plan.accepted.min(actor.remaining()))
+        } else {
+            plan.accepted
+        };
+        let work_omitted = plan.accepted - accepted;
+        if let Some(actor) = self
+            .actor
+            .filter(|_| self.emitter.model.is_some() && self.allow_models)
+        {
+            actor.budget.omit_work(work_omitted as u64);
+        }
+        let omitted = plan.omitted.saturating_add(work_omitted as u64);
+        state.dropped = state.dropped.saturating_add(omitted);
+        let first = state.ordinal;
+        for index in 0..accepted {
+            self.push(state, occurrence(index), used, adopted.as_deref_mut());
+        }
+        state.ordinal = first.wrapping_add(plan.requested);
+    }
+    fn squirt_sample(
+        &self,
+        time: f64,
+        state: &mut EmitterInstance,
+    ) -> Result<SquirtSample, SquirtError> {
+        let (clip, shared) =
+            retimed_selection(&self.frame, time).ok_or(SquirtError::NonFiniteInput)?;
+        let sample = self.frame.sample.at_times(clip, shared);
+        let at = self.sample_frame(time, &sample, state.previous_node, &mut state.pose_scratch);
+        let ended = self
+            .frame
+            .selection
+            .clip
+            .and_then(|id| self.clips.get(&id))
+            .is_some_and(|(duration, looping)| !*looping && clip.as_seconds() >= *duration);
+        let controls = self.emitter.controls.as_ref().expect("M2 controls");
+        let allowed = self.frame.root_visible
+            && at.visible
+            && !ended
+            && sample.animated(&controls.activation);
+        SquirtSample::new(sample.animated(&self.emitter.rate), allowed)
+    }
+    /// Called once per actor interval; internal integration quanta never observe
+    /// edges. Seek rebases the skipped destination before any real elapsed time.
+    pub(super) fn observe_squirt(
+        &self,
+        state: &mut EmitterInstance,
+        delta: f64,
+    ) -> Result<Option<SquirtBurst>, SquirtError> {
+        if self.frame.change == EffectChange::Seek {
+            let destination = self.squirt_sample(self.start, state);
+            let _ = state.squirt.observe(
+                destination
+                    .as_ref()
+                    .copied()
+                    .unwrap_or_else(|_| SquirtSample::inactive()),
+                SquirtUpdate::Seek,
+            );
+            destination?;
+        }
+        if delta <= 0. {
+            return Ok(state
+                .squirt
+                .observe(SquirtSample::inactive(), SquirtUpdate::Hold));
+        }
+        match self.squirt_sample(self.frame.time, state) {
+            Ok(sample) => Ok(state.squirt.observe(sample, SquirtUpdate::Advance)),
+            Err(error) => {
+                let _ = state
+                    .squirt
+                    .observe(SquirtSample::inactive(), SquirtUpdate::Advance);
+                Err(error)
+            }
         }
     }
     pub(super) fn push(
