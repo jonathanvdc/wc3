@@ -3,7 +3,6 @@
 #import bevy_pbr::{
     pbr_prepass_functions,
     pbr_bindings,
-    pbr_bindings::material,
     pbr_types,
     pbr_functions,
     pbr_functions::SampleBias,
@@ -22,14 +21,16 @@
 #import bevy_pbr::pbr_bindings::material_indices
 #endif  // BINDLESS
 
-#import "embedded://bevy_wc3/shaders/combiner.wgsl"::{combiner,secondary,secondary_sampler,tertiary,tertiary_sampler,fourth,fourth_sampler,compose}
-#import "embedded://bevy_wc3/shaders/world_composition.wgsl"::{world,world_color}
+#import "embedded://bevy_wc3/shaders/material_access.wgsl"::{load_combiner,load_world,load_hd,load_standard,sample_base,sample_secondary,sample_tertiary,sample_fourth}
+#import "embedded://bevy_wc3/shaders/combiner.wgsl"::compose
+#import "embedded://bevy_wc3/shaders/world_composition.wgsl"::world_color
 
-struct HdUniform { fresnel_color: vec4<f32>, fresnel: vec4<f32>, maps: vec4<u32>, };
-@group(#{MATERIAL_BIND_GROUP}) @binding(103) var<uniform> hd: HdUniform;
 
 // Share composition with the color pass, including masks that are not opacity.
 fn composed_alpha(in:VertexOutput)->f32 {
+    let combiner = load_combiner(in.instance_index);
+    let world = load_world(in.instance_index);
+    let material = load_standard(in.instance_index);
     if world.composition.x!=0u {
         var layer_alpha=1.0;
 #ifdef WORLD_LAYER_ALPHA
@@ -39,7 +40,7 @@ fn composed_alpha(in:VertexOutput)->f32 {
     }
     var uv0=vec2(0.0); var uv1=vec2(0.0); var uv2=vec2(0.0);
 #ifdef VERTEX_UVS_A
-    uv0=(pbr_bindings::material.uv_transform*vec3(in.uv,1.0)).xy;
+    uv0=(material.uv_transform*vec3(in.uv,1.0)).xy;
     uv1=(combiner.uv_transform*vec3(in.uv,1.0)).xy;
 #endif
 #ifdef VERTEX_UVS_B
@@ -69,23 +70,27 @@ fn composed_alpha(in:VertexOutput)->f32 {
     if combiner.additional_coordinates.x==3u {uv3=in.uv_c;}
 #endif
     uv3=(combiner.fourth_transform*vec3(uv3,1.0)).xy;
-    d=textureSample(fourth,fourth_sampler,uv3);
+    d = sample_fourth(uv3, in.instance_index);
     }
 
     var a=vec4(1.0);
-    if (pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT)!=0u {
-        a=textureSample(pbr_bindings::base_color_texture,pbr_bindings::base_color_sampler,uv0);
+    if (material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT)!=0u {
+        a = sample_base(uv0, in.instance_index);
     }
     var b=vec4(1.0);
-        if combiner.coordinates.z>1u {b=textureSample(secondary,secondary_sampler,uv1);}
+        if combiner.coordinates.z > 1u {
+            b = sample_secondary(uv1, in.instance_index);
+        }
     var c=vec4(1.0);
-        if combiner.coordinates.z>2u {c=textureSample(tertiary,tertiary_sampler,uv2);}
-    var tint=pbr_bindings::material.base_color;
+        if combiner.coordinates.z > 2u {
+            c = sample_tertiary(uv2, in.instance_index);
+        }
+    var tint=material.base_color;
 #ifdef VERTEX_COLORS
     tint*=in.color;
 #endif
 
-    var alpha=compose(a,b,c,d,tint).color.a;
+    var alpha = compose(a, b, c, d, tint, combiner).color.a;
 #ifdef MODEL_EDGE_FADE
     alpha*=in.edge_opacity;
 #endif
@@ -107,19 +112,19 @@ fn fragment(
     let is_front = true;
 #else   // MESHLET_MESH_MATERIAL_PASS
     var in = vertex_output;
+    let combiner = load_combiner(in.instance_index);
+    let world = load_world(in.instance_index);
+    let hd = load_hd(in.instance_index);
+    let material = load_standard(in.instance_index);
 #ifdef VERTEX_COLORS
     if world.flags.x != 0u { in.color = vec4(1.0); }
 #endif
 
 #ifdef BINDLESS
     let slot = mesh[in.instance_index].material_and_lightmap_bind_group_slot & 0xffffu;
-    let flags = pbr_bindings::material_array[material_indices[slot].material].flags;
-    let uv_transform = pbr_bindings::material_array[material_indices[slot].material].uv_transform;
-#else   // BINDLESS
-    var flags = pbr_bindings::material.flags;
-
-    let uv_transform = pbr_bindings::material.uv_transform;
-#endif  // BINDLESS
+#endif
+    var flags = material.flags;
+    let uv_transform = material.uv_transform;
 
     // If we're in the crossfade section of a visibility range, conditionally
     // discard the fragment according to the visibility pattern.
@@ -131,14 +136,14 @@ fn fragment(
     if world.flags.x != 0u && world.flags.y != 0u {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK
-            && pbr_bindings::material.base_color.a < pbr_bindings::material.alpha_cutoff { discard; }
+            && material.base_color.a < material.alpha_cutoff { discard; }
     } else if combiner.mode.x == 0u && world.composition.x == 0u {
         pbr_prepass_functions::prepass_alpha_discard(to_bevy(in));
     } else {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK {
             let alpha = composed_alpha(in);
-            if alpha < pbr_bindings::material.alpha_cutoff { discard; }
+            if alpha < material.alpha_cutoff { discard; }
         }
     }
 #endif  // MESHLET_MESH_MATERIAL_PASS
@@ -241,22 +246,26 @@ fn fragment(
 @fragment
 fn fragment(vertex_output: VertexOutput) {
     var in=vertex_output;
+    let combiner = load_combiner(in.instance_index);
+    let world = load_world(in.instance_index);
+    let hd = load_hd(in.instance_index);
+    let material = load_standard(in.instance_index);
 #ifdef VERTEX_COLORS
     if world.flags.x!=0u {in.color=vec4(1.0);}
 #endif
-    let flags = pbr_bindings::material.flags;
-    let uv_transform = pbr_bindings::material.uv_transform;
+    let flags = material.flags;
+    let uv_transform = material.uv_transform;
     if combiner.clip.x != 0.0 && composed_alpha(in) < combiner.clip.x { discard; }
     if world.flags.x != 0u && world.flags.y != 0u {
         let alpha_mode=flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
-        if alpha_mode==pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK && pbr_bindings::material.base_color.a < pbr_bindings::material.alpha_cutoff {discard;}
+        if alpha_mode==pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK && material.base_color.a < material.alpha_cutoff {discard;}
     } else if combiner.mode.x == 0u && world.composition.x == 0u {
         pbr_prepass_functions::prepass_alpha_discard(to_bevy(in));
     } else {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
         if alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK {
             let alpha = composed_alpha(in);
-            if alpha < pbr_bindings::material.alpha_cutoff { discard; }
+            if alpha < material.alpha_cutoff { discard; }
         }
     }
 }

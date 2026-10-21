@@ -1,7 +1,9 @@
 //! Direct semantic surface preparation for the Bevy PBR pipeline.
 mod animation;
 mod bindings;
+mod image_updates;
 pub(crate) use bindings::register_material_uniform_buffers;
+pub(crate) use image_updates::register_material_image_updates;
 mod compile;
 mod m2;
 mod opacity;
@@ -501,6 +503,18 @@ impl SurfaceAnimation {
             Arc::make_mut(&mut hd.images).map_images(map);
         }
     }
+}
+
+#[cfg(test)]
+fn shared_material_data_types() -> &'static str {
+    let source = include_str!("shaders/material_access.wgsl");
+    let start = source
+        .find("struct Combiner {")
+        .expect("shared material types");
+    let length = source[start..]
+        .find("#ifdef BINDLESS")
+        .expect("shared material access branch");
+    &source[start..start + length]
 }
 
 #[cfg(test)]

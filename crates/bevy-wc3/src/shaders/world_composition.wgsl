@@ -1,13 +1,18 @@
 #import "embedded://bevy_wc3/shaders/model_io.wgsl"::VertexOutput
-#import "embedded://bevy_wc3/shaders/combiner.wgsl"::{combiner,secondary,secondary_sampler,tertiary,tertiary_sampler}
+#import "embedded://bevy_wc3/shaders/material_access.wgsl"::{World,load_combiner,load_world,load_standard,sample_base,sample_secondary,sample_tertiary}
 #import bevy_pbr::{pbr_bindings,pbr_types}
 
-struct World { composition: vec4<u32>, flags: vec4<u32>, ambient: vec4<f32>, };
-@group(#{MATERIAL_BIND_GROUP}) @binding(110) var<uniform> world: World;
 
 struct WorldComposed { color: vec4<f32>, emission: vec3<f32>, };
 // Programmes select texture composition; Bevy remains authoritative for lighting.
-fn compose_world(a:vec4<f32>,b:vec4<f32>,c:vec4<f32>,q:f32,tint:vec4<f32>)->WorldComposed {
+fn compose_world(
+    a: vec4<f32>,
+    b: vec4<f32>,
+    c: vec4<f32>,
+    q: f32,
+    tint: vec4<f32>,
+    world: World
+) -> WorldComposed {
     var rgb=a.rgb;
     var alpha=a.a;
     var emission=vec3(0.0);
@@ -31,9 +36,12 @@ fn compose_world(a:vec4<f32>,b:vec4<f32>,c:vec4<f32>,q:f32,tint:vec4<f32>)->Worl
 }
 
 fn world_color(in:VertexOutput,vertex_alpha:f32)->WorldComposed {
+    let combiner = load_combiner(in.instance_index);
+    let world = load_world(in.instance_index);
+    let material = load_standard(in.instance_index);
     var uv0=vec2(0.0); var uv1=vec2(0.0); var uv2=vec2(0.0);
 #ifdef VERTEX_UVS_A
-    uv0=(pbr_bindings::material.uv_transform*vec3(in.uv,1.0)).xy;
+    uv0=(material.uv_transform*vec3(in.uv,1.0)).xy;
     uv1=(combiner.uv_transform*vec3(in.uv,1.0)).xy;
     uv2=in.uv;
 #endif
@@ -46,10 +54,14 @@ fn world_color(in:VertexOutput,vertex_alpha:f32)->WorldComposed {
 #endif
     uv2=(combiner.third_transform*vec3(uv2,1.0)).xy;
     var a=vec4(1.0); var b=vec4(1.0); var c=vec4(1.0);
-    if (pbr_bindings::material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT)!=0u {
-        a=textureSample(pbr_bindings::base_color_texture,pbr_bindings::base_color_sampler,uv0);
+    if (material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT)!=0u {
+        a = sample_base(uv0, in.instance_index);
     }
-    if world.composition.y>1u {b=textureSample(secondary,secondary_sampler,uv1);}
-    if world.composition.y>2u {c=textureSample(tertiary,tertiary_sampler,uv2);}
-    return compose_world(a,b,c,vertex_alpha,pbr_bindings::material.base_color);
+    if world.composition.y > 1u {
+        b = sample_secondary(uv1, in.instance_index);
+    }
+    if world.composition.y > 2u {
+        c = sample_tertiary(uv2, in.instance_index);
+    }
+    return compose_world(a, b, c, vertex_alpha, material.base_color, world);
 }

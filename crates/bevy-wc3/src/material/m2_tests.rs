@@ -149,10 +149,11 @@ fn unknown_coordinates_or_programs_report_fallback() {
 fn shared_composition_shader_parses_and_validates() {
     let source = include_str!("../shaders/combiner.wgsl")
         .lines()
-        .filter(|line| !line.starts_with("#define_import_path"))
+        .filter(|line| !line.starts_with("#define_import_path") && !line.starts_with("#import"))
         .collect::<Vec<_>>()
         .join("\n")
         .replace("#{MATERIAL_BIND_GROUP}", "2");
+    let source = format!("{}\n{source}", super::super::shared_material_data_types());
     let module =
         parse_str(&source).unwrap_or_else(|error| panic!("{}", error.emit_to_string(&source)));
     Validator::new(ValidationFlags::all(), Capabilities::all())

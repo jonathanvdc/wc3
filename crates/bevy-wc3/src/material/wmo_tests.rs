@@ -221,6 +221,7 @@ fn shared_world_equations_parse_and_validate() {
         .collect::<Vec<_>>()
         .join("\n")
         .replace("#{MATERIAL_BIND_GROUP}", "2");
+    let source = format!("{}\n{source}", super::super::shared_material_data_types());
     let module =
         parse_str(&source).unwrap_or_else(|error| panic!("{}", error.emit_to_string(&source)));
     Validator::new(ValidationFlags::all(), Capabilities::all())

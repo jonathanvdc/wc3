@@ -7,7 +7,7 @@ use crate::effects::sprites::ParticleRenderPlugin;
 use crate::effects::trails::RibbonRenderPlugin;
 use crate::image_replacements::{refresh_image_replacements, ReplacementImages};
 use crate::layers::synchronize_model_layers;
-use crate::material::register_material_uniform_buffers;
+use crate::material::{register_material_image_updates, register_material_uniform_buffers};
 use crate::runtime::{
     publish_affine_poses, simulate_model_particles, synchronize_model_cameras,
     synchronize_mounted_models,
@@ -38,6 +38,7 @@ impl Plugin for Wc3BevyPlugin {
         embedded_asset!(app, "shaders/wc3_prepass.wgsl");
         embedded_asset!(app, "shaders/material.wgsl");
         embedded_asset!(app, "shaders/combiner.wgsl");
+        embedded_asset!(app, "shaders/material_access.wgsl");
         embedded_asset!(app, "shaders/surface_images.wgsl");
         embedded_asset!(app, "shaders/world_composition.wgsl");
         embedded_asset!(app, "shaders/model_io.wgsl");
@@ -65,6 +66,7 @@ impl Plugin for Wc3BevyPlugin {
             RibbonRenderPlugin,
         ));
         register_material_uniform_buffers(app);
+        register_material_image_updates(app);
         app.add_message::<ModelEvent>();
         configure(app);
         app.add_systems(

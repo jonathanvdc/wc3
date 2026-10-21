@@ -1,22 +1,14 @@
-struct Combiner {
-    uv_transform: mat3x3<f32>, third_transform: mat3x3<f32>,
-    fourth_transform: mat3x3<f32>, additional_coordinates: vec4<u32>,
-    coordinates: vec4<u32>, weights: vec4<f32>,
-    guild_background: vec4<f32>, guild_emblem: vec4<f32>, guild_border: vec4<f32>,
-    mode: vec4<u32>, clip: vec4<f32>,
-};
-@group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> combiner: Combiner;
-@group(#{MATERIAL_BIND_GROUP}) @binding(101) var secondary: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(102) var secondary_sampler: sampler;
-@group(#{MATERIAL_BIND_GROUP}) @binding(111) var tertiary: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(112) var tertiary_sampler: sampler;
-
-@group(#{MATERIAL_BIND_GROUP}) @binding(114) var fourth: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(115) var fourth_sampler: sampler;
-
+#import "embedded://bevy_wc3/shaders/material_access.wgsl"::Combiner
 struct Composed { color: vec4<f32>, emission: vec3<f32>, };
 // Surface tint and opacity stay independent of texture masks and additive color.
-fn compose(a:vec4<f32>,b:vec4<f32>,c:vec4<f32>,d:vec4<f32>,tint:vec4<f32>) -> Composed {
+fn compose(
+    a: vec4<f32>,
+    b: vec4<f32>,
+    c: vec4<f32>,
+    d: vec4<f32>,
+    tint: vec4<f32>,
+    combiner: Combiner
+) -> Composed {
     let mode=combiner.mode.x;
     let weights=combiner.weights;
     var rgb=a.rgb;

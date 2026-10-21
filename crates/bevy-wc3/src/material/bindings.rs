@@ -2,16 +2,16 @@
 
 use super::{CombinerUniform, HdUniform, ModelMaterialExtension, ModelMaterialKey, WorldUniform};
 use bevy::ecs::system::{
-    lifetimeless::{SRes, SResMut},
     SystemParamItem,
+    lifetimeless::{SRes, SResMut},
 };
-use bevy::prelude::{App, Handle, Image, Resource};
+use bevy::prelude::{App, Handle, Image, Resource, StandardMaterial};
 use bevy::render::render_asset::RenderAssets;
-use bevy::render::render_resource::encase::{internal::WriteInto, UniformBuffer};
+use bevy::render::render_resource::encase::{UniformBuffer, internal::WriteInto};
 use bevy::render::render_resource::{
-    AsBindGroup, AsBindGroupError, BindGroupLayout, BindGroupLayoutEntry, BindingType, Buffer,
-    BufferBindingType, BufferInitDescriptor, BufferUsages, OwnedBindingResource, ShaderStages,
-    ShaderType, UnpreparedBindGroup,
+    AsBindGroup, AsBindGroupError, BindGroupLayout, BindGroupLayoutEntry, BindingType,
+    BindlessDescriptor, BindlessSlabResourceLimit, Buffer, BufferBindingType, BufferInitDescriptor,
+    BufferUsages, OwnedBindingResource, ShaderStages, ShaderType, UnpreparedBindGroup,
 };
 use bevy::render::renderer::RenderDevice;
 use bevy::render::storage::GpuShaderBuffer;
@@ -19,6 +19,9 @@ use bevy::render::texture::{FallbackImage, GpuImage};
 use bevy::render::{GpuResourceAppExt, RenderApp};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+#[path = "bindless.rs"]
+mod bindless;
+use bindless::BindlessSnapshot;
 
 #[derive(AsBindGroup)]
 struct ImageBindings {
@@ -133,6 +136,17 @@ impl AsBindGroup for ModelMaterialExtension {
         ),
         Option<SResMut<MaterialUniformBuffers>>,
     );
+    fn bindless_slot_count() -> Option<BindlessSlabResourceLimit> {
+        BindlessSnapshot::bindless_slot_count()
+    }
+    fn bindless_supported(device: &RenderDevice) -> bool {
+        // ExtendedMaterial delegates layout/preparation to both halves independently.
+        // Keep the extension fallback in lockstep with its public StandardMaterial base.
+        StandardMaterial::bindless_supported(device) && BindlessSnapshot::bindless_supported(device)
+    }
+    fn bindless_descriptor() -> Option<BindlessDescriptor> {
+        BindlessSnapshot::bindless_descriptor()
+    }
     fn label() -> &'static str {
         "ModelMaterialExtension"
     }
@@ -147,6 +161,11 @@ impl AsBindGroup for ModelMaterialExtension {
         force_no_bindless: bool,
     ) -> Result<UnpreparedBindGroup, AsBindGroupError> {
         let (images, cache) = param;
+        if !force_no_bindless && Self::bindless_supported(device) {
+            return BindlessSnapshot::from(self)
+                .unprepared_bind_group(layout, device, images, false);
+        }
+
         // Preserve Bevy's image fallback/retry semantics before allocating uniforms.
         let mut group = ImageBindings::from(self).unprepared_bind_group(
             layout,
@@ -182,6 +201,9 @@ impl AsBindGroup for ModelMaterialExtension {
         device: &RenderDevice,
         force_no_bindless: bool,
     ) -> Vec<BindGroupLayoutEntry> {
+        if !force_no_bindless && Self::bindless_supported(device) {
+            return BindlessSnapshot::bind_group_layout_entries(device, false);
+        }
         let mut entries = ImageBindings::bind_group_layout_entries(device, force_no_bindless);
         entries.extend([
             uniform_binding::<CombinerUniform>(100),

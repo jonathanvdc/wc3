@@ -1,6 +1,6 @@
 #import "embedded://bevy_wc3/shaders/model_io.wgsl"::VertexOutput
 #ifdef MODEL_GENERATED_COORDS
-#import "embedded://bevy_wc3/shaders/combiner.wgsl"::combiner
+#import "embedded://bevy_wc3/shaders/material_access.wgsl"::load_combiner
 #import bevy_pbr::mesh_view_bindings::view
 #endif
 // Adapted from Bevy v0.19.1: crates/bevy_pbr/src/render/mesh.wgsl
@@ -178,6 +178,7 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     let facing=max(dot(-normalize(view_position),view_normal),0.0);
     out.edge_opacity=clamp(2.7*facing*facing-0.4,0.0,1.0);
 #endif
+    let combiner = load_combiner(vertex_no_morph.instance_index);
     if combiner.coordinates.x!=0u || combiner.coordinates.y!=0u || combiner.coordinates.w==1u {
     let reflected=reflect(-normalize(view_position),view_normal)+vec3(0.0,0.0,1.0);
     let generated=0.5*reflected.xy/max(length(reflected),0.000001)+vec2(0.5);

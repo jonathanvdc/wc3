@@ -36,8 +36,9 @@
 #import bevy_pbr::decal::forward::get_forward_decal_info
 #endif
 
-#import "embedded://bevy_wc3/shaders/combiner.wgsl"::{combiner,secondary,secondary_sampler,tertiary,tertiary_sampler,fourth,fourth_sampler,compose}
-#import "embedded://bevy_wc3/shaders/world_composition.wgsl"::{world,world_color}
+#import "embedded://bevy_wc3/shaders/material_access.wgsl"::{load_combiner,load_world,load_hd,load_standard,sample_base,sample_secondary,sample_tertiary,sample_fourth}
+#import "embedded://bevy_wc3/shaders/combiner.wgsl"::compose
+#import "embedded://bevy_wc3/shaders/world_composition.wgsl"::world_color
 #import bevy_pbr::pbr_bindings
 #import "embedded://bevy_wc3/shaders/hd.wgsl"::apply_hd
 
@@ -56,6 +57,9 @@ fn fragment(
 #endif
 
     var in = vertex_output;
+    let combiner = load_combiner(in.instance_index);
+    let world = load_world(in.instance_index);
+    let material = load_standard(in.instance_index);
 
     // If we're in the crossfade section of a visibility range, conditionally
     // discard the fragment according to the visibility pattern.
@@ -85,7 +89,7 @@ fn fragment(
     var pbr_input=pbr_input_from_standard_material(to_bevy(in),is_front);
 
     if world.flags.x != 0u && world.flags.y != 0u {
-        pbr_input.material.base_color.a = pbr_bindings::material.base_color.a;
+        pbr_input.material.base_color.a = material.base_color.a;
     }
 
     if world.composition.x != 0u {
@@ -120,7 +124,7 @@ fn fragment(
         var uv1=vec2(0.0);
         var uv2=vec2(0.0);
 #ifdef VERTEX_UVS_A
-        uv0=(pbr_bindings::material.uv_transform*vec3(in.uv,1.0)).xy;
+        uv0=(material.uv_transform*vec3(in.uv,1.0)).xy;
     uv1=(combiner.uv_transform*vec3(in.uv,1.0)).xy;
 #endif
 #ifdef VERTEX_UVS_B
@@ -150,22 +154,26 @@ fn fragment(
     if combiner.additional_coordinates.x==3u {uv3=in.uv_c;}
 #endif
     uv3=(combiner.fourth_transform*vec3(uv3,1.0)).xy;
-    d=textureSample(fourth,fourth_sampler,uv3);
+    d = sample_fourth(uv3, in.instance_index);
     }
 
         var a=vec4(1.0);
         if (pbr_input.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_BASE_COLOR_TEXTURE_BIT)!=0u {
-            a=textureSample(pbr_bindings::base_color_texture,pbr_bindings::base_color_sampler,uv0);
+            a = sample_base(uv0, in.instance_index);
         }
         var b=vec4(1.0);
-        if combiner.coordinates.z>1u {b=textureSample(secondary,secondary_sampler,uv1);}
+        if combiner.coordinates.z > 1u {
+            b = sample_secondary(uv1, in.instance_index);
+        }
         var c=vec4(1.0);
-        if combiner.coordinates.z>2u {c=textureSample(tertiary,tertiary_sampler,uv2);}
-        var tint=pbr_bindings::material.base_color;
+        if combiner.coordinates.z > 2u {
+            c = sample_tertiary(uv2, in.instance_index);
+        }
+        var tint=material.base_color;
 #ifdef VERTEX_COLORS
         tint*=in.color;
 #endif
-        let combined=compose(a,b,c,d,tint);
+        let combined = compose(a, b, c, d, tint, combiner);
         pbr_input.material.base_color=combined.color;
         if (pbr_input.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_UNLIT_BIT)!=0u {
             pbr_input.material.base_color=vec4(combined.color.rgb+combined.emission,combined.color.a);

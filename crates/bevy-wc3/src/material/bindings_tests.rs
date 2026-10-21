@@ -4,9 +4,9 @@ use bevy::asset::uuid_handle;
 use bevy::ecs::system::SystemState;
 use bevy::pbr::ExtendedMaterial;
 use bevy::prelude::*;
+use bevy::render::RenderStartup;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::render_resource::{BindGroupEntry, BufferId};
-use bevy::render::RenderStartup;
 use bevy::winit::WinitPlugin;
 use std::thread::yield_now;
 use std::time::{Duration, Instant};
@@ -71,14 +71,14 @@ fn prepare(
     material: &ModelMaterialExtension,
 ) -> Result<UnpreparedBindGroup, AsBindGroupError> {
     let device = world.resource::<RenderDevice>().clone();
-    let entries = ModelMaterialExtension::bind_group_layout_entries(&device, false);
+    let entries = ModelMaterialExtension::bind_group_layout_entries(&device, true);
     let layout = device.create_bind_group_layout("material cache test", &entries);
     let mut params = SystemState::<<ModelMaterialExtension as AsBindGroup>::Param>::new(world);
     let group = material.unprepared_bind_group(
         &layout,
         &device,
         &mut params.get_mut(world).unwrap(),
-        false,
+        true,
     )?;
     let entries: Vec<_> = group
         .bindings
@@ -170,11 +170,13 @@ fn material_uniform_resources_share_evict_reset_and_retry_without_changing_image
         prepare(world, &material),
         Err(AsBindGroupError::RetryNextUpdate)
     ));
-    assert!(world
-        .resource::<MaterialUniformBuffers>()
-        .combiner
-        .entries
-        .is_empty());
+    assert!(
+        world
+            .resource::<MaterialUniformBuffers>()
+            .combiner
+            .entries
+            .is_empty()
+    );
     let handle = material.secondary.clone().unwrap();
     let image = world.resource::<FallbackImage>().d2.clone();
     world
@@ -202,4 +204,76 @@ fn material_uniform_resources_share_evict_reset_and_retry_without_changing_image
     let uncached_a = uniform_ids(&prepare(world, &material).unwrap());
     let uncached_b = uniform_ids(&prepare(world, &material).unwrap());
     assert!(uncached_a.into_iter().zip(uncached_b).all(|(a, b)| a != b));
+}
+
+#[test]
+#[ignore = "requires a host GPU; run explicitly with --ignored --exact"]
+fn bindless_snapshot_emits_plain_data_without_uniform_buffer_arrays() {
+    let mut app = gpu_app();
+    let world = app.sub_app_mut(RenderApp).world_mut();
+    let device = world.resource::<RenderDevice>().clone();
+    if !ModelMaterialExtension::bindless_supported(&device) {
+        return;
+    }
+    let entries = ModelMaterialExtension::bind_group_layout_entries(&device, false);
+    let layout = device.create_bind_group_layout("bindless data test", &entries);
+    let mut params = SystemState::<<ModelMaterialExtension as AsBindGroup>::Param>::new(world);
+    let material = ModelMaterialExtension::default();
+    let group = material
+        .unprepared_bind_group(&layout, &device, &mut params.get_mut(world).unwrap(), false)
+        .unwrap();
+    assert_eq!(group.bindings.len(), 13);
+    assert!(
+        group.bindings.iter().any(
+            |(slot, resource)| *slot == 50 && matches!(resource, OwnedBindingResource::Data(_))
+        )
+    );
+    assert!(
+        !group
+            .bindings
+            .iter()
+            .any(|(_, resource)| matches!(resource, OwnedBindingResource::Buffer(_)))
+    );
+    let cached_entries = ModelMaterialExtension::bind_group_layout_entries(&device, true);
+    assert_eq!(
+        cached_entries
+            .iter()
+            .map(|entry| entry.binding)
+            .collect::<Vec<_>>(),
+        [
+            100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 114, 115
+        ]
+    );
+    assert!(
+        entries
+            .iter()
+            .any(|entry| entry.binding == 116 && entry.count.is_none())
+    );
+    let data_before = group.bindings.iter().find(|(slot, _)| *slot == 50).unwrap();
+    let OwnedBindingResource::Data(before) = &data_before.1 else {
+        panic!("plain data")
+    };
+    let mut edited = material;
+    edited.combiner.weights.y = 0.125;
+    let changed = edited
+        .unprepared_bind_group(&layout, &device, &mut params.get_mut(world).unwrap(), false)
+        .unwrap();
+    let data_after = changed
+        .bindings
+        .iter()
+        .find(|(slot, _)| *slot == 50)
+        .unwrap();
+    let OwnedBindingResource::Data(after) = &data_after.1 else {
+        panic!("plain data")
+    };
+    assert_ne!(
+        before.0, after.0,
+        "ordinary asset edits change the row published to Bevy"
+    );
+    edited.secondary = Some(uuid_handle!("ff8cc27f-5644-48f7-811a-24f24be839ee"));
+    assert!(matches!(
+        edited.unprepared_bind_group(&layout, &device, &mut params.get_mut(world).unwrap(), false),
+        Err(AsBindGroupError::RetryNextUpdate)
+    ));
+    // Bevy's material allocator, not this direct helper, creates final array bindgroups.
 }
