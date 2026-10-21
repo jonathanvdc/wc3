@@ -18,7 +18,8 @@ pub(super) struct ModelProjection {
     pub birth: f64,
     pub lifetime: f64,
     pub age: f64,
-    pub transform: Transform,
+    pub transform: Option<Transform>,
+    pub initial_transform: Transform,
     pub visible: bool,
 }
 #[derive(Clone, Copy)]
@@ -41,8 +42,6 @@ pub(crate) type ModelOutputs<'w, 's> = Query<
 struct Slot {
     entity: Entity,
     seen: u64,
-    transform: Transform,
-    visible: bool,
     effective_visible: bool,
 }
 #[derive(Default)]
@@ -73,7 +72,8 @@ impl ModelChildren {
                 epoch: self.epoch,
                 ordinal: sample.ordinal,
             };
-            let effective_visible = sample.visible && context.visible;
+            let visible = sample.visible && sample.transform.is_some();
+            let effective_visible = visible && context.visible;
             let slot = self.slots.entry(key).or_insert_with(|| {
                 let entity = spawn_owned_model(
                     commands,
@@ -85,7 +85,7 @@ impl ModelChildren {
                             root: context.root,
                             birth: sample.birth,
                             lifetime: sample.lifetime,
-                            visible: sample.visible,
+                            visible,
                             first_clip_pending: true,
                         },
                         Playback {
@@ -95,7 +95,7 @@ impl ModelChildren {
                             driving_camera: context.driving_camera,
                             ..Default::default()
                         },
-                        sample.transform,
+                        sample.transform.unwrap_or(sample.initial_transform),
                         if effective_visible {
                             Visibility::Inherited
                         } else {
@@ -106,15 +106,15 @@ impl ModelChildren {
                 Slot {
                     entity,
                     seen: generation,
-                    transform: sample.transform,
-                    visible: sample.visible,
                     effective_visible,
                 }
             });
             slot.seen = generation;
             if let Ok((mut transform, mut child, mut clock)) = outputs.get_mut(slot.entity) {
-                if *transform != sample.transform {
-                    *transform = sample.transform;
+                if let Some(sample) = sample.transform {
+                    if *transform != sample {
+                        *transform = sample;
+                    }
                 }
                 let desired = if effective_visible {
                     Visibility::Inherited
@@ -124,16 +124,14 @@ impl ModelChildren {
                 if slot.effective_visible != effective_visible {
                     commands.entity(slot.entity).insert(desired);
                 }
-                if child.visible != sample.visible {
-                    child.visible = sample.visible;
+                if child.visible != visible {
+                    child.visible = visible;
                 }
                 if clock.clip_time != sample.age || clock.shared_time != sample.age {
                     clock.clip_time = sample.age;
                     clock.shared_time = sample.age;
                 }
             }
-            slot.transform = sample.transform;
-            slot.visible = sample.visible;
             slot.effective_visible = effective_visible;
         }
         self.slots.retain(|_, slot| {
@@ -146,3 +144,7 @@ impl ModelChildren {
         });
     }
 }
+
+#[cfg(test)]
+#[path = "m2_models_tests.rs"]
+mod tests;

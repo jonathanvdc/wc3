@@ -33,9 +33,10 @@ once, in radians per second, and integrates that tumble by particle age.
 
 The child retains its own material colors and opacity. Parent particle color and
 alpha curves are not material overrides. Model coordinate conversion applies
-once, separately from authored particle size. Collapsed frames omit the affected
-projection; signed scale is retained, while shear is approximated by Bevy's
-rotation/scale Transform. Native tumble distributions, unit-scale conventions,
+once, separately from authored particle size. Collapsed birth frames omit the birth. A temporarily collapsed attached frame
+hides its existing actor while retaining its identity, clock, and last finite
+Transform; valid projection makes that same actor visible again. Signed scale
+is retained, while shear is approximated by Bevy's rotation/scale Transform. Native tumble distributions, unit-scale conventions,
 and attached model-particle fidelity remain unverified.
 
 ## Playback, timing, and ownership

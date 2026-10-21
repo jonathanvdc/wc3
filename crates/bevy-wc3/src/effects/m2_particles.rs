@@ -127,6 +127,7 @@ struct GeometryEmitter {
     maximum: Vec3,
 }
 struct GeometryBirth {
+    initial_transform: Transform,
     ordinal: u64,
     basis: ModelBasis,
     omega: Vec3,
@@ -894,54 +895,10 @@ impl RuntimeM2Particles {
             ) {
                 models.projections.clear();
                 for birth in &state.births {
-                    let projection = (|| {
-                        let sidecar = models.births.get(birth.appearance_index as usize)?;
-                        let seconds = (frame.time - birth.time).max(0.) as f32;
-                        let style = emitter
-                            .age_appearance
-                            .as_ref()
-                            .map(|appearance| appearance.sample(&sidecar.appearance, seconds))
-                            .unwrap_or_default();
-                        let age = ModelTime::seconds(
-                            (f64::from(seconds) / f64::from(birth.lifetime)).clamp(0., 1.),
-                        )
-                        .ok()?;
-                        let size = emitter
-                            .appearance
-                            .scale
-                            .as_ref()
-                            .and_then(|curve| curve.sample(age))
-                            .unwrap_or(Vec2::ONE);
-                        let (position, _) = emitter.motion(birth, frame.time);
-                        let position = if emitter.flags.attached() {
-                            node.transform_point3(position)
-                        } else {
-                            position
-                        };
-                        let basis = if emitter.flags.attached() {
-                            ModelBasis::from_frame(node)?
-                        } else {
-                            sidecar.basis
-                        };
-                        let transform = basis.sample(
-                            position,
-                            size,
-                            style.scale,
-                            model.template.coordinates.parent_basis.scale,
-                            sidecar.omega,
-                            seconds,
-                        )?;
-                        Some(ModelProjection {
-                            ordinal: sidecar.ordinal,
-                            birth: birth.time,
-                            lifetime: f64::from(birth.lifetime),
-                            age: f64::from(seconds),
-                            transform,
-                            visible: style.visible,
-                        })
-                    })();
-                    if let Some(projection) = projection {
-                        models.projections.push(projection);
+                    if let Some(sidecar) = models.births.get(birth.appearance_index as usize) {
+                        models.projections.push(
+                            emitter.model_projection(birth, sidecar, model, frame.time, node),
+                        );
                     }
                 }
                 models.children.synchronize(
@@ -1115,8 +1072,37 @@ impl BirthContext<'_, '_, '_> {
                         Some(BirthAppearance::Age(value)) => value,
                         None => Default::default(),
                     };
+                    let initial_size = emitter
+                        .appearance
+                        .scale
+                        .as_ref()
+                        .and_then(|curve| curve.sample(ModelTime::seconds(0.).unwrap()))
+                        .unwrap_or(Vec2::ONE);
+                    let initial_twinkle = emitter
+                        .age_appearance
+                        .as_ref()
+                        .map_or(1., |style| style.sample(&appearance, 0.).scale);
+                    let original_origin =
+                        birth.origin - self.follow * (1. - fraction.clamp(0., 1.));
+                    let initial_position = if emitter.flags.attached() {
+                        birth_node.transform_point3(original_origin)
+                    } else {
+                        original_origin
+                    };
+                    let Some(initial_transform) = basis.sample(
+                        initial_position,
+                        initial_size,
+                        initial_twinkle,
+                        model.template.coordinates.parent_basis.scale,
+                        Vec3::ZERO,
+                        0.,
+                    ) else {
+                        state.dropped = state.dropped.saturating_add(1);
+                        return;
+                    };
                     birth.appearance_index = models.births.len() as u32;
                     models.births.push(GeometryBirth {
+                        initial_transform,
                         ordinal,
                         basis,
                         omega: tumble(model.minimum, model.maximum, unit, negate),
@@ -1143,6 +1129,62 @@ fn interpolated_transform(a: Mat4, b: Mat4, t: f32) -> Mat4 {
     Mat4::from_scale_rotation_translation(sa.lerp(sb, t), ra.slerp(rb, t), ta.lerp(tb, t))
 }
 impl Emitter {
+    fn model_projection(
+        &self,
+        birth: &Birth,
+        sidecar: &GeometryBirth,
+        model: &GeometryEmitter,
+        time: f64,
+        node: Mat4,
+    ) -> ModelProjection {
+        let seconds = (time - birth.time).max(0.) as f32;
+        let style = self
+            .age_appearance
+            .as_ref()
+            .map(|appearance| appearance.sample(&sidecar.appearance, seconds))
+            .unwrap_or_default();
+        let transform = (|| {
+            let age =
+                ModelTime::seconds((f64::from(seconds) / f64::from(birth.lifetime)).clamp(0., 1.))
+                    .ok()?;
+            let size = self
+                .appearance
+                .scale
+                .as_ref()
+                .and_then(|curve| curve.sample(age))
+                .unwrap_or(Vec2::ONE);
+            let (position, _) = self.motion(birth, time);
+            let position = if self.flags.attached() {
+                node.transform_point3(position)
+            } else {
+                position
+            };
+            let basis = if self.flags.attached() {
+                ModelBasis::from_frame(node)?
+            } else {
+                sidecar.basis
+            };
+            basis.sample(
+                position,
+                size,
+                style.scale,
+                model.template.coordinates.parent_basis.scale,
+                sidecar.omega,
+                seconds,
+            )
+        })();
+        // Every living birth remains a pool member even when its attached frame
+        // temporarily collapses. The pool retains its hidden, finite actor.
+        ModelProjection {
+            ordinal: sidecar.ordinal,
+            birth: birth.time,
+            lifetime: f64::from(birth.lifetime),
+            age: f64::from(seconds),
+            transform,
+            initial_transform: sidecar.initial_transform,
+            visible: style.visible,
+        }
+    }
     fn retire_implosion(&self, state: &mut EmitterInstance, interval: ImplosionInterval) {
         if self.generator != ParticleGenerator::Sphere
             || !self.flags.implosion_filter()
