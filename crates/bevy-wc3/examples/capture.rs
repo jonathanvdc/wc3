@@ -1239,7 +1239,7 @@ fn step(app: &mut App, dt: Duration) -> CaptureResult<()> {
         return Err(format!(
             "particle programme {:?} failed: {}",
             emitter.feature,
-            emitter.error.as_deref().unwrap()
+            emitter.error.as_ref().unwrap()
         )
         .into());
     }

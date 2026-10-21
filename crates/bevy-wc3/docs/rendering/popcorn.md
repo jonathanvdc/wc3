@@ -247,8 +247,14 @@ Programmes inside particle-owned models also consume the enclosing
 [model-particle tree's shared emission-step allowance](prem.md#limits).
 `ParticleProgramEmitter` exposes living particles (including controllers), billboard
 `sprites` counts, `ribbon_segments`, `omitted_geometry`, simulation omissions,
-suppressed births, skipped seconds and checked execution errors. Despawn removes
-the simulation and its render entities.
+suppressed births, skipped seconds and checked execution errors. Its `error`
+retains the core `EffectRuntimeError`: inspect `layer` and `offset` to locate the
+failed programme instruction, or format the value with `Display` for a log.
+These optional fields remain absent when that context is unavailable. A fault in
+an existing instance stops execution until playback resets; reset retries execution
+and reports a new failure if its cause persists. An instantiation failure requires
+correcting the preparation or limits before spawning again. Despawn removes the
+simulation and its render entities.
 
 The scalar evaluator uses shared local scratch and persistent particle storage;
 steady-state execution performs no allocation within its configured capacities.

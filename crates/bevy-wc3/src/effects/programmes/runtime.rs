@@ -58,8 +58,11 @@ pub struct ParticleProgramEmitter {
     pub omitted_spatial_writes: u64,
     /// Exact spatial lookups omitted by the shared row-check allowance.
     pub omitted_spatial_queries: u64,
-    /// A checked execution failure; the instance remains stopped until playback resets.
-    pub error: Option<String>,
+    /// Checked core failure, retaining its layer and original instruction offset.
+    /// Execution faults stop an existing instance until playback resets. Preparation
+    /// or limit failures require correcting the cause before respawning.
+    /// Format the value with `Display` for logs.
+    pub error: Option<EffectRuntimeError>,
 }
 #[derive(Clone)]
 struct Emitter {
@@ -111,7 +114,7 @@ struct State {
     sprites: usize,
     ribbon_segments: usize,
     omitted_geometry: usize,
-    error: Option<String>,
+    error: Option<EffectRuntimeError>,
 }
 #[derive(Default)]
 pub(crate) struct ProgramInstances {
@@ -298,10 +301,10 @@ impl RuntimeProgramParticles {
                                 });
                             match configured {
                                 Ok(()) => (Some(instance), None),
-                                Err(error) => (None, Some(error.to_string())),
+                                Err(error) => (None, Some(error)),
                             }
                         }
-                        Err(error) => (None, Some(error.to_string())),
+                        Err(error) => (None, Some(error)),
                     };
                     State {
                         entity,
@@ -362,7 +365,7 @@ impl RuntimeProgramParticles {
                     Ok(()) => state.started = true,
                     Err(error) => {
                         instance.stop();
-                        state.error = Some(error.to_string());
+                        state.error = Some(error);
                     }
                 }
             }
@@ -441,7 +444,7 @@ impl RuntimeProgramParticles {
                     })();
                     if let Err(error) = result {
                         instance.stop();
-                        state.error = Some(error.to_string());
+                        state.error = Some(error);
                     }
                 }
             }
@@ -537,7 +540,7 @@ impl RuntimeProgramParticles {
                 output.sprites = state.sprites;
                 output.ribbon_segments = state.ribbon_segments;
                 output.omitted_geometry = state.omitted_geometry;
-                if output.error.as_deref() != state.error.as_deref() {
+                if output.error != state.error {
                     output.error = state.error.clone();
                 }
                 if let Some(instance) = &state.instance {
@@ -844,3 +847,7 @@ fn scene_context(
 #[cfg(test)]
 #[path = "camera_tests.rs"]
 mod camera_tests;
+
+#[cfg(test)]
+#[path = "runtime_error_tests.rs"]
+mod runtime_error_tests;
