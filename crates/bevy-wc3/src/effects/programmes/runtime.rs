@@ -54,6 +54,10 @@ pub struct ParticleProgramEmitter {
     pub suppressed: u64,
     /// Time discarded by the simulation step budget.
     pub skipped_seconds: f64,
+    /// Spatial commits omitted by row/draft capacity or unavailable data.
+    pub omitted_spatial_writes: u64,
+    /// Exact spatial lookups omitted by the shared row-check allowance.
+    pub omitted_spatial_queries: u64,
     /// A checked execution failure; the instance remains stopped until playback resets.
     pub error: Option<String>,
 }
@@ -230,6 +234,8 @@ impl RuntimeProgramParticles {
                                 omitted: 0,
                                 suppressed: 0,
                                 skipped_seconds: 0.,
+                                omitted_spatial_writes: 0,
+                                omitted_spatial_queries: 0,
                                 error: None,
                             },
                             ChildOf(basis),
@@ -541,6 +547,8 @@ impl RuntimeProgramParticles {
                         .saturating_add(stats.omitted_executions);
                     output.suppressed = stats.suppressed_births;
                     output.skipped_seconds = stats.skipped_seconds;
+                    output.omitted_spatial_writes = stats.omitted_spatial_writes;
+                    output.omitted_spatial_queries = stats.omitted_spatial_queries;
                 }
             }
         }

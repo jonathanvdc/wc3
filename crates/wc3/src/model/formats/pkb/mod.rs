@@ -12,6 +12,8 @@ mod graph;
 mod layer;
 mod rendering;
 mod samplers;
+mod spatial;
+pub use spatial::{SpatialLayer, SpatialPayload};
 mod script;
 pub use bindings::{
     EntryPoint, ExternalDeclaration, FunctionArgument, FunctionDeclaration, NativeType,

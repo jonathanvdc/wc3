@@ -826,3 +826,6 @@ fn birth_serial_orders_same_time_births_after_slot_reuse_and_resets_cleanly() {
 
 #[path = "scene_runtime_tests.rs"]
 mod scene_runtime_tests;
+
+#[path = "spatial_runtime_tests.rs"]
+mod spatial_runtime_tests;

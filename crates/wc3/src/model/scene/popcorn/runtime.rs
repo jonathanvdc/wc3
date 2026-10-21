@@ -3,6 +3,7 @@ use super::callbacks::{ExecutionHost, Scratch};
 use super::graph::*;
 use super::lifetime::Lifetime;
 use super::payload::{Handle as PayloadHandle, Storage as PayloadStorage};
+use super::spatial::Store as SpatialStore;
 use super::{Failure, State, Value, ValueType};
 use glam::Mat4;
 use std::array::from_fn;
@@ -19,6 +20,10 @@ use std::sync::Arc;
 pub struct EffectLimits {
     /// Total reusable particle slots, including renderer-free controllers.
     pub particles: usize,
+    /// Entries retained per shared spatial resource in each of two snapshots.
+    pub spatial_entries: usize,
+    /// Spatial candidate rows examined across one whole advance, not per step.
+    pub spatial_checks_per_update: usize,
     /// Maximum pending routed births.
     pub pending_events: usize,
     /// Maximum generated occurrence times retained by one host invocation.
@@ -40,6 +45,8 @@ impl Default for EffectLimits {
     fn default() -> Self {
         Self {
             particles: 1024,
+            spatial_entries: 1024,
+            spatial_checks_per_update: 1_048_576,
             pending_events: 8192,
             occurrences: 8192,
             handles: 64,
@@ -54,6 +61,10 @@ impl Default for EffectLimits {
 /// Observable cumulative bounded-work accounting.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct EffectStats {
+    /// Spatial commits omitted by entry/draft capacity or unavailable row data.
+    pub omitted_spatial_writes: u64,
+    /// Exact spatial queries omitted by the shared per-advance row-check budget.
+    pub omitted_spatial_queries: u64,
     /// Successfully initialized particles, including controllers.
     pub spawned: u64,
     /// Retired particles, including explicit stop-boundary spawners.
@@ -218,6 +229,8 @@ impl ParticleView<'_> {
 }
 /// Reusable pooled state; callers supply the matching shared programme explicitly.
 pub struct EffectInstance {
+    spatial: Vec<SpatialStore>,
+    spatial_checks: usize,
     identity: Arc<()>,
     layout: Vec<Box<[Option<ValueType>]>>,
     particles: Vec<Particle>,
@@ -333,10 +346,26 @@ impl EffectProgram {
             .and_then(|bytes| {
                 bytes.checked_add(limits.pending_events.checked_mul(size_of::<Spawn>())?)
             })
-            .and_then(|bytes| bytes.checked_add(Scratch::storage_bytes(limits, payload_width)?))
+            .and_then(|bytes| {
+                bytes.checked_add(Scratch::storage_bytes(
+                    limits,
+                    payload_width,
+                    !self.inner.spatial.is_empty(),
+                )?)
+            })
             .and_then(|bytes| {
                 bytes.checked_add(limits.particles.checked_mul(2 * size_of::<usize>())?)
             });
+        let bytes = bytes.and_then(|bytes| {
+            if self.inner.spatial.is_empty() {
+                Some(bytes)
+            } else {
+                bytes.checked_add(
+                    SpatialStore::storage_bytes(limits.spatial_entries)?
+                        .checked_mul(self.inner.spatial.len())?,
+                )
+            }
+        });
         let bytes = bytes.and_then(|bytes| {
             bytes.checked_add(PayloadStorage::bytes(
                 limits.particles,
@@ -364,6 +393,15 @@ impl EffectProgram {
             })
             .collect();
         Ok(EffectInstance {
+            spatial: self
+                .inner
+                .spatial
+                .iter()
+                .map(|resource| {
+                    SpatialStore::new(limits.spatial_entries, resource.cell_size).map_err(failure)
+                })
+                .collect::<Result<_, _>>()?,
+            spatial_checks: limits.spatial_checks_per_update,
             identity: self.inner.identity.clone(),
             layout: self
                 .inner
@@ -376,7 +414,7 @@ impl EffectProgram {
             free: (0..limits.particles).rev().collect(),
             fields: FieldPlanes::new(&widths, limits.particles),
             pending: BinaryHeap::with_capacity(limits.pending_events),
-            scratch: Scratch::new(limits, payload_width),
+            scratch: Scratch::new(limits, payload_width, !self.inner.spatial.is_empty()),
             payload: PayloadStorage::new(limits.particles, limits.pending_events, payload_width)
                 .map_err(failure)?,
             vm_scratch: State::scratch_for_programs(programs.iter().copied()),
@@ -429,6 +467,10 @@ impl EffectInstance {
         if !inputs.world_from_effect.is_finite() {
             return Err(failure("effect transform must be finite"));
         }
+        for store in &mut self.spatial {
+            store.clear();
+        }
+        self.spatial_checks = self.limits.spatial_checks_per_update;
         self.active.clear();
         self.free.clear();
         self.free.extend((0..self.particles.len()).rev());
@@ -602,6 +644,7 @@ impl EffectInstance {
             return Ok(());
         }
         self.payload.reset_work();
+        self.spatial_checks = self.limits.spatial_checks_per_update;
         let end = self.time + delta;
         let mut steps = 0;
         let mut work = 0;
@@ -622,6 +665,9 @@ impl EffectInstance {
             steps += 1;
         }
         if self.time < end {
+            for store in &mut self.spatial {
+                store.clear();
+            }
             self.stats.skipped_seconds += end - self.time;
             self.time = end;
             let mut index = 0;
@@ -664,6 +710,9 @@ impl EffectInstance {
         inputs: SceneInputs,
         work: &mut usize,
     ) -> Result<(), EffectRuntimeError> {
+        for store in &mut self.spatial {
+            store.begin_tick();
+        }
         let mut index = 0;
         while index < self.active.len() {
             let slot = self.active[index];
@@ -880,6 +929,8 @@ impl EffectInstance {
             generation: particle.generation,
         };
         let mut host = ExecutionHost {
+            spatial: &mut self.spatial,
+            spatial_checks: &mut self.spatial_checks,
             graph: &program.inner,
             bound,
             fields: &mut self.fields,

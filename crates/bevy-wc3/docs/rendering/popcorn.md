@@ -105,23 +105,22 @@ simulation still has one result per model instance; use separate instances for
 independent simulation cameras. Exact native camera behavior remains unverified.
 
 `SceneContext` is a checked host capability, not collision support. Scene
-intersection, spatial stores and unknown world-to-world
-operations still require additional interpreters; no literal-zero collision
-response is supplied.
+intersection and unknown world-to-world operations still require additional
+interpreters; no literal-zero collision response is supplied.
 
 Procedural turbulence uses the checked core's original coherent curl-field
 approximation. Prepared samplers share immutable octave controls; each model
 instance owns its bounded effect-global oscillator cache. The sampler shares an
-original seeded scalar/quadrature basis with eight discrete temporal frequency bands;
-queries use analytic interpolation without per-particle trigonometry. Native axes and units are not
+original seeded scalar/quadrature basis with eight discrete temporal frequency bands.
+Field interpolation uses no trigonometry; a temporal cache miss evaluates eight
+sine/cosine pairs, and interleaving more than four moving samplers can evict cached
+phases. Native axes and units are not
 converted a second time inside the sampler. Global scale changes both spatial
 wavelength and velocity amplitude. Field samples consume no particle RNG.
 The independent coordinate/channel hash and analytic gradients do not reproduce
 the native stochastic field; rendering diagnostics mark this as an approximation.
 At most 24 octaves execute per sample, with checked spatial/temporal precision
 bounds. External PKVF and unsupported flow/divergence controls remain diagnosed.
-Turbulence support alone does not make graphs requiring spatial or collision
-interpreters executable.
 
 Routed births retain their occurrence timestamps and are processed in chronological
 order. A newborn evolves only for the remaining portion of its birth step. The
@@ -142,6 +141,26 @@ gate future renderer-bearing births while structural controllers continue. Livin
 keep aging without an emission backlog. Guide names match sequence-name substrings
 without case sensitivity; `always=on/off` selects the default. Exact client
 visibility reset and per-cycle restart conventions remain unverified.
+
+## Spatial snapshots
+
+Supported baked spatial declarations share a bounded store by full resource name
+and named Float3 payload schema. Layer-local aliases and read/write flags do not
+split that identity. Each simulation tick reads the previous snapshot and rebuilds
+the next, so layer execution order does not expose newly inserted points early.
+Lookup coordinates remain distinct from payload positions; a keyed lookup does
+not become a nearest-world-particle search. Rank zero, payload slot zero and zero
+query options are supported, using an inclusive radius and first-insertion ties.
+Other query controls require an additional interpreter.
+
+A first-tick miss or missing rebuilt key yields unavailable geometry while the
+programme remains alive. No world-origin substitute or historical lookup replay
+is introduced. Entry and draft omissions are available in
+`ParticleProgramEmitter::omitted_spatial_writes`; exhausting the shared candidate
+row-check allowance increments `omitted_spatial_queries`. These counters remain
+separate from omitted births and executions. Configure the entry and row-check
+capacities through `ParticleEffect::with_limits`. Native snapshot and tie fidelity
+remain unverified.
 
 ## Rendering and budgets
 

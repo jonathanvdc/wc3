@@ -89,7 +89,9 @@ omissions, raw authoring coordinates, localized names and editor metadata. Shape
 defaults and coordinate conversion belong to checked lowering.
 `turbulence_sampler()` retains procedural/external controls, numeric integer seeds,
 localized metadata and sparse omissions. Defaults are applied only during checked
-preparation; external vector-field metadata remains inspectable without execution. `curve_sampler()` and
+preparation; external vector-field metadata remains inspectable without execution.
+`spatial_layer()` separates the full shared resource name from its local binding
+alias and retains named payload types and read/write controls. `curve_sampler()` and
 `event_stream_sampler()` expose borrowed native arrays
 without applying simulation policy. Curve type, interpolation and quality omissions
 remain `None`; the native view does not infer scalar width from sparse metadata.
@@ -187,7 +189,9 @@ inverse point/direction transforms with masks 67/66, RGB/HSV
 conversion, quaternion orientation and rotation, emitter axes, typed curve
 sampling, primitive `samplePosition` callbacks, and checked procedural turbulence sampling. It
 executes the complete acquired HD LichAttack graph, including invisible
-controllers and its routed child layer. Scene collision, broadcasts, spatial queries, unsupported payload
+controllers and its routed child layer. Shared spatial resources support named
+Float3 insertion and rank-zero nearest lookup. Scene collision, broadcasts,
+other spatial query options, unsupported payload
 semantics, other transform masks, unknown callbacks and unresolved sampler
 families fail explicitly. When a native curve omits dimensionality, lowering
 resolves it from the return registers of its bound `sample` calls. All uses across
@@ -254,6 +258,31 @@ semantic words are errors, rather than guesses about unobserved derivative data.
 snapshot copying, root-row clearing and interpolation. Exhaustion omits entire
 births through `EffectStats::omitted_births`, with no partial payload or backlog.
 
+Spatial declarations retain full resource names separately from layer-local
+aliases and preserve payload names, types and read/write controls. Checked
+lowering shares references with the same full resource and payload schema within
+one effect; separate instances never share mutable rows. The current subset uses
+one Float3 payload, payload slot zero, nearest rank zero and zero query options.
+Unknown layouts or controls fail rather than acquiring an inferred meaning.
+
+Each actual simulation step reads one immutable previous-step snapshot and builds
+the next write snapshot. Inserts never affect another layer's reads in that step.
+Key coordinates and returned payload positions remain independent: a scalar key
+replicated into XYZ can locate a world-position payload without indexing that
+world position. Radius tests include the boundary; exact-distance ties select the
+first original insertion. No self exclusion is applied. Missing reads return
+unavailable positions and do not stop the effect. Snapshot and tie policies remain
+unverified against the native client.
+
+`EffectLimits::spatial_entries` bounds each resource's two preallocated snapshots.
+`spatial_checks_per_update` bounds candidate rows examined across all queries,
+layers and internal steps of one advance. An incomplete search returns unavailable
+rather than a partial nearest result. Entry/draft or unavailable-data omissions
+increment `EffectStats::omitted_spatial_writes`; query-work omissions increment
+`omitted_spatial_queries`, independently of birth counts. Queries allocate no
+storage. Zero-delta calls do not swap snapshots, reset clears them, and omitted
+simulation tails discard stale rows without replaying writes later.
+
 Primitive sampling supports boxes, spheres, complex ellipsoids, cylinders,
 capsules and cones in surface or volume mode. Lowering applies explicit sparse
 defaults and converts shape authoring properties once into the native simulation
@@ -288,8 +317,9 @@ The immutable sampler shares octave data and an original 256-entry seeded
 quadrature basis through `EffectProgram`. Eight discrete temporal frequency bands
 are an explicit stochastic approximation. A bounded per-instance oscillator cache
 uses effect-global execution time, independently of particle age or invocation
-order; it evaluates eight sine/cosine pairs on a time-cache miss. Queries themselves
-use hashed table lookups and analytic interpolation, with no trigonometry. Frozen
+order; it evaluates eight sine/cosine pairs on a time-cache miss. The four-entry
+cache can evict phases when more moving samplers are interleaved. Field interpolation
+uses hashed table lookups and analytic derivatives, with no trigonometry. Frozen
 samplers share fully prepared scalar values. Time scale zero freezes the field, negative
 scale reverses time, and time base shifts its temporal phase. Sampling consumes
 no particle RNG and allocates nothing. Seeded coordinate/channel hashing and

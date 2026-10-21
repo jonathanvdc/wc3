@@ -313,3 +313,95 @@ fn scene_camera_binding_checks_native_capability_schema_and_free_signature() {
         .callback(b"xform_w2w_f_masked", &[], None, &[])
         .is_err());
 }
+
+#[test]
+fn spatial_identity_uses_full_name_and_payload_schema_not_alias_or_writer_flags() {
+    use crate::model::formats::pkb::SpatialPayload;
+    let mut native = SpatialLayer {
+        name: b"Original/Keyed",
+        local_name: b"write",
+        flags: Some(1),
+        cell_size: Some(0.75),
+        payload: vec![SpatialPayload {
+            name: b"Position",
+            native_type: NativeType(33),
+            flags: 0x1c00,
+        }],
+    };
+    let mut resources = Vec::new();
+    assert_eq!(spatial_resource(&native, &mut resources).unwrap(), 0);
+    native.local_name = b"reader";
+    native.payload[0].flags = 0;
+    assert_eq!(spatial_resource(&native, &mut resources).unwrap(), 0);
+    assert_eq!(resources.len(), 1);
+    let mut conflict = native.clone();
+    conflict.cell_size = Some(1.);
+    assert!(spatial_resource(&conflict, &mut resources).is_err());
+    let mut conflict = native.clone();
+    conflict.payload[0].name = b"Other";
+    assert!(spatial_resource(&conflict, &mut resources).is_err());
+    let mut unsupported = native.clone();
+    unsupported.payload[0].native_type = NativeType(34);
+    assert!(spatial_resource(&unsupported, &mut resources).is_err());
+    let mut unsupported = native.clone();
+    unsupported.flags = Some(2);
+    assert!(spatial_resource(&unsupported, &mut resources).is_err());
+    native.name = b"Other/Keyed";
+    assert_eq!(spatial_resource(&native, &mut resources).unwrap(), 1);
+}
+#[test]
+fn original_native_spatial_schema_retains_sparse_payload_controls_and_checked_abi() {
+    let document =
+        Document::read(include_bytes!("../../../../tests/fixtures/pkb/spatial.pkb")).unwrap();
+    let resources: Vec<_> = document
+        .objects()
+        .iter()
+        .enumerate()
+        .filter(|(_, object)| {
+            document.strings()[document.types()[object.type_index as usize].name as usize]
+                == b"CLayerCompileCacheSpatialLayer"
+        })
+        .map(|(index, _)| document.spatial_layer(index as u32 + 1).unwrap())
+        .collect();
+    assert_eq!(resources.len(), 3);
+    assert_eq!(resources[0].payload[0].flags, 0x1c00);
+    assert_eq!(resources[1].payload[0].flags, 0);
+    assert_eq!(resources[0].name, resources[1].name);
+    assert_ne!(resources[0].local_name, resources[1].local_name);
+    let options = EffectCompileOptions::default();
+    let lowering = Lowering {
+        document: &document,
+        options: &options,
+        samplers: vec![],
+        attributes: vec![],
+        attribute_slots: HashMap::new(),
+        curve_widths: HashMap::new(),
+    };
+    use ValueType::{Context, Float, Float3, Int};
+    for (name, args, expected) in [
+        (b"allocatePayload".as_slice(), vec![Context], Some(Int)),
+        (
+            b"appendPayload".as_slice(),
+            vec![Int, Float3, Int, Context],
+            Some(Int),
+        ),
+        (b"insert".as_slice(), vec![Int, Float3, Context], None),
+        (
+            b"closestF3".as_slice(),
+            vec![Float3, Float, Int, Int, Int, Int, Context],
+            Some(Float3),
+        ),
+    ] {
+        assert_eq!(
+            lowering
+                .callback(name, &args, Some(0), &[External::Spatial(0)])
+                .unwrap()
+                .1,
+            expected
+        );
+        assert!(lowering.callback(name, &args, None, &[]).is_err());
+        assert!(lowering
+            .callback(name, &args, Some(0), &[External::Sampler(0)])
+            .is_err());
+    }
+}

@@ -4,11 +4,11 @@ mod turbulence;
 use super::effect_payload::{payload_layout, payload_policies, payload_reads};
 use super::{
     CompileLimits, CompilerBlob, Document, Effect, ExternalDeclaration,
-    Instruction as NativeInstruction, LayerCache, LayerIndex, NativeType, ReadError,
+    Instruction as NativeInstruction, LayerCache, LayerIndex, NativeType, ReadError, SpatialLayer,
 };
 use crate::model::common::PackedArray;
 use crate::model::scene::popcorn::graph::{
-    BoundProgram, Callback, EffectGraph, EffectSampler, EventRoute, External,
+    BoundProgram, Callback, EffectGraph, EffectSampler, EventRoute, External, SpatialResource,
 };
 use crate::model::scene::popcorn::layout::compact_registers;
 use crate::model::scene::popcorn::payload::Layout as PayloadLayout;
@@ -275,14 +275,10 @@ impl<'a> Document<'a> {
             .collect::<Result<Vec<_>, _>>()?;
         let mut layers = Vec::new();
         let mut renderers = Vec::new();
+        let mut spatial = Vec::new();
         for (index, cache) in caches.iter().enumerate() {
             let layer = EffectLayerId(index as u32);
             let result = (|| {
-                if !cache.spatial_layers.is_empty() {
-                    return Err(error(
-                        "native spatial payload/query execution is unsupported",
-                    ));
-                }
                 let fields = cache
                     .fields
                     .iter()
@@ -328,6 +324,16 @@ impl<'a> Document<'a> {
                 let life = lifecycle(b"self.lifeRatio")?;
                 let inverse_life = lifecycle(b"self.invLife")?;
                 let mut resources = HashMap::<Vec<u8>, External>::new();
+                for link in &cache.spatial_layers {
+                    let native = self.spatial_layer(*link)?;
+                    let index = spatial_resource(&native, &mut spatial)?;
+                    if resources
+                        .insert(native.local_name.to_vec(), External::Spatial(index))
+                        .is_some()
+                    {
+                        return Err(error("duplicate spatial resource local alias"));
+                    }
+                }
                 for link in &cache.samplers {
                     let sampler = self.named_sampler(*link)?;
                     let index = lowering.sampler(sampler.sampler, sampler.sampler_type)?;
@@ -507,6 +513,7 @@ impl<'a> Document<'a> {
                 })
         });
         let payload_policies = payload_policies(&layers, &events);
+        let uses_spatial = !spatial.is_empty();
         Ok(EffectProgram {
             inner: Arc::new(EffectGraph {
                 identity: Arc::new(()),
@@ -539,6 +546,9 @@ impl<'a> Document<'a> {
                     if layers_use_inverse {
                         limitations.push(EffectLimitation::InverseTransform);
                     }
+                    if uses_spatial {
+                        limitations.push(EffectLimitation::SpatialSnapshots);
+                    }
                     limitations.extend(payload_policies);
                     if lowering
                         .samplers
@@ -565,6 +575,7 @@ impl<'a> Document<'a> {
                 },
                 duration: options.stream_duration,
                 samplers: lowering.samplers.into_boxed_slice(),
+                spatial: spatial.into_boxed_slice(),
                 random: options.random,
             }),
         })
@@ -791,7 +802,8 @@ impl Lowering<'_, '_> {
                     | External::RandomContext
                     | External::SceneContext
                     | External::Event(_)
-                    | External::Sampler(_) => ValueType::Context,
+                    | External::Sampler(_)
+                    | External::Spatial(_) => ValueType::Context,
                     _ => kind,
                 };
                 if kind != expected {
@@ -871,7 +883,24 @@ impl Lowering<'_, '_> {
                     .ok_or_else(|| error("callback receiver exceeds external bindings"))
             })
             .transpose()?;
+        let spatial_bound = matches!(bound, Some(External::Spatial(_)));
         let (callback, expected, result) = match name {
+            b"allocatePayload" if spatial_bound => {
+                (Callback::SpatialAllocate, vec![Context], Some(Int))
+            }
+            b"appendPayload" if spatial_bound => (
+                Callback::SpatialAppend,
+                vec![Int, Float3, Int, Context],
+                Some(Int),
+            ),
+            b"insert" if spatial_bound => {
+                (Callback::SpatialInsert, vec![Int, Float3, Context], None)
+            }
+            b"closestF3" if spatial_bound => (
+                Callback::SpatialClosest,
+                vec![Float3, Float, Int, Int, Int, Int, Context],
+                Some(Float3),
+            ),
             b"view.position" => (Callback::ViewPosition, vec![Int, Context], Some(Float3)),
             b"scene.orientation_f_norm" => (Callback::Orientation, vec![Float3], Some(Quaternion)),
             b"orientation_axisSide" => (Callback::OrientationSide, vec![Quaternion], Some(Float3)),
@@ -1078,6 +1107,44 @@ impl Lowering<'_, '_> {
         }
         Ok((callback, result))
     }
+}
+
+fn spatial_resource(
+    native: &SpatialLayer<'_>,
+    resources: &mut Vec<SpatialResource>,
+) -> Result<usize, EffectCompileError> {
+    let [payload] = native.payload.as_slice() else {
+        return Err(error("spatial resources require one named Float3 payload"));
+    };
+    if native.name.is_empty()
+        || payload.name.is_empty()
+        || native.flags != Some(1)
+        || payload.native_type != NativeType(33)
+        || !matches!(payload.flags, 0 | 0x1c00)
+    {
+        return Err(error("unsupported spatial resource or payload controls"));
+    }
+    let cell_size = native
+        .cell_size
+        .filter(|size| size.is_finite() && *size > 0.)
+        .ok_or_else(|| error("spatial resource requires a finite positive cell size"))?;
+    if let Some((index, previous)) = resources
+        .iter()
+        .enumerate()
+        .find(|(_, resource)| resource.name.as_ref() == native.name)
+    {
+        if previous.payload_name.as_ref() != payload.name || previous.cell_size != cell_size {
+            return Err(error("shared spatial resource declarations disagree"));
+        }
+        return Ok(index);
+    }
+    let index = resources.len();
+    resources.push(SpatialResource {
+        name: native.name.into(),
+        payload_name: payload.name.into(),
+        cell_size,
+    });
+    Ok(index)
 }
 
 fn scene_external(native: &ExternalDeclaration<'_>) -> Result<External, EffectCompileError> {

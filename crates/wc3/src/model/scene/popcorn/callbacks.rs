@@ -2,6 +2,7 @@
 use super::graph::*;
 use super::payload::{Element as PayloadElement, Storage as PayloadStorage};
 use super::runtime::{EffectLimits, EffectStats, FieldPlanes, RandomState, Spawn};
+use super::spatial::{Search, Store as SpatialStore};
 use super::turbulence::TemporalCache;
 use super::{color, orientation, random, transforms};
 use super::{Host, Value, ValueType};
@@ -39,6 +40,12 @@ struct Draft {
     control: u32,
     omitted: bool,
 }
+struct SpatialDraft {
+    key: u32,
+    resource: usize,
+    payload: Option<Vec3>,
+    committed: bool,
+}
 pub(crate) struct Scratch {
     times: Vec<Occurrence>,
     elements: Vec<BoundElement>,
@@ -47,10 +54,11 @@ pub(crate) struct Scratch {
     batches: Vec<Batch>,
     drafts: Vec<Draft>,
     next: u32,
+    spatial: Vec<SpatialDraft>,
     turbulence: TemporalCache,
 }
 impl Scratch {
-    pub fn new(limits: EffectLimits, payload_width: usize) -> Self {
+    pub fn new(limits: EffectLimits, payload_width: usize, spatial: bool) -> Self {
         Self {
             times: Vec::with_capacity(limits.occurrences),
             elements: Vec::with_capacity(limits.handles),
@@ -59,10 +67,15 @@ impl Scratch {
             batches: Vec::with_capacity(limits.handles),
             drafts: Vec::with_capacity(limits.handles),
             next: 0,
+            spatial: Vec::with_capacity(if spatial { limits.handles } else { 0 }),
             turbulence: TemporalCache::default(),
         }
     }
-    pub fn storage_bytes(limits: EffectLimits, payload_width: usize) -> Option<usize> {
+    pub fn storage_bytes(
+        limits: EffectLimits,
+        payload_width: usize,
+        spatial: bool,
+    ) -> Option<usize> {
         limits
             .occurrences
             .checked_mul(size_of::<Occurrence>())?
@@ -73,7 +86,14 @@ impl Scratch {
                     .checked_mul(size_of::<Option<PayloadElement>>())?,
             )?
             .checked_add(limits.handles.checked_mul(
-                size_of::<Batch>() + size_of::<Draft>() + size_of::<BoundElement>(),
+                size_of::<Batch>()
+                    + size_of::<Draft>()
+                    + size_of::<BoundElement>()
+                    + if spatial {
+                        size_of::<SpatialDraft>()
+                    } else {
+                        0
+                    },
             )?)?
             .checked_add(size_of::<TemporalCache>())
     }
@@ -82,6 +102,7 @@ impl Scratch {
         self.elements.clear();
         self.batches.clear();
         self.drafts.clear();
+        self.spatial.clear();
     }
     fn key(&mut self) -> Result<u32> {
         self.next = self
@@ -92,6 +113,8 @@ impl Scratch {
     }
 }
 pub(crate) struct ExecutionHost<'a> {
+    pub spatial: &'a mut [SpatialStore],
+    pub spatial_checks: &'a mut usize,
     pub graph: &'a EffectGraph,
     pub bound: &'a BoundProgram,
     pub fields: &'a mut FieldPlanes,
@@ -171,6 +194,42 @@ impl ExecutionHost<'_> {
             return Err("scene context capability has the wrong ownership kind");
         }
         Ok(self.scene)
+    }
+    fn spatial_receiver(&self, receiver: Option<u16>) -> Result<usize> {
+        let Some(receiver) = receiver else {
+            return Err("spatial callback requires a bound resource");
+        };
+        let External::Spatial(resource) = self.external(receiver)? else {
+            return Err("spatial callback receiver has the wrong resource kind");
+        };
+        if resource >= self.spatial.len() {
+            return Err("spatial resource is outside the instance");
+        }
+        Ok(resource)
+    }
+    fn spatial_context(&self, value: Value) -> Result<()> {
+        let slot = value.words()[0]
+            .checked_sub(1)
+            .and_then(|slot| u16::try_from(slot).ok())
+            .ok_or("invalid spatial particle context capability")?;
+        if value.kind() != ValueType::Context
+            || !matches!(self.external(slot)?, External::ParticleContext)
+        {
+            return Err("spatial callback requires the current particle context");
+        }
+        Ok(())
+    }
+    fn spatial_draft(&mut self, resource: usize, key: u32) -> Result<&mut SpatialDraft> {
+        let draft = self
+            .scratch
+            .spatial
+            .iter_mut()
+            .find(|draft| draft.key == key)
+            .ok_or("spatial draft is not owned by this invocation")?;
+        if draft.resource != resource || draft.committed {
+            return Err("spatial draft belongs to another resource or was already inserted");
+        }
+        Ok(draft)
     }
     fn batch(&mut self, total: u32, residual: f32, start: usize, omitted: u64) -> Result<Value> {
         if self.scratch.batches.len() >= self.limits.handles {
@@ -308,6 +367,7 @@ impl Host for ExecutionHost<'_> {
             | External::EffectContext
             | External::RandomContext
             | External::SceneContext
+            | External::Spatial(_)
             | External::Sampler(_)
             | External::Event(_) => {
                 Value::from_words(ValueType::Context, [u32::from(external) + 1, 0, 0, 0])
@@ -338,6 +398,77 @@ impl Host for ExecutionHost<'_> {
             .get(function as usize)
             .ok_or("effect callback binding is outside its table")?;
         Ok(match callback {
+            Callback::SpatialAllocate => {
+                let resource = self.spatial_receiver(receiver)?;
+                self.spatial_context(a[0])?;
+                let key = if self.scratch.spatial.len() >= self.limits.handles {
+                    0
+                } else {
+                    let key = self.scratch.key()?;
+                    self.scratch.spatial.push(SpatialDraft {
+                        key,
+                        resource,
+                        payload: None,
+                        committed: false,
+                    });
+                    key
+                };
+                Some(Value::from(key as i32))
+            }
+            Callback::SpatialAppend => {
+                let resource = self.spatial_receiver(receiver)?;
+                self.spatial_context(a[3])?;
+                if a[2].words()[0] != 0 {
+                    return Err("unsupported spatial payload slot");
+                }
+                let key = a[0].words()[0];
+                if key != 0 {
+                    self.spatial_draft(resource, key)?.payload = Some(vector(a[1]));
+                }
+                Some(Value::from(key as i32))
+            }
+            Callback::SpatialInsert => {
+                let resource = self.spatial_receiver(receiver)?;
+                self.spatial_context(a[2])?;
+                let key = a[0].words()[0];
+                let inserted = if key == 0 {
+                    false
+                } else {
+                    let draft = self.spatial_draft(resource, key)?;
+                    let payload = draft
+                        .payload
+                        .ok_or("spatial draft has no named payload value")?;
+                    draft.committed = true;
+                    self.spatial[resource].insert(vector(a[1]), payload)
+                };
+                if !inserted {
+                    self.stats.omitted_spatial_writes =
+                        self.stats.omitted_spatial_writes.saturating_add(1);
+                }
+                None
+            }
+            Callback::SpatialClosest => {
+                let resource = self.spatial_receiver(receiver)?;
+                self.scene_context(a[6])?;
+                if a[2..6].iter().any(|value| value.words()[0] != 0) {
+                    return Err("spatial queries support only rank zero, zero options and payload slot zero");
+                }
+                let found = self.spatial[resource].closest(
+                    vector(a[0]),
+                    number(a[1]),
+                    self.spatial_checks,
+                )?;
+                let value = match found {
+                    Search::Found(payload) => payload,
+                    Search::Missing => Vec3::splat(f32::INFINITY),
+                    Search::Omitted => {
+                        self.stats.omitted_spatial_queries =
+                            self.stats.omitted_spatial_queries.saturating_add(1);
+                        Vec3::splat(f32::INFINITY)
+                    }
+                };
+                Some(Value::from(value))
+            }
             Callback::ViewPosition => {
                 let scene = self.scene_context(a[1])?;
                 let position = scene

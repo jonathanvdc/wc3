@@ -150,6 +150,8 @@ pub struct EffectEntry {
 /// Established implementation policies whose native fidelity remains unverified.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EffectLimitation {
+    /// Spatial reads use the previous executed tick and deterministic insertion-order ties.
+    SpatialSnapshots,
     /// Original counter-based random stream rather than a verified native RNG.
     RandomSequence,
     /// Births use a deterministic remaining-subframe interval; native fidelity is unverified.
@@ -253,6 +255,12 @@ pub struct EffectLayer {
     pub(crate) evolve_on_death: bool,
     pub(crate) payload: PayloadLayout,
 }
+#[derive(Clone, Debug)]
+pub(crate) struct SpatialResource {
+    pub name: Box<[u8]>,
+    pub payload_name: Box<[u8]>,
+    pub cell_size: f32,
+}
 #[derive(Debug)]
 pub(crate) struct EffectGraph {
     pub identity: Arc<()>,
@@ -263,6 +271,7 @@ pub(crate) struct EffectGraph {
     pub renderers: Box<[EffectRenderer]>,
     pub attributes: Box<[EffectAttribute]>,
     pub samplers: Box<[EffectSampler]>,
+    pub spatial: Box<[SpatialResource]>,
     pub limitations: Box<[EffectLimitation]>,
     pub duration: EventStreamDuration,
     pub random: EffectRandom,
@@ -283,11 +292,16 @@ pub(crate) enum External {
     RandomContext,
     SceneContext,
     Sampler(usize),
+    Spatial(usize),
     Event(usize),
     Attribute(usize),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Callback {
+    SpatialAllocate,
+    SpatialAppend,
+    SpatialInsert,
+    SpatialClosest,
     ViewPosition,
     Age,
     Running,

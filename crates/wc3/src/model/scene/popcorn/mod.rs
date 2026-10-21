@@ -263,4 +263,6 @@ mod random;
 
 mod transforms;
 
+mod spatial;
+
 pub(crate) mod turbulence;
