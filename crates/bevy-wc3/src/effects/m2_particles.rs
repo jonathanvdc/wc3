@@ -1,5 +1,5 @@
 //! Shared M2 particle motion and sprite/model transports, independent of native codecs.
-use super::super::material::{ModelMaterial, SurfacePass};
+use super::super::material::SurfacePass;
 use super::age_appearance::{AgeAppearance, AgeParticleAppearance};
 use super::age_sprites_gpu::{
     AgeSpriteComposition, AgeSpriteData, AgeSpriteRecord, AgeSpriteStyle, AgeSpriteUniform,
@@ -16,6 +16,7 @@ use super::m2_model_geometry::{tumble, ModelBasis};
 use super::m2_models::{
     ModelChildren, ModelOutputs, ModelProjection, ModelProjectionContext, ModelTemplate,
 };
+use super::model_budget::{ActorFrame, ModelActorLease};
 use super::render::SortPolicy;
 use super::ModelEmitter;
 use crate::child_coordinates::ChildCoordinates;
@@ -128,6 +129,7 @@ struct GeometryEmitter {
     maximum: Vec3,
 }
 struct GeometryBirth {
+    lease: Option<ModelActorLease>,
     initial_transform: Transform,
     ordinal: u64,
     basis: ModelBasis,
@@ -147,6 +149,7 @@ pub(crate) struct GeometryWorld<'a, 'w, 's> {
     pub root: Entity,
     pub driving_camera: Option<Entity>,
     pub allow_births: bool,
+    pub actor: Option<&'a ActorFrame>,
 }
 #[derive(Clone)]
 struct Birth {
@@ -415,7 +418,7 @@ impl RuntimeM2Particles {
                 };
                 diagnostic(RenderDiagnosticKind::Unverified,"M2 model particles own ordinary child animation and materials; exact native model size, tumble and nonuniform-frame fidelity remains unverified");
                 diagnostic(RenderDiagnosticKind::Approximation,"Model-particle orientation uses finite ordinary Bevy TRS; shear is orthogonalized and collapsed birth frames are omitted");
-                diagnostic(RenderDiagnosticKind::Unsupported,"Nested geometry-model particle services are omitted by the first model-particle adapter");
+                diagnostic(RenderDiagnosticKind::Budget,"Nested model particles and their static descendants share ModelParticleLimits on the outer application root; omitted admissions and emission intervals are not queued");
                 Some(GeometryEmitter {
                     template: ModelTemplate {
                         model: binding.model.clone(),
@@ -658,7 +661,6 @@ impl RuntimeM2Particles {
         &self,
         commands: &mut Commands,
         meshes: &mut Assets<Mesh>,
-        _materials: &mut Assets<ModelMaterial>,
         basis: Entity,
     ) -> M2ParticleInstances {
         let quad = self
@@ -738,25 +740,75 @@ impl RuntimeM2Particles {
             previous_basis: None,
         }
     }
+    #[cfg(test)]
     pub fn update(
         &self,
         instances: &mut M2ParticleInstances,
         frame: EffectFrame<'_, '_, '_>,
-        _meshes: &mut Assets<Mesh>,
+        meshes: &mut Assets<Mesh>,
         gpu_sprites: &mut Query<&mut AgeSpriteData>,
         statistics: &mut Query<&mut SpriteEmitter>,
-        _materials: &mut Assets<ModelMaterial>,
     ) {
-        self.update_with_models(instances, frame, _meshes, gpu_sprites, statistics, None);
+        let had_births: Vec<_> = instances
+            .emitters
+            .iter()
+            .map(|state| !state.births.is_empty())
+            .collect();
+        self.update_bounded(instances, frame, gpu_sprites, statistics, None);
+        for ((emitter, state), had_births) in self
+            .emitters
+            .iter()
+            .zip(&mut instances.emitters)
+            .zip(had_births)
+        {
+            // The CPU oracle must preserve the resident sentinel on empty-to-empty
+            // updates, while publishing it when the final live birth expires.
+            if state.passes.is_empty() && (had_births || !state.births.is_empty()) {
+                if let Some(mut mesh) = meshes.get_mut(&state.mesh) {
+                    let node = emitter.emitter_frame(
+                        frame.basis_world * frame.feature_matrix(emitter.node_index),
+                    );
+                    emitter.draw(state, &frame, node, &mut mesh, Mat4::IDENTITY);
+                }
+            }
+        }
+    }
+    pub fn update_bounded(
+        &self,
+        instances: &mut M2ParticleInstances,
+        frame: EffectFrame<'_, '_, '_>,
+        gpu_sprites: &mut Query<&mut AgeSpriteData>,
+        statistics: &mut Query<&mut SpriteEmitter>,
+        actor: Option<&ActorFrame>,
+    ) {
+        self.update_inner(instances, frame, gpu_sprites, statistics, None, actor);
     }
     pub fn update_with_models(
         &self,
         instances: &mut M2ParticleInstances,
         frame: EffectFrame<'_, '_, '_>,
-        _meshes: &mut Assets<Mesh>,
+        gpu_sprites: &mut Query<&mut AgeSpriteData>,
+        statistics: &mut Query<&mut SpriteEmitter>,
+        model_world: Option<GeometryWorld>,
+    ) {
+        let actor = model_world.as_ref().and_then(|world| world.actor).cloned();
+        self.update_inner(
+            instances,
+            frame,
+            gpu_sprites,
+            statistics,
+            model_world,
+            actor.as_ref(),
+        );
+    }
+    fn update_inner(
+        &self,
+        instances: &mut M2ParticleInstances,
+        frame: EffectFrame<'_, '_, '_>,
         gpu_sprites: &mut Query<&mut AgeSpriteData>,
         statistics: &mut Query<&mut SpriteEmitter>,
         mut model_world: Option<GeometryWorld>,
+        actor: Option<&ActorFrame>,
     ) {
         if !frame.time.is_finite() {
             return;
@@ -806,6 +858,7 @@ impl RuntimeM2Particles {
                 clips: &self.clips,
                 frame,
                 allow_models: model_world.as_ref().is_none_or(|world| world.allow_births),
+                actor,
                 previous_basis: instances.previous_basis.unwrap_or(frame.basis_world),
                 node,
                 start,
@@ -816,6 +869,12 @@ impl RuntimeM2Particles {
             let mut clock = EmissionClock::new(start, frame.time);
             let mut checked_end = start;
             for step in clock.by_ref() {
+                if actor
+                    .filter(|actor| actor.owned || emitter.model.is_some())
+                    .is_some_and(|actor| !actor.step())
+                {
+                    break;
+                }
                 checked_end = step.end;
                 let at = step.start;
                 let end = step.end;
@@ -858,7 +917,20 @@ impl RuntimeM2Particles {
                     let available = MAX_BIRTHS_PER_UPDATE
                         .saturating_sub(births_this_update)
                         .min(emitter.capacity().saturating_sub(state.births.len()));
-                    let accepted = count.min(available);
+                    let local_accepted = count.min(available);
+                    let accepted = if emitter.model.is_some() && births.allow_models {
+                        births.actor.map_or(local_accepted, |actor| {
+                            local_accepted.min(actor.remaining())
+                        })
+                    } else {
+                        local_accepted
+                    };
+                    if let Some(actor) = births
+                        .actor
+                        .filter(|_| emitter.model.is_some() && births.allow_models)
+                    {
+                        actor.budget.omit_work((local_accepted - accepted) as u64);
+                    }
                     let omitted = count - accepted;
                     state.dropped = state.dropped.saturating_add(omitted as u64);
                     for index in 0..accepted {
@@ -868,7 +940,10 @@ impl RuntimeM2Particles {
                     state.ordinal = state.ordinal.wrapping_add(omitted as u64);
                 }
             }
-            let emission_omitted = clock.omitted_seconds();
+            let emission_omitted = (frame.time - checked_end).max(0.);
+            if let Some(actor) = actor.filter(|actor| actor.owned || emitter.model.is_some()) {
+                actor.budget.skip_seconds(emission_omitted);
+            }
             if emitter.generator == ParticleGenerator::Sphere && emitter.flags.implosion_filter() {
                 checked_end = bounded_end(start, checked_end, state.births.len());
             }
@@ -902,12 +977,6 @@ impl RuntimeM2Particles {
                         emitter.sample_gpu(state, &frame, node, &mut data);
                     }
                 }
-                #[cfg(test)]
-                if state.passes.is_empty() {
-                    if let Some(mut mesh) = _meshes.get_mut(&state.mesh) {
-                        emitter.draw(state, &frame, node, &mut mesh, Mat4::IDENTITY);
-                    }
-                }
             }
             if let (Some(model), Some(models), Some(world), Some(pass)) = (
                 &emitter.model,
@@ -917,10 +986,11 @@ impl RuntimeM2Particles {
             ) {
                 models.projections.clear();
                 for birth in &state.births {
-                    if let Some(sidecar) = models.births.get(birth.appearance_index as usize) {
-                        models.projections.push(
-                            emitter.model_projection(birth, sidecar, model, frame.time, node),
-                        );
+                    if let Some(sidecar) = models.births.get_mut(birth.appearance_index as usize) {
+                        let mut projection =
+                            emitter.model_projection(birth, sidecar, model, frame.time, node);
+                        projection.lease = sidecar.lease.take();
+                        models.projections.push(projection);
                     }
                 }
                 models.children.synchronize(
@@ -980,6 +1050,7 @@ struct BirthContext<'a, 'view, 'data> {
     emitter: &'a Emitter,
     clips: &'a HashMap<ClipId, (f64, bool)>,
     allow_models: bool,
+    actor: Option<&'a ActorFrame>,
     frame: EffectFrame<'a, 'view, 'data>,
     previous_basis: Mat4,
     node: Mat4,
@@ -991,6 +1062,23 @@ impl BirthContext<'_, '_, '_> {
     fn push(&self, state: &mut EmitterInstance, time: f64, births: &mut usize) {
         let frame = &self.frame;
         let emitter = self.emitter;
+        let ordinal = state.ordinal;
+        state.ordinal = state.ordinal.wrapping_add(1);
+        if emitter.model.is_some() && !self.allow_models {
+            state.dropped = state.dropped.saturating_add(1);
+            return;
+        }
+        let lease = if emitter.model.is_some() {
+            match self.actor.map(ActorFrame::reserve).transpose() {
+                Ok(lease) => lease,
+                Err(_) => {
+                    state.dropped = state.dropped.saturating_add(1);
+                    return;
+                }
+            }
+        } else {
+            None
+        };
         let delta = frame.time - self.start;
         let fraction = if delta > 0. {
             ((time - self.start) / delta) as f32
@@ -1032,17 +1120,11 @@ impl BirthContext<'_, '_, '_> {
             }
             interpolated_transform(state.previous_node, self.node, fraction)
         };
-        let ordinal = state.ordinal;
-        state.ordinal = state.ordinal.wrapping_add(1);
         if state.births.len() >= emitter.capacity() || *births >= MAX_BIRTHS_PER_UPDATE {
             state.dropped = state.dropped.saturating_add(1);
             return;
         }
         *births += 1;
-        if emitter.model.is_some() && !self.allow_models {
-            state.dropped = state.dropped.saturating_add(1);
-            return;
-        }
         if let Some((mut birth, appearance)) = emitter.birth_posed(
             &sample,
             time,
@@ -1124,6 +1206,7 @@ impl BirthContext<'_, '_, '_> {
                     };
                     birth.appearance_index = models.births.len() as u32;
                     models.births.push(GeometryBirth {
+                        lease,
                         initial_transform,
                         ordinal,
                         basis,
@@ -1198,6 +1281,7 @@ impl Emitter {
         // Every living birth remains a pool member even when its attached frame
         // temporarily collapses. The pool retains its hidden, finite actor.
         ModelProjection {
+            lease: None,
             ordinal: sidecar.ordinal,
             birth: birth.time,
             lifetime: f64::from(birth.lifetime),

@@ -5,6 +5,7 @@ use super::super::{ModelAsset, ModelInstance, Playback};
 use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
 use super::frame::EffectStart;
+use super::model_budget::ActorFrame;
 use super::model_children::{ModelParticleChild, ModelParticleMotion, ModelParticleStart};
 use super::model_ownership::spawn_owned_model;
 use super::EffectFrame;
@@ -187,7 +188,7 @@ impl RuntimeModelParticles {
             diagnostic(RenderDiagnosticKind::Unsupported, "Model-particle longitude is retained but unused; latitude uses the Warcraft III radian convention");
             diagnostic(RenderDiagnosticKind::Unverified, "Model-particle yaw, pitch, and spin use deterministic occurrence-indexed random packets; native game random sequences remain unverified");
             diagnostic(RenderDiagnosticKind::Budget, "External-model particles retain at most 1024 children and 1024 births per update; rates use the shared bounded 60 Hz emission clock");
-            diagnostic(RenderDiagnosticKind::Unsupported, "Nested geometry-model particle births are omitted by the first model-particle adapter; child meshes and other effect families remain active");
+            diagnostic(RenderDiagnosticKind::Budget, "Nested model particles and their static descendants share ModelParticleLimits on the outer application root; omitted admissions and emission intervals are not queued");
             result.emitters.push(Emitter {
                 feature,
                 node: attached.node,
@@ -246,7 +247,9 @@ impl RuntimeModelParticles {
         assets: &Assets<ModelAsset>,
         statistics: &mut Query<&mut ModelEmitter>,
     ) {
-        self.update_limited(instances, commands, root, frame, assets, statistics, true);
+        self.update_limited(
+            instances, commands, root, frame, assets, statistics, true, None,
+        );
     }
     #[allow(clippy::too_many_arguments)]
     pub fn update_limited(
@@ -258,6 +261,7 @@ impl RuntimeModelParticles {
         assets: &Assets<ModelAsset>,
         statistics: &mut Query<&mut ModelEmitter>,
         allow_births: bool,
+        actor: Option<&ActorFrame>,
     ) {
         let previous = instances.previous_time.unwrap_or(frame.time);
         let reset = frame.time < previous
@@ -283,7 +287,12 @@ impl RuntimeModelParticles {
             let start = if reset { frame.time } else { previous };
             let mut clock = EmissionClock::new(start, frame.time);
             let mut budget = CAPACITY;
+            let mut checked_end = start;
             for step in clock.by_ref() {
+                if actor.is_some_and(|actor| !actor.step()) {
+                    break;
+                }
+                checked_end = step.end;
                 let Some((clip, shared)) = retimed_selection(frame, step.sample_time) else {
                     continue;
                 };
@@ -307,8 +316,20 @@ impl RuntimeModelParticles {
                 } else {
                     0.
                 };
-                let (schedule, first_ordinal) = state.schedule(rate, step.end - step.start, budget);
-                budget = budget.saturating_sub(schedule.count as usize);
+                let local_limit = budget;
+                let limit = if allow_births && asset.is_some() {
+                    actor.map_or(local_limit, |actor| local_limit.min(actor.remaining()))
+                } else {
+                    local_limit
+                };
+                let (schedule, first_ordinal) = state.schedule(rate, step.end - step.start, limit);
+                let local_count = (schedule.authored_count as usize).min(local_limit);
+                if let Some(actor) = actor.filter(|_| allow_births && asset.is_some()) {
+                    actor
+                        .budget
+                        .omit_work(local_count.saturating_sub(schedule.count as usize) as u64);
+                }
+                budget = budget.saturating_sub(local_count);
                 if !allow_births {
                     state.omitted = state.omitted.saturating_add(schedule.count as u64);
                     continue;
@@ -321,6 +342,17 @@ impl RuntimeModelParticles {
                         state.omitted = state.omitted.saturating_add(1);
                         continue;
                     }
+                    let lease = match actor.map(ActorFrame::reserve).transpose() {
+                        Ok(lease) => lease,
+                        Err(reason) => {
+                            let omitted = schedule.count as usize - index;
+                            state.omitted = state.omitted.saturating_add(omitted as u64);
+                            if let Some(actor) = actor {
+                                actor.budget.omit(reason, omitted.saturating_sub(1) as u64);
+                            }
+                            break;
+                        }
+                    };
                     let time = step.start + schedule.offset(index);
                     let Some((clip, shared)) = retimed_selection(frame, time) else {
                         continue;
@@ -405,11 +437,16 @@ impl RuntimeModelParticles {
                             },
                             Visibility::default(),
                         ),
+                        lease,
                     );
                     state.children.push((entity, time, lifetime));
                 }
             }
-            state.skipped_seconds += clock.omitted_seconds();
+            let skipped = (frame.time - checked_end).max(0.);
+            state.skipped_seconds += skipped;
+            if let Some(actor) = actor {
+                actor.budget.skip_seconds(skipped);
+            }
             state.previous_node = current_node;
             if let Ok(mut stats) = statistics.get_mut(state.entity) {
                 if stats.alive != state.children.len() {

@@ -13,9 +13,11 @@ use super::model_driver::ModelParticleDriver;
 use super::mounts::MountedModel;
 use super::{ModelDraw, ModelNode, ModelRig, Playback, PlaybackError, PoseOverrides};
 use crate::bounds::transform_bounds;
+use crate::effects::model_budget::ActorFrame;
 use crate::effects::model_children::ParticleModelSubtree;
 use crate::effects::model_ownership::queue_model_birth;
 use crate::effects::RuntimeParticles;
+use crate::instances::PreparedModelRequest;
 use crate::layers::ModelOwnedRenderEntity;
 use crate::physics::PhysicsState;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
@@ -55,9 +57,16 @@ pub(crate) fn populate_model(
         materials,
         model,
         root,
-        false,
-        Playback::default(),
+        ModelSpawnContext::default(),
     );
+}
+
+/// Initial clock and ownership shared by the ordinary and targeted factories.
+#[derive(Default)]
+pub(crate) struct ModelSpawnContext<'a> {
+    pub owned: bool,
+    pub initial_playback: Playback,
+    pub actor: Option<&'a ActorFrame>,
 }
 
 pub(crate) fn populate_model_with_context(
@@ -66,9 +75,13 @@ pub(crate) fn populate_model_with_context(
     materials: &mut Assets<ModelMaterial>,
     model: &PreparedModel,
     root: Entity,
-    owned: bool,
-    initial_playback: Playback,
+    context: ModelSpawnContext<'_>,
 ) {
+    let ModelSpawnContext {
+        owned,
+        initial_playback,
+        actor,
+    } = context;
     if owned {
         commands.entity(root).insert(ParticleModelSubtree);
     }
@@ -85,9 +98,7 @@ pub(crate) fn populate_model_with_context(
             ChildOf(root),
         ))
         .id();
-    let mut particles = model
-        .particles
-        .spawn(commands, meshes, materials, basis_entity);
+    let mut particles = model.particles.spawn(commands, meshes, basis_entity);
     if owned {
         if let Ok(selection) = initial_playback.selection() {
             RuntimeParticles::start_owned_clock(
@@ -149,10 +160,13 @@ pub(crate) fn populate_model_with_context(
         .map(|(i, node)| (node.id, nodes[i]))
         .collect();
     let world_parents = model.world.spawn_gates(commands, root, &feature_nodes);
-    let feature_instances =
-        model
-            .features
-            .spawn(commands, &feature_nodes, &world_parents.features, owned);
+    let feature_instances = model.features.spawn(
+        commands,
+        &feature_nodes,
+        &world_parents.features,
+        owned,
+        actor,
+    );
     let lod = model
         .draws
         .iter()
@@ -290,7 +304,7 @@ pub(crate) fn populate_model_with_context(
         }
     }
     let mut mounted_roots = Vec::with_capacity(model.mounts.len());
-    for mount in model.mounts.iter() {
+    for (mount_index, mount) in model.mounts.iter().enumerate() {
         let mut child_model = mount.model.clone();
         // The mount transform is already authored in the host model frame.
         // Bounds compiled in application coordinates must return to the child
@@ -301,9 +315,28 @@ pub(crate) fn populate_model_with_context(
             .map(|bounds| transform_bounds(bounds, inverse_basis));
         child_model.basis = Transform::IDENTITY;
         let child = if owned {
+            let lease = match actor.map(ActorFrame::reserve).transpose() {
+                Ok(lease) => lease,
+                Err(reason) => {
+                    if let Some(actor) = actor {
+                        actor
+                            .budget
+                            .omit(reason, (model.mounts.len() - mount_index - 1) as u64);
+                    }
+                    break;
+                }
+            };
             let child = commands
-                .spawn((Name::new("Model"), mount.transform, Visibility::default()))
+                .spawn((
+                    Name::new("Model"),
+                    mount.transform,
+                    Visibility::default(),
+                    ParticleModelSubtree,
+                ))
                 .id();
+            if let Some(lease) = lease {
+                commands.entity(child).insert(lease);
+            }
             let mut playback = child_model
                 .clips
                 .first()
@@ -318,15 +351,9 @@ pub(crate) fn populate_model_with_context(
                 playback = initial_playback.clone();
                 playback.clip = Some(clip);
             }
-            populate_model_with_context(
-                commands,
-                meshes,
-                materials,
-                &child_model,
-                child,
-                true,
-                playback,
-            );
+            commands
+                .entity(child)
+                .insert((PreparedModelRequest(child_model.clone()), playback));
             queue_model_birth(commands, child);
             child
         } else {

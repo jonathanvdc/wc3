@@ -85,7 +85,9 @@ mesh pipeline. The effect guides describe simulation, playback, and resource nee
 - [External programmes](popcorn.md) execute supported baked graphs and send billboard outputs through the sampled sprite transport.
 
 Each family bounds populations and per-update work and exposes omitted-work
-counters. M2 multi-texture colors and alpha masks retain their independent
+counters. Nested model particles also share configurable actor and emission-work
+limits with their particle-owned attachments and rigid parts. M2 multi-texture
+colors and alpha masks retain their independent
 modulation gains. Bone generators use declared section palettes and posed joint
 spans; their exact game distribution remains unverified. Particle refraction uses
 conditional per-view masks and scene composition. Native TXAC selectors still

@@ -9,6 +9,7 @@ use crate::effects::age_sprites_gpu::{
 };
 use crate::effects::emission::EffectChange;
 use crate::effects::frame::EffectStart;
+use crate::effects::model_budget::ActorFrame;
 use crate::effects::render::SortPolicy;
 use crate::effects::render::{effect_capsule, effect_quad, EffectGeometry};
 use crate::effects::EffectFrame;
@@ -339,12 +340,23 @@ impl RuntimeProgramParticles {
             }
         }
     }
+    #[cfg(test)]
     pub fn update(
         &self,
         instances: &mut ProgramInstances,
         frame: &EffectFrame<'_, '_, '_>,
         sprites: &mut Query<&mut AgeSpriteData>,
         statistics: &mut Query<&mut ParticleProgramEmitter>,
+    ) {
+        self.update_bounded(instances, frame, sprites, statistics, None);
+    }
+    pub fn update_bounded(
+        &self,
+        instances: &mut ProgramInstances,
+        frame: &EffectFrame<'_, '_, '_>,
+        sprites: &mut Query<&mut AgeSpriteData>,
+        statistics: &mut Query<&mut ParticleProgramEmitter>,
+        actor: Option<&ActorFrame>,
     ) {
         let previous = instances.previous.unwrap_or(frame.time);
         let delta = (frame.time - previous).max(0.);
@@ -380,7 +392,8 @@ impl RuntimeProgramParticles {
                         }
                         if state.started {
                             instance.set_emitting(active);
-                            instance.advance(
+                            let skipped = instance.stats().skipped_seconds;
+                            instance.advance_with_step_budget(
                                 &emitter.effect.program,
                                 if frame.change == EffectChange::Reset {
                                     0.
@@ -388,7 +401,13 @@ impl RuntimeProgramParticles {
                                     delta
                                 },
                                 inputs,
+                                || actor.is_none_or(|actor| actor.step()),
                             )?;
+                            if let Some(actor) = actor {
+                                actor
+                                    .budget
+                                    .skip_seconds(instance.stats().skipped_seconds - skipped);
+                            }
                         }
                         Ok::<_, EffectRuntimeError>(())
                     })();

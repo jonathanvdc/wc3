@@ -64,6 +64,7 @@ mod queued {
             &mut Commands::new(&mut queue, &world),
             owner,
             PendingModelRequest,
+            None,
         );
         world.despawn(owner);
         queue.apply(&mut world);
@@ -78,6 +79,7 @@ mod queued {
             &mut Commands::new(&mut queue, &world),
             owner,
             PendingModelRequest,
+            None,
         );
         Commands::new(&mut queue, &world).entity(owner).despawn();
         queue.apply(&mut world);
@@ -87,9 +89,75 @@ mod queued {
             &mut Commands::new(&mut queue, &world),
             owner,
             PendingModelRequest,
+            None,
         );
         Commands::new(&mut queue, &world).entity(child).despawn();
         queue.apply(&mut world);
         assert!(world.get_entity(child).is_err());
     }
+}
+
+#[test]
+fn admission_lease_releases_when_deferred_birth_is_abandoned_or_owner_dies() {
+    use super::*;
+    use crate::effects::model_budget::{ActorBudget, ModelParticleLimits};
+    use bevy::diagnostic::FrameCount;
+    use bevy::ecs::world::CommandQueue;
+    let mut world = World::new();
+    let owner = world.spawn_empty().id();
+    let budget = ActorBudget::new(owner, ModelParticleLimits::default());
+    let mut queue = CommandQueue::default();
+    spawn_owned_model(
+        &mut Commands::new(&mut queue, &world),
+        owner,
+        (),
+        Some(budget.reserve(FrameCount(0)).unwrap()),
+    );
+    assert_eq!(budget.stats(FrameCount(0)).actors, 1);
+    drop(queue);
+    assert_eq!(budget.stats(FrameCount(0)).actors, 0);
+    let mut queue = CommandQueue::default();
+    spawn_owned_model(
+        &mut Commands::new(&mut queue, &world),
+        owner,
+        (),
+        Some(budget.reserve(FrameCount(0)).unwrap()),
+    );
+    world.despawn(owner);
+    queue.apply(&mut world);
+    assert_eq!(budget.stats(FrameCount(0)).actors, 0);
+    assert_eq!(budget.stats(FrameCount(0)).pending, 0);
+}
+
+#[test]
+fn deferred_request_cannot_cross_a_tree_reload_at_a_surviving_owner() {
+    use super::*;
+    use crate::effects::model_budget::{ActorBudget, ModelParticleLimits};
+    use bevy::diagnostic::FrameCount;
+    use bevy::ecs::world::CommandQueue;
+    let mut world = World::new();
+    let root = world.spawn_empty().id();
+    let owner = world.spawn_empty().id();
+    let old = ActorBudget::new(root, ModelParticleLimits::default());
+    world.entity_mut(root).insert(ModelActorTree {
+        budget: old.clone(),
+        pending: Default::default(),
+    });
+    let mut queue = CommandQueue::default();
+    let child = spawn_owned_model(
+        &mut Commands::new(&mut queue, &world),
+        owner,
+        (),
+        Some(old.reserve(FrameCount(0)).unwrap()),
+    );
+    let new = ActorBudget::new(root, ModelParticleLimits::default());
+    world.entity_mut(root).insert(ModelActorTree {
+        budget: new.clone(),
+        pending: Default::default(),
+    });
+    queue.apply(&mut world);
+    assert!(world.get_entity(owner).is_ok());
+    assert!(world.get_entity(child).is_err());
+    assert_eq!(old.stats(FrameCount(0)).actors, 0);
+    assert_eq!(new.stats(FrameCount(0)).actors, 0);
 }

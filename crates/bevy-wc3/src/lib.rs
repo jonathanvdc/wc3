@@ -86,8 +86,9 @@ pub use diagnostics::{
 };
 pub use effects::age_sprites_gpu::ParticleRefraction;
 pub use effects::{
-    ModelEmitter, ParticleEffect, ParticleProgramEmitter, ParticleTextureBinding,
-    ParticleTextureRequest, RibbonEmitter, SpriteEmitter,
+    ModelEmitter, ModelParticleLimits, ModelParticleTreeStats, ParticleEffect,
+    ParticleProgramEmitter, ParticleTextureBinding, ParticleTextureRequest, RibbonEmitter,
+    SpriteEmitter,
 };
 pub use error::ModelError;
 pub use events::{EventDispatchStats, EventProgram, EventSource, ModelEvent};

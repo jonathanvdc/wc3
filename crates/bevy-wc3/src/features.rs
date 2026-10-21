@@ -4,6 +4,7 @@ use super::runtime::{ModelDraw, ModelNode};
 use super::world::WorldLiquidSurface;
 use super::{ModelAsset, ModelInstance, ModelRig, Playback};
 use crate::child_models::{ChildModelBinding, ChildModelKey};
+use crate::effects::model_budget::ActorFrame;
 use crate::effects::model_children::ParticleModelSubtree;
 use crate::effects::model_ownership::queue_model_birth;
 use crate::layers::ModelOwnedRenderEntity;
@@ -338,6 +339,7 @@ impl RuntimeFeatures {
         nodes: &HashMap<NodeId, Entity>,
         parents: &HashMap<FeatureId, Entity>,
         owned: bool,
+        actor: Option<&ActorFrame>,
     ) -> RuntimeFeatureInstances {
         let mut instances = RuntimeFeatureInstances::default();
         for (feature, definition, origin) in &self.lights {
@@ -421,20 +423,27 @@ impl RuntimeFeatures {
                 Visibility::default(),
                 ChildOf(parent),
             ));
+            let mut admitted = false;
             if let (Some(model), Some(placement)) = (&definition.model, definition.placement) {
-                if owned {
-                    entity.insert(ParticleModelSubtree);
+                if let Ok(lease) = actor.map(ActorFrame::reserve).transpose() {
+                    if owned {
+                        entity.insert(ParticleModelSubtree);
+                    }
+                    if let Some(lease) = lease {
+                        entity.insert(lease);
+                    }
+                    entity.insert((
+                        ModelInstance(model.clone()),
+                        ChildCoordinates {
+                            coordinates: placement.coordinates,
+                            parent_basis: definition.parent_basis,
+                        },
+                    ));
+                    admitted = true;
                 }
-                entity.insert((
-                    ModelInstance(model.clone()),
-                    ChildCoordinates {
-                        coordinates: placement.coordinates,
-                        parent_basis: definition.parent_basis,
-                    },
-                ));
             }
             let entity = entity.id();
-            if owned && definition.model.is_some() && definition.placement.is_some() {
+            if owned && admitted {
                 queue_model_birth(commands, entity);
             }
             instances.attachments.push(entity);

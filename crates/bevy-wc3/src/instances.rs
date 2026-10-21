@@ -1,15 +1,19 @@
 //! Asset-backed instance requests and shared GPU preparation.
 use super::bounds::transform_bounds;
 use super::child_coordinates::ChildCoordinates;
+use super::effects::model_budget::{
+    ActorFrame, ModelActorLease, ModelActorTree, ModelParticleTreeStats,
+};
 use super::effects::model_children::{ModelParticleChild, ParticleModelSubtree};
 use super::events::EventClocks;
-use super::runtime::populate_model_with_context;
+use super::runtime::{populate_model_with_context, ModelSpawnContext};
 use super::{ModelAsset, ModelMaterial, ModelRig, Playback, PoseOverrides, PreparedModel};
 use crate::image_replacements::{effective_replacements, ImageOwners, ReplacementImages};
 use bevy::asset::{
     AssetEvent, AssetId, AssetLoadError, DependencyLoadState, LoadState,
     RecursiveDependencyLoadState,
 };
+use bevy::diagnostic::FrameCount;
 use bevy::ecs::system::SystemParam;
 use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::prelude::*;
@@ -302,6 +306,32 @@ fn cyclic_ancestor(
     None
 }
 
+/// A compiled rigid part waiting for the same bounded owned population path.
+#[derive(Component, Clone)]
+pub(crate) struct PreparedModelRequest(pub PreparedModel);
+type PreparedRequests<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static PreparedModelRequest,
+        Option<&'static Playback>,
+        Option<&'static ModelRig>,
+        Option<&'static ChildCoordinates>,
+        Option<&'static PoseOverrides>,
+        Option<&'static ModelParticleChild>,
+    ),
+>;
+struct Population<'a> {
+    root: Entity,
+    prepared: &'a PreparedModel,
+    playback: Option<&'a Playback>,
+    previous: Option<&'a ModelRig>,
+    placement: Option<&'a ChildCoordinates>,
+    overrides: Option<&'a PoseOverrides>,
+    owned: bool,
+    particle: Option<&'a ModelParticleChild>,
+}
 type ModelRequests<'world, 'state> = Query<
     'world,
     'state,
@@ -335,6 +365,10 @@ pub(crate) struct LoaderResources<'w> {
 pub(crate) struct OwnedModelFactory<'w, 's> {
     commands: Commands<'w, 's>,
     requests: ModelRequests<'w, 's>,
+    prepared: PreparedRequests<'w, 's>,
+    admissions: Query<'w, 's, &'static mut ModelActorLease>,
+    trees: Query<'w, 's, &'static ModelActorTree>,
+    frame: Option<Res<'w, FrameCount>>,
     hierarchy: ModelHierarchy<'w, 's>,
     owners: ImageOwners<'w, 's>,
     resources: LoaderResources<'w>,
@@ -345,10 +379,56 @@ impl OwnedModelFactory<'_, '_> {
         let Self {
             commands,
             requests,
+            prepared: ready_requests,
+            admissions,
+            trees,
+            frame,
             hierarchy,
             owners,
             resources,
         } = self;
+        let frame = frame.as_deref().copied().unwrap_or_default();
+        if admissions
+            .get(root)
+            .is_ok_and(|lease| !lease.is_current(trees.get(lease.budget().root()).ok()))
+        {
+            commands.entity(root).try_despawn();
+            return;
+        }
+        if let Ok((_, ready, playback, previous, placement, overrides, particle)) =
+            ready_requests.get(root)
+        {
+            let actor = if let Ok(mut lease) = admissions.get_mut(root) {
+                if !lease.admit_ready(frame) {
+                    return;
+                }
+                Some(ActorFrame {
+                    budget: lease.budget().clone(),
+                    frame,
+                    owned: true,
+                })
+            } else {
+                None
+            };
+            populate_ready(
+                commands,
+                &mut resources.meshes,
+                &mut resources.materials,
+                Population {
+                    root,
+                    prepared: &ready.0,
+                    playback,
+                    previous,
+                    placement,
+                    overrides,
+                    owned: true,
+                    particle,
+                },
+                actor.as_ref(),
+            );
+            commands.entity(root).remove::<PreparedModelRequest>();
+            return;
+        }
         let Ok((_, request, playback, previous, placement, overrides, failure, owned, particle)) =
             requests.get(root)
         else {
@@ -396,6 +476,18 @@ impl OwnedModelFactory<'_, '_> {
         let Some(source) = assets.get(&request.0) else {
             return;
         };
+        let actor = if let Ok(mut lease) = admissions.get_mut(root) {
+            if !lease.admit_ready(frame) {
+                return;
+            }
+            Some(ActorFrame {
+                budget: lease.budget().clone(),
+                frame,
+                owned: true,
+            })
+        } else {
+            None
+        };
         let prepared = cache
             .0
             .entry(request.0.id())
@@ -408,68 +500,22 @@ impl OwnedModelFactory<'_, '_> {
         };
         let prepared = &prepared;
         commands.entity(root).insert(bound);
-        let mut rebound_playback = playback.cloned().unwrap_or_default();
-        if placement.is_some() && playback.is_none() && previous.is_none() {
-            if let Some((clip, _)) = prepared.clips.first() {
-                rebound_playback.play_immediately(*clip);
-            }
-        }
-        if let Some(particle) = particle.filter(|particle| particle.first_clip_pending) {
-            if rebound_playback.clip.is_none() {
-                rebound_playback.clip = prepared.clips.first().map(|(clip, _)| *clip);
-            }
-            commands.entity(root).insert(ModelParticleChild {
-                first_clip_pending: false,
-                ..*particle
-            });
-        }
-        let (report, rebound_overrides) = rebind_state(
-            previous.map(ModelRig::model),
-            prepared,
-            &mut rebound_playback,
-            overrides,
-        );
-        if previous.is_some() || report.changed() {
-            commands.entity(root).insert(report);
-        }
-        if let Some(overrides) = rebound_overrides {
-            commands.entity(root).insert(overrides);
-        }
-        if let Some(previous) = previous {
-            previous.despawn_owned_subtree(commands);
-        }
-        if let Some(placement) = placement {
-            let mut mounted = prepared.clone();
-            mounted.basis = placement.basis(prepared.basis);
-            mounted.rest_bounds = prepared.rest_bounds.map(|bounds| {
-                transform_bounds(
-                    bounds,
-                    mounted.basis.to_matrix() * prepared.basis.to_matrix().inverse(),
-                )
-            });
-            populate_model_with_context(
-                commands,
-                meshes,
-                materials,
-                &mounted,
+        populate_ready(
+            commands,
+            meshes,
+            materials,
+            Population {
                 root,
-                owned,
-                rebound_playback.clone(),
-            );
-        } else {
-            populate_model_with_context(
-                commands,
-                meshes,
-                materials,
                 prepared,
-                root,
+                playback,
+                previous,
+                placement,
+                overrides,
                 owned,
-                rebound_playback.clone(),
-            );
-        }
-        if playback.is_some() || previous.is_some() || placement.is_some() || owned {
-            commands.entity(root).insert(rebound_playback);
-        }
+                particle,
+            },
+            actor.as_ref(),
+        );
         commands
             .entity(root)
             .remove::<ModelInstance>()
@@ -478,12 +524,110 @@ impl OwnedModelFactory<'_, '_> {
     }
 }
 
+fn populate_ready(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<ModelMaterial>,
+    population: Population<'_>,
+    actor: Option<&ActorFrame>,
+) {
+    let Population {
+        root,
+        prepared,
+        playback,
+        previous,
+        placement,
+        overrides,
+        owned,
+        particle,
+    } = population;
+    let mut rebound_playback = playback.cloned().unwrap_or_default();
+    if placement.is_some() && playback.is_none() && previous.is_none() {
+        if let Some((clip, _)) = prepared.clips.first() {
+            rebound_playback.play_immediately(*clip);
+        }
+    }
+    if let Some(particle) = particle.filter(|particle| particle.first_clip_pending) {
+        if rebound_playback.clip.is_none() {
+            rebound_playback.clip = prepared.clips.first().map(|(clip, _)| *clip);
+        }
+        commands.entity(root).insert(ModelParticleChild {
+            first_clip_pending: false,
+            ..*particle
+        });
+    }
+    let (report, rebound_overrides) = rebind_state(
+        previous.map(ModelRig::model),
+        prepared,
+        &mut rebound_playback,
+        overrides,
+    );
+    if previous.is_some() || report.changed() {
+        commands.entity(root).insert(report);
+    }
+    if let Some(overrides) = rebound_overrides {
+        commands.entity(root).insert(overrides);
+    }
+    if let Some(previous) = previous {
+        previous.despawn_owned_subtree(commands);
+        if !owned {
+            commands
+                .entity(root)
+                .remove::<(ModelActorTree, ModelParticleTreeStats)>();
+        }
+    }
+    if let Some(placement) = placement {
+        let mut mounted = prepared.clone();
+        mounted.basis = placement.basis(prepared.basis);
+        mounted.rest_bounds = prepared.rest_bounds.map(|bounds| {
+            transform_bounds(
+                bounds,
+                mounted.basis.to_matrix() * prepared.basis.to_matrix().inverse(),
+            )
+        });
+        populate_model_with_context(
+            commands,
+            meshes,
+            materials,
+            &mounted,
+            root,
+            ModelSpawnContext {
+                owned,
+                initial_playback: rebound_playback.clone(),
+                actor,
+            },
+        );
+    } else {
+        populate_model_with_context(
+            commands,
+            meshes,
+            materials,
+            prepared,
+            root,
+            ModelSpawnContext {
+                owned,
+                initial_playback: rebound_playback.clone(),
+                actor,
+            },
+        );
+    }
+    if playback.is_some() || previous.is_some() || placement.is_some() || owned {
+        commands.entity(root).insert(rebound_playback);
+    }
+}
+
 pub(crate) fn spawn_loaded_models(
     mut factory: OwnedModelFactory<'_, '_>,
     mut pending: Local<Vec<Entity>>,
 ) {
     pending.clear();
-    pending.extend(factory.requests.iter().map(|request| request.0));
+    pending.extend(
+        factory
+            .requests
+            .iter()
+            .filter(|request| !request.7)
+            .map(|request| request.0),
+    );
     for &root in pending.iter() {
         factory.populate(root);
     }

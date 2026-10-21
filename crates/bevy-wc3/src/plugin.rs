@@ -20,6 +20,7 @@ use crate::{
 };
 use bevy::asset::embedded_asset;
 use bevy::camera::visibility::VisibilitySystems;
+use bevy::diagnostic::FrameCountPlugin;
 use bevy::prelude::*;
 
 /// Registers native model and BLP loaders, Universal PBR materials and effects.
@@ -28,6 +29,9 @@ use bevy::prelude::*;
 pub struct Wc3BevyPlugin;
 impl Plugin for Wc3BevyPlugin {
     fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<FrameCountPlugin>() {
+            app.add_plugins(FrameCountPlugin);
+        }
         embedded_asset!(app, "shaders/wc3_mesh.wgsl");
         embedded_asset!(app, "shaders/extra_skinning.wgsl");
         embedded_asset!(app, "shaders/wc3_prepass.wgsl");

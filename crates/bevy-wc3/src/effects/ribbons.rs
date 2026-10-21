@@ -4,6 +4,7 @@ use super::super::material::{effect_state, ModelMaterial, SurfaceAnimation, Surf
 use super::atlas_sprites::retimed_selection;
 use super::emission::{EffectChange, EmissionClock};
 use super::frame::EffectStart;
+use super::model_budget::ActorFrame;
 use super::ribbon_definition::{TrailAtlasSlot, TrailBehavior, TrailEmitter, TrailRendering};
 use super::EffectFrame;
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
@@ -382,12 +383,13 @@ impl RuntimeRibbons {
             previous_clip: None,
         }
     }
-    pub fn update(
+    pub fn update_bounded(
         &self,
         instances: &mut RibbonInstancesState,
         frame: &EffectFrame<'_, '_, '_>,
         render: &mut Query<&mut RibbonInstances>,
         stats: &mut Query<&mut RibbonEmitter>,
+        actor: Option<&ActorFrame>,
     ) {
         let previous = instances.previous_time.unwrap_or(frame.time);
         let dt = (frame.time - previous).max(0.);
@@ -415,7 +417,12 @@ impl RuntimeRibbons {
             if dt > 0. && definition.emission_rate > 0. && definition.lifetime > 0. {
                 let mut clock = EmissionClock::new(previous, frame.time);
                 let mut remaining = CAPACITY;
+                let mut checked_end = previous;
                 for step in clock.by_ref() {
+                    if actor.is_some_and(|actor| !actor.step()) {
+                        break;
+                    }
+                    checked_end = step.end;
                     let schedule = state.phase.continuous(
                         definition.emission_rate,
                         step.end - step.start,
@@ -504,11 +511,15 @@ impl RuntimeRibbons {
                         state.connected = true;
                     }
                 }
-                if clock.omitted_seconds() > 0. {
+                let skipped = (frame.time - checked_end).max(0.);
+                if let Some(actor) = actor {
+                    actor.budget.skip_seconds(skipped);
+                }
+                if skipped > 0. {
                     state.break_chain();
-                    state.omitted = state.omitted.saturating_add(
-                        (clock.omitted_seconds() * definition.emission_rate).ceil() as u64,
-                    );
+                    state.omitted = state
+                        .omitted
+                        .saturating_add((skipped * definition.emission_rate).ceil() as u64);
                 }
             } else if dt > 0. {
                 state.break_chain();

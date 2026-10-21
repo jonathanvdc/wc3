@@ -1,5 +1,6 @@
 //! Ordinary Bevy model instances owned by shared age-driven particle births.
 use super::m2_model_geometry::ParticleKey;
+use super::model_budget::ModelActorLease;
 use super::model_children::{ModelParticleChild, ModelParticleStart, ParticleModelSubtree};
 use super::model_ownership::spawn_owned_model;
 use crate::child_coordinates::ChildCoordinates;
@@ -12,9 +13,9 @@ pub(super) struct ModelTemplate {
     pub model: Handle<ModelAsset>,
     pub coordinates: ChildCoordinates,
 }
-#[derive(Clone, Copy)]
 pub(super) struct ModelProjection {
     pub ordinal: u64,
+    pub lease: Option<ModelActorLease>,
     pub birth: f64,
     pub lifetime: f64,
     pub age: f64,
@@ -67,7 +68,7 @@ impl ModelChildren {
     ) {
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
-        for sample in particles {
+        for mut sample in particles {
             let key = ParticleKey {
                 epoch: self.epoch,
                 ordinal: sample.ordinal,
@@ -108,6 +109,7 @@ impl ModelChildren {
                             Visibility::Hidden
                         },
                     ),
+                    sample.lease.take(),
                 );
                 Slot {
                     entity,

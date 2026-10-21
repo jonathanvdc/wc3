@@ -1,6 +1,7 @@
 //! Direct staged sprite simulation using the resident immutable GPU transport.
 use super::emission::{EffectChange, EmissionClock};
 use super::frame::EffectStart;
+use super::model_budget::ActorFrame;
 use super::{EffectFrame, SpriteEmitter};
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::effects::blend::EffectBlend;
@@ -16,6 +17,7 @@ use bevy::camera::visibility::NoFrustumCulling;
 use bevy::math::{Quat, Vec3};
 use bevy::prelude::*;
 use std::array::from_fn;
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_8, PI};
 use std::mem::take;
@@ -351,12 +353,13 @@ impl RuntimeAtlasParticles {
             previous_time: None,
         }
     }
-    pub fn update(
+    pub fn update_bounded(
         &self,
         instances: &mut AtlasParticleInstances,
         frame: &EffectFrame<'_, '_, '_>,
         render: &mut Query<&mut SpriteInstances>,
         stats: &mut Query<&mut SpriteEmitter>,
+        actor: Option<&ActorFrame>,
     ) {
         let previous = instances.previous_time.unwrap_or(frame.time);
         let reset = frame.time < previous || frame.change == EffectChange::Reset;
@@ -400,11 +403,17 @@ impl RuntimeAtlasParticles {
                         node,
                         dt,
                         frame.pose.is_some() || (enabled && !ended),
+                        actor,
                     );
                 } else if frame.pose.is_some() || (enabled && !ended) {
                     let mut clock = EmissionClock::new(previous, frame.time);
                     let mut remaining = CAPACITY;
+                    let mut checked_end = previous;
                     for step in clock.by_ref() {
+                        if actor.is_some_and(|actor| !actor.step()) {
+                            break;
+                        }
+                        checked_end = step.end;
                         let Some((clip, shared)) = retimed_selection(frame, step.sample_time)
                         else {
                             continue;
@@ -433,7 +442,11 @@ impl RuntimeAtlasParticles {
                             self.birth(emitter, state, frame, time, transform);
                         }
                     }
-                    state.skipped_seconds += clock.omitted_seconds();
+                    let skipped = (frame.time - checked_end).max(0.);
+                    state.skipped_seconds += skipped;
+                    if let Some(actor) = actor {
+                        actor.budget.skip_seconds(skipped);
+                    }
                 }
             }
             state.previous_node = node;
@@ -584,6 +597,7 @@ impl RuntimeAtlasParticles {
             push(record.as_tail());
         }
     }
+    #[allow(clippy::too_many_arguments)]
     fn bursts(
         &self,
         emitter: &AtlasEmitter,
@@ -592,6 +606,7 @@ impl RuntimeAtlasParticles {
         node: Mat4,
         dt: f64,
         emit: bool,
+        actor: Option<&ActorFrame>,
     ) {
         // Effective track selection and clock bounds are shared with ordinary
         // property sampling, so inactive programmes cannot produce bursts.
@@ -647,12 +662,17 @@ impl RuntimeAtlasParticles {
         let previous = state.previous_raw;
         let mut occurrences = take(&mut state.bursts);
         occurrences.clear();
+        let exhausted = Cell::new(false);
         let mut add = |key: f64, value: f32| {
             if occurrences.len() >= MAX_BURST_OCCURRENCES {
                 return;
             }
             let mut cycle = period.map_or(0., |period| ((previous - key) / period).ceil());
             for _ in 0..MAX_BURST_OCCURRENCES {
+                if actor.is_some_and(|actor| !actor.step()) {
+                    exhausted.set(true);
+                    break;
+                }
                 if occurrences.len() >= MAX_BURST_OCCURRENCES {
                     break;
                 }
@@ -674,6 +694,10 @@ impl RuntimeAtlasParticles {
         if let Some(track) = track {
             let times = track.times();
             for (index, key) in times.iter().enumerate() {
+                if actor.is_some_and(|actor| !actor.step()) {
+                    exhausted.set(true);
+                    break;
+                }
                 if times.get(index + 1) == Some(key) {
                     continue;
                 }
@@ -689,6 +713,12 @@ impl RuntimeAtlasParticles {
             }
         } else if !emitter.animated_rate {
             add(origin, frame.sample.animated(&emitter.rate));
+        }
+        if exhausted.get() {
+            state.skipped_seconds += dt;
+            if let Some(actor) = actor {
+                actor.budget.skip_seconds(dt);
+            }
         }
         occurrences.sort_by(|a, b| a.0.total_cmp(&b.0));
         for &(occurrence, count) in
@@ -870,6 +900,7 @@ mod tests {
             Mat4::IDENTITY,
             dt,
             emit,
+            None,
         );
     }
     #[test]

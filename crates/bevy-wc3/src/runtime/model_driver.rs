@@ -2,18 +2,20 @@
 use super::current_affine::{CurrentAffines, CurrentTransformSource, NodePoseSource};
 use super::evaluation::{EvaluationFrame, ModelEvaluationWorld};
 use super::model_step_order::{ModelStepOrder, ModelStepParent};
+use super::model_tree::{actor_frame, prepare_tree, publish_tree};
 use super::mounts::MountedModel;
 use super::{ModelRig, Playback, PoseOverrides};
 use crate::child_coordinates::ChildCoordinates;
+use crate::effects::model_budget::{ModelActorLease, ModelActorTree};
 use crate::effects::model_children::{
     current_hierarchy_visible, observe_model_start, synchronize_child, ModelParticleChild,
     ModelParticleStart, ParticleModelSubtree,
 };
 use crate::effects::model_ownership::ModelParticleBirths;
 use crate::effects::EffectChange;
-use crate::effects::{EffectFrame, EffectWorld, ModelOutputs};
+use crate::effects::{EffectFrame, EffectWorld, ModelOutputs, RuntimeParticles};
 use crate::features::{ModelAttachment, OwnedAttachmentClocks};
-use crate::instances::{ModelInstance, OwnedModelFactory};
+use crate::instances::{ModelInstance, OwnedModelFactory, PreparedModelRequest};
 use crate::physics::PhysicsSimulation;
 use crate::pose::PoseContext;
 use bevy::ecs::change_detection::Tick;
@@ -63,6 +65,8 @@ pub(crate) struct ModelPipeline {
     attachment_starts: HashSet<Entity>,
     entities: Vec<Entity>,
     actors: QueryState<Entity, ModelActors>,
+    trees: QueryState<Entity, With<ModelActorTree>>,
+    tree_roots: Vec<Entity>,
 }
 impl ModelPipeline {
     fn new(world: &mut World) -> Self {
@@ -83,6 +87,8 @@ impl ModelPipeline {
             attachment_starts: HashSet::new(),
             entities: Vec::new(),
             actors: world.query_filtered(),
+            trees: world.query_filtered(),
+            tree_roots: Vec::new(),
         }
     }
 }
@@ -155,7 +161,7 @@ impl CurrentTransformSource for BirthFrames<'_> {
         WorldFrames(self.world).edge(entity)
     }
 }
-fn actor_parent(world: &World, entity: Entity) -> Option<Entity> {
+pub(super) fn actor_parent(world: &World, entity: Entity) -> Option<Entity> {
     if let Some(child) = world.get::<ModelParticleChild>(entity) {
         return Some(child.root);
     }
@@ -180,9 +186,17 @@ fn actor_parent(world: &World, entity: Entity) -> Option<Entity> {
 /// Application Transform edits ordered before this stage affect owned actors now.
 pub(crate) fn simulate_model_particles(world: &mut World, mut state: Local<Option<ModelPipeline>>) {
     let pipeline = state.get_or_insert_with(|| ModelPipeline::new(world));
+    pipeline.tree_roots.clear();
+    pipeline.tree_roots.extend(pipeline.trees.iter(world));
+    for &root in &pipeline.tree_roots {
+        prepare_tree(world, root);
+    }
     pipeline.entities.clear();
     pipeline.entities.extend(pipeline.actors.iter(world));
     if pipeline.entities.is_empty() {
+        for &root in &pipeline.tree_roots {
+            publish_tree(world, root);
+        }
         return;
     }
     let evaluation_tick = pipeline.evaluation.meta().get_last_run();
@@ -245,7 +259,9 @@ pub(crate) fn simulate_model_particles(world: &mut World, mut state: Local<Optio
             continue;
         }
         let new_actor = pipeline.fresh.contains(&entity) || world.get::<ModelRig>(entity).is_none();
-        if world.get::<ModelInstance>(entity).is_some() {
+        if world.get::<ModelInstance>(entity).is_some()
+            || world.get::<PreparedModelRequest>(entity).is_some()
+        {
             pipeline.factory.meta_mut().set_last_run(factory_tick);
             if let Ok(mut factory) = pipeline.factory.get_mut(world) {
                 factory.populate(entity);
@@ -255,6 +271,14 @@ pub(crate) fn simulate_model_particles(world: &mut World, mut state: Local<Optio
             // is populated; inherit the current camera before its first pose.
             if !synchronize_owned_actor(world, entity) {
                 continue;
+            }
+        }
+        if world.get::<ModelRig>(entity).is_some()
+            && world.get::<ModelInstance>(entity).is_none()
+            && world.get::<PreparedModelRequest>(entity).is_none()
+        {
+            if let Some(mut lease) = world.get_mut::<ModelActorLease>(entity) {
+                lease.ready();
             }
         }
         if (new_actor || world.get::<ModelParticleStart>(entity).is_some())
@@ -285,6 +309,11 @@ pub(crate) fn simulate_model_particles(world: &mut World, mut state: Local<Optio
                 pipeline.pending.push_back(entity);
             }
         }
+    }
+    pipeline.tree_roots.clear();
+    pipeline.tree_roots.extend(pipeline.trees.iter(world));
+    for &root in &pipeline.tree_roots {
+        publish_tree(world, root);
     }
     let tick = world.read_change_tick();
     pipeline.evaluation.meta_mut().set_last_run(tick);
@@ -472,6 +501,7 @@ fn process_actor(
         .and_then(|source| pipeline.affines.resolve(source, &WorldFrames(world)))
         .map(Affine3A::from_mat4);
     let owned = world.get::<ParticleModelSubtree>(entity).is_some();
+    let actor_frame = actor_frame(world, entity, owned);
     if owned {
         pipeline.evaluation.meta_mut().set_last_run(evaluation_tick);
         if let Ok(mut evaluation) = pipeline.evaluation.get_mut(world) {
@@ -533,6 +563,7 @@ fn process_actor(
                     transition,
                     ..
                 } = &mut *instance;
+                RuntimeParticles::set_actor_frame(particles, actor_frame.clone());
                 if let Some(birth_basis) = initial_basis {
                     let mut initial_selection = selection;
                     initial_selection.clip_time = Time::seconds(0.).unwrap();
@@ -592,7 +623,8 @@ fn process_actor(
                         &mut effects,
                         &mut outputs,
                         playback.driving_camera,
-                        !owned,
+                        actor_frame.is_some(),
+                        actor_frame.as_ref(),
                     );
                     prepared = Some(PreparedEffectStep {
                         selection,

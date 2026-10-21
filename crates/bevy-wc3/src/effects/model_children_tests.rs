@@ -99,11 +99,14 @@ fn detached_children_are_cleaned_up_with_the_renderer_owner() {
 }
 #[test]
 fn detached_particle_requests_cannot_reload_an_ancestor_model() {
-    use super::super::super::instances::{spawn_loaded_models, PreparedModelCache};
+    use super::super::super::instances::{
+        spawn_loaded_models, OwnedModelFactory, PreparedModelCache,
+    };
     use super::super::super::{
         compile_model, ModelInstanceError, ModelMaterial, ModelRig, ModelSource,
     };
     use crate::image_replacements::ReplacementImages;
+    use bevy::ecs::system::SystemState;
     use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
     let model = Model::<Universal>::empty(ModelMetadata::Mdlx(Default::default())).unwrap();
     let mut app = App::new();
@@ -130,6 +133,14 @@ fn detached_particle_requests_cannot_reload_an_ancestor_model() {
         .entity_mut(particle)
         .insert(ModelInstance(handle));
     app.update();
+    assert!(
+        app.world().get::<ModelInstance>(particle).is_some(),
+        "the global loader leaves owned requests to the bounded factory"
+    );
+    assert!(app.world().get::<ModelRig>(particle).is_none());
+    let mut factory = SystemState::<OwnedModelFactory>::new(app.world_mut());
+    factory.get_mut(app.world_mut()).unwrap().populate(particle);
+    factory.apply(app.world_mut());
     assert!(
         matches!(app.world().get::<ModelInstanceError>(particle), Some(ModelInstanceError::CyclicDependency { ancestor, .. }) if *ancestor == root)
     );

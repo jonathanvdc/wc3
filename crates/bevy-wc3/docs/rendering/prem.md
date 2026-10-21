@@ -39,11 +39,13 @@ once, in radians per second, and integrates that tumble by particle age.
 
 The child retains its own material colors and opacity. Parent particle color and
 alpha curves are not material overrides. Model coordinate conversion applies
-once, separately from authored particle size. Collapsed birth frames omit the birth. A temporarily collapsed attached frame
-hides its existing actor while retaining its identity, clock, and last finite
+once, separately from authored particle size. Collapsed birth frames omit the
+birth. A temporarily collapsed attached frame hides its existing actor while
+retaining its identity, clock, and last finite
 Transform; valid projection makes that same actor visible again. Signed scale
-is retained, while shear is approximated by Bevy's rotation/scale Transform. Native tumble distributions, unit-scale conventions,
-and attached model-particle fidelity remain unverified.
+is retained, while shear is approximated by Bevy's rotation/scale Transform.
+Native tumble distributions, unit-scale conventions, and attached model-particle
+fidelity remain unverified.
 
 ## Playback, timing, and ownership
 
@@ -84,9 +86,10 @@ independent clock over the accepted particle-age interval, applying their own
 playback speed once; mapped ancestor speeds do not multiply it again. Explicit
 nonzero or paused child clocks retain their policy. Animated attachment activation
 starts at readiness and reports an approximation: initial activation crossings
-are not reconstructed. Pending automatic attachments retain their captured interval while the owner's
-observed clock stays unchanged. Once that clock advances, later readiness starts
-at the endpoint without replaying the owner's startup interval.
+are not reconstructed. Pending automatic attachments retain their captured
+interval while the owner's observed clock stays unchanged. Once that clock
+advances, later readiness starts at the endpoint without replaying the owner's
+startup interval.
 
 Current hierarchy visibility hides living particles and suppresses new births.
 An explicit `Visibility::Visible` override follows Bevy ancestry semantics.
@@ -94,18 +97,36 @@ Emitter activation stops births without destroying existing particles.
 
 ## Limits
 
-Each emitter is limited to 1,024 live child models and a bounded per-update birth
-budget. `ModelEmitter` exposes population, omitted births, and skipped simulation
-time. PREM counts authored occurrences discarded by its per-update cap, including
-those skipped without evaluating each birth. The same omitted birth is counted
-once when the population or generation boundary also prevents it. Unexamined
-time beyond the simulation-step budget is reported separately as skipped seconds.
-Excess work
-is discarded rather than queued after a stall. The initial
-adapter permits one geometry-model particle generation: child models retain
-ordinary mesh, sprite, ribbon, light, and attachment behavior, but further
-model-particle births are omitted and diagnosed. Recursive geometry actors and
-pooled M2 emitter-template trails require additional bounded ownership support.
+Each emitter retains its own live-particle and per-update birth limits.
+`ModelEmitter` exposes population, omitted births, and skipped simulation time.
+PREM counts authored occurrences discarded by its per-update cap, including those
+skipped without evaluating each birth. An omitted occurrence is counted once.
+Unexamined simulation time is reported separately as skipped seconds.
+
+Nested geometry-model particles share one ownership tree with their static rigid
+parts and automatic model attachments. Add `ModelParticleLimits` to the outer
+application model root to configure the tree; defaults allow 4,096 pending or
+ready actors, 512 birth/admission operations, and 16,384 examined emission steps
+per application frame. Preexisting application-owned assembly parts are outside
+these actor limits. Accepted pending requests reserve actor capacity immediately;
+despawn, reset, reload, failed loading and rejected ownership release it.
+Reducing limits preserves already accepted actors and constrains future work.
+At capacity, an update that retires children can still omit replacement births
+until those children despawn.
+
+Readiness retries precede fresh births and rotate through a stable queue. Ready
+actors always receive their pose, material and effect update; this does not spend
+birth/admission work. Owned effect sources share the emission-step allowance,
+including programme simulation steps and examined keyed-burst keys or
+occurrences. Current owner order determines which sources receive the remaining work during a
+long frame. Excess admissions and unexamined time are omitted without a catch-up
+queue, rather than creating an unbounded recursive hierarchy. `ModelParticleTreeStats`
+on the application root reports pending/ready actors, current-frame work and
+cumulative exclusive omission reasons. Its skipped seconds sum across effect
+sources, rather than measuring elapsed scene wall time.
+
+Cyclic resource dependencies remain rejected. M2 pooled emitter-template trails
+need their separate interpreter; resolving `RPID` does not activate it.
 
 This is a CPU hierarchy/model simulation and can cost substantially more than
 sprite particles at comparable populations. Synthetic tests cover lifecycle and

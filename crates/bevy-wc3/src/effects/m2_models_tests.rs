@@ -12,6 +12,7 @@ fn template() -> ModelTemplate {
 }
 fn projection(ordinal: u64, age: f64, x: f32) -> ModelProjection {
     ModelProjection {
+        lease: None,
         ordinal,
         birth: 0.,
         lifetime: 10.,
@@ -159,16 +160,14 @@ fn first_invalid_projection_uses_hidden_finite_birth_frame() {
     let mut children = ModelChildren::default();
     let mut sample = projection(1, 0.2, 99.);
     sample.transform = None;
+    let initial_transform = sample.initial_transform;
     synchronize(&mut world, &mut children, owner, [sample]);
     let entity = children.slots[&ParticleKey {
         epoch: 0,
         ordinal: 1,
     }]
         .entity;
-    assert_eq!(
-        *world.get::<Transform>(entity).unwrap(),
-        sample.initial_transform
-    );
+    assert_eq!(*world.get::<Transform>(entity).unwrap(), initial_transform);
     assert_eq!(
         *world.get::<Visibility>(entity).unwrap(),
         Visibility::Hidden

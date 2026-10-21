@@ -11,7 +11,9 @@ mod implosion;
 mod m2_model_geometry;
 mod m2_models;
 mod m2_particles;
+pub(crate) mod model_budget;
 pub(crate) mod model_children;
+pub use model_budget::{ModelParticleLimits, ModelParticleTreeStats};
 pub(crate) mod model_ownership;
 pub(super) mod model_particles;
 
@@ -19,7 +21,7 @@ mod programmes;
 mod ribbons;
 mod world;
 use super::events::EventTraversal;
-use super::material::{ModelMaterial, SurfacePass};
+use super::material::SurfacePass;
 use crate::child_models::{ChildModelBinding, ChildModelKey};
 use crate::textures::TextureImages;
 use atlas_sprites::{AtlasParticleInstances, RuntimeAtlasParticles};
@@ -32,6 +34,7 @@ pub(crate) use m2_models::ModelOutputs;
 pub(crate) use m2_particles::GeometryWorld;
 pub use m2_particles::SpriteEmitter;
 use m2_particles::{M2ParticleInstances, RuntimeM2Particles};
+use model_budget::ActorFrame;
 pub use model_particles::ModelEmitter;
 use model_particles::{ModelParticleInstances, RuntimeModelParticles};
 pub use programmes::{
@@ -57,6 +60,7 @@ pub(super) struct RuntimeParticles {
 #[derive(Default)]
 pub(super) struct ParticleInstances {
     clock: EffectClock,
+    actor: Option<ActorFrame>,
     m2: M2ParticleInstances,
     atlas: AtlasParticleInstances,
     ribbons: RibbonInstancesState,
@@ -139,13 +143,13 @@ impl RuntimeParticles {
         &self,
         commands: &mut Commands,
         meshes: &mut Assets<Mesh>,
-        materials: &mut Assets<ModelMaterial>,
         basis: Entity,
     ) -> ParticleInstances {
         // Create age meshes before the resident transports, preserving entity order.
-        let m2 = self.m2.spawn(commands, meshes, materials, basis);
+        let m2 = self.m2.spawn(commands, meshes, basis);
         ParticleInstances {
             clock: EffectClock::default(),
+            actor: None,
             programmes: self.programmes.spawn(commands, meshes, basis),
             atlas: self.atlas.spawn(commands, meshes, basis),
             ribbons: self.ribbons.spawn(commands, meshes, basis),
@@ -173,6 +177,9 @@ impl RuntimeParticles {
     }
     pub(crate) fn has_model_actors(&self) -> bool {
         self.m2.has_models() || !self.models.is_empty()
+    }
+    pub(crate) fn set_actor_frame(instances: &mut ParticleInstances, actor: Option<ActorFrame>) {
+        instances.actor = actor;
     }
     pub(crate) fn seed_owned(
         &self,
@@ -204,6 +211,7 @@ impl RuntimeParticles {
         outputs: &mut ModelOutputs<'w, 's>,
         driving_camera: Option<Entity>,
         allow_births: bool,
+        actor: Option<&ActorFrame>,
     ) -> (f64, emission::EffectChange) {
         let (time, change) =
             instances
@@ -219,11 +227,11 @@ impl RuntimeParticles {
             &world.models,
             &mut world.model_statistics,
             allow_births,
+            actor,
         );
         self.m2.update_with_models(
             &mut instances.m2,
             frame,
-            &mut world.meshes,
             &mut world.age_sprites,
             &mut world.age_statistics,
             Some(GeometryWorld {
@@ -233,6 +241,7 @@ impl RuntimeParticles {
                 root,
                 driving_camera,
                 allow_births,
+                actor,
             }),
         );
         (time, change)
@@ -254,11 +263,13 @@ impl RuntimeParticles {
         world: &mut EffectWorld<'_, '_>,
         simulate_models: bool,
     ) {
-        self.atlas.update(
+        let actor = instances.actor.as_ref().filter(|actor| actor.owned);
+        self.atlas.update_bounded(
             &mut instances.atlas,
             &frame,
             &mut world.sprites,
             &mut world.age_statistics,
+            actor,
         );
         if simulate_models {
             self.models.update(
@@ -270,26 +281,27 @@ impl RuntimeParticles {
                 &mut world.model_statistics,
             );
         }
-        self.ribbons.update(
+        self.ribbons.update_bounded(
             &mut instances.ribbons,
             &frame,
             &mut world.trails,
             &mut world.ribbon_statistics,
+            actor,
         );
-        self.programmes.update(
+        self.programmes.update_bounded(
             &mut instances.programmes,
             &frame,
             &mut world.age_sprites,
             &mut world.program_statistics,
+            actor,
         );
         if simulate_models {
-            self.m2.update(
+            self.m2.update_bounded(
                 &mut instances.m2,
                 frame,
-                &mut world.meshes,
                 &mut world.age_sprites,
                 &mut world.age_statistics,
-                world.materials.bypass_change_detection(),
+                actor,
             );
         }
     }

@@ -18,6 +18,7 @@ fn scene() -> (App, Entity, Handle<ModelAsset>) {
     let prepared = compiled.prepare(&mut meshes, &mut binds);
     let mut materials = Assets::<ModelMaterial>::default();
     let mut app = App::new();
+    app.add_plugins(bevy::diagnostic::FrameCountPlugin);
     let mut queue = CommandQueue::default();
     let root = super::super::spawn_model(
         &mut Commands::new(&mut queue, app.world()),
@@ -498,4 +499,188 @@ fn global_loader_ready_attachment_consumes_its_captured_interval_before_pose() {
     let count = sprite_population(&mut app);
     app.update();
     assert_eq!(sprite_population(&mut app), count);
+}
+
+#[test]
+fn static_owned_descendants_share_admission_limit_and_release_with_owner() {
+    use crate::compiled::RuntimeMount;
+    use crate::effects::model_budget::{
+        ActorBudget, ModelActorTree, ModelParticleLimits, ModelParticleTreeStats,
+    };
+    use bevy::diagnostic::FrameCount;
+    let (mut app, root, _) = scene();
+    let handle = effect_asset(
+        &mut app,
+        r#"Version { FormatVersion 800, } Model "static" {} Bone "pivot" { ObjectId 0, GeosetId Multiple, GeosetAnimId None, } PivotPoints 1 { { 0, 0, 0 }, }"#,
+    );
+    let assets = app.world().resource::<Assets<ModelAsset>>();
+    let mut meshes = Assets::<Mesh>::default();
+    let mut binds = Assets::<SkinnedMeshInverseBindposes>::default();
+    let leaf = assets
+        .get(&handle)
+        .unwrap()
+        .compiled
+        .prepare(&mut meshes, &mut binds);
+    let mut branch = leaf.clone();
+    branch.mounts = (0..5)
+        .map(|_| RuntimeMount {
+            parent: 0,
+            socket: None,
+            transform: Transform::default(),
+            model: leaf.clone(),
+            clips: HashMap::new(),
+        })
+        .collect();
+    let limits = ModelParticleLimits {
+        actors_per_tree: 3,
+        birth_work_per_frame: 20,
+        ..Default::default()
+    };
+    let budget = ActorBudget::new(root, limits);
+    app.world_mut().entity_mut(root).insert((
+        limits,
+        ModelActorTree {
+            budget: budget.clone(),
+            pending: Default::default(),
+        },
+    ));
+    let frame = *app.world().resource::<FrameCount>();
+    let child = birth(&mut app, root, handle, 10.);
+    app.world_mut()
+        .entity_mut(child)
+        .remove::<ModelInstance>()
+        .insert((
+            PreparedModelRequest(branch),
+            budget.reserve(frame).unwrap(),
+            ParticleModelSubtree,
+        ));
+    app.update();
+    assert!(app.world().get::<ModelRig>(child).is_some());
+    let stats = app.world().get::<ModelParticleTreeStats>(root).unwrap();
+    assert_eq!((stats.actors, stats.pending), (3, 0));
+    assert_eq!(
+        stats.omitted_actor_limit, 3,
+        "static mounts count even without emitters"
+    );
+    let children = app.world().get::<ModelRig>(child).unwrap().mounts();
+    assert_eq!(children.len(), 2);
+    for entity in children {
+        assert!(
+            app.world().get::<ModelRig>(*entity).is_some(),
+            "ready static descendants populate through the bounded worklist"
+        );
+    }
+    app.world_mut().despawn(child);
+    assert_eq!(budget.stats(frame).actors, 0);
+}
+
+fn model_emitter_asset(app: &mut App, child: Handle<ModelAsset>, rate: f32) -> Handle<ModelAsset> {
+    use crate::{compile_model_with_options, ChildModelBinding, ChildModelKey, CompileOptions};
+    use wc3::model::{conversion::ImportOptions, io::mdlx};
+    let source = format!(
+        r#"Version {{ FormatVersion 800, }} Model "nested" {{}} ParticleEmitter "source" {{ ObjectId 0, EmitterUsesMdl, Path "child.mdl", static EmissionRate {rate}, static Gravity 0, static Longitude 0, static Latitude 0, static LifeSpan 2, static InitVelocity 0, }} PivotPoints 1 {{ {{ 0,0,0 }}, }}"#
+    );
+    let model = mdlx::decode_mdl(&source, &ImportOptions::default())
+        .unwrap()
+        .value
+        .widen::<Universal>();
+    let feature = model.features().iter().next().unwrap().0;
+    let compiled = compile_model_with_options(
+        &model,
+        CompileOptions {
+            child_models: [(
+                ChildModelKey::particle_geometry(feature),
+                ChildModelBinding::new(child),
+            )]
+            .into(),
+            ..Default::default()
+        },
+        |_| None,
+    )
+    .unwrap();
+    app.world_mut()
+        .resource_mut::<Assets<ModelAsset>>()
+        .add(ModelAsset {
+            compiled,
+            images: HashMap::new(),
+            unresolved_images: Vec::new(),
+        })
+}
+#[test]
+fn nested_model_births_share_tree_limits_and_never_replay_a_rejected_interval() {
+    use crate::effects::model_budget::{ModelParticleLimits, ModelParticleTreeStats};
+    let (mut app, root, leaf) = scene();
+    let middle = model_emitter_asset(&mut app, leaf, 100.);
+    let outer = model_emitter_asset(&mut app, middle, 10.);
+    app.world_mut().entity_mut(root).insert((
+        ModelInstance(outer),
+        ModelParticleLimits {
+            actors_per_tree: 5,
+            birth_work_per_frame: 20,
+            emission_steps_per_frame: 40,
+        },
+    ));
+    app.update();
+    app.world_mut()
+        .get_mut::<Playback>(root)
+        .unwrap()
+        .shared_time = 0.25;
+    app.update();
+    let stats = app.world().get::<ModelParticleTreeStats>(root).unwrap();
+    assert_eq!(stats.actors, 5);
+    assert_eq!(stats.pending, 0);
+    assert!(stats.omitted_actor_requests() > 0);
+    assert!(stats.birth_work <= 20 && stats.emission_steps <= 40);
+    let mut children = app.world_mut().query::<&ModelParticleChild>();
+    assert!(
+        children.iter(app.world()).any(|child| child.root != root),
+        "a second geometry-model generation must actually be admitted"
+    );
+    let total = stats_actors(&app, root);
+    app.update();
+    assert_eq!(
+        stats_actors(&app, root),
+        total,
+        "paused readiness cannot replay the omitted source interval"
+    );
+    app.world_mut().get_mut::<Playback>(root).unwrap().restart();
+    app.update();
+    assert_eq!(
+        stats_actors(&app, root),
+        0,
+        "reset releases the entire ownership tree"
+    );
+}
+fn stats_actors(app: &App, root: Entity) -> usize {
+    app.world()
+        .get::<crate::effects::model_budget::ModelParticleTreeStats>(root)
+        .unwrap()
+        .actors
+}
+
+#[test]
+fn stale_leased_ready_request_is_rejected_before_factory_population() {
+    use crate::effects::model_budget::{ActorBudget, ModelActorTree, ModelParticleLimits};
+    use bevy::diagnostic::FrameCount;
+    let (mut app, root, handle) = scene();
+    let old = ActorBudget::new(root, ModelParticleLimits::default());
+    let prepared = app.world().get::<ModelRig>(root).unwrap().model().clone();
+    let child = birth(&mut app, root, handle, 1.);
+    app.world_mut()
+        .entity_mut(child)
+        .remove::<ModelInstance>()
+        .insert((
+            PreparedModelRequest(prepared),
+            old.reserve(FrameCount(0)).unwrap(),
+            ParticleModelSubtree,
+        ));
+    let new = ActorBudget::new(root, ModelParticleLimits::default());
+    app.world_mut().entity_mut(root).insert(ModelActorTree {
+        budget: new.clone(),
+        pending: Default::default(),
+    });
+    app.update();
+    assert!(app.world().get_entity(child).is_err());
+    assert_eq!(old.stats(FrameCount(0)).actors, 0);
+    assert_eq!(new.stats(FrameCount(0)).actors, 0);
 }

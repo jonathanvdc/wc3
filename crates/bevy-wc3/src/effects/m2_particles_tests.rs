@@ -258,7 +258,6 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
     let mut gpu_world = World::new();
     let mut gpu_query = gpu_world.query::<&mut AgeSpriteData>();
     let mut query_state = world.query::<&mut SpriteEmitter>();
-    let mut materials = Assets::<ModelMaterial>::default();
     emitter.rate = emitter.speed;
     let runtime = RuntimeM2Particles {
         emitters: vec![emitter],
@@ -275,7 +274,6 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         &mut meshes,
         &mut gpu_query.query_mut(&mut gpu_world),
         &mut query_state.query_mut(&mut world),
-        &mut materials,
     );
     let Some(VertexAttributeValues::Float32x3(positions)) = meshes
         .get(&handle)
@@ -301,7 +299,6 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         &mut meshes,
         &mut gpu_query.query_mut(&mut gpu_world),
         &mut query_state.query_mut(&mut world),
-        &mut materials,
     );
     let Some(VertexAttributeValues::Float32x3(positions)) = meshes
         .get(&handle)
@@ -405,7 +402,6 @@ fn world_particles_follow_only_translation_after_their_birth() {
     let mut gpu_world = World::new();
     let mut gpu_query = gpu_world.query::<&mut AgeSpriteData>();
     let mut query = world.query::<&mut SpriteEmitter>();
-    let mut materials = Assets::<ModelMaterial>::default();
     let nodes = [Mat4::from_translation(Vec3::X * 4.)];
     let frame = EffectFrame {
         traversal: SlotConstruct::construct(&mut slot_values),
@@ -425,7 +421,6 @@ fn world_particles_follow_only_translation_after_their_birth() {
         &mut meshes,
         &mut gpu_query.query_mut(&mut gpu_world),
         &mut query.query_mut(&mut world),
-        &mut materials,
     );
     let births = &instances.emitters[0].births;
     assert_eq!(births.len(), 3);
@@ -1110,7 +1105,6 @@ fn implosion_long_update_reports_omitted_time_once_per_emitter() {
         ..Default::default()
     };
     let mut meshes = Assets::<Mesh>::default();
-    let mut materials = Assets::<ModelMaterial>::default();
     let mut gpu_world = World::new();
     let mut gpu_query = gpu_world.query::<&mut AgeSpriteData>();
     let mut stats_world = World::new();
@@ -1130,7 +1124,6 @@ fn implosion_long_update_reports_omitted_time_once_per_emitter() {
             &mut meshes,
             &mut gpu_query.query_mut(&mut gpu_world),
             &mut stats_query.query_mut(&mut stats_world),
-            &mut materials,
         );
         let expected = if population == 4 {
             clock.omitted_seconds()
@@ -1352,13 +1345,12 @@ fn disabled_geometry_keeps_m2_simulation_and_statistics_without_live_records() {
         "geometry selection must not remove an emitter's simulation"
     );
     let mut meshes = Assets::<Mesh>::default();
-    let mut materials = Assets::<ModelMaterial>::default();
     let mut world = World::new();
     let basis = world.spawn_empty().id();
     let mut queue = CommandQueue::default();
     let mut instances = {
         let mut commands = Commands::new(&mut queue, &world);
-        runtime.spawn(&mut commands, &mut meshes, &mut materials, basis)
+        runtime.spawn(&mut commands, &mut meshes, basis)
     };
     queue.apply(&mut world);
     let entity = instances.emitters[0].passes[0].entity;
@@ -1393,7 +1385,6 @@ fn disabled_geometry_keeps_m2_simulation_and_statistics_without_live_records() {
             &mut meshes,
             &mut data,
             &mut statistics,
-            &mut materials,
         );
         let stats = statistics.get(entity).unwrap();
         let draw = data.get(entity).unwrap();
@@ -1611,6 +1602,7 @@ fn collapsed_attached_model_projection_keeps_live_birth_identity_and_finite_fall
         .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, 7)
         .unwrap();
     let sidecar = GeometryBirth {
+        lease: None,
         ordinal: 7,
         initial_transform: Transform::IDENTITY,
         basis: ModelBasis::from_frame(Mat4::IDENTITY).unwrap(),
