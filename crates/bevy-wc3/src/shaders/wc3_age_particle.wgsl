@@ -165,14 +165,14 @@ fn vertex(input: VertexInput) -> VertexOutput {
     }
     let cs = particle.size_spin.z;
     let sn = particle.size_spin.w;
-    side = (right * cs + up * sn) * particle.size_spin.x * 0.5;
-    vertical = (up * cs - right * sn) * particle.size_spin.y * 0.5;
+    side = (right * cs + up * sn) * particle.size_spin.x;
+    vertical = (up * cs - right * sn) * particle.size_spin.y;
 #endif
     var cell = particle.cells.x;
     if tail {
         let extent = velocity * particle.velocity_tail.w;
         side = safe_normalize(cross(extent, view.world_position - center))
-            * particle.size_spin.x * 0.5;
+            * particle.size_spin.x;
         vertical = extent * 0.5;
         center -= vertical;
         cell = particle.cells.y;

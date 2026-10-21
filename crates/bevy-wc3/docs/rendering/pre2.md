@@ -52,9 +52,14 @@ during import. That selection can enable either geometry, both, or neither; it
 does not change the emission direction. Selecting neither keeps births, motion,
 retirement, and statistics active without sampling or uploading live geometry.
 Velocity-oriented heads use the projected particle velocity, while fixed-plane
-heads use the appropriate attached or detached XY frame. Tail
-extent uses velocity multiplied by the authored tail time, optionally clamped to
-particle age. Exact native tail geometry remains unverified.
+heads use the appropriate attached or detached XY frame. M2 lifetime scale values
+are head half extents and tail cross-section half widths: a size of `(1, 2)`
+produces a camera-facing head spanning `2 × 4` before scene and size controls.
+Tail length uses velocity multiplied by the authored tail time, optionally
+clamped to particle age; changing width does not change that temporal extent.
+Anisotropic tail projection, nearly view-aligned tails and exact native tail
+geometry remain unverified. Model-particle child scale is an affine transform
+and does not use the sprite full-span factor.
 
 ## M2 motion and coordinate frames
 

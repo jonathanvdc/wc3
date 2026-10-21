@@ -1825,8 +1825,8 @@ impl Emitter {
             } else {
                 birth.size_scale
             };
-            let horizontal = (r * cos + u * sin) * size[0] * scale[0] * 0.5;
-            let vertical = (u * cos - r * sin) * size[1] * scale[1] * 0.5;
+            let horizontal = (r * cos + u * sin) * size[0] * scale[0];
+            let vertical = (u * cos - r * sin) * size[1] * scale[1];
             let (r, u) = (horizontal, vertical);
             let head = self
                 .appearance
@@ -1875,8 +1875,7 @@ impl Emitter {
                     .cross(camera_position - position)
                     .normalize_or_zero()
                     * size[0]
-                    * scale[0]
-                    * 0.5;
+                    * scale[0];
                 buffers.quad(
                     [end - side, end + side, position + side, position - side],
                     tail,

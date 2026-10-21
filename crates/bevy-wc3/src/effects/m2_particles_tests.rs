@@ -627,15 +627,14 @@ fn gpu_sample_corners(
         right = up.cross(back).normalize_or_zero();
     }
     let [width, height, cos, sin] = record.size_spin;
-    let mut side = (right * cos + up * sin) * width * 0.5;
-    let mut vertical = (up * cos - right * sin) * height * 0.5;
+    let mut side = (right * cos + up * sin) * width;
+    let mut vertical = (up * cos - right * sin) * height;
     if tail {
         let extent = velocity * record.velocity_tail[3];
         side = extent
             .cross(camera.w_axis.truncate() - position)
             .normalize_or_zero()
-            * width
-            * 0.5;
+            * width;
         vertical = extent * 0.5;
         position -= vertical;
     }
@@ -1776,5 +1775,113 @@ fn native_follow_flag_is_retained_as_a_known_compiled_control() {
             .iter()
             .any(|(_, issue)| issue.kind == RenderDiagnosticKind::Unsupported
                 && issue.message.contains("particle controls")));
+    }
+}
+
+#[test]
+fn lifetime_scale_is_half_extent_while_tail_time_is_full_displacement() {
+    let mut values = SlotValues::default();
+    let mut emitter = emitter(&mut values);
+    emitter.head_tail = ParticleHeadTail::Both;
+    emitter.gpu_style.head = true;
+    emitter.gpu_style.tail = true;
+    emitter.tail_length = 0.75;
+    emitter.appearance.scale = Some(
+        Curve::linear(
+            [
+                ModelTime::seconds(0.).unwrap(),
+                ModelTime::seconds(1.).unwrap(),
+            ],
+            [Vec2::new(1., 2.), Vec2::new(3., 4.)],
+        )
+        .unwrap(),
+    );
+    let birth = Birth {
+        time: 0.,
+        lifetime: 2.,
+        origin: Vec3::ZERO,
+        velocity: Vec3::X * 2.,
+        acceleration: Vec3::ZERO,
+        spin: 0.,
+        spin_rate: 0.,
+        scale_variation: Vec2::ONE,
+        random_cell: 0,
+        size_scale: Vec2::ONE,
+        appearance_index: 0,
+    };
+    let mut state = EmitterInstance {
+        samples: Default::default(),
+        mesh: Handle::default(),
+        passes: Vec::new(),
+        births: vec![birth],
+        age_appearances: Vec::new(),
+        models: None,
+        order: Vec::new(),
+        fraction: 0.,
+        ordinal: 0,
+        previous_node: Mat4::IDENTITY,
+        pose_scratch: Vec::new(),
+        dropped: 0,
+        skipped_seconds: 0.,
+    };
+    let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
+    builder.import_values(&values).unwrap();
+    let model = builder.finish().unwrap();
+    let program = AnimationProgram::compile(&model);
+    let sample = program.sample(AnimationSample::default()).unwrap();
+    let camera = Mat4::from_translation(Vec3::Z * 10.);
+    let mut data = AgeSpriteData {
+        records: Default::default(),
+        live_indices: Default::default(),
+        uniform: Default::default(),
+        style: emitter.gpu_style.clone(),
+    };
+    for time in [0., 0.5, 1.] {
+        // The scale curve is addressed by normalized age, not elapsed seconds.
+        let half_extent = Vec2::new(1. + time as f32, 2. + time as f32);
+        let center = Vec3::X * (2. * time as f32);
+        let frame = EffectFrame {
+            traversal: Default::default(),
+            change: Default::default(),
+            root_visible: true,
+            pose: None,
+            selection: Default::default(),
+            time,
+            sample: &sample,
+            node_poses: &[Mat4::IDENTITY],
+            node_visible: &[true],
+            basis_world: Mat4::IDENTITY,
+        };
+        emitter.sample_gpu(&mut state, &frame, Mat4::IDENTITY, &mut data);
+        assert_eq!(data.records.len(), 1);
+        assert_eq!(&data.records[0].size_spin[..2], &half_extent.to_array());
+        let head = gpu_sample_corners(&data.records[0], &data.uniform, camera, false);
+        assert!(head[0].abs_diff_eq(
+            center - half_extent.x * Vec3::X - half_extent.y * Vec3::Y,
+            1e-6
+        ));
+        assert!(head[2].abs_diff_eq(
+            center + half_extent.x * Vec3::X + half_extent.y * Vec3::Y,
+            1e-6
+        ));
+        let tail = gpu_sample_corners(&data.records[0], &data.uniform, camera, true);
+        let end = center - Vec3::X * 1.5;
+        assert!(((tail[0] + tail[1]) * 0.5).abs_diff_eq(end, 1e-6));
+        assert!(((tail[2] + tail[3]) * 0.5).abs_diff_eq(center, 1e-6));
+        assert!(((tail[1] - tail[0]).length() - 2. * half_extent.x).abs() < 1e-6);
+        let mut mesh = Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::default(),
+        );
+        emitter.draw(&mut state, &frame, Mat4::IDENTITY, &mut mesh, camera);
+        let Some(VertexAttributeValues::Float32x3(vertices)) =
+            mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            panic!("live head and tail geometry absent")
+        };
+        assert_eq!(vertices.len(), 8);
+        for (expected, actual) in head.into_iter().chain(tail).zip(vertices) {
+            assert!(expected.abs_diff_eq(Vec3::from_array(*actual), 1e-6));
+        }
     }
 }
