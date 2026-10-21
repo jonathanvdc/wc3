@@ -405,3 +405,111 @@ fn original_native_spatial_schema_retains_sparse_payload_controls_and_checked_ab
             .is_err());
     }
 }
+
+const REDUNDANT: &[u8] = include_bytes!("../../../../tests/fixtures/pkb/redundant-stage.pkb");
+
+#[test]
+fn redundant_unknown_stage_does_not_change_selected_evolution_or_run_twice() {
+    use crate::model::scene::popcorn::{EffectInstance, EffectLimits, SceneInputs};
+    let document = Document::read(REDUNDANT).unwrap();
+    let extra = document
+        .compiler_blobs()
+        .map(Result::unwrap)
+        .find(|blob| blob.identifier == 97)
+        .unwrap();
+    let varying = document
+        .compiler_blobs()
+        .map(Result::unwrap)
+        .find(|blob| blob.identifier == 5)
+        .unwrap();
+    assert_eq!(extra.bytes, varying.bytes);
+    assert_ne!(extra.externals, varying.externals);
+    assert_ne!(extra.functions, varying.functions);
+    assert_ne!(extra.entrypoint, varying.entrypoint);
+    assert!(same_programme(&document, &extra, &varying).unwrap());
+    for (evolution, expected) in [
+        (EffectEvolution::Physics, 5.),
+        (EffectEvolution::Fixed, 5.),
+        (EffectEvolution::Varying, 6.),
+    ] {
+        let program = document
+            .compile_effect(
+                1,
+                &EffectCompileOptions {
+                    evolution,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(program
+            .limitations()
+            .contains(&EffectLimitation::RedundantProgramme));
+        let mut instance = program
+            .instantiate(
+                EffectLimits {
+                    step_seconds: 0.01,
+                    ..Default::default()
+                },
+                1,
+            )
+            .unwrap();
+        instance.start(&program, 0, SceneInputs::default()).unwrap();
+        let size = |instance: &EffectInstance| {
+            let particle = instance.particles(EffectLayerId(0)).next().unwrap();
+            f32::from_bits(particle.field(EffectFieldId(3)).unwrap().words()[0])
+        };
+        assert_eq!(size(&instance), 3.);
+        instance
+            .advance(&program, 0.01, SceneInputs::default())
+            .unwrap();
+        assert_eq!(size(&instance), expected);
+    }
+}
+
+#[test]
+fn unknown_nonduplicate_stage_still_rejects_with_its_native_identifier() {
+    let document = Document::read(REDUNDANT).unwrap();
+    let extra = document
+        .compiler_blobs()
+        .map(Result::unwrap)
+        .find(|blob| blob.identifier == 97)
+        .unwrap();
+    let offset = extra.bytes.as_ptr() as usize - REDUNDANT.as_ptr() as usize;
+    let mut changed = REDUNDANT.to_vec();
+    // Change only the unknown programme's increment constant, leaving a complete
+    // valid script and all metadata equal to its original supported counterpart.
+    changed[offset + 36 + 64..offset + 36 + 68].copy_from_slice(&4f32.to_bits().to_le_bytes());
+    let document = Document::read(&changed).unwrap();
+    let failure = document
+        .compile_effect(1, &EffectCompileOptions::default())
+        .unwrap_err();
+    assert!(failure
+        .message
+        .contains("unsupported native particle programme stage"));
+    assert_eq!(failure.stage, Some(97));
+}
+
+#[test]
+fn duplicate_admission_requires_resolved_external_function_and_entry_metadata() {
+    let document = Document::read(REDUNDANT).unwrap();
+    let extra = document
+        .compiler_blobs()
+        .map(Result::unwrap)
+        .find(|blob| blob.identifier == 97)
+        .unwrap();
+    let varying = document
+        .compiler_blobs()
+        .map(Result::unwrap)
+        .find(|blob| blob.identifier == 5)
+        .unwrap();
+    for field in 0..4 {
+        let mut different = extra.clone();
+        match field {
+            0 => different.externals[0] = different.externals[1],
+            1 => different.functions[0] = different.functions[1],
+            2 => different.entrypoint = 0,
+            _ => different.class_name = Some(u32::MAX),
+        }
+        assert!(!same_programme(&document, &different, &varying).unwrap());
+    }
+}

@@ -205,3 +205,31 @@ fn ergonomic_values_preserve_scalar_vector_quaternion_and_boolean_layouts() {
         assert_eq!(value.words().map(f32::from_bits), expected);
     }
 }
+
+#[test]
+fn compiled_payload_absence_policy_is_explicit_and_retained() {
+    use wc3::model::scene::popcorn::{EffectLimitation, MissingPayloadPolicy};
+    let bytes = include_bytes!("fixtures/pkb/sprite.pkb");
+    let document = Document::read(bytes).unwrap();
+    let strict = document
+        .compile_effect(1, &EffectCompileOptions::default())
+        .unwrap();
+    assert_eq!(strict.missing_payload_policy(), MissingPayloadPolicy::Error);
+    assert!(!strict
+        .limitations()
+        .contains(&EffectLimitation::MissingPayloadZero));
+    let zero = document
+        .compile_effect(
+            1,
+            &EffectCompileOptions {
+                missing_payload: MissingPayloadPolicy::Zero,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(zero.missing_payload_policy(), MissingPayloadPolicy::Zero);
+    assert!(zero
+        .limitations()
+        .contains(&EffectLimitation::MissingPayloadZero));
+    assert_eq!(document.as_bytes(), bytes);
+}

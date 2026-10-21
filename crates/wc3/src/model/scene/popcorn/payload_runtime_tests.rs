@@ -343,3 +343,6 @@ fn queued_ownership_is_released_before_a_child_initializer_routes_its_own_payloa
     assert_eq!(instance.particles(EffectLayerId(2)).count(), 1);
     assert_eq!(instance.stats().omitted_births, 0);
 }
+
+#[path = "payload_missing_tests.rs"]
+mod missing;

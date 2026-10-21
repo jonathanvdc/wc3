@@ -150,6 +150,9 @@ pub struct EffectEntry {
 /// Established implementation policies whose native fidelity remains unverified.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EffectLimitation {
+    /// An unrecognized extra native programme exactly duplicates a supported
+    /// alternative; only the explicit known-stage selection is executed.
+    RedundantProgramme,
     /// Spatial reads use the previous executed tick and deterministic insertion-order ties.
     SpatialSnapshots,
     /// Original counter-based random stream rather than a verified native RNG.
@@ -184,6 +187,8 @@ pub enum EffectLimitation {
     PayloadIndex,
     /// Nonzero native draft controls retain independent ownership without a verified additional routing meaning.
     PayloadDraftControl,
+    /// Declared root channels omitted by a birth read as typed zero; native defaults are unverified.
+    MissingPayloadZero,
     /// Present position/orientation channels replace the complete payload frame, with unit scale.
     PayloadFrame,
     /// Native interpolation selector is restricted to the observed zero mode.
@@ -209,12 +214,26 @@ pub enum EffectRandom {
     /// Interval midpoints for independent numerical-oracle tests.
     Midpoint,
 }
+/// Extraction behavior for a declared root channel omitted by a particular birth.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MissingPayloadPolicy {
+    /// Reject an absent value; never invent payload values.
+    #[default]
+    Error,
+    /// Return zero words with the declared type, without marking the channel present.
+    /// Native default-value semantics remain unverified.
+    Zero,
+}
 /// Shared immutable effect graph; instances own no borrowed native data.
 #[derive(Clone, Debug)]
 pub struct EffectProgram {
     pub(crate) inner: Arc<EffectGraph>,
 }
 impl EffectProgram {
+    /// Checked extraction policy retained from graph compilation.
+    pub fn missing_payload_policy(&self) -> MissingPayloadPolicy {
+        self.inner.missing_payload
+    }
     /// Authored default entry index, independent of entry names.
     pub fn default_entry(&self) -> u32 {
         self.inner.default_entry
@@ -275,6 +294,7 @@ pub(crate) struct EffectGraph {
     pub limitations: Box<[EffectLimitation]>,
     pub duration: EventStreamDuration,
     pub random: EffectRandom,
+    pub missing_payload: MissingPayloadPolicy,
 }
 #[derive(Clone, Debug)]
 pub(crate) struct BoundProgram {

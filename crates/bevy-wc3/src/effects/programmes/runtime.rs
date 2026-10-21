@@ -153,6 +153,7 @@ impl RuntimeProgramParticles {
             }
             for limitation in effect.program.limitations() {
                 let (kind,message)=match limitation {
+                    EffectLimitation::MissingPayloadZero => (RenderDiagnosticKind::Unverified,"external particle programme reads omitted declared payload channels as typed zero; native default-value semantics remain unverified".to_owned()),
                     EffectLimitation::TurbulenceField => (RenderDiagnosticKind::Approximation,"external procedural turbulence uses an original coherent analytic curl field; native stochastic samples are not reproduced".to_owned()),
                     EffectLimitation::TurbulenceDomain => (RenderDiagnosticKind::Budget,"external procedural turbulence evaluates at most 24 octaves / 576 corner contributions per callback with checked spatial/temporal precision bounds".to_owned()),
                     _=>(RenderDiagnosticKind::Unverified,format!("external particle programme uses explicit {limitation:?} policy; native game fidelity remains unverified")),

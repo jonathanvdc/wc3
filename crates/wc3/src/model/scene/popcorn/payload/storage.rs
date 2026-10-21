@@ -48,12 +48,11 @@ impl Storage {
         self.words = next;
         true
     }
-    pub fn read(&self, particle: usize, field: usize) -> Result<Value> {
+    pub fn read(&self, particle: usize, field: usize) -> Result<Option<Value>> {
         if field >= self.stride {
             return Err("payload extraction root field is outside compiled storage");
         }
-        self.particles[particle * self.stride + field]
-            .ok_or("payload extraction root field was not supplied by this birth")
+        Ok(self.particles[particle * self.stride + field])
     }
     pub fn snapshot_words(length: usize) -> usize {
         length * size_of::<Option<Element>>().div_ceil(4)

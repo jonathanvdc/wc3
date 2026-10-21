@@ -122,6 +122,16 @@ the native stochastic field; rendering diagnostics mark this as an approximation
 At most 24 octaves execute per sample, with checked spatial/temporal precision
 bounds. External PKVF and unsupported flow/divergence controls remain diagnosed.
 
+The native PKB loader explicitly selects `MissingPayloadPolicy::Zero`: extracting
+a valid declared root channel omitted by that birth returns typed zero words.
+Supplied values and channel presence remain intact, and no event targets are
+filtered or grouped from payload initialization controls. Unknown fields, wrong
+layouts and stale or forged capabilities still fail. Rendering diagnostics report
+the dedicated unverified missing-payload policy; these defaults are not established
+native-client behavior. Applications needing strict missing-channel errors can
+compile with the core's default `EffectCompileOptions` and pass that programme to
+`ParticleEffect::new`.
+
 Routed births retain their occurrence timestamps and are processed in chronological
 order. A newborn evolves only for the remaining portion of its birth step. The
 loader uses the last authored event timestamp as an event stream's duration, or

@@ -250,7 +250,8 @@ mod runtime;
 pub use graph::{
     EffectAttribute, EffectAttributeId, EffectEntry, EffectField, EffectFieldId, EffectLayer,
     EffectLayerId, EffectLimitation, EffectParticleId, EffectProgram, EffectRandom, EffectRenderer,
-    EffectRendererInput, EffectRendererProperty, EventStreamDuration, SceneContext, SceneInputs,
+    EffectRendererInput, EffectRendererProperty, EventStreamDuration, MissingPayloadPolicy,
+    SceneContext, SceneInputs,
 };
 pub use runtime::{EffectInstance, EffectLimits, EffectRuntimeError, EffectStats, ParticleView};
 

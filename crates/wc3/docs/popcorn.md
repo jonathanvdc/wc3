@@ -106,6 +106,12 @@ The resulting `EffectProgram` owns immutable data and can be shared among many
 instances after the source document is dropped. Initialization and the selected
 physics, fixed or varying evolution stage remain separate; alternative stages do
 not all execute for the same particle.
+An extra native stage with an unrecognized identifier is accepted only when its
+complete script and resolved external, function and entry-point metadata exactly
+match a supported alternative. It contributes no additional invocation and is
+reported as `EffectLimitation::RedundantProgramme`. This admits redundant native
+data without assigning the unknown identifier a lifecycle meaning; that meaning
+and native selection fidelity remain unverified. Other unknown stages reject.
 
 ```rust
 use wc3::model::formats::pkb::{Document, EffectCompileOptions};
@@ -200,8 +206,8 @@ view still reports `None`; unused sparse curves remain unresolved.
 
 ## Execution policies
 
-`EffectCompileOptions` makes stage selection, random policy and event-stream
-duration interpretation explicit. The original deterministic random stream,
+`EffectCompileOptions` makes stage selection, random policy, missing-payload
+behavior and event-stream duration interpretation explicit. The original deterministic random stream,
 remaining-subframe birth scheduling, transform-mask interpretation and curve
 interpolation are implemented policies whose exact native-game fidelity remains
 unverified. Constant-capable fields initialize from native constants before the
@@ -233,11 +239,21 @@ fixed axis conversion should keep that conversion separate from authored T/Q
 filters and apply it once when extracting positions.
 
 Payload event declarations map by exact name, native type, footprint and role into
-root declarations. Target layouts may have unused extra channels. Lowering checks
-that every incoming route supplies channels explicitly read by selected scripts;
-missing reads, conflicting layouts, unknown semantics and stale capabilities fail
-explicitly. Position and Orientation also feed transforms implicitly, so they are
-retained even when no extraction callback reads them.
+root declarations. Target layouts may have unused extra channels. The default
+`EffectCompileOptions::missing_payload` policy is `MissingPayloadPolicy::Error`:
+lowering checks that incoming event declarations cover selected script reads,
+and extraction fails if a particular birth packet omitted a read channel.
+
+Applications may explicitly select `MissingPayloadPolicy::Zero`. Extraction then
+returns zero component words with the valid root declaration's type when that
+birth omitted its value, including channels absent from its incoming event schema.
+Unknown slots, conflicting layouts, unknown semantics and stale or forged
+capabilities still fail. Supplied values remain unchanged. The fallback does not
+mark a channel present, alter queued packets or select different event targets.
+Position and Orientation therefore feed implicit transforms only when actually
+supplied. `EffectProgram::missing_payload_policy()` retains the selection;
+`EffectLimitation::MissingPayloadZero` records its unverified native defaults.
+A zero quaternion is zero words, not an invented identity orientation.
 
 Each invocation owns its batch, element and draft handles. Appending validates
 both event and batch ownership; element values can be reused by independent drafts.

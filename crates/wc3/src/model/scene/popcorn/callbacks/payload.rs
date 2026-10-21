@@ -1,7 +1,7 @@
 //! Invocation-owned payload construction, routing and extraction.
 use super::super::graph::{Callback, External};
 use super::super::runtime::Spawn;
-use super::super::{Value, ValueType};
+use super::super::{MissingPayloadPolicy, Value, ValueType};
 use super::{BoundElement, Draft, ExecutionHost, PayloadElement, PayloadStorage, Result};
 impl ExecutionHost<'_> {
     pub(super) fn payload_call(
@@ -124,7 +124,26 @@ impl ExecutionHost<'_> {
             }
             Callback::Extract(kind) => {
                 self.context(a[1], false)?;
-                let value = self.payload.read(self.slot, a[0].words()[0] as usize)?;
+                let field = a[0].words()[0] as usize;
+                let declaration = self.graph.layers[self.layer.0 as usize]
+                    .payload
+                    .fields
+                    .get(field)
+                    .ok_or("payload extraction root declaration slot is invalid")?;
+                if declaration.kind != Some(kind)
+                    || declaration.footprint as usize != kind.components() * 4
+                {
+                    return Err("payload extraction layout disagrees with root declaration");
+                }
+                let value = match self.payload.read(self.slot, field)? {
+                    Some(value) => value,
+                    None if self.graph.missing_payload == MissingPayloadPolicy::Zero => {
+                        Value::from_words(kind, [0; 4])
+                    }
+                    None => {
+                        return Err("payload extraction root field was not supplied by this birth")
+                    }
+                };
                 if value.kind() != kind {
                     return Err("payload extraction layout disagrees with root declaration");
                 }

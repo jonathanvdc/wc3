@@ -16,7 +16,8 @@ use crate::model::scene::popcorn::shapes::{Domain, Primitive, Shape};
 use crate::model::scene::popcorn::{
     EffectAttribute, EffectEntry, EffectField, EffectFieldId, EffectLayer, EffectLayerId,
     EffectLimitation, EffectProgram, EffectRandom, EffectRenderer, EffectRendererInput,
-    EffectRendererProperty, EventStreamDuration, Function as Signature, Value, ValueType,
+    EffectRendererProperty, EventStreamDuration, Function as Signature, MissingPayloadPolicy,
+    Value, ValueType,
 };
 use glam::{Quat, Vec3};
 use std::collections::HashMap;
@@ -50,6 +51,8 @@ pub struct EffectCompileOptions {
     pub stream_duration: EventStreamDuration,
     /// Original deterministic random policy.
     pub random: EffectRandom,
+    /// Extraction policy for declared root channels omitted by a birth.
+    pub missing_payload: MissingPayloadPolicy,
 }
 impl Default for EffectCompileOptions {
     fn default() -> Self {
@@ -59,6 +62,7 @@ impl Default for EffectCompileOptions {
             evolution: EffectEvolution::Physics,
             stream_duration: EventStreamDuration::LastOccurrence,
             random: EffectRandom::Counter,
+            missing_payload: MissingPayloadPolicy::Error,
         }
     }
 }
@@ -273,6 +277,7 @@ impl<'a> Document<'a> {
             .iter()
             .map(|cache| payload_layout(&cache.root_event))
             .collect::<Result<Vec<_>, _>>()?;
+        let mut redundant_programme = false;
         let mut layers = Vec::new();
         let mut renderers = Vec::new();
         let mut spatial = Vec::new();
@@ -365,6 +370,7 @@ impl<'a> Document<'a> {
                     }
                 }
                 let mut init = None;
+                let mut unclassified = Vec::new();
                 let (mut physics, mut fixed, mut varying) = (None, None, None);
                 for link in cache.fixed.iter().copied().chain(cache.varying) {
                     let blob = self.compiler_blob_at(link)?;
@@ -373,11 +379,29 @@ impl<'a> Document<'a> {
                         3 => &mut physics,
                         4 => &mut fixed,
                         5 => &mut varying,
-                        _ => return Err(error("unsupported native particle programme stage")),
+                        _ => {
+                            unclassified.push(blob);
+                            continue;
+                        }
                     };
                     if target.replace(blob).is_some() {
                         return Err(error("duplicate native particle programme stage"));
                     }
+                }
+                for extra in &unclassified {
+                    let mut duplicate = false;
+                    for known in [&init, &physics, &fixed, &varying].into_iter().flatten() {
+                        if same_programme(self, extra, known)? {
+                            duplicate = true;
+                            break;
+                        }
+                    }
+                    if !duplicate {
+                        let mut failure = error("unsupported native particle programme stage");
+                        failure.stage = Some(extra.identifier);
+                        return Err(failure);
+                    }
+                    redundant_programme = true;
                 }
                 let init =
                     init.ok_or_else(|| error("effect layer has no initialization programme"))?;
@@ -483,10 +507,12 @@ impl<'a> Document<'a> {
                 if let Some(evolve) = &layer.evolve {
                     reads.extend(payload_reads(evolve, &layer.payload)?);
                 }
-                layer
-                    .payload
-                    .validate_reads(&mapping, &reads)
-                    .map_err(error)?;
+                if options.missing_payload == MissingPayloadPolicy::Error {
+                    layer
+                        .payload
+                        .validate_reads(&mapping, &reads)
+                        .map_err(error)?;
+                }
                 maps.push(mapping);
             }
             events.push(EventRoute {
@@ -543,11 +569,17 @@ impl<'a> Document<'a> {
                         EffectLimitation::CurveInterpolation,
                         EffectLimitation::OrientationPolicies,
                     ];
+                    if options.missing_payload == MissingPayloadPolicy::Zero {
+                        limitations.push(EffectLimitation::MissingPayloadZero);
+                    }
                     if layers_use_inverse {
                         limitations.push(EffectLimitation::InverseTransform);
                     }
                     if uses_spatial {
                         limitations.push(EffectLimitation::SpatialSnapshots);
+                    }
+                    if redundant_programme {
+                        limitations.push(EffectLimitation::RedundantProgramme);
                     }
                     limitations.extend(payload_policies);
                     if lowering
@@ -577,6 +609,7 @@ impl<'a> Document<'a> {
                 samplers: lowering.samplers.into_boxed_slice(),
                 spatial: spatial.into_boxed_slice(),
                 random: options.random,
+                missing_payload: options.missing_payload,
             }),
         })
     }
@@ -1107,6 +1140,51 @@ impl Lowering<'_, '_> {
         }
         Ok((callback, result))
     }
+}
+
+// This does not assign a lifecycle meaning to an unknown identifier. Exact
+// native code and resolved bindings only prove that its programme data is already
+// represented by an explicitly supported alternative. It is never run twice.
+fn same_programme(
+    document: &Document<'_>,
+    a: &CompilerBlob<'_>,
+    b: &CompilerBlob<'_>,
+) -> Result<bool, EffectCompileError> {
+    if a.bytes != b.bytes
+        || a.class_name != b.class_name
+        || a.externals.len() != b.externals.len()
+        || a.functions.len() != b.functions.len()
+    {
+        return Ok(false);
+    }
+    match (a.entrypoint, b.entrypoint) {
+        (0, 0) => {}
+        (0, _) | (_, 0) => return Ok(false),
+        (a, b) if document.entrypoint(a)? != document.entrypoint(b)? => return Ok(false),
+        _ => {}
+    }
+    for (&a, &b) in a.externals.iter().zip(&b.externals) {
+        if document.external_declaration(a)? != document.external_declaration(b)? {
+            return Ok(false);
+        }
+    }
+    for (&a, &b) in a.functions.iter().zip(&b.functions) {
+        let a = document.function_declaration(a)?;
+        let b = document.function_declaration(b)?;
+        if a.name != b.name
+            || a.symbol_slot != b.symbol_slot
+            || a.traits != b.traits
+            || a.arguments.len() != b.arguments.len()
+        {
+            return Ok(false);
+        }
+        for (&a, &b) in a.arguments.iter().zip(&b.arguments) {
+            if document.function_argument(a)? != document.function_argument(b)? {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
 }
 
 fn spatial_resource(

@@ -6,7 +6,7 @@ use crate::{CompileOptions, ModelError, ParticleEffect};
 use bevy::asset::{io::AssetReaderError, AssetPath, LoadContext, ReadAssetBytesError};
 use std::collections::HashMap;
 use wc3::model::formats::pkb::{Document, EffectCompileOptions};
-use wc3::model::scene::popcorn::EffectProgram;
+use wc3::model::scene::popcorn::{EffectProgram, MissingPayloadPolicy};
 use wc3::model::{Model, NodeFeature};
 
 pub(super) async fn resolve_programmes(
@@ -62,7 +62,13 @@ pub(super) async fn resolve_programmes(
                     );
                 }
                 document
-                    .compile_effect(link, &EffectCompileOptions::default())
+                    .compile_effect(
+                        link,
+                        &EffectCompileOptions {
+                            missing_payload: MissingPayloadPolicy::Zero,
+                            ..Default::default()
+                        },
+                    )
                     .map_err(|error| error.to_string())
             })();
             match compiled {
