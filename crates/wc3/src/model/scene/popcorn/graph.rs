@@ -2,7 +2,7 @@
 use super::payload::Layout as PayloadLayout;
 use super::shapes::Shape;
 use super::{Program, Value, ValueType};
-use glam::Mat4;
+use glam::{Mat4, Vec3};
 use std::sync::Arc;
 
 /// Zero-based layer identity within one compiled effect.
@@ -22,16 +22,41 @@ pub struct EffectParticleId {
     /// Slot incarnation; stale parents cannot alias a recycled particle.
     pub generation: u32,
 }
+/// A checked, immutable host scene snapshot for one simulation observation.
+///
+/// Positions use the same world coordinate system and numeric units as
+/// `SceneInputs::world_from_effect`. This value contains no native pointer or VM
+/// register identity. The checked executor supplies its own opaque capability.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SceneContext {
+    camera: Option<Vec3>,
+}
+impl SceneContext {
+    /// Bind camera index zero. Nonfinite positions are unavailable.
+    pub fn with_camera(position: Vec3) -> Option<Self> {
+        position.is_finite().then_some(Self {
+            camera: Some(position),
+        })
+    }
+    /// Return the supported simulation camera, or no position for absent and
+    /// unsupported indices. Rendering views never change this selection.
+    pub fn camera_position(self, index: i32) -> Option<Vec3> {
+        (index == 0).then_some(self.camera).flatten()
+    }
+}
 /// Effect-local external inputs; simulation time belongs to the instance.
 #[derive(Clone, Copy, Debug)]
 pub struct SceneInputs {
     /// Transforms native effect coordinates into application world coordinates once.
     pub world_from_effect: Mat4,
+    /// Explicit host scene capabilities; absent cameras remain unavailable.
+    pub scene: SceneContext,
 }
 impl Default for SceneInputs {
     fn default() -> Self {
         Self {
             world_from_effect: Mat4::IDENTITY,
+            scene: SceneContext::default(),
         }
     }
 }
@@ -251,12 +276,14 @@ pub(crate) enum External {
     ParticleContext,
     EffectContext,
     RandomContext,
+    SceneContext,
     Sampler(usize),
     Event(usize),
     Attribute(usize),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Callback {
+    ViewPosition,
     Age,
     Running,
     StreamDuration,

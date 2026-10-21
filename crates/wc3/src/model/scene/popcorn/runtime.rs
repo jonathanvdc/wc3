@@ -892,6 +892,7 @@ impl EffectInstance {
             running: self.running,
             emitting: self.emitting,
             world: inputs.world_from_effect,
+            scene: inputs.scene,
             payload_frame: particle.payload_frame,
             payload: &mut self.payload,
             attributes: &self.attributes,

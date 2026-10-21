@@ -91,6 +91,24 @@ independent game meaning remains unverified. Popcorn scaling routes average
 emitter scale through `Game.Scale` and removes it from the input basis; without
 that flag the basis retains its authored scale.
 
+Camera-dependent programme simulation uses the camera explicitly selected by
+`Playback::driving_camera`. Camera index zero refers to that choice, independently
+of how many views render the model. The adapter converts its current world
+position into the programme's native axes and one-to-one-hundred numeric units
+once; emitter rotation, scale and translation do not transform the camera again.
+Owned newborn programmes use the same selection at startup. Missing cameras and
+unsupported indices yield unavailable positions rather than an invented world
+origin. Their geometry is omitted while the instance remains alive. Later authored camera
+queries can observe a new binding without restarting; initialization is not
+replayed. Camera-dependent
+simulation still has one result per model instance; use separate instances for
+independent simulation cameras. Exact native camera behavior remains unverified.
+
+`SceneContext` is a checked host capability, not collision support. Scene
+intersection, spatial stores, procedural turbulence and unknown world-to-world
+operations still require additional interpreters; no literal-zero collision
+response is supplied.
+
 Routed births retain their occurrence timestamps and are processed in chronological
 order. A newborn evolves only for the remaining portion of its birth step. The
 loader uses the last authored event timestamp as an event stream's duration, or

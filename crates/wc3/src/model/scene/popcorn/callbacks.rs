@@ -102,6 +102,7 @@ pub(crate) struct ExecutionHost<'a> {
     pub running: bool,
     pub emitting: bool,
     pub world: Mat4,
+    pub scene: SceneContext,
     pub payload_frame: Option<Mat4>,
     pub payload: &'a mut PayloadStorage,
     pub attributes: &'a [Value],
@@ -155,6 +156,19 @@ impl ExecutionHost<'_> {
             | (External::ParticleContext | External::EffectContext, false) => Ok(()),
             _ => Err("effect context capability has the wrong ownership kind"),
         }
+    }
+    fn scene_context(&self, value: Value) -> Result<SceneContext> {
+        if value.kind() != ValueType::Context {
+            return Err("scene callback requires an opaque scene capability");
+        }
+        let slot = value.words()[0]
+            .checked_sub(1)
+            .and_then(|slot| u16::try_from(slot).ok())
+            .ok_or("invalid scene context capability")?;
+        if !matches!(self.external(slot)?, External::SceneContext) {
+            return Err("scene context capability has the wrong ownership kind");
+        }
+        Ok(self.scene)
     }
     fn batch(&mut self, total: u32, residual: f32, start: usize, omitted: u64) -> Result<Value> {
         if self.scratch.batches.len() >= self.limits.handles {
@@ -291,6 +305,7 @@ impl Host for ExecutionHost<'_> {
             External::ParticleContext
             | External::EffectContext
             | External::RandomContext
+            | External::SceneContext
             | External::Sampler(_)
             | External::Event(_) => {
                 Value::from_words(ValueType::Context, [u32::from(external) + 1, 0, 0, 0])
@@ -321,6 +336,13 @@ impl Host for ExecutionHost<'_> {
             .get(function as usize)
             .ok_or("effect callback binding is outside its table")?;
         Ok(match callback {
+            Callback::ViewPosition => {
+                let scene = self.scene_context(a[1])?;
+                let position = scene
+                    .camera_position(a[0].words()[0] as i32)
+                    .unwrap_or(Vec3::splat(f32::INFINITY));
+                Some(Value::from(position))
+            }
             Callback::HsvToRgb | Callback::RgbToHsv => Some(Value::from_words(
                 ValueType::Float4,
                 color::convert(

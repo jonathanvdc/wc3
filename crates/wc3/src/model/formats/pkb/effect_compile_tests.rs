@@ -246,3 +246,70 @@ fn inverse_callbacks_keep_distinct_point_and_direction_contracts_and_free_contex
             .is_err());
     }
 }
+
+#[test]
+fn scene_camera_binding_checks_native_capability_schema_and_free_signature() {
+    let native = ExternalDeclaration {
+        name: b"SceneContext",
+        type_name: b"SceneCtx",
+        native_type: NativeType(u32::MAX),
+        storage_bytes: 8,
+        meta_type: 2,
+        attributes: 2,
+        access: 1,
+    };
+    assert!(matches!(
+        scene_external(&native).unwrap(),
+        External::SceneContext
+    ));
+    for field in 0..6 {
+        let mut invalid = native.clone();
+        match field {
+            0 => invalid.type_name = b"RandCtx",
+            1 => invalid.native_type = NativeType(25),
+            2 => invalid.storage_bytes = 4,
+            3 => invalid.meta_type = 0,
+            4 => invalid.attributes = 0,
+            _ => invalid.access = 3,
+        }
+        assert!(scene_external(&invalid).is_err());
+    }
+    let document = Document::read(FIXTURE).unwrap();
+    let options = EffectCompileOptions::default();
+    let lowering = Lowering {
+        document: &document,
+        options: &options,
+        samplers: vec![],
+        attributes: vec![],
+        attribute_slots: HashMap::new(),
+        curve_widths: HashMap::new(),
+    };
+    let arguments = [ValueType::Int, ValueType::Context];
+    let (callback, result) = lowering
+        .callback(b"view.position", &arguments, None, &[])
+        .unwrap();
+    assert_eq!(callback, Callback::ViewPosition);
+    assert_eq!(result, Some(ValueType::Float3));
+    assert!(lowering
+        .callback(
+            b"view.position",
+            &[ValueType::Float, ValueType::Context],
+            None,
+            &[]
+        )
+        .is_err());
+    assert!(lowering
+        .callback(
+            b"view.position",
+            &arguments,
+            Some(0),
+            &[External::SceneContext]
+        )
+        .is_err());
+    assert!(lowering
+        .callback(b"scene.intersect", &[], None, &[])
+        .is_err());
+    assert!(lowering
+        .callback(b"xform_w2w_f_masked", &[], None, &[])
+        .is_err());
+}

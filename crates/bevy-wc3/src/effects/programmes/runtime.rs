@@ -17,6 +17,7 @@ use crate::effects::EffectFrame;
 use crate::layers::ModelOwnedRenderEntity;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::light::NotShadowCaster;
+use bevy::math::Affine3A;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
@@ -24,7 +25,7 @@ use std::sync::Arc;
 use wc3::model::profiles::mdlx::Popcorn;
 use wc3::model::scene::popcorn::{
     EffectAttributeId, EffectFieldId, EffectInstance, EffectRuntimeError, ParticleView,
-    SceneInputs, Value, ValueType,
+    SceneContext, SceneInputs, Value, ValueType,
 };
 use wc3::model::{ClipId, FeatureId, Model, NodeFeature, NodeId, Property};
 
@@ -332,7 +333,7 @@ impl RuntimeProgramParticles {
             {
                 continue;
             }
-            let (inputs, scale) = emitter.inputs_at(matrix);
+            let (inputs, scale) = emitter.inputs_at(matrix, emitter.scene(frame));
             if let Some(instance) = &mut state.instance {
                 let result = emitter
                     .controls(instance, frame, scale, inputs)
@@ -597,9 +598,19 @@ impl Emitter {
         }
     }
     fn inputs(&self, frame: &EffectFrame<'_, '_, '_>) -> (SceneInputs, f32) {
-        self.inputs_at(frame.basis_world * frame.feature_matrix(self.anchor))
+        self.inputs_at(
+            frame.basis_world * frame.feature_matrix(self.anchor),
+            self.scene(frame),
+        )
     }
-    fn inputs_at(&self, matrix: Mat4) -> (SceneInputs, f32) {
+    fn scene(&self, frame: &EffectFrame<'_, '_, '_>) -> SceneContext {
+        scene_context(
+            frame.basis_world,
+            frame.pose.and_then(|pose| pose.camera),
+            self.space_from_world,
+        )
+    }
+    fn inputs_at(&self, matrix: Mat4, scene: SceneContext) -> (SceneInputs, f32) {
         let mut matrix = self.space_from_world * matrix * Mat4::from_rotation_z(FRAC_PI_2);
         let lengths = Vec3::new(
             matrix.x_axis.truncate().length(),
@@ -616,6 +627,7 @@ impl Emitter {
         (
             SceneInputs {
                 world_from_effect: matrix,
+                scene,
             },
             if self.scaling { scale } else { 1. },
         )
@@ -794,3 +806,25 @@ fn ribbon_sample(
             .map_or(0., |value| floats(value)[0]),
     })
 }
+
+// PoseContext already contains the camera selected by Playback::driving_camera,
+// expressed in model coordinates. Return it to world coordinates before applying
+// the same fixed world-axis and numeric-unit conversion used by this programme.
+fn scene_context(
+    basis_world: Mat4,
+    camera_model: Option<Affine3A>,
+    space_from_world: Mat4,
+) -> SceneContext {
+    camera_model
+        .and_then(|camera| {
+            let world = basis_world.transform_point3(camera.translation.into());
+            SceneContext::with_camera(
+                space_from_world.transform_point3(world) / MODEL_UNITS_PER_EFFECT_UNIT,
+            )
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+#[path = "camera_tests.rs"]
+mod camera_tests;

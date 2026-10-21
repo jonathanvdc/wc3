@@ -17,6 +17,19 @@ pub(crate) fn forward(
     direction: bool,
 ) -> Result<Vec3> {
     let world = select(ordinary, payload, mask)?;
+    if value == Vec3::splat(f32::INFINITY) {
+        if !matches!((direction, mask), (false, 17 | 11 | 19) | (true, 18)) {
+            return Err("unsupported native local-to-world transform mask");
+        }
+        if !world.is_finite()
+            || world.row(3) != Vec4::W
+            || !world.determinant().is_finite()
+            || world.determinant() == 0.
+        {
+            return Err("unavailable position requires a finite affine frame");
+        }
+        return Ok(value);
+    }
     finite(match (direction, mask) {
         (false, 17) => value + world.w_axis.truncate(),
         (false, 11 | 19) => world.transform_point3(value),
@@ -36,7 +49,10 @@ pub(crate) fn inverse(
         (true, 66) => 18,
         _ => return Err("unsupported native world-to-local transform mask"),
     };
-    finite(value)?;
+    let unavailable = value == Vec3::splat(f32::INFINITY);
+    if !unavailable {
+        finite(value)?;
+    }
     let frame = select(ordinary, payload, forward_mask)?;
     if !frame.is_finite() || frame.row(3) != Vec4::W {
         return Err("inverse effect transform requires a finite affine frame");
@@ -49,6 +65,9 @@ pub(crate) fn inverse(
     let inverse = frame.inverse();
     if !inverse.is_finite() {
         return Err("inverse effect transform exceeds finite range");
+    }
+    if unavailable {
+        return Ok(value);
     }
     finite(if direction {
         inverse.transform_vector3(value)

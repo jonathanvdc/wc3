@@ -139,8 +139,18 @@ Borrowed `ParticleView` values expose canonical fields independently of temporar
 VM registers, and particle IDs include a generation to distinguish recycled slots.
 Instances require the same programme identity when starting or advancing.
 
-`SceneInputs` supplies the world transform; elapsed effect time belongs to the
-instance. Authored attributes have typed defaults and resolved IDs; set overrides
+`SceneInputs` supplies the world transform and a typed `SceneContext` snapshot;
+elapsed effect time belongs to the instance. `SceneContext::with_camera` accepts
+a finite position in the same world axes and numeric units as that transform.
+The checked `view.position` callback uses camera index zero. An absent camera or
+unsupported index returns positive infinity in all three components, allowing
+authored validity tests and renderer adapters to omit unavailable geometry.
+Supported coordinate transforms preserve that exact unavailable value after
+checking their frame and mask. NaN, mixed infinities and transform overflow still
+fail explicitly. Native scene capabilities remain opaque binding identities,
+independent of numeric time, pointers and particle/random contexts.
+
+Authored attributes have typed defaults and resolved IDs; set overrides
 before `start()` when initialization must observe them. Float defaults use native
 F4 storage, while boolean defaults use separate I4 storage. An omitted boolean
 default is false; supported explicit true encodings normalize to all-ones. `set_emitting(false)`
@@ -167,7 +177,7 @@ is omitted, elapsed time and lifetime still advance so particles can retire.
 Runtime errors stop advancement until the instance is restarted and leave earlier
 writes observable.
 
-The implemented callback subset covers effect age/running state, event-stream
+The implemented callback subset covers camera position, effect age/running state, event-stream
 and rate generation, condition-triggered events, typed payload construction, routing and extraction, retirement, random intervals
 and isotropic random vectors,
 point transforms with masks 11/17/19, direction transforms with mask 18, checked
@@ -175,7 +185,7 @@ inverse point/direction transforms with masks 67/66, RGB/HSV
 conversion, quaternion orientation and rotation, emitter axes, typed curve
 sampling, and primitive `samplePosition` callbacks. It
 executes the complete acquired HD LichAttack graph, including invisible
-controllers and its routed child layer. Broadcasts, spatial queries, unsupported payload
+controllers and its routed child layer. Scene collision, broadcasts, spatial queries, unsupported payload
 semantics, other transform masks, unknown callbacks and unresolved sampler
 families fail explicitly. When a native curve omits dimensionality, lowering
 resolves it from the return registers of its bound `sample` calls. All uses across

@@ -201,6 +201,7 @@ fn queued_payloads_interpolate_and_map_into_sparse_root_layout_before_init() {
             Quat::from_rotation_z(1.),
             Vec3::splat(100.),
         ),
+        ..Default::default()
     };
     instance.start(&program, 0, inputs).unwrap();
     instance.advance(&program, 0.25, inputs).unwrap();

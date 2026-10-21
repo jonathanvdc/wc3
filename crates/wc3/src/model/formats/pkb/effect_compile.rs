@@ -1,8 +1,8 @@
 //! Native baked graph lowering into owned, renderer-independent effect programmes.
 use super::effect_payload::{payload_layout, payload_policies, payload_reads};
 use super::{
-    CompileLimits, CompilerBlob, Document, Effect, Instruction as NativeInstruction, LayerCache,
-    LayerIndex, NativeType, ReadError,
+    CompileLimits, CompilerBlob, Document, Effect, ExternalDeclaration,
+    Instruction as NativeInstruction, LayerCache, LayerIndex, NativeType, ReadError,
 };
 use crate::model::common::PackedArray;
 use crate::model::scene::popcorn::graph::{
@@ -745,6 +745,7 @@ impl Lowering<'_, '_> {
                     b"ParticleContextS" => External::ParticleContext,
                     b"ParticleContextI" => External::EffectContext,
                     b"RandContext" => External::RandomContext,
+                    b"SceneContext" => scene_external(&native)?,
                     name => {
                         if let Some(index) = field_slots.get(name) {
                             if fields[*index].value_type != Some(kind) {
@@ -775,6 +776,7 @@ impl Lowering<'_, '_> {
                     External::ParticleContext
                     | External::EffectContext
                     | External::RandomContext
+                    | External::SceneContext
                     | External::Event(_)
                     | External::Sampler(_) => ValueType::Context,
                     _ => kind,
@@ -857,6 +859,7 @@ impl Lowering<'_, '_> {
             })
             .transpose()?;
         let (callback, expected, result) = match name {
+            b"view.position" => (Callback::ViewPosition, vec![Int, Context], Some(Float3)),
             b"scene.orientation_f_norm" => (Callback::Orientation, vec![Float3], Some(Quaternion)),
             b"orientation_axisSide" => (Callback::OrientationSide, vec![Quaternion], Some(Float3)),
             b"rotate" => (Callback::Rotate, vec![Float3, Quaternion], Some(Float3)),
@@ -1024,7 +1027,8 @@ impl Lowering<'_, '_> {
         }
         if matches!(
             callback,
-            Callback::Age
+            Callback::ViewPosition
+                | Callback::Age
                 | Callback::Extract(_)
                 | Callback::Running
                 | Callback::Kill
@@ -1050,6 +1054,19 @@ impl Lowering<'_, '_> {
         }
         Ok((callback, result))
     }
+}
+
+fn scene_external(native: &ExternalDeclaration<'_>) -> Result<External, EffectCompileError> {
+    if native.type_name != b"SceneCtx"
+        || native.native_type != NativeType(u32::MAX)
+        || native.storage_bytes != 8
+        || native.meta_type != 2
+        || native.attributes != 2
+        || native.access != 1
+    {
+        return Err(error("unsupported SceneContext capability declaration"));
+    }
+    Ok(External::SceneContext)
 }
 
 #[cfg(test)]
