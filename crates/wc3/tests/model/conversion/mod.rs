@@ -1,4 +1,5 @@
 mod m2;
+mod m2_child_models;
 
 mod mdlx;
 mod wmo;

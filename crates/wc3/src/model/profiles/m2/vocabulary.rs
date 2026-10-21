@@ -1,7 +1,7 @@
 //! Built-in M2 authoring vocabulary and its lossless embeddings.
 use crate::model::profiles::Unavailable;
 use crate::model::profiles::{m2, Extends, NoProperties, Profile, Universal};
-use crate::model::resources::{M2ImageResource, PathResource};
+use crate::model::resources::{M2ImageResource, M2ModelResource};
 use crate::model::M2ResourceLocator;
 use crate::model::PropertyValues;
 use crate::model::{
@@ -17,7 +17,7 @@ use crate::model::{LightShadows, Link};
 pub struct M2;
 impl Profile for M2 {
     type ImageResource<'a> = M2ImageResource<'a>;
-    type ModelResource<'a> = PathResource<'a>;
+    type ModelResource<'a> = M2ModelResource<'a>;
     type EffectResource<'a> = Unavailable;
     type PhysicsResource<'a> = M2ResourceLocator<'a>;
     type BoneOverrideResource<'a> = M2ResourceLocator<'a>;

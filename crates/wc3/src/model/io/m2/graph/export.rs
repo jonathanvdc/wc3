@@ -1,9 +1,9 @@
 //! Typed M2 output planning and native graph construction.
 use super::animation::{encode, time_ms};
 use super::*;
-use crate::model::M2ImageResource;
 use crate::model::TimeSource;
 use crate::model::{Billboard, TransformSemantics};
+use crate::model::{M2ImageResource, M2ModelResource};
 use glam::Vec3;
 use zerovec::ZeroVec;
 
@@ -433,6 +433,34 @@ where
         programs.extend(particle_programs.into_iter().map(Option::unwrap_or_default));
         D::texture_combiner_hints(&mut bundle.model, programs, &mut context)?;
     }
+    let mut geometry_models = Vec::new();
+    let mut recursive_models = Vec::new();
+    for (_, feature) in model.features() {
+        if let profile::ActorKind::Particle(particle) = &feature.payload {
+            for (ids, resource) in [
+                (&mut geometry_models, particle.details.rendering.model),
+                (
+                    &mut recursive_models,
+                    particle.details.rendering.child_model,
+                ),
+            ] {
+                ids.push(
+                    resource
+                        .and_then(|id| model.model_resource(id))
+                        .map_or(0, |resource| match resource {
+                            M2ModelResource::FileDataId(id) => *id,
+                            M2ModelResource::Path(_) => 0,
+                        }),
+                );
+            }
+        }
+    }
+    D::particle_model_ids(
+        &mut bundle.model,
+        geometry_models,
+        recursive_models,
+        &mut context,
+    )?;
     D::texture_ids(&mut bundle.model, texture_ids)?;
     for (_, system) in model.systems() {
         if let profile::System::BoneOverrides(values) = system {

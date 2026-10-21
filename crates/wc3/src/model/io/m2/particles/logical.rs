@@ -5,8 +5,8 @@ use crate::model::io::m2::graph::texture_index;
 use crate::model::io::{materialize, owned};
 use crate::model::{self as semantic, profiles::m2 as profile, Curve, Time};
 use crate::model::{
-    M2ParticleDetails, M2ParticleRendering, M2ParticleShape, ParticleEmission, ParticleLifetime,
-    ParticleMotion,
+    M2ModelResource, M2ParticleDetails, M2ParticleRendering, M2ParticleShape, ParticleEmission,
+    ParticleLifetime, ParticleMotion,
 };
 use glam::{Vec2, Vec3, Vec4};
 use profile::values::ParticleHeadTail as GeometrySelection;
@@ -248,7 +248,7 @@ where
         let bytes = path.as_bytes();
         let bytes = bytes.strip_suffix(&[0]).unwrap_or(bytes);
         (!bytes.is_empty())
-            .then(|| builder.add_model_resource(semantic::PathResource::Path(Cow::Borrowed(bytes))))
+            .then(|| builder.add_model_resource(M2ModelResource::Path(Cow::Borrowed(bytes))))
     };
     let spline = &value.spline_points;
     Ok(profile::ParticleEmitter {
@@ -413,12 +413,17 @@ where
             match resource {
                 None => Ok(ZeroVec::new()),
                 Some(id) => {
-                    let semantic::PathResource::Path(path) = model
+                    match model
                         .model_resource(*id)
-                        .ok_or_else(|| Error::new("m2.particle.model", "missing model resource"))?;
-                    Ok(ZeroVec::alloc_from_slice(
-                        &path.iter().copied().chain([0]).collect::<Vec<_>>(),
-                    ))
+                        .ok_or_else(|| Error::new("m2.particle.model", "missing model resource"))?
+                    {
+                        M2ModelResource::Path(path) => Ok(ZeroVec::alloc_from_slice(
+                            &path.iter().copied().chain([0]).collect::<Vec<_>>(),
+                        )),
+                        // The selected envelope installs numeric identities in
+                        // aligned GPID/RPID tables after core actor export.
+                        M2ModelResource::FileDataId(_) => Ok(ZeroVec::new()),
+                    }
                 }
             }
         };

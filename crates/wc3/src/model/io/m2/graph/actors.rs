@@ -2,10 +2,10 @@
 use super::*;
 use crate::model::materials::m2::rasterization;
 use crate::model::materials::state::PassState;
-use crate::model::FieldOfViewAxis;
 use crate::model::LightEmission;
 use crate::model::PerspectiveProjection;
 use crate::model::{Axis, M2RibbonBehavior, M2RibbonRendering, TrailAppearance, TrailGeometry};
+use crate::model::{FieldOfViewAxis, M2ModelResource};
 use glam::{Vec2, Vec3};
 fn placement<'a>(
     builder: &mut GraphBuilder<'a>,
@@ -413,6 +413,26 @@ where
         )?;
         let feature = builder.reserve_feature(node);
         let mut particle = D::Layout::logical_particle(value, textures, builder)?;
+        for (geometry, resource) in [
+            (true, &mut particle.details.rendering.model),
+            (false, &mut particle.details.rendering.child_model),
+        ] {
+            let id = source
+                .model
+                .extensions()
+                .find_map(|chunk| match chunk {
+                    Chunk::GeometryParticleIds(ids) if geometry => ids.get(index),
+                    Chunk::RecursiveParticleIds(ids) if !geometry => ids.get(index),
+                    _ => None,
+                })
+                .filter(|id| *id != 0);
+            if let Some(id) = id {
+                if let Some(previous) = resource.take() {
+                    builder.remove_model_resource(previous);
+                }
+                *resource = Some(builder.add_model_resource(M2ModelResource::FileDataId(id)));
+            }
+        }
         particle.details.rendering.texture_program = source.model.extensions().find_map(|chunk| {
             if let Chunk::TextureCombinerHints(programs) = chunk {
                 programs.get(core.materials.len() + index)

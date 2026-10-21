@@ -112,6 +112,49 @@ impl<'a> TryFrom<ImageResource<'a>> for PathResource<'a> {
 impl ValidateLinks for PathResource<'_> {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
+/// M2 child-model addresses, including GPID/RPID file-data identities.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum M2ModelResource<'a> {
+    /// Legacy native path spelling, including non-UTF-8 bytes.
+    Path(Cow<'a, [u8]>),
+    /// Modern particle geometry or emitter-template file-data identity.
+    FileDataId(u32),
+}
+impl ValidateLinks for M2ModelResource<'_> {
+    fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
+        if matches!(self, Self::FileDataId(0)) {
+            visitor(Link::InvalidValue);
+        }
+    }
+}
+impl<'a> From<PathResource<'a>> for M2ModelResource<'a> {
+    fn from(value: PathResource<'a>) -> Self {
+        let PathResource::Path(path) = value;
+        Self::Path(path)
+    }
+}
+impl<'a> From<M2ModelResource<'a>> for ResourceLocator<'a> {
+    fn from(value: M2ModelResource<'a>) -> Self {
+        match value {
+            M2ModelResource::Path(path) => Self::Path(path),
+            M2ModelResource::FileDataId(id) => Self::FileDataId(id),
+        }
+    }
+}
+impl<'a> TryFrom<ResourceLocator<'a>> for M2ModelResource<'a> {
+    type Error = Error;
+    fn try_from(value: ResourceLocator<'a>) -> Result<Self, Error> {
+        match value {
+            ResourceLocator::Path(path) => Ok(Self::Path(path)),
+            ResourceLocator::FileDataId(id) => Ok(Self::FileDataId(id)),
+            _ => Err(Error::new(
+                "m2.model_resource",
+                "child models require a native path or file-data identity",
+            )),
+        }
+    }
+}
+
 /// Warcraft III image paths and application replacement categories.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MdlxImageResource<'a> {

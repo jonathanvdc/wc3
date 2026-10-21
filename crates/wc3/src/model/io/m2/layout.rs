@@ -61,6 +61,13 @@ pub trait ExportDialect: Dialect {
     /// Installs numeric texture IDs, or diagnoses an envelope without extension chunks.
     fn texture_ids(model: &mut native::Document<'static, Self>, ids: Vec<u32>)
         -> Result<(), Error>;
+    /// Installs aligned GPID/RPID addresses where extension chunks are supported.
+    fn particle_model_ids(
+        model: &mut native::Document<'static, Self>,
+        geometry: Vec<u32>,
+        recursive: Vec<u32>,
+        context: &mut Context,
+    ) -> Result<(), Error>;
     /// Installs material-prefixed particle texture-program selectors where chunk framing permits them.
     fn texture_combiner_hints(
         model: &mut native::Document<'static, Self>,
@@ -70,6 +77,21 @@ pub trait ExportDialect: Dialect {
 }
 
 impl<V: ModelLayout> ExportDialect for native::Flat<V> {
+    fn particle_model_ids(
+        _: &mut native::Document<'static, Self>,
+        geometry: Vec<u32>,
+        recursive: Vec<u32>,
+        context: &mut Context,
+    ) -> Result<(), Error> {
+        if geometry.iter().chain(&recursive).any(|id| *id != 0) {
+            context.unsupported(
+                "m2.particle.model_resource",
+                "flat MD20 cannot carry numeric GPID/RPID child models; provide legacy filenames",
+            )?;
+        }
+        Ok(())
+    }
+
     fn texture_combiner_hints(
         _: &mut native::Document<'static, Self>,
         values: Vec<[u8; 2]>,
@@ -131,6 +153,31 @@ impl<V: ModelLayout> ExportDialect for native::Flat<V> {
 }
 
 impl<V: ModelLayout> ExportDialect for Chunked<V> {
+    fn particle_model_ids(
+        model: &mut native::Document<'static, Self>,
+        geometry: Vec<u32>,
+        recursive: Vec<u32>,
+        _: &mut Context,
+    ) -> Result<(), Error> {
+        if geometry.iter().any(|id| *id != 0) {
+            model
+                .insert_extension(
+                    0,
+                    Chunk::GeometryParticleIds(ZeroVec::alloc_from_slice(&geometry)),
+                )
+                .map_err(failure)?;
+        }
+        if recursive.iter().any(|id| *id != 0) {
+            model
+                .insert_extension(
+                    0,
+                    Chunk::RecursiveParticleIds(ZeroVec::alloc_from_slice(&recursive)),
+                )
+                .map_err(failure)?;
+        }
+        Ok(())
+    }
+
     fn texture_combiner_hints(
         model: &mut native::Document<'static, Self>,
         values: Vec<[u8; 2]>,

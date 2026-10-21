@@ -72,6 +72,30 @@ where
         ));
     }
 
+    for (geometry, field) in [
+        (true, "m2.particle.geometry_ids"),
+        (false, "m2.particle.child_ids"),
+    ] {
+        let mut tables = source.model.extensions().filter_map(|chunk| match chunk {
+            Chunk::GeometryParticleIds(ids) if geometry => Some(ids),
+            Chunk::RecursiveParticleIds(ids) if !geometry => Some(ids),
+            _ => None,
+        });
+        if let Some(ids) = tables.next() {
+            if tables.next().is_some() {
+                return Err(Error::new(
+                    field,
+                    "multiple particle model ID tables are ambiguous",
+                ));
+            }
+            if ids.len() != core.particles.len() {
+                return Err(Error::new(
+                    field,
+                    "particle model ID table must align with core emitters",
+                ));
+            }
+        }
+    }
     let mut context = Context::import(options);
     let name = core.name.as_bytes();
     let name = std::str::from_utf8(name.strip_suffix(&[0]).unwrap_or(name))
@@ -483,6 +507,8 @@ where
             | Chunk::BoneIds(_)
             | Chunk::SkeletonId(_)
             | Chunk::TextureIds(_)
+            | Chunk::GeometryParticleIds(_)
+            | Chunk::RecursiveParticleIds(_)
             | Chunk::Physics(_)
             | Chunk::Unknown { .. } => {}
             _ => context.unsupported(

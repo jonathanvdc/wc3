@@ -22,6 +22,20 @@ fails normal graph validation. Display names and visibility-guide text still
 use Unicode strings, so invalid UTF-8 in those fields requires an explicit
 import loss policy.
 
+M2 child-model declarations use `M2ModelResource::Path` for legacy filenames
+and `FileDataId` for modern geometry (`GPID`) and emitter-template (`RPID`)
+references. Their roles remain separate on each particle emitter. Nonzero chunk
+entries take precedence over legacy filenames; zero entries retain the filename
+fallback. Widening preserves these addresses as Universal resource locators,
+and narrowing back to M2 accepts both forms. Malformed or ambiguous alignment
+tables are rejected independently of accepted loss for other extensions.
+
+Numeric child addresses require a chunked output envelope. Child resource
+addresses do not contain native child documents. The semantic M2 export planner
+currently accepts a model and export options, with no input for those documents,
+so it rejects referenced child-model trees whose payloads are unavailable.
+Edit the retained native bundle when rewriting a complete child-model tree.
+
 For an independent Warcraft III model, `io::mdlx::decode_mdx` and `decode_mdl`
 combine native decoding with owned import. Both return `Model<'static, Mdlx>`
 and an import report, so their input can be released immediately. `import_owned`

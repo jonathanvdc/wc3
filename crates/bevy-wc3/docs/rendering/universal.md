@@ -79,6 +79,12 @@ policy, and `compile_options` for material appearances and other compilation
 choices. Missing required companions fail loading. Optional missing images remain
 inspectable on `ModelAsset`.
 
+M2 particle geometry (`GPID`) and emitter-template (`RPID`) chunks import as
+separate typed child-model resources, including file-data IDs. Zero table entries
+retain a legacy filename fallback. The loader resolves both roles through the
+same model-dependency graph; [model-particle runtime coverage](prem.md) remains
+separate from successful resource discovery.
+
 M2 bundles resolve animations and attachment tables through their external skeleton
 chain. Nonempty deferred tracks need that context before validation or writing.
 Empty equipment sequences do not invent sibling animation dependencies; explicit
