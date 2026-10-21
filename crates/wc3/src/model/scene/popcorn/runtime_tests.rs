@@ -758,3 +758,68 @@ fn shared_step_permission_omits_tail_without_replay_and_keeps_local_ceiling() {
         "the omitted interval has no deferred births"
     );
 }
+
+#[test]
+fn birth_serial_orders_same_time_births_after_slot_reuse_and_resets_cleanly() {
+    let program = sprite();
+    let mut instance = program
+        .instantiate(
+            EffectLimits {
+                particles: 3,
+                ..Default::default()
+            },
+            0,
+        )
+        .unwrap();
+    instance.start(&program, 0, inputs()).unwrap();
+    let original = instance.particles(EffectLayerId(0)).next().unwrap().id;
+    let birth = Spawn {
+        time: 0.,
+        layer: EffectLayerId(0),
+        parent: None,
+        seed: 0,
+        order: 0,
+        payload: None,
+        payload_event: 0,
+        payload_target: 0,
+        payload_fraction: 0.,
+        payload_ordinal: 0,
+    };
+    instance
+        .birth(&program, birth, 0., inputs(), &mut 0)
+        .unwrap();
+    instance.retire_at(0);
+    instance
+        .birth(&program, birth, 0., inputs(), &mut 0)
+        .unwrap();
+    let mut living: Vec<_> = instance
+        .particles(EffectLayerId(0))
+        .map(|particle| (particle.birth_serial, particle.id, particle.birth_time))
+        .collect();
+    living.sort_by_key(|particle| particle.0);
+    assert_eq!(
+        living.iter().map(|particle| particle.0).collect::<Vec<_>>(),
+        [1, 2]
+    );
+    assert!(
+        living[0].1.slot > living[1].1.slot,
+        "slot order does not encode chronology"
+    );
+    assert_eq!(living[0].2, living[1].2);
+    instance.start(&program, 0, inputs()).unwrap();
+    let restarted = instance.particles(EffectLayerId(0)).next().unwrap();
+    assert_eq!(restarted.birth_serial, 0);
+    assert_ne!(restarted.id, original);
+    instance.next_serial = u64::MAX;
+    let free = instance.free.len();
+    assert!(instance
+        .birth(&program, birth, 0., inputs(), &mut 0)
+        .unwrap_err()
+        .message
+        .contains("serial exhausted"));
+    assert_eq!(
+        instance.free.len(),
+        free,
+        "identity exhaustion must not consume a pool slot"
+    );
+}

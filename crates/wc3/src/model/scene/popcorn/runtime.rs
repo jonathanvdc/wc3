@@ -153,6 +153,7 @@ struct Particle {
     layer: EffectLayerId,
     generation: u32,
     birth: f64,
+    serial: u64,
     cursor: f64,
     random: RandomState,
     parent: Option<EffectParticleId>,
@@ -198,6 +199,8 @@ pub struct ParticleView<'a> {
     pub layer: EffectLayerId,
     /// Absolute effect-local birth time in seconds.
     pub birth_time: f64,
+    /// Monotonic allocation order within this instance restart, independent of slot reuse.
+    pub birth_serial: u64,
     /// Parent identity retained independently of slot reuse.
     pub parent: Option<EffectParticleId>,
     fields: &'a FieldPlanes,
@@ -234,6 +237,7 @@ pub struct EffectInstance {
     faulted: bool,
     seed: u64,
     order: u64,
+    next_serial: u64,
 }
 impl EffectProgram {
     /// Allocate all reusable particle, field, event and callback storage before simulation.
@@ -349,6 +353,7 @@ impl EffectProgram {
                 layer: EffectLayerId(0),
                 generation: 0,
                 birth: 0.,
+                serial: 0,
                 cursor: 0.,
                 random: RandomState {
                     seed: 0,
@@ -389,6 +394,7 @@ impl EffectProgram {
             faulted: false,
             seed,
             order: 0,
+            next_serial: 0,
         })
     }
 }
@@ -433,6 +439,7 @@ impl EffectInstance {
         self.emitting = true;
         self.faulted = false;
         self.order = 0;
+        self.next_serial = 0;
         self.stats = EffectStats::default();
         for target in &program.inner.events[entry.event].targets {
             self.enqueue(Spawn {
@@ -554,6 +561,7 @@ impl EffectInstance {
                     },
                     layer,
                     birth_time: particle.birth,
+                    birth_serial: particle.serial,
                     parent: particle.parent,
                     fields: &self.fields,
                     types: &self.layout[layer.0 as usize],
@@ -734,10 +742,15 @@ impl EffectInstance {
             self.stats.omitted_births = self.stats.omitted_births.saturating_add(1);
             return Ok(());
         }
+        let serial = self.next_serial;
+        let next_serial = serial
+            .checked_add(1)
+            .ok_or_else(|| failure("particle birth serial exhausted"))?;
         let Some(slot) = self.free.pop() else {
             self.stats.omitted_births += 1;
             return Ok(());
         };
+        self.next_serial = next_serial;
         let layer = &program.inner.layers[spawn.layer.0 as usize];
         let particle = &mut self.particles[slot];
         particle.generation = particle
@@ -746,6 +759,7 @@ impl EffectInstance {
             .ok_or_else(|| failure("particle incarnation exhausted"))?;
         particle.layer = spawn.layer;
         particle.birth = spawn.time;
+        particle.serial = serial;
         particle.cursor = spawn.time;
         particle.random = RandomState {
             seed: spawn.seed,
