@@ -1,4 +1,5 @@
-//! Asynchronous profiling for the pipelined crowd benchmark.
+//! Profiling and frame pacing for the crowd benchmark.
+use super::completion::{self, CompletionWait};
 use bevy::diagnostic::DiagnosticsStore;
 use bevy::prelude::*;
 use bevy::render::diagnostic::DiagnosticsRecorder;
@@ -9,6 +10,7 @@ use bevy::render::{Render, RenderApp, RenderSystems};
 use bevy::tasks::block_on;
 use bevy::transform::TransformSystems;
 use bevy_wc3::Wc3Systems;
+use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, VecDeque};
 use std::error::Error;
@@ -16,6 +18,67 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+pub enum FramePolicy {
+    #[default]
+    Pipelined,
+    SerialCompleted {
+        wait: CompletionWait,
+    },
+}
+impl FramePolicy {
+    pub fn is_serial(self) -> bool {
+        matches!(self, Self::SerialCompleted { .. })
+    }
+    fn queue_depth(self) -> usize {
+        if self.is_serial() {
+            1
+        } else {
+            3
+        }
+    }
+}
+pub struct FrameTiming {
+    pub wall_ms: f64,
+    pub update_ms: f64,
+    pub completion_wait_ms: f64,
+}
+/// Advance one normal application frame using the selected submission boundary.
+/// Pipelined update time includes queue backpressure; serial wait is separate.
+pub fn frame(app: &mut App, policy: FramePolicy) -> Result<FrameTiming> {
+    let start = Instant::now();
+    if !policy.is_serial() {
+        pace(app)?;
+    }
+    app.update();
+    let submitted = Instant::now();
+    if let FramePolicy::SerialCompleted { wait } = policy {
+        completion::wait(
+            app.world().resource::<RenderDevice>(),
+            wait,
+            Duration::from_secs(120),
+        )?;
+        app.world()
+            .resource::<Shared>()
+            .0
+            .lock()
+            .unwrap()
+            .fences
+            .clear();
+    }
+    let end = Instant::now();
+    Ok(FrameTiming {
+        wall_ms: (end - start).as_secs_f64() * 1000.,
+        update_ms: (submitted - start).as_secs_f64() * 1000.,
+        completion_wait_ms: if policy.is_serial() {
+            (end - submitted).as_secs_f64() * 1000.
+        } else {
+            0.
+        },
+    })
+}
 
 #[derive(Default)]
 struct Measurements {
@@ -60,6 +123,10 @@ pub fn install(app: &mut App) {
     .add_systems(
         PostUpdate,
         (
+            (|shared: Res<Shared>| stage_start(&shared, "simulate_effects_cpu_ms"))
+                .before(Wc3Systems::SimulateEffects),
+            (|shared: Res<Shared>| stage_end(&shared, "simulate_effects_cpu_ms"))
+                .after(Wc3Systems::SimulateEffects),
             (|shared: Res<Shared>| stage_start(&shared, "evaluate_node_poses_cpu_ms"))
                 .before(Wc3Systems::EvaluateNodePoses),
             (|shared: Res<Shared>| stage_end(&shared, "evaluate_node_poses_cpu_ms"))
@@ -253,7 +320,8 @@ pub fn reset(app: &mut App) {
     data.active = true;
 }
 /// Terminal drain only: recover the render world after its last submission, then
-/// wait once for outstanding GPU work. Do not call app.update() after this.
+/// wait once for outstanding GPU work. Call resume_rendering() before any later
+/// app.update(), because the pipelined render world is now owned locally.
 pub fn drain(app: &mut App) -> Result<()> {
     if app.world().contains_resource::<RenderAppChannels>() {
         let render_app = {
@@ -280,7 +348,25 @@ pub fn drain(app: &mut App) -> Result<()> {
     shared.0.lock().unwrap().active = false;
     Ok(())
 }
-pub fn report(app: &App) -> Value {
+/// Return the drained render world to its original rendering owner before
+/// unmeasured screenshot frames. The extract sub-app remains installed, so a
+/// pipelined world must leave the local sub-app collection before the next update.
+/// Sending it queues one render-only frame; simulation advances only when the
+/// caller subsequently updates the main app (using zero delta for screenshots).
+/// Serial rendering already owns its render world locally and needs no transfer.
+pub fn resume_rendering(app: &mut App) -> Result<()> {
+    if app.world().contains_resource::<RenderAppChannels>() {
+        let render_app = app
+            .remove_sub_app(RenderApp)
+            .ok_or("cannot resume: the drained render world is not available locally")?;
+        app.world_mut()
+            .resource_mut::<RenderAppChannels>()
+            .send_blocking(render_app);
+    }
+    Ok(())
+}
+
+pub fn report(app: &App, policy: FramePolicy) -> Value {
     let shared = app.world().resource::<Shared>();
     let data = shared.0.lock().unwrap();
     let mut result = serde_json::Map::new();
@@ -292,5 +378,5 @@ pub fn report(app: &App) -> Value {
         sorted.sort_by(f64::total_cmp);
         result.insert(name.clone(), json!({"samples":sorted.len(), "median": sorted[sorted.len()/2], "p95":sorted[(sorted.len()*95/100).min(sorted.len()-1)]}));
     }
-    json!({"maximum_queued_frames":3, "gpu_pass_timestamps_available":data.gpu_pass_timestamps, "spans":result, "note":"Main and render schedules overlap on separate threads. The first two fresh asynchronous reports per diagnostic are discarded after warmup. Set spans are scheduling windows and can include unrelated concurrent systems; they are not exclusive function CPU time. Render-pass CPU spans measure command recording, not GPU completion. GPU spans require supported timestamp features; macOS encoder timestamps are suppressed by Bevy, so only pass spans can be valid GPU timings."})
+    json!({"frame_policy":policy,"maximum_queued_frames":policy.queue_depth(), "gpu_pass_timestamps_available":data.gpu_pass_timestamps, "spans":result, "note":"Main and render schedules overlap in pipelined mode; serial mode disables the pipelined renderer. The first two fresh asynchronous reports per diagnostic are discarded after warmup. Set spans are scheduling windows and can include unrelated concurrent systems; they are not exclusive function CPU time. Render-pass CPU spans measure command recording, not GPU completion. GPU spans require supported timestamp features; macOS encoder timestamps are suppressed by Bevy, so only pass spans can be valid GPU timings."})
 }

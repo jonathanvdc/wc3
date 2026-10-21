@@ -1,7 +1,7 @@
 //! Capture a native model offscreen at fixed animation times.
 //! Run `cargo run -p bevy-wc3 --example capture -- --help` for options.
 use bevy::app::PluginsState;
-use bevy::asset::{AssetPlugin, LoadState, RecursiveDependencyLoadState};
+use bevy::asset::AssetPlugin;
 use bevy::camera::{Hdr, MainPassResolutionOverride, RenderTarget, ShadowLodOrigin, Viewport};
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::core_pipeline::tonemapping::Tonemapping;
@@ -12,7 +12,7 @@ use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
 use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
-use bevy::render::render_resource::{CachedPipelineState, PipelineCache, PollType, TextureFormat};
+use bevy::render::render_resource::{CachedPipelineState, PipelineCache, TextureFormat};
 use bevy::render::renderer::RenderDevice;
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured};
 use bevy::render::{RenderApp, RenderPlugin};
@@ -31,7 +31,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::env::args;
 use std::error::Error;
 use std::fs::{create_dir_all, File};
-use std::hint::spin_loop;
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -41,8 +40,13 @@ use wc3::model::formats::wmo::Profile as WmoProfile;
 use wc3::model::materials::m2::GuildPalette;
 #[path = "support/character.rs"]
 mod character;
+#[path = "support/completion.rs"]
+mod completion;
+#[path = "support/loading.rs"]
+mod loading;
 #[path = "support/resolver.rs"]
 mod resolver;
+use loading::check_asset;
 use resolver::{parse_wmo_profile, ModelResolver};
 
 type CaptureResult<T> = Result<T, Box<dyn Error>>;
@@ -1048,18 +1052,6 @@ fn capture(options: Options) -> CaptureResult<()> {
     Ok(())
 }
 
-fn check_asset<A: Asset>(assets: &AssetServer, handle: &Handle<A>) -> CaptureResult<()> {
-    if let LoadState::Failed(error) = assets.load_state(handle) {
-        return Err(format!("asset load failed: {error}").into());
-    }
-    if let RecursiveDependencyLoadState::Failed(error) =
-        assets.recursive_dependency_load_state(handle)
-    {
-        return Err(format!("texture dependency load failed: {error}").into());
-    }
-    Ok(())
-}
-
 fn benchmark_pose(
     app: &mut App,
     options: &Options,
@@ -1074,11 +1066,7 @@ fn benchmark_pose(
     writeln!(output, "frame,pose_seconds,wall_ms,step_ms,wait_ms")?;
     let synchronize = |app: &App| -> CaptureResult<()> {
         let device = app.sub_app(RenderApp).world().resource::<RenderDevice>();
-        let deadline = Instant::now() + TIMEOUT;
-        while !device.poll(PollType::Poll)?.is_queue_empty() {
-            check_deadline(deadline, "waiting for benchmark GPU completion")?;
-            spin_loop();
-        }
+        completion::wait(device, completion::CompletionWait::SpinPoll, TIMEOUT)?;
         Ok(())
     };
     synchronize(app)?;
