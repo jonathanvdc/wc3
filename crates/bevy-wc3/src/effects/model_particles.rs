@@ -48,6 +48,7 @@ struct Emitter {
     gravity: Property<f32>,
     lifetime: Property<f32>,
     latitude: Property<f32>,
+    longitude: Property<f32>,
 }
 #[derive(Clone, Default)]
 pub(crate) struct RuntimeModelParticles {
@@ -185,7 +186,7 @@ impl RuntimeModelParticles {
                 definition.motion.speed,
                 definition.lifetime.duration,
             );
-            diagnostic(RenderDiagnosticKind::Unsupported, "Model-particle longitude is retained but unused; latitude uses the Warcraft III radian convention");
+            diagnostic(RenderDiagnosticKind::Unverified, "Model-particle latitude and longitude bound raw-radian polar and azimuth angles; exact native game angular distributions remain unverified");
             diagnostic(RenderDiagnosticKind::Unverified, "Model-particle yaw, pitch, and spin use deterministic occurrence-indexed random packets; native game random sequences remain unverified");
             diagnostic(RenderDiagnosticKind::Budget, "External-model particles retain at most 1024 children and 1024 births per update; rates use the shared bounded 60 Hz emission clock");
             diagnostic(RenderDiagnosticKind::Budget, "Nested model particles and their static descendants share ModelParticleLimits on the outer application root; omitted admissions and emission intervals are not queued");
@@ -201,6 +202,7 @@ impl RuntimeModelParticles {
                 gravity: definition.motion.gravity,
                 lifetime,
                 latitude: details.latitude,
+                longitude: details.longitude,
             });
         }
         result
@@ -361,10 +363,12 @@ impl RuntimeModelParticles {
                     let lifetime = f64::from(sample.animated(&emitter.lifetime));
                     let speed = sample.animated(&emitter.speed);
                     let latitude = sample.animated(&emitter.latitude);
+                    let longitude = sample.animated(&emitter.longitude);
                     if !lifetime.is_finite()
                         || lifetime <= frame.time - time
                         || !speed.is_finite()
                         || !latitude.is_finite()
+                        || !longitude.is_finite()
                     {
                         continue;
                     }
@@ -385,7 +389,7 @@ impl RuntimeModelParticles {
                         emitter.anchor as u32,
                         first_ordinal.wrapping_add(index as u64),
                     );
-                    let yaw = rng.random() * TAU;
+                    let yaw = rng.signed() * longitude;
                     let pitch = rng.signed() * latitude;
                     let direction =
                         Quat::from_rotation_z(yaw) * Quat::from_rotation_y(pitch) * Vec3::Z;

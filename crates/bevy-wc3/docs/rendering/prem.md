@@ -20,9 +20,12 @@ sampler evaluates activation, parameters, and hierarchy at subframe births.
 Application root motion interpolates observed update endpoints. MDLX PREM retains
 world-space origins, velocities, sampled scale, and random headings. Analytic
 constant-gravity motion follows the authored model-up axis after coordinate
-conversion. Its established latitude interpretation remains unverified against
-the native game. Each scheduled PREM occurrence owns a deterministic yaw, pitch,
-and spin packet. Per-birth rejection for pose visibility, invalid values,
+conversion. Latitude bounds the signed polar angle and longitude bounds the
+signed azimuth, both sampled in raw radians at each occurrence. Zero longitude
+confines initial velocity to the emitter's XZ plane; zero latitude launches along
+positive Z regardless of longitude. Native game angular distributions remain
+unverified. Each scheduled PREM occurrence owns a deterministic yaw, pitch, and
+spin packet. Per-birth rejection for pose visibility, invalid values,
 population limits or missing resources does not shift later packets. Emitter
 activation and hierarchy visibility gate scheduling first. Reset restarts the
 source sequence; native game random-sequence fidelity remains unverified.
