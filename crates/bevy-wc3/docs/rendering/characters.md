@@ -112,13 +112,26 @@ domain; local bodies and constraints do not supply external-world contacts or
 gameplay ragdoll arbitration. Vegetation and unknown domains remain external.
 Simulation uses bounded fixed steps and positional constraint projection, including
 shoulder swing/twist and hinge limits, distance and weld
-constraints, and explicitly permitted body contacts using body-centered bounding
-spheres. Capsule, box and hull contacts use conservative bounds. Shape centers of
-mass let gravity rotate anchored pendants. The renderer preserves authored body
-information for external adapters and reports unsupported native controls, including motors, friction and slider limits,
+constraints, and explicitly permitted contacts between independent compound fixtures.
+Sphere/capsule pairs use exact segment distances; sphere/orthogonal-box contacts
+use the actual box. Box-box, capsule-box and convex-hull pairs retain conservative
+fixture bounds. Rounded fixtures under nonuniform scale or shear also use bounds.
+Compound centers and full tensor inertia retain fixture offsets and orientation;
+contacts produce angular impulses and bounded Coulomb friction. The original
+material policy selects maximum restitution and the geometric mean of friction.
+One representative point is used per fixture pair; stable multipoint manifolds
+are not implemented. Authored hull mass uses declared volume and centroid with
+a diagnosed spherical tensor approximation.
+
+Kinematic target motion interpolates over the available fixed steps and supplies
+point velocities to contacts. Body scale changes retain compiled mass and transform
+its centered second moments, with native scale/mass fidelity unverified. The
+renderer preserves authored body information for external adapters and reports
+unsupported native controls, including motors, angular joint friction and slider limits,
 through rendering diagnostics. This approximates native rigid-body behavior; it
-does not implement cloth simulation or establish WoW physics parity. Removing simulation restores authored animation; pausing it
-retains the simulated pose, and resetting starts from the next authored pose.
+does not implement cloth simulation or establish WoW physics parity. Removing
+simulation restores authored animation; pausing it retains the simulated pose,
+and resetting starts from the next authored pose.
 Lights and mounted models follow the final simulated skeleton. Retimed effect
 births and event poses sample authored animation and application overrides; they
 do not reconstruct a history of secondary-motion states.

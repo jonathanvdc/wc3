@@ -54,8 +54,9 @@ response, and indoor/outdoor illumination.
 
 [Assemblies](assembly.md) combine shared skeletons, mounted parts, geometry choices,
 and composed textures. The optional [WoW adapter](characters.md) interprets native
-appearance choices. Authored secondary motion is opt-in and uses an approximate
-solver.
+appearance choices. Authored secondary motion is opt-in: the approximate solver
+retains compound fixtures, capsule contacts, tensor inertia and contact friction;
+convex-hull contacts, stable manifolds and native stepping remain partial.
 
 Attachment mounts expose animated sockets and can load child models automatically.
 [Lights](lights.md) preserve activation independently of shadow parameters and

@@ -42,10 +42,24 @@ fn fixture(dynamic: usize) -> (PhysicsDefinition, Vec<Mat4>) {
             angular_damping: 0.,
             follow: 0.,
             inverse_mass: 1.,
-            inverse_inertia: 1.,
+            inverse_inertia: Mat3::IDENTITY,
+            mass: Mass {
+                mass: 1.,
+                center: Vec3::ZERO,
+                second_moment: Mat3::from_diagonal(Vec3::splat(0.5)),
+            },
+            fixtures: vec![Fixture {
+                geometry: contact::Primitive::Sphere {
+                    center: Vec3::ZERO,
+                    radius: 0.5,
+                },
+                center: Vec3::ZERO,
+                radius: 0.5,
+                friction: 0.,
+                restitution: 0.,
+                approximate: false,
+            }],
             radius: 0.5,
-            center: Vec3::ZERO,
-            restitution: 0.,
         });
         authored.push(Mat4::from_translation(Vec3::X * index as f32));
     }
@@ -463,7 +477,7 @@ fn offset_mass_center_creates_gravity_torque_about_pinned_body_origin() {
     let (mut definition, mut authored) = fixture(2);
     definition.bodies[0].inverse_mass = 0.;
     definition.bodies[0].info.body.kind = PhysicsBodyKind::Kinematic;
-    definition.bodies[1].center = Vec3::new(1., 0., -1.);
+    definition.bodies[1].mass.center = Vec3::new(1., 0., -1.);
     authored[1] = Mat4::IDENTITY;
     let frame = Frame {
         axis_x: Vec3::X,
@@ -873,4 +887,205 @@ fn ragdoll_and_private_world_equipment_preserve_domain_and_simulate_authored_cha
             "authored-domain belt bodies did not respond to gravity"
         );
     }
+}
+
+#[test]
+fn exact_capsules_remove_body_sphere_false_contacts() {
+    let (mut definition, mut authored) = fixture(2);
+    for body in &mut definition.bodies {
+        body.fixtures = vec![Fixture {
+            geometry: contact::Primitive::Capsule {
+                endpoints: [-Vec3::Z * 2., Vec3::Z * 2.],
+                radius: 0.1,
+            },
+            center: Vec3::ZERO,
+            radius: 2.1,
+            friction: 0.,
+            restitution: 0.,
+            approximate: false,
+        }];
+        body.radius = 2.1;
+    }
+    definition.pairs.push((0, 1));
+    authored[1] = Mat4::from_translation(Vec3::X);
+    let settings = PhysicsSimulation {
+        gravity: Vec3::ZERO,
+        ..Default::default()
+    };
+    let mut state = PhysicsState::default();
+    state.step(&definition, &settings, 0., &authored, &HashMap::new());
+    state.step(
+        &definition,
+        &settings,
+        1. / 120.,
+        &authored,
+        &HashMap::new(),
+    );
+    assert_eq!(state.bodies[0].position, Vec3::ZERO);
+    assert_eq!(state.bodies[1].position, Vec3::X);
+    assert_eq!(state.bodies[1].velocity, Vec3::ZERO);
+}
+#[test]
+fn offset_capsule_impact_produces_angular_response_and_friction() {
+    let (mut definition, mut authored) = fixture(2);
+    definition.bodies[0].inverse_mass = 0.;
+    definition.bodies[0].info.body.kind = PhysicsBodyKind::Kinematic;
+    for body in &mut definition.bodies {
+        body.fixtures = vec![Fixture {
+            geometry: contact::Primitive::Capsule {
+                endpoints: [-Vec3::Z, Vec3::Z],
+                radius: 0.25,
+            },
+            center: Vec3::ZERO,
+            radius: 1.25,
+            friction: 0.8,
+            restitution: 0.,
+            approximate: false,
+        }];
+        body.radius = 1.25;
+    }
+    definition.pairs.push((0, 1));
+    authored[1] = Mat4::from_translation(Vec3::new(0.49, 0., 0.8));
+    let settings = PhysicsSimulation {
+        gravity: Vec3::ZERO,
+        ..Default::default()
+    };
+    let mut state = PhysicsState::default();
+    state.step(&definition, &settings, 0., &authored, &HashMap::new());
+    state.bodies[1].velocity = Vec3::new(-1., 2., 0.);
+    state.step(
+        &definition,
+        &settings,
+        1. / 120.,
+        &authored,
+        &HashMap::new(),
+    );
+    assert!(state.bodies[1].angular_velocity.length() > 0.01);
+    assert!(state.bodies[1].velocity.y < 2.);
+    assert!(state.bodies[0].velocity.length() < 1e-6);
+}
+#[test]
+fn moving_kinematic_compound_surface_drives_contact_friction() {
+    let (mut definition, mut authored) = fixture(2);
+    definition.bodies[0].inverse_mass = 0.;
+    definition.bodies[0].info.body.kind = PhysicsBodyKind::Kinematic;
+    for body in &mut definition.bodies {
+        body.fixtures[0].friction = 0.8;
+    }
+    // The second fixture does not contact but belongs to the same moving compound.
+    let mut offset = definition.bodies[0].fixtures[0];
+    offset.center = Vec3::X * 2.;
+    offset.geometry = contact::Primitive::Sphere {
+        center: offset.center,
+        radius: 0.5,
+    };
+    definition.bodies[0].fixtures.push(offset);
+    definition.bodies[0].radius = 2.5;
+    definition.pairs.push((0, 1));
+    authored[1] = Mat4::from_translation(Vec3::Z);
+    let settings = PhysicsSimulation::default();
+    let mut state = PhysicsState::default();
+    state.step(&definition, &settings, 0., &authored, &HashMap::new());
+    authored[0] = Mat4::from_translation(Vec3::Y * 0.01);
+    state.step(
+        &definition,
+        &settings,
+        1. / 120.,
+        &authored,
+        &HashMap::new(),
+    );
+    assert!((state.bodies[0].velocity.y - 1.2).abs() < 1e-5);
+    assert!(state.bodies[1].velocity.y > 0.001);
+    assert!(state.bodies[1].angular_velocity.x.abs() > 0.001);
+}
+#[test]
+fn contact_repair_preserves_both_pose_histories() {
+    let (mut definition, mut authored) = fixture(2);
+    definition.pairs.push((0, 1));
+    authored[1] = Mat4::from_translation(Vec3::X * 0.8);
+    // Deliberately offset the fixtures to make normal repair angular.
+    for body in &mut definition.bodies {
+        body.fixtures[0].center = Vec3::Z * 0.3;
+        body.fixtures[0].geometry = contact::Primitive::Sphere {
+            center: Vec3::Z * 0.3,
+            radius: 0.5,
+        };
+        body.radius = 0.8;
+    }
+    let settings = PhysicsSimulation {
+        gravity: Vec3::ZERO,
+        ..Default::default()
+    };
+    let mut state = PhysicsState::default();
+    state.step(&definition, &settings, 0., &authored, &HashMap::new());
+    state.step(
+        &definition,
+        &settings,
+        1. / 120.,
+        &authored,
+        &HashMap::new(),
+    );
+    for body in &state.bodies {
+        assert!(body.velocity.length() < 1e-5);
+        assert!(body.angular_velocity.length() < 1e-5);
+    }
+}
+
+#[test]
+fn moving_world_carrier_contributes_kinematic_contact_velocity() {
+    let (mut definition, mut authored) = fixture(2);
+    definition.bodies[0].inverse_mass = 0.;
+    definition.bodies[0].info.body.kind = PhysicsBodyKind::Kinematic;
+    for body in &mut definition.bodies {
+        body.fixtures[0].friction = 0.8;
+    }
+    definition.pairs.push((0, 1));
+    authored[1] = Mat4::from_translation(Vec3::Z);
+    let settings = PhysicsSimulation::default();
+    let mut state = PhysicsState::default();
+    state.rebase(&definition, &settings, 0., Some(Affine3A::IDENTITY));
+    state.step(&definition, &settings, 0., &authored, &HashMap::new());
+    state.rebase(
+        &definition,
+        &settings,
+        1. / 120.,
+        Some(Affine3A::from_translation(Vec3::Y * 0.01)),
+    );
+    state.step(
+        &definition,
+        &settings,
+        1. / 120.,
+        &authored,
+        &HashMap::new(),
+    );
+    assert!((state.bodies[0].velocity.y - 1.2).abs() < 1e-5);
+    assert!(state.bodies[1].velocity.y > 0.001);
+}
+#[test]
+fn paused_kinematic_target_motion_is_not_replayed_on_resume() {
+    let (mut definition, mut authored) = fixture(1);
+    definition.bodies[0].inverse_mass = 0.;
+    definition.bodies[0].info.body.kind = PhysicsBodyKind::Kinematic;
+    let mut settings = PhysicsSimulation::default();
+    let mut state = PhysicsState::default();
+    state.step(&definition, &settings, 0., &authored, &HashMap::new());
+    settings.paused = true;
+    authored[0] = Mat4::from_translation(Vec3::X * 2.);
+    state.step(
+        &definition,
+        &settings,
+        1. / 120.,
+        &authored,
+        &HashMap::new(),
+    );
+    settings.paused = false;
+    state.step(
+        &definition,
+        &settings,
+        2. / 120.,
+        &authored,
+        &HashMap::new(),
+    );
+    assert_eq!(state.bodies[0].position, Vec3::X * 2.);
+    assert_eq!(state.bodies[0].velocity, Vec3::ZERO);
 }
