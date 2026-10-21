@@ -1,4 +1,8 @@
 //! Shared M2 particle motion and sprite/model transports, independent of native codecs.
+#[path = "m2_particles/birth.rs"]
+mod birth;
+#[path = "m2_particles/motion.rs"]
+mod motion;
 use super::super::material::SurfacePass;
 use super::age_appearance::{AgeAppearance, AgeParticleAppearance};
 use super::age_sprites_gpu::{
@@ -10,7 +14,6 @@ use super::bones::{BoneCandidate, BoneSource};
 use super::emission::{EffectChange, EmissionClock};
 use super::frame::EffectFrame;
 use super::frame::EffectStart;
-use super::generators::spline;
 use super::implosion::{bounded_end, outward_crossing};
 use super::m2_model_geometry::{tumble, ModelBasis};
 use super::m2_models::{
@@ -35,6 +38,7 @@ use bevy::math::{Vec2, Vec3};
 #[cfg(test)]
 use bevy::mesh::{Indices, MeshVertexAttribute, PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::*;
+use birth::{BirthFrame, BirthInputs};
 use std::array::from_fn;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
@@ -1413,152 +1417,17 @@ impl Emitter {
         ordinal: u64,
         bone_pose: impl FnMut(BoneCandidate) -> Option<(Vec3, Option<Vec3>)>,
     ) -> Option<(Birth, Option<BirthAppearance>)> {
-        if !node.is_finite() || node.determinant() == 0. {
-            return None;
-        }
-        let mut seed = self.seed ^ ordinal.wrapping_mul(0xd6e8feb86659fd93);
-
-        let controls = self.controls.as_ref().expect("age-driven emitter controls");
-        let enabled = sample.animated(&controls.activation);
-        if !enabled {
-            return None;
-        }
-        let lifetime =
-            sample.animated(&self.lifespan) + signed(&mut seed) * controls.lifespan_variation;
-        if !lifetime.is_finite() || lifetime <= 0. {
-            return None;
-        }
-        let speed = sample.animated(&self.speed)
-            * (1. + signed(&mut seed) * sample.animated(&controls.speed_variation));
-        let vertical = sample.animated(&controls.vertical);
-        let horizontal = sample.animated(&controls.horizontal);
-        let theta = signed(&mut seed) * vertical;
-        let phi = signed(&mut seed) * horizontal;
-        let mut direction = if self.generator == ParticleGenerator::Sphere {
-            Vec3::new(
-                theta.cos() * phi.cos(),
-                theta.cos() * phi.sin(),
-                theta.sin(),
-            )
-        } else {
-            Vec3::new(
-                theta.sin() * phi.cos(),
-                theta.sin() * phi.sin(),
-                theta.cos(),
-            )
-        };
-        let width = sample.animated(&controls.width);
-        let length = sample.animated(&controls.length);
-        let origin = match self.generator {
-            ParticleGenerator::Plane => Vec3::new(
-                signed(&mut seed) * length * 0.5,
-                signed(&mut seed) * width * 0.5,
-                0.,
-            ),
-            ParticleGenerator::Sphere => {
-                let radius = length + (width - length) * random(&mut seed);
-                direction * radius
-            }
-            ParticleGenerator::Spline => {
-                let (position, tangent) = spline(&self.spline, length, width, random(&mut seed));
-                direction = tangent;
-                position
-            }
-            ParticleGenerator::Bone => {
-                let draws = [
-                    random(&mut seed),
-                    random(&mut seed),
-                    random(&mut seed),
-                    random(&mut seed),
-                ];
-                let model_origin = self
-                    .bones
-                    .as_ref()?
-                    .sample(draws, width, length, bone_pose)?;
-                direction = Vec3::Z;
-                (node.inverse() * basis).transform_point3(model_origin)
-            }
-            _ => return None,
-        };
-        let z_source = sample.animated(&controls.z_source);
-        let aimed = if self.generator == ParticleGenerator::Plane {
-            z_source > 0.001
-        } else {
-            z_source != 0.
-        };
-        if aimed {
-            direction = (origin - Vec3::Z * z_source)
-                .try_normalize()
-                .unwrap_or(direction);
-        }
-        if !aimed && self.generator == ParticleGenerator::Sphere && self.flags.sphere_up() {
-            direction = Vec3::Z;
-        }
-        let gravity = sample.animated(&controls.gravity);
-        let local = self.flags.attached();
-        let (origin, mut velocity, acceleration) = if local {
-            (origin, direction * speed, gravity + self.wind)
-        } else {
-            (
-                node.transform_point3(origin),
-                node.transform_vector3(direction * speed),
-                basis.transform_vector3(gravity + self.wind),
-            )
-        };
-        velocity += if local {
-            node.inverse().transform_vector3(inherited)
-        } else {
-            inherited
-        };
-        let x_variation = (1. + signed(&mut seed) * self.appearance.scale_variation[0]).max(0.);
-        let y_variation = if self.flags.independent_scale() {
-            (1. + signed(&mut seed) * self.appearance.scale_variation[1]).max(0.)
-        } else {
-            x_variation
-        };
-        let scale_variation = Vec2::new(x_variation, y_variation);
-        Some((
-            Birth {
-                appearance_index: u32::MAX,
+        self.birth_sampled(
+            BirthInputs::sample(self, sample),
+            BirthFrame {
                 time,
-                lifetime,
-                origin,
-                velocity,
-                acceleration,
-                spin: self.spin[0] + signed(&mut seed) * self.spin[1],
-                spin_rate: self.spin[2] + signed(&mut seed) * self.spin[3],
-                scale_variation,
-                size_scale: self.particle_scale(node, basis),
-                random_cell: if self.flags.random_texture() {
-                    (random(&mut seed)
-                        * f32::from(self.atlas[0].max(1))
-                        * f32::from(self.atlas[1].max(1))) as u32
-                } else {
-                    0
-                },
+                node,
+                basis,
+                inherited,
+                ordinal,
             },
-            self.age_appearance
-                .as_ref()
-                .filter(|appearance| appearance.needs_particle_state())
-                .map(|appearance| BirthAppearance::Age(appearance.birth(seed as u32))),
-        ))
-    }
-    fn motion(&self, birth: &Birth, time: f64) -> (Vec3, Vec3) {
-        let age = (time - birth.time).max(0.) as f32;
-        if self.drag > 0.00001 {
-            let decay = (-self.drag * age).exp();
-            let vscale = (1. - decay) / self.drag;
-            let ascale = (age - vscale) / self.drag;
-            (
-                birth.origin + birth.velocity * vscale + birth.acceleration * ascale,
-                birth.velocity * decay + birth.acceleration * vscale,
-            )
-        } else {
-            (
-                birth.origin + birth.velocity * age + birth.acceleration * (0.5 * age * age),
-                birth.velocity + birth.acceleration * age,
-            )
-        }
+            bone_pose,
+        )
     }
     fn sample_gpu(
         &self,

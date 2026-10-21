@@ -1940,3 +1940,132 @@ fn unresolved_native_child_emitter_keeps_the_parent_sprite_interpreter() {
         );
     }
 }
+
+#[test]
+fn varied_birth_packet_preserves_the_established_random_draw_order() {
+    let mut values = SlotValues::default();
+    let mut emitter = emitter(&mut values);
+    emitter.speed = values.add(7.);
+    emitter.lifespan = values.add(3.);
+    let controls = emitter.controls.as_mut().unwrap();
+    controls.speed_variation = values.add(0.3);
+    controls.lifespan_variation = 0.4;
+    controls.width = values.add(2.);
+    controls.length = values.add(5.);
+    controls.gravity = values.add(Vec3::new(0.5, -1., -3.));
+    emitter.appearance.scale_variation = Vec2::new(0.2, 0.7);
+    emitter.flags.set_independent_scale(true);
+    emitter.flags.set_random_texture(true);
+    emitter.spin = [0.4, 0.8, 0.6, 0.2];
+    emitter.atlas = [3, 5];
+    let node = Mat4::from_scale_rotation_translation(
+        Vec3::new(2., 3., 4.),
+        Quat::from_rotation_z(0.3),
+        Vec3::new(5., -2., 1.),
+    );
+    let birth = emitter
+        .birth(&values, 2.5, node, Vec3::new(1., -2., 0.5), 17)
+        .unwrap();
+    let packet = [
+        birth.lifetime,
+        birth.origin.x,
+        birth.origin.y,
+        birth.origin.z,
+        birth.velocity.x,
+        birth.velocity.y,
+        birth.velocity.z,
+        birth.acceleration.x,
+        birth.acceleration.y,
+        birth.acceleration.z,
+        birth.spin,
+        birth.spin_rate,
+        birth.scale_variation.x,
+        birth.scale_variation.y,
+        birth.size_scale.x,
+        birth.size_scale.y,
+    ];
+    let expected = [
+        3.150495, 8.294773, 2.1575747, 1., 2.120071, -2.569796, 27.664768, 1.8418971, -2.570489,
+        -12., 0.8048676, 0.581381, 0.9193937, 0.9320074, 1.9999999, 2.9999998,
+    ];
+    for (actual, expected) in packet.into_iter().zip(expected) {
+        assert!((actual - expected).abs() < 2e-5, "{actual} != {expected}");
+    }
+    assert_eq!(birth.random_cell, 14);
+}
+
+#[test]
+fn frozen_birth_inputs_reuse_the_ordinary_packet_and_ignore_later_controls() {
+    let mut values = SlotValues::default();
+    let emitter = emitter(&mut values);
+    let frozen = BirthInputs::sample(&emitter, &values);
+    let frame = BirthFrame {
+        time: 0.25,
+        node: Mat4::from_rotation_translation(Quat::from_rotation_z(0.4), Vec3::new(2., 3., 4.)),
+        basis: Mat4::from_scale(Vec3::splat(0.01)),
+        inherited: Vec3::new(1., 2., 3.),
+        ordinal: 17,
+    };
+    let ordinary = emitter
+        .birth_posed(
+            &values,
+            frame.time,
+            frame.node,
+            frame.basis,
+            frame.inherited,
+            frame.ordinal,
+            |_| None,
+        )
+        .unwrap()
+        .0;
+    let repeated = emitter.birth_sampled(frozen, frame, |_| None).unwrap().0;
+    assert_eq!(ordinary.origin, repeated.origin);
+    assert_eq!(ordinary.velocity, repeated.velocity);
+    assert_eq!(ordinary.acceleration, repeated.acceleration);
+    assert_eq!(ordinary.spin, repeated.spin);
+    assert_eq!(ordinary.random_cell, repeated.random_cell);
+    let controls = emitter.controls.as_ref().unwrap();
+    values.set(emitter.speed, 0.).unwrap();
+    values.set(controls.gravity, Vec3::Z * -9.).unwrap();
+    values.set(controls.activation, false).unwrap();
+    assert!(emitter
+        .birth_posed(
+            &values,
+            frame.time,
+            frame.node,
+            frame.basis,
+            frame.inherited,
+            frame.ordinal,
+            |_| None
+        )
+        .is_none());
+    let retained = emitter.birth_sampled(frozen, frame, |_| None).unwrap().0;
+    assert_eq!(ordinary.velocity, retained.velocity);
+    assert_eq!(ordinary.acceleration, retained.acceleration);
+}
+
+#[test]
+fn ordinary_birth_packets_match_the_pre_extraction_export() {
+    // Recorded by the existing ignored Emitter::birth exporter before this
+    // refactor. These fixed values do not call a second implementation oracle.
+    let mut values = SlotValues::default();
+    let emitter = emitter(&mut values);
+    for (ordinal, expected) in [
+        (0, Vec3::new(1.7775202, 3.043055, 8.317796)),
+        (17, Vec3::new(0.6558661, -0.42448652, 9.879823)),
+        (4095, Vec3::new(-0.29503617, 4.555508, 9.661248)),
+    ] {
+        let birth = emitter
+            .birth(&values, 0., Mat4::IDENTITY, Vec3::ZERO, ordinal)
+            .unwrap();
+        assert!(
+            birth.velocity.abs_diff_eq(expected, 1e-5),
+            "changed packet at ordinal {ordinal}: {:?}",
+            birth.velocity
+        );
+        assert_eq!(birth.origin, Vec3::ZERO);
+        assert_eq!(birth.acceleration, Vec3::ZERO);
+        assert_eq!(birth.lifetime, 2.);
+        assert_eq!(birth.scale_variation, Vec2::ONE);
+    }
+}
