@@ -43,6 +43,9 @@ struct VertexOutput {
     @location(3) world_normal: vec3<f32>,
     @location(4) uv_secondary: vec2<f32>,
     @location(5) uv_tertiary: vec2<f32>,
+#ifdef SAMPLED_SPRITE
+    @location(6) sampled_appearance: vec2<f32>,
+#endif
 };
 fn safe_normalize(value: vec3<f32>) -> vec3<f32> {
     let magnitude = length(value);
@@ -86,12 +89,23 @@ fn vertex(input: VertexInput) -> VertexOutput {
     cell %= rows * columns;
     var corner = (input.corner.xy + vec2(1.0)) * 0.5;
     if (emitter.atlas.z & 8u) != 0u { corner.y = 1.0 - corner.y; }
+#ifdef SAMPLED_SPRITE
+    if (emitter.atlas.z & 256u) != 0u { corner = vec2(corner.y, 1.0 - corner.x); }
+    if (emitter.atlas.z & 512u) != 0u { corner.x = 1.0 - corner.x; }
+    if (emitter.atlas.z & 1024u) != 0u { corner.y = 1.0 - corner.y; }
+#endif
     var output: VertexOutput;
     output.position = position_world_to_clip(world);
     output.uv = (vec2(f32(cell % columns), f32(cell / columns)) + corner)
         / vec2(f32(columns), f32(rows));
     output.uv_secondary = particle.offsets.xy + corner * particle.scales.x;
     output.uv_tertiary = particle.offsets.zw + corner * particle.scales.y;
+#ifdef SAMPLED_SPRITE
+    let next = particle.cells.z % (rows * columns);
+    output.uv_secondary = (vec2(f32(next % columns), f32(next / columns)) + corner)
+        / vec2(f32(columns), f32(rows));
+    output.sampled_appearance = particle.scales.zw;
+#endif
     output.color = particle.color;
     output.world_position = world;
     output.world_normal = normal;
@@ -99,7 +113,7 @@ fn vertex(input: VertexInput) -> VertexOutput {
 }
 @fragment
 fn fragment(input: VertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
-    let a = textureSample(primary, primary_sampler, input.uv);
+    var a = textureSample(primary, primary_sampler, input.uv);
 #ifdef REFRACTION
     let b = textureSample(primary, primary_sampler, input.uv_secondary);
     let c = textureSample(primary, primary_sampler, input.uv_tertiary);
@@ -108,7 +122,18 @@ fn fragment(input: VertexOutput, @builtin(front_facing) front_facing: bool) -> @
     let mask = a.r * b.g * c.b * 4.0 * fade;
     return vec4(mask * input.color.r * 0.5, 0.0, 0.0, mask * input.color.a);
 #else
+#ifdef SAMPLED_SPRITE
+    if (emitter.atlas.z & 64u) != 0u {
+        let next = textureSample(primary, primary_sampler, input.uv_secondary);
+        a = mix(a, next, input.sampled_appearance.x);
+    }
+#endif
     var color = a * input.color;
+#ifdef SAMPLED_SPRITE
+    if (emitter.atlas.z & 128u) != 0u {
+        color.a = textureSample(secondary, secondary_sampler, vec2(color.a, input.sampled_appearance.y)).r;
+    }
+#endif
     var alpha_test = color.a;
     let multi = (emitter.atlas.z & 1u) != 0u;
     if multi {

@@ -1,8 +1,9 @@
 //! External programmes enter through Universal features and share sampled sprite transport.
 mod prepared;
 mod runtime;
+mod sampling;
 mod visibility;
-pub use prepared::{ParticleEffect, ParticleTextureRequest};
+pub use prepared::{ParticleEffect, ParticleTextureBinding, ParticleTextureRequest};
 pub use runtime::ParticleProgramEmitter;
 pub(crate) use runtime::{ProgramInstances, RuntimeProgramParticles};
 

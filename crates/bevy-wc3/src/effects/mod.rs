@@ -33,7 +33,9 @@ pub use m2_particles::SpriteEmitter;
 use m2_particles::{M2ParticleInstances, RuntimeM2Particles};
 pub use model_particles::ModelEmitter;
 use model_particles::{ModelParticleInstances, RuntimeModelParticles};
-pub use programmes::{ParticleEffect, ParticleProgramEmitter, ParticleTextureRequest};
+pub use programmes::{
+    ParticleEffect, ParticleProgramEmitter, ParticleTextureBinding, ParticleTextureRequest,
+};
 use programmes::{ProgramInstances, RuntimeProgramParticles};
 pub use ribbons::RibbonEmitter;
 use ribbons::{RibbonInstancesState, RuntimeRibbons};

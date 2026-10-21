@@ -105,13 +105,21 @@ fn position_world_to_clip(p: vec3<f32>) -> vec4<f32> { return vec4(p, 1.0); }
 fn shade_effect(color: vec4<f32>, position: vec3<f32>, normal: vec3<f32>,
     frag_coord: vec4<f32>, unlit: bool, fog_enabled: bool, fog_blend: u32) -> vec4<f32> { return color; }
 "#;
-    for (alpha_key, refraction) in [(false, false), (true, false), (false, true), (true, true)] {
+    for (alpha_key, refraction, sampled) in [
+        (false, false, false),
+        (true, false, false),
+        (false, true, false),
+        (true, true, false),
+        (false, false, true),
+        (true, false, true),
+    ] {
         let mut enabled = vec![true];
         let mut source = imports.to_owned();
         for line in body.lines() {
             match line.trim() {
                 "#ifdef ALPHA_KEY" => enabled.push(*enabled.last().unwrap() && alpha_key),
                 "#ifdef REFRACTION" => enabled.push(*enabled.last().unwrap() && refraction),
+                "#ifdef SAMPLED_SPRITE" => enabled.push(*enabled.last().unwrap() && sampled),
                 "#else" => {
                     let branch = enabled.pop().unwrap();
                     enabled.push(*enabled.last().unwrap() && !branch);

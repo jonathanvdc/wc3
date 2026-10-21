@@ -92,11 +92,12 @@ pub(super) async fn resolve_programmes(
                 .resolve(context, candidates, request.color_space, request.sampler)
                 .await?
             {
-                handles.insert(request.renderer, handle);
+                handles.insert((request.renderer, request.binding), handle);
             }
         }
-        let prepared =
-            ParticleEffect::new(program, |request| handles.get(&request.renderer).cloned());
+        let prepared = ParticleEffect::new(program, |request| {
+            handles.get(&(request.renderer, request.binding)).cloned()
+        });
         options.particle_effects.insert(feature, prepared);
     }
     Ok(diagnostics)

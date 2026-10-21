@@ -1,6 +1,6 @@
 //! Prepared external-effect images and renderer bindings.
 use crate::diagnostics::{RenderDiagnostic, RenderDiagnosticKind, RenderDiagnosticSource};
-use crate::effects::age_sprites_gpu::{AgeSpriteComposition, AgeSpriteStyle};
+use crate::effects::age_sprites_gpu::{AgeSpriteComposition, AgeSpriteStyle, SpriteUv};
 use crate::effects::render::SortPolicy;
 use crate::textures::{TextureColorSpace, TextureRole};
 use crate::ModelError;
@@ -12,13 +12,32 @@ use wc3::model::scene::popcorn::{
     EffectRendererProperty, Value, ValueType,
 };
 use wc3::model::values::model::ParticleBlend;
-use wc3::model::{ImageResource, Sampler};
+use wc3::model::{AddressMode, ImageResource, Sampler};
+
+/// Image binding within one external particle renderer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ParticleTextureBinding {
+    /// Primary diffuse color.
+    Diffuse,
+    /// Numeric alpha replacement lookup.
+    AlphaRemap,
+}
+impl ParticleTextureBinding {
+    fn slot(self) -> usize {
+        match self {
+            Self::Diffuse => 0,
+            Self::AlphaRemap => 1,
+        }
+    }
+}
 
 /// One image interpretation requested by an external particle programme.
 #[derive(Clone, Debug)]
 pub struct ParticleTextureRequest<'a> {
     /// Zero-based renderer declaration within the programme.
     pub renderer: usize,
+    /// Distinct binding, even when multiple images share a role or path.
+    pub binding: ParticleTextureBinding,
     /// External image identity, independent of a model's dependency table.
     pub resource: ImageResource<'a>,
     /// Purpose of the image.
@@ -72,12 +91,42 @@ impl ParticleEffect {
         for (index, renderer) in program.renderers().iter().enumerate() {
             match prepare(index, renderer, &program) {
                 Ok(Some(mut prepared)) => {
-                    if let Some(request) = image_request(index, renderer) {
+                    for request in image_requests(index, renderer) {
+                        let binding = request.binding;
                         let image = resolve(request);
                         if image.is_none() {
-                            diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Resource, RenderDiagnosticSource::Model, format!("external particle renderer {index} has an unresolved diffuse image; using white")));
+                            diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Resource,
+                                RenderDiagnosticSource::Model,
+                                format!("external particle renderer {index} has an unresolved {binding:?} image")));
+                            if binding == ParticleTextureBinding::AlphaRemap {
+                                if let AgeSpriteComposition::Sampled { alpha_remap, .. } =
+                                    &mut prepared.style.composition
+                                {
+                                    *alpha_remap = false;
+                                }
+                            }
                         }
-                        prepared.style.textures[0] = image;
+                        prepared.style.textures[binding.slot()] = image;
+                    }
+                    if toggle(renderer, b"AlphaRemap", false)
+                        && renderer
+                            .property(b"AlphaRemap.AlphaMap")
+                            .and_then(|p| p.text.as_deref())
+                            .is_none()
+                    {
+                        diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Resource,
+                            RenderDiagnosticSource::Model,
+                            format!("external particle renderer {index} enables alpha remap without an image; preserving diffuse alpha")));
+                    }
+                    if toggle(renderer, b"AlphaRemap", false) {
+                        diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Unverified,
+                            RenderDiagnosticSource::Model,
+                            "billboard alpha-remap V uses a stable slot-incarnation hash; native random fidelity remains unverified"));
+                    }
+                    if toggle(renderer, b"Atlas", false) {
+                        diagnostics.push(RenderDiagnostic::new(RenderDiagnosticKind::Unverified,
+                            RenderDiagnosticSource::Model,
+                            "billboard atlas uses adjacent-frame RGBA crossfade; authored atlas blending-mode fidelity remains unverified"));
                     }
                     renderers.push(prepared);
                 }
@@ -147,7 +196,7 @@ impl ParticleEffect {
     pub fn diagnostics(&self) -> &[RenderDiagnostic] {
         &self.diagnostics
     }
-    /// Diffuse image interpretations needed by supported renderers.
+    /// Color and data image interpretations needed by supported renderers.
     /// Use this before asynchronous image loading, then supply handles to [`Self::new`].
     pub fn texture_requests(
         program: &EffectProgram,
@@ -156,10 +205,10 @@ impl ParticleEffect {
             .renderers()
             .iter()
             .enumerate()
-            .filter_map(move |(index, renderer)| {
-                prepare(index, renderer, program).ok().flatten()?;
-                image_request(index, renderer)
+            .filter(move |(index, renderer)| {
+                prepare(*index, renderer, program).ok().flatten().is_some()
             })
+            .flat_map(|(index, renderer)| image_requests(index, renderer))
     }
     pub(crate) fn map_images(
         &mut self,
@@ -174,14 +223,44 @@ impl ParticleEffect {
         }
     }
 }
-fn image_request(index: usize, renderer: &EffectRenderer) -> Option<ParticleTextureRequest<'_>> {
-    let path = renderer.primary_image()?;
-    Some(ParticleTextureRequest {
-        renderer: index,
-        resource: ImageResource::Path(path.into()),
-        role: TextureRole::Color,
-        color_space: TextureColorSpace::Srgb,
-        sampler: Sampler::default(),
+fn image_requests(
+    index: usize,
+    renderer: &EffectRenderer,
+) -> impl Iterator<Item = ParticleTextureRequest<'_>> {
+    [
+        ParticleTextureBinding::Diffuse,
+        ParticleTextureBinding::AlphaRemap,
+    ]
+    .into_iter()
+    .filter_map(move |binding| {
+        let (path, role, color_space) = match binding {
+            ParticleTextureBinding::Diffuse => (
+                renderer.primary_image()?,
+                TextureRole::Color,
+                TextureColorSpace::Srgb,
+            ),
+            ParticleTextureBinding::AlphaRemap => {
+                if !toggle(renderer, b"AlphaRemap", false) {
+                    return None;
+                }
+                let path = renderer.property(b"AlphaRemap.AlphaMap")?.text.as_deref()?;
+                (path, TextureRole::Data, TextureColorSpace::Linear)
+            }
+        };
+        Some(ParticleTextureRequest {
+            renderer: index,
+            binding,
+            resource: ImageResource::Path(path.into()),
+            role,
+            color_space,
+            sampler: match binding {
+                ParticleTextureBinding::Diffuse => Sampler::default(),
+                ParticleTextureBinding::AlphaRemap => Sampler {
+                    u: AddressMode::Clamp,
+                    v: AddressMode::Clamp,
+                },
+            },
+        })
     })
 }
 fn property<'a>(renderer: &'a EffectRenderer, name: &[u8]) -> Option<&'a EffectRendererProperty> {
@@ -220,17 +299,12 @@ fn prepare(
     }
     for feature in [
         b"SoftParticles".as_slice(),
-        b"AlphaRemap",
         b"NormalBend",
         b"NormalWrap",
         b"DiffuseRamp",
         b"Emissive",
         b"TransformUVs",
         b"EnableSize2D",
-        b"FlipUVs",
-        b"RotateTexture",
-        b"TextureUVs.FlipU",
-        b"TextureUVs.FlipV",
         b"GeometryMesh",
         b"Distortion",
     ] {
@@ -297,9 +371,6 @@ fn prepare(
         if property(renderer, b"Atlas.Source").is_some_and(|value| value.numeric[0] != 1) {
             return Err("the atlas source is unsupported");
         }
-        if property(renderer, b"Atlas.Blending").is_some_and(|value| value.numeric[0] != 0) {
-            return Err("interpolated atlas frames are unsupported");
-        }
         property(renderer, b"Atlas.SubDiv").map_or([1, 1], |value| {
             [value.numeric[1].max(1), value.numeric[0].max(1)]
         })
@@ -322,7 +393,21 @@ fn prepare(
             textures: [None, None, None],
             blend,
             priority: renderer.draw_order as f32,
-            composition: AgeSpriteComposition::Single,
+            composition: AgeSpriteComposition::Sampled {
+                uv: SpriteUv {
+                    rotate: toggle(renderer, b"RotateTexture", false),
+                    flip_u: toggle(renderer, b"FlipUVs", false)
+                        || toggle(renderer, b"TextureUVs.FlipU", false),
+                    flip_v: toggle(renderer, b"FlipUVs", false)
+                        || toggle(renderer, b"TextureUVs.FlipV", false),
+                },
+                crossfade: toggle(renderer, b"Atlas", false),
+                alpha_remap: toggle(renderer, b"AlphaRemap", false)
+                    && renderer
+                        .property(b"AlphaRemap.AlphaMap")
+                        .and_then(|p| p.text.as_deref())
+                        .is_some(),
+            },
             unlit: !toggle(renderer, b"Lit", false) && !toggle(renderer, b"LegacyLit", false),
             head: true,
             tail: false,
@@ -331,3 +416,7 @@ fn prepare(
         },
     }))
 }
+
+#[cfg(test)]
+#[path = "appearance_tests.rs"]
+mod appearance_tests;

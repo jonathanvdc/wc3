@@ -22,8 +22,8 @@ then at the asset root. The provider retains the asset source and owns archive
 case handling and content identities. The renderer does not compile source PKFX.
 
 External images have their own `ParticleTextureRequest`, including renderer index,
-resource, color role, transfer function and sampler. They do not receive invented
-indices in the model's image table. Override
+binding (`Diffuse` or `AlphaRemap`), resource, image role, transfer function and
+sampler. They do not receive invented indices in the model's image table. Override
 `ResourceResolver::particle_effect_texture_candidates` to supply archive paths or
 replacements. Its owner is the resolved baked companion. Literal image paths and
 BLP/DDS/PNG/TGA alternatives use the same per-load image cache as model materials;
@@ -31,7 +31,10 @@ equal paths with equal interpretations share prepared images.
 
 Only enabled, supported renderer inputs request images. A disabled distortion
 fallback does not make an otherwise ordinary diffuse effect fail loading. Missing
-diffuse images use a white fallback and retain a resource diagnostic.
+diffuse images use a white fallback and retain a resource diagnostic. Alpha-remap
+LUTs request linear data sampling. Missing LUTs preserve diffuse alpha and report
+the unresolved resource. Cache handles by `(request.renderer, request.binding)`;
+one renderer can request multiple distinct images.
 
 ## Compile an in-memory model
 
@@ -41,13 +44,19 @@ compilation and live rendering continue to consume one Universal graph.
 
 ```rust
 use bevy::prelude::*;
-use bevy_wc3::{compile_model_with_options, CompileOptions, ParticleEffect};
+use bevy_wc3::{
+    compile_model_with_options, CompileOptions, ParticleEffect, ParticleTextureBinding,
+};
 use wc3::model::{FeatureId, Model};
 use wc3::model::scene::popcorn::EffectProgram;
 
 # fn prepare(model: &Model<'_>, feature: FeatureId, program: EffectProgram,
-#            diffuse: Handle<Image>) -> Result<(), bevy_wc3::ModelError> {
-let effect = ParticleEffect::new(program, |_request| Some(diffuse.clone()));
+#            diffuse: Handle<Image>, alpha_remap: Option<Handle<Image>>)
+#            -> Result<(), bevy_wc3::ModelError> {
+let effect = ParticleEffect::new(program, |request| match request.binding {
+    ParticleTextureBinding::Diffuse => Some(diffuse.clone()),
+    ParticleTextureBinding::AlphaRemap => alpha_remap.clone(),
+});
 let mut options = CompileOptions::default();
 options.particle_effects.insert(feature, effect);
 let compiled = compile_model_with_options(model, options, |_request| None)?;
@@ -92,12 +101,21 @@ visibility reset and per-cycle restart conventions remain unverified.
 
 ## Rendering and budgets
 
-The initial billboard adapter supports screen-facing scalar size, rotation, enabled
-state, HDR color, diffuse textures, noninterpolated rectangular atlases, and the
-native transparent blend choices. Size is a half extent. Atlas cursors use absolute
-value, clamp to the final cell and truncate; they do not wrap. Colors retain HDR
+The initial billboard adapter supports screen-facing scalar size, rotation,
+enabled state, HDR color, diffuse textures, rectangular atlas crossfade,
+alpha-remap LUTs and native transparent blend choices. Size is a half extent.
+Atlas cursors use absolute
+value and clamp to the final cell; nonfinite cursors select zero. Their fractional
+part blends adjacent sampled RGBA frames before particle-color modulation.
+`RotateTexture` rotates local UVs before effective U/V flips; `FlipUVs` enables
+both axis flips. Cell placement follows these local operations. Authored atlas
+blending metadata remains unverified; this adapter selects adjacent-frame crossfade.
+Alpha remap replaces the modulated alpha with the LUT red channel while retaining
+RGB. Billboard LUT V uses a deterministic hash of layer, pool slot and incarnation,
+so sorting and swap removal do not change a living particle's lookup. This is an
+explicit original random policy, with native fidelity unverified. Colors retain HDR
 components and alpha above one. Unsupported facing modes, two-dimensional size,
-soft intersections, UV programmes and additional material features produce
+soft intersections, general UV programmes and additional material features produce
 renderer diagnostics. Native ribbons, distortion and mesh outputs have no adapter.
 
 `ParticleEffect::with_limits` selects `EffectLimits` for independent instances.

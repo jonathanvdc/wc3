@@ -799,7 +799,7 @@ fn native_world_surface_sampler_variants_get_distinct_labeled_gpu_images() {
 
 #[test]
 fn baked_effect_provider_keeps_sources_and_resolves_images_beside_the_companion() {
-    use crate::{ParticleTextureRequest, TextureColorSpace, TextureRole};
+    use crate::{ParticleTextureBinding, ParticleTextureRequest, TextureColorSpace, TextureRole};
     use wc3::model::profiles::Universal;
     use wc3::model::Sampler;
     let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
@@ -820,6 +820,7 @@ fn baked_effect_provider_keeps_sources_and_resolves_images_beside_the_companion(
     );
     let request = ParticleTextureRequest {
         renderer: 0,
+        binding: ParticleTextureBinding::Diffuse,
         resource: ImageResource::Path(b"sprite.tif".as_slice().into()),
         role: TextureRole::Color,
         color_space: TextureColorSpace::Srgb,

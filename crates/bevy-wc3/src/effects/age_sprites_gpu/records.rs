@@ -20,6 +20,16 @@ pub(crate) struct AgeSpriteRecord {
     pub cells: [u32; 4],
 }
 
+impl AgeSpriteRecord {
+    /// Sampled-only lanes: next atlas cell, interpolation fraction, stable LUT V.
+    /// M2 multi-texture and refraction keep their original record interpretation.
+    pub(crate) fn set_sampled_appearance(&mut self, next: u32, fraction: f32, lut_v: f32) {
+        self.cells[2] = next;
+        self.scales[2] = fraction;
+        self.scales[3] = lut_v;
+    }
+}
+
 #[derive(Clone, Copy, Default, Pod, Zeroable)]
 #[repr(C)]
 pub(crate) struct AgeSpriteUniform {
@@ -30,23 +40,47 @@ pub(crate) struct AgeSpriteUniform {
     pub atlas: [u32; 4],
 }
 
+/// Local UV operations, after image orientation and before atlas placement.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct SpriteUv {
+    pub rotate: bool,
+    pub flip_u: bool,
+    pub flip_v: bool,
+}
+
 /// Known native composition controls, independent of opaque TXAC selectors.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum AgeSpriteComposition {
     #[default]
     Single,
     Refraction,
+    Sampled {
+        uv: SpriteUv,
+        crossfade: bool,
+        alpha_remap: bool,
+    },
     Multi {
         three_colors: bool,
         alpha_modulate4x: bool,
     },
 }
 impl AgeSpriteComposition {
-    /// GPU bits: multi-input, three RGB inputs, fourfold alpha gain.
+    /// GPU composition bits; sampled UV controls do not overlap native multi/refraction bits.
     pub(crate) fn flags(self) -> u32 {
         match self {
             Self::Single => 0,
             Self::Refraction => 16,
+            Self::Sampled {
+                uv,
+                crossfade,
+                alpha_remap,
+            } => {
+                32 | (u32::from(crossfade) << 6)
+                    | (u32::from(alpha_remap) << 7)
+                    | (u32::from(uv.rotate) << 8)
+                    | (u32::from(uv.flip_u) << 9)
+                    | (u32::from(uv.flip_v) << 10)
+            }
             Self::Multi {
                 three_colors,
                 alpha_modulate4x,
@@ -122,6 +156,52 @@ impl ExtractComponent for AgeSpriteData {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sampled_lanes_preserve_motion_and_other_texture_parameters() {
+        let mut record = AgeSpriteRecord {
+            position: [2.; 4],
+            velocity_tail: [3.; 4],
+            size_spin: [4.; 4],
+            color: [5.; 4],
+            offsets: [6.; 4],
+            scales: [7.; 4],
+            cells: [8; 4],
+        };
+        record.set_sampled_appearance(19, 0.25, 0.75);
+        assert_eq!(record.position, [2.; 4]);
+        assert_eq!(record.velocity_tail, [3.; 4]);
+        assert_eq!(record.size_spin, [4.; 4]);
+        assert_eq!(record.color, [5.; 4]);
+        assert_eq!(record.offsets, [6.; 4]);
+        assert_eq!(record.scales, [7., 7., 0.25, 0.75]);
+        assert_eq!(record.cells, [8, 8, 19, 8]);
+        assert_eq!(size_of::<AgeSpriteRecord>(), 112);
+    }
+
+    #[test]
+    fn sampled_flags_do_not_enable_multi_or_refraction() {
+        let sampled = AgeSpriteComposition::Sampled {
+            uv: SpriteUv {
+                rotate: true,
+                flip_u: true,
+                flip_v: true,
+            },
+            crossfade: true,
+            alpha_remap: true,
+        }
+        .flags();
+        assert_eq!(sampled & 31, 0);
+        assert_eq!(AgeSpriteComposition::Refraction.flags(), 16);
+        assert_eq!(
+            AgeSpriteComposition::Multi {
+                three_colors: true,
+                alpha_modulate4x: true
+            }
+            .flags(),
+            7
+        );
+    }
 
     #[test]
     fn live_samples_preserve_extracted_frames_and_reuse_released_allocations() {

@@ -102,6 +102,7 @@ struct AgeSpriteKey {
     mesh: MeshPipelineKey,
     filter: u8,
     refraction: bool,
+    sampled: bool,
 }
 impl SpecializedMeshPipeline for AgeSpritePipeline {
     type Key = AgeSpriteKey;
@@ -112,6 +113,9 @@ impl SpecializedMeshPipeline for AgeSpritePipeline {
     ) -> Result<RenderPipelineDescriptor, SpecializedMeshPipelineError> {
         let mut descriptor = self.mesh_pipeline.specialize(key.mesh, layout)?;
         descriptor.vertex.shader = self.shader.clone();
+        if key.sampled {
+            descriptor.vertex.shader_defs.push("SAMPLED_SPRITE".into());
+        }
         if key.filter == 1 {
             descriptor
                 .fragment
@@ -133,6 +137,9 @@ impl SpecializedMeshPipeline for AgeSpritePipeline {
         }
         if let Some(fragment) = descriptor.fragment.as_mut() {
             fragment.shader = self.shader.clone();
+            if key.sampled {
+                fragment.shader_defs.push("SAMPLED_SPRITE".into());
+            }
             if key.refraction {
                 fragment.shader_defs.push("REFRACTION".into());
             }
@@ -265,6 +272,7 @@ fn queue_age_sprites(
                 AgeSpriteKey {
                     mesh: mesh_key,
                     refraction: data.style.composition == AgeSpriteComposition::Refraction,
+                    sampled: matches!(data.style.composition, AgeSpriteComposition::Sampled { .. }),
                     filter: match data.style.blend {
                         ParticleBlend::Unknown(_) => 2,
                         blend => blend.raw() as u8,

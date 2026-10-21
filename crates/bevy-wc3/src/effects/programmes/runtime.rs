@@ -1,5 +1,6 @@
 //! Universal feature controls, independent instances and compact sprite extraction.
 use super::prepared::{ParticleEffect, SpriteRenderer};
+use super::sampling::{atlas_sample, lut_cursor};
 use super::visibility::VisibilityGuide;
 use crate::coordinates::render_basis;
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
@@ -548,14 +549,14 @@ fn sprite_record(
     if !position.is_finite()
         || !size.is_finite()
         || !rotation.is_finite()
-        || !cursor.is_finite()
         || color.iter().any(|component| !component.is_finite())
     {
         return None;
     }
     let count = renderer.atlas[0] * renderer.atlas[1];
-    let cell = (cursor.abs().min(count.saturating_sub(1) as f32) as u32).min(count - 1);
-    Some(AgeSpriteRecord {
+    let (cell, next, fraction) = atlas_sample(cursor, count);
+    let lut_v = lut_cursor(particle.id.slot, particle.id.generation, particle.layer.0);
+    let mut record = AgeSpriteRecord {
         position: position.extend(1.).to_array(),
         velocity_tail: [0.; 4],
         size_spin: [size, size, rotation.cos(), rotation.sin()],
@@ -563,5 +564,7 @@ fn sprite_record(
         offsets: [0.; 4],
         scales: [1.; 4],
         cells: [cell, 0, 0, 0],
-    })
+    };
+    record.set_sampled_appearance(next, fraction, lut_v);
+    Some(record)
 }

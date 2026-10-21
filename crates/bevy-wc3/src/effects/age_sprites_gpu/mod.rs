@@ -5,7 +5,7 @@ pub use refraction::ParticleRefraction;
 mod render;
 pub(crate) use records::{
     AgeSpriteComposition, AgeSpriteData, AgeSpriteRecord, AgeSpriteStyle, AgeSpriteUniform,
-    SampleBuffers,
+    SampleBuffers, SpriteUv,
 };
 pub(crate) use render::AgeSpriteRenderPlugin;
 
