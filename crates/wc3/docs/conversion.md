@@ -30,6 +30,12 @@ fallback. Widening preserves these addresses as Universal resource locators,
 and narrowing back to M2 accepts both forms. Malformed or ambiguous alignment
 tables are rejected independently of accepted loss for other extensions.
 
+Bone overrides and external physics are imported for the owning model and its
+skeleton chain. Companions declared only by child-model trees remain with those
+children; they are not applied to the parent graph. A companion shared with the
+parent still belongs to the parent import. Manually supplied optional root
+companions keep their existing behavior.
+
 Numeric child addresses require a chunked output envelope. Child resource
 addresses do not contain native child documents. The semantic M2 export planner
 currently accepts a model and export options, with no input for those documents,

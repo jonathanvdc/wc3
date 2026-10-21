@@ -1,4 +1,5 @@
 //! Imports native rigid-body documents without an intermediate model encoding.
+use super::super::companion_scope::CompanionScope;
 use super::super::overrides::resource;
 use super::*;
 use crate::model::io::materialize;
@@ -12,9 +13,11 @@ pub(in super::super) fn import<'a, 'data: 'a, D: Dialect>(
     nodes: &[NodeId],
     builder: &mut GraphBuilder<'a>,
     _context: &mut Context,
+    companions: &CompanionScope,
 ) -> Result<Vec<Physics<'a>>, Error> {
     let mut documents: Vec<_> = source
         .files()
+        .filter(|(key, _)| companions.includes(key))
         .filter_map(|(key, file)| {
             if let File::Physics(file) = file {
                 Some((Some(key), file))

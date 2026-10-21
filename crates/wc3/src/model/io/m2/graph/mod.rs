@@ -6,7 +6,9 @@ use crate::model::{self as semantic, profiles::m2 as profile};
 use glam::Vec3;
 use std::collections::HashSet;
 mod billboard;
+mod companion_scope;
 use crate::model::properties::BillboardFlags;
+use companion_scope::CompanionScope;
 mod actors;
 mod actors_export;
 pub(super) mod animation;
@@ -456,11 +458,12 @@ where
     if let Some(collision) = collision {
         builder.add_system(profile::System::Collision(collision))?;
     }
-    let overrides = overrides::import(source, &nodes, &mut builder)?;
+    let companions = CompanionScope::new(source);
+    let overrides = overrides::import(source, &nodes, &mut builder, &companions)?;
     if !overrides.is_empty() {
         builder.add_system(profile::System::BoneOverrides(overrides))?;
     }
-    for physics in physics::import(source, &nodes, &mut builder, &mut context)? {
+    for physics in physics::import(source, &nodes, &mut builder, &mut context, &companions)? {
         builder.add_system(profile::System::Physics(physics))?;
     }
     // Native aliases may precede their target and form chains. Resolve only after

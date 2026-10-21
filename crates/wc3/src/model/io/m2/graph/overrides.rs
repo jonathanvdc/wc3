@@ -1,4 +1,5 @@
 //! Sparse customization transforms are logical bone bindings, not saved encoded files.
+use super::companion_scope::CompanionScope;
 use super::*;
 use crate::model::io::materialize;
 use crate::model::M2ResourceLocator;
@@ -9,9 +10,10 @@ pub(super) fn import<'a, 'data: 'a, D: Dialect>(
     source: &'a Bundle<'data, D>,
     nodes: &[semantic::NodeId],
     builder: &mut GraphBuilder<'a>,
+    companions: &CompanionScope,
 ) -> Result<Vec<profile::BoneOverride<'a>>, Error> {
     let mut values = Vec::new();
-    for (key, file) in source.files() {
+    for (key, file) in source.files().filter(|(key, _)| companions.includes(key)) {
         if let File::Bone(file) = file {
             let resource = Some(builder.add_bone_override_resource(resource(key)));
             if file.indices.len() != file.matrices.len() {

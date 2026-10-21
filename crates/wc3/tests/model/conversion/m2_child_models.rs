@@ -145,3 +145,144 @@ fn duplicate_or_misaligned_model_id_tables_are_rejected() {
         .to_string()
         .contains("align"));
 }
+
+fn bone_companion(bone: u16, x: f32) -> File<'static> {
+    use wc3::model::formats::m2::companions::{BoneFile, BoneMatrix};
+    let mut values = [0.; 16];
+    for i in 0..4 {
+        values[i * 5] = 1.;
+    }
+    values[12] = x;
+    File::Bone(BoneFile {
+        version: 1,
+        indices: ZeroVec::alloc_from_slice(&[bone]),
+        matrices: vec![BoneMatrix { values }],
+    })
+}
+#[test]
+fn child_bone_companions_are_not_applied_to_the_parent_graph() {
+    let mut source = source();
+    let mut child = Document::<Chunked<V256>>::new();
+    child.core_mut().name = ZeroVec::alloc_from_slice(b"child with distinct bones\0");
+    child.core_mut().bones = vec![Bone::new(), Bone::new()];
+    child
+        .insert_extension(0, Chunk::BoneIds(ZeroVec::alloc_from_slice(&[201])))
+        .unwrap();
+    source.insert(
+        FileKey::FileId(11),
+        File::Document(Box::new(DynamicDocument::Chunked256(child))),
+    );
+    source.insert(FileKey::FileId(201), bone_companion(1, 9.));
+    // Native references are valid in the child, but bone 1 does not exist in the parent.
+    source.validate_complete().unwrap();
+    let imported = adapter::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    assert!(!imported
+        .systems()
+        .iter()
+        .any(|(_, system)| matches!(system, profile::System::BoneOverrides(_))));
+}
+#[test]
+fn root_declared_and_optional_bone_companions_remain_in_the_root_graph() {
+    let mut source = source();
+    let mut child = Document::<Chunked<V256>>::new();
+    child.core_mut().name = ZeroVec::alloc_from_slice(b"child sharing bone companion\0");
+    child.core_mut().bones = vec![Bone::new()];
+    child
+        .insert_extension(0, Chunk::BoneIds(ZeroVec::alloc_from_slice(&[301])))
+        .unwrap();
+    source.insert(
+        FileKey::FileId(11),
+        File::Document(Box::new(DynamicDocument::Chunked256(child))),
+    );
+    source
+        .model
+        .insert_extension(0, Chunk::BoneIds(ZeroVec::alloc_from_slice(&[301])))
+        .unwrap();
+    source.insert(FileKey::FileId(301), bone_companion(0, 3.));
+    source.insert(FileKey::Path("optional.bone".into()), bone_companion(0, 4.));
+    let imported = adapter::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let overrides: Vec<_> = imported
+        .systems()
+        .iter()
+        .filter_map(|(_, system)| match system {
+            profile::System::BoneOverrides(values) => Some(values),
+            _ => None,
+        })
+        .flat_map(|values| values.iter())
+        .collect();
+    assert_eq!(overrides.len(), 2);
+    let mut x: Vec<_> = overrides
+        .iter()
+        .map(|value| value.transforms.get(0).unwrap().w_axis.x)
+        .collect();
+    x.sort_by(f32::total_cmp);
+    assert_eq!(x, [3., 4.]);
+}
+
+fn physics_companion(bone: u16) -> File<'static> {
+    use std::borrow::Cow;
+    use wc3::model::formats::m2::companions::{
+        PhysicsBody4, PhysicsBox, PhysicsChunk, PhysicsFile, PhysicsFrame, PhysicsShape,
+        PhysicsShape2,
+    };
+    use wc3::model::formats::m2::records::{PhysicsBodyKind, PhysicsKind, PhysicsShapeKind};
+    use wc3::model::{Construct, PropertyValues};
+    let mut values = PropertyValues::default();
+    File::Physics(PhysicsFile {
+        chunks: vec![
+            PhysicsChunk::Header(6),
+            PhysicsChunk::Kind(PhysicsKind::WornItem),
+            PhysicsChunk::Boxes(vec![PhysicsBox {
+                frame: PhysicsFrame {
+                    axis_x: [1., 0., 0.],
+                    axis_y: [0., 1., 0.],
+                    axis_z: [0., 0., 1.],
+                    origin: [0.; 3],
+                },
+                half_extents: [1.; 3],
+            }]),
+            PhysicsChunk::Shapes2(vec![PhysicsShape2 {
+                shape: PhysicsShape {
+                    shape_type: PhysicsShapeKind::Box,
+                    shape_index: 0,
+                    ..Construct::construct(&mut values)
+                },
+                ..Construct::construct(&mut values)
+            }]),
+            PhysicsChunk::Bodies4(vec![PhysicsBody4 {
+                body_type: PhysicsBodyKind::Kinematic,
+                bone_index: bone,
+                shape_index: 0,
+                shape_count: 1,
+                ..Construct::construct(&mut values)
+            }]),
+        ],
+        padding: Cow::Owned(Vec::new()),
+    })
+}
+#[test]
+fn child_physics_companions_are_not_applied_to_the_parent_graph() {
+    let mut source = source();
+    let mut child = Document::<Chunked<V256>>::new();
+    child.core_mut().name = ZeroVec::alloc_from_slice(b"child with physics\0");
+    child.core_mut().bones = vec![Bone::new(), Bone::new()];
+    child.core_mut().flags.set_external_physics(true);
+    child.insert_extension(0, Chunk::PhysicsId(202)).unwrap();
+    source.insert(
+        FileKey::FileId(11),
+        File::Document(Box::new(DynamicDocument::Chunked256(child))),
+    );
+    source.insert(FileKey::FileId(202), physics_companion(1));
+    source.validate_complete().unwrap();
+    let imported = adapter::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    assert!(!imported
+        .systems()
+        .iter()
+        .any(|(_, system)| matches!(system, profile::System::Physics(_))));
+}
