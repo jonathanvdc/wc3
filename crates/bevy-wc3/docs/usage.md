@@ -257,8 +257,10 @@ texture categories, and joint matching into the same pipeline. See
 Add `PhysicsSimulation` to enable supported authored secondary motion. Rigid parts
 inherit settings unless overridden. `PreparedModel::physics_bodies()` and
 `physics_joints()` expose owned inputs for external solvers, and `PoseOverrides`
-retains application authority over simulated bones. Solver limits belong in the
-[secondary-motion reference](rendering/characters.md#secondary-motion).
+retains application authority over simulated bones. `PhysicsContactPolicy` selects
+authored grants or prepared source-local unconnected dynamic contacts; inspect
+`ModelRig::physics_contact_error()` when opting into the latter. Solver limits belong in the
+[secondary-motion reference](rendering/physics.md).
 
 ## Bake a static pose
 

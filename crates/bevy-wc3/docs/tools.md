@@ -107,6 +107,14 @@ live GPU skinning with CPU-baked geometry. This mode excludes the live hierarchy
 and its effects from rendering and rejects scheduled `--play` transitions. See
 [static pose baking](usage.md) for the snapshot's scope.
 
+Add `--physics` for authored secondary motion; it cannot be combined with
+`--bake-pose`. Contacts default to authored grants. Add
+`--physics-contact-policy unconnected-dynamics` alongside `--physics` to select
+prepared source-local topology admission. Unavailable admission terminates capture
+with its typed cause. The tool adds no ground or authored contact grants. See
+[secondary motion](rendering/physics.md) for the preparation budget and remaining
+native-filtering limits.
+
 ## Capture an equipped character
 
 `--character-recipe PATH` assembles a resolved WoW appearance before entering the
@@ -123,7 +131,8 @@ cargo run -p bevy-wc3 --example capture -- \
 ```
 
 Add `--physics` for authored secondary motion, or `--bake-pose` for
-static composition snapshots; these modes cannot be combined.
+static composition snapshots; these modes cannot be combined. The same
+[secondary-motion settings](rendering/physics.md) apply to equipped characters.
 
 A resolved JSON recipe names the body, visible native geosets, texture replacement
 categories and model parts. The optional part `slot` is an arbitrary application

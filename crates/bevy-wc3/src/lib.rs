@@ -99,7 +99,9 @@ pub use features::{
 pub use instances::{ModelInstance, ModelInstanceError, ModelRebind, ModelSource};
 pub use lod::{Lod, LodOverride, LodSettings, LodState};
 pub use material::{ModelMaterial, ModelMaterialExtension};
-pub use physics::{PhysicsBodyInfo, PhysicsFrame, PhysicsSimulation};
+pub use physics::{
+    PhysicsBodyInfo, PhysicsContactError, PhysicsContactPolicy, PhysicsFrame, PhysicsSimulation,
+};
 pub use plugin::Wc3BevyPlugin;
 pub use runtime::{
     spawn_model, ModelDraw, ModelNode, ModelRig, Playback, PlaybackError, PoseOverrides,

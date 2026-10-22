@@ -8,7 +8,7 @@ use super::super::transition::TransitionState;
 use super::super::{DrawPurpose, DrawSource, ModelMaterial, PreparedModel, SampledCamera};
 use super::evaluation::EvaluationState;
 use super::Playback;
-use crate::physics::PhysicsState;
+use crate::physics::{PhysicsContactError, PhysicsState};
 use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -78,6 +78,13 @@ pub struct ModelRig {
     pub(super) physics_locals: Vec<ModelTransform>,
 }
 impl ModelRig {
+    /// Last requested contact policy could not be prepared. Contacts are disabled
+    /// while body/constraint simulation continues. Cleared when an available
+    /// policy is selected or simulation is removed; absent before first sampling.
+    pub fn physics_contact_error(&self) -> Option<PhysicsContactError> {
+        self.physics.contact_error()
+    }
+
     /// This rig's live external programme entity for an authored feature.
     /// The entity owns programme statistics and controls. Mounted and
     /// particle-owned child rigs have independent lookups; replacement may

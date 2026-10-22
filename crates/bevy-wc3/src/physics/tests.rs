@@ -1089,3 +1089,6 @@ fn paused_kinematic_target_motion_is_not_replayed_on_resume() {
     assert_eq!(state.bodies[0].position, Vec3::X * 2.);
     assert_eq!(state.bodies[0].velocity, Vec3::ZERO);
 }
+
+#[path = "admission_tests.rs"]
+mod admission;

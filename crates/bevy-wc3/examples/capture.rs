@@ -28,8 +28,8 @@ use bevy_wc3::{
     BakedSource, CameraBinding, DrawPurpose, Lod, LodOverride, LodSettings, ModelAsset, ModelDraw,
     ModelEmitter, ModelInstance, ModelInstanceError, ModelMaterial, ModelParticleLimits,
     ModelParticleTreeStats, ModelRig, ParticleProgramEmitter, ParticleRefraction,
-    PhysicsSimulation, Playback, PlaybackError, PoseBaker, PoseOptions, PreparedModel,
-    RibbonEmitter, SpriteEmitter, Wc3BevyPlugin, WorldSelection,
+    PhysicsContactPolicy, PhysicsSimulation, Playback, PlaybackError, PoseBaker, PoseOptions,
+    PreparedModel, RibbonEmitter, SpriteEmitter, Wc3BevyPlugin, WorldSelection,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::env::args;
@@ -63,6 +63,8 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --model-particle-limits A,B,S  Owned actors, admission work and emission work per frame
   --guild-palette RGB:RGB:RGB  Linear background, emblem and border RGB multipliers
   --physics             Enable authored rigid-body secondary motion
+  --physics-contact-policy authored|unconnected-dynamics
+                        Select contact admission (requires --physics)
   --allow-loss          Explicitly discard unsupported native data, retaining diagnostics
   --wmo-profile NAME    classic, legion, bfa, shadowlands-pre92, shadowlands, dragonflight, warwithin
   --file-id ID=PATH     Map a native file-data identity to an asset-root-relative file
@@ -118,6 +120,7 @@ struct PlaybackChange {
 struct Options {
     character_recipe: Option<PathBuf>,
     physics: bool,
+    physics_contact_policy: Option<PhysicsContactPolicy>,
     allow_loss: bool,
     wmo_profile: Option<WmoProfile>,
     file_ids: HashMap<u32, String>,
@@ -174,6 +177,7 @@ impl Options {
         let mut options = Self {
             character_recipe: None,
             physics: false,
+            physics_contact_policy: None,
             allow_loss: false,
             wmo_profile: None,
             file_ids: HashMap::new(),
@@ -266,6 +270,17 @@ impl Options {
                 .next()
                 .ok_or_else(|| format!("missing value for {option}"))?;
             match option.as_str() {
+                "--physics-contact-policy" => {
+                    options.physics_contact_policy =
+                        Some(match value.as_str() {
+                            "authored" => PhysicsContactPolicy::AuthoredPairs,
+                            "unconnected-dynamics" => PhysicsContactPolicy::UnconnectedDynamics,
+                            _ => return Err(
+                                "physics-contact-policy must be authored or unconnected-dynamics"
+                                    .into(),
+                            ),
+                        });
+                }
                 "--character-recipe" => options.character_recipe = Some(value.into()),
                 "--wmo-profile" => {
                     options.wmo_profile = Some(parse_wmo_profile(&value)?);
@@ -434,6 +449,9 @@ impl Options {
                 }
                 _ => return Err(format!("unknown option: {option}").into()),
             }
+        }
+        if options.physics_contact_policy.is_some() && !options.physics {
+            return Err("physics-contact-policy requires --physics".into());
         }
         if options.bake_pose && options.physics {
             return Err("bake-pose cannot capture live physics".into());
@@ -920,9 +938,14 @@ fn capture(options: Options) -> CaptureResult<()> {
         app.world_mut().entity_mut(root).insert(limits);
     }
     if options.physics {
-        app.world_mut()
-            .entity_mut(root)
-            .insert(PhysicsSimulation::default());
+        app.world_mut().entity_mut(root).insert(PhysicsSimulation {
+            contact_policy: options.physics_contact_policy.unwrap_or_default(),
+            ..Default::default()
+        });
+        eprintln!(
+            "Physics contact policy: {:?}",
+            options.physics_contact_policy.unwrap_or_default()
+        );
     }
     if let Some(index) = options.model_camera {
         let feature = prepared
@@ -1231,6 +1254,15 @@ fn step(app: &mut App, dt: Duration) -> CaptureResult<()> {
             }
         }
     }
+    let mut rigs = app.world_mut().query::<(Entity, &ModelRig)>();
+    if let Some((entity, error)) = rigs
+        .iter(app.world())
+        .find_map(|(entity, rig)| rig.physics_contact_error().map(|error| (entity, error)))
+    {
+        return Err(
+            format!("model {entity:?} requested unavailable physics contacts: {error}").into(),
+        );
+    }
     let mut programmes = app.world_mut().query::<&ParticleProgramEmitter>();
     if let Some(emitter) = programmes
         .iter(app.world())
@@ -1396,6 +1428,20 @@ mod tests {
             Some(PathBuf::from("character.json"))
         );
         assert!(options.physics);
+        assert_eq!(options.physics_contact_policy, None);
+        assert!(parse(&["--physics-contact-policy", "authored"]).is_err());
+        assert!(parse(&["--physics", "--physics-contact-policy", "invalid"]).is_err());
+        let contacts = parse(&[
+            "--physics",
+            "--physics-contact-policy",
+            "unconnected-dynamics",
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            contacts.physics_contact_policy,
+            Some(PhysicsContactPolicy::UnconnectedDynamics)
+        );
         assert!(parse(&["--physics", "--bake-pose"]).is_err());
         assert!(parse(&[
             "--character-recipe",

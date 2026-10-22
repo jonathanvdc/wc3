@@ -94,54 +94,16 @@ the selected face. Recompile with an empty selection to clear it.
 
 ## Secondary motion
 
-Armor deformation from skeletal animation does not require a physics solver.
-`PhysicsSimulation` is an optional component for authored rigid-body secondary
-motion, and `PoseOverrides` remains available to application physics or IK
-systems. Simulation uses authored model coordinates before the model's conversion
-into Bevy coordinates. Choose gravity and other accelerations in that frame.
-Inherited forces are converted using the current carrier pose.
-`PhysicsFrame::World` is the default and preserves inertial motion when the
-character or a mount moves or rotates;
-`PhysicsFrame::Model` retains simulation in the moving model frame. Repeated
-zero-delta render warmups do not advance simulation. Changes in frame scale, shear
-or reflection reset simulation.
+Skeletal animation deforms armor without a physics solver. Add `PhysicsSimulation`
+for supported authored rigid-body secondary motion; mounted parts inherit its
+settings unless overridden. Native M2 imports retain bodies and joints but supply
+no explicit contact grants. Applications can select an inferred contact policy
+without modifying the imported model.
 
-The built-in solver supports worn-item, ragdoll and private-world rigid-body
-systems under explicit application opt-in. Ragdoll systems retain their authored
-domain; local bodies and constraints do not supply external-world contacts or
-gameplay ragdoll arbitration. Vegetation and unknown domains remain external.
-Simulation uses bounded fixed steps and positional constraint projection, including
-shoulder swing/twist and hinge limits, distance and weld
-constraints, and explicitly permitted contacts between independent compound fixtures.
-Sphere/capsule pairs use exact segment distances; sphere/orthogonal-box contacts
-use the actual box. Box-box, capsule-box and convex-hull pairs retain conservative
-fixture bounds. Rounded fixtures under nonuniform scale or shear also use bounds.
-Compound centers and full tensor inertia retain fixture offsets and orientation;
-contacts produce angular impulses and bounded Coulomb friction. The original
-material policy selects maximum restitution and the geometric mean of friction.
-One representative point is used per fixture pair; stable multipoint manifolds
-are not implemented. Authored hull mass uses declared volume and centroid with
-a diagnosed spherical tensor approximation.
-
-Contact admission follows `Physics::collision_pairs` in semantic physics systems.
-Pair endpoints are `Body::node` placement identities. Native M2 imports currently
-leave this list empty, so imported PHYS systems run their bodies and constraints
-without contacts; the capture tool's `--physics` option adds no pairs. Applications
-enabling contacts must supply permitted pairs before compiling the Universal
-model. Native game contact filtering has not been established.
-
-Kinematic target motion interpolates over the available fixed steps and supplies
-point velocities to contacts. Body scale changes retain compiled mass and transform
-its centered second moments, with native scale/mass fidelity unverified. The
-renderer preserves authored body information for external adapters and reports
-unsupported native controls, including motors, angular joint friction and slider limits,
-through rendering diagnostics. This approximates native rigid-body behavior; it
-does not implement cloth simulation or establish WoW physics parity. Removing
-simulation restores authored animation; pausing it retains the simulated pose,
-and resetting starts from the next authored pose.
-Lights and mounted models follow the final simulated skeleton. Retimed effect
-births and event poses sample authored animation and application overrides; they
-do not reconstruct a history of secondary-motion states.
+The [secondary-motion guide](physics.md) covers coordinate frames, contact
+admission, preparation budgets, observation and geometric approximations.
+`PoseOverrides` remains available for application physics or IK. The built-in
+solver approximates rigid-body behavior and does not establish WoW physics parity.
 
 ## Fidelity boundaries
 

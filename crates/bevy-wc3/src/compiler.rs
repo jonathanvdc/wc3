@@ -24,7 +24,7 @@ use crate::compiled::{ClipTiming, RuntimeDraw, RuntimeLiquid, RuntimeNode, Runti
 use crate::composition::DrawSelection;
 use crate::diagnostics::{RenderDiagnosticKind, RenderDiagnosticSource};
 use crate::image_replacements::ImageBinding;
-use crate::physics::PhysicsDefinition;
+use crate::physics::{PhysicsDefinition, DEFAULT_CONTACT_PAIR_BUDGET};
 use crate::ModelError;
 use bevy::asset::uuid::Uuid;
 use bevy::prelude::*;
@@ -68,7 +68,7 @@ pub(crate) fn node_order(nodes: &[RuntimeNode]) -> Result<Vec<usize>, ModelError
 }
 
 /// Application-selected authored state used during immutable model compilation.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct CompileOptions {
     /// Material appearance. Ambiguous defaults require an explicit selection.
     pub material: MaterialSelection,
@@ -78,6 +78,21 @@ pub struct CompileOptions {
     pub child_models: HashMap<ChildModelKey, ChildModelBinding>,
     /// Prepared external particle programmes, keyed by their Universal model feature.
     pub particle_effects: HashMap<FeatureId, ParticleEffect>,
+    /// Maximum potential unconnected-dynamic body pairs prepared across source physics systems.
+    /// Sources remain isolated; their shared bound is checked before joint exclusions or quadratic enumeration.
+    /// Zero disables preparation when any potential pairs exist. Composition also caps retained remapped pairs.
+    pub physics_contact_pair_budget: usize,
+}
+impl Default for CompileOptions {
+    fn default() -> Self {
+        Self {
+            material: Default::default(),
+            draws: Default::default(),
+            child_models: Default::default(),
+            particle_effects: Default::default(),
+            physics_contact_pair_budget: DEFAULT_CONTACT_PAIR_BUDGET,
+        }
+    }
 }
 
 /// Compile geometry, skin bindings, default appearances, surfaces, and animation
@@ -533,7 +548,12 @@ pub fn compile_model_with_options(
     let camera_sensitive = nodes
         .iter()
         .any(|node| node.camera_anchored || !matches!(node.billboard, Billboard::None));
-    let physics = Arc::new(PhysicsDefinition::compile(model, &nodes, &mut diagnostics));
+    let physics = Arc::new(PhysicsDefinition::compile(
+        model,
+        &nodes,
+        &mut diagnostics,
+        options.physics_contact_pair_budget,
+    ));
     let mut compiled = CompiledModel {
         image_template: None,
         image_bindings: image_bindings.into(),

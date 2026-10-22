@@ -285,7 +285,12 @@ fn evaluate_instance(
         bases,
         material_changed,
     } = services;
-    let physics_active = physics_settings.is_some() && !instance.model.physics.is_empty();
+    let physics_active = physics_settings.as_ref().is_some_and(|settings| {
+        instance
+            .model
+            .physics
+            .observes_policy(settings.contact_policy)
+    });
     let physics_dirty = physics_active || instance.physics.is_initialized();
     if !physics_active {
         instance.physics.clear();

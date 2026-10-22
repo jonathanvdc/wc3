@@ -143,6 +143,6 @@ assembly does not infer which imported correction resources should be active.
 definitions and live roots. `PoseOverrides` provides application pose control.
 `PhysicsSimulation` enables supported authored rigid-body secondary motion, with
 settings inherited by rigid components unless overridden. Native physics coverage
-and approximations are described in the [WoW guide](characters.md#secondary-motion).
+and approximations are described in the [secondary-motion guide](physics.md).
 Assembly itself introduces no additional simulation or shading pipeline; all parts
 continue through Bevy PBR, lighting, skinning and the renderer's existing limits.

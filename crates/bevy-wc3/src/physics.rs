@@ -1,4 +1,5 @@
 //! Optional, deterministic rigid-body secondary motion in authored model space.
+mod admission;
 mod contact;
 mod fixtures;
 mod mass;
@@ -7,6 +8,8 @@ use crate::compiled::RuntimeNode;
 use crate::diagnostics::{RenderDiagnosticKind, RenderDiagnosticSource};
 use crate::pose::{hierarchical, local_matrix};
 use crate::RenderDiagnostic;
+use admission::Admission;
+pub use admission::{PhysicsContactError, PhysicsContactPolicy};
 use bevy::math::Affine3A;
 use bevy::math::{Quat, Vec3};
 use bevy::prelude::*;
@@ -21,6 +24,8 @@ use wc3::model::systems::{model::System as ModelSystem, System};
 use wc3::model::values::model::{PhysicsBodyKind, PhysicsKind};
 use wc3::model::SystemId;
 use wc3::model::{Model, NodeId, Transform as ModelTransform};
+
+pub(crate) const DEFAULT_CONTACT_PAIR_BUDGET: usize = 16_384;
 
 /// Motion frame used for secondary-motion integration.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -41,6 +46,9 @@ pub enum PhysicsFrame {
 pub struct PhysicsSimulation {
     /// Whether scene-frame motion produces inertial secondary motion.
     pub frame: PhysicsFrame,
+    /// Body-contact admission. Authored grants remain the default.
+    /// Switching policy resets motion to the current authored pose.
+    pub contact_policy: PhysicsContactPolicy,
     /// Model-space acceleration, in model units per second squared.
     pub gravity: Vec3,
     /// Additional model-space acceleration, such as application-supplied wind.
@@ -62,6 +70,7 @@ impl Default for PhysicsSimulation {
     fn default() -> Self {
         Self {
             frame: PhysicsFrame::World,
+            contact_policy: PhysicsContactPolicy::AuthoredPairs,
             gravity: Vec3::new(0., 0., -9.81),
             acceleration: Vec3::ZERO,
             timestep: 1. / 120.,
@@ -123,6 +132,7 @@ pub(crate) struct PhysicsDefinition {
     bodies: Vec<BodyDefinition>,
     joints: Vec<JointDefinition>,
     pairs: Vec<(usize, usize)>,
+    admission: Admission,
 }
 fn diagnostic(
     diagnostics: &mut Vec<RenderDiagnostic>,
@@ -189,13 +199,17 @@ impl PhysicsDefinition {
         model: &Model<'_, Universal>,
         nodes: &[RuntimeNode],
         diagnostics: &mut Vec<RenderDiagnostic>,
+        contact_pair_budget: usize,
     ) -> Self {
         let indices: HashMap<_, _> = nodes
             .iter()
             .enumerate()
             .map(|(i, node)| (node.id, i))
             .collect();
-        let mut output = Self::default();
+        let mut output = Self {
+            admission: Admission::new(contact_pair_budget),
+            ..Default::default()
+        };
         for (system_id, system) in model.systems() {
             let System::M2(ModelSystem::Physics(system)) = system else {
                 continue;
@@ -220,6 +234,8 @@ impl PhysicsDefinition {
                 "Physics uses compound tensor inertia, point contacts, maximum restitution and geometric-mean Coulomb friction; native mass/contact fidelity and stable multipoint manifolds remain unverified");
             diagnostic(diagnostics,system_id,RenderDiagnosticKind::Approximation,
                 "Animated nonuniform body scale uses conservative rounded contact bounds and fixed-mass affine inertia; kinematic targets interpolate over available fixed steps");
+            let body_start = output.bodies.len();
+            let joint_start = output.joints.len();
             let mut body_indices = HashMap::new();
             for body in &system.bodies {
                 let Some(&placement) = indices.get(&body.node) else {
@@ -346,6 +362,11 @@ impl PhysicsDefinition {
                     authored: joint.clone(),
                 });
             }
+            output.admission.prepare_source(
+                &output.bodies,
+                &output.joints[joint_start..],
+                body_start..output.bodies.len(),
+            );
             // Empty does not mean all-to-all: this list explicitly grants contact.
             for &(a, b) in &system.collision_pairs {
                 if let (Some(&a), Some(&b)) = (body_indices.get(&a), body_indices.get(&b)) {
@@ -438,6 +459,8 @@ impl PhysicsDefinition {
                 self.joints.push(joint);
             }
         }
+        self.admission.append_remapped(&source.admission, &remap);
+        self.admission.retain_compiled(&self.bodies, &self.joints);
         for (a, b) in &source.pairs {
             if let (Some(&a), Some(&b)) = (remap.get(a), remap.get(b)) {
                 if a != b {
@@ -445,6 +468,11 @@ impl PhysicsDefinition {
                 }
             }
         }
+    }
+    pub(crate) fn observes_policy(&self, policy: PhysicsContactPolicy) -> bool {
+        !self.is_empty()
+            || (policy == PhysicsContactPolicy::UnconnectedDynamics
+                && self.admission.error.is_some())
     }
     pub(crate) fn bodies(&self) -> impl Iterator<Item = &PhysicsBodyInfo> {
         self.bodies.iter().map(|body| &body.info)
@@ -521,12 +549,25 @@ pub(crate) struct PhysicsState {
     traversal: Option<u64>,
     frame: Option<Affine3A>,
     frame_failure: Option<&'static str>,
+    contact_policy: Option<PhysicsContactPolicy>,
+    contact_error: Option<PhysicsContactError>,
 }
 impl PhysicsState {
     pub(crate) fn synchronize_playback(&mut self, revision: u64) {
         if self.traversal != Some(revision) {
             self.clear();
             self.traversal = Some(revision);
+        }
+    }
+    pub(crate) fn contact_error(&self) -> Option<PhysicsContactError> {
+        self.contact_error
+    }
+    fn observe_contact_error(&mut self, error: Option<PhysicsContactError>) {
+        if self.contact_error != error {
+            if let Some(error) = error {
+                warn!("Model secondary-motion contacts disabled: {error}");
+            }
+            self.contact_error = error;
         }
     }
     pub(crate) fn is_initialized(&self) -> bool {
@@ -536,13 +577,20 @@ impl PhysicsState {
         self.time = None;
         self.frame = None;
         self.output.clear();
+        self.contact_policy = None;
+        self.contact_error = None;
+    }
+    fn invalidate_motion(&mut self) {
+        let contact_error = self.contact_error;
+        self.clear();
+        self.contact_error = contact_error;
     }
     fn frame_error(&mut self, message: &'static str) {
         if self.frame_failure != Some(message) {
             warn!("Model secondary motion: {message}");
         }
         self.frame_failure = Some(message);
-        self.clear();
+        self.invalidate_motion();
     }
     /// Re-express inertial body state in the current authored frame without
     /// estimating acceleration or introducing a force from rendering warmup.
@@ -570,7 +618,8 @@ impl PhysicsState {
         let continuous = self.time.is_some_and(|previous| {
             time >= previous
                 && time - previous <= settings.timestep * f64::from(settings.max_steps.min(1024))
-        }) && self.reset == settings.reset_generation;
+        }) && self.reset == settings.reset_generation
+            && self.contact_policy == Some(settings.contact_policy);
         if let Some(previous) = self
             .frame
             .filter(|previous| continuous && *previous != current)
@@ -618,9 +667,25 @@ impl PhysicsState {
     ) -> &'a [Option<Mat4>] {
         self.output.resize(authored.len(), None);
         self.output.fill(None);
+        let contact_error = if settings.contact_policy == PhysicsContactPolicy::UnconnectedDynamics
+        {
+            definition.admission.error
+        } else {
+            None
+        };
+        self.observe_contact_error(contact_error);
         if definition.is_empty() {
+            self.contact_policy = Some(settings.contact_policy);
             return &self.output;
         }
+        // Unavailable inference never falls back to authored or a partial list.
+        let pairs = match settings.contact_policy {
+            PhysicsContactPolicy::AuthoredPairs => definition.pairs.as_slice(),
+            PhysicsContactPolicy::UnconnectedDynamics if contact_error.is_none() => {
+                definition.admission.pairs.as_slice()
+            }
+            PhysicsContactPolicy::UnconnectedDynamics => &[],
+        };
         let valid = settings.timestep.is_finite()
             && (1e-5..=0.1).contains(&settings.timestep)
             && settings.gravity.is_finite()
@@ -628,18 +693,20 @@ impl PhysicsState {
             && settings.follow_frequency.is_finite()
             && time.is_finite();
         if !valid {
-            self.clear();
+            self.invalidate_motion();
             return &self.output;
         }
         let elapsed = self.time.map_or(0., |previous| time - previous);
         let reset = self.time.is_none()
             || self.reset != settings.reset_generation
+            || self.contact_policy != Some(settings.contact_policy)
             || self.bodies.len() != definition.bodies.len()
             || elapsed < 0.
             || (!settings.paused
                 && elapsed > settings.timestep * f64::from(settings.max_steps.min(1024)));
         self.time = Some(time);
         self.reset = settings.reset_generation;
+        self.contact_policy = Some(settings.contact_policy);
         self.weights.clear();
         self.weights.extend(definition.bodies.iter().map(|body| {
             if overrides.contains_key(&body.info.target) {
@@ -658,7 +725,7 @@ impl PhysicsState {
         if self.targets.iter().any(|body| {
             !body.position.is_finite() || !body.rotation.is_finite() || !body.scale.is_finite()
         }) {
-            self.clear();
+            self.invalidate_motion();
             return &self.output;
         }
         if reset {
@@ -748,7 +815,7 @@ impl PhysicsState {
                     for joint in &definition.joints {
                         self.project_joint(joint, step, iterations);
                     }
-                    for &(a, b) in &definition.pairs {
+                    for &(a, b) in pairs {
                         self.project_contact(definition, a, b);
                     }
                 }
@@ -762,7 +829,7 @@ impl PhysicsState {
                             if delta.w < 0. { -delta } else { delta }.to_scaled_axis() / step;
                     }
                 }
-                for &(a, b) in &definition.pairs {
+                for &(a, b) in pairs {
                     self.resolve_contact_velocity(definition, a, b);
                 }
             }
