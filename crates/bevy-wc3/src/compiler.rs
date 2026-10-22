@@ -76,7 +76,8 @@ pub struct CompileOptions {
     pub draws: DrawSelection,
     /// Resolved optional models, keyed by their source feature and authored role.
     pub child_models: HashMap<ChildModelKey, ChildModelBinding>,
-    /// Prepared external particle programmes, keyed by their Universal model feature.
+    /// Prepared external particle programmes, keyed by their authored Universal programme feature.
+    /// Absent, foreign or wrong-family keys fail before image resolution, even for hidden geometry.
     pub particle_effects: HashMap<FeatureId, ParticleEffect>,
     /// Maximum potential unconnected-dynamic body pairs prepared across source physics systems.
     /// Sources remain isolated; their shared bound is checked before joint exclusions or quadratic enumeration.
@@ -93,6 +94,25 @@ impl Default for CompileOptions {
             physics_contact_pair_budget: DEFAULT_CONTACT_PAIR_BUDGET,
         }
     }
+}
+
+fn validate_particle_effects(
+    model: &Model<'_, Universal>,
+    bindings: &HashMap<FeatureId, ParticleEffect>,
+) -> Result<(), ModelError> {
+    for id in bindings.keys() {
+        let feature = model.feature(*id).ok_or_else(|| {
+            ModelError::new(format!(
+                "particle programme binding {id:?} belongs to an absent or foreign feature"
+            ))
+        })?;
+        if !matches!(feature.payload, NodeFeature::ParticleProgram(_)) {
+            return Err(ModelError::new(format!(
+                "particle programme binding {id:?} does not match an authored particle programme"
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Compile geometry, skin bindings, default appearances, surfaces, and animation
@@ -119,6 +139,7 @@ pub fn compile_model_with_options(
 ) -> Result<CompiledModel, ModelError> {
     model.validate().map_err(|e| ModelError(e.to_string()))?;
     validate_child_models(model, &options.child_models)?;
+    validate_particle_effects(model, &options.particle_effects)?;
     let targets = AnimationTargets::new(model);
     let node_map: HashMap<_, _> = model
         .nodes()

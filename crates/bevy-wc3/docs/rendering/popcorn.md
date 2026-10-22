@@ -42,6 +42,10 @@ one renderer can request multiple distinct images.
 Applications can prepare effects themselves and associate them with owner-local
 Universal feature IDs. Native reading belongs at this resource boundary; model
 compilation and live rendering continue to consume one Universal graph.
+Every supplied binding key must identify an authored particle-programme feature in
+that model. Foreign, absent and wrong-family keys fail before model image
+resolution, including when all geometry is hidden. Leaving an authored feature
+unbound retains its missing-interpreter diagnostic and does not fail compilation.
 
 ```rust
 use bevy::prelude::*;
