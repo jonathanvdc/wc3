@@ -11,7 +11,7 @@ of several models.
 
 - [Application integration](usage.md): loading, textures, playback, replacement, sockets, and pose baking.
 - [Viewer and captures](tools.md): inspect local models and produce repeatable PNGs.
-- [Model assembly](rendering/assembly.md): geometry choices, texture atlases, and mounted or skinned parts.
+- [Model assembly](rendering/assembly.md): appearance choices, prepared dependencies, texture atlases, and mounted or skinned parts.
 - [WoW characters and equipment](rendering/characters.md): translate native appearance choices into an assembly.
 - [Performance measurements](performance.md): completed-frame timing and model or character crowds.
 

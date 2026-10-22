@@ -1,4 +1,6 @@
-use super::{compose_atlas, AtlasLayer, PixelRect, RgbaImage, Source, TextureReplacement};
+use super::{
+    compose_atlas, AtlasLayer, PixelRect, RgbaImage, Source, SourceDependencies, TextureReplacement,
+};
 use crate::compiler::compile_with_geometry;
 use crate::mesh_interner::MeshInterner;
 use crate::textures::ImageKey;
@@ -56,6 +58,7 @@ impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCo
         &mut self,
         model: &Model<'_>,
         source: &Source,
+        dependencies: &SourceDependencies,
         geometry: &mut MeshInterner,
     ) -> Result<CompiledModel, ModelError> {
         let scoped: HashSet<_> = texture_requests(model)
@@ -69,6 +72,8 @@ impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCo
             CompileOptions {
                 material: source.material,
                 draws: source.draws.clone(),
+                child_models: dependencies.child_models.clone(),
+                particle_effects: dependencies.particle_effects.clone(),
                 ..Default::default()
             },
             |request: TextureRequest<'_, '_>| {

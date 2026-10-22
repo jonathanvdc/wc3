@@ -5,18 +5,42 @@ mod images;
 mod plan;
 
 use crate::TextureInput;
-use crate::{DrawSelection, ModelError, PartBinding};
+use crate::{
+    ChildModelBinding, ChildModelKey, DrawSelection, ModelError, PartBinding, ParticleEffect,
+};
 pub use atlas::{compose_atlas, Atlas, AtlasBlend, AtlasError, AtlasLayer, PixelRect, RgbaImage};
-pub use compile::compile_assembly;
 pub(crate) use compile::compile_with_bindings;
+pub use compile::{compile_assembly, compile_assembly_with_dependencies};
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
+use std::fmt::{Debug, Formatter, Result as FmtResult};
 use wc3::model::{
-    ClipId, ImageResource, ImageResourceId, MaterialSelection, Model, ResourceLocator,
+    ClipId, FeatureId, ImageResource, ImageResourceId, MaterialSelection, Model, ResourceLocator,
 };
 
 /// Models resolved from a coherent application resource provider.
 pub type Models<'data> = HashMap<ResourceLocator<'static>, Model<'data>>;
+/// Prepared optional dependencies shared by every occurrence of one source resource.
+///
+/// Bindings use identities from that source's Universal model. Programme images,
+/// fixed attributes and finite simulation limits remain owned by [`ParticleEffect`].
+/// Model image replacements do not alter those separately prepared image bindings.
+#[derive(Clone, Default)]
+pub struct SourceDependencies {
+    /// Resolved model dependencies with their authored feature roles and coordinates.
+    pub child_models: HashMap<ChildModelKey, ChildModelBinding>,
+    /// Prepared programmes keyed by their authored particle-programme features.
+    pub particle_effects: HashMap<FeatureId, ParticleEffect>,
+}
+impl Debug for SourceDependencies {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter
+            .debug_struct("SourceDependencies")
+            .field("child_models", &self.child_models)
+            .field("particle_effects", &self.particle_effects.keys())
+            .finish()
+    }
+}
 /// One source graph and its exact typed appearance choices.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Source {

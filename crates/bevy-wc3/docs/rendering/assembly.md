@@ -94,6 +94,45 @@ Across the assembly's source compilations, equal resolved image sources, effecti
 color spaces and samplers share a Bevy image. Different sampling or color interpretation receives a separate
 image; native metadata and input addresses do not enter the physical cache key. Atlas composition happens during setup, rather than animation updates.
 
+## Supply prepared external dependencies
+
+Use `compile_assembly_with_dependencies` when a source has resolved child models
+or an external [particle programme](popcorn.md). Its additional callback receives
+the resource identity and owning `Model<Universal>` and returns `SourceDependencies`
+containing the existing `ChildModelKey` bindings and prepared `ParticleEffect` values.
+Load and prepare those dependencies before compiling the assembly. For example,
+an application can keep its already prepared bindings in a resource-keyed map:
+
+```rust
+use bevy_wc3::assembly::{compile_assembly_with_dependencies, SourceDependencies};
+use std::collections::HashMap;
+
+let prepared: HashMap<_, SourceDependencies> = prepared_dependencies;
+let compiled = compile_assembly_with_dependencies(
+    &plan,
+    &models,
+    &mut images,
+    |resource, _model| Ok(prepared.get(resource).cloned().unwrap_or_default()),
+    decode_image,
+)?;
+```
+
+Resolution runs once per distinct resource, root first and then in first occurrence
+order, after plan validation. All returned feature keys and child roles are checked
+against their owning source before model images are decoded, even when geometry is
+hidden. Empty bindings retain ordinary missing-resource or missing-interpreter
+diagnostics. Resolver failures return no partial assembly; any callback-side assets
+remain owned by the application.
+
+Bindings are resource-scoped within this compilation: repeated occurrences use the
+same prepared dependencies, while each live rig retains independent clocks, particles
+and controls. Different dependencies for two occurrences of the same resource require
+distinct application resource identities. Programme images, fixed attributes and
+finite limits stay in `ParticleEffect`; `Source::images` and `Source::inputs` do not
+replace those separately prepared images. Child coordinate and recurrence policies
+remain those of `ChildModelBinding` and the ordinary child loader. Other compiler
+settings, including the physics contact-pair budget, retain their defaults.
+
 ## Bind components
 
 `PartBinding::Mounted` accepts `wc3::model::ModelMount`, the same placement
@@ -132,7 +171,9 @@ owner clocks; elapsed owner history and reload do not reconstruct old effects.
 ## Compile and reuse
 
 `compile_assembly` accepts the resolved plan, semantic model map, Bevy image store
-and decoded-image callback. It validates selections, compiles sources, resolves
+and decoded-image callback. The dependency-aware variant additionally accepts the
+resource-scoped callback described above. Both use the same compiler and runtime.
+Compilation validates selections, compiles sources, resolves
 bindings and returns a `CompiledModel`. Prepare and spawn it with the ordinary
 renderer APIs. Failed setup returns no partial assembly; images already inserted
 remain available in the asset store.
