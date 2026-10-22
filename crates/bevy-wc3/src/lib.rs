@@ -100,7 +100,8 @@ pub use instances::{ModelInstance, ModelInstanceError, ModelRebind, ModelSource}
 pub use lod::{Lod, LodOverride, LodSettings, LodState};
 pub use material::{ModelMaterial, ModelMaterialExtension};
 pub use physics::{
-    PhysicsBodyInfo, PhysicsContactError, PhysicsContactPolicy, PhysicsFrame, PhysicsSimulation,
+    PhysicsBodyInfo, PhysicsContactError, PhysicsContactIssue, PhysicsContactLimits,
+    PhysicsContactPolicy, PhysicsContactStats, PhysicsFrame, PhysicsSimulation,
 };
 pub use plugin::Wc3BevyPlugin;
 pub use runtime::{

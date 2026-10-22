@@ -1,6 +1,8 @@
 //! Optional, deterministic rigid-body secondary motion in authored model space.
 mod admission;
 mod contact;
+mod contact_work;
+mod convex;
 mod fixtures;
 mod mass;
 mod response;
@@ -13,6 +15,9 @@ pub use admission::{PhysicsContactError, PhysicsContactPolicy};
 use bevy::math::Affine3A;
 use bevy::math::{Quat, Vec3};
 use bevy::prelude::*;
+use contact_work::ContactWork;
+pub use contact_work::{PhysicsContactIssue, PhysicsContactLimits, PhysicsContactStats};
+use convex::Scratch as ContactScratch;
 use fixtures::Fixture;
 use mass::Mass;
 use response::Body as ImpulseBody;
@@ -59,6 +64,8 @@ pub struct PhysicsSimulation {
     pub max_steps: u32,
     /// Position-constraint projection iterations per fixed step.
     pub iterations: u32,
+    /// Shared narrow-phase and support work ceilings for one requested update.
+    pub contact_limits: PhysicsContactLimits,
     /// Frequency in Hz used to interpret nonzero authored pose-follow factors.
     pub follow_frequency: f32,
     /// Stop integration while preserving the simulated pose.
@@ -76,6 +83,7 @@ impl Default for PhysicsSimulation {
             timestep: 1. / 120.,
             max_steps: 16,
             iterations: 8,
+            contact_limits: PhysicsContactLimits::default(),
             follow_frequency: 4.,
             paused: false,
             reset_generation: 0,
@@ -274,7 +282,16 @@ impl PhysicsDefinition {
                 let fixtures: Vec<_> = body.shapes.iter().map(Fixture::prepare).collect();
                 if fixtures.iter().any(|(fixture, _)| fixture.approximate) {
                     diagnostic(diagnostics, system_id, RenderDiagnosticKind::Approximation,
-                        "Physics convex hulls and nonuniform/sheared rounded fixtures use conservative per-fixture contact bounds; hull inertia uses its declared mass with a spherical tensor approximation");
+                        "Nonuniform/sheared rounded fixtures use conservative per-fixture bounds for analytical-only pairs; hull inertia uses its declared mass with a spherical tensor approximation");
+                }
+                if fixtures.iter().any(|(fixture, _)| fixture.is_hull()) {
+                    diagnostic(diagnostics, system_id, RenderDiagnosticKind::Approximation, "Convex contacts use bounded iterative GJK/EPA support queries; numerical or work-limit failures omit the query and are exposed in per-instance contact statistics. Native game contact fidelity is unverified");
+                }
+                if fixtures
+                    .iter()
+                    .any(|(fixture, _)| fixture.hull_issue().is_some())
+                {
+                    diagnostic(diagnostics, system_id, RenderDiagnosticKind::Unsupported, "Convex contact requires a finite three-dimensional hull with at most 4096 prepared vertices; unavailable hull queries are omitted without a sphere substitute");
                 }
                 if body
                     .shapes
@@ -551,8 +568,13 @@ pub(crate) struct PhysicsState {
     frame_failure: Option<&'static str>,
     contact_policy: Option<PhysicsContactPolicy>,
     contact_error: Option<PhysicsContactError>,
+    contact_scratch: Option<Box<ContactScratch>>,
+    contact_stats: PhysicsContactStats,
 }
 impl PhysicsState {
+    pub(crate) fn contact_stats(&self) -> PhysicsContactStats {
+        self.contact_stats
+    }
     pub(crate) fn synchronize_playback(&mut self, revision: u64) {
         if self.traversal != Some(revision) {
             self.clear();
@@ -665,6 +687,10 @@ impl PhysicsState {
         authored: &[Mat4],
         overrides: &HashMap<NodeId, ModelTransform>,
     ) -> &'a [Option<Mat4>] {
+        if self.reset != settings.reset_generation {
+            self.contact_stats = PhysicsContactStats::default();
+        }
+        let mut contact_work = ContactWork::new(settings.contact_limits);
         self.output.resize(authored.len(), None);
         self.output.fill(None);
         let contact_error = if settings.contact_policy == PhysicsContactPolicy::UnconnectedDynamics
@@ -729,6 +755,14 @@ impl PhysicsState {
             return &self.output;
         }
         if reset {
+            if self.contact_scratch.is_none()
+                && definition
+                    .bodies
+                    .iter()
+                    .any(|body| body.fixtures.iter().any(Fixture::is_hull))
+            {
+                self.contact_scratch = Some(Box::default());
+            }
             self.bodies.clone_from(&self.targets);
             self.previous.resize(self.bodies.len(), Vec3::ZERO);
             self.previous_rotations
@@ -785,6 +819,10 @@ impl PhysicsState {
                         .rotation
                         .slerp(target.rotation, 1. - (-follow * step).exp());
                     body.scale = target.scale;
+                    // Dynamic velocity is already integrated. Retain the
+                    // predicted position so only later constraint displacement
+                    // feeds back into it, rather than free-flight f32 rounding.
+                    self.previous[index] = body.position;
                 }
                 remaining_steps = remaining_steps.saturating_sub(1).max(1);
                 self.local_inertias.clear();
@@ -816,21 +854,29 @@ impl PhysicsState {
                         self.project_joint(joint, step, iterations);
                     }
                     for &(a, b) in pairs {
-                        self.project_contact(definition, a, b);
+                        if !contact_work.begin_pair() {
+                            break;
+                        }
+                        self.project_contact(definition, a, b, &mut contact_work);
                     }
                 }
                 for (index, (body, def)) in
                     self.bodies.iter_mut().zip(&definition.bodies).enumerate()
                 {
                     if def.inverse_mass != 0. {
-                        body.velocity = (body.position - self.previous[index]) / step;
+                        if self.weights[index] > 0. {
+                            body.velocity += (body.position - self.previous[index]) / step;
+                        }
                         let delta = body.rotation * self.previous_rotations[index].inverse();
                         body.angular_velocity =
                             if delta.w < 0. { -delta } else { delta }.to_scaled_axis() / step;
                     }
                 }
                 for &(a, b) in pairs {
-                    self.resolve_contact_velocity(definition, a, b);
+                    if !contact_work.begin_pair() {
+                        break;
+                    }
+                    self.resolve_contact_velocity(definition, a, b, &mut contact_work);
                 }
             }
         } else {
@@ -847,6 +893,7 @@ impl PhysicsState {
                 }
             }
         }
+        self.contact_stats.accumulate(contact_work.stats);
         if self.bodies.iter().any(|body| {
             !body.position.is_finite()
                 || !body.rotation.is_finite()
@@ -966,15 +1013,29 @@ impl PhysicsState {
             .distance_squared(self.bodies[b].position)
             <= radius * radius
     }
-    fn project_contact(&mut self, definition: &PhysicsDefinition, a: usize, b: usize) {
+    fn project_contact(
+        &mut self,
+        definition: &PhysicsDefinition,
+        a: usize,
+        b: usize,
+        work: &mut ContactWork,
+    ) {
         if self.weights[a] + self.weights[b] == 0. || !self.near(definition, a, b, 0.) {
             return;
         }
         for left in &definition.bodies[a].fixtures {
             for right in &definition.bodies[b].fixtures {
-                let Some(contact) =
-                    left.contact(self.bodies[a].matrix(), right, self.bodies[b].matrix(), 0.)
-                else {
+                if !work.available() {
+                    return;
+                }
+                let Some(contact) = left.contact(
+                    self.bodies[a].matrix(),
+                    right,
+                    self.bodies[b].matrix(),
+                    0.,
+                    work,
+                    self.contact_scratch.as_deref_mut(),
+                ) else {
                     continue;
                 };
                 if contact.depth <= 0. {
@@ -1002,7 +1063,7 @@ impl PhysicsState {
                     self.bodies[index].position += linear;
                     self.bodies[index].rotation =
                         (rotation * self.bodies[index].rotation).normalize();
-                    // Repair both pose histories so geometric separation does not inject energy.
+                    // Shift both velocity reference poses so contact position repair does not inject energy.
                     self.previous[index] += linear;
                     self.previous_rotations[index] =
                         (rotation * self.previous_rotations[index]).normalize();
@@ -1010,17 +1071,28 @@ impl PhysicsState {
             }
         }
     }
-    fn resolve_contact_velocity(&mut self, definition: &PhysicsDefinition, a: usize, b: usize) {
+    fn resolve_contact_velocity(
+        &mut self,
+        definition: &PhysicsDefinition,
+        a: usize,
+        b: usize,
+        work: &mut ContactWork,
+    ) {
         if self.weights[a] + self.weights[b] == 0. || !self.near(definition, a, b, 1e-5) {
             return;
         }
         for left in &definition.bodies[a].fixtures {
             for right in &definition.bodies[b].fixtures {
+                if !work.available() {
+                    return;
+                }
                 let Some(contact) = left.contact(
                     self.bodies[a].matrix(),
                     right,
                     self.bodies[b].matrix(),
                     1e-5,
+                    work,
+                    self.contact_scratch.as_deref_mut(),
                 ) else {
                     continue;
                 };

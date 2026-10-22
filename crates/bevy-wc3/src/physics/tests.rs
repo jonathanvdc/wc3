@@ -48,17 +48,15 @@ fn fixture(dynamic: usize) -> (PhysicsDefinition, Vec<Mat4>) {
                 center: Vec3::ZERO,
                 second_moment: Mat3::from_diagonal(Vec3::splat(0.5)),
             },
-            fixtures: vec![Fixture {
-                geometry: contact::Primitive::Sphere {
+            fixtures: vec![Fixture::test_primitive(
+                contact::Primitive::Sphere {
                     center: Vec3::ZERO,
                     radius: 0.5,
                 },
-                center: Vec3::ZERO,
-                radius: 0.5,
-                friction: 0.,
-                restitution: 0.,
-                approximate: false,
-            }],
+                Vec3::ZERO,
+                0.5,
+                0.,
+            )],
             radius: 0.5,
         });
         authored.push(Mat4::from_translation(Vec3::X * index as f32));
@@ -893,17 +891,15 @@ fn ragdoll_and_private_world_equipment_preserve_domain_and_simulate_authored_cha
 fn exact_capsules_remove_body_sphere_false_contacts() {
     let (mut definition, mut authored) = fixture(2);
     for body in &mut definition.bodies {
-        body.fixtures = vec![Fixture {
-            geometry: contact::Primitive::Capsule {
+        body.fixtures = vec![Fixture::test_primitive(
+            contact::Primitive::Capsule {
                 endpoints: [-Vec3::Z * 2., Vec3::Z * 2.],
                 radius: 0.1,
             },
-            center: Vec3::ZERO,
-            radius: 2.1,
-            friction: 0.,
-            restitution: 0.,
-            approximate: false,
-        }];
+            Vec3::ZERO,
+            2.1,
+            0.,
+        )];
         body.radius = 2.1;
     }
     definition.pairs.push((0, 1));
@@ -931,17 +927,15 @@ fn offset_capsule_impact_produces_angular_response_and_friction() {
     definition.bodies[0].inverse_mass = 0.;
     definition.bodies[0].info.body.kind = PhysicsBodyKind::Kinematic;
     for body in &mut definition.bodies {
-        body.fixtures = vec![Fixture {
-            geometry: contact::Primitive::Capsule {
+        body.fixtures = vec![Fixture::test_primitive(
+            contact::Primitive::Capsule {
                 endpoints: [-Vec3::Z, Vec3::Z],
                 radius: 0.25,
             },
-            center: Vec3::ZERO,
-            radius: 1.25,
-            friction: 0.8,
-            restitution: 0.,
-            approximate: false,
-        }];
+            Vec3::ZERO,
+            1.25,
+            0.8,
+        )];
         body.radius = 1.25;
     }
     definition.pairs.push((0, 1));
@@ -973,7 +967,7 @@ fn moving_kinematic_compound_surface_drives_contact_friction() {
         body.fixtures[0].friction = 0.8;
     }
     // The second fixture does not contact but belongs to the same moving compound.
-    let mut offset = definition.bodies[0].fixtures[0];
+    let mut offset = definition.bodies[0].fixtures[0].clone();
     offset.center = Vec3::X * 2.;
     offset.geometry = contact::Primitive::Sphere {
         center: offset.center,
@@ -1092,3 +1086,485 @@ fn paused_kinematic_target_motion_is_not_replayed_on_resume() {
 
 #[path = "admission_tests.rs"]
 mod admission;
+
+#[test]
+fn contact_query_quota_is_shared_by_compounds_projections_and_substeps() {
+    let (mut definition, mut authored) = fixture(2);
+    // The body-level bound passes, but each tiny fixture pair is separated.
+    // No projection can eliminate later work and mask a quota reset bug.
+    for body in &mut definition.bodies {
+        body.radius = 100.;
+        body.fixtures = vec![
+            Fixture::test_primitive(
+                contact::Primitive::Sphere {
+                    center: Vec3::ZERO,
+                    radius: 0.01
+                },
+                Vec3::ZERO,
+                0.01,
+                0.
+            );
+            32
+        ];
+    }
+    definition.pairs.push((0, 1));
+    authored[1] = Mat4::from_translation(Vec3::X);
+    let mut settings = PhysicsSimulation {
+        gravity: Vec3::ZERO,
+        contact_limits: PhysicsContactLimits {
+            queries_per_update: 7,
+            support_vertices_per_update: 0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut state = PhysicsState::default();
+    state.step(&definition, &settings, 0., &authored, &HashMap::new());
+    state.step(&definition, &settings, 1. / 60., &authored, &HashMap::new());
+    assert_eq!(state.contact_stats().queries, 7);
+    assert_eq!(state.contact_stats().query_budget_exhaustions, 1);
+    assert_eq!(state.contact_stats().support_vertices, 0);
+    state.step(&definition, &settings, 2. / 60., &authored, &HashMap::new());
+    assert_eq!(state.contact_stats().queries, 14);
+    assert_eq!(state.contact_stats().query_budget_exhaustions, 2);
+    settings.paused = true;
+    state.step(&definition, &settings, 3. / 60., &authored, &HashMap::new());
+    assert_eq!(state.contact_stats().queries, 14);
+    settings.reset();
+    state.step(&definition, &settings, 4. / 60., &authored, &HashMap::new());
+    assert_eq!(state.contact_stats(), PhysicsContactStats::default());
+}
+#[test]
+fn zero_contact_quota_does_not_disable_body_integration_or_explicit_constraints() {
+    let (mut definition, mut authored) = fixture(2);
+    definition.pairs.push((0, 1));
+    authored[1] = Mat4::from_translation(Vec3::X * 0.25);
+    let settings = PhysicsSimulation {
+        contact_limits: PhysicsContactLimits {
+            queries_per_update: 0,
+            support_vertices_per_update: 0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut state = PhysicsState::default();
+    state.step(&definition, &settings, 0., &authored, &HashMap::new());
+    state.step(
+        &definition,
+        &settings,
+        1. / 120.,
+        &authored,
+        &HashMap::new(),
+    );
+    assert!(state.bodies[0].position.z < 0.);
+    assert!((state.bodies[1].position.x - 0.25).abs() < 1e-6);
+    assert_eq!(state.contact_stats().queries, 0);
+    assert_eq!(state.contact_stats().query_budget_exhaustions, 1);
+}
+
+#[test]
+fn explicitly_permitted_thin_hull_contacts_follow_the_face_not_its_sphere_bound() {
+    use bevy::math::Vec4;
+    let half = Vec3::new(1., 0.03, 0.4);
+    let vertices = (0..8)
+        .map(|bits| {
+            Vec3::new(
+                if bits & 1 == 0 { -half.x } else { half.x },
+                if bits & 2 == 0 { -half.y } else { half.y },
+                if bits & 4 == 0 { -half.z } else { half.z },
+            )
+        })
+        .collect::<Vec<_>>();
+    let shape = Shape {
+        geometry: ShapeGeometry::ConvexHull {
+            vertices: vertices.into_iter().collect(),
+            planes: vec![
+                Vec4::new(-1., 0., 0., half.x),
+                Vec4::new(1., 0., 0., half.x),
+                Vec4::new(0., -1., 0., half.y),
+                Vec4::new(0., 1., 0., half.y),
+                Vec4::new(0., 0., -1., half.z),
+                Vec4::new(0., 0., 1., half.z),
+            ]
+            .into_iter()
+            .collect(),
+            faces: vec![
+                vec![0, 4, 6, 2],
+                vec![1, 3, 7, 5],
+                vec![0, 1, 5, 4],
+                vec![2, 6, 7, 3],
+                vec![0, 2, 3, 1],
+                vec![4, 5, 7, 6],
+            ]
+            .into(),
+        },
+        density: 1.,
+        transform: Mat4::IDENTITY,
+        friction: 0.,
+        restitution: 0.,
+        mass_properties: None,
+        game_flags: Default::default(),
+        collision_mask: Default::default(),
+    };
+    let (hull, _) = Fixture::prepare(&shape);
+    assert!(hull.is_hull());
+    assert!(hull.hull_issue().is_none());
+    let (mut definition, mut authored) = fixture(2);
+    definition.pairs.push((0, 1));
+    definition.bodies[0].fixtures = vec![hull];
+    definition.bodies[0].radius = half.length();
+    definition.bodies[0].inverse_mass = 0.;
+    definition.bodies[0].info.body.kind = PhysicsBodyKind::Kinematic;
+    definition.bodies[1].fixtures = vec![Fixture::test_primitive(
+        contact::Primitive::Sphere {
+            center: Vec3::ZERO,
+            radius: 0.1,
+        },
+        Vec3::ZERO,
+        0.1,
+        0.,
+    )];
+    definition.bodies[1].radius = 0.1;
+    let settings = PhysicsSimulation {
+        gravity: Vec3::ZERO,
+        ..Default::default()
+    };
+    for initial_y in [0.3, 0.05] {
+        authored[1] = Mat4::from_translation(Vec3::new(0.17, initial_y, 0.08));
+        let mut state = PhysicsState::default();
+        for frame in 0..=4 {
+            state.step(
+                &definition,
+                &settings,
+                f64::from(frame) / 120.,
+                &authored,
+                &HashMap::new(),
+            );
+        }
+        let expected = if initial_y == 0.3 { initial_y } else { 0.13 };
+        assert!(
+            (state.bodies[1].position.y - expected).abs() < 2e-4,
+            "{:?}",
+            state.bodies[1].position
+        );
+        assert_eq!(state.bodies[0].position, Vec3::ZERO);
+        assert_eq!(
+            state.contact_stats().inconclusive_queries,
+            0,
+            "initial_y={initial_y}; matrix={:?}; hull_radius={}; {:?}",
+            state.bodies[1].matrix(),
+            definition.bodies[0].fixtures[0].radius,
+            state.contact_stats()
+        );
+        assert!(state.contact_stats().queries > 0);
+        assert!(state.contact_stats().support_vertices > 0);
+    }
+}
+
+#[test]
+fn separated_and_zero_weight_dense_pairs_share_one_examination_allowance() {
+    for zero_weight in [false, true] {
+        let (mut definition, mut authored) = fixture(8);
+        for (i, body) in definition.bodies.iter_mut().enumerate() {
+            authored[i] = if zero_weight {
+                // Near/overlapping bounds cannot explain this rejection.
+                body.inverse_mass = 0.;
+                body.info.body.kind = PhysicsBodyKind::Kinematic;
+                Mat4::IDENTITY
+            } else {
+                Mat4::from_translation(Vec3::X * (i as f32 * 10.))
+            };
+        }
+        for a in 0..8 {
+            for b in a + 1..8 {
+                definition.pairs.push((a, b));
+            }
+        }
+        let settings = PhysicsSimulation {
+            iterations: 3,
+            contact_limits: PhysicsContactLimits {
+                pair_checks_per_update: 5,
+                queries_per_update: 1000,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut state = PhysicsState::default();
+        state.step(&definition, &settings, 0., &authored, &HashMap::new());
+        state.step(&definition, &settings, 1. / 60., &authored, &HashMap::new());
+        let stats = state.contact_stats();
+        assert_eq!(
+            stats.pair_checks, 5,
+            "one allowance for every pass and substep"
+        );
+        assert_eq!(stats.pair_budget_exhaustions, 1);
+        assert_eq!(
+            stats.queries, 0,
+            "charge BEFORE weight and broad-phase rejection"
+        );
+        assert_eq!(stats.support_vertices, 0);
+        assert_eq!(stats.query_budget_exhaustions, 0);
+        assert_eq!(stats.last_issue, Some(PhysicsContactIssue::PairLimit));
+        if !zero_weight {
+            assert!(state.bodies[0].position.z < 0.);
+        }
+        state.step(&definition, &settings, 2. / 60., &authored, &HashMap::new());
+        assert_eq!(state.contact_stats().pair_checks, 10);
+        assert_eq!(state.contact_stats().pair_budget_exhaustions, 2);
+    }
+}
+
+#[test]
+fn body_pair_budget_exact_boundary_zero_pause_and_explicit_reset() {
+    for allowance in [0, 1, 3, 4, 5] {
+        let (mut definition, mut authored) = fixture(2);
+        definition.pairs.push((0, 1));
+        authored[1] = Mat4::from_translation(Vec3::X * 10.);
+        let mut settings = PhysicsSimulation {
+            iterations: 1,
+            contact_limits: PhysicsContactLimits {
+                pair_checks_per_update: allowance,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut state = PhysicsState::default();
+        state.step(&definition, &settings, 0., &authored, &HashMap::new());
+        state.step(&definition, &settings, 1. / 60., &authored, &HashMap::new());
+        // Two fixed substeps, each with one projection and one velocity pass.
+        let stats = state.contact_stats();
+        assert_eq!(stats.pair_checks, allowance.min(4) as u64);
+        assert_eq!(stats.pair_budget_exhaustions, u64::from(allowance < 4));
+        assert_eq!(stats.queries, 0);
+        assert!(
+            state.bodies[0].position.z < 0.,
+            "contact quota must not pause forces"
+        );
+        state.step(&definition, &settings, 1. / 60., &authored, &HashMap::new());
+        assert_eq!(
+            state.contact_stats(),
+            stats,
+            "zero-delta update has no contact work"
+        );
+        settings.paused = true;
+        state.step(&definition, &settings, 2. / 60., &authored, &HashMap::new());
+        assert_eq!(state.contact_stats(), stats);
+        settings.reset();
+        state.step(&definition, &settings, 2. / 60., &authored, &HashMap::new());
+        assert_eq!(state.contact_stats(), PhysicsContactStats::default());
+    }
+}
+
+#[test]
+fn zero_pair_allowance_keeps_joint_projection_active() {
+    let (mut definition, mut authored) = fixture(2);
+    authored[1] = Mat4::from_translation(Vec3::X * 2.);
+    definition.bodies[0].inverse_mass = 0.;
+    definition.bodies[0].info.body.kind = PhysicsBodyKind::Kinematic;
+    let frame = Frame {
+        axis_x: Vec3::X,
+        axis_y: Vec3::Y,
+        axis_z: Vec3::Z,
+        origin: Vec3::ZERO,
+    };
+    definition.joints.push(JointDefinition {
+        a: 0,
+        b: 1,
+        anchor_a: Vec3::ZERO,
+        anchor_b: Vec3::ZERO,
+        rotation_a: Quat::IDENTITY,
+        rotation_b: Quat::IDENTITY,
+        authored: Joint {
+            body_a: definition.bodies[0].info.body.node,
+            body_b: definition.bodies[1].info.body.node,
+            frame_a: frame,
+            frame_b: frame,
+            constraint: Constraint::Distance {
+                distance: 1.,
+                spring: Spring::default(),
+            },
+        },
+    });
+    definition.pairs.push((0, 1));
+    let settings = PhysicsSimulation {
+        gravity: Vec3::ZERO,
+        contact_limits: PhysicsContactLimits {
+            pair_checks_per_update: 0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut state = PhysicsState::default();
+    state.step(&definition, &settings, 0., &authored, &HashMap::new());
+    state.step(
+        &definition,
+        &settings,
+        1. / 120.,
+        &authored,
+        &HashMap::new(),
+    );
+    assert!((state.bodies[0].position.distance(state.bodies[1].position) - 1.).abs() < 1e-5);
+    assert_eq!(state.contact_stats().pair_checks, 0);
+    assert_eq!(state.contact_stats().queries, 0);
+    assert_eq!(state.contact_stats().pair_budget_exhaustions, 1);
+}
+
+#[test]
+fn unpaired_ballistic_motion_matches_independent_discrete_oracle_across_frame_slices() {
+    let (definition, authored) = fixture(1);
+    let settings = PhysicsSimulation {
+        gravity: Vec3::new(0., 0., -0.4),
+        timestep: 1. / 120.,
+        ..Default::default()
+    };
+    let steps = 240;
+    let acceleration = f64::from(settings.gravity.z);
+    let h = settings.timestep;
+    // Semi-implicit Euler under constant acceleration, derived independently:
+    // v_n=n*a*h and x_n=a*h²*n*(n+1)/2, with initial x=v=0.
+    let expected_velocity = acceleration * h * f64::from(steps);
+    let expected_position = acceleration * h * h * f64::from(steps * (steps + 1)) / 2.;
+    let mut results = Vec::new();
+    for frame_steps in [1, 4] {
+        let mut state = PhysicsState::default();
+        state.step(&definition, &settings, 0., &authored, &HashMap::new());
+        for completed in (frame_steps..=steps).step_by(frame_steps as usize) {
+            state.step(
+                &definition,
+                &settings,
+                f64::from(completed) * h,
+                &authored,
+                &HashMap::new(),
+            );
+        }
+        assert!(
+            (f64::from(state.bodies[0].position.z) - expected_position).abs() < 5e-5,
+            "position {:?}; oracle={expected_position}",
+            state.bodies[0].position
+        );
+        assert!((f64::from(state.bodies[0].velocity.z) - expected_velocity).abs() < 1e-5);
+        assert_eq!(state.contact_stats(), PhysicsContactStats::default());
+        results.push((state.bodies[0].position, state.bodies[0].velocity));
+    }
+    assert_eq!(
+        results[0], results[1],
+        "frame slicing must preserve the same fixed steps"
+    );
+}
+
+#[test]
+fn long_ballistic_flight_does_not_feed_large_position_quantization_into_velocity() {
+    let (definition, mut authored) = fixture(1);
+    authored[0] = Mat4::from_translation(Vec3::Z * 65_536.);
+    let settings = PhysicsSimulation {
+        gravity: Vec3::new(0., 0., -0.25),
+        timestep: 1. / 128.,
+        ..Default::default()
+    };
+    let steps = 4096;
+    let mut state = PhysicsState::default();
+    state.step(&definition, &settings, 0., &authored, &HashMap::new());
+    for completed in 1..=steps {
+        state.step(
+            &definition,
+            &settings,
+            f64::from(completed) * settings.timestep,
+            &authored,
+            &HashMap::new(),
+        );
+    }
+    // Binary-exact acceleration increments give an independent exact velocity.
+    let expected_velocity = -0.25 * settings.timestep * f64::from(steps);
+    assert_eq!(f64::from(state.bodies[0].velocity.z), expected_velocity);
+    let expected_position = 65_536.
+        - 0.25 * settings.timestep * settings.timestep * f64::from(steps * (steps + 1)) / 2.;
+    // Position remains f32: bound its accumulated rounding by N*half-ULP at
+    // the largest position. This does not promise f64 trajectory precision.
+    let position_error_bound = f64::from(steps) * f64::from(65_536_f32.next_up() - 65_536.) / 2.;
+    assert!(
+        (f64::from(state.bodies[0].position.z) - expected_position).abs() <= position_error_bound
+    );
+    assert!(state.bodies[0].position.z < 65_436.);
+}
+
+#[test]
+fn moving_contact_repair_preserves_integrated_linear_momentum() {
+    let (mut definition, mut authored) = fixture(2);
+    authored[1] = Mat4::from_translation(Vec3::X * 0.8);
+    definition.pairs.push((0, 1));
+    let settings = PhysicsSimulation {
+        gravity: Vec3::ZERO,
+        timestep: 1. / 128.,
+        ..Default::default()
+    };
+    let mut state = PhysicsState::default();
+    state.step(&definition, &settings, 0., &authored, &HashMap::new());
+    for body in &mut state.bodies {
+        body.velocity = Vec3::Y * 2.;
+    }
+    state.step(
+        &definition,
+        &settings,
+        settings.timestep,
+        &authored,
+        &HashMap::new(),
+    );
+    assert!((state.bodies[1].position - state.bodies[0].position).length() >= 1. - 1e-5);
+    for body in &state.bodies {
+        assert!(body.velocity.distance(Vec3::Y * 2.) < 1e-5);
+    }
+    assert!((state.bodies[0].velocity + state.bodies[1].velocity).distance(Vec3::Y * 4.) < 1e-5);
+}
+
+#[test]
+fn joint_projection_still_contributes_constraint_velocity_without_losing_translation() {
+    let (mut definition, mut authored) = fixture(2);
+    authored[1] = Mat4::from_translation(Vec3::X * 2.);
+    let frame = Frame {
+        axis_x: Vec3::X,
+        axis_y: Vec3::Y,
+        axis_z: Vec3::Z,
+        origin: Vec3::ZERO,
+    };
+    definition.joints.push(JointDefinition {
+        a: 0,
+        b: 1,
+        anchor_a: Vec3::ZERO,
+        anchor_b: Vec3::ZERO,
+        rotation_a: Quat::IDENTITY,
+        rotation_b: Quat::IDENTITY,
+        authored: Joint {
+            body_a: definition.bodies[0].info.body.node,
+            body_b: definition.bodies[1].info.body.node,
+            frame_a: frame,
+            frame_b: frame,
+            constraint: Constraint::Distance {
+                distance: 1.,
+                spring: Spring::default(),
+            },
+        },
+    });
+    let settings = PhysicsSimulation {
+        gravity: Vec3::ZERO,
+        timestep: 1. / 128.,
+        iterations: 1,
+        ..Default::default()
+    };
+    let mut state = PhysicsState::default();
+    state.step(&definition, &settings, 0., &authored, &HashMap::new());
+    for body in &mut state.bodies {
+        body.velocity = Vec3::Y * 2.;
+    }
+    state.step(
+        &definition,
+        &settings,
+        settings.timestep,
+        &authored,
+        &HashMap::new(),
+    );
+    assert!((state.bodies[1].position.distance(state.bodies[0].position) - 1.).abs() < 1e-6);
+    // Equal mass, central anchors: the unit distance correction is split equally.
+    assert!(state.bodies[0].velocity.distance(Vec3::new(64., 2., 0.)) < 1e-5);
+    assert!(state.bodies[1].velocity.distance(Vec3::new(-64., 2., 0.)) < 1e-5);
+    assert!((state.bodies[0].velocity + state.bodies[1].velocity).distance(Vec3::Y * 4.) < 1e-5);
+}

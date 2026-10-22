@@ -398,7 +398,7 @@ fn retained_native_topology_ledgers_match_body_and_compound_fixture_candidate_co
     for &(fixtures, dynamic, edges, body_pairs, fixture_pairs) in cases {
         let (mut def, _) = fixture(fixtures.len());
         for (index, &count) in fixtures.iter().enumerate() {
-            let shape = def.bodies[index].fixtures[0];
+            let shape = def.bodies[index].fixtures[0].clone();
             def.bodies[index].fixtures = vec![shape; count];
             def.bodies[index].info.body.kind = if dynamic.contains(&index) {
                 PhysicsBodyKind::Dynamic
@@ -518,7 +518,7 @@ fn unsupported_motion_on_fixtureless_anchors_does_not_block_contact_participants
         let (mut def, _) = fixture(3);
         def.bodies[0].info.body.kind = PhysicsBodyKind::Kinematic;
         def.bodies[0].inverse_mass = 0.;
-        let saved = def.bodies[0].fixtures[0];
+        let saved = def.bodies[0].fixtures[0].clone();
         def.bodies[0].fixtures.clear();
         let parent = def.bodies[1].info.body.node;
         match control {

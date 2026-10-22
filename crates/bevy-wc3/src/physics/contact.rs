@@ -40,6 +40,7 @@ pub enum QueryError {
     InvalidPrimitive,
 }
 
+#[cfg(test)]
 pub fn query(a: Primitive, b: Primitive) -> Result<Option<Contact>, QueryError> {
     query_margin(a, b, 0.)
 }

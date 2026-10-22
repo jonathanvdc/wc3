@@ -93,6 +93,32 @@ an imported model. Capture terminates when the requested admission is unavailabl
 Candidate pair counts establish possible work; they do not establish touching
 contacts or native pose fidelity.
 
+## Bound per-update contact work
+
+`PhysicsSimulation::contact_limits` defaults to 16,384 body-pair examinations,
+16,384 narrow-phase queries and 262,144 hull-vertex/primitive-support samples per
+requested update. These are independent allowances shared across fixed steps,
+projection iterations and velocity passes. `pair_checks_per_update` charges each
+body-pair examination before weight or broad-phase rejection, including repeated
+visits to a separated pair. Compound fixture queries then consume the separate
+query and support allowances. A zero pair or query allowance disables contacts
+while integration and joints continue. Pair exhaustion stops remaining body-pair
+traversal; an already admitted pair can finish its compound queries. Query
+exhaustion truncates the remaining contact passes; support exhaustion omits that
+hull query while analytical contacts can use remaining query allowance. Omitted
+work is never queued for a later frame.
+
+`ModelRig::physics_contact_stats()` reports saturating cumulative actual body-pair
+examinations (`pair_checks`), queries, support samples and typed numerical/budget
+issues since rig creation or an explicit reset generation. Pair and query
+exhaustions are each counted once per truncated update; using exactly an allowance
+without further requested work is not an exhaustion. Support exhaustion is counted
+per failed hull query. The latest issue remains visible after successful queries.
+This runtime observation is independent of
+`physics_contact_error()`, which reports contact-policy preparation failure.
+Hull scratch is allocated once when its instance initializes and reused across
+contacts; source hulls above 4096 vertices are rejected before a private vertex copy.
+
 ## Geometry and response limits
 
 The built-in solver supports worn-item, ragdoll and private-world rigid systems
@@ -104,8 +130,13 @@ friction and slider limits retain diagnostics.
 
 Each compound fixture retains its own geometry and material response.
 Sphere/capsule pairs use exact segment distances; sphere/orthogonal-box contacts
-use the actual box. Box-box, capsule-box and convex-hull pairs use conservative
-fixture bounds. Rounded fixtures under nonuniform scale or shear also use bounds.
+use the actual box. Pairs containing a convex hull use bounded support-map distance
+and penetration queries over the original prepared vertices. Affine support retains
+nonuniform scale, reflection and shear. Invalid or degenerate hulls, numerical
+nonconvergence and exhausted work quotas omit the contact rather than substitute
+a sphere. These iterative contacts approximate penetration; native game fidelity
+remains unverified. Other box-box and capsule-box pairs retain conservative fixture
+bounds, as do analytical-only rounded pairs under nonuniform scale or shear.
 Compound centers and full tensor inertia retain fixture offsets and orientation;
 contacts produce angular impulses and bounded Coulomb friction. Restitution uses
 the maximum and friction the geometric mean of the two fixtures' values.

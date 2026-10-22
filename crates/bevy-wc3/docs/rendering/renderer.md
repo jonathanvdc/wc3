@@ -55,10 +55,12 @@ response, and indoor/outdoor illumination.
 
 [Assemblies](assembly.md) combine shared skeletons, mounted parts, geometry choices,
 and composed textures. The optional [WoW adapter](characters.md) interprets native
-appearance choices. [Authored secondary motion](physics.md) is opt-in: the approximate solver
-retains compound fixtures, capsule contacts, tensor inertia and contact friction;
-convex-hull contacts, stable manifolds and native stepping remain partial. Contact
-admission defaults to authored grants; the explicit unconnected-dynamic policy
+appearance choices. [Authored secondary motion](physics.md) is opt-in: the
+approximate solver retains compound fixtures, analytical capsule contacts, bounded iterative convex
+contacts, tensor inertia and contact friction. Numerical and work-limit failures
+omit convex queries with typed per-instance statistics; stable manifolds and
+native stepping remain partial. Contact admission defaults to authored grants;
+the explicit unconnected-dynamic policy
 derives bounded source-local pairs without inventing native filtering or ground.
 
 Attachment mounts expose animated sockets and can load child models automatically.
