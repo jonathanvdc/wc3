@@ -135,7 +135,17 @@ pub fn compile_model(
 pub fn compile_model_with_options(
     model: &Model<'_, Universal>,
     options: CompileOptions,
+    resolve_image: impl FnMut(TextureRequest<'_, '_>) -> Option<Handle<Image>>,
+) -> Result<CompiledModel, ModelError> {
+    compile_with_geometry(model, options, resolve_image, &mut MeshInterner::default())
+}
+
+/// Share fully compiled geometry within one preparation operation.
+pub(crate) fn compile_with_geometry(
+    model: &Model<'_, Universal>,
+    options: CompileOptions,
     mut resolve_image: impl FnMut(TextureRequest<'_, '_>) -> Option<Handle<Image>>,
+    mesh_interner: &mut MeshInterner,
 ) -> Result<CompiledModel, ModelError> {
     model.validate().map_err(|e| ModelError(e.to_string()))?;
     validate_child_models(model, &options.child_models)?;
@@ -281,7 +291,6 @@ pub fn compile_model_with_options(
     }
     let mesh_animation = MeshAnimation::compile(model);
     let mut geometry_cache = HashMap::new();
-    let mut mesh_interner = MeshInterner::default();
     let mut draws = Vec::new();
     for (instance_id, instance) in model.instances() {
         if options.draws.hidden_instances.contains(&instance_id) {

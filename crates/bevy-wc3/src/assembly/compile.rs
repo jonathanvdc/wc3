@@ -1,6 +1,7 @@
 use super::images::ImageCompiler;
 use super::plan::plan;
 use super::{Assembly, Models, PendingAssembly, PendingPart, RgbaImage, Source};
+use crate::mesh_interner::MeshInterner;
 use crate::{CompiledModel, ModelError, ModelPart, PartBinding};
 use bevy::prelude::{Assets, Image};
 use std::collections::HashMap;
@@ -67,22 +68,22 @@ pub(crate) fn compile_with_bindings<B: Clone + PartialEq>(
         images,
         resolve: &mut resolve_image,
         decoded: &mut decoded,
+        handles: Vec::new(),
     };
-    let compiled_root = compiler.compile(root, &assembly.root)?;
+    let mut geometry = MeshInterner::default();
+    let compiled_root = compiler.compile(root, &assembly.root, &mut geometry)?;
     let mut compiled_parts = Vec::with_capacity(parts.len());
     let mut bindings = Vec::with_capacity(parts.len());
     let mut sources = Vec::new();
     for part in &parts {
         let model = &models[&part.source.model];
-        let compiled = if let Some(index) = sources.iter().position(|source: &&Source| {
-            source.model == part.source.model
-                && source.draws == part.source.draws
-                && source.images == part.source.images
-                && source.inputs == part.source.inputs
-        }) {
+        let compiled = if let Some(index) = sources
+            .iter()
+            .position(|source: &&Source| *source == &part.source)
+        {
             CompiledModel::clone(&compiled_parts[index])
         } else {
-            compiler.compile(model, &part.source)?
+            compiler.compile(model, &part.source, &mut geometry)?
         };
         sources.push(&part.source);
         bindings.push(resolve_binding(root, model, &compiled, &part.binding)?);

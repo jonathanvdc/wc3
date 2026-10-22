@@ -1,8 +1,9 @@
 use super::{compose_atlas, AtlasLayer, PixelRect, RgbaImage, Source, TextureReplacement};
+use crate::compiler::compile_with_geometry;
+use crate::mesh_interner::MeshInterner;
 use crate::textures::ImageKey;
 use crate::{
-    compile_model_with_options, texture_requests, CompileOptions, CompiledModel, ModelError,
-    TextureColorSpace, TextureRequest,
+    texture_requests, CompileOptions, CompiledModel, ModelError, TextureColorSpace, TextureRequest,
 };
 use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::{Assets, Handle, Image};
@@ -13,6 +14,7 @@ pub(super) struct ImageCompiler<'a, F> {
     pub(super) images: &'a mut Assets<Image>,
     pub(super) resolve: &'a mut F,
     pub(super) decoded: &'a mut HashMap<ImageResource<'static>, RgbaImage>,
+    pub(super) handles: Vec<(ImageKey<TextureReplacement>, Handle<Image>)>,
 }
 impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCompiler<'_, F> {
     fn decode(&mut self, resource: &ImageResource<'static>) -> Result<RgbaImage, ModelError> {
@@ -54,17 +56,18 @@ impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCo
         &mut self,
         model: &Model<'_>,
         source: &Source,
+        geometry: &mut MeshInterner,
     ) -> Result<CompiledModel, ModelError> {
-        let mut handles: Vec<(ImageKey<TextureReplacement>, Handle<Image>)> = Vec::new();
         let scoped: HashSet<_> = texture_requests(model)
             .into_iter()
             .filter(|request| request.input.is_some())
             .map(|request| request.texture)
             .collect();
         let mut failure = None;
-        let compiled = compile_model_with_options(
+        let compiled = compile_with_geometry(
             model,
             CompileOptions {
+                material: source.material,
                 draws: source.draws.clone(),
                 ..Default::default()
             },
@@ -85,7 +88,9 @@ impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCo
                     color_space: request.color_space,
                     sampler: request.sampler,
                 };
-                if let Some((_, handle)) = handles.iter().find(|(existing, _)| *existing == key) {
+                if let Some((_, handle)) =
+                    self.handles.iter().find(|(existing, _)| *existing == key)
+                {
                     return Some(handle.clone());
                 }
                 let pixels = self.replacement(&selection);
@@ -104,9 +109,10 @@ impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCo
                 }
                 image.sampler = ImageSampler::Descriptor(sampler(request.sampler));
                 let handle = self.images.add(image);
-                handles.push((key, handle.clone()));
+                self.handles.push((key, handle.clone()));
                 Some(handle)
             },
+            geometry,
         )?;
         if let Some(error) = failure {
             return Err(error);

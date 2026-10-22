@@ -11,15 +11,19 @@ pub use compile::compile_assembly;
 pub(crate) use compile::compile_with_bindings;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
-use wc3::model::{ClipId, ImageResource, ImageResourceId, Model, ResourceLocator};
+use wc3::model::{
+    ClipId, ImageResource, ImageResourceId, MaterialSelection, Model, ResourceLocator,
+};
 
 /// Models resolved from a coherent application resource provider.
 pub type Models<'data> = HashMap<ResourceLocator<'static>, Model<'data>>;
 /// One source graph and its exact typed appearance choices.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Source {
     /// Resource locating the source model.
     pub model: ResourceLocator<'static>,
+    /// Material look belonging to this source graph; defaults to its authored default.
+    pub material: MaterialSelection,
     /// Geometry selection before compilation.
     pub draws: DrawSelection,
     /// Replace an image dependency wherever it is sampled.
@@ -29,10 +33,11 @@ pub struct Source {
     pub inputs: BTreeMap<TextureInput, TextureReplacement>,
 }
 impl Source {
-    /// Select all authored geometry without texture replacements.
+    /// Use the authored default material look and all geometry without texture replacements.
     pub fn new(model: ResourceLocator<'static>) -> Self {
         Self {
             model,
+            material: MaterialSelection::default(),
             draws: DrawSelection::default(),
             images: BTreeMap::new(),
             inputs: BTreeMap::new(),

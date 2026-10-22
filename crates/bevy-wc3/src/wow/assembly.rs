@@ -192,6 +192,7 @@ fn source(
         .collect();
     Ok(Source {
         model: resource.clone(),
+        material: Default::default(),
         draws: DrawSelection {
             draws,
             ..Default::default()

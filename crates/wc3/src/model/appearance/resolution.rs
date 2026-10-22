@@ -3,7 +3,7 @@ use crate::model::profiles::Universal;
 use crate::model::{DrawId, Error, InstanceId, LookId, MaterialId, Model};
 
 /// An authored look used to resolve a draw's material.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MaterialSelection {
     /// Use the authored default look.
     #[default]

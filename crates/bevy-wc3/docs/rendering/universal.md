@@ -60,7 +60,7 @@ pixels or use native metadata as part of that physical cache key.
 
 `TextureRequestKey` identifies a logical request. Assembly replacements target image
 dependencies or structural input addresses, with input choices taking precedence.
-See [assembly image selection](assembly.md#select-geometry-and-images) and
+See [assembly image selection](assembly.md#select-appearance-geometry-and-images) and
 [per-instance replacements](../usage.md#resolve-resources-and-textures).
 When a selected material contains a texture-valued animation slot, discovery
 conservatively retains all sampled images in the model, including images that may

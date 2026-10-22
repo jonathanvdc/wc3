@@ -16,10 +16,11 @@ the renderer supplies no race, sex, customization-slot or inventory schema.
 Load or author the required models before resolving graph-scoped identities.
 `Models` maps resource identities to `Model<Universal>` values. An
 `Assembly` has a root `Source` and an ordered list of `Part`s.
-Each source selects its model resource, a `DrawSelection`, and image replacements
-by dependency or by structural input address. Each part supplies a `PartBinding` and optional host-to-part clip
-mappings. Public assembly plans use concrete `PartBinding` values, so their
-attachment and skeleton relationships are explicit.
+Each source selects its model resource, material look, `DrawSelection` and image
+replacements by dependency or structural input address. Each part supplies a
+`PartBinding` and optional host-to-part clip mappings. Public assembly plans use
+concrete `PartBinding` values, so their attachment and skeleton relationships are
+explicit.
 
 For example, a resolver can attach a sensor resource to an application-selected
 node without introducing an inventory slot:
@@ -43,7 +44,15 @@ The [WoW adapter](characters.md) is one application of this machinery. It interp
 native geoset groups, replacement categories and bone identities before entering
 the same assembly compiler. Its character database vocabulary is optional.
 
-## Select geometry and images
+## Select appearance, geometry and images
+
+`Source::material` uses the same `wc3::model::MaterialSelection` as direct
+compilation. Its default uses the graph's authored default look; choose
+`MaterialSelection::Draw(look)` for an explicit complete draw-material assignment.
+Draws in a source without a default look require an explicit selection. Look identities
+belong to that source model, so the plan rejects an absent or foreign look even
+when its geometry is hidden, before decoding images. The source choice is passed
+to the ordinary Universal compiler alongside its draw selection.
 
 `DrawSelection` chooses typed draws and suppresses complete instances. Its default
 retains authored geometry. Assembly validation rejects foreign draw and instance
@@ -81,8 +90,8 @@ then use the `Alpha` equation. Native appearance adapters select these equations
 explicitly; generic layers retain the default.
 Invalid dimensions, pixel storage and rectangles are errors. Image callbacks
 supply `RgbaImage` values; source decoding is cached within an assembly compilation.
-After replacement resolution, equal sources, effective color spaces and samplers
-share a Bevy image. Different sampling or color interpretation receives a separate
+Across the assembly's source compilations, equal resolved image sources, effective
+color spaces and samplers share a Bevy image. Different sampling or color interpretation receives a separate
 image; native metadata and input addresses do not enter the physical cache key. Atlas composition happens during setup, rather than animation updates.
 
 ## Bind components
@@ -129,11 +138,14 @@ renderer APIs. Failed setup returns no partial assembly; images already inserted
 remain available in the asset store.
 
 Compatible skinned parts that refer to the same resource coalesce into one rig
-with united geometry selections. Bindings, texture replacements and clip maps must
-agree. Conflicting policies fail explicitly. Repeated identical rigid sources
-reuse compiled geometry, and preparation shares meshes and inverse-bind palettes
-across occurrences. Live rigs retain independent state. Reuse compiled and
-prepared assemblies across instances to amortize setup work.
+with united geometry selections. Bindings, material selections, texture replacements
+and clip maps must agree. Material selections compare the resolved look, so
+`Default` and an explicit `Draw` of the graph's default look are compatible.
+Different resolved looks fail explicitly for shared-skeleton requests. Repeated
+rigid sources with equivalent selections reuse compilation; different looks
+retain their own appearances. Preparation can still share equal meshes and
+inverse-bind palettes across occurrences. Live rigs retain independent state.
+Reuse compiled and prepared assemblies across instances to amortize setup work.
 
 Native facial bone corrections are selected by the [WoW adapter](characters.md#facial-bone-corrections).
 They preserve full affine matrices through live skinning and offline baking; generic

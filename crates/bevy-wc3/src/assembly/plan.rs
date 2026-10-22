@@ -1,7 +1,7 @@
 use super::{Models, PendingAssembly, PendingPart, Source};
 use crate::{texture_requests, DrawSelection, ModelError};
 use std::collections::{HashMap, HashSet};
-use wc3::model::Model;
+use wc3::model::{MaterialSelection, Model};
 
 fn source_model<'a, 'data>(
     source: &Source,
@@ -12,6 +12,11 @@ fn source_model<'a, 'data>(
         .ok_or_else(|| ModelError(format!("missing assembly model {:?}", source.model)))
 }
 fn validate_source(source: &Source, model: &Model<'_>) -> Result<(), ModelError> {
+    if matches!(source.material, MaterialSelection::Draw(look) if model.look(look).is_none()) {
+        return Err(ModelError(
+            "assembly selection references an absent or foreign material look".into(),
+        ));
+    }
     let draws: HashSet<_> = model
         .instances()
         .iter()
@@ -103,8 +108,14 @@ pub(super) fn plan<B: Clone + PartialEq>(
     let mut output: Vec<PendingPart<B>> = Vec::with_capacity(assembly.parts.len());
     let mut shared = HashMap::new();
     for part in &assembly.parts {
+        let mut part = part.clone();
+        if part.source.material == MaterialSelection::Default {
+            part.source.material = source_model(&part.source, models)?
+                .default_look()
+                .map_or(MaterialSelection::Default, MaterialSelection::Draw);
+        }
         if !is_skinned(&part.binding) {
-            output.push(part.clone());
+            output.push(part);
             continue;
         }
         if let Some(&index) = shared.get(&part.source.model) {
@@ -113,6 +124,8 @@ pub(super) fn plan<B: Clone + PartialEq>(
                 Some("skeleton bindings")
             } else if existing.clips != part.clips {
                 Some("clip mappings")
+            } else if existing.source.material != part.source.material {
+                Some("material selections")
             } else if existing.source.images != part.source.images
                 || existing.source.inputs != part.source.inputs
             {
@@ -133,7 +146,7 @@ pub(super) fn plan<B: Clone + PartialEq>(
             );
         } else {
             shared.insert(part.source.model.clone(), output.len());
-            output.push(part.clone());
+            output.push(part);
         }
     }
     Ok(output)
