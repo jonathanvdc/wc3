@@ -1,6 +1,7 @@
 //! Content sharing after complete vertex projection, skinning and indexing.
 use bevy::mesh::Indices;
 use bevy::prelude::Mesh;
+use bytemuck::cast_slice;
 use std::collections::{hash_map::DefaultHasher, HashMap};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -23,7 +24,7 @@ impl MeshInterner {
         mesh
     }
 }
-fn mesh_hash(mesh: &Mesh) -> u64 {
+pub(super) fn mesh_hash(mesh: &Mesh) -> u64 {
     let mut hash = DefaultHasher::new();
     mesh.primitive_topology().hash(&mut hash);
     for (attribute, values) in mesh.attributes() {
@@ -44,14 +45,39 @@ fn mesh_hash(mesh: &Mesh) -> u64 {
     }
     hash.finish()
 }
-fn mesh_equal(left: &Mesh, right: &Mesh) -> bool {
+pub(super) fn mesh_equal(left: &Mesh, right: &Mesh) -> bool {
     // Full Bevy equality additionally checks morph, usage and skin-bound metadata.
-    // Explicit bytes preserve distinctions such as signed zero and typed streams.
+    // Explicit bytes and float bits preserve signed zero throughout the payload.
     left == right
         && left
             .attributes()
             .zip(right.attributes())
             .all(|((_, left), (_, right))| left.get_bytes() == right.get_bytes())
+        && left.get_morph_targets().map(cast_slice::<_, u8>)
+            == right.get_morph_targets().map(cast_slice::<_, u8>)
+        && left.final_aabb.map(|bounds| {
+            [
+                bounds.min.to_array().map(f32::to_bits),
+                bounds.max.to_array().map(f32::to_bits),
+            ]
+        }) == right.final_aabb.map(|bounds| {
+            [
+                bounds.min.to_array().map(f32::to_bits),
+                bounds.max.to_array().map(f32::to_bits),
+            ]
+        })
+        && match (left.skinned_mesh_bounds(), right.skinned_mesh_bounds()) {
+            (Some(left), Some(right)) => {
+                left.aabbs.iter().zip(&right.aabbs).all(|(left, right)| {
+                    left.center.to_array().map(f32::to_bits)
+                        == right.center.to_array().map(f32::to_bits)
+                        && left.half_size.to_array().map(f32::to_bits)
+                            == right.half_size.to_array().map(f32::to_bits)
+                })
+            }
+            (None, None) => true,
+            _ => false,
+        }
 }
 
 #[cfg(test)]

@@ -28,6 +28,8 @@ use wc3::model::{
     AnimationProgram, ClipId, DrawId, FeatureId, FeatureKind, InstanceId, MaterialId, MeshId,
     NodeId,
 };
+mod prepared_geometry;
+pub(crate) use prepared_geometry::PreparedGeometry;
 pub(crate) type MaterialCacheKey = (MaterialId, usize, MeshMaterialState, [u32; 4]);
 pub(crate) type MaterialCache = HashMap<MaterialCacheKey, Handle<ModelMaterial>>;
 
@@ -232,7 +234,28 @@ impl CompiledModel {
         meshes: &mut Assets<Mesh>,
         binds: &mut Assets<SkinnedMeshInverseBindposes>,
     ) -> PreparedModel {
-        self.prepare_shared(meshes, binds, &mut HashMap::new(), &mut HashMap::new())
+        self.prepare_shared(
+            meshes,
+            binds,
+            &mut HashMap::new(),
+            &mut HashMap::new(),
+            None,
+        )
+    }
+    pub(crate) fn prepare_cached(
+        &self,
+        meshes: &mut Assets<Mesh>,
+        binds: &mut Assets<SkinnedMeshInverseBindposes>,
+        geometry: &mut PreparedGeometry,
+    ) -> PreparedModel {
+        geometry.prune(meshes, binds);
+        self.prepare_shared(
+            meshes,
+            binds,
+            &mut HashMap::new(),
+            &mut HashMap::new(),
+            Some(geometry),
+        )
     }
     fn prepare_shared(
         &self,
@@ -240,10 +263,17 @@ impl CompiledModel {
         binds: &mut Assets<SkinnedMeshInverseBindposes>,
         variants: &mut HashMap<*const Mesh, Handle<Mesh>>,
         palettes: &mut HashMap<(*const Mat4, usize), Handle<SkinnedMeshInverseBindposes>>,
+        mut geometry: Option<&mut PreparedGeometry>,
     ) -> PreparedModel {
         PreparedModel {
             image_template: self.image_template.as_ref().map(|template| {
-                Arc::new(template.prepare_shared(meshes, binds, variants, palettes))
+                Arc::new(template.prepare_shared(
+                    meshes,
+                    binds,
+                    variants,
+                    palettes,
+                    geometry.as_deref_mut(),
+                ))
             }),
             image_bindings: self.image_bindings.clone(),
             mounts: self
@@ -253,9 +283,13 @@ impl CompiledModel {
                     parent: mount.parent,
                     socket: mount.socket,
                     transform: mount.transform,
-                    model: mount
-                        .model
-                        .prepare_shared(meshes, binds, variants, palettes),
+                    model: mount.model.prepare_shared(
+                        meshes,
+                        binds,
+                        variants,
+                        palettes,
+                        geometry.as_deref_mut(),
+                    ),
                     clips: mount.clips.clone(),
                 })
                 .collect::<Vec<_>>()
@@ -291,7 +325,10 @@ impl CompiledModel {
                     pass: liquid.pass,
                     mesh: variants
                         .entry(Arc::as_ptr(&liquid.mesh))
-                        .or_insert_with(|| meshes.add((*liquid.mesh).clone()))
+                        .or_insert_with(|| match geometry.as_deref_mut() {
+                            Some(geometry) => geometry.mesh(meshes, &liquid.mesh),
+                            None => meshes.add((*liquid.mesh).clone()),
+                        })
                         .clone(),
                     surface: liquid.surface.clone(),
                 })
@@ -305,7 +342,10 @@ impl CompiledModel {
                     joints: skin.joints.clone(),
                     binds: palettes
                         .entry((skin.binds.as_ptr(), skin.binds.len()))
-                        .or_insert_with(|| binds.add(skin.binds.to_vec()))
+                        .or_insert_with(|| match geometry.as_deref_mut() {
+                            Some(geometry) => geometry.palette(binds, &skin.binds),
+                            None => binds.add(skin.binds.to_vec()),
+                        })
                         .clone(),
                 })
                 .collect::<Vec<_>>()
@@ -327,7 +367,10 @@ impl CompiledModel {
                     lod: draw.lod,
                     mesh: variants
                         .entry(Arc::as_ptr(&draw.mesh))
-                        .or_insert_with(|| meshes.add((*draw.mesh).clone()))
+                        .or_insert_with(|| match geometry.as_deref_mut() {
+                            Some(geometry) => geometry.mesh(meshes, &draw.mesh),
+                            None => meshes.add((*draw.mesh).clone()),
+                        })
                         .clone(),
                     material: draw.material.clone(),
                     animation: draw.animation.clone(),

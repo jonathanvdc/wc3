@@ -1,6 +1,7 @@
 //! Asset-backed instance requests and shared GPU preparation.
 use super::bounds::transform_bounds;
 use super::child_coordinates::ChildCoordinates;
+use super::compiled::PreparedGeometry;
 use super::effects::model_budget::{
     ActorFrame, ModelActorLease, ModelActorTree, ModelParticleTreeStats,
 };
@@ -207,7 +208,10 @@ fn rebind_state(
 }
 
 #[derive(Resource, Default)]
-pub(crate) struct PreparedModelCache(HashMap<AssetId<ModelAsset>, PreparedModel>);
+pub(crate) struct PreparedModelCache(
+    HashMap<AssetId<ModelAsset>, PreparedModel>,
+    PreparedGeometry,
+);
 
 pub(crate) fn invalidate_models(
     mut events: MessageReader<AssetEvent<ModelAsset>>,
@@ -488,10 +492,12 @@ impl OwnedModelFactory<'_, '_> {
         } else {
             None
         };
-        let prepared = cache
-            .0
-            .entry(request.0.id())
-            .or_insert_with(|| source.compiled.prepare(meshes, binds));
+        let PreparedModelCache(model_cache, geometry_cache) = &mut **cache;
+        let prepared = model_cache.entry(request.0.id()).or_insert_with(|| {
+            source
+                .compiled
+                .prepare_cached(meshes, binds, geometry_cache)
+        });
         let replacements = effective_replacements(root, owners);
         let Some((prepared, bound)) =
             image_cache.prepare(request.0.id(), prepared, replacements, images)
