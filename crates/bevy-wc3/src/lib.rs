@@ -91,7 +91,7 @@ pub use effects::{
     ParticleProgramControls, ParticleProgramEmitter, ParticleTextureBinding,
     ParticleTextureRequest, RibbonEmitter, SpriteEmitter,
 };
-pub use error::ModelError;
+pub use error::{ModelError, ModelLoadError};
 pub use events::{EventDispatchStats, EventProgram, EventSource, ModelEvent};
 pub use features::{
     AttachmentState, ModelAttachment, ModelFeature, ModelLight, ModelLightSettings, SampledCamera,

@@ -1,13 +1,17 @@
 use super::*;
 use crate::BlpImageLoader;
-use bevy::asset::{AssetApp, AssetPlugin, LoadState};
+use bevy::asset::{AssetApp, AssetLoadError, AssetPlugin, LoadState};
 use bevy::image::{ImageAddressMode, ImageLoader, ImageSampler};
 use bevy::tasks::{AsyncComputeTaskPool, ComputeTaskPool, IoTaskPool, TaskPoolBuilder};
 use std::collections::HashSet;
+use std::error::Error as _;
 use std::fs;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use wc3::model::common::ZeroVec;
+use wc3::model::formats::m2;
+use wc3::model::io::asset::CompanionKind;
+use wc3::model::io::m2 as semantic_m2;
 use wc3::model::{AddressMode, ModelMetadata};
 use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
 fn app(directory: &Path) -> App {
@@ -112,6 +116,132 @@ fn native_m2_missing_skin_fails_with_resource_identity() {
     let error = wait(&mut app, &handle).unwrap_err();
     assert!(error.contains("required model companion"), "{error}");
     assert!(error.contains("unit00.skin"), "{error}");
+    let LoadState::Failed(error) = app.world().resource::<AssetServer>().load_state(&handle) else {
+        panic!("load failure was not retained");
+    };
+    let AssetLoadError::AssetLoaderError(error) = error.as_ref() else {
+        panic!("expected a native loader failure");
+    };
+    let Some(ModelLoadError::MissingCompanion {
+        owner,
+        request,
+        candidates,
+    }) = error.error().downcast_ref::<ModelLoadError>()
+    else {
+        panic!("required companion identity was not retained");
+    };
+    assert_eq!(owner.to_string(), "unit.m2");
+    assert_eq!(request.owner, FileKey::Path("unit.m2".into()));
+    assert_eq!(request.key, FileKey::Path("unit00.skin".into()));
+    assert!(matches!(request.kind, CompanionKind::Skin { .. }));
+    assert_eq!(candidates[0].to_string(), "unit00.skin");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn native_companion_read_errors_preserve_the_registered_source_failure() {
+    struct UnregisteredSource;
+    impl ResourceResolver for UnregisteredSource {
+        fn candidates(
+            &self,
+            _resource: &ModelResource<'_>,
+            _owner: &AssetPath<'_>,
+        ) -> Vec<AssetPath<'static>> {
+            vec![AssetPath::parse("unregistered://unit00.skin")]
+        }
+    }
+    let directory = directory("unregistered-companion-source");
+    fs::create_dir_all(&directory).unwrap();
+    let mut native = m2::Document::<m2::Flat<m2::V264>>::new();
+    native.core_mut().skins = 1;
+    fs::write(directory.join("unit.m2"), native.encode_m2().unwrap()).unwrap();
+    let mut app = app_with_resolver(&directory, Arc::new(UnregisteredSource));
+    let handle = app.world().resource::<AssetServer>().load("unit.m2");
+    wait(&mut app, &handle).unwrap_err();
+    let LoadState::Failed(error) = app.world().resource::<AssetServer>().load_state(&handle) else {
+        panic!("load failure was not retained");
+    };
+    let AssetLoadError::AssetLoaderError(error) = error.as_ref() else {
+        panic!("expected a native loader failure");
+    };
+    let error = error.error().downcast_ref::<ModelLoadError>().unwrap();
+    let ModelLoadError::CompanionRead { path, request, .. } = error else {
+        panic!("read failure was classified as {error:?}");
+    };
+    assert_eq!(path.to_string(), "unregistered://unit00.skin");
+    assert_eq!(request.key, FileKey::Path("unit00.skin".into()));
+    assert!(matches!(
+        error
+            .source()
+            .unwrap()
+            .downcast_ref::<ReadAssetBytesError>(),
+        Some(ReadAssetBytesError::MissingAssetSourceError(_))
+    ));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn mdlx_loader_detects_the_wire_format_independently_of_the_extension() {
+    use wc3::model::formats::mdlx::{mdl::Read as _, DynamicDocument, NoExtensions};
+
+    let directory = directory("mdlx-format-detection");
+    fs::create_dir_all(&directory).unwrap();
+    let text = "Version { FormatVersion 800, } Model \"format detection\" {}";
+    let document = DynamicDocument::<NoExtensions>::decode_mdl(text).unwrap();
+    fs::write(directory.join("binary.mdl"), document.encode_mdx().unwrap()).unwrap();
+    fs::write(directory.join("text.mdx"), text).unwrap();
+    let mut app = app(&directory);
+    for path in ["binary.mdl", "text.mdx"] {
+        let handle = app.world().resource::<AssetServer>().load(path);
+        wait(&mut app, &handle).unwrap();
+        assert!(app
+            .world()
+            .resource::<Assets<ModelAsset>>()
+            .get(&handle)
+            .is_some());
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn native_decoding_errors_retain_the_codec_source() {
+    let directory = directory("typed-native-error");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(directory.join("invalid.mdx"), b"MDLXinvalid").unwrap();
+    let mut app = app(&directory);
+    let handle = app.world().resource::<AssetServer>().load("invalid.mdx");
+    wait(&mut app, &handle).unwrap_err();
+    let LoadState::Failed(error) = app.world().resource::<AssetServer>().load_state(&handle) else {
+        panic!("load failure was not retained");
+    };
+    let AssetLoadError::AssetLoaderError(error) = error.as_ref() else {
+        panic!("expected a native loader failure");
+    };
+    let error = error.error().downcast_ref::<ModelLoadError>().unwrap();
+    assert!(matches!(error, ModelLoadError::Native { .. }));
+    assert!(error.source().unwrap().source().is_some());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn wmo_loader_requires_provider_profile_before_decoding() {
+    let directory = directory("wmo-profile-required");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(directory.join("unit.wmo"), b"uninterpreted root").unwrap();
+    let mut app = app(&directory);
+    let handle = app.world().resource::<AssetServer>().load("unit.wmo");
+    let message = wait(&mut app, &handle).unwrap_err();
+    assert!(message.contains("layout provenance"), "{message}");
+    let LoadState::Failed(error) = app.world().resource::<AssetServer>().load_state(&handle) else {
+        panic!("load failure was not retained");
+    };
+    let AssetLoadError::AssetLoaderError(error) = error.as_ref() else {
+        panic!("expected a native loader failure");
+    };
+    assert!(matches!(
+        error.error().downcast_ref::<ModelLoadError>(),
+        Some(ModelLoadError::MissingWmoProfile { .. })
+    ));
     fs::remove_dir_all(directory).unwrap();
 }
 #[test]

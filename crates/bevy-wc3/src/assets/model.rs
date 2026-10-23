@@ -3,7 +3,7 @@ use super::images::ImageLoadCache;
 use super::particle_program::resolve_programmes;
 use crate::child_models::{requests as child_model_requests, ChildModelBinding, ChildModelRole};
 use crate::diagnostics::{RenderDiagnosticKind, RenderDiagnosticSource};
-use crate::error::ModelError;
+use crate::error::{ModelError, ModelLoadError};
 use crate::textures::{texture_requests, TextureRequest, TextureRequestKey};
 use crate::{
     compile_model_with_options, CompileOptions, CompiledModel, ParticleTextureRequest,
@@ -15,22 +15,17 @@ use bevy::asset::{
 };
 use bevy::prelude::*;
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt as _;
 use std::path::{Component, Path, PathBuf};
-use std::str::from_utf8;
 use std::sync::{Arc, Mutex};
 use wc3::model::common::FileKey;
 use wc3::model::conversion::{ImportOptions, IssueKind, Report};
-use wc3::model::formats::mdlx::mdl::Read as _;
-use wc3::model::formats::mdlx::{DynamicDocument, NoExtensions};
-use wc3::model::formats::{m2, wmo};
-use wc3::model::io::mdlx as semantic_mdlx;
-use wc3::model::io::{m2 as semantic_m2, wmo as semantic_wmo};
+use wc3::model::formats::wmo;
+use wc3::model::io::asset::{Format, Progress, Reader as NativeReader, Request};
 use wc3::model::{FeatureId, ImageResource, Model, ResourceLocator as ModelResource};
-use wc3::visit_m2_model;
 
 /// Per-load ancestry propagated to optional model dependencies.
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -442,32 +437,32 @@ fn file_resource(key: &FileKey) -> ModelResource<'static> {
         },
     }
 }
-async fn read_resource(
+async fn read_companion(
     context: &mut LoadContext<'_>,
     resolver: &dyn ResourceResolver,
     owner: &AssetPath<'_>,
-    resource: &ModelResource<'_>,
-    required: bool,
-) -> Result<Option<Vec<u8>>, ModelError> {
-    let candidates = resolver.candidates(resource, owner);
+    request: &Request,
+) -> Result<Vec<u8>, ModelLoadError> {
+    let candidates = resolver.candidates(&file_resource(&request.key), owner);
     for path in &candidates {
         match context.read_asset_bytes(path.clone()).await {
-            Ok(bytes) => return Ok(Some(bytes)),
+            Ok(bytes) => return Ok(bytes),
             Err(ReadAssetBytesError::AssetReaderError(AssetReaderError::NotFound(_))) => {}
-            Err(error) => {
-                return Err(ModelError(format!(
-                    "cannot read {resource:?} at {path}: {error}"
-                )));
+            Err(source) => {
+                return Err(ModelLoadError::CompanionRead {
+                    owner: owner.clone_owned(),
+                    request: Box::new(request.clone()),
+                    path: Box::new(path.clone()),
+                    source: Box::new(source),
+                });
             }
         }
     }
-    if required {
-        Err(ModelError(format!(
-            "unresolved required model companion {resource:?} for {owner}; tried {candidates:?}"
-        )))
-    } else {
-        Ok(None)
-    }
+    Err(ModelLoadError::MissingCompanion {
+        owner: owner.clone_owned(),
+        request: Box::new(request.clone()),
+        candidates,
+    })
 }
 
 async fn compile_loaded(
@@ -623,72 +618,6 @@ async fn compile_loaded(
     })
 }
 
-fn decode_m2_bundle<'a, D: m2::Dialect>(
-    _: &m2::Document<'_, D>,
-    bytes: &'a [u8],
-    key: FileKey,
-    buffers: &'a BTreeMap<FileKey, Vec<u8>>,
-    missing: &mut Option<FileKey>,
-) -> Result<m2::Bundle<'a, D>, m2::ReadError> {
-    m2::Bundle::decode(bytes, key, |dependency| {
-        if let Some(bytes) = buffers.get(&dependency.key) {
-            Ok(Some(bytes))
-        } else {
-            *missing = Some(dependency.key.clone());
-            Ok(None)
-        }
-    })
-}
-
-async fn load_wmo<D: wmo::Dialect>(
-    bytes: &[u8],
-    context: &mut LoadContext<'_>,
-    resolver: &dyn ResourceResolver,
-    owner: &AssetPath<'_>,
-    children: &ChildModelContext<'_>,
-) -> Result<ModelAsset, ModelError> {
-    let root = wmo::Root::<D>::decode(bytes).map_err(|error| ModelError(error.to_string()))?;
-    let mut bundle = wmo::Bundle::from_root(root).with_key(owner_key(owner));
-    for dependency in bundle
-        .dependencies()
-        .map_err(|error| ModelError(error.to_string()))?
-    {
-        if let wmo::DependencyKind::Group { index, lod } = dependency.kind {
-            let bytes = read_resource(
-                context,
-                resolver,
-                owner,
-                &file_resource(&dependency.key),
-                true,
-            )
-            .await?
-            .unwrap();
-            let group =
-                wmo::Group::<D>::decode(&bytes).map_err(|error| ModelError(error.to_string()))?;
-            bundle.insert_group(
-                wmo::GroupKey { index, lod },
-                dependency.key,
-                group.into_owned(),
-            );
-        }
-    }
-    bundle
-        .validate_complete()
-        .map_err(|error| ModelError(error.to_string()))?;
-    let conversion = semantic_wmo::import(&bundle, &resolver.import_options(owner))
-        .map_err(|error| ModelError(error.to_string()))?;
-    let model = conversion.value.widen();
-    compile_loaded(
-        &model,
-        &conversion.report,
-        context,
-        resolver,
-        owner,
-        children,
-    )
-    .await
-}
-
 impl ModelLoader {
     async fn load_native(
         &self,
@@ -696,148 +625,87 @@ impl ModelLoader {
         reader: &mut dyn Reader,
         settings: &ModelLoaderSettings,
         context: &mut LoadContext<'_>,
-    ) -> Result<ModelAsset, ModelError> {
+    ) -> Result<ModelAsset, ModelLoadError> {
+        let owner = context.path().clone_owned();
         let mut bytes = Vec::new();
         reader
             .read_to_end(&mut bytes)
             .await
-            .map_err(|error| ModelError(error.to_string()))?;
-        let owner = context.path().clone_owned();
-        let children = ChildModelContext {
-            ancestry: &settings.ancestry,
-            graph: &self.dependencies,
-            generation,
-        };
+            .map_err(|source| ModelLoadError::RootRead {
+                owner: owner.clone(),
+                source,
+            })?;
         let extension = owner
             .path()
             .extension()
             .and_then(|value| value.to_str())
             .unwrap_or("")
             .to_ascii_lowercase();
-        if extension == "mdx" || extension == "mdl" {
-            let source = if bytes.starts_with(b"MDLX") {
-                DynamicDocument::<NoExtensions>::decode_mdx(&bytes, 800)
-                    .map_err(|error| ModelError(error.to_string()))?
-            } else {
-                let text = from_utf8(&bytes)
-                    .map_err(|error| ModelError(format!("MDL source is not UTF-8: {error}")))?;
-                DynamicDocument::<NoExtensions>::decode_mdl(text)
-                    .map_err(|error| ModelError(error.to_string()))?
-            };
-            let conversion =
-                semantic_mdlx::import_dynamic_owned(&source, &self.resolver.import_options(&owner))
-                    .map_err(|error| ModelError(error.to_string()))?;
-            let model = conversion.value.widen();
-            return compile_loaded(
-                &model,
-                &conversion.report,
-                context,
-                self.resolver.as_ref(),
-                &owner,
-                &children,
-            )
-            .await;
-        }
-        if extension == "m2" {
-            let source = m2::DynamicDocument::decode_m2(&bytes)
-                .map_err(|error| ModelError(error.to_string()))?;
-            let key = owner_key(&owner);
-            let mut buffers = BTreeMap::new();
-            for dependency in source.dependencies(&key) {
-                if matches!(dependency.kind, m2::DependencyKind::Texture)
-                    || buffers.contains_key(&dependency.key)
-                {
-                    continue;
+        let format = match extension.as_str() {
+            "mdx" | "mdl" => Format::Mdlx,
+            "m2" => Format::M2,
+            "wmo" => Format::Wmo(self.resolver.wmo_profile(&owner).ok_or_else(|| {
+                ModelLoadError::MissingWmoProfile {
+                    owner: owner.clone(),
                 }
-                let data = read_resource(
-                    context,
-                    self.resolver.as_ref(),
-                    &owner,
-                    &file_resource(&dependency.key),
-                    true,
-                )
-                .await?
-                .unwrap();
-                buffers.insert(dependency.key, data);
+            })?),
+            _ => {
+                return Err(ModelLoadError::UnsupportedExtension { owner, extension });
             }
-            loop {
-                let mut missing = None;
-                let result = visit_m2_model!(&source, |typed| {
-                    match decode_m2_bundle(typed, &bytes, key.clone(), &buffers, &mut missing) {
-                        Ok(bundle) => {
-                            let conversion =
-                                semantic_m2::import(&bundle, &self.resolver.import_options(&owner))
-                                    .map_err(|error| ModelError(error.to_string()))?;
-                            let model = conversion.value.widen();
-                            Some(
-                                compile_loaded(
-                                    &model,
-                                    &conversion.report,
-                                    context,
-                                    self.resolver.as_ref(),
-                                    &owner,
-                                    &children,
-                                )
-                                .await,
-                            )
-                        }
-                        Err(error) if missing.is_none() => Some(Err(ModelError(error.to_string()))),
-                        Err(_) => None,
-                    }
-                });
-                if let Some(result) = result {
-                    return result;
+        };
+        let mut native = NativeReader::new(format, owner_key(&owner), bytes);
+        let native = loop {
+            match native.poll().map_err(|source| ModelLoadError::Native {
+                owner: owner.clone(),
+                source: Box::new(source),
+            })? {
+                Progress::Pending(request) => {
+                    let bytes =
+                        read_companion(context, self.resolver.as_ref(), &owner, &request).await?;
+                    native
+                        .provide(&request, bytes)
+                        .map_err(|source| ModelLoadError::Native {
+                            owner: owner.clone(),
+                            source: Box::new(source),
+                        })?;
                 }
-                let key = missing
-                    .ok_or_else(|| ModelError("M2 companion resolver made no progress".into()))?;
-                let data = read_resource(
-                    context,
-                    self.resolver.as_ref(),
-                    &owner,
-                    &file_resource(&key),
-                    true,
-                )
-                .await?
-                .unwrap();
-                buffers.insert(key, data);
+                Progress::Ready(native) => break native,
             }
-        }
-        if extension == "wmo" {
-            let profile = self.resolver.wmo_profile(&owner).ok_or_else(|| ModelError("WMO loading requires explicit client layout provenance from ResourceResolver::wmo_profile".into()))?;
-            macro_rules! load {
-                ($dialect:ty) => {
-                    load_wmo::<$dialect>(&bytes, context, self.resolver.as_ref(), &owner, &children)
-                        .await
-                };
-            }
-            return match profile {
-                wmo::Profile::Classic => load!(wmo::Classic),
-                wmo::Profile::Legion => load!(wmo::Legion),
-                wmo::Profile::Bfa => load!(wmo::Bfa),
-                wmo::Profile::ShadowlandsPre92 => load!(wmo::ShadowlandsPre92),
-                wmo::Profile::Shadowlands => load!(wmo::Shadowlands),
-                wmo::Profile::Dragonflight => load!(wmo::Dragonflight),
-                wmo::Profile::WarWithin => load!(wmo::WarWithin),
-                _ => Err(ModelError("legacy WMO asset loading is not implemented; import its native bundle and compile the Universal model directly".into())),
-            };
-        }
-
-        Err(ModelError(format!(
-            "native Universal loading is not implemented for .{extension}"
-        )))
+        };
+        let conversion = native
+            .import(&self.resolver.import_options(&owner))
+            .map_err(|source| ModelLoadError::Native {
+                owner: owner.clone(),
+                source: Box::new(source),
+            })?;
+        let children = ChildModelContext {
+            ancestry: &settings.ancestry,
+            graph: &self.dependencies,
+            generation,
+        };
+        compile_loaded(
+            &conversion.value,
+            &conversion.report,
+            context,
+            self.resolver.as_ref(),
+            &owner,
+            &children,
+        )
+        .await
+        .map_err(|source| ModelLoadError::Compile { owner, source })
     }
 }
 
 impl AssetLoader for ModelLoader {
     type Asset = ModelAsset;
     type Settings = ModelLoaderSettings;
-    type Error = ModelError;
+    type Error = ModelLoadError;
     async fn load(
         &self,
         reader: &mut dyn Reader,
         settings: &ModelLoaderSettings,
         context: &mut LoadContext<'_>,
-    ) -> Result<Self::Asset, ModelError> {
+    ) -> Result<Self::Asset, ModelLoadError> {
         let attempt = ModelDependencyLoad::begin(&self.dependencies, context.path());
         let result = self
             .load_native(attempt.generation, reader, settings, context)
