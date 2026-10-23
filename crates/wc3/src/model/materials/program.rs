@@ -2,6 +2,7 @@
 use super::m2::MaterialStep as M2MaterialStep;
 use super::mdlx::{MaterialDeclaration, MaterialStep as MdlxMaterialStep};
 use super::wmo::MaterialStep as WmoMaterialStep;
+use crate::model::common::{Detached, IntoOwned};
 use crate::model::profiles::{NoProperties, SurfacePayload};
 use crate::model::{Error, Link, ValidateLinks};
 
@@ -12,6 +13,15 @@ pub struct MaterialProgram<S, D = NoProperties> {
     pub declaration: D,
     /// Material operations in authored order.
     pub steps: Vec<S>,
+}
+impl<'owned, S: Detached<'owned>, D: Detached<'owned>> Detached<'owned> for MaterialProgram<S, D> {
+    type Detached = MaterialProgram<S::Detached, D::Detached>;
+    fn into_detached(self) -> Self::Detached {
+        MaterialProgram {
+            declaration: self.declaration.into_detached(),
+            steps: self.steps.into_detached(),
+        }
+    }
 }
 impl<S, D: Default> Default for MaterialProgram<S, D> {
     fn default() -> Self {
@@ -25,7 +35,7 @@ impl<S, D: Default> Default for MaterialProgram<S, D> {
 ///
 /// Each dialect retains its shader semantics. Composition and external shader
 /// steps may expand into multiple rendering passes when interpreted.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum MaterialStep<'a> {
     /// Warcraft III shader inputs and rendering settings.
     Mdlx(Box<MdlxMaterialStep>),

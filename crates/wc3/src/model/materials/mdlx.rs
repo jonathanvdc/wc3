@@ -1,6 +1,7 @@
 //! Warcraft III layered surfaces independent of MDX and MDL storage.
 use super::bindings::{Coordinates, TextureBinding};
 use super::state::{DepthState, Lighting, Operation, PassState, Rasterization};
+use crate::model::common::IntoOwned;
 use crate::model::materials::state::BlendOperations;
 use crate::model::profiles::Unavailable;
 use crate::model::TextureTransform;
@@ -15,7 +16,7 @@ pub type Blend = BlendOperations<Unavailable, (), AlphaAdditiveEncoding, u32>;
 ///
 /// Both selectors add source RGB multiplied by source alpha. Their distinct
 /// native declarations are retained so material export preserves the wire value.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(IntoOwned, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum AlphaAdditiveEncoding {
     /// The native `Additive` selector, also available on atlas particles.
     Additive,
@@ -26,7 +27,7 @@ impl ValidateLinks for AlphaAdditiveEncoding {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
 /// Additional sampling and unresolved controls of a layered pass.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(IntoOwned, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LayerOptions {
     /// Select sphere-environment sampling.
     pub sphere_environment: bool,
@@ -45,7 +46,7 @@ pub struct LayerOptions {
 pub type Shading = Rasterization<DepthState<Operation, Operation>, bool, Lighting, LayerOptions>;
 
 /// One independently animated texture slot in an extended shader.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, PartialEq)]
 pub struct TextureSlot {
     /// Semantic shader slot; undocumented selectors remain numeric.
     pub slot: u32,
@@ -53,7 +54,7 @@ pub struct TextureSlot {
     pub binding: TextureBinding<Property<Option<Texture>>>,
 }
 /// Fresnel controls for a material pass.
-#[derive(Clone, Debug, Construct, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Construct, PartialEq)]
 pub struct Fresnel {
     /// Edge color in RGB order.
     pub color: Property<Vec3>,
@@ -63,7 +64,7 @@ pub struct Fresnel {
     pub team_color: Property<f32>,
 }
 /// Material-wide draw declarations shared by the steps of an MDLX material.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct MaterialDeclaration<'a> {
     /// Material-level named shader declaration, including an unresolved name.
     pub shader_name: Cow<'a, str>,
@@ -82,7 +83,7 @@ pub struct MaterialDeclaration<'a> {
 }
 
 /// Image and scalar inputs shared by the classic and default Reforged shaders.
-#[derive(Clone, Debug, Construct, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Construct, PartialEq)]
 pub struct MaterialInputs {
     /// Primary image and referenced coordinates.
     pub binding: TextureBinding<Property<Option<Texture>>, Coordinates<u32, TextureTransform>>,
@@ -92,7 +93,7 @@ pub struct MaterialInputs {
     pub emissive_gain: Option<Property<f32>>,
 }
 /// Shared role and scalar inputs to Reforged DefaultUnit and Crystal shaders.
-#[derive(Clone, Debug, Construct, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Construct, PartialEq)]
 pub struct ReforgedInputs {
     /// Primary image, opacity, and emissive gain.
     pub inputs: MaterialInputs,
@@ -102,7 +103,7 @@ pub struct ReforgedInputs {
     pub fresnel: Option<Fresnel>,
 }
 /// Inputs to a shader whose execution is not interpreted.
-#[derive(Clone, Debug, Construct, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Construct, PartialEq)]
 pub struct UnresolvedInputs {
     /// Uninterpreted per-pass selector, when authored.
     pub selector: Option<u32>,
@@ -114,7 +115,7 @@ pub struct UnresolvedInputs {
     pub fresnel: Option<Fresnel>,
 }
 /// Shader-specific Warcraft III inputs, independent of pass state.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, PartialEq)]
 pub enum Shader {
     /// Classic texture composition.
     Classic(MaterialInputs),
@@ -131,7 +132,7 @@ impl Construct for Shader {
     }
 }
 /// One Warcraft III pass, shared by the MDLX and Universal profiles.
-#[derive(Clone, Debug, Construct, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Construct, PartialEq)]
 pub struct MaterialStep {
     /// Color composition and rasterization for this pass.
     pub state: PassState<Blend, Shading>,

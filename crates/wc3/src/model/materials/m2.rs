@@ -1,7 +1,8 @@
 //! World of Warcraft shader inputs and draw-state semantics.
 use super::bindings::{Coordinates, ImageSelection, TextureBinding};
 use super::state::{DepthState, Lighting, Operation, Rasterization};
-use crate::model::values::model::{MaterialFlags, TextureSource};
+use crate::model::common::{Detached, IntoOwned};
+use crate::model::values::model::{BatchFlags, MaterialFlags, ModelBlend, TextureSource};
 use crate::model::{Construct, PropertyValues};
 use crate::model::{Error, Link, Property, ValidateLinks};
 use glam::Vec3;
@@ -9,7 +10,7 @@ use std::fmt::Debug;
 
 pub use crate::model::TextureTransform;
 /// Input-local legacy texture-frame playback.
-#[derive(Clone, Debug, Construct, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Construct, PartialEq)]
 pub struct FrameSampling {
     /// Animated legacy texture frame selection.
     pub frame: Property<u16>,
@@ -30,7 +31,7 @@ pub type TextureUnit<T = TextureTransform> = TextureBinding<
 ///
 /// These colours are external presentation settings, not values authored in an
 /// M2 file. Native imports use white; native export cannot retain a changed palette.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(IntoOwned, Clone, Copy, Debug, PartialEq)]
 pub struct GuildPalette {
     /// Cloth background multiplier.
     pub background: Vec3,
@@ -111,6 +112,18 @@ impl ValidateLinks for MaterialFlags {
 impl ValidateLinks for TextureSource {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
+
+macro_rules! material_value_ownership {
+    ($($value:ty),* $(,)?) => {$(
+        impl<'owned> Detached<'owned> for $value {
+            type Detached = Self;
+            fn into_detached(self) -> Self {
+                self
+            }
+        }
+    )*};
+}
+material_value_ownership!(BatchFlags, MaterialFlags, ModelBlend, TextureSource);
 
 mod steps;
 pub use steps::*;

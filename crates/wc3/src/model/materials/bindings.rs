@@ -1,4 +1,5 @@
 //! Independently selected image, coordinates, sampling, and shader contribution.
+use crate::model::common::Detached;
 use crate::model::{Construct, Property, PropertyValue, PropertyValues};
 use crate::model::{Link, Texture, ValidateLinks};
 
@@ -33,6 +34,42 @@ pub struct ImageSelection<S = ()> {
     pub source: S,
     /// Complete sampled-image value owned by this input.
     pub texture: Option<Texture>,
+}
+
+impl<'owned, I, C, S, V> Detached<'owned> for TextureBinding<I, C, S, V>
+where
+    I: Detached<'owned>,
+    C: Detached<'owned>,
+    S: Detached<'owned>,
+    V: Detached<'owned>,
+{
+    type Detached = TextureBinding<I::Detached, C::Detached, S::Detached, V::Detached>;
+    fn into_detached(self) -> Self::Detached {
+        TextureBinding {
+            image: self.image.into_detached(),
+            coordinates: self.coordinates.into_detached(),
+            sampling: self.sampling.into_detached(),
+            contribution: self.contribution.into_detached(),
+        }
+    }
+}
+impl<'owned, S: Detached<'owned>, T: Detached<'owned>> Detached<'owned> for Coordinates<S, T> {
+    type Detached = Coordinates<S::Detached, T::Detached>;
+    fn into_detached(self) -> Self::Detached {
+        Coordinates {
+            source: self.source.into_detached(),
+            transform: self.transform.into_detached(),
+        }
+    }
+}
+impl<'owned, S: Detached<'owned>> Detached<'owned> for ImageSelection<S> {
+    type Detached = ImageSelection<S::Detached>;
+    fn into_detached(self) -> Self::Detached {
+        ImageSelection {
+            source: self.source.into_detached(),
+            texture: self.texture,
+        }
+    }
 }
 
 impl<I: ValidateLinks, C: ValidateLinks, S: ValidateLinks, V: ValidateLinks> ValidateLinks

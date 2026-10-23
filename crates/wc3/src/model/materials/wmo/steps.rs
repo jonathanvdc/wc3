@@ -1,5 +1,6 @@
 //! WMO shader equations with named inputs and explicit native projection.
 use super::{Blend, MaterialRasterization, ShaderOverrides};
+use crate::model::common::IntoOwned;
 use crate::model::materials::bindings::TextureBinding;
 use crate::model::materials::state::PassState;
 use crate::model::profiles::SurfacePayload;
@@ -10,7 +11,7 @@ use std::borrow::Cow;
 /// A world shader image input with complete, independently owned address behavior.
 pub type ImageInput = TextureBinding<Option<ImageResourceId>, (), Sampler>;
 /// Material-wide draw, lighting, and retained native declarations.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct MaterialDeclaration<'a> {
     /// Optional authoring name.
     pub name: Cow<'a, str>,
@@ -36,7 +37,7 @@ pub struct MaterialDeclaration<'a> {
     pub legacy_runtime: Option<[u32; 4]>,
 }
 /// Inputs for the WMO Diffuse equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct DiffuseMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -46,7 +47,7 @@ pub struct DiffuseMaterialStep<'a> {
     pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO DiffuseWithoutTextureAlpha equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct DiffuseWithoutTextureAlphaMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -56,7 +57,7 @@ pub struct DiffuseWithoutTextureAlphaMaterialStep<'a> {
     pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO ReflectionEmission equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct ReflectionEmissionMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -68,7 +69,7 @@ pub struct ReflectionEmissionMaterialStep<'a> {
     pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO DiffuseWeightedReflectionEmission equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct DiffuseWeightedReflectionEmissionMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -80,7 +81,7 @@ pub struct DiffuseWeightedReflectionEmissionMaterialStep<'a> {
     pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO LayeredDiffuse equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct LayeredDiffuseMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -92,7 +93,7 @@ pub struct LayeredDiffuseMaterialStep<'a> {
     pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO MaskedEmission equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct MaskedEmissionMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -104,7 +105,7 @@ pub struct MaskedEmissionMaterialStep<'a> {
     pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO MaskedDiffuseModulationReflection equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct MaskedDiffuseModulationReflectionMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -118,7 +119,7 @@ pub struct MaskedDiffuseModulationReflectionMaterialStep<'a> {
     pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO DiffuseMultipleEmission equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct DiffuseMultipleEmissionMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -132,7 +133,7 @@ pub struct DiffuseMultipleEmissionMaterialStep<'a> {
     pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO OpaqueLayeredDiffuse equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct OpaqueLayeredDiffuseMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -144,7 +145,7 @@ pub struct OpaqueLayeredDiffuseMaterialStep<'a> {
     pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO LayeredDiffuseEmission equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct LayeredDiffuseEmissionMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -156,7 +157,7 @@ pub struct LayeredDiffuseEmissionMaterialStep<'a> {
     pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO MaskedDiffuseModulation equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct MaskedDiffuseModulationMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -170,7 +171,7 @@ pub struct MaskedDiffuseModulationMaterialStep<'a> {
     pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO LayeredDiffuseModulation equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct LayeredDiffuseModulationMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -184,7 +185,7 @@ pub struct LayeredDiffuseModulationMaterialStep<'a> {
     pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO DiffuseModulation equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct DiffuseModulationMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -196,7 +197,7 @@ pub struct DiffuseModulationMaterialStep<'a> {
     pub unused_inputs: Vec<ImageInput>,
 }
 /// Inputs for the WMO TextureMaskedLayeredModulation equation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct TextureMaskedLayeredModulationMaterialStep<'a> {
     /// Material-wide rendering declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -210,7 +211,7 @@ pub struct TextureMaskedLayeredModulationMaterialStep<'a> {
     pub unused_inputs: Vec<ImageInput>,
 }
 /// A shader whose complete input contract is not interpreted.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct UnresolvedMaterialStep<'a> {
     /// Material-wide declarations.
     pub declaration: MaterialDeclaration<'a>,
@@ -220,7 +221,7 @@ pub struct UnresolvedMaterialStep<'a> {
     pub textures: Vec<ImageInput>,
 }
 /// One WMO shader equation and its named inputs.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, PartialEq)]
 pub enum MaterialStep<'a> {
     /// The Diffuse equation.
     Diffuse(DiffuseMaterialStep<'a>),

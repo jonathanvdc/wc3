@@ -1,5 +1,6 @@
 //! World-model surfaces and texture bindings independent of WMO chunk layout.
 use super::state::{Lighting, Rasterization};
+use crate::model::common::IntoOwned;
 use crate::model::materials::state::BlendOperations;
 use crate::model::profiles::Unavailable;
 use crate::model::{Link, ValidateLinks};
@@ -7,7 +8,7 @@ use crate::model::{Link, ValidateLinks};
 /// World-model blend operations, including operations absent from other formats.
 pub type Blend = BlendOperations<WorldBlend, (), Unavailable, u32>;
 /// World-shader options beyond common face, lighting, and fog controls.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(IntoOwned, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RasterizationOptions {
     /// Use exterior lighting even for interior geometry.
     pub exterior_lit: bool,
@@ -17,7 +18,7 @@ pub struct RasterizationOptions {
 /// World rasterization selects no independent depth program.
 pub type MaterialRasterization = Rasterization<(), bool, Lighting, RasterizationOptions>;
 /// Additional shader color and texture override information.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(IntoOwned, Clone, Debug, Default, PartialEq)]
 pub struct ShaderOverrides {
     /// Shader-23 override color in RGBA order.
     pub color: [u8; 4],
@@ -31,7 +32,7 @@ impl ValidateLinks for RasterizationOptions {
 }
 
 /// Additional world-shader color operations.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(IntoOwned, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum WorldBlend {
     /// Multiply and add according to the world shader operation.
     ModulateAdd,

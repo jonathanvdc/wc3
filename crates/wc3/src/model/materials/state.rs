@@ -1,4 +1,5 @@
 //! Composable draw state with independently selected operation domains.
+use crate::model::common::{Detached, IntoOwned};
 use crate::model::{Link, ValidateLinks};
 
 /// State applied to a draw pass, independent of its shader inputs.
@@ -34,7 +35,7 @@ pub struct DepthState<T, W, B = ()> {
     pub bias: B,
 }
 /// Explicit control of a rendering operation.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, IntoOwned)]
 pub enum Operation {
     /// Apply the operation.
     #[default]
@@ -57,7 +58,7 @@ impl Operation {
     }
 }
 /// Lighting and fog can be bypassed independently.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, IntoOwned)]
 pub struct Lighting {
     /// Bypass scene illumination.
     pub unlit: bool,
@@ -77,6 +78,71 @@ pub struct BlendEquation<E, O, F, C> {
     pub destination: F,
     /// Constant color supplied to the operation.
     pub constant: C,
+}
+impl<'owned, B, R, O> Detached<'owned> for PassState<B, R, O>
+where
+    B: Detached<'owned>,
+    R: Detached<'owned>,
+    O: Detached<'owned>,
+{
+    type Detached = PassState<B::Detached, R::Detached, O::Detached>;
+    fn into_detached(self) -> Self::Detached {
+        PassState {
+            blend: self.blend.into_detached(),
+            rasterization: self.rasterization.into_detached(),
+            ordering: self.ordering.into_detached(),
+        }
+    }
+}
+impl<'owned, D, F, L, C> Detached<'owned> for Rasterization<D, F, L, C>
+where
+    D: Detached<'owned>,
+    F: Detached<'owned>,
+    L: Detached<'owned>,
+    C: Detached<'owned>,
+{
+    type Detached = Rasterization<D::Detached, F::Detached, L::Detached, C::Detached>;
+    fn into_detached(self) -> Self::Detached {
+        Rasterization {
+            depth: self.depth.into_detached(),
+            faces: self.faces.into_detached(),
+            lighting: self.lighting.into_detached(),
+            controls: self.controls.into_detached(),
+        }
+    }
+}
+impl<'owned, T, W, B> Detached<'owned> for DepthState<T, W, B>
+where
+    T: Detached<'owned>,
+    W: Detached<'owned>,
+    B: Detached<'owned>,
+{
+    type Detached = DepthState<T::Detached, W::Detached, B::Detached>;
+    fn into_detached(self) -> Self::Detached {
+        DepthState {
+            test: self.test.into_detached(),
+            write: self.write.into_detached(),
+            bias: self.bias.into_detached(),
+        }
+    }
+}
+impl<'owned, E, O, F, C> Detached<'owned> for BlendEquation<E, O, F, C>
+where
+    E: Detached<'owned>,
+    O: Detached<'owned>,
+    F: Detached<'owned>,
+    C: Detached<'owned>,
+{
+    type Detached = BlendEquation<E::Detached, O::Detached, F::Detached, C::Detached>;
+    fn into_detached(self) -> Self::Detached {
+        BlendEquation {
+            enabled: self.enabled.into_detached(),
+            operation: self.operation.into_detached(),
+            source: self.source.into_detached(),
+            destination: self.destination.into_detached(),
+            constant: self.constant.into_detached(),
+        }
+    }
 }
 impl<B: ValidateLinks, R: ValidateLinks, O: ValidateLinks> ValidateLinks for PassState<B, R, O> {
     fn visit_links(&self, v: &mut dyn FnMut(Link)) {
@@ -160,6 +226,29 @@ impl<E: ValidateLinks, C: ValidateLinks, A: ValidateLinks, U: ValidateLinks> Val
             Self::Extension(value) => value.visit_links(visitor),
             Self::Unknown(value) => value.visit_links(visitor),
             _ => {}
+        }
+    }
+}
+
+impl<'owned, E, C, A, U> Detached<'owned> for BlendOperations<E, C, A, U>
+where
+    E: Detached<'owned>,
+    C: Detached<'owned>,
+    A: Detached<'owned>,
+    U: Detached<'owned>,
+{
+    type Detached = BlendOperations<E::Detached, C::Detached, A::Detached, U::Detached>;
+    fn into_detached(self) -> Self::Detached {
+        match self {
+            Self::Opaque => BlendOperations::Opaque,
+            Self::Alpha => BlendOperations::Alpha,
+            Self::Additive => BlendOperations::Additive,
+            Self::Modulate => BlendOperations::Modulate,
+            Self::Modulate2x => BlendOperations::Modulate2x,
+            Self::AlphaKey(value) => BlendOperations::AlphaKey(value.into_detached()),
+            Self::AdditiveAlpha(value) => BlendOperations::AdditiveAlpha(value.into_detached()),
+            Self::Extension(value) => BlendOperations::Extension(value.into_detached()),
+            Self::Unknown(value) => BlendOperations::Unknown(value.into_detached()),
         }
     }
 }
