@@ -127,7 +127,7 @@ fn complete_read_write_trajectory_matches_original_separate_plane_contract() {
         let mut flat =
             FieldPlanes::new(FieldLayout::from_widths(&widths).unwrap(), capacity).unwrap();
         for tick in 0..97u32 {
-            for field in 0..widths.len() {
+            for (field, planes) in old.iter_mut().enumerate() {
                 for slot in 0..=capacity {
                     let words = [
                         tick.wrapping_mul(12345),
@@ -135,7 +135,7 @@ fn complete_read_write_trajectory_matches_original_separate_plane_contract() {
                         slot as u32,
                         u32::MAX - tick,
                     ];
-                    for (plane, word) in old[field].iter_mut().zip(words) {
+                    for (plane, word) in planes.iter_mut().zip(words) {
                         if let Some(value) = plane.get_mut(slot) {
                             *value = word;
                         }
@@ -144,7 +144,7 @@ fn complete_read_write_trajectory_matches_original_separate_plane_contract() {
                 }
                 for slot in 0..=capacity {
                     let expected =
-                        from_fn(|component| old[field][component].get(slot).copied().unwrap_or(0));
+                        from_fn(|component| planes[component].get(slot).copied().unwrap_or(0));
                     assert_eq!(flat.read(field, slot), expected);
                 }
             }

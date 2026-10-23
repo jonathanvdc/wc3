@@ -267,6 +267,8 @@ pub(crate) enum Instruction {
     },
 }
 
+#[cfg(test)]
+mod age;
 mod callbacks;
 mod color;
 mod curve;
