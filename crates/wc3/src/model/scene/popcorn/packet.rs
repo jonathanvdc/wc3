@@ -89,15 +89,16 @@ pub(crate) struct PureEvolution {
     #[cfg(test)]
     pub persistent_writes: Box<[(usize, usize)]>,
 }
-fn supported(kind: ValueType) -> bool {
+// Quaternion belongs to the VM float family but is intentionally outside
+// this component-wise packet subset.
+fn ordinary_float(kind: ValueType) -> bool {
     matches!(
         kind,
-        ValueType::Bool
-            | ValueType::Bool3
-            | ValueType::Float
-            | ValueType::Float3
-            | ValueType::Float4
+        ValueType::Float | ValueType::Float2 | ValueType::Float3 | ValueType::Float4
     )
+}
+fn supported(kind: ValueType) -> bool {
+    ordinary_float(kind) || matches!(kind, ValueType::Bool | ValueType::Bool3)
 }
 fn local(scope: usize, slot: usize, counts: [usize; 4]) -> Option<usize> {
     if slot >= *counts.get(scope)? {
@@ -223,9 +224,9 @@ impl PureEvolution {
                         BinaryOperation::Add
                             | BinaryOperation::Subtract
                             | BinaryOperation::Multiply
-                    ) || !matches!(destination.kind, ValueType::Float | ValueType::Float4)
-                        || !matches!(left.kind, ValueType::Float | ValueType::Float4)
-                        || !matches!(right.kind, ValueType::Float | ValueType::Float4)
+                    ) || !ordinary_float(destination.kind)
+                        || !ordinary_float(left.kind)
+                        || !ordinary_float(right.kind)
                     {
                         return None;
                     }

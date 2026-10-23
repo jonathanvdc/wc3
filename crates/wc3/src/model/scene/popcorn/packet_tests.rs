@@ -223,6 +223,98 @@ fn packet_scratch_accounts_exact_owned_allocations_and_ineligible_graph_allocate
     assert!(Scratch::bytes((usize::MAX, 1)).is_none());
 }
 
+/// Original moving field with scalar/vector broadcasts and normalized inactive words.
+pub(crate) fn floating_fixture(count: usize, kind: ValueType) -> EffectProgram {
+    let mut program = fixture(count);
+    let graph = Arc::get_mut(&mut program.inner).unwrap();
+    let layer = &mut graph.layers[0];
+    layer.fields[4].value_type = Some(kind);
+    // Inactive physical words must not leak through any packet route.
+    layer.fields[4].initial = [-0f32, 0.2, -0.3, 0.4].map(f32::to_bits);
+    let destination = Destination {
+        scope: 1,
+        slot: 3,
+        kind,
+    };
+    let source = Source {
+        address: Address::Slot { scope: 1, slot: 3 },
+        kind,
+    };
+    let scalar = Source {
+        address: Address::Constant([0.125f32.to_bits(), 0, 0, 0]),
+        kind: ValueType::Float,
+    };
+    let vector = Source {
+        address: Address::Constant([0.5f32, -0.25, 0.75, -1.].map(f32::to_bits)),
+        kind,
+    };
+    let moving = [
+        Instruction::Load {
+            destination,
+            external: 2,
+        },
+        Instruction::Binary {
+            destination,
+            left: source,
+            right: scalar,
+            operation: BinaryOperation::Add,
+        },
+        Instruction::Binary {
+            destination,
+            left: scalar,
+            right: source,
+            operation: BinaryOperation::Multiply,
+        },
+        Instruction::Binary {
+            destination,
+            left: source,
+            right: vector,
+            operation: BinaryOperation::Subtract,
+        },
+        Instruction::Store {
+            source,
+            external: 2,
+        },
+    ];
+    let operations = &mut layer.evolve.as_mut().unwrap().program.operations;
+    operations.drain(8..10);
+    // A later Curve fault must preserve this earlier vector store on replay.
+    operations.splice(
+        4..4,
+        moving.into_iter().map(|instruction| VmOperation {
+            offset: 0,
+            instruction,
+        }),
+    );
+    for (index, operation) in operations.iter_mut().enumerate() {
+        operation.offset = index * 7;
+    }
+    prepare(&mut graph.layers, &graph.samplers);
+    assert!(graph.layers[0].pure_evolution.is_some());
+    program
+}
+
+#[test]
+fn ordinary_float_widths_are_admitted_without_admitting_quaternion_arithmetic() {
+    for kind in [
+        ValueType::Float,
+        ValueType::Float2,
+        ValueType::Float3,
+        ValueType::Float4,
+    ] {
+        let program = floating_fixture(PARTICLE_BATCH_SIZE, kind);
+        assert!(program.inner.layers[0].pure_evolution.is_some());
+    }
+    let mut program = floating_fixture(PARTICLE_BATCH_SIZE, ValueType::Float4);
+    let graph = Arc::get_mut(&mut program.inner).unwrap();
+    let bound = graph.layers[0].evolve.as_mut().unwrap();
+    if let Instruction::Binary { destination, .. } = &mut bound.program.operations[5].instruction {
+        destination.kind = ValueType::Quaternion;
+    }
+    prepare(&mut graph.layers, &graph.samplers);
+    assert!(graph.layers[0].pure_evolution.is_none());
+}
+
 pub(crate) fn persistent_fixture(count: usize) -> EffectProgram {
     let mut program = fixture(count);
     let graph = Arc::get_mut(&mut program.inner).unwrap();

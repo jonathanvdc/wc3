@@ -700,3 +700,39 @@ fn plane_gather_matches_scalar_for_ranges_holes_reordering_and_wider_physical_un
         }
     }
 }
+
+#[test]
+fn moving_float_widths_match_scalar_in_full_tiles_tails_and_late_curve_faults() {
+    use crate::model::scene::popcorn::packet::tests::floating_fixture;
+    for kind in [
+        ValueType::Float,
+        ValueType::Float2,
+        ValueType::Float3,
+        ValueType::Float4,
+    ] {
+        for count in [PARTICLE_BATCH_SIZE, PARTICLE_BATCH_SIZE * 2 + 1] {
+            let program = floating_fixture(count, kind);
+            let (mut scalar, mut packet) = pair(&program, count);
+            for _ in 0..3 {
+                advance(&program, &mut scalar, &mut packet, 0.125);
+            }
+            assert!(packet.packet.as_ref().unwrap().committed > 0);
+            let failing = scalar.active[(PARTICLE_BATCH_SIZE + 1).min(count - 1)];
+            scalar
+                .fields
+                .write(2, failing, [f32::NAN.to_bits(), 0, 0, 0]);
+            packet
+                .fields
+                .write(2, failing, [f32::NAN.to_bits(), 0, 0, 0]);
+            let before = scalar.fields.read(4, failing);
+            advance(&program, &mut scalar, &mut packet, 0.125);
+            assert!(scalar.faulted);
+            assert_ne!(
+                scalar.fields.read(4, failing),
+                before,
+                "the vector store precedes the late failure"
+            );
+            assert!(packet.packet.as_ref().unwrap().fallbacks > 0);
+        }
+    }
+}

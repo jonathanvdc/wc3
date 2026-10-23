@@ -386,3 +386,125 @@ fn actual_native_burst_128_commits_both_real_execution_routes() {
     );
     assert_eq!(b.execution_stats().rust_packet_committed_lanes, 0);
 }
+
+#[test]
+fn moving_float_widths_use_real_simd_and_preserve_late_fault_prefix() {
+    use crate::model::scene::popcorn::packet::tests::floating_fixture;
+    for kind in [
+        ValueType::Float,
+        ValueType::Float2,
+        ValueType::Float3,
+        ValueType::Float4,
+    ] {
+        let count = PARTICLE_BATCH_SIZE * 2 + 1;
+        let base = floating_fixture(count, kind);
+        let scalar = base
+            .clone()
+            .with_execution(options(ExecutionPreference::ScalarJit));
+        let (interpreted, automatic) = programs(base);
+        vector_reports(&automatic, true);
+        let (mut a, mut b) = instances(&interpreted, &automatic, count);
+        let (_, mut c) = instances(&interpreted, &scalar, count);
+        for _ in 0..3 {
+            let before = b.execution_stats();
+            check_step(&interpreted, &automatic, &mut a, &mut b, 0.125);
+            c.advance(&scalar, 0.125, SceneInputs::default()).unwrap();
+            structural(&a, &c, &interpreted);
+            assert_eq!(
+                delta(b.execution_stats(), before),
+                [1, 2, (PARTICLE_BATCH_SIZE * 2) as u64, 0]
+            );
+            assert!(c.execution_stats().scalar_jit_invocations > 0);
+            assert_eq!(c.execution_stats().simd_committed_lanes, 0);
+        }
+        let index = PARTICLE_BATCH_SIZE + 1;
+        for instance in [&mut a, &mut b, &mut c] {
+            let slot = instance.active[index];
+            instance
+                .fields
+                .write(2, slot, [f32::NAN.to_bits(), 0, 0, 0]);
+        }
+        let before = b.execution_stats();
+        let left = a
+            .advance(&interpreted, 0.125, SceneInputs::default())
+            .unwrap_err();
+        assert_eq!(
+            b.advance(&automatic, 0.125, SceneInputs::default()),
+            Err(left.clone())
+        );
+        assert_eq!(c.advance(&scalar, 0.125, SceneInputs::default()), Err(left));
+        structural(&a, &b, &interpreted);
+        structural(&a, &c, &interpreted);
+        assert_eq!(
+            delta(b.execution_stats(), before),
+            [2, 2, PARTICLE_BATCH_SIZE as u64, 0]
+        );
+    }
+}
+
+#[test]
+#[ignore = "set WC3_MOVING_PKB to the original immutable-motion-128-facing0.pkb"]
+fn original_native_moving_float3_fixture_commits_simd_and_rust_packets() {
+    use crate::model::formats::pkb::{Document, EffectCompileOptions};
+    use crate::model::scene::popcorn::EffectFieldId;
+    use std::env::var_os;
+    use std::fs::read;
+    let bytes = read(var_os("WC3_MOVING_PKB").expect("original moving PKB path")).unwrap();
+    let document = Document::read(&bytes).unwrap();
+    let (root, _) = document.effect_roots().next().unwrap().unwrap();
+    let base = document
+        .compile_effect(root, &EffectCompileOptions::default())
+        .unwrap();
+    let (interpreted, automatic) = programs(base);
+    assert!(automatic
+        .execution_reports()
+        .iter()
+        .any(|report| report.layer == EffectLayerId(1)
+            && report.stage == ExecutionStage::Evolution
+            && report.backend == ExecutionBackend::SimdJit));
+    let limits = EffectLimits {
+        particles: 129,
+        pending_events: 129,
+        occurrences: 129,
+        ..Default::default()
+    };
+    let mut a = interpreted.instantiate(limits, 42).unwrap();
+    let mut b = automatic.instantiate(limits, 42).unwrap();
+    a.start(
+        &interpreted,
+        interpreted.default_entry(),
+        SceneInputs::default(),
+    )
+    .unwrap();
+    b.start(
+        &automatic,
+        automatic.default_entry(),
+        SceneInputs::default(),
+    )
+    .unwrap();
+    for _ in 0..2 {
+        check_step(&interpreted, &automatic, &mut a, &mut b, 1. / 64.);
+    }
+    for _ in 0..64 {
+        let left = a.execution_stats();
+        let right = b.execution_stats();
+        check_step(&interpreted, &automatic, &mut a, &mut b, 1. / 64.);
+        assert_eq!(a.particles(EffectLayerId(1)).count(), 128);
+        assert_eq!(
+            a.execution_stats().rust_packet_committed_lanes - left.rust_packet_committed_lanes,
+            128
+        );
+        assert_eq!(delta(b.execution_stats(), right), [1, 8, 128, 0]);
+        for child in b.particles(EffectLayerId(1)) {
+            let life = f32::from_bits(child.field(EffectFieldId(0)).unwrap().words()[0]);
+            let position = child.field(EffectFieldId(8)).unwrap().words();
+            let expected = [-0.4f32, -0.15, 0.]
+                .into_iter()
+                .zip([0.8f32, 0.3, 0.2])
+                .map(|(base, velocity)| (base + velocity * life).to_bits())
+                .collect::<Vec<_>>();
+            assert_eq!(position[..3], expected);
+            assert_eq!(position[3], 0);
+        }
+    }
+}

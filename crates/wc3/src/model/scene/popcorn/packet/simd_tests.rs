@@ -456,3 +456,41 @@ fn compiler_lane_configuration_drives_ir_and_rejects_incomplete_groups() {
     SimdCompiler::<16, 8>::lower(&mut module, plan, &program.inner.samplers, &mut context).unwrap();
     assert!(context.func.display().to_string().contains("f32x8"));
 }
+
+#[test]
+fn ordinary_float_widths_broadcast_in_both_directions_and_zero_inactive_words() {
+    use crate::model::scene::popcorn::packet::tests::floating_fixture;
+    for kind in [
+        ValueType::Float,
+        ValueType::Float2,
+        ValueType::Float3,
+        ValueType::Float4,
+    ] {
+        let program = floating_fixture(PARTICLE_BATCH_SIZE, kind);
+        let plan = program.inner.layers[0].pure_evolution.as_ref().unwrap();
+        let code = Code::new(plan, &program.inner.samplers);
+        let field = plan
+            .fields
+            .iter()
+            .position(|field| field.canonical == 4)
+            .unwrap();
+        let mut rust = staged(&program);
+        let mut simd = staged(&program);
+        rust.execute(plan, &program.inner.samplers, 1.25).unwrap();
+        code.run(&mut simd, plan, 1.25).unwrap();
+        assert_eq!(rust.fields, simd.fields);
+        for component in 0..VALUE_COMPONENTS {
+            let expected = if component < kind.components() {
+                ((f32::from_bits(program.inner.layers[0].fields[4].initial[component]) + 0.125)
+                    * 0.125
+                    - [0.5, -0.25, 0.75, -1.][component])
+                    .to_bits()
+            } else {
+                0
+            };
+            assert!(simd.fields[field][component]
+                .iter()
+                .all(|&word| word == expected));
+        }
+    }
+}
