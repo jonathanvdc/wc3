@@ -58,8 +58,6 @@ impl TemplateCatalogue {
                     Some("Geometry-model outputs are not adopted as M2 sprite templates")
                 } else if details.shape.generator == ParticleGenerator::Bone {
                     Some("Bone generators require a posed model and are not adopted")
-                } else if details.flags.attached() {
-                    Some("Attached adopted template framing is unverified and remains unsupported")
                 } else {
                     None
                 };
@@ -78,6 +76,12 @@ impl TemplateCatalogue {
                         .map(|emitter| {
                             let mut template = FrozenTemplate::new(emitter, sample);
                             template.issues = issues.get(&feature).cloned().unwrap_or_default();
+                            if details.flags.attached() {
+                                template.issues.push(RenderIssue::new(
+                                    RenderDiagnosticKind::Unverified,
+                                    "Attached adopted templates use the owner-local particle frame and inverse-owner-frame inherited velocity; exact native inheritance, follow and frame behavior remain unverified",
+                                ));
+                            }
                             Arc::new(template)
                         })
                 } else {

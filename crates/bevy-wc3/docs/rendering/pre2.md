@@ -215,19 +215,25 @@ supplies pooled sprite emitters. Resolve it with
 particle. The parent's own sprite or model output remains active. Each source
 emitter considers the first four authored M2 candidate slots, retaining rejected
 slots rather than promoting later candidates. Nested template resources,
-geometry-model outputs, Bone generators and attached templates are diagnosed
-and omitted. Other geometry and scene features in the template model are not
-instantiated.
+geometry-model outputs and Bone generators are diagnosed and omitted. Other
+geometry and scene features in the template model are not instantiated.
 
 The template's emission controls freeze at its first clip and time zero. Its
 own activation does not gate sourcing, and it never emits autonomously. Lifetime
 appearance curves still sample each child's age. Images retain the template
 model's scope. Each source emitter owns one carry, random stream and child pool
 per accepted template, shared by all its living parent particles. Each surviving
-parent drives that shared pool at its current point, using the source emitter's
-axes; unrelated parents are never joined by a birth interpolation segment.
-The template's inherit-velocity flag controls inherited parent velocity. Parent
-particle color, opacity and size do not override the child's appearance.
+parent drives that shared pool. Detached templates stamp births at the parent's
+current point using the source emitter's axes; unrelated parents are never joined
+by a birth interpolation segment. Attached templates instead retain generator-local
+motion and draw in the current owner emitter frame. They do not acquire a separate
+frame for each driving particle, and moving that particle does not move their local
+birth origin. The template model's own pivot and bone animation remain unused.
+
+The template's inherit-velocity flag controls inherited parent velocity. Attached
+templates use the ordinary inverse-owner-frame conversion for that velocity;
+exact native inheritance under rotated or scaled owner frames remains unverified.
+Parent particle color, opacity and size do not override the child's appearance.
 
 Children age once per simulation interval and can survive the parent that
 emitted them. Sources born and retired within a long update can still leave
@@ -238,8 +244,9 @@ templates cannot later recover it. Late resource readiness and replacement start
 at the current observed time without replaying old drives; paused readiness does
 not create historical births.
 The common analytical motion and age policy remains an approximation of native
-discrete stepping. Attached-parent framing, advanced template texture routing,
-random distributions and exact game fidelity remain unverified.
+discrete stepping. Attached-template and attached-parent framing, follow behavior,
+advanced template texture routing, random distributions and exact game fidelity
+remain unverified.
 
 Query `AdoptedParticleTemplate` alongside `SpriteEmitter` for each pool's live
 counts and provenance. `SpriteEmitter.feature` and `.node` stay local to the

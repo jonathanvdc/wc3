@@ -2141,10 +2141,14 @@ fn adopted_catalogue_preserves_rejected_candidate_slots_and_never_promotes_fifth
             .collect::<Vec<_>>(),
         candidates[..4]
     );
+    let attached = runtime.templates.slots[0].template.as_ref().unwrap();
+    assert!(attached.kernel().flags.attached());
+    assert!(attached.issues.iter().any(|issue| {
+        issue.kind == RenderDiagnosticKind::Unverified
+            && issue.message.contains("owner-local particle frame")
+    }));
     assert!(
-        runtime
-            .templates
-            .slots
+        runtime.templates.slots[1..]
             .iter()
             .all(|slot| slot.template.is_err()),
         "rejected slots consume their authored positions"
@@ -2575,3 +2579,6 @@ fn expiry_wake_up_never_delays_the_existing_subtraction_boundary() {
     assert_eq!(now - birth.time, 1.);
     assert!(now >= birth.retirement_bound());
 }
+
+#[path = "m2_particles/attached_template_tests.rs"]
+mod attached_template_tests;
