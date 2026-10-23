@@ -286,7 +286,7 @@ impl EffectProgram {
     /// Existing instances retain their own fixed recipe and fallback state.
     pub fn immutable_recipe(&self, layer: EffectLayerId) -> Option<ImmutableRecipe<'_>> {
         Some(ImmutableRecipe {
-            plan: self.execution.age(layer)?,
+            plan: self.execution.age_shared(layer)?,
             samplers: &self.inner.samplers,
         })
     }

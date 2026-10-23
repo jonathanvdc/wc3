@@ -9,7 +9,10 @@ use super::lifetime::Lifetime;
 use super::packet::{Lane, Scratch as PacketScratch, PARTICLE_BATCH_SIZE};
 use super::payload::{Handle as PayloadHandle, Storage as PayloadStorage};
 use super::spatial::Store as SpatialStore;
-use super::{ExecutionReport, ExecutionStage, ExecutionStats, Failure, State, Value, ValueType};
+use super::{
+    ExecutionReport, ExecutionStage, ExecutionStats, Failure, FieldSamplingError, State, Value,
+    ValueType,
+};
 use age_runtime::AgePool;
 use glam::Mat4;
 use std::cmp::Ordering;
@@ -326,11 +329,52 @@ impl<'a> ParticleView<'a> {
         if let Some(value) = self.immutable.and_then(|view| view.field(field)) {
             return Some(value);
         }
+        self.raw_field(field)
+    }
+    fn raw_field(&self, field: EffectFieldId) -> Option<Value> {
         let kind = *self.types.get(field.0 as usize)?;
         Some(Value::from_words(
             kind?,
             self.fields.read(field.0 as usize, self.id.slot as usize),
         ))
+    }
+    /// Read typed canonical fields in caller order, preserving duplicates.
+    /// All fields and the output length are validated first. Requested immutable
+    /// outputs share one DAG evaluation; raw-only and ordinary particles do not
+    /// evaluate it. Sampling allocates nothing and never advances authorization.
+    pub fn sample_fields(
+        &self,
+        fields: &[EffectFieldId],
+        outputs: &mut [Value],
+    ) -> Result<(), FieldSamplingError> {
+        if outputs.len() != fields.len() {
+            return Err(FieldSamplingError::OutputLength {
+                expected: fields.len(),
+                actual: outputs.len(),
+            });
+        }
+        for &field in fields {
+            let kind = self
+                .types
+                .get(field.0 as usize)
+                .ok_or(FieldSamplingError::UnknownField(field))?;
+            if kind.is_none() {
+                return Err(FieldSamplingError::UntypedField(field));
+            }
+        }
+        if let Some(immutable) = self
+            .immutable
+            .filter(|view| fields.iter().any(|field| view.writes(*field)))
+        {
+            immutable.sample_fields(fields, outputs, |field| {
+                self.raw_field(field).expect("validated particle field")
+            });
+        } else {
+            for (&field, output) in fields.iter().zip(outputs) {
+                *output = self.raw_field(field).expect("validated particle field");
+            }
+        }
+        Ok(())
     }
 }
 /// Reusable pooled state; callers supply the matching shared programme explicitly.

@@ -12,17 +12,18 @@ use super::{
     ExecutionStage, ExecutionStats, Program, State,
 };
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub(super) struct ExecutionPlan {
     options: ExecutionOptions,
     reports: Box<[ExecutionReport]>,
     native: Option<NativeCode>,
-    ages: Box<[Option<AgePlan>]>,
+    ages: Box<[Option<Arc<AgePlan>>]>,
 }
 impl ExecutionPlan {
     pub(super) fn prepare(graph: &EffectGraph, options: ExecutionOptions) -> Self {
-        let ages: Box<[Option<AgePlan>]> = if options.preference
+        let ages: Box<[Option<Arc<AgePlan>>]> = if options.preference
             == ExecutionPreference::ImmutableAge
             && options.numeric_policy == NumericPolicy::Graphics
         {
@@ -32,6 +33,7 @@ impl ExecutionPlan {
                 .map(|layer| {
                     AgePlan::prepare(layer, &graph.samplers)
                         .filter(|plan| plan.total_life_curves(&graph.samplers))
+                        .map(Arc::new)
                 })
                 .collect()
         } else {
@@ -117,6 +119,9 @@ impl ExecutionPlan {
         }
     }
     pub(super) fn age(&self, layer: EffectLayerId) -> Option<&AgePlan> {
+        self.age_shared(layer).map(Arc::as_ref)
+    }
+    pub(super) fn age_shared(&self, layer: EffectLayerId) -> Option<&Arc<AgePlan>> {
         self.ages.get(layer.0 as usize)?.as_ref()
     }
     pub(super) fn has_age(&self) -> bool {

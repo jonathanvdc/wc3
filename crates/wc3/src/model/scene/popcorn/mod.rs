@@ -9,8 +9,9 @@ use glam::{Quat, Vec2, Vec3, Vec4};
 mod age;
 mod immutable;
 pub use immutable::{
-    ImmutableBirth, ImmutableCapture, ImmutableCurve, ImmutableExpression, ImmutableNode,
-    ImmutableNodeId, ImmutableOutput, ImmutableParticleView, ImmutableRecipe, ImmutableSample,
+    FieldSamplingError, ImmutableBirth, ImmutableCapture, ImmutableCurve, ImmutableExpression,
+    ImmutableNode, ImmutableNodeId, ImmutableOutput, ImmutableParticleView, ImmutableProjection,
+    ImmutableProjectionError, ImmutableProjectionScratch, ImmutableRecipe, ImmutableSample,
 };
 
 mod numeric;

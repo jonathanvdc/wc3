@@ -1,12 +1,18 @@
 //! Read-only prepared age expressions and generation-scoped birth captures.
 use super::age::{
-    AgePlan, AgeSample, Expression, NodeId as AgeNodeId, MAX_CAPTURES, MAX_NODES, MAX_OUTPUTS,
+    AgeError, AgePlan, AgeSample, Expression, NodeId as AgeNodeId, MAX_CAPTURES, MAX_NODES,
+    MAX_OUTPUTS,
 };
 use super::graph::{EffectFieldId, EffectSampler};
 use super::runtime::FieldPlanes;
 use super::{BinaryOperation, Value, ValueType};
 use std::fmt::{Debug, Formatter, Result as FmtResult};
-use std::ptr::eq;
+use std::sync::Arc;
+
+mod projection;
+mod sampling;
+pub use projection::{ImmutableProjection, ImmutableProjectionError, ImmutableProjectionScratch};
+pub use sampling::FieldSamplingError;
 
 /// One topologically ordered expression in an immutable recipe.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -105,13 +111,13 @@ pub struct ImmutableCurve<'a> {
 /// Borrowed prepared expressions; clones of one programme share recipe identity.
 #[derive(Clone, Copy)]
 pub struct ImmutableRecipe<'a> {
-    pub(super) plan: &'a AgePlan,
+    pub(super) plan: &'a Arc<AgePlan>,
     pub(super) samplers: &'a [EffectSampler],
 }
 impl ImmutableRecipe<'_> {
     /// Whether two views refer to the exact same immutable prepared recipe.
     pub fn same_recipe(&self, other: &Self) -> bool {
-        eq(self.plan, other.plan)
+        Arc::ptr_eq(self.plan, other.plan)
     }
     /// Number of certified constant-rate phase recurrences.
     pub fn phase_count(&self) -> usize {
@@ -274,24 +280,61 @@ impl<'a> ImmutableParticleView<'a> {
     pub(super) fn evaluate(&self, outputs: &mut [Value]) {
         let zero = Value::from(0f32);
         let mut captures = [zero; MAX_CAPTURES];
-        for (index, capture) in captures
-            .iter_mut()
-            .take(self.recipe.capture_count())
-            .enumerate()
-        {
-            *capture = self.capture(index).expect("prepared immutable capture");
-        }
         let mut nodes = [zero; MAX_NODES];
+        self.evaluate_plan(
+            self.recipe.plan,
+            &mut captures[..self.recipe.capture_count()],
+            &mut nodes[..self.recipe.node_count()],
+            outputs,
+        )
+        .unwrap_or_else(|error| panic!("authorized immutable recipe must be total: {error}"));
+    }
+    fn evaluate_plan(
+        &self,
+        plan: &AgePlan,
+        captures: &mut [Value],
+        nodes: &mut [Value],
+        outputs: &mut [Value],
+    ) -> Result<(), AgeError> {
+        for (value, capture) in captures.iter_mut().zip(&plan.captures) {
+            *value = Value::from_words(capture.kind, self.fields.read(capture.field, self.slot));
+        }
+        plan.evaluate(
+            captures,
+            self.recipe.samplers,
+            self.sample.into(),
+            nodes,
+            outputs,
+        )
+    }
+    pub(super) fn writes(&self, field: EffectFieldId) -> bool {
         self.recipe
             .plan
-            .evaluate(
-                &captures[..self.recipe.capture_count()],
-                self.recipe.samplers,
-                self.sample.into(),
-                &mut nodes[..self.recipe.node_count()],
-                outputs,
-            )
-            .unwrap_or_else(|error| panic!("authorized immutable recipe must be total: {error}"));
+            .outputs
+            .iter()
+            .any(|output| output.field == field.0 as usize)
+    }
+    #[inline(never)]
+    pub(super) fn sample_fields(
+        &self,
+        fields: &[EffectFieldId],
+        values: &mut [Value],
+        mut raw: impl FnMut(EffectFieldId) -> Value,
+    ) {
+        let mut outputs = [Value::from(0f32); MAX_OUTPUTS];
+        self.evaluate(&mut outputs[..self.recipe.output_count()]);
+        for (&field, value) in fields.iter().zip(values) {
+            *value = match self
+                .recipe
+                .plan
+                .outputs
+                .iter()
+                .position(|out| out.field == field.0 as usize)
+            {
+                Some(index) => outputs[index],
+                None => raw(field),
+            };
+        }
     }
     #[inline(never)]
     pub(super) fn field(&self, field: EffectFieldId) -> Option<Value> {

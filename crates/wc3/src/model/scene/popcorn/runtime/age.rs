@@ -65,7 +65,7 @@ impl EffectInstance {
     pub fn immutable_recipe(&self, layer: EffectLayerId) -> Option<ImmutableRecipe<'_>> {
         self.immutable_active().then_some(())?;
         Some(ImmutableRecipe {
-            plan: self.execution.age(layer)?,
+            plan: self.execution.age_shared(layer)?,
             samplers: &self.definition.samplers,
         })
     }
