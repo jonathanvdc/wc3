@@ -184,8 +184,14 @@ pub fn texture_requests<'view, 'data>(
                 MaterialStep::Mdlx(layer) => {
                     let base = &layer.shader.inputs().binding.image;
                     let mut slots = vec![(0, base)];
-                    if let mdlx::Shader::ReforgedDefault(layer) = &layer.shader {
+                    let crystal = matches!(layer.shader, mdlx::Shader::ReforgedCrystal(_));
+                    if let mdlx::Shader::ReforgedDefault(layer)
+                    | mdlx::Shader::ReforgedCrystal(layer) = &layer.shader
+                    {
                         for slot in &layer.textures {
+                            if crystal && slot.slot == 5 {
+                                continue;
+                            }
                             slots.retain(|(index, _)| *index != slot.slot);
                             slots.push((slot.slot, &slot.binding.image));
                         }

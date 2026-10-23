@@ -268,8 +268,9 @@ fn native_import_interprets_selector_precedence_before_widening() {
         ("", Some(0), "classic"),
         ("", Some(2), "classic"),
         ("", Some(1), "reforged"),
+        ("", Some(24), "crystal"),
         ("", Some(99), "unresolved"),
-        ("Shader_HD_Crystal", None, "unresolved"),
+        ("Shader_HD_Crystal", None, "crystal"),
     ] {
         let model = if selector.is_some() {
             native_model::<native::V1800>(name, &[selector], false)
@@ -281,6 +282,7 @@ fn native_import_interprets_selector_precedence_before_widening() {
         let actual = match shader {
             Shader::Classic(_) => "classic",
             Shader::ReforgedDefault(_) => "reforged",
+            Shader::ReforgedCrystal(_) => "crystal",
             Shader::Unresolved(_) => "unresolved",
         };
         assert_eq!(actual, expected, "{name:?}, {selector:?}");

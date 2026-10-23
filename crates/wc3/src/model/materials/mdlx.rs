@@ -91,7 +91,7 @@ pub struct MaterialInputs {
     /// Authored emissive multiplier.
     pub emissive_gain: Option<Property<f32>>,
 }
-/// Inputs to Reforged's DefaultUnit shader.
+/// Shared role and scalar inputs to Reforged DefaultUnit and Crystal shaders.
 #[derive(Clone, Debug, Construct, PartialEq)]
 pub struct ReforgedInputs {
     /// Primary image, opacity, and emissive gain.
@@ -120,6 +120,8 @@ pub enum Shader {
     Classic(MaterialInputs),
     /// Reforged's default unit shader.
     ReforgedDefault(ReforgedInputs),
+    /// Reforged Crystal surface composition, distinct from DefaultUnit.
+    ReforgedCrystal(ReforgedInputs),
     /// An uninterpreted shader or input combination.
     Unresolved(UnresolvedInputs),
 }
@@ -141,7 +143,7 @@ impl Shader {
     pub fn inputs(&self) -> &MaterialInputs {
         match self {
             Self::Classic(inputs) => inputs,
-            Self::ReforgedDefault(value) => &value.inputs,
+            Self::ReforgedDefault(value) | Self::ReforgedCrystal(value) => &value.inputs,
             Self::Unresolved(value) => &value.inputs,
         }
     }
@@ -149,7 +151,7 @@ impl Shader {
     pub fn inputs_mut(&mut self) -> &mut MaterialInputs {
         match self {
             Self::Classic(inputs) => inputs,
-            Self::ReforgedDefault(value) => &mut value.inputs,
+            Self::ReforgedDefault(value) | Self::ReforgedCrystal(value) => &mut value.inputs,
             Self::Unresolved(value) => &mut value.inputs,
         }
     }
@@ -157,7 +159,7 @@ impl Shader {
     pub fn textures(&self) -> &[TextureSlot] {
         match self {
             Self::Classic(_) => &[],
-            Self::ReforgedDefault(value) => &value.textures,
+            Self::ReforgedDefault(value) | Self::ReforgedCrystal(value) => &value.textures,
             Self::Unresolved(value) => &value.textures,
         }
     }
@@ -165,7 +167,7 @@ impl Shader {
     pub fn textures_mut(&mut self) -> &mut [TextureSlot] {
         match self {
             Self::Classic(_) => &mut [],
-            Self::ReforgedDefault(value) => &mut value.textures,
+            Self::ReforgedDefault(value) | Self::ReforgedCrystal(value) => &mut value.textures,
             Self::Unresolved(value) => &mut value.textures,
         }
     }
@@ -173,7 +175,7 @@ impl Shader {
     pub fn fresnel(&self) -> Option<&Fresnel> {
         match self {
             Self::Classic(_) => None,
-            Self::ReforgedDefault(value) => value.fresnel.as_ref(),
+            Self::ReforgedDefault(value) | Self::ReforgedCrystal(value) => value.fresnel.as_ref(),
             Self::Unresolved(value) => value.fresnel.as_ref(),
         }
     }
@@ -181,7 +183,7 @@ impl Shader {
     pub fn fresnel_mut(&mut self) -> Option<&mut Fresnel> {
         match self {
             Self::Classic(_) => None,
-            Self::ReforgedDefault(value) => value.fresnel.as_mut(),
+            Self::ReforgedDefault(value) | Self::ReforgedCrystal(value) => value.fresnel.as_mut(),
             Self::Unresolved(value) => value.fresnel.as_mut(),
         }
     }

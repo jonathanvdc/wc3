@@ -52,14 +52,27 @@ pub(super) fn write<'a, V: FormatVersion>(
             .steps
             .iter()
             .all(|step| matches!(step.shader, Shader::ReforgedDefault(_)));
+    let named_crystal = matches!(V::NUMBER, 900 | 1000)
+        && (declaration.shader_name.is_empty() || declaration.shader_name == "Shader_HD_Crystal")
+        && !source.steps.is_empty()
+        && source
+            .steps
+            .iter()
+            .all(|step| matches!(step.shader, Shader::ReforgedCrystal(_)));
+    // Non-six native Crystal layouts keep their independent passes. Only the
+    // one semantic grouped pass expands into six legacy role layers.
+    let grouped_crystal = named_crystal && source.steps.len() == 1;
+    let named_hd = named_default_unit || grouped_crystal;
     if named_default_unit && source.steps.len() != 1 {
         return Err(Error::new(
             path,
-            "legacy DefaultUnit supports one surface, not multiple draw passes",
+            "legacy grouped HD export supports one surface, not multiple draw passes",
         ));
     }
     let shader_name = if named_default_unit {
         "Shader_HD_DefaultUnit"
+    } else if named_crystal {
+        "Shader_HD_Crystal"
     } else {
         declaration.shader_name.as_ref()
     };
@@ -71,6 +84,10 @@ pub(super) fn write<'a, V: FormatVersion>(
                         .steps
                         .iter()
                         .all(|step| matches!(step.shader, Shader::ReforgedDefault(_))),
+                    "Shader_HD_Crystal" => source
+                        .steps
+                        .iter()
+                        .all(|step| matches!(step.shader, Shader::ReforgedCrystal(_))),
                     "Shader_SD_FixedFunction" => source
                         .steps
                         .iter()
@@ -101,6 +118,7 @@ pub(super) fn write<'a, V: FormatVersion>(
             }
             Shader::Classic(_) => None,
             Shader::ReforgedDefault(_) => Some(1),
+            Shader::ReforgedCrystal(_) => Some(24),
             Shader::Unresolved(inputs) => inputs.selector,
         };
         let mut layer = native::Layer::<V>::new();
@@ -190,7 +208,7 @@ pub(super) fn write<'a, V: FormatVersion>(
                     .unsupported(format!("{path}.fresnel"), error.to_string())?;
             }
         }
-        if let Some(source) = selector.filter(|_| !named_default_unit) {
+        if let Some(source) = selector.filter(|_| !(named_hd || named_crystal)) {
             if let Err(error) =
                 layer.try_set_shader_type(native::materials::ShaderType::new(source))
             {
@@ -221,7 +239,7 @@ pub(super) fn write<'a, V: FormatVersion>(
                 texture_id: replace(&mut layer.texture_id, native::Animatable::Static(0)),
             });
         }
-        if named_default_unit {
+        if named_hd {
             let mut roles = BTreeMap::new();
             for slot in slots {
                 if slot.texture_type > 5
@@ -229,14 +247,18 @@ pub(super) fn write<'a, V: FormatVersion>(
                 {
                     return Err(Error::new(
                         &path,
-                        "legacy DefaultUnit requires unique texture roles zero through five",
+                        "legacy HD requires unique texture roles zero through five",
                     ));
                 }
             }
             if let Some(diffuse) = roles.remove(&0) {
                 layer.texture_id = diffuse;
             }
-            let last = roles.keys().next_back().copied().unwrap_or(0);
+            let last = if named_crystal {
+                5
+            } else {
+                roles.keys().next_back().copied().unwrap_or(0)
+            };
             material.layers.push(layer);
             for role in 1..=last {
                 let mut auxiliary = native::Layer::<V>::new();

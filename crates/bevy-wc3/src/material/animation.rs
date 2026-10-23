@@ -1,7 +1,7 @@
 //! Owned surface binding evaluation and authored UV transforms.
 use super::super::{mesh_animation::MeshAnimation, textures::TextureRole};
 use super::wmo::scrolling_transform;
-use super::{HdAnimation, ModelMaterial, SurfaceAnimation, UvConvention};
+use super::{HdAnimation, HdProgramme, ModelMaterial, SurfaceAnimation, UvConvention};
 use crate::animation_targets::AnimationTargets;
 use bevy::math::Affine2;
 use bevy::math::{Vec3, Vec4};
@@ -38,7 +38,14 @@ impl HdAnimation {
         let mut changed = false;
         changed |= replace_handle(&mut material.base.base_color_texture, handles[0]);
         changed |= replace_handle(&mut material.base.normal_map_texture, handles[1]);
-        changed |= replace_handle(&mut material.base.occlusion_texture, handles[2]);
+        changed |= replace_handle(
+            &mut material.base.occlusion_texture,
+            if self.programme == HdProgramme::Crystal {
+                None
+            } else {
+                handles[2]
+            },
+        );
         changed |= replace_handle(&mut material.base.metallic_roughness_texture, handles[2]);
         changed |= replace(
             &mut material.base.metallic,
@@ -63,7 +70,7 @@ impl HdAnimation {
         changed |= replace(
             &mut material.extension.hd.maps,
             UVec4::new(
-                1,
+                self.programme as u32,
                 handles[2].is_some() as u32,
                 handles[4].is_some() as u32,
                 handles[5].is_some() as u32,
@@ -82,7 +89,18 @@ impl HdAnimation {
         );
         changed |= replace(
             &mut material.extension.hd.fresnel,
-            Vec4::new(opacity, team, 0., 0.),
+            // z is the checked raw normal-map presence flag for Crystal's
+            // shared alpha/normal calculation in depth-only passes.
+            Vec4::new(
+                opacity,
+                team,
+                if self.programme == HdProgramme::Crystal && handles[1].is_some() {
+                    1.
+                } else {
+                    0.
+                },
+                0.,
+            ),
         );
         changed
     }

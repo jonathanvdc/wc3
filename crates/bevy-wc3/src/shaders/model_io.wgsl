@@ -54,6 +54,14 @@ struct VertexOutput {
 #ifdef VERTEX_UVS_D
     @location(13) uv_d: vec2<f32>,
 #endif
+#ifdef MODEL_CRYSTAL
+    // Depth-only Crystal coverage needs the same shading frame as forward.
+    @location(14) crystal_normal: vec3<f32>,
+#ifdef VERTEX_TANGENTS
+    @location(15) crystal_tangent: vec4<f32>,
+#endif
+#endif
+
 }
 #else
 #import bevy_pbr::forward_io
@@ -171,6 +179,19 @@ fn from_bevy(in: prepass_io::VertexOutput) -> VertexOutput {
 #endif
 #ifdef VERTEX_UVS_D
     out.uv_d=vec2(0.0);
+#endif
+#ifdef MODEL_CRYSTAL
+#ifdef NORMAL_PREPASS_OR_DEFERRED_PREPASS
+    out.crystal_normal=in.world_normal;
+#ifdef VERTEX_TANGENTS
+    out.crystal_tangent=in.world_tangent;
+#endif
+#else
+    out.crystal_normal=vec3(0.0,0.0,1.0);
+#ifdef VERTEX_TANGENTS
+    out.crystal_tangent=vec4(1.0,0.0,0.0,1.0);
+#endif
+#endif
 #endif
     return out;
 }

@@ -151,11 +151,18 @@ fn read_layers<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
                     values.add(texture(primary.value().copied().unwrap_or_default())?);
                 Shader::Classic(inputs)
             }
-            ShaderFamily::ReforgedDefault => Shader::ReforgedDefault(ReforgedInputs {
-                inputs,
-                textures: slots,
-                fresnel,
-            }),
+            ShaderFamily::ReforgedDefault | ShaderFamily::ReforgedCrystal => {
+                let hd = ReforgedInputs {
+                    inputs,
+                    textures: slots,
+                    fresnel,
+                };
+                if family == ShaderFamily::ReforgedCrystal {
+                    Shader::ReforgedCrystal(hd)
+                } else {
+                    Shader::ReforgedDefault(hd)
+                }
+            }
             _ => Shader::Unresolved(UnresolvedInputs {
                 selector,
                 inputs,
@@ -252,13 +259,16 @@ pub(super) fn bind<'source, 'a, V: FormatVersion, S: Storage<'source, 'a>>(
 }
 
 /// Named HD materials in versions 900/1000 store texture roles in layer order.
+/// Crystal admits exactly six roles; DefaultUnit retains its established range.
 /// Only the diffuse layer supplies draw state, opacity, UVs, and Fresnel controls.
 fn legacy_roles<'a, V: FormatVersion>(
     source: &native::Material<'_, V>,
     material: Material<'a>,
 ) -> Result<Material<'a>, Error> {
+    let crystal = source.try_shader().unwrap_or_default() == "Shader_HD_Crystal";
+    let default_unit = source.try_shader().unwrap_or_default() == "Shader_HD_DefaultUnit";
     if !matches!(V::NUMBER, 900 | 1000)
-        || source.try_shader().unwrap_or_default() != "Shader_HD_DefaultUnit"
+        || !(default_unit || crystal && material.steps.len() == 6)
         || material.steps.is_empty()
     {
         return Ok(material);
@@ -271,8 +281,9 @@ fn legacy_roles<'a, V: FormatVersion>(
     }
     let mut layers = material.steps.into_iter();
     let mut primary = layers.next().expect("nonempty legacy material");
-    let Shader::ReforgedDefault(inputs) = &mut primary.shader else {
-        unreachable!("legacy DefaultUnit shader was interpreted during layer decoding")
+    let inputs = match &mut primary.shader {
+        Shader::ReforgedDefault(inputs) | Shader::ReforgedCrystal(inputs) => inputs,
+        _ => unreachable!("selected legacy HD shader was interpreted during layer decoding"),
     };
     for (index, layer) in layers.enumerate() {
         let binding = TextureBinding {
@@ -349,15 +360,18 @@ fn texture_map<'a>(
 enum ShaderFamily {
     Classic,
     ReforgedDefault,
+    ReforgedCrystal,
     Unresolved,
 }
 fn shader_family(selector: Option<u32>, name: &str) -> ShaderFamily {
     match selector {
         Some(1) => ShaderFamily::ReforgedDefault,
+        Some(24) => ShaderFamily::ReforgedCrystal,
         Some(0 | 2) => ShaderFamily::Classic,
         Some(_) => ShaderFamily::Unresolved,
         None => match name {
             "Shader_HD_DefaultUnit" => ShaderFamily::ReforgedDefault,
+            "Shader_HD_Crystal" => ShaderFamily::ReforgedCrystal,
             "" | "Shader_SD_FixedFunction" => ShaderFamily::Classic,
             _ => ShaderFamily::Unresolved,
         },
@@ -389,6 +403,7 @@ mod tests {
                 (0, ShaderFamily::Classic),
                 (2, ShaderFamily::Classic),
                 (1, ShaderFamily::ReforgedDefault),
+                (24, ShaderFamily::ReforgedCrystal),
                 (99, ShaderFamily::Unresolved),
             ] {
                 assert_eq!(shader_family(Some(selector), name), family);
@@ -398,7 +413,7 @@ mod tests {
             ("", ShaderFamily::Classic),
             ("Shader_SD_FixedFunction", ShaderFamily::Classic),
             ("Shader_HD_DefaultUnit", ShaderFamily::ReforgedDefault),
-            ("Shader_HD_Crystal", ShaderFamily::Unresolved),
+            ("Shader_HD_Crystal", ShaderFamily::ReforgedCrystal),
         ] {
             assert_eq!(shader_family(None, name), family);
         }

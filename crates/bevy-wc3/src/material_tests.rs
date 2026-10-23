@@ -1,6 +1,7 @@
 use super::super::textures::TextureRole;
 use super::compile::rasterization;
 use super::*;
+use crate::diagnostics::RenderDiagnosticKind;
 use bevy::math::{Quat, Vec2, Vec3, Vec4};
 use std::array::from_fn;
 use wc3::model::materials::state::{BlendOperations, Lighting, Operation};
@@ -71,6 +72,13 @@ fn basic_world_shaders_keep_black_baked_light_separate_from_surface_albedo() {
 
 #[test]
 fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
+    hd_role_case(HdProgramme::DefaultUnit);
+}
+#[test]
+fn crystal_keeps_its_programme_and_mask_role_through_appearance_updates() {
+    hd_role_case(HdProgramme::Crystal);
+}
+fn hd_role_case(programme: HdProgramme) {
     let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let ids = from_fn::<_, 6, _>(|slot| {
@@ -109,7 +117,10 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
         opacity: slot_values.add(0.5),
         team_color: slot_values.add(0.3),
     });
-    layer.shader = mdlx::Shader::ReforgedDefault(hd);
+    layer.shader = match programme {
+        HdProgramme::DefaultUnit => mdlx::Shader::ReforgedDefault(hd),
+        HdProgramme::Crystal => mdlx::Shader::ReforgedCrystal(hd),
+    };
     let id = builder
         .add_material(Material {
             name: "HD".into(),
@@ -148,7 +159,11 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
     );
     assert_eq!(
         pass.material.occlusion_texture,
-        pass.material.metallic_roughness_texture
+        if programme == HdProgramme::Crystal {
+            None
+        } else {
+            pass.material.metallic_roughness_texture.clone()
+        }
     );
     assert_eq!(
         pass.material.emissive_texture.as_ref(),
@@ -158,8 +173,43 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
     );
     assert_eq!(pass.material.emissive, LinearRgba::rgb(2., 2., 2.));
     assert_eq!(pass.material.alpha_mode, AlphaMode::Mask(0.75));
-    assert_eq!(pass.state.hd.maps, UVec4::ONE);
-    assert_eq!(pass.state.hd.fresnel, Vec4::new(0.5, 0.3, 0., 0.));
+    assert_eq!(
+        pass.state.hd.maps,
+        UVec4::new(
+            programme as u32,
+            1,
+            1,
+            u32::from(programme == HdProgramme::DefaultUnit)
+        )
+    );
+    assert_eq!(
+        pass.state.hd.fresnel,
+        Vec4::new(
+            0.5,
+            0.3,
+            if programme == HdProgramme::Crystal {
+                1.
+            } else {
+                0.
+            },
+            0.
+        )
+    );
+    assert_eq!(
+        ModelMaterialKey::from(&pass.state).crystal,
+        programme == HdProgramme::Crystal
+    );
+    if programme == HdProgramme::Crystal {
+        assert!(pass.state.environment.is_none());
+        assert!(resolved
+            .material(id, 0)
+            .for_slot(5, ids[5], TextureRole::Color)
+            .is_none());
+        assert!(!pass
+            .diagnostics
+            .iter()
+            .any(|issue| issue.kind == RenderDiagnosticKind::Unsupported));
+    }
     assert_eq!(pass.state.hd.fresnel_color, Vec4::new(0.2, 0.4, 0.8, 1.));
     assert!(!pass.animation.is_animated());
     let sample = model.animation_sample(AnimationSample::default()).unwrap();
@@ -183,6 +233,10 @@ fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
     assert!(changed.apply_to_assets(&sample, &handle, &mut materials));
     assert!(!changed.apply_to_assets(&sample, &handle, &mut materials));
     assert_eq!(materials.get(&handle).unwrap().base.emissive.red, 3.);
+    assert_eq!(
+        materials.get(&handle).unwrap().extension.hd.maps.x,
+        programme as u32
+    );
 }
 
 #[test]

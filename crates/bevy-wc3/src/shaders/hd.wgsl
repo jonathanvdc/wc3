@@ -11,7 +11,7 @@ fn apply_hd(in: VertexOutput, is_front: bool, input: PbrInput) -> PbrInput {
     // HD maps use a shared, animated UV transform. Normal RG reconstructs Z
     // even when the source texture has RGB(A) channels.
 #ifdef VERTEX_UVS_A
-    if hd.maps.x != 0u {
+    if hd.maps.x != 0u && hd.maps.x != 3u {
         let uv = (material.uv_transform * vec3(in.uv, 1.0)).xy;
 #ifdef STANDARD_MATERIAL_NORMAL_MAP
 #ifdef VERTEX_TANGENTS

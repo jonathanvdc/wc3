@@ -162,6 +162,8 @@ struct WorldUniform {
 
 #[derive(Clone, Copy, Debug, ShaderType)]
 struct HdUniform {
+    // fresnel.xy: opacity/team; z: Crystal normal-image presence.
+    // maps.x: DefaultUnit1, M2 packed-normal2, Crystal3; y/z/w: role presence.
     fresnel_color: Vec4,
     fresnel: Vec4,
     maps: UVec4,
@@ -247,12 +249,14 @@ pub struct ModelMaterialKey {
     fourth_uv: bool,
     world_layer_alpha: bool,
     edge_fade: bool,
+    crystal: bool,
 }
 
 impl From<&ModelMaterialExtension> for ModelMaterialKey {
     fn from(state: &ModelMaterialExtension) -> Self {
         Self {
             fourth_uv: state.fourth_uv,
+            crystal: state.hd.maps.x == HdProgramme::Crystal as u32,
             world_layer_alpha: matches!(
                 state.world.composition.x,
                 7 | 10 | 12 | 13 | 14 | 16 | 18 | 19 | 20
@@ -338,12 +342,26 @@ impl MaterialExtension for ModelMaterialExtension {
         specialize_mesh_attributes(
             descriptor,
             layout,
-            key.bind_group_data.generated_coordinates || key.bind_group_data.edge_fade,
+            key.bind_group_data.generated_coordinates
+                || key.bind_group_data.edge_fade
+                || key.bind_group_data.crystal,
             key.bind_group_data.third_uv,
             key.bind_group_data.world_layer_alpha,
             key.bind_group_data.fourth_uv,
         )?;
 
+        if key.bind_group_data.crystal {
+            if layout.0.contains(Mesh::ATTRIBUTE_TANGENT) {
+                descriptor.vertex.shader_defs.push("VERTEX_TANGENTS".into());
+                if let Some(fragment) = &mut descriptor.fragment {
+                    fragment.shader_defs.push("VERTEX_TANGENTS".into());
+                }
+            }
+            descriptor.vertex.shader_defs.push("MODEL_CRYSTAL".into());
+            if let Some(fragment) = &mut descriptor.fragment {
+                fragment.shader_defs.push("MODEL_CRYSTAL".into());
+            }
+        }
         if key.bind_group_data.edge_fade {
             descriptor.vertex.shader_defs.push("MODEL_EDGE_FADE".into());
             if let Some(fragment) = &mut descriptor.fragment {
@@ -408,8 +426,15 @@ pub(crate) struct SurfaceAnimation {
     hd: Option<HdAnimation>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+enum HdProgramme {
+    DefaultUnit = 1,
+    Crystal = 3,
+}
 #[derive(Clone)]
 struct HdAnimation {
+    programme: HdProgramme,
     slots: [Option<Property<Option<Texture>>>; 6],
     fresnel: Option<mdlx::Fresnel>,
     gain: Option<Property<f32>>,
@@ -537,3 +562,7 @@ mod image_rebinding_tests {
         assert_eq!(material.extension.hd.maps, UVec4::new(1, 0, 0, 0));
     }
 }
+
+#[cfg(test)]
+#[path = "material/crystal_tests.rs"]
+mod crystal_tests;

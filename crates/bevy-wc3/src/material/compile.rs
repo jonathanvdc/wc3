@@ -4,7 +4,9 @@ use super::m2::compile_m2;
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 
 use super::wmo::compile_wmo;
-use super::{layered_uv, Blend, HdAnimation, ModelMaterial, SurfacePass, UvConvention};
+use super::{
+    layered_uv, Blend, HdAnimation, HdProgramme, ModelMaterial, SurfacePass, UvConvention,
+};
 use crate::animation_targets::AnimationTargets;
 use crate::error::ModelError;
 use bevy::material::OpaqueRendererMethod;
@@ -204,7 +206,9 @@ fn compile_mdlx(
     let opacity = &inputs.opacity;
     let emissive_gain = &inputs.emissive_gain;
     let hd_inputs = match &surface.shader {
-        mdlx::Shader::ReforgedDefault(inputs) => Some(inputs),
+        mdlx::Shader::ReforgedDefault(inputs) | mdlx::Shader::ReforgedCrystal(inputs) => {
+            Some(inputs)
+        }
         _ => None,
     };
     pass.sort_near = declaration.sort_near_z;
@@ -258,6 +262,9 @@ fn compile_mdlx(
         let mut slots = from_fn(|_| None);
         slots[0] = Some(binding.image);
         for slot in &hd_inputs.textures {
+            if matches!(surface.shader, mdlx::Shader::ReforgedCrystal(_)) && slot.slot == 5 {
+                continue; // Retained semantic storage, not a consumed Crystal role.
+            }
             if let Some(binding) = slots.get_mut(slot.slot as usize) {
                 *binding = Some(slot.binding.image);
             } else {
@@ -283,7 +290,13 @@ fn compile_mdlx(
                 )?;
             }
         }
+        let programme = if matches!(surface.shader, mdlx::Shader::ReforgedCrystal(_)) {
+            HdProgramme::Crystal
+        } else {
+            HdProgramme::DefaultUnit
+        };
         let hd = HdAnimation {
+            programme,
             slots,
             fresnel: hd_inputs.fresnel.clone(),
             gain: *emissive_gain,
@@ -305,7 +318,12 @@ fn compile_mdlx(
         // overwrite it transiently and mark an unchanged asset as modified.
         pass.animation.texture = None;
         pass.animation.hd = Some(hd);
-        pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Approximation, "DefaultUnit Fresnel and authored environment reflection use the renderer's PBR approximation; game fidelity remains unverified"));
+        if programme == HdProgramme::Crystal {
+            pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Approximation,
+                "Crystal uses Bevy PBR/shadow/normal transforms; grazing offsets clamp abs(view normal Z) to 0.0001. Intended material equations are source-derived, not native-client verified"));
+        } else {
+            pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Approximation, "DefaultUnit Fresnel and authored environment reflection use the renderer's PBR approximation; game fidelity remains unverified"));
+        }
     } else if let mdlx::Shader::Unresolved(_) = &surface.shader {
         pass.diagnostics.push(RenderIssue::new(
             RenderDiagnosticKind::Unsupported,

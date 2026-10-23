@@ -41,6 +41,9 @@
 #import "embedded://bevy_wc3/shaders/world_composition.wgsl"::world_color
 #import bevy_pbr::pbr_bindings
 #import "embedded://bevy_wc3/shaders/hd.wgsl"::apply_hd
+#ifdef MODEL_CRYSTAL
+#import "embedded://bevy_wc3/shaders/crystal.wgsl"::prepare_crystal
+#endif
 
 @fragment
 fn fragment(
@@ -116,6 +119,11 @@ fn fragment(
             pbr_input.material.emissive.a);
     }
 
+#ifdef MODEL_CRYSTAL
+    let crystal=prepare_crystal(in,is_front,true);
+    pbr_input.N=crystal.normal;
+    pbr_input.material.base_color=vec4(crystal.diffuse,crystal.alpha);
+#endif
     pbr_input = apply_hd(in, is_front, pbr_input);
 
     // Compose native texture masks before Bevy evaluates illumination.
@@ -209,6 +217,9 @@ fn fragment(
         out.color = pbr_input.material.base_color;
     }
 
+#ifdef MODEL_CRYSTAL
+    out.color=vec4(mix(out.color.rgb,crystal.rim_color,crystal.rim),out.color.a);
+#endif
     // apply in-shader post processing (fog, alpha-premultiply, and also tonemapping, debanding if the camera is non-hdr)
     // note this does not include fullscreen postprocessing effects like bloom.
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);

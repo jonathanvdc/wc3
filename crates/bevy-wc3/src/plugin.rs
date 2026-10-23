@@ -43,6 +43,7 @@ impl Plugin for Wc3BevyPlugin {
         embedded_asset!(app, "shaders/world_composition.wgsl");
         embedded_asset!(app, "shaders/model_io.wgsl");
         embedded_asset!(app, "shaders/hd.wgsl");
+        embedded_asset!(app, "shaders/crystal.wgsl");
         embedded_asset!(app, "shaders/material_prepass.wgsl");
         embedded_asset!(app, "shaders/effect_lighting.wgsl");
         embedded_asset!(app, "shaders/wc3_particle.wgsl");

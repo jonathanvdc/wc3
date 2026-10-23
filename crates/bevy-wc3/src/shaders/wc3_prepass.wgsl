@@ -41,6 +41,10 @@ struct Vertex {
 #ifdef VERTEX_TANGENTS
     @location(4) tangent: vec4<f32>,
 #endif
+#else ifdef MODEL_CRYSTAL
+#ifdef VERTEX_TANGENTS
+    @location(4) tangent: vec4<f32>,
+#endif
 #endif
 #ifdef SKINNED
     @location(5) joint_indices: vec4<u32>,
@@ -320,6 +324,19 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
         vertex_no_morph.instance_index, mesh_world_from_local[3]);
 #endif  // VISIBILITY_RANGE_DITHER
 
+#ifdef MODEL_CRYSTAL
+#ifdef SKINNED
+    out.crystal_normal=skin_normal_finite(world_from_local,vertex.normal);
+#ifdef VERTEX_TANGENTS
+    out.crystal_tangent=skin_tangent_finite(world_from_local,vertex.tangent);
+#endif
+#else
+    out.crystal_normal=mesh_functions::mesh_normal_local_to_world(vertex.normal,vertex_no_morph.instance_index);
+#ifdef VERTEX_TANGENTS
+    out.crystal_tangent=mesh_functions::mesh_tangent_local_to_world(world_from_local,vertex.tangent,vertex_no_morph.instance_index);
+#endif
+#endif
+#endif
     return out;
 }
 

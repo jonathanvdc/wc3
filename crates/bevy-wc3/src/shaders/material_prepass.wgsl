@@ -24,6 +24,9 @@
 #import "embedded://bevy_wc3/shaders/material_access.wgsl"::{load_combiner,load_world,load_hd,load_standard,sample_base,sample_secondary,sample_tertiary,sample_fourth}
 #import "embedded://bevy_wc3/shaders/combiner.wgsl"::compose
 #import "embedded://bevy_wc3/shaders/world_composition.wgsl"::world_color
+#ifdef MODEL_CRYSTAL
+#import "embedded://bevy_wc3/shaders/crystal.wgsl"::prepare_crystal
+#endif
 
 
 // Share composition with the color pass, including masks that are not opacity.
@@ -132,6 +135,11 @@ fn fragment(
     pbr_functions::visibility_range_dither(in.position, in.visibility_range_dither);
 #endif  // VISIBILITY_RANGE_DITHER
 
+#ifdef MODEL_CRYSTAL
+    let crystal=prepare_crystal(in,is_front,false);
+    let alpha_mode=flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
+    if alpha_mode==pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK && crystal.alpha<material.alpha_cutoff {discard;}
+#else
     if combiner.clip.x != 0.0 && composed_alpha(in) < combiner.clip.x { discard; }
     if world.flags.x != 0u && world.flags.y != 0u {
         let alpha_mode = flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
@@ -146,6 +154,7 @@ fn fragment(
             if alpha < material.alpha_cutoff { discard; }
         }
     }
+#endif // MODEL_CRYSTAL
 #endif  // MESHLET_MESH_MATERIAL_PASS
 
     var out: prepass_io::FragmentOutput;
@@ -226,6 +235,11 @@ fn fragment(
 #endif  // STANDARD_MATERIAL_NORMAL_MAP
 #endif  // VERTEX_TANGENTS
 #endif  // VERTEX_UVS
+#ifdef MODEL_CRYSTAL
+#ifndef MESHLET_MESH_MATERIAL_PASS
+        normal=crystal.normal;
+#endif
+#endif
         out.normal = vec4(normal * 0.5 + vec3(0.5), 1.0);
     } else {
         out.normal = vec4(in.world_normal * 0.5 + vec3(0.5), 1.0);

@@ -497,3 +497,116 @@ fn semantic_export_restores_native_node_kinds_for_mdl() {
     assert_eq!(decoded.event_objects().count(), 1);
     assert_eq!(decoded.collision_shapes().count(), 1);
 }
+
+#[test]
+fn crystal_exact_six_legacy_roles_preserve_first_pass_and_each_image_track() {
+    use wc3::model::formats::mdlx::animation::{Animatable, Sequence, Track, ValueKeyframe};
+    use wc3::model::formats::mdlx::materials::{
+        Layer, LayerFresnel, Material, ShaderType, Texture,
+    };
+    let mut source = mdlx::Document::<mdlx::V1000>::new();
+    source.set_sequences([Sequence::new("Stand", [0, 1000]).unwrap()]);
+    source.set_textures((0..6).map(|i| Texture::new(&format!("role-{i}.blp")).unwrap()));
+    let mut material = Material::new();
+    material.try_set_shader("Shader_HD_Crystal").unwrap();
+    material.priority_plane = 7;
+    for index in 0..6 {
+        let mut layer = Layer::new();
+        layer.texture_id = Animatable::Both {
+            value: index,
+            track: Track::step(
+                [
+                    ValueKeyframe {
+                        frame: 0,
+                        value: index,
+                    },
+                    ValueKeyframe {
+                        frame: 1000,
+                        value: (index + 1) % 6,
+                    },
+                ],
+                None,
+            )
+            .unwrap(),
+        };
+        layer.alpha = Animatable::Static(if index == 0 { 0.42 } else { 0.125 });
+        material.layers.push(layer);
+    }
+    material.layers[0]
+        .try_set_emissive_gain(Animatable::Static(2.))
+        .unwrap();
+    material.layers[0]
+        .try_set_fresnel(LayerFresnel {
+            color: Animatable::Static([0.2, 0.4, 0.6]),
+            opacity: Animatable::Static(0.3),
+            team_color: Animatable::Static(0.7),
+        })
+        .unwrap();
+    source.set_materials([material.clone()]);
+    let imported = io::mdlx::import(&source, &ImportOptions::default())
+        .unwrap()
+        .value;
+    let (_, value) = imported.materials().iter().next().unwrap();
+    assert_eq!(value.surface.steps.len(), 1);
+    let profile::Shader::ReforgedCrystal(hd) = &value.surface.steps[0].shader else {
+        panic!("Crystal must have its own typed interpretation");
+    };
+    assert_eq!(
+        hd.textures.iter().map(|slot| slot.slot).collect::<Vec<_>>(),
+        [1, 2, 3, 4, 5]
+    );
+    assert_eq!(imported.values()[hd.inputs.opacity], 0.42);
+    assert_eq!(imported.values()[hd.inputs.emissive_gain.unwrap()], 2.);
+    assert_eq!(imported.values()[hd.fresnel.as_ref().unwrap().opacity], 0.3);
+    let universal: Model<'_, Universal> = imported.widen();
+    let canonical = universal.try_narrow::<Mdlx>().unwrap();
+    let output = io::mdlx::plan::<mdlx::V1000>(&canonical, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .value;
+    let output = output.materials().next().unwrap();
+    assert_eq!(output.try_shader().unwrap(), "Shader_HD_Crystal");
+    assert_eq!(output.priority_plane, 7);
+    assert_eq!(output.layers.len(), 6);
+    assert_eq!(output.layers[0].alpha.value(), Some(&0.42));
+    assert_eq!(
+        output.layers[0].try_fresnel().unwrap(),
+        material.layers[0].try_fresnel().unwrap()
+    );
+    for (actual, original) in output.layers.iter().zip(&material.layers) {
+        assert_eq!(actual.texture_id, original.texture_id);
+    }
+    let modern = io::mdlx::plan::<mdlx::V1800>(&canonical, &ExportOptions::default())
+        .unwrap()
+        .execute()
+        .value;
+    let modern = modern.materials().next().unwrap();
+    assert_eq!(modern.layers.len(), 1);
+    assert_eq!(
+        modern.layers[0].try_shader_type().unwrap(),
+        ShaderType::HD_CRYSTAL
+    );
+}
+
+#[test]
+fn crystal_non_six_legacy_layers_remain_independent() {
+    use wc3::model::formats::mdlx::materials::{Layer, Material, Texture};
+    for count in [1, 5, 7] {
+        let mut source = mdlx::Document::<mdlx::V1000>::new();
+        source.set_textures([Texture::new("role.blp").unwrap()]);
+        let mut material = Material::new();
+        material.try_set_shader("Shader_HD_Crystal").unwrap();
+        material.layers = (0..count).map(|_| Layer::new()).collect();
+        source.set_materials([material]);
+        let imported = io::mdlx::import(&source, &ImportOptions::default())
+            .unwrap()
+            .value;
+        let (_, value) = imported.materials().iter().next().unwrap();
+        assert_eq!(value.surface.steps.len(), count);
+        assert!(value
+            .surface
+            .steps
+            .iter()
+            .all(|step| matches!(step.shader, profile::Shader::ReforgedCrystal(_))));
+    }
+}

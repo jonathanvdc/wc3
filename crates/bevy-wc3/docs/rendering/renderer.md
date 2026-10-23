@@ -42,7 +42,7 @@ no game database or team-selection policy.
 
 Choose the family-specific guide for supported equations and fallbacks:
 
-- [Reforged DefaultUnit](reforged-materials.md): normal/ORM, team color, emissive, Fresnel, and approximate reflection.
+- [Reforged](reforged-materials.md): DefaultUnit and Crystal HD roles, view-dependent diffuse composition, Fresnel, and PBR approximations.
 - [M2](m2-materials.md): texture combiners, generated coordinates, weighted crossfades, and edge opacity; the [shader inventory](m2-programmes.md) lists bounded coverage.
 - [WMO](wmo-materials.md): layered surfaces, baked vertex illumination, and regional ambient contributions.
 

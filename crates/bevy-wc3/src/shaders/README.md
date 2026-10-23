@@ -17,7 +17,11 @@ The model material extension preserves Bevy's PBR/light/post-processing
 stages. `material.wgsl` evaluates supported native combiners and WMO
 baked-light interpretation; `hd.wgsl` supplies DefaultUnit role sampling,
 RG normal reconstruction, team masking, Fresnel, and environment approximation.
-The prepass fragment retains matching alpha/UV/normal interpretation.
+`crystal.wgsl` prepares the distinct Crystal diffuse displacement and squared-rim
+response without sampling the scene. The shared function supplies forward and
+auxiliary-pass alpha/normal interpretation. Crystal-only depth variants retain
+geometric normal/tangent varyings at locations 14/15; ordinary variants omit them.
+DefaultUnit's fifth-power rim remains independent.
 
 The vertex entry points retain their filenames while serving Universal geometry.
 `extra_skinning.wgsl` shares the extra four joint influences between main and
