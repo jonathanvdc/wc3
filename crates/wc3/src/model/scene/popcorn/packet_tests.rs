@@ -213,7 +213,8 @@ fn packet_scratch_accounts_exact_owned_allocations_and_ineligible_graph_allocate
         Scratch::bytes(shape),
         Some(
             size_of::<Scratch>()
-                + (scratch.registers.capacity() + scratch.fields.capacity()) * size_of::<Planes>()
+                + (scratch.registers.capacity() + scratch.fields.capacity())
+                    * size_of::<Planes<PARTICLE_BATCH_SIZE>>()
         )
     );
     let mut layers = program.inner.layers.to_vec();
@@ -567,4 +568,29 @@ fn ordered_field_dependencies_exclude_write_only_and_post_store_loads() {
     assert!(binding(4).read_before_write);
     assert_eq!(binding(4).components, 3);
     assert!(binding(4).written);
+}
+
+#[test]
+fn const_batch_storage_accounts_for_real_arrays_and_preserves_zero_width_rejection() {
+    use std::mem::size_of_val;
+    fn check<const BATCH: usize>() {
+        let scratch = BatchScratch::<BATCH>::new((2, 3));
+        let actual_bytes = size_of_val(&*scratch)
+            + size_of_val(scratch.registers.as_slice())
+            + size_of_val(scratch.fields.as_slice());
+        assert_eq!(BatchScratch::<BATCH>::bytes((2, 3)), Some(actual_bytes));
+        assert_eq!(scratch.lanes.len(), BATCH);
+        assert_eq!(scratch.registers.len(), 2);
+        assert_eq!(scratch.fields.len(), 3);
+        assert!(scratch
+            .fields
+            .iter()
+            .flatten()
+            .flatten()
+            .all(|word| *word == 0));
+    }
+    check::<8>();
+    check::<32>();
+    assert!(BatchScratch::<0>::bytes((2, 3)).is_none());
+    assert!(BatchScratch::<8>::bytes((usize::MAX, 1)).is_none());
 }

@@ -9,7 +9,7 @@ use std::mem::size_of;
 // Full tiles keep natural low-population effects on the cheap scalar path.
 pub(super) const PARTICLE_BATCH_SIZE: usize = 16;
 const VALUE_COMPONENTS: usize = 4;
-type Planes = [[u32; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS];
+type Planes<const BATCH: usize> = [[u32; BATCH]; VALUE_COMPONENTS];
 #[derive(Clone, Copy, Debug)]
 struct Register {
     slot: usize,
@@ -27,7 +27,12 @@ struct Operand {
 }
 impl Operand {
     #[inline]
-    fn word(self, registers: &[Planes], lane: usize, component: usize) -> u32 {
+    fn word<const BATCH: usize>(
+        self,
+        registers: &[Planes<BATCH>],
+        lane: usize,
+        component: usize,
+    ) -> u32 {
         let component = component.min(self.width - 1);
         match self.location {
             Location::Constant(words) => words[component],
@@ -345,10 +350,13 @@ pub(super) struct Lane {
     pub delta: f64,
     pub life: f32,
 }
-pub(super) struct Scratch {
-    registers: Vec<Planes>,
-    fields: Vec<Planes>,
-    pub lanes: [Lane; PARTICLE_BATCH_SIZE],
+pub(super) type Scratch = BatchScratch<PARTICLE_BATCH_SIZE>;
+
+/// Private fixed-size storage. The runtime uses only the default Scratch alias.
+pub(super) struct BatchScratch<const BATCH: usize> {
+    registers: Vec<Planes<BATCH>>,
+    fields: Vec<Planes<BATCH>>,
+    pub lanes: [Lane; BATCH],
     pub count: usize,
     #[cfg(test)]
     pub attempts: usize,
@@ -357,7 +365,7 @@ pub(super) struct Scratch {
     #[cfg(test)]
     pub fallbacks: usize,
 }
-impl Scratch {
+impl<const BATCH: usize> BatchScratch<BATCH> {
     pub fn shape(layers: &[EffectLayer]) -> Option<(usize, usize)> {
         let mut result = None;
         for plan in layers
@@ -371,16 +379,20 @@ impl Scratch {
         result
     }
     pub fn bytes((registers, fields): (usize, usize)) -> Option<usize> {
+        if BATCH == 0 {
+            return None;
+        }
         registers
             .checked_add(fields)?
-            .checked_mul(size_of::<Planes>())?
+            .checked_mul(size_of::<Planes<BATCH>>())?
             .checked_add(size_of::<Self>())
     }
     pub fn new((registers, fields): (usize, usize)) -> Box<Self> {
+        assert!(BATCH > 0, "particle batch must not be empty");
         Box::new(Self {
-            registers: vec![[[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS]; registers],
-            fields: vec![[[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS]; fields],
-            lanes: [Lane::default(); PARTICLE_BATCH_SIZE],
+            registers: vec![[[0; BATCH]; VALUE_COMPONENTS]; registers],
+            fields: vec![[[0; BATCH]; VALUE_COMPONENTS]; fields],
+            lanes: [Lane::default(); BATCH],
             count: 0,
             #[cfg(test)]
             attempts: 0,
@@ -439,7 +451,7 @@ impl Scratch {
         // Only the Rust evaluator uses retained register planes. Native SIMD
         // initializes its invocation locals in SSA and needs no scratch clearing.
         // Persistent reads are proven to follow a write within this invocation.
-        self.registers[..plan.locals].fill([[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS]);
+        self.registers[..plan.locals].fill([[0; BATCH]; VALUE_COMPONENTS]);
         #[cfg(test)]
         {
             self.attempts += 1;
@@ -447,7 +459,7 @@ impl Scratch {
         for operation in &plan.operations {
             match operation.instruction {
                 InstructionPlan::Load { output, input } => {
-                    let mut result = [[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS];
+                    let mut result = [[0; BATCH]; VALUE_COMPONENTS];
                     for lane in 0..self.count {
                         match input {
                             Input::Field(index) => {
@@ -473,7 +485,7 @@ impl Scratch {
                     self.registers[output.slot] = result;
                 }
                 InstructionPlan::Store { field, input } => {
-                    let mut result = [[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS];
+                    let mut result = [[0; BATCH]; VALUE_COMPONENTS];
                     for (component, words) in result.iter_mut().enumerate().take(input.width) {
                         for (lane, word) in words.iter_mut().enumerate().take(self.count) {
                             *word = input.word(&self.registers, lane, component);
@@ -487,7 +499,7 @@ impl Scratch {
                     right,
                     operation,
                 } => {
-                    let mut result = [[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS];
+                    let mut result = [[0; BATCH]; VALUE_COMPONENTS];
                     for (component, words) in result.iter_mut().enumerate().take(output.width) {
                         for (lane, word) in words.iter_mut().enumerate().take(self.count) {
                             *word = float_arithmetic(
@@ -504,7 +516,7 @@ impl Scratch {
                     input,
                     sampler,
                 } => {
-                    let mut result = [[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS];
+                    let mut result = [[0; BATCH]; VALUE_COMPONENTS];
                     for (lane, _) in self.lanes.iter().enumerate().take(self.count) {
                         let value = sample(
                             &samplers[sampler],
@@ -523,10 +535,8 @@ impl Scratch {
     }
     #[cfg(test)]
     pub fn poison(&mut self) {
-        self.registers
-            .fill([[0xdeadbeef; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS]);
-        self.fields
-            .fill([[0x7fc00001; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS]);
+        self.registers.fill([[0xdeadbeef; BATCH]; VALUE_COMPONENTS]);
+        self.fields.fill([[0x7fc00001; BATCH]; VALUE_COMPONENTS]);
     }
     pub fn commit(&self, plan: &PureEvolution, lane: usize, fields: &mut FieldPlanes) {
         for (index, binding) in plan

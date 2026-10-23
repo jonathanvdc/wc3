@@ -1,18 +1,20 @@
 use super::*;
 use crate::model::scene::popcorn::graph::EffectProgram;
 use crate::model::scene::popcorn::packet::tests::{fixture, persistent_fixture};
-use crate::model::scene::popcorn::packet::Lane;
+use crate::model::scene::popcorn::packet::{Lane, Scratch};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{default_libcall_names, Linkage};
 use std::mem::transmute;
 use std::sync::Arc;
 
-type Entry = unsafe extern "C" fn(*mut Frame) -> u32;
-struct Code {
+type Entry<const BATCH: usize = PARTICLE_BATCH_SIZE> =
+    unsafe extern "C" fn(*mut BatchFrame<BATCH>) -> u32;
+type Code = BatchCode<PARTICLE_BATCH_SIZE>;
+struct BatchCode<const BATCH: usize> {
     module: Option<JITModule>,
-    entry: Entry,
+    entry: Entry<BATCH>,
 }
-impl Drop for Code {
+impl<const BATCH: usize> Drop for BatchCode<BATCH> {
     fn drop(&mut self) {
         if let Some(module) = self.module.take() {
             unsafe {
@@ -21,13 +23,13 @@ impl Drop for Code {
         }
     }
 }
-impl Code {
-    fn new(plan: &PureEvolution, samplers: &[EffectSampler]) -> Self {
+impl<const BATCH: usize> BatchCode<BATCH> {
+    fn configured<const LANES: usize>(plan: &PureEvolution, samplers: &[EffectSampler]) -> Self {
         let builder =
             JITBuilder::with_flags(&[("opt_level", "speed")], default_libcall_names()).unwrap();
         let mut module = JITModule::new(builder);
         let mut context = module.make_context();
-        lower(&mut module, plan, samplers, &mut context).unwrap();
+        SimdCompiler::<BATCH, LANES>::lower(&mut module, plan, samplers, &mut context).unwrap();
         let id = module
             .declare_function(
                 "original_simd_tile",
@@ -37,24 +39,38 @@ impl Code {
             .unwrap();
         module.define_function(id, &mut context).unwrap();
         module.finalize_definitions().unwrap();
-        let entry = unsafe { transmute::<*const u8, Entry>(module.get_finalized_function(id)) };
+        let entry =
+            unsafe { transmute::<*const u8, Entry<BATCH>>(module.get_finalized_function(id)) };
         Self {
             module: Some(module),
             entry,
         }
     }
-    fn run(&self, scratch: &mut Scratch, plan: &PureEvolution, time: f64) -> Result<(), ()> {
-        Frame::with(scratch, plan, time, |frame| unsafe { (self.entry)(frame) })
+    fn run(
+        &self,
+        scratch: &mut BatchScratch<BATCH>,
+        plan: &PureEvolution,
+        time: f64,
+    ) -> Result<(), ()> {
+        BatchFrame::<BATCH>::with(scratch, plan, time, |frame| unsafe { (self.entry)(frame) })
+    }
+}
+impl BatchCode<PARTICLE_BATCH_SIZE> {
+    fn new(plan: &PureEvolution, samplers: &[EffectSampler]) -> Self {
+        Self::configured::<SIMD_LANES>(plan, samplers)
     }
 }
 fn staged(program: &EffectProgram) -> Box<Scratch> {
+    staged_batch::<PARTICLE_BATCH_SIZE>(program)
+}
+fn staged_batch<const BATCH: usize>(program: &EffectProgram) -> Box<BatchScratch<BATCH>> {
     let layer = &program.inner.layers[0];
     let plan = layer.pure_evolution.as_ref().unwrap();
-    let mut scratch = Scratch::new((plan.registers, plan.fields.len()));
+    let mut scratch = BatchScratch::<BATCH>::new((plan.registers, plan.fields.len()));
     scratch.poison();
-    scratch.count = PARTICLE_BATCH_SIZE;
-    scratch.registers[..plan.locals].fill([[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS]);
-    for lane in 0..PARTICLE_BATCH_SIZE {
+    scratch.count = BATCH;
+    scratch.registers[..plan.locals].fill([[0; BATCH]; VALUE_COMPONENTS]);
+    for lane in 0..BATCH {
         scratch.lanes[lane] = Lane {
             slot: lane,
             life: 0.25,
@@ -370,4 +386,73 @@ fn repeated_time_loads_share_tile_input_and_unused_nonfinite_time_is_not_checked
         code.run(&mut vector, plan, time).unwrap();
         assert_eq!(scalar.fields, vector.fields);
     }
+}
+
+fn configured_execution_matches_rust<const BATCH: usize>() {
+    for program in [fixture(BATCH), persistent_fixture(BATCH)] {
+        let plan = program.inner.layers[0].pure_evolution.as_ref().unwrap();
+        let code = BatchCode::<BATCH>::configured::<4>(plan, &program.inner.samplers);
+        for time in [-0., 1.25, 7.5] {
+            let mut scalar = staged_batch::<BATCH>(&program);
+            let mut vector = staged_batch::<BATCH>(&program);
+            scalar.execute(plan, &program.inner.samplers, time).unwrap();
+            code.run(&mut vector, plan, time).unwrap();
+            assert_eq!(scalar.fields, vector.fields);
+            assert_eq!(vector.attempts, 1);
+        }
+        let field = plan
+            .fields
+            .iter()
+            .position(|field| field.canonical == 2)
+            .unwrap();
+        let mut vector = staged_batch::<BATCH>(&program);
+        vector.fields[field][0][BATCH - 1] = f32::NAN.to_bits();
+        assert!(code.run(&mut vector, plan, 1.25).is_err());
+        let mut short = staged_batch::<BATCH>(&program);
+        short.count -= 1;
+        assert!(code.run(&mut short, plan, 1.25).is_err());
+        assert_eq!(short.attempts, 0);
+    }
+}
+#[test]
+fn alternative_batch_layouts_execute_complete_groups_and_keep_late_failures_transactional() {
+    // Only batch size varies for execution: four-lane vectors are supported by
+    // both production target ISAs. No eight-lane hardware assumption is made.
+    configured_execution_matches_rust::<8>();
+    configured_execution_matches_rust::<32>();
+}
+#[test]
+fn compiler_lane_configuration_drives_ir_and_rejects_incomplete_groups() {
+    let program = fixture(PARTICLE_BATCH_SIZE);
+    let plan = program.inner.layers[0].pure_evolution.as_ref().unwrap();
+    assert!(!SimdCompiler::<8, 0>::eligible(
+        plan,
+        &program.inner.samplers
+    ));
+    assert!(!SimdCompiler::<8, 1>::eligible(
+        plan,
+        &program.inner.samplers
+    ));
+    assert!(!SimdCompiler::<8, 3>::eligible(
+        plan,
+        &program.inner.samplers
+    ));
+    assert!(!SimdCompiler::<0, 4>::eligible(
+        plan,
+        &program.inner.samplers
+    ));
+    assert!(SimdCompiler::<8, 3>::cost(plan, &program.inner.samplers).is_none());
+    let builder =
+        JITBuilder::with_flags(&[("opt_level", "speed")], default_libcall_names()).unwrap();
+    let mut module = JITModule::new(builder);
+    let mut context = module.make_context();
+    assert!(
+        SimdCompiler::<8, 3>::lower(&mut module, plan, &program.inner.samplers, &mut context)
+            .is_err()
+    );
+    assert!(context.func.signature.params.is_empty());
+    // IR-only type selection is independent of target legalization/ISA support.
+    // The production owner retains its normal per-kernel codegen fallback.
+    SimdCompiler::<16, 8>::lower(&mut module, plan, &program.inner.samplers, &mut context).unwrap();
+    assert!(context.func.display().to_string().contains("f32x8"));
 }
