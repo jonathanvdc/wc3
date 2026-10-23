@@ -28,6 +28,16 @@ state. The default 1,024-slot pool includes its controller and 1,000 children.
 Particles coincide, so both routes retain identical geometry and overdraw; this
 is an effect-cost workload rather than a spatial crowd.
 
+Pass `--motion` to the generator for moving Float3 positions, changing authored
+axes, rotation, size, color and atlas frames. `--facing 0|2|3|4|5` selects a
+supported billboard geometry in that moving control. Use a fresh directory for
+each case, then run the same comparison driver and admissions. Moving centers
+require CPU position projection and per-view sorting on the immutable route;
+the resulting measurements include those costs. These overlapping populations
+are performance controls. Use single-particle captures from
+`crates/wc3/tests/fixtures/pkb/generate_immutable_motion.py` to inspect alpha,
+atlas orientation and individual trajectories without coincident overdraw.
+
 Capture reaches 0.5 seconds naturally, saves its image, warms residency with zero
 delta, then measures 64 completed frames at 64 FPS through 1.5 seconds. No birth
 or retirement occurs inside that interval. The camera, 160×120 viewport, MSAA1,
@@ -59,3 +69,26 @@ wall samples include CPU submission and busy queue completion, not GPU timestamp
 or pipelined throughput. See the [performance guide](../../../docs/performance.md)
 for the measurement boundary. Keep hardware, quality, binary/source hashes and
 raw-file hashes beside per-run summaries and all paired ratios.
+
+## Moving visual controls
+
+Generate single-particle and population controls with the original motion author,
+then capture all five billboard geometries through the maintained `capture`
+example:
+
+```sh
+python3 crates/wc3/tests/fixtures/pkb/generate_immutable_motion.py \
+  --repo "$PWD" --output /tmp/wc3-motion-pkb \
+  --capture-output /tmp/wc3-motion-assets --counts 1,128 --facing 0,2,3,4,5
+python3 crates/bevy-wc3/benches/support/immutable_frames/check_motion.py \
+  target/release/examples/capture /tmp/wc3-motion-assets \
+  --output /tmp/wc3-motion-captures --execute
+```
+
+Omit `--execute` to inspect the commands and hashes. `--counts` and `--facing`
+can select a complete smaller set for preflight; the default requires both
+populations and all geometries. Every CPU/immutable pair uses the same requested
+times, camera and simulation FPS. The driver retains logs and PNG hashes and
+checks published populations, immutable admission, faults and omissions at each
+capture. It does not establish pixel equivalence: compare the resulting images
+and inspect motion, axes, atlas orientation, color and alpha separately.

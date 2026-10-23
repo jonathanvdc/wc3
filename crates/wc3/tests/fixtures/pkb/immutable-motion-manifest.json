@@ -1,0 +1,42 @@
+{
+  "generator": "generate_immutable_motion.py",
+  "generator_sha256": "16bd0bcf776024658f71defc09e31a0e7ced20604cb8475d9a0fb87d67564c9c",
+  "provenance": "original generated native controls; no game or reference assets",
+  "fixtures": [
+    {
+      "path": "immutable-motion-128-facing0.pkb",
+      "bytes": 9628,
+      "sha256": "12c9fe318c66acc59c2191b89f1ba2b3d646a52c5276d7f35be637374ea53c1d",
+      "children": 128,
+      "facing": 0
+    },
+    {
+      "path": "immutable-motion-128-facing2.pkb",
+      "bytes": 9628,
+      "sha256": "92e814f88dfc818ba2c873df5f679e7ea2cf202792df6d84ff0dd03dc4d5d92b",
+      "children": 128,
+      "facing": 2
+    },
+    {
+      "path": "immutable-motion-128-facing3.pkb",
+      "bytes": 9628,
+      "sha256": "6ed9478c91cc8d1bd0a93c5c632370cee60ca754198bf95b0943004d3b4d15ed",
+      "children": 128,
+      "facing": 3
+    },
+    {
+      "path": "immutable-motion-128-facing4.pkb",
+      "bytes": 9628,
+      "sha256": "2d15de3a8d1767c2caac14d8d7b74af6e6a5adca9f3cb4d63aa8591f3169d74e",
+      "children": 128,
+      "facing": 4
+    },
+    {
+      "path": "immutable-motion-128-facing5.pkb",
+      "bytes": 9628,
+      "sha256": "86e790259e3f91c4b608354346571683ba348ecd1edfce8fd44cf63da27582f5",
+      "children": 128,
+      "facing": 5
+    }
+  ]
+}

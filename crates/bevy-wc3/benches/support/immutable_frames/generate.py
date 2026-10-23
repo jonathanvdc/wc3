@@ -60,7 +60,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--motion", action="store_true", help="moving Position and authored axes, with an original atlas")
+    parser.add_argument("--facing", type=int, choices=[0, 2, 3, 4, 5], default=0)
     args = parser.parse_args()
+    if args.facing and not args.motion:
+        parser.error("--facing requires --motion")
     repo, output = args.repo.resolve(), args.output.resolve()
     if output.exists():
         raise SystemExit("preserve previous controls; output must be fresh")
@@ -70,8 +74,19 @@ def main():
     spec.loader.exec_module(variant)
     base, author = variant.load_author(repo)
     variant.install_immutable_variant(author)
+    sources = [Path(__file__), source, base]
+    if args.motion:
+        motion_source = source.with_name("generate_immutable_motion.py")
+        motion_spec = importlib.util.spec_from_file_location("original_motion_author", motion_source)
+        motion = importlib.util.module_from_spec(motion_spec)
+        motion_spec.loader.exec_module(motion)
+        motion.install_motion_variant(author, args.facing)
+        image = motion.sprite_png()
+        sources.append(motion_source)
+    else:
+        image = sprite_png()
     blob, info = author.build(CHILDREN)
-    payloads = {"effect.pkb": blob, "sprite.png": sprite_png()}
+    payloads = {"effect.pkb": blob, "sprite.png": image}
     for instances in INSTANCES:
         payloads[f"instances-{instances}.mdl"] = host_mdl(instances)
     output.mkdir(parents=True)
@@ -81,14 +96,15 @@ def main():
         files[name] = {"bytes": len(data), "sha256": digest(data)}
     manifest = {
         "status": "authored_not_strict_imported_or_rendered",
-        "provenance": "original repository native writer, complete original MDLs and white RGBA; no external bytes",
-        "sources": {str(path): digest(path.read_bytes()) for path in [Path(__file__), source, base]},
+        "provenance": "original repository native writer, complete original MDLs and RGBA; no external bytes",
+        "sources": {str(path): digest(path.read_bytes()) for path in sources},
         "files": files, "children_per_feature": CHILDREN, "features": INSTANCES,
         "options": OPTIONS, "routes": ["simd-jit", "immutable"],
-        "programme": info,
+        "programme": info, "motion": args.motion, "facing": args.facing,
         "declared_work": {
             "capacity": "default1024 total slots per feature, includes one controller +1000 children",
-            "positions": "all zero; same transparent geometry/overdraw on both routes",
+            "positions": ("coincident moving Float3 centers and authored axes; same geometry/overdraw on both routes"
+                          if args.motion else "all zero; same transparent geometry/overdraw on both routes"),
             "interval": "capture0.5s then64 natural external1/64s frames to1.5s; child lifetime4s",
             "births": "one original burst; no new births/retirement in measured interval",
             "internal_steps": "capture may subdivide; never assume64*1000 invocations",
