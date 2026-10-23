@@ -3312,5 +3312,11 @@
       "files": 58,
       "cases": 330
     }
+  },
+  "synthetic_route_correction": {
+    "observed_at_stage": "explicit SIMD admission",
+    "rust_packet_used": false,
+    "reason": "The original burst fixture stores a Boolean Enabled field; its historical Rust pure-packet admission excluded Boolean copies. These timings compare native scalar against Rust scalar for this fixture.",
+    "scope": "Historical timings and hashes remain unchanged; this corrects their route interpretation. Acquired-effect route use must be established separately."
   }
 }
