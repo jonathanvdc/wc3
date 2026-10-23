@@ -1,4 +1,5 @@
 //! Geometry streams and connectivity available to this model family.
+use crate::model::common::IntoOwned;
 use crate::model::common::IntoPackedArray;
 use crate::model::geometry_edit::{check_edit, remap_values};
 use crate::model::geometry_schema::validate_geometry;
@@ -30,7 +31,7 @@ type M2Streams<'data> =
 ///     [PackedArray::default()], Vec::<[u32; 3]>::new(), Vec::<[Influence; 4]>::new(),
 /// );
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct M2Geometry<'data> {
     pub(crate) streams: M2Streams<'data>,
 }

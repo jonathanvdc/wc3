@@ -1,10 +1,11 @@
 //! Owned geometry distributions preserve slot structure and blending interpretation.
 use super::vertex_geometry::RemapStreams;
 use super::{Error, Influence, InfluenceRows, JointInfluences, PackedArray};
+use crate::model::common::IntoOwned;
 use crate::model::ValueGroups;
 
 /// Authored joint distributions in the shared geometry representation.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, IntoOwned)]
 pub enum GeometryInfluences<'data> {
     /// No authored skinning distribution.
     #[default]

@@ -1,4 +1,5 @@
 //! Static world geometry with the authored world-model stream vocabulary.
+use crate::model::common::IntoOwned;
 use crate::model::common::IntoPackedArray;
 use crate::model::TextureCoordinates;
 use glam::{Vec2, Vec3, Vec4};
@@ -30,7 +31,7 @@ type WmoStreams<'data> = VertexStreams<
 /// Coordinate and color streams retain their authored order. Native dialects
 /// decide which stream counts can be encoded; geometry authoring itself does
 /// not impose the limits of one particular file revision.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct WmoGeometry<'data> {
     streams: WmoStreams<'data>,
     pools: GeometryPools<'data>,

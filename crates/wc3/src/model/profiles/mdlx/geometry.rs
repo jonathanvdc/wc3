@@ -1,4 +1,5 @@
 //! Geometry streams and connectivity available to this model family.
+use crate::model::common::IntoOwned;
 use crate::model::common::IntoPackedArray;
 use crate::model::geometry_edit::{check_edit, remap_values};
 use crate::model::geometry_schema::{present, validate_geometry};
@@ -27,7 +28,7 @@ type MdlxStreams<'data> = VertexStreams<
 /// codec. General polygons and arbitrary attributes belong to
 /// `GeometryData`. Tangent and weighted-skin availability is a native
 /// dialect decision rather than a restriction on this family vocabulary.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct MdlxGeometry<'data> {
     pub(crate) streams: MdlxStreams<'data>,
 }

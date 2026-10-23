@@ -1,4 +1,5 @@
 //! Profile-specific joint binding with borrowed matrix inspection.
+use crate::model::common::IntoOwned;
 use crate::model::common::IntoPackedArray;
 use crate::model::profiles::{Either, Unavailable};
 use crate::model::{Error, Link, PackedArray, ValidateLinks};
@@ -51,7 +52,7 @@ impl BindMatrices<'_, '_> {
 }
 
 /// Model-space joint binding used by Warcraft III and M2 geometry.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, IntoOwned)]
 pub struct IdentityBinding;
 impl ValidateLinks for IdentityBinding {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
@@ -66,7 +67,7 @@ impl<'data> BindingSchema<'data> for IdentityBinding {
 }
 
 /// An explicitly authored inverse bind transform per joint.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct ExplicitBinding<'data> {
     matrices: PackedArray<'data, BindMatrix>,
 }
@@ -104,7 +105,7 @@ impl<'data> BindingSchema<'data> for ExplicitBinding<'data> {
 }
 
 /// All built-in bind interpretations, preserving their authored distinction.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum UniversalBinding<'data> {
     /// Implicit model-space binding.
     Identity(IdentityBinding),

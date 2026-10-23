@@ -2,6 +2,7 @@
 
 use crate::model::common::packed_identity;
 use crate::model::common::AsULE;
+use crate::model::common::IntoOwned;
 use crate::model::common::IntoPackedArray;
 use crate::model::profiles::{Profile, Universal};
 use crate::model::BindingSchema as _;
@@ -61,7 +62,7 @@ pub struct Influence {
     pub weight: f32,
 }
 /// Draw topology retained independently of native index encoding.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum Topology<'a> {
     /// Ordered groups containing different primitive families.
     Mixed(Vec<Topology<'a>>),
@@ -100,7 +101,7 @@ pub enum AttributeDomain {
     Mesh,
 }
 /// The meaning of an additional geometry attribute.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, IntoOwned)]
 pub enum AttributeSemantic<'a> {
     /// Surface normal used for lighting.
     Normal,
@@ -126,7 +127,7 @@ pub enum AttributeSemantic<'a> {
     Named(Cow<'a, str>),
 }
 /// Typed values of an authoring attribute.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum AttributeValues<'a> {
     /// Complete typed surface records, including material relationships.
     TriangleProperties(PackedArray<'a, TriangleProperties>),
@@ -216,7 +217,7 @@ impl VertexInfluences {
     }
 }
 /// Attribute data associated with vertices, polygon corners, faces, or the mesh as a whole.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct Attribute<'a> {
     /// Meaning of these values.
     pub semantic: AttributeSemantic<'a>,

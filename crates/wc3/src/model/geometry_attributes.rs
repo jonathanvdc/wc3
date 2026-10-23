@@ -1,6 +1,7 @@
 //! Canonical typed attributes, keyed by their meaning and correspondence domain.
 use super::geometry_edit::remap_attribute;
 use super::{Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Error, PackedArray};
+use crate::model::common::IntoOwned;
 use glam::{Vec2, Vec3, Vec4};
 use std::ops::Index;
 use std::slice::Iter;
@@ -8,7 +9,7 @@ use std::sync::LazyLock;
 use std::vec::IntoIter;
 
 /// Ordered attributes with one definition per semantic and domain.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, IntoOwned)]
 pub struct GeometryAttributes<'data> {
     entries: Vec<Attribute<'data>>,
 }

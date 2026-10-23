@@ -1,4 +1,5 @@
 //! Complete geometry vocabularies with borrowed inspection of their logical streams.
+use crate::model::common::IntoOwned;
 use crate::model::common::IntoPackedArray;
 use crate::model::common::PackedValue;
 use crate::model::geometry_edit::{check_edit, remap_values};
@@ -175,7 +176,7 @@ impl InfluenceRows<'_, '_> {
 }
 
 /// Shared geometry with canonical attributes and explicit connectivity.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct GeometryData<'data> {
     /// Authored purpose, independent of representation.
     pub kind: GeometryKind,

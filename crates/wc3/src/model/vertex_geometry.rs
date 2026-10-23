@@ -1,13 +1,13 @@
 //! Shared vertex storage with constrained profile owners and a profile-independent view.
 use super::geometry_edit::remap_values;
 use super::{Influence, PackedArray, Topology};
-use crate::model::common::PackedValue;
+use crate::model::common::{Detached, IntoOwned, PackedValue};
 use crate::model::ValueGroups;
 use glam::{Vec2, Vec3, Vec4};
 use std::ops::{Deref, DerefMut};
 
 /// Joint distributions preserve their authored slot structure and blending interpretation.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, IntoOwned)]
 pub enum JointInfluences<'data> {
     /// No authored skinning distribution.
     #[default]
@@ -131,3 +131,50 @@ pub(crate) type VertexStreams<
     N = PackedArray<'data, Vec3>,
     E = (),
 > = GeometryStreams<'data, VertexData<'data, U, T, C, N, E>, I>;
+
+impl<'owned, U, T, C, N, E> Detached<'owned> for VertexData<'_, U, T, C, N, E>
+where
+    U: Detached<'owned>,
+    T: Detached<'owned>,
+    C: Detached<'owned>,
+    N: Detached<'owned>,
+    E: Detached<'owned>,
+{
+    type Detached =
+        VertexData<'owned, U::Detached, T::Detached, C::Detached, N::Detached, E::Detached>;
+    fn into_detached(self) -> Self::Detached {
+        VertexData {
+            positions: self.positions.into_detached(),
+            normals: self.normals.into_detached(),
+            tangents: self.tangents.into_detached(),
+            colors: self.colors.into_detached(),
+            texture_coordinates: self.texture_coordinates.into_detached(),
+            extras: self.extras.into_detached(),
+        }
+    }
+}
+impl<U, T, C, N, E> VertexData<'_, U, T, C, N, E>
+where
+    Self: IntoOwned,
+{
+    /// Detaches every stream, including borrowed buffers in its generic components.
+    pub fn into_owned(self) -> <Self as IntoOwned>::Owned {
+        IntoOwned::into_owned(self)
+    }
+}
+impl<'owned, V: Detached<'owned>, I: Detached<'owned>> Detached<'owned>
+    for GeometryStreams<'_, V, I>
+{
+    type Detached = GeometryStreams<'owned, V::Detached, I::Detached>;
+    fn into_detached(self) -> Self::Detached {
+        GeometryStreams {
+            vertices: self.vertices.into_detached(),
+            topology: self.topology.into_detached(),
+            influences: self.influences.into_detached(),
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "geometry_ownership_tests.rs"]
+mod ownership_tests;

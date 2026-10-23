@@ -2,6 +2,7 @@
 use super::{MaterialId, PackedArray, Topology};
 use crate::model::common::packed_identity;
 use crate::model::common::AsULE;
+use crate::model::common::IntoOwned;
 use glam::Vec4;
 
 /// Authored world-triangle rendering and query behavior.
@@ -38,7 +39,7 @@ pub struct TriangleProperties {
 }
 
 /// Primary primitives and additional connectivity selected by draws.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct ConnectivitySets<'data> {
     /// Primary authored primitive topology.
     pub primary: Topology<'data>,
@@ -55,7 +56,7 @@ impl Default for ConnectivitySets<'_> {
 }
 
 // Constrained WMO storage keeps its independently indexed arrays together.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, IntoOwned)]
 pub(crate) struct GeometryPools<'data> {
     pub triangle_strip_indices: PackedArray<'data, u32>,
     pub tangent_vectors: PackedArray<'data, Vec4>,
