@@ -66,3 +66,24 @@ fn original_native_reports_are_owned_policy_specific_and_distinct_from_routes() 
         graphics.layers().len()
     );
 }
+
+#[test]
+fn original_camera_programme_names_its_scene_capability_rejection() {
+    use wc3::model::scene::popcorn::SpecializationExternal;
+    let native = Document::read(include_bytes!("fixtures/pkb/camera.pkb")).unwrap();
+    let program = native
+        .compile_effect(1, &EffectCompileOptions::default())
+        .unwrap()
+        .with_execution(options(NumericPolicy::Graphics));
+    let report = program.specialization_report(EffectLayerId(0)).unwrap();
+    let expected = SpecializationStatus::Rejected(SpecializationRejection {
+        reason: SpecializationReason::External {
+            binding: 0,
+            kind: SpecializationExternal::SceneContext,
+        },
+        offset: Some(0),
+        field: None,
+    });
+    assert_eq!(report.immutable_expressions, expected);
+    assert_eq!(report.pure_packet, expected);
+}

@@ -22,8 +22,8 @@ mod execution_plan;
 mod execution_policy;
 mod specialization;
 pub use specialization::{
-    SpecializationInstruction, SpecializationReason, SpecializationRejection, SpecializationReport,
-    SpecializationResource, SpecializationStatus,
+    SpecializationExternal, SpecializationInstruction, SpecializationReason,
+    SpecializationRejection, SpecializationReport, SpecializationResource, SpecializationStatus,
 };
 
 pub use execution_policy::{

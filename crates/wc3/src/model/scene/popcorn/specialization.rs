@@ -1,4 +1,5 @@
 //! Preparation eligibility, independent of selected backends and runtime work.
+use super::graph::External;
 use super::{EffectFieldId, EffectLayerId, Instruction, ValueType};
 
 /// Result of one semantic specialization analysis during preparation.
@@ -33,6 +34,12 @@ impl SpecializationRejection {
             field: None,
         }
     }
+    pub(super) fn external(binding: u16, external: &External) -> Self {
+        Self::new(SpecializationReason::External {
+            binding,
+            kind: SpecializationExternal::from(external),
+        })
+    }
     pub(super) fn at(mut self, offset: usize) -> Self {
         self.offset = Some(offset);
         self
@@ -61,7 +68,12 @@ pub enum SpecializationReason {
     /// A checked instruction is outside this specialization subset.
     Instruction(SpecializationInstruction),
     /// The specialization cannot directly bind this external declaration.
-    External(u16),
+    External {
+        /// Binding ordinal in this selected programme, retaining source identity.
+        binding: u16,
+        /// Semantic capability represented by that binding.
+        kind: SpecializationExternal,
+    },
     /// A source store modifies canonical lifecycle state.
     LifecycleWrite,
     /// A persistent register is read before being defined in this invocation.
@@ -96,6 +108,51 @@ pub enum SpecializationReason {
     },
     /// No canonical output is written by the selected evolution.
     NoOutputs,
+}
+
+/// Semantic capability at an unsupported external binding.
+/// Ordinals and resource identities remain in the owning prepared programme.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpecializationExternal {
+    /// Canonical particle field.
+    Field,
+    /// Effect-local time.
+    Time,
+    /// VM-visible duration of this particle's current evolution interval.
+    Delta,
+    /// Particle invocation and generation capability.
+    ParticleContext,
+    /// Effect or instance invocation capability.
+    EffectContext,
+    /// Particle random-stream capability.
+    RandomContext,
+    /// Host scene capability.
+    SceneContext,
+    /// Prepared immutable sampler.
+    Sampler,
+    /// Shared spatial resource.
+    Spatial,
+    /// Routed event capability.
+    Event,
+    /// Authored effect attribute.
+    Attribute,
+}
+impl From<&External> for SpecializationExternal {
+    fn from(external: &External) -> Self {
+        match external {
+            External::Field(_) => Self::Field,
+            External::Time => Self::Time,
+            External::Delta => Self::Delta,
+            External::ParticleContext => Self::ParticleContext,
+            External::EffectContext => Self::EffectContext,
+            External::RandomContext => Self::RandomContext,
+            External::SceneContext => Self::SceneContext,
+            External::Sampler(_) => Self::Sampler,
+            External::Spatial(_) => Self::Spatial,
+            External::Event(_) => Self::Event,
+            External::Attribute(_) => Self::Attribute,
+        }
+    }
 }
 
 /// Checked instruction category used in specialization diagnostics.

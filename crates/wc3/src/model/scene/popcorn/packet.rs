@@ -256,7 +256,7 @@ impl PureEvolution {
                         }
                         External::Time if destination.kind == ValueType::Float => Input::Time,
                         External::Delta if destination.kind == ValueType::Float => Input::Delta,
-                        _ => return Err(Rejection::new(Reason::External(*external)).at(offset)),
+                        binding => return Err(Rejection::external(*external, binding).at(offset)),
                     };
                     InstructionPlan::Load {
                         output: output(*destination, counts, offset)?,
@@ -264,12 +264,12 @@ impl PureEvolution {
                     }
                 }
                 Instruction::Store { source, external } => {
-                    let External::Field(index) = bound
+                    let binding = bound
                         .externals
                         .get(usize::from(*external))
-                        .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(offset))?
-                    else {
-                        return Err(Rejection::new(Reason::External(*external)).at(offset));
+                        .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(offset))?;
+                    let External::Field(index) = binding else {
+                        return Err(Rejection::external(*external, binding).at(offset));
                     };
                     if *index == layer.life || *index == layer.inverse_life {
                         return Err(Rejection::new(Reason::LifecycleWrite)
@@ -346,12 +346,12 @@ impl PureEvolution {
                         ))
                         .at(offset));
                     }
-                    let External::Sampler(index) = bound
+                    let binding = bound
                         .externals
                         .get(usize::from(*receiver))
-                        .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(offset))?
-                    else {
-                        return Err(Rejection::new(Reason::External(*receiver)).at(offset));
+                        .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(offset))?;
+                    let External::Sampler(index) = binding else {
+                        return Err(Rejection::external(*receiver, binding).at(offset));
                     };
                     if !matches!(
                         samplers

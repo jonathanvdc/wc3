@@ -343,3 +343,47 @@ fn written_feedback_keeps_field_identity_and_empty_outputs_are_distinct() {
         .clear();
     assert_eq!(rejected(&program).reason, SpecializationReason::NoOutputs);
 }
+
+#[test]
+fn external_capability_names_preserve_binding_offset_without_native_payloads() {
+    let cases = [
+        (External::Field(99), SpecializationExternal::Field),
+        (External::Time, SpecializationExternal::Time),
+        (External::Delta, SpecializationExternal::Delta),
+        (
+            External::ParticleContext,
+            SpecializationExternal::ParticleContext,
+        ),
+        (
+            External::EffectContext,
+            SpecializationExternal::EffectContext,
+        ),
+        (
+            External::RandomContext,
+            SpecializationExternal::RandomContext,
+        ),
+        (External::SceneContext, SpecializationExternal::SceneContext),
+        (External::Sampler(123), SpecializationExternal::Sampler),
+        (External::Spatial(456), SpecializationExternal::Spatial),
+        (External::Event(789), SpecializationExternal::Event),
+        (External::Attribute(42), SpecializationExternal::Attribute),
+    ];
+    for (binding, kind) in cases {
+        let rejection = SpecializationRejection::external(7, &binding).at(1234);
+        assert_eq!(
+            rejection.reason,
+            SpecializationReason::External { binding: 7, kind }
+        );
+        assert_eq!(rejection.offset, Some(1234));
+        assert_eq!(rejection.field, None);
+    }
+    let mut program = closed_fixture();
+    Arc::get_mut(&mut program.inner).unwrap().layers[0]
+        .evolve
+        .as_mut()
+        .unwrap()
+        .externals[0] = External::SceneContext;
+    let expected = SpecializationRejection::external(0, &External::SceneContext).at(0);
+    assert_eq!(rejected(&program), expected);
+    assert_eq!(packet_rejected(&program), expected);
+}
