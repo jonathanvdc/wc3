@@ -302,3 +302,10 @@ retains actual route deltas, all paired ratios, cold/birth/query costs, numerica
 contracts and hashes/paths for preserved raw logs and frozen artifacts. Its
 source snapshot precedes subsequent packet specialization; no later unmeasured
 change contributes to these results.
+
+The subsequent const-generic packet refactor retains the private default of 16
+particles and four native SIMD lanes, independently of the VM's four-word values.
+The [default-layout receipt](../benches/results/popcorn-simd-default-layout-2026-10-22.json)
+records byte-identical 2,836-byte machine code and executed parity for the same
+diagnostic kernel before and after this refactor. This establishes code identity
+for that kernel, not all programmes or rendered-frame performance.

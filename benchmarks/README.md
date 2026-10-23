@@ -146,8 +146,11 @@ The CSV records each frame's wall time, and the tool prints median and p95.
 Always inspect the companion images before drawing conclusions about rendering.
 Keep model, resolution, camera, LOD, prepasses, lighting, simulation FPS, and
 capture times fixed between comparisons. The timed pose is frozen, including its
-live effect population. Use `crowd` for advancing GPU workloads and the CPU
-runtime suite for headless simulation costs.
+live effect population. Add `--benchmark-advance-frames N` for naturally advancing
+completed frames after the requested images; use `crowd` for overlapping CPU/GPU
+workloads and the CPU runtime suite for headless simulation costs. The
+[immutable-effect comparison](../crates/bevy-wc3/benches/support/immutable_frames/README.md)
+provides original matched inputs and guarded advancing-frame route/upload checks.
 For effect GPU cases, use the checked-in particle and ribbon capture fixtures
 with the same flag. Native GPU access is required, and device/pipeline/readback
 failures are errors rather than successful performance measurements.

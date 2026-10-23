@@ -63,6 +63,74 @@ executors. Record this choice when comparing runs.
 Use the [benchmark guide](../../../benchmarks/README.md#host-gpu-measurements)
 for synthetic asset export and instructions for comparing renderer revisions.
 
+## Compare immutable effect frames
+
+The original [immutable-frame workload](../benches/support/immutable_frames/README.md)
+compares the same 1,000-particle programme through SIMD CPU appearance and immutable
+shader appearance, with either one or 32 independent features. Generate its complete
+MDLs, native programme and white sprite into a fresh directory, then run the
+paired driver with an optimized, native-feature-enabled capture binary:
+
+```sh
+python3 crates/bevy-wc3/benches/support/immutable_frames/generate.py \
+  --repo "$PWD" --output /tmp/wc3-immutable-frame-assets
+cargo build --release -p bevy-wc3 --features popcorn-jit --example capture
+python3 crates/bevy-wc3/benches/support/immutable_frames/compare.py \
+  target/release/examples/capture /tmp/wc3-immutable-frame-assets \
+  /tmp/wc3-immutable-frame-results --build-label release-feature-enabled --execute
+```
+
+Five alternating pairs per case preserve raw completed-frame samples and actual
+clock, population, route and transfer receipts. The driver requires real SIMD
+work on the CPU route and positive immutable publication/authorizations without
+fallback on the shader route. Internal simulation substeps are observed rather
+than inferred from FPS. Stable birth uploads are separate from premeasurement
+residency transfers and changing CPU sample uploads.
+
+Read both one-feature and 32-feature results: amplification isolates effect cost
+but does not remove fixed renderer overhead. The driver reports median paired
+ratios, retaining regressions; no speedup is presumed. Inspect images and the
+admission ledger before interpreting those ratios. Record hardware, quality,
+artifact and raw-file hashes beside per-run route/traffic and paired timing
+summaries.
+
+### Immutable WGSL measurements, 2026-10-22
+
+On an Apple M4 Pro with a 20-core GPU and 24 GiB memory, five alternating pairs
+per case compared optimized Rust 1.98.1 builds with `popcorn-jit`. The workload
+above used 64 advancing completed frames at 64 Hz, a 160×120 viewport, 1× MSAA
+and identical coincident billboards. Each emitter retained 1,000 live children
+plus its controller. All twenty runs matched published clocks, populations and
+budgets, with actual SIMD entries or immutable authorizations and no fallback.
+Matched release captures were pixel-identical and inspected.
+
+| Emitters | Particles | SIMD frame median | WGSL frame median | Paired median ratio | Paired p95 ratio |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1,000 | 3.289 ms | 3.215 ms | 0.974 | 0.976 |
+| 32 | 32,000 | 13.902 ms | 8.895 ms | 0.640 | 0.570 |
+
+Frame medians are medians of five run medians; ratios are medians of five paired
+WGSL/SIMD quantile ratios. The one-emitter difference is small, and individual
+pairs include regressions. With 32 emitters, median completed-frame time fell
+36% and p95 fell 43%; the paired update/submission median ratio was 0.551.
+These are completed wall frames, including queue completion, rather than GPU
+timestamp or pipelined-throughput measurements.
+
+During the stable 64-frame interval, each SIMD emitter uploaded 7,168,000 sampled
+record bytes and 512,000 source/view index bytes. Each immutable emitter instead
+uploaded 4,096 uniform bytes, with no birth, sample or index writes. Initial
+residency transfers are retained separately. A sparse Lich replay also reduced
+birth uploads from 133,120 to 2,080 bytes with the same ten writes and identical
+images and simulation observations; that replay establishes transfer efficiency,
+not a release frame-time gain for that asset.
+
+The [measurement record](../benches/results/immutable-frames-2026-10-22.json)
+retains binary/source/input hashes, all run quantiles, paired ratios, actual work
+counters, transfer receipts and raw CSV/log paths. These original synthetic
+controls establish a gain for the admitted stationary-billboard workload on this
+host. Moving geometry and unsupported recipes retain CPU sampling; these results
+do not establish cross-engine parity or exact game fidelity.
+
 ## Measure effect preparation
 
 Two opt-in CPU microbenchmarks isolate particle preparation and paused view

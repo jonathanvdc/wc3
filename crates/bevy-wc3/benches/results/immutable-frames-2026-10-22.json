@@ -1,0 +1,2958 @@
+{
+  "stage": "immutable WGSL completed frames",
+  "date": "2026-10-22",
+  "status": "completed_guarded_measurement",
+  "host": {
+    "cpu_gpu": "Apple M4 Pro",
+    "gpu_cores": 20,
+    "physical_memory_gib": 24,
+    "gpu_receipt": {
+      "path": "/private/tmp/wc3-immutable-frame-host-gpu-01.json",
+      "sha256": "6128e617734db2ecbb4d6afbc2ac42dce7891123209e1b309587ab41b603263e",
+      "bytes": 1310
+    },
+    "gpu_receipt_scope": "hash/path only; raw display identifiers are not copied",
+    "os": "macOS27.0.1",
+    "rust": "1.98.1",
+    "bevy": "0.19.1",
+    "profile": "release",
+    "feature": "popcorn-jit",
+    "build_label": "release-386cd47f-native-8fc5ba9f",
+    "basis": "root-supplied frozen host/build metadata",
+    "metal_family_support": "Metal4 (system_profiler capability)"
+  },
+  "method": {
+    "repeats": 5,
+    "processes": 20,
+    "features": [
+      1,
+      32
+    ],
+    "children_per_feature": 1000,
+    "pool_capacity_with_controller": 1024,
+    "start_seconds": 0.5,
+    "end_seconds": 1.5,
+    "external_frames": 64,
+    "external_fps": 64,
+    "size": [
+      160,
+      120
+    ],
+    "eye": [
+      0,
+      0,
+      600
+    ],
+    "target": [
+      0,
+      0,
+      0
+    ],
+    "msaa": 1,
+    "lighting": "unshaded; no default light",
+    "geometry": "coincident zero; identical overdraw",
+    "completion": "synchronized SpinPoll queue-empty",
+    "quantiles": "upper median; p95 sorted[N-N//20-1]",
+    "paired": "immutable/Automatic per repeat, median of five ratios",
+    "clock_precision": "published nine-decimal core/Bevy clocks, not raw f64 equality",
+    "internal_work": "actual counters; no64*population assumption",
+    "timing": "simulation/update/render submission/completion included; observations/I/O/readback excluded"
+  },
+  "provenance": {
+    "raw_manifest": {
+      "path": "/private/tmp/wc3-immutable-frame-results-01/manifest.json",
+      "sha256": "4367b9a615b809cec8d1a576896a0ce18aa4e64b21fac00a7bfe26da68e962d4",
+      "bytes": 388473
+    },
+    "assets_manifest": {
+      "path": "/private/tmp/wc3-immutable-frame-assets-02/manifest.json",
+      "sha256": "b1c9bf1d4edd14391d099dd6c9ade263168f7beb5a15b27920907a19dd499b2f",
+      "bytes": 8988
+    },
+    "frozen_inputs": {
+      "/private/tmp/wc3-immutable-capture-release-01/capture": "8fc5ba9fbebd02c69e053f7f4f4a30a36d351ef0cc98d4f387fdfc8406207544",
+      "/Users/jonathanvdc/Code/wc3-mdx/crates/bevy-wc3/benches/support/immutable_frames/compare.py": "faec769ebfe38b9b04361fc2c50bb4063564a0ead7f54d9bca6dc49431c378ce",
+      "/private/tmp/wc3-immutable-frame-assets-02/manifest.json": "b1c9bf1d4edd14391d099dd6c9ade263168f7beb5a15b27920907a19dd499b2f",
+      "/Users/jonathanvdc/Code/wc3-mdx/crates/bevy-wc3/benches/support/immutable_frames/generate.py": "d44259af1a03bfc1e24bf161bc4ea867974d94f2eb3bd4b3a6636b240a8af2cd",
+      "/Users/jonathanvdc/Code/wc3-mdx/crates/wc3/tests/fixtures/pkb/generate_immutable.py": "bb8bbb5ed4ef5a0b6fda9625cf433c6c976688b2f820930f9b3498978e4f1a68",
+      "/Users/jonathanvdc/Code/wc3-mdx/crates/wc3/benches/fixtures/particle_runtime/generate.py": "bfd277c077105eaec6a352442df2471a3f107a2f7959096c0a64a93687eaa339",
+      "/private/tmp/wc3-immutable-frame-assets-02/effect.pkb": "198f73a4e754cf39ede8b36f427d921a1ec9b81d2b29be724852577b378aaea4",
+      "/private/tmp/wc3-immutable-frame-assets-02/sprite.png": "60ffd2c283635d9875ee649d4dd294fb97af2443ff05508d968c858b011dbea0",
+      "/private/tmp/wc3-immutable-frame-assets-02/instances-1.mdl": "daf52cbd8646292ba1a0a33f41741db7485c9b01e319c404f112f4257018620c",
+      "/private/tmp/wc3-immutable-frame-assets-02/instances-32.mdl": "fdd5f5cdb449e34e5f64bc350169eeecd550b3cd85c3e001a172798f6bd15fc3"
+    },
+    "build_source_snapshot": {
+      "path": "/private/tmp/wc3-immutable-release-build-source-hashes-01.json",
+      "sha256": "0f94165483e78ca69238683ca037beae6eef3bad1781622f4612cd80d93daa0e",
+      "bytes": 87452
+    },
+    "source_snapshot_entries": 744,
+    "record_writer": [
+      {
+        "path": "/private/tmp/wc3-immutable-frame-record-writer/write_record.py",
+        "sha256": "bc040bcea8325b37712fefda52872aaa17675726bf6479818dc3b5283a4325dd",
+        "bytes": 10070
+      },
+      {
+        "path": "/private/tmp/wc3-immutable-frame-record-writer/evidence.py",
+        "sha256": "53b2b47097e6372c554bbad173f3b9b42e2cf1d081a3935bf993df3476d94928",
+        "bytes": 5633
+      }
+    ],
+    "source_scope": "supplied frozen prebuild snapshot; not current-worktree attribution",
+    "frozen_artifact": {
+      "path": "/private/tmp/wc3-immutable-capture-release-01/hashes.json",
+      "sha256": "c9edbe5bbe35d0b728504cb4814baf82d12fc1f4f95ad79ad35a35aa8bec6350",
+      "bytes": 452
+    },
+    "release_build_log": {
+      "path": "/private/tmp/wc3-immutable-release-capture-build-01.log",
+      "sha256": "f47506bb4d399e302f83cb37a5cebe9f7d7c72bc2f5dd80d2b2faab7ffb071a4",
+      "bytes": 2784
+    }
+  },
+  "validation": {
+    "tests": {
+      "log": {
+        "path": "/private/tmp/wc3-immutable-candidate-tests-01.log",
+        "sha256": "ff390d3b6b70cca8ebd5450b50d4a83b747c507c4d4436b66e5990a5725d8b48",
+        "bytes": 63597
+      },
+      "passed": 585,
+      "failed": 0,
+      "ignored": 14
+    },
+    "strict_feature_clippy": {
+      "log": {
+        "path": "/private/tmp/wc3-immutable-render-clippy-final.log",
+        "sha256": "54494e4a2891d16392a7a7fa426ab36aa3feab3c8a3341650a727daf0500116f",
+        "bytes": 2768
+      },
+      "scope_basis": "root-invoked strict feature-enabled command; successful log"
+    },
+    "default_simd_identity": {
+      "link": "../../../wc3/benches/results/popcorn-simd-default-layout-2026-10-22.json",
+      "file": {
+        "path": "/Users/jonathanvdc/Code/wc3-mdx/crates/wc3/benches/results/popcorn-simd-default-layout-2026-10-22.json",
+        "sha256": "e32894cc96b4b4fd86076653726aedf2469292a1a55ac84b658874208ddedcba",
+        "bytes": 1506
+      },
+      "code_bytes": 2836,
+      "code_sha256": "2bb308fd4cf00f775f4a96df6e12e3e438cf178b087a4ee32a50ea8db7c1456d",
+      "scope": "same original private diagnostic kernel before/after const-generic refactor; not all graph code or end-to-end frame equivalence"
+    },
+    "gpu_receipts": {
+      "initial_synthetic": {
+        "path": "/private/tmp/wc3-immutable-control-image-comparison-01.json",
+        "sha256": "3fd6b03f6af6dee150a43de769c11ae8cea5f33928a362f691accbccdb6995f4",
+        "bytes": 2042
+      },
+      "dynamic": {
+        "path": "/private/tmp/wc3-immutable-dynamic-assets-02/pixel-comparison.json",
+        "sha256": "b4ac1ce2530a1e2364dc92fe2b7a492573f93233737880682e08ce86ab35a9a5",
+        "bytes": 1641
+      },
+      "dynamic_run": {
+        "path": "/private/tmp/wc3-immutable-dynamic-assets-02/capture-verification.json",
+        "sha256": "450cc4dc98b1d579ef0f76a16890c5defc56f44ab6f39a38983ffb5af73964a6",
+        "bytes": 8715
+      },
+      "lich_cpu_gpu": {
+        "path": "/private/tmp/wc3-immutable-lich-image-comparison-01.json",
+        "sha256": "2739eaece9f60c887b757df8f01c160b256bc642c18493e8c518cd3015382868",
+        "bytes": 879
+      },
+      "lich_rows": {
+        "path": "/private/tmp/wc3-immutable-lich-row-comparison-01.json",
+        "sha256": "51acae36a34540ec0064043c3e958137604334cb4503c32121a0512c79c5d6d3",
+        "bytes": 390
+      }
+    },
+    "gpu_summary": {
+      "initial_cpu_gpu_exact_images": 5,
+      "dynamic_cpu_gpu_exact_images": 14,
+      "dynamic_scope": "numeric Rotation6, size/color, asymmetric2x2 atlas/alpha, lifetime",
+      "acquired_lich_cpu_gpu_images": 4,
+      "max_lich_rgb8_error": 2,
+      "graphics_scope": "bounded arithmetic, not bit-perfect native game rendering"
+    },
+    "lich_changed_row_replay": {
+      "external_frames": 64,
+      "first_seconds": "3.015625000",
+      "last_seconds": "4.000000000",
+      "old_new_exact_images": 4,
+      "programme_observations_exact": true,
+      "advancing_transfer_deltas": {
+        "cpu_sampled": {
+          "birth_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "sampled_records": {
+            "queue_bytes": 52528,
+            "queue_writes": 64,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "resident_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "natural_indices": {
+            "queue_bytes": 1876,
+            "queue_writes": 64,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "view_orders": {
+            "queue_bytes": 1876,
+            "queue_writes": 64,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "uniforms": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          }
+        },
+        "previous_full_blocks": {
+          "birth_records": {
+            "queue_bytes": 133120,
+            "queue_writes": 10,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "sampled_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "resident_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "natural_indices": {
+            "queue_bytes": 560,
+            "queue_writes": 19,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "view_orders": {
+            "queue_bytes": 560,
+            "queue_writes": 19,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "uniforms": {
+            "queue_bytes": 4096,
+            "queue_writes": 64,
+            "initial_bytes": 0,
+            "initializations": 0
+          }
+        },
+        "changed_rows": {
+          "birth_records": {
+            "queue_bytes": 2080,
+            "queue_writes": 10,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "sampled_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "resident_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "natural_indices": {
+            "queue_bytes": 560,
+            "queue_writes": 19,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "view_orders": {
+            "queue_bytes": 560,
+            "queue_writes": 19,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "uniforms": {
+            "queue_bytes": 4096,
+            "queue_writes": 64,
+            "initial_bytes": 0,
+            "initializations": 0
+          }
+        }
+      },
+      "birth_byte_reduction": 64.0,
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-cpu-lich-01/advance-timings.csv",
+          "sha256": "c2d1009c8fd6215252f0d0fb7857198c63553b2b10aef5687ffa945a42d0059d",
+          "bytes": 5311
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-cpu-lich-01/advance-programmes.csv",
+          "sha256": "c6117dcc7abd705951540fc2d5f24a40ceb8b5d2c429de7a417abe68d8b3c9a0",
+          "bytes": 4124
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-cpu-lich-01/advance-uploads.csv",
+          "sha256": "23cb8239ed30b3c24712095329da4f53781ff77ecabdc6c94da51fe8041ab212",
+          "bytes": 454
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-gpu-lich-01/advance-timings.csv",
+          "sha256": "1801090c2f213453f52651f4a3b815a038c5e4013ba5df79132b07aa9483333f",
+          "bytes": 5312
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-gpu-lich-01/advance-programmes.csv",
+          "sha256": "79e80a32c347be892eea97de7d48e37e23af5685e42e16ce382722aa2e12cc0f",
+          "bytes": 4319
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-gpu-lich-01/advance-uploads.csv",
+          "sha256": "f83f7e10401d0704abd8c0c5604adf1c60358c25aaed9fd7f343abf1f34a4be2",
+          "bytes": 460
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-gpu-lich-rows-01/advance-timings.csv",
+          "sha256": "2507bf8ee23fbab10fe6d93d8c7d9f0bcd65a760cd52bb49df1a21979ccf42d7",
+          "bytes": 5312
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-gpu-lich-rows-01/advance-programmes.csv",
+          "sha256": "79e80a32c347be892eea97de7d48e37e23af5685e42e16ce382722aa2e12cc0f",
+          "bytes": 4319
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-gpu-lich-rows-01/advance-uploads.csv",
+          "sha256": "03e9057773cfb97a4d33898c25892e866e9f4d8803bc87b9a656cdc078fccee6",
+          "bytes": 460
+        }
+      ],
+      "scope": "untimed upload/fidelity proof; debug frame times are not performance results"
+    },
+    "release_captures": {
+      "preflight": {
+        "path": "/private/tmp/wc3-immutable-frame-preflight-01/manifest.json",
+        "sha256": "d7870d21f8ad75b80523d0483d5045615da56dca40b359fb46f3461b04c99998",
+        "bytes": 2947
+      },
+      "pixel_comparison": {
+        "path": "/private/tmp/wc3-immutable-frame-preflight-01/pixel-comparison.json",
+        "sha256": "eff9625c43d800daa92fabaf515e4d2f5cc0d70b99b2470ebf872d9cf7b2f686",
+        "bytes": 288
+      },
+      "matched_pairs": 2,
+      "pixel_identical": true,
+      "human_inspected": [
+        "features1-simd-jit/frame-0000-0.500s.png",
+        "features32-immutable/frame-0000-0.500s.png"
+      ],
+      "all_twenty_measured_capture_pngs_match_within_workload": true
+    },
+    "final_native_corpus": {
+      "manifest": {
+        "path": "/private/tmp/wc3-immutable-final-corpus-01/manifest.json",
+        "sha256": "3fd9ac52d732d71a649670b0afddb6c8f36766ae852ed417a02da000b4aee8d3",
+        "bytes": 11837
+      },
+      "status": "exact_match",
+      "files": 58,
+      "cases": 330,
+      "trajectory_rows": 83064,
+      "source": {
+        "path": "/private/tmp/wc3-corn-simd-corpus.rs",
+        "sha256": "a55e9ccf2cb08e28e3eafaf2f6d839e621a07a18526bda94d885e3344853bad4"
+      },
+      "binaries": {
+        "baseline": {
+          "path": "/private/tmp/wc3-immutable-final-corpus-interpreter",
+          "returncode": 0,
+          "sha256": "628d9ef344b660e82baaa0c34a9a05c2e4d5f7481c664029eba895e0baa53ee1",
+          "stdout_sha256": "50b956d4b9faa383d8683dc0bdbf63010745c4f60d4838a7c3406a72bd5c0d08",
+          "summary": {
+            "cases": 330,
+            "compiled": 165,
+            "files": 58,
+            "kind": "end",
+            "rejected": 9
+          }
+        },
+        "candidate": {
+          "path": "/private/tmp/wc3-immutable-final-corpus-automatic",
+          "returncode": 0,
+          "sha256": "56dc7f907d4150411fa9d8b5dfb9fcdce76a59c963f7851d8cd004eecbbe39d0",
+          "stdout_sha256": "50b956d4b9faa383d8683dc0bdbf63010745c4f60d4838a7c3406a72bd5c0d08",
+          "summary": {
+            "cases": 330,
+            "compiled": 165,
+            "files": 58,
+            "kind": "end",
+            "rejected": 9
+          }
+        }
+      },
+      "linked_library": {
+        "path": "/Users/jonathanvdc/Code/wc3-mdx/target/release/deps/libwc3-a480a90f1483e393.rlib",
+        "sha256": "1a9bb667a94a907bf840915d2c7ac42a0657c089842cb94c64cc8f1ea0f46d94",
+        "bytes": 149326568
+      },
+      "scope": "Interpreter versus Automatic using the final typed-packet core; all three evolution modes; source/binary/asset hashes in raw manifest; correctness only, no timing claim"
+    }
+  },
+  "jobs": [
+    {
+      "name": "features1-r0-simd-jit",
+      "features": 1,
+      "repeat": 0,
+      "route": "simd-jit",
+      "timing": {
+        "wall": {
+          "median_ms": 3.709334,
+          "p95_ms": 3.935917
+        },
+        "step": {
+          "median_ms": 2.373834,
+          "p95_ms": 2.572209
+        },
+        "wait": {
+          "median_ms": 1.331166,
+          "p95_ms": 1.401791
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r0-simd-jit.stdout",
+          "sha256": "8dbca6a9415a6718e805a1d69e199976a03c04eb2ad371174803eb4d057c7aff",
+          "bytes": 1238
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r0-simd-jit.stderr",
+          "sha256": "50d0e5e37f6012c1e8c984cdce5593379c4f83ee180b44ca7518a1985a369895",
+          "bytes": 1830
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r0-simd-jit/advance-programmes.csv",
+          "sha256": "a058e6fc6a0f38ec43f5d3408718d6f233c74808b804229074220e8a56eeccef",
+          "bytes": 5142
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r0-simd-jit/advance-timings.csv",
+          "sha256": "da950ca5e1202d92bf6ba168d0cd35f72a856cacf6ac4171c8ef3e83e782a7ef",
+          "bytes": 5546
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r0-simd-jit/advance-uploads.csv",
+          "sha256": "3dca2d13fe151e48049405cc4008c5ee97903999b89af87c9896ac71a209de39",
+          "bytes": 459
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r0-simd-jit/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "bb2b912ac724ae7a2dca1ed8deabfdb6091387c8ccdbe835ecca33516aaf284e",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          576,
+          0,
+          3968,
+          63488,
+          0,
+          0
+        ],
+        "minimum_per_external_frame": [
+          9,
+          0,
+          62,
+          992,
+          0,
+          0
+        ],
+        "maximum_per_external_frame": [
+          9,
+          0,
+          62,
+          992,
+          0,
+          0
+        ]
+      },
+      "transfer_profile": 0
+    },
+    {
+      "name": "features1-r0-immutable",
+      "features": 1,
+      "repeat": 0,
+      "route": "immutable",
+      "timing": {
+        "wall": {
+          "median_ms": 3.214917,
+          "p95_ms": 3.467042
+        },
+        "step": {
+          "median_ms": 1.905167,
+          "p95_ms": 2.157458
+        },
+        "wait": {
+          "median_ms": 1.302334,
+          "p95_ms": 1.336667
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r0-immutable.stdout",
+          "sha256": "3420b876242afb79d352a60a5c97c174b4bfa9ecca9aa06559d76d3d40b56c99",
+          "bytes": 1240
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r0-immutable.stderr",
+          "sha256": "121fa8da6e0d43c8df22bbebdf09b911544da566e92faacfd0fe24cc64a1f773",
+          "bytes": 2004
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r0-immutable/advance-programmes.csv",
+          "sha256": "03dbe9be2a62d7a2f5c7ef97882acf22b420b2d38825ffe2e985636f6c8c314e",
+          "bytes": 5142
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r0-immutable/advance-timings.csv",
+          "sha256": "470da7b4d2ff86ec7eae042a611439c0b7f0069ab05f0981cc6941644ca405f3",
+          "bytes": 5738
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r0-immutable/advance-uploads.csv",
+          "sha256": "fd751dc15e1b82c2412e1a638f192950ee5414c0531a3ee092611448421dd692",
+          "bytes": 452
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r0-immutable/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "bb2b912ac724ae7a2dca1ed8deabfdb6091387c8ccdbe835ecca33516aaf284e",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          64,
+          0,
+          0,
+          0,
+          64000,
+          0
+        ],
+        "minimum_per_external_frame": [
+          1,
+          0,
+          0,
+          0,
+          1000,
+          0
+        ],
+        "maximum_per_external_frame": [
+          1,
+          0,
+          0,
+          0,
+          1000,
+          0
+        ]
+      },
+      "transfer_profile": 1
+    },
+    {
+      "name": "features1-r1-immutable",
+      "features": 1,
+      "repeat": 1,
+      "route": "immutable",
+      "timing": {
+        "wall": {
+          "median_ms": 3.301834,
+          "p95_ms": 3.712792
+        },
+        "step": {
+          "median_ms": 1.972541,
+          "p95_ms": 2.406916
+        },
+        "wait": {
+          "median_ms": 1.308167,
+          "p95_ms": 1.366125
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r1-immutable.stdout",
+          "sha256": "a0df8ec9b65b92df506ba4fcd894c4ef3900cc1a183a95e820938c8594d0cf15",
+          "bytes": 1240
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r1-immutable.stderr",
+          "sha256": "121fa8da6e0d43c8df22bbebdf09b911544da566e92faacfd0fe24cc64a1f773",
+          "bytes": 2004
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r1-immutable/advance-programmes.csv",
+          "sha256": "03dbe9be2a62d7a2f5c7ef97882acf22b420b2d38825ffe2e985636f6c8c314e",
+          "bytes": 5142
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r1-immutable/advance-timings.csv",
+          "sha256": "c665be6a6094739e596fbf00bcd083cb2db9a0bffe464ad5ebcd5cca381ae674",
+          "bytes": 5738
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r1-immutable/advance-uploads.csv",
+          "sha256": "fd751dc15e1b82c2412e1a638f192950ee5414c0531a3ee092611448421dd692",
+          "bytes": 452
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r1-immutable/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "bb2b912ac724ae7a2dca1ed8deabfdb6091387c8ccdbe835ecca33516aaf284e",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          64,
+          0,
+          0,
+          0,
+          64000,
+          0
+        ],
+        "minimum_per_external_frame": [
+          1,
+          0,
+          0,
+          0,
+          1000,
+          0
+        ],
+        "maximum_per_external_frame": [
+          1,
+          0,
+          0,
+          0,
+          1000,
+          0
+        ]
+      },
+      "transfer_profile": 1
+    },
+    {
+      "name": "features1-r1-simd-jit",
+      "features": 1,
+      "repeat": 1,
+      "route": "simd-jit",
+      "timing": {
+        "wall": {
+          "median_ms": 3.288584,
+          "p95_ms": 3.635167
+        },
+        "step": {
+          "median_ms": 1.977833,
+          "p95_ms": 2.345083
+        },
+        "wait": {
+          "median_ms": 1.302709,
+          "p95_ms": 1.354917
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r1-simd-jit.stdout",
+          "sha256": "c87338cee6321c3b96ea45eecf5114730e6774ff3e5601aef01a230559e307da",
+          "bytes": 1238
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r1-simd-jit.stderr",
+          "sha256": "50d0e5e37f6012c1e8c984cdce5593379c4f83ee180b44ca7518a1985a369895",
+          "bytes": 1830
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r1-simd-jit/advance-programmes.csv",
+          "sha256": "a058e6fc6a0f38ec43f5d3408718d6f233c74808b804229074220e8a56eeccef",
+          "bytes": 5142
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r1-simd-jit/advance-timings.csv",
+          "sha256": "e64f92b663f206aece4942cc7822c5f08270bc8ccadca478b24090b79dceafb1",
+          "bytes": 5546
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r1-simd-jit/advance-uploads.csv",
+          "sha256": "3dca2d13fe151e48049405cc4008c5ee97903999b89af87c9896ac71a209de39",
+          "bytes": 459
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r1-simd-jit/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "bb2b912ac724ae7a2dca1ed8deabfdb6091387c8ccdbe835ecca33516aaf284e",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          576,
+          0,
+          3968,
+          63488,
+          0,
+          0
+        ],
+        "minimum_per_external_frame": [
+          9,
+          0,
+          62,
+          992,
+          0,
+          0
+        ],
+        "maximum_per_external_frame": [
+          9,
+          0,
+          62,
+          992,
+          0,
+          0
+        ]
+      },
+      "transfer_profile": 0
+    },
+    {
+      "name": "features1-r2-simd-jit",
+      "features": 1,
+      "repeat": 2,
+      "route": "simd-jit",
+      "timing": {
+        "wall": {
+          "median_ms": 3.268292,
+          "p95_ms": 3.531375
+        },
+        "step": {
+          "median_ms": 1.972917,
+          "p95_ms": 2.211417
+        },
+        "wait": {
+          "median_ms": 1.308834,
+          "p95_ms": 1.355208
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r2-simd-jit.stdout",
+          "sha256": "c90743c0d6800ac60f71dad31a79b23c38b617f06f580147b9fae9a0fd7933b7",
+          "bytes": 1238
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r2-simd-jit.stderr",
+          "sha256": "50d0e5e37f6012c1e8c984cdce5593379c4f83ee180b44ca7518a1985a369895",
+          "bytes": 1830
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r2-simd-jit/advance-programmes.csv",
+          "sha256": "a058e6fc6a0f38ec43f5d3408718d6f233c74808b804229074220e8a56eeccef",
+          "bytes": 5142
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r2-simd-jit/advance-timings.csv",
+          "sha256": "4f17b3db21c288ed4ac16a78dcdece425a31478f1a70931d54b3f65174b93f83",
+          "bytes": 5546
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r2-simd-jit/advance-uploads.csv",
+          "sha256": "3dca2d13fe151e48049405cc4008c5ee97903999b89af87c9896ac71a209de39",
+          "bytes": 459
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r2-simd-jit/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "bb2b912ac724ae7a2dca1ed8deabfdb6091387c8ccdbe835ecca33516aaf284e",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          576,
+          0,
+          3968,
+          63488,
+          0,
+          0
+        ],
+        "minimum_per_external_frame": [
+          9,
+          0,
+          62,
+          992,
+          0,
+          0
+        ],
+        "maximum_per_external_frame": [
+          9,
+          0,
+          62,
+          992,
+          0,
+          0
+        ]
+      },
+      "transfer_profile": 0
+    },
+    {
+      "name": "features1-r2-immutable",
+      "features": 1,
+      "repeat": 2,
+      "route": "immutable",
+      "timing": {
+        "wall": {
+          "median_ms": 3.184917,
+          "p95_ms": 3.443334
+        },
+        "step": {
+          "median_ms": 1.884875,
+          "p95_ms": 2.129625
+        },
+        "wait": {
+          "median_ms": 1.304959,
+          "p95_ms": 1.34475
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r2-immutable.stdout",
+          "sha256": "11e9f51a724455606c079442a90f346b1b75696d480083882c648724ee0444f8",
+          "bytes": 1240
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r2-immutable.stderr",
+          "sha256": "121fa8da6e0d43c8df22bbebdf09b911544da566e92faacfd0fe24cc64a1f773",
+          "bytes": 2004
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r2-immutable/advance-programmes.csv",
+          "sha256": "03dbe9be2a62d7a2f5c7ef97882acf22b420b2d38825ffe2e985636f6c8c314e",
+          "bytes": 5142
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r2-immutable/advance-timings.csv",
+          "sha256": "7bd6430044df97d9c95c7f96a9bccc485c2aa0494d3ac8c630a68e6269e8be02",
+          "bytes": 5738
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r2-immutable/advance-uploads.csv",
+          "sha256": "fd751dc15e1b82c2412e1a638f192950ee5414c0531a3ee092611448421dd692",
+          "bytes": 452
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r2-immutable/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "bb2b912ac724ae7a2dca1ed8deabfdb6091387c8ccdbe835ecca33516aaf284e",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          64,
+          0,
+          0,
+          0,
+          64000,
+          0
+        ],
+        "minimum_per_external_frame": [
+          1,
+          0,
+          0,
+          0,
+          1000,
+          0
+        ],
+        "maximum_per_external_frame": [
+          1,
+          0,
+          0,
+          0,
+          1000,
+          0
+        ]
+      },
+      "transfer_profile": 1
+    },
+    {
+      "name": "features1-r3-immutable",
+      "features": 1,
+      "repeat": 3,
+      "route": "immutable",
+      "timing": {
+        "wall": {
+          "median_ms": 3.208,
+          "p95_ms": 3.513708
+        },
+        "step": {
+          "median_ms": 1.890375,
+          "p95_ms": 2.207917
+        },
+        "wait": {
+          "median_ms": 1.305791,
+          "p95_ms": 1.344292
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r3-immutable.stdout",
+          "sha256": "c7630003b5d492892ae622ad9d6de0866126d9c921e920abb2dfc2d3cbd73712",
+          "bytes": 1240
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r3-immutable.stderr",
+          "sha256": "121fa8da6e0d43c8df22bbebdf09b911544da566e92faacfd0fe24cc64a1f773",
+          "bytes": 2004
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r3-immutable/advance-programmes.csv",
+          "sha256": "03dbe9be2a62d7a2f5c7ef97882acf22b420b2d38825ffe2e985636f6c8c314e",
+          "bytes": 5142
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r3-immutable/advance-timings.csv",
+          "sha256": "777516ef736d06d2a75f0cce47a5952c2caf7a6737ff8c29b3759e292ad3931e",
+          "bytes": 5738
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r3-immutable/advance-uploads.csv",
+          "sha256": "fd751dc15e1b82c2412e1a638f192950ee5414c0531a3ee092611448421dd692",
+          "bytes": 452
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r3-immutable/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "bb2b912ac724ae7a2dca1ed8deabfdb6091387c8ccdbe835ecca33516aaf284e",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          64,
+          0,
+          0,
+          0,
+          64000,
+          0
+        ],
+        "minimum_per_external_frame": [
+          1,
+          0,
+          0,
+          0,
+          1000,
+          0
+        ],
+        "maximum_per_external_frame": [
+          1,
+          0,
+          0,
+          0,
+          1000,
+          0
+        ]
+      },
+      "transfer_profile": 1
+    },
+    {
+      "name": "features1-r3-simd-jit",
+      "features": 1,
+      "repeat": 3,
+      "route": "simd-jit",
+      "timing": {
+        "wall": {
+          "median_ms": 3.312167,
+          "p95_ms": 3.601875
+        },
+        "step": {
+          "median_ms": 2.009583,
+          "p95_ms": 2.352167
+        },
+        "wait": {
+          "median_ms": 1.309666,
+          "p95_ms": 1.34275
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r3-simd-jit.stdout",
+          "sha256": "498c957bb938beedba0da6881c72680b462cf7170cddd981a135accbcc877113",
+          "bytes": 1238
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r3-simd-jit.stderr",
+          "sha256": "50d0e5e37f6012c1e8c984cdce5593379c4f83ee180b44ca7518a1985a369895",
+          "bytes": 1830
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r3-simd-jit/advance-programmes.csv",
+          "sha256": "a058e6fc6a0f38ec43f5d3408718d6f233c74808b804229074220e8a56eeccef",
+          "bytes": 5142
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r3-simd-jit/advance-timings.csv",
+          "sha256": "e5879c3d831e6c30bf84f7afb02f68a7139134af5fea3d92a191d5980300fe57",
+          "bytes": 5546
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r3-simd-jit/advance-uploads.csv",
+          "sha256": "3dca2d13fe151e48049405cc4008c5ee97903999b89af87c9896ac71a209de39",
+          "bytes": 459
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r3-simd-jit/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "bb2b912ac724ae7a2dca1ed8deabfdb6091387c8ccdbe835ecca33516aaf284e",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          576,
+          0,
+          3968,
+          63488,
+          0,
+          0
+        ],
+        "minimum_per_external_frame": [
+          9,
+          0,
+          62,
+          992,
+          0,
+          0
+        ],
+        "maximum_per_external_frame": [
+          9,
+          0,
+          62,
+          992,
+          0,
+          0
+        ]
+      },
+      "transfer_profile": 0
+    },
+    {
+      "name": "features1-r4-simd-jit",
+      "features": 1,
+      "repeat": 4,
+      "route": "simd-jit",
+      "timing": {
+        "wall": {
+          "median_ms": 3.267709,
+          "p95_ms": 3.540416
+        },
+        "step": {
+          "median_ms": 1.965333,
+          "p95_ms": 2.254666
+        },
+        "wait": {
+          "median_ms": 1.308875,
+          "p95_ms": 1.349791
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r4-simd-jit.stdout",
+          "sha256": "9095499a6f3bde5ded8273f2b290a8402fb507f4eaa04d58310d5909c9b8cdcd",
+          "bytes": 1238
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r4-simd-jit.stderr",
+          "sha256": "50d0e5e37f6012c1e8c984cdce5593379c4f83ee180b44ca7518a1985a369895",
+          "bytes": 1830
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r4-simd-jit/advance-programmes.csv",
+          "sha256": "a058e6fc6a0f38ec43f5d3408718d6f233c74808b804229074220e8a56eeccef",
+          "bytes": 5142
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r4-simd-jit/advance-timings.csv",
+          "sha256": "94eb9a16c2d8c27062c218f1f3bd4661243f3a9e2019e4109d3f25f7aa3d6e40",
+          "bytes": 5546
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r4-simd-jit/advance-uploads.csv",
+          "sha256": "3dca2d13fe151e48049405cc4008c5ee97903999b89af87c9896ac71a209de39",
+          "bytes": 459
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r4-simd-jit/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "bb2b912ac724ae7a2dca1ed8deabfdb6091387c8ccdbe835ecca33516aaf284e",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          576,
+          0,
+          3968,
+          63488,
+          0,
+          0
+        ],
+        "minimum_per_external_frame": [
+          9,
+          0,
+          62,
+          992,
+          0,
+          0
+        ],
+        "maximum_per_external_frame": [
+          9,
+          0,
+          62,
+          992,
+          0,
+          0
+        ]
+      },
+      "transfer_profile": 0
+    },
+    {
+      "name": "features1-r4-immutable",
+      "features": 1,
+      "repeat": 4,
+      "route": "immutable",
+      "timing": {
+        "wall": {
+          "median_ms": 3.232542,
+          "p95_ms": 3.67775
+        },
+        "step": {
+          "median_ms": 1.932167,
+          "p95_ms": 2.357333
+        },
+        "wait": {
+          "median_ms": 1.311209,
+          "p95_ms": 1.358833
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r4-immutable.stdout",
+          "sha256": "16752ea9cad63305ecaae203bd5f602c74d468809c564ef5935089b694539580",
+          "bytes": 1240
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r4-immutable.stderr",
+          "sha256": "121fa8da6e0d43c8df22bbebdf09b911544da566e92faacfd0fe24cc64a1f773",
+          "bytes": 2004
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r4-immutable/advance-programmes.csv",
+          "sha256": "03dbe9be2a62d7a2f5c7ef97882acf22b420b2d38825ffe2e985636f6c8c314e",
+          "bytes": 5142
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r4-immutable/advance-timings.csv",
+          "sha256": "f0e1f941aa698663d7114fadd471d5ad1e6f2198f4168244b097cc1c07395cfc",
+          "bytes": 5738
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r4-immutable/advance-uploads.csv",
+          "sha256": "fd751dc15e1b82c2412e1a638f192950ee5414c0531a3ee092611448421dd692",
+          "bytes": 452
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features1-r4-immutable/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "bb2b912ac724ae7a2dca1ed8deabfdb6091387c8ccdbe835ecca33516aaf284e",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          64,
+          0,
+          0,
+          0,
+          64000,
+          0
+        ],
+        "minimum_per_external_frame": [
+          1,
+          0,
+          0,
+          0,
+          1000,
+          0
+        ],
+        "maximum_per_external_frame": [
+          1,
+          0,
+          0,
+          0,
+          1000,
+          0
+        ]
+      },
+      "transfer_profile": 1
+    },
+    {
+      "name": "features32-r0-simd-jit",
+      "features": 32,
+      "repeat": 0,
+      "route": "simd-jit",
+      "timing": {
+        "wall": {
+          "median_ms": 13.90225,
+          "p95_ms": 17.115917
+        },
+        "step": {
+          "median_ms": 6.713125,
+          "p95_ms": 7.056666
+        },
+        "wait": {
+          "median_ms": 7.178583,
+          "p95_ms": 10.404709
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r0-simd-jit.stdout",
+          "sha256": "426c47819a0b288e0d5d6aedcbc2328504033f91094007b93355b842ab26ad71",
+          "bytes": 8170
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r0-simd-jit.stderr",
+          "sha256": "c3342415a906b39d1e6c5997dd1a9a0df7c3895d206471d89d7996fb4062553b",
+          "bytes": 1842
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r0-simd-jit/advance-programmes.csv",
+          "sha256": "5217d84ecb8a6dc9238c71be819d7f66cf8f06560268b619fd12911baf58b9e7",
+          "bytes": 155957
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r0-simd-jit/advance-timings.csv",
+          "sha256": "fb927b64097b8774b1b55cddebc8d993ac7cca13b58dfdd35cce3d15edb15149",
+          "bytes": 5743
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r0-simd-jit/advance-uploads.csv",
+          "sha256": "db57e59edd11a24fcd24e1d395cd01e22a81a3816536dd2c52bb0effad1248c4",
+          "bytes": 486
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r0-simd-jit/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "f7efa6daecfd8c4c90e440d88e5e0c3471a8cca28804cc01d4fcae98f3c01717",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          18432,
+          0,
+          126976,
+          2031616,
+          0,
+          0
+        ],
+        "minimum_per_external_frame": [
+          288,
+          0,
+          1984,
+          31744,
+          0,
+          0
+        ],
+        "maximum_per_external_frame": [
+          288,
+          0,
+          1984,
+          31744,
+          0,
+          0
+        ]
+      },
+      "transfer_profile": 2
+    },
+    {
+      "name": "features32-r0-immutable",
+      "features": 32,
+      "repeat": 0,
+      "route": "immutable",
+      "timing": {
+        "wall": {
+          "median_ms": 8.928166,
+          "p95_ms": 9.462792
+        },
+        "step": {
+          "median_ms": 3.719667,
+          "p95_ms": 3.963375
+        },
+        "wait": {
+          "median_ms": 5.207916,
+          "p95_ms": 5.577625
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r0-immutable.stdout",
+          "sha256": "3407ea87d2e48e5be1c4cdf7ea842305f43ca82a1a4bb56ac9f90a5fd58ea36c",
+          "bytes": 8263
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r0-immutable.stderr",
+          "sha256": "d4069821607c0314215d0721f33fa47b59fa153270dadc689b11a9c67c90dd43",
+          "bytes": 2017
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r0-immutable/advance-programmes.csv",
+          "sha256": "4f652b0feec83cf45c44d44a13b1a59ff8732b3807ab4691d6b5b2323b8af828",
+          "bytes": 155957
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r0-immutable/advance-timings.csv",
+          "sha256": "58e30f3d7b0bb3c19ce902d753d3a71081034e1bd482ccc02abd7d49745605ef",
+          "bytes": 5930
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r0-immutable/advance-uploads.csv",
+          "sha256": "34ed9147a33cbf4601ea56c25b0a765ac2e4823a8ed59c169f38f7302f198799",
+          "bytes": 480
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r0-immutable/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "f7efa6daecfd8c4c90e440d88e5e0c3471a8cca28804cc01d4fcae98f3c01717",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          2048,
+          0,
+          0,
+          0,
+          2048000,
+          0
+        ],
+        "minimum_per_external_frame": [
+          32,
+          0,
+          0,
+          0,
+          32000,
+          0
+        ],
+        "maximum_per_external_frame": [
+          32,
+          0,
+          0,
+          0,
+          32000,
+          0
+        ]
+      },
+      "transfer_profile": 3
+    },
+    {
+      "name": "features32-r1-immutable",
+      "features": 32,
+      "repeat": 1,
+      "route": "immutable",
+      "timing": {
+        "wall": {
+          "median_ms": 8.826,
+          "p95_ms": 9.240292
+        },
+        "step": {
+          "median_ms": 3.662833,
+          "p95_ms": 3.919458
+        },
+        "wait": {
+          "median_ms": 5.199916,
+          "p95_ms": 5.515292
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r1-immutable.stdout",
+          "sha256": "7a6456663869f330dbb0e374cc92ba6a7d98940284302521fd139b75567c15b1",
+          "bytes": 8263
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r1-immutable.stderr",
+          "sha256": "d4069821607c0314215d0721f33fa47b59fa153270dadc689b11a9c67c90dd43",
+          "bytes": 2017
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r1-immutable/advance-programmes.csv",
+          "sha256": "4f652b0feec83cf45c44d44a13b1a59ff8732b3807ab4691d6b5b2323b8af828",
+          "bytes": 155957
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r1-immutable/advance-timings.csv",
+          "sha256": "ddc92bed0bf42f3ba9aa238bd132e98673d045bad0fa872749470dd6701bae23",
+          "bytes": 5930
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r1-immutable/advance-uploads.csv",
+          "sha256": "34ed9147a33cbf4601ea56c25b0a765ac2e4823a8ed59c169f38f7302f198799",
+          "bytes": 480
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r1-immutable/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "f7efa6daecfd8c4c90e440d88e5e0c3471a8cca28804cc01d4fcae98f3c01717",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          2048,
+          0,
+          0,
+          0,
+          2048000,
+          0
+        ],
+        "minimum_per_external_frame": [
+          32,
+          0,
+          0,
+          0,
+          32000,
+          0
+        ],
+        "maximum_per_external_frame": [
+          32,
+          0,
+          0,
+          0,
+          32000,
+          0
+        ]
+      },
+      "transfer_profile": 3
+    },
+    {
+      "name": "features32-r1-simd-jit",
+      "features": 32,
+      "repeat": 1,
+      "route": "simd-jit",
+      "timing": {
+        "wall": {
+          "median_ms": 13.347,
+          "p95_ms": 16.553334
+        },
+        "step": {
+          "median_ms": 6.779,
+          "p95_ms": 7.138416
+        },
+        "wait": {
+          "median_ms": 6.576375,
+          "p95_ms": 9.459917
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r1-simd-jit.stdout",
+          "sha256": "ec3281a6e6cd6c38b4577f08757875df505f8e11ced07ab49772c8271dba4cba",
+          "bytes": 8170
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r1-simd-jit.stderr",
+          "sha256": "c3342415a906b39d1e6c5997dd1a9a0df7c3895d206471d89d7996fb4062553b",
+          "bytes": 1842
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r1-simd-jit/advance-programmes.csv",
+          "sha256": "5217d84ecb8a6dc9238c71be819d7f66cf8f06560268b619fd12911baf58b9e7",
+          "bytes": 155957
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r1-simd-jit/advance-timings.csv",
+          "sha256": "ecae9bea38490e7126f5050c2636b13c748acb6536a20c23f9ce9eb1dd98506d",
+          "bytes": 5741
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r1-simd-jit/advance-uploads.csv",
+          "sha256": "db57e59edd11a24fcd24e1d395cd01e22a81a3816536dd2c52bb0effad1248c4",
+          "bytes": 486
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r1-simd-jit/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "f7efa6daecfd8c4c90e440d88e5e0c3471a8cca28804cc01d4fcae98f3c01717",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          18432,
+          0,
+          126976,
+          2031616,
+          0,
+          0
+        ],
+        "minimum_per_external_frame": [
+          288,
+          0,
+          1984,
+          31744,
+          0,
+          0
+        ],
+        "maximum_per_external_frame": [
+          288,
+          0,
+          1984,
+          31744,
+          0,
+          0
+        ]
+      },
+      "transfer_profile": 2
+    },
+    {
+      "name": "features32-r2-simd-jit",
+      "features": 32,
+      "repeat": 2,
+      "route": "simd-jit",
+      "timing": {
+        "wall": {
+          "median_ms": 14.0895,
+          "p95_ms": 16.149958
+        },
+        "step": {
+          "median_ms": 6.679084,
+          "p95_ms": 7.149292
+        },
+        "wait": {
+          "median_ms": 7.419875,
+          "p95_ms": 9.131042
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r2-simd-jit.stdout",
+          "sha256": "86160d56c8bfa59fe9b32a9707f356b954fb48512a2105ecf02991f176a06f90",
+          "bytes": 8170
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r2-simd-jit.stderr",
+          "sha256": "c3342415a906b39d1e6c5997dd1a9a0df7c3895d206471d89d7996fb4062553b",
+          "bytes": 1842
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r2-simd-jit/advance-programmes.csv",
+          "sha256": "5217d84ecb8a6dc9238c71be819d7f66cf8f06560268b619fd12911baf58b9e7",
+          "bytes": 155957
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r2-simd-jit/advance-timings.csv",
+          "sha256": "3825101381f8147e5dd055248f44b009f57d85ad0df365b07b8fe6544e718630",
+          "bytes": 5738
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r2-simd-jit/advance-uploads.csv",
+          "sha256": "db57e59edd11a24fcd24e1d395cd01e22a81a3816536dd2c52bb0effad1248c4",
+          "bytes": 486
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r2-simd-jit/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "f7efa6daecfd8c4c90e440d88e5e0c3471a8cca28804cc01d4fcae98f3c01717",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          18432,
+          0,
+          126976,
+          2031616,
+          0,
+          0
+        ],
+        "minimum_per_external_frame": [
+          288,
+          0,
+          1984,
+          31744,
+          0,
+          0
+        ],
+        "maximum_per_external_frame": [
+          288,
+          0,
+          1984,
+          31744,
+          0,
+          0
+        ]
+      },
+      "transfer_profile": 2
+    },
+    {
+      "name": "features32-r2-immutable",
+      "features": 32,
+      "repeat": 2,
+      "route": "immutable",
+      "timing": {
+        "wall": {
+          "median_ms": 8.925125,
+          "p95_ms": 9.236917
+        },
+        "step": {
+          "median_ms": 3.719708,
+          "p95_ms": 3.934875
+        },
+        "wait": {
+          "median_ms": 5.202292,
+          "p95_ms": 5.444291
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r2-immutable.stdout",
+          "sha256": "c2922f3c2586588a461499c6f2b45ad8ff38125bfc52ac5cc3f6eecadfe1199b",
+          "bytes": 8263
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r2-immutable.stderr",
+          "sha256": "d4069821607c0314215d0721f33fa47b59fa153270dadc689b11a9c67c90dd43",
+          "bytes": 2017
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r2-immutable/advance-programmes.csv",
+          "sha256": "4f652b0feec83cf45c44d44a13b1a59ff8732b3807ab4691d6b5b2323b8af828",
+          "bytes": 155957
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r2-immutable/advance-timings.csv",
+          "sha256": "1a775ffa30c19b368ca63d00be2755fa66fe6522706a0a20641c44615d10cfe6",
+          "bytes": 5930
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r2-immutable/advance-uploads.csv",
+          "sha256": "34ed9147a33cbf4601ea56c25b0a765ac2e4823a8ed59c169f38f7302f198799",
+          "bytes": 480
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r2-immutable/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "f7efa6daecfd8c4c90e440d88e5e0c3471a8cca28804cc01d4fcae98f3c01717",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          2048,
+          0,
+          0,
+          0,
+          2048000,
+          0
+        ],
+        "minimum_per_external_frame": [
+          32,
+          0,
+          0,
+          0,
+          32000,
+          0
+        ],
+        "maximum_per_external_frame": [
+          32,
+          0,
+          0,
+          0,
+          32000,
+          0
+        ]
+      },
+      "transfer_profile": 3
+    },
+    {
+      "name": "features32-r3-immutable",
+      "features": 32,
+      "repeat": 3,
+      "route": "immutable",
+      "timing": {
+        "wall": {
+          "median_ms": 8.894667,
+          "p95_ms": 9.227708
+        },
+        "step": {
+          "median_ms": 3.674792,
+          "p95_ms": 3.922708
+        },
+        "wait": {
+          "median_ms": 5.197708,
+          "p95_ms": 5.5405
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r3-immutable.stdout",
+          "sha256": "d02fd1d4654e1f24ee0509f4c7c78ccad44bdb070391021718f27e466d0cc7d5",
+          "bytes": 8263
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r3-immutable.stderr",
+          "sha256": "d4069821607c0314215d0721f33fa47b59fa153270dadc689b11a9c67c90dd43",
+          "bytes": 2017
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r3-immutable/advance-programmes.csv",
+          "sha256": "4f652b0feec83cf45c44d44a13b1a59ff8732b3807ab4691d6b5b2323b8af828",
+          "bytes": 155957
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r3-immutable/advance-timings.csv",
+          "sha256": "94db3f8edeaab7972f24ad36f8aebf4ceda75e96014b1ae2f32a2605ea99bcae",
+          "bytes": 5930
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r3-immutable/advance-uploads.csv",
+          "sha256": "34ed9147a33cbf4601ea56c25b0a765ac2e4823a8ed59c169f38f7302f198799",
+          "bytes": 480
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r3-immutable/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "f7efa6daecfd8c4c90e440d88e5e0c3471a8cca28804cc01d4fcae98f3c01717",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          2048,
+          0,
+          0,
+          0,
+          2048000,
+          0
+        ],
+        "minimum_per_external_frame": [
+          32,
+          0,
+          0,
+          0,
+          32000,
+          0
+        ],
+        "maximum_per_external_frame": [
+          32,
+          0,
+          0,
+          0,
+          32000,
+          0
+        ]
+      },
+      "transfer_profile": 3
+    },
+    {
+      "name": "features32-r3-simd-jit",
+      "features": 32,
+      "repeat": 3,
+      "route": "simd-jit",
+      "timing": {
+        "wall": {
+          "median_ms": 13.888625,
+          "p95_ms": 16.199958
+        },
+        "step": {
+          "median_ms": 6.669125,
+          "p95_ms": 7.176708
+        },
+        "wait": {
+          "median_ms": 7.346833,
+          "p95_ms": 9.758291
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r3-simd-jit.stdout",
+          "sha256": "85741e2917a96e0cb61c004d5240b0025fc904ca4d45b7c82df8968beda8328e",
+          "bytes": 8170
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r3-simd-jit.stderr",
+          "sha256": "c3342415a906b39d1e6c5997dd1a9a0df7c3895d206471d89d7996fb4062553b",
+          "bytes": 1842
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r3-simd-jit/advance-programmes.csv",
+          "sha256": "5217d84ecb8a6dc9238c71be819d7f66cf8f06560268b619fd12911baf58b9e7",
+          "bytes": 155957
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r3-simd-jit/advance-timings.csv",
+          "sha256": "8f137ed745964160dff1cf1fb9c51bfb410d992000e6b3735a658d86014dfaa6",
+          "bytes": 5740
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r3-simd-jit/advance-uploads.csv",
+          "sha256": "db57e59edd11a24fcd24e1d395cd01e22a81a3816536dd2c52bb0effad1248c4",
+          "bytes": 486
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r3-simd-jit/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "f7efa6daecfd8c4c90e440d88e5e0c3471a8cca28804cc01d4fcae98f3c01717",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          18432,
+          0,
+          126976,
+          2031616,
+          0,
+          0
+        ],
+        "minimum_per_external_frame": [
+          288,
+          0,
+          1984,
+          31744,
+          0,
+          0
+        ],
+        "maximum_per_external_frame": [
+          288,
+          0,
+          1984,
+          31744,
+          0,
+          0
+        ]
+      },
+      "transfer_profile": 2
+    },
+    {
+      "name": "features32-r4-simd-jit",
+      "features": 32,
+      "repeat": 4,
+      "route": "simd-jit",
+      "timing": {
+        "wall": {
+          "median_ms": 13.914166,
+          "p95_ms": 16.136583
+        },
+        "step": {
+          "median_ms": 6.810167,
+          "p95_ms": 7.060125
+        },
+        "wait": {
+          "median_ms": 6.844125,
+          "p95_ms": 9.197708
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r4-simd-jit.stdout",
+          "sha256": "7fd6157cd31a0d7d86025927ff73da4f7b20501058edd1b60ff1a68626723073",
+          "bytes": 8170
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r4-simd-jit.stderr",
+          "sha256": "c3342415a906b39d1e6c5997dd1a9a0df7c3895d206471d89d7996fb4062553b",
+          "bytes": 1842
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r4-simd-jit/advance-programmes.csv",
+          "sha256": "5217d84ecb8a6dc9238c71be819d7f66cf8f06560268b619fd12911baf58b9e7",
+          "bytes": 155957
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r4-simd-jit/advance-timings.csv",
+          "sha256": "267c447def2fde08d2ae79ec23364d867f55e5120c9a1c79b7c5ee1e2e2f42a8",
+          "bytes": 5740
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r4-simd-jit/advance-uploads.csv",
+          "sha256": "db57e59edd11a24fcd24e1d395cd01e22a81a3816536dd2c52bb0effad1248c4",
+          "bytes": 486
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r4-simd-jit/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "f7efa6daecfd8c4c90e440d88e5e0c3471a8cca28804cc01d4fcae98f3c01717",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          18432,
+          0,
+          126976,
+          2031616,
+          0,
+          0
+        ],
+        "minimum_per_external_frame": [
+          288,
+          0,
+          1984,
+          31744,
+          0,
+          0
+        ],
+        "maximum_per_external_frame": [
+          288,
+          0,
+          1984,
+          31744,
+          0,
+          0
+        ]
+      },
+      "transfer_profile": 2
+    },
+    {
+      "name": "features32-r4-immutable",
+      "features": 32,
+      "repeat": 4,
+      "route": "immutable",
+      "timing": {
+        "wall": {
+          "median_ms": 8.837833,
+          "p95_ms": 9.268708
+        },
+        "step": {
+          "median_ms": 3.60825,
+          "p95_ms": 3.96075
+        },
+        "wait": {
+          "median_ms": 5.209458,
+          "p95_ms": 5.387709
+        }
+      },
+      "raw_files": [
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r4-immutable.stdout",
+          "sha256": "caec6db214ef319deb6cd6db479aced2dc31bb5e73b9c4eb5c80b41710c27e0b",
+          "bytes": 8263
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r4-immutable.stderr",
+          "sha256": "d4069821607c0314215d0721f33fa47b59fa153270dadc689b11a9c67c90dd43",
+          "bytes": 2017
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r4-immutable/advance-programmes.csv",
+          "sha256": "4f652b0feec83cf45c44d44a13b1a59ff8732b3807ab4691d6b5b2323b8af828",
+          "bytes": 155957
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r4-immutable/advance-timings.csv",
+          "sha256": "0b07cee98eac6d722ad41de00c5bd66146db1cdb4de6d28e7882666da22ba2a7",
+          "bytes": 5930
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r4-immutable/advance-uploads.csv",
+          "sha256": "34ed9147a33cbf4601ea56c25b0a765ac2e4823a8ed59c169f38f7302f198799",
+          "bytes": 480
+        },
+        {
+          "path": "/private/tmp/wc3-immutable-frame-results-01/features32-r4-immutable/frame-0000-0.500s.png",
+          "sha256": "71258b383189f552933cbedc423856e702fbd428b18746c9624f8ed90096bcb7",
+          "bytes": 778
+        }
+      ],
+      "observations_sha256": "f7efa6daecfd8c4c90e440d88e5e0c3471a8cca28804cc01d4fcae98f3c01717",
+      "input_engine_first_last": [
+        [
+          "0.515625000",
+          "0.515625000",
+          "0.015625000"
+        ],
+        [
+          "1.500000000",
+          "1.500000000",
+          "0.015625000"
+        ]
+      ],
+      "work_columns": [
+        "scalar_jit_invocations",
+        "rust_packet_committed_lanes",
+        "simd_attempted_batches",
+        "simd_committed_lanes",
+        "immutable_age_invocations",
+        "immutable_age_fallbacks"
+      ],
+      "actual_route_work": {
+        "sum": [
+          2048,
+          0,
+          0,
+          0,
+          2048000,
+          0
+        ],
+        "minimum_per_external_frame": [
+          32,
+          0,
+          0,
+          0,
+          32000,
+          0
+        ],
+        "maximum_per_external_frame": [
+          32,
+          0,
+          0,
+          0,
+          32000,
+          0
+        ]
+      },
+      "transfer_profile": 3
+    }
+  ],
+  "transfer_profiles": [
+    {
+      "id": 0,
+      "sha256": "9614a0c9710baa2ab8595f5ba6cf2ff032bcde9594ea59016bc03a99d3da78ac",
+      "values": {
+        "before_cumulative": {
+          "birth_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "sampled_records": {
+            "queue_bytes": 3584000,
+            "queue_writes": 32,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "resident_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "natural_indices": {
+            "queue_bytes": 128000,
+            "queue_writes": 32,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "view_orders": {
+            "queue_bytes": 128000,
+            "queue_writes": 32,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "uniforms": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 64,
+            "initializations": 1
+          }
+        },
+        "advancing_delta": {
+          "birth_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "sampled_records": {
+            "queue_bytes": 7168000,
+            "queue_writes": 64,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "resident_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "natural_indices": {
+            "queue_bytes": 256000,
+            "queue_writes": 64,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "view_orders": {
+            "queue_bytes": 256000,
+            "queue_writes": 64,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "uniforms": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          }
+        }
+      },
+      "jobs": [
+        "features1-r0-simd-jit",
+        "features1-r1-simd-jit",
+        "features1-r2-simd-jit",
+        "features1-r3-simd-jit",
+        "features1-r4-simd-jit"
+      ]
+    },
+    {
+      "id": 1,
+      "sha256": "ae8b6c72826f85e7173a39c6d8e4c95a95cb50306f79f14d338802d19e5f21d3",
+      "values": {
+        "before_cumulative": {
+          "birth_records": {
+            "queue_bytes": 229600,
+            "queue_writes": 17,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "sampled_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "resident_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "natural_indices": {
+            "queue_bytes": 4000,
+            "queue_writes": 1,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "view_orders": {
+            "queue_bytes": 8000,
+            "queue_writes": 2,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "uniforms": {
+            "queue_bytes": 1984,
+            "queue_writes": 31,
+            "initial_bytes": 64,
+            "initializations": 1
+          }
+        },
+        "advancing_delta": {
+          "birth_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "sampled_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "resident_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "natural_indices": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "view_orders": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "uniforms": {
+            "queue_bytes": 4096,
+            "queue_writes": 64,
+            "initial_bytes": 0,
+            "initializations": 0
+          }
+        }
+      },
+      "jobs": [
+        "features1-r0-immutable",
+        "features1-r1-immutable",
+        "features1-r2-immutable",
+        "features1-r3-immutable",
+        "features1-r4-immutable"
+      ]
+    },
+    {
+      "id": 2,
+      "sha256": "4bc597868c78fcf349e3754276fd930f338df44447367ad17fa5175009d05502",
+      "values": {
+        "before_cumulative": {
+          "birth_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "sampled_records": {
+            "queue_bytes": 114688000,
+            "queue_writes": 1024,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "resident_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "natural_indices": {
+            "queue_bytes": 4096000,
+            "queue_writes": 1024,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "view_orders": {
+            "queue_bytes": 4096000,
+            "queue_writes": 1024,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "uniforms": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 2048,
+            "initializations": 32
+          }
+        },
+        "advancing_delta": {
+          "birth_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "sampled_records": {
+            "queue_bytes": 229376000,
+            "queue_writes": 2048,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "resident_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "natural_indices": {
+            "queue_bytes": 8192000,
+            "queue_writes": 2048,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "view_orders": {
+            "queue_bytes": 8192000,
+            "queue_writes": 2048,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "uniforms": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          }
+        }
+      },
+      "jobs": [
+        "features32-r0-simd-jit",
+        "features32-r1-simd-jit",
+        "features32-r2-simd-jit",
+        "features32-r3-simd-jit",
+        "features32-r4-simd-jit"
+      ]
+    },
+    {
+      "id": 3,
+      "sha256": "d8c68277c790959b1351b47c6d2d9eb46bdddc63d60b037d302a4d53517439bc",
+      "values": {
+        "before_cumulative": {
+          "birth_records": {
+            "queue_bytes": 7347200,
+            "queue_writes": 544,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "sampled_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "resident_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "natural_indices": {
+            "queue_bytes": 128000,
+            "queue_writes": 32,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "view_orders": {
+            "queue_bytes": 256000,
+            "queue_writes": 64,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "uniforms": {
+            "queue_bytes": 63488,
+            "queue_writes": 992,
+            "initial_bytes": 2048,
+            "initializations": 32
+          }
+        },
+        "advancing_delta": {
+          "birth_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "sampled_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "resident_records": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "natural_indices": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "view_orders": {
+            "queue_bytes": 0,
+            "queue_writes": 0,
+            "initial_bytes": 0,
+            "initializations": 0
+          },
+          "uniforms": {
+            "queue_bytes": 131072,
+            "queue_writes": 2048,
+            "initial_bytes": 0,
+            "initializations": 0
+          }
+        }
+      },
+      "jobs": [
+        "features32-r0-immutable",
+        "features32-r1-immutable",
+        "features32-r2-immutable",
+        "features32-r3-immutable",
+        "features32-r4-immutable"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "features": 1,
+      "all5clock_population_budget_pairs_match": true,
+      "paired": {
+        "wall": {
+          "median_ms": {
+            "ratios_immutable_over_simd": [
+              0.8667100347393898,
+              1.004029089723723,
+              0.9744897334754666,
+              0.9685501968952652,
+              0.9892380257850378
+            ],
+            "median_paired_ratio": 0.9744897334754666,
+            "regression": false,
+            "reciprocal_speedup": 1.0261780762261623
+          },
+          "p95_ms": {
+            "ratios_immutable_over_simd": [
+              0.8808727419810937,
+              1.0213539020353122,
+              0.9750689179144101,
+              0.9755219156689223,
+              1.0387903568394223
+            ],
+            "median_paired_ratio": 0.9755219156689223,
+            "regression": false,
+            "reciprocal_speedup": 1.025092295660311
+          }
+        },
+        "step": {
+          "median_ms": {
+            "ratios_immutable_over_simd": [
+              0.8025695983796677,
+              0.9973243443708342,
+              0.9553747065892787,
+              0.940680230674722,
+              0.9831244883182646
+            ],
+            "median_paired_ratio": 0.9553747065892787,
+            "regression": false,
+            "reciprocal_speedup": 1.0467097287618543
+          },
+          "p95_ms": {
+            "ratios_immutable_over_simd": [
+              0.8387568817308392,
+              1.026367083808974,
+              0.9630137599557207,
+              0.938673572072051,
+              1.045535347585851
+            ],
+            "median_paired_ratio": 0.9630137599557207,
+            "regression": false,
+            "reciprocal_speedup": 1.03840676175383
+          }
+        },
+        "wait": {
+          "median_ms": {
+            "ratios_immutable_over_simd": [
+              0.9783407929589548,
+              1.0041897307840817,
+              0.9970393495279003,
+              0.9970412303594962,
+              1.0017832107726101
+            ],
+            "median_paired_ratio": 0.9970412303594962,
+            "regression": false,
+            "reciprocal_speedup": 1.0029675499371646
+          },
+          "p95_ms": {
+            "ratios_immutable_over_simd": [
+              0.9535422898277989,
+              1.0082720934197447,
+              0.9922831034055288,
+              1.0011483894991622,
+              1.0066988148535587
+            ],
+            "median_paired_ratio": 1.0011483894991622,
+            "regression": true,
+            "reciprocal_speedup": 0.9988529277865226
+          }
+        }
+      }
+    },
+    {
+      "features": 32,
+      "all5clock_population_budget_pairs_match": true,
+      "paired": {
+        "wall": {
+          "median_ms": {
+            "ratios_immutable_over_simd": [
+              0.6422101458397022,
+              0.661272195999101,
+              0.6334593136733028,
+              0.6404281921356506,
+              0.6351680007267414
+            ],
+            "median_paired_ratio": 0.6404281921356506,
+            "regression": false,
+            "reciprocal_speedup": 1.561455307995229
+          },
+          "p95_ms": {
+            "ratios_immutable_over_simd": [
+              0.5528650320050045,
+              0.558213348440864,
+              0.5719468124932584,
+              0.5696130817129279,
+              0.5743909971522471
+            ],
+            "median_paired_ratio": 0.5696130817129279,
+            "regression": false,
+            "reciprocal_speedup": 1.7555776580706715
+          }
+        },
+        "step": {
+          "median_ms": {
+            "ratios_immutable_over_simd": [
+              0.5540887440647985,
+              0.5403205487535034,
+              0.5569188828887315,
+              0.551015612992709,
+              0.5298328220144969
+            ],
+            "median_paired_ratio": 0.551015612992709,
+            "regression": false,
+            "reciprocal_speedup": 1.8148306080997236
+          },
+          "p95_ms": {
+            "ratios_immutable_over_simd": [
+              0.5616497932593097,
+              0.5490655069696134,
+              0.5503866676588395,
+              0.5465887702272407,
+              0.5610028151059648
+            ],
+            "median_paired_ratio": 0.5503866676588395,
+            "regression": false,
+            "reciprocal_speedup": 1.816904475999873
+          }
+        },
+        "wait": {
+          "median_ms": {
+            "ratios_immutable_over_simd": [
+              0.7254796663909856,
+              0.7906963942901675,
+              0.7011293316935931,
+              0.707475996800254,
+              0.7611576351980713
+            ],
+            "median_paired_ratio": 0.7254796663909856,
+            "regression": false,
+            "reciprocal_speedup": 1.3783983843057375
+          },
+          "p95_ms": {
+            "ratios_immutable_over_simd": [
+              0.5360673710336349,
+              0.5830169545885021,
+              0.5962398376877468,
+              0.5677735988811975,
+              0.5857664757350418
+            ],
+            "median_paired_ratio": 0.5830169545885021,
+            "regression": false,
+            "reciprocal_speedup": 1.7152159849378785
+          }
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "Original synthetic workload; no cross-engine or native-game fidelity claim",
+    "I32 amplifies effect cost; I1 also reported; no fixed-Bevy-cost compensation",
+    "Wall/step/wait quantiles independent; not GPU timestamps or pipelined throughput",
+    "Before transfers include residency/capture/warmup; not isolated cold-time measurements",
+    "Transfers exclude textures/meshes/unrelated Bevy buffers; mapped initialization kept separate",
+    "Ratios above1retain regressions; no speedup or statistical significance presumed"
+  ]
+}

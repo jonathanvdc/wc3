@@ -1,0 +1,39 @@
+{
+  "status": "observed_default_specialization_code_identity",
+  "batch_particles": 16,
+  "native_simd_lanes": 4,
+  "value_words": 4,
+  "kernel_bytes": 2836,
+  "code_sha256": "2bb308fd4cf00f775f4a96df6e12e3e438cf178b087a4ee32a50ea8db7c1456d",
+  "scope": "same original private diagnostic kernel before/after const-generic refactor; not all graph code or end-to-end frame equivalence",
+  "previous": {
+    "code": "/tmp/wc3-simd-codegen-02/finalized-code.bin",
+    "code_sha256": "2bb308fd4cf00f775f4a96df6e12e3e438cf178b087a4ee32a50ea8db7c1456d",
+    "metadata": "/tmp/wc3-simd-codegen-02/metadata.json",
+    "metadata_sha256": "9153d08c6ef9e5d68b9d554165345257a1b7e9922b85008aed7bbe92f5f0f70d"
+  },
+  "const_generic_default": {
+    "code": "/tmp/wc3-simd-codegen-const-config-01/finalized-code.bin",
+    "code_sha256": "2bb308fd4cf00f775f4a96df6e12e3e438cf178b087a4ee32a50ea8db7c1456d",
+    "metadata": "/tmp/wc3-simd-codegen-const-config-01/metadata.json",
+    "metadata_sha256": "9153d08c6ef9e5d68b9d554165345257a1b7e9922b85008aed7bbe92f5f0f70d"
+  },
+  "actual_execution": {
+    "status": "executed_field_parity_pass",
+    "measurement": false,
+    "isa": "aarch64",
+    "triple": "aarch64-apple-darwin",
+    "code_bytes": 2836,
+    "lanes": 16,
+    "actual_entry_calls": 1,
+    "packed_add_sub_mul": [
+      124,
+      38,
+      192
+    ]
+  },
+  "test_log": {
+    "path": "/tmp/wc3-const-config-codegen-final.log",
+    "sha256": "4572ce8b52bedcd30be71970534730dae49005f6a3d4bc13980d181108152979"
+  }
+}
