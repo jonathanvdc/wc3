@@ -91,6 +91,10 @@ pub fn parse_wmo_profile(name: &str) -> Result<WmoProfile, &'static str> {
 }
 
 /// `simd-jit` requests Automatic: eligible tiles use SIMD, with checked scalar fallback.
+#[allow(
+    dead_code,
+    reason = "Some examples sharing this module use default particle execution"
+)]
 pub fn parse_particle_execution(name: &str) -> Result<ExecutionOptions, &'static str> {
     let preference = match name {
         "interpreter" => ExecutionPreference::Interpreter,

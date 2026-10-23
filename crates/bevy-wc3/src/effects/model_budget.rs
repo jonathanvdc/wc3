@@ -111,6 +111,10 @@ pub(crate) struct ActorBudget {
     skipped_seconds: AtomicU64,
 }
 fn add(counter: &AtomicU64, amount: u64) {
+    #[allow(
+        deprecated,
+        reason = "Atomic::try_update is newer than the Rust 1.97 minimum"
+    )]
     let _ = counter.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |old| {
         Some(old.saturating_add(amount))
     });
@@ -156,6 +160,10 @@ impl ActorBudget {
         if !seconds.is_finite() || seconds <= 0. {
             return;
         }
+        #[allow(
+            deprecated,
+            reason = "Atomic::try_update is newer than the Rust 1.97 minimum"
+        )]
         let _ = self
             .skipped_seconds
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |old| {
@@ -183,6 +191,10 @@ impl ActorBudget {
             return Err(ActorBudgetError::BirthWork);
         }
         let limit = self.actor_limit.load(Ordering::Relaxed) as usize;
+        #[allow(
+            deprecated,
+            reason = "Atomic::try_update is newer than the Rust 1.97 minimum"
+        )]
         let result = self
             .actors
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
