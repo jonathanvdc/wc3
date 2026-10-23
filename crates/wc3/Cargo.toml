@@ -77,3 +77,7 @@ harness = false
 [[bench]]
 name = "packed_storage"
 harness = false
+
+[[bench]]
+name = "particle_runtime"
+harness = false

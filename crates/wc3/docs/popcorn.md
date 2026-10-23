@@ -149,6 +149,19 @@ Borrowed `ParticleView` values expose canonical fields independently of temporar
 VM registers, and particle IDs include a generation to distinguish recycled slots.
 Instances require the same programme identity when starting or advancing.
 
+Selected evolution programmes can use full 16-particle batches for a checked
+arithmetic and read-only curve subset. Initialization, short populations and
+other operations retain scalar execution. The immutable layer owns its prepared
+batch plan; each instance preallocates optional batch scratch within its storage
+allowance, falling back to scalar execution if that allowance cannot fit it.
+Batches share scalar arithmetic and curve evaluation, preserve canonical commit
+order and replay failed speculative work through the scalar error path.
+
+Batching trades preparation, scratch storage and a small per-step dispatch cost
+for dense throughput. Measure both sparse and dense populations with
+`cargo bench -p wc3 --bench particle_runtime`; its original fixtures and untimed
+field oracle make those workloads reproducible without acquired assets.
+
 `SceneInputs` supplies the world transform and a typed `SceneContext` snapshot;
 elapsed effect time belongs to the instance. `SceneContext::with_camera` accepts
 a finite position in the same world axes and numeric units as that transform.
