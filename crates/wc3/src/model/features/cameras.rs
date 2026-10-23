@@ -1,4 +1,5 @@
 //! Camera pose, projection, and optical parameters.
+use crate::model::common::{Detached, IntoOwned};
 use crate::model::features::{FromFeature, TryFromFeature};
 use crate::model::profiles::{m2, mdlx};
 use crate::model::{Construct, Link, Property, PropertyValues, ValidateLinks};
@@ -6,7 +7,7 @@ use glam::{Vec2, Vec3};
 use m2::values::CameraKind;
 
 /// Camera pose interpretations.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum Camera {
     /// Camera whose eye and orientation follow its hierarchy node.
     Node(Box<NodeCamera>),
@@ -43,7 +44,7 @@ pub struct LookAtCamera<F = Property<f32>> {
     pub lens: CameraLens,
 }
 /// Optional photographic lens parameters.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct CameraLens {
     /// Depth-of-field focus distance.
     pub focus_distance: Option<Property<f32>>,
@@ -124,7 +125,7 @@ impl ValidateLinks for CameraLens {
 }
 
 /// Camera whose eye and orientation follow its carrying hierarchy node.
-#[derive(Clone, Debug, Construct)]
+#[derive(Clone, Debug, Construct, IntoOwned)]
 pub struct NodeCamera {
     /// Perspective projection, independent of camera placement.
     pub projection: PerspectiveProjection,
@@ -151,6 +152,8 @@ pub struct PerspectiveProjection<F = Property<f32>> {
     /// Near and far clipping distance.
     pub clipping: Vec2,
 }
+owned_components!(PerspectiveProjection<F> { field_of_view; axis, clipping });
+owned_components!(LookAtCamera<F> { projection; eye_offset, target, target_offset, roll, role, visibility, lens });
 impl<F> PerspectiveProjection<F> {
     /// Maps the authored angle while preserving its axis and clipping distances.
     pub fn map_field_of_view<G>(&self, map: impl FnOnce(&F) -> G) -> PerspectiveProjection<G> {

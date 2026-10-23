@@ -1,8 +1,9 @@
 //! Complete M2 event-source definitions.
+use crate::model::common::IntoOwned;
 use crate::model::{EventSourceSchema, Link, NodeId, TimeSource, ValidateLinks};
 
 /// An anchored action whose occurrences share one evaluation clock.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, IntoOwned)]
 pub struct EventSource {
     /// Hierarchy anchor of the action.
     pub node: NodeId,

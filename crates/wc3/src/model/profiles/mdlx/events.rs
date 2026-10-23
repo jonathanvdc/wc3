@@ -1,4 +1,5 @@
 //! Complete MDLX event-source definitions.
+use crate::model::common::IntoOwned;
 use crate::model::{EventSourceSchema, Link, NodeId, TimeSource, ValidateLinks};
 use std::borrow::Cow;
 
@@ -14,7 +15,7 @@ use std::borrow::Cow;
 ///     node, clock: TimeSource::Animation, identifier: *b"$SND", data: 1,
 /// });
 /// ```
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, IntoOwned)]
 pub struct EventSource<'a> {
     /// Hierarchy anchor of the action.
     pub node: NodeId,

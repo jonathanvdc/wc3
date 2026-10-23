@@ -1,4 +1,5 @@
 //! Portable authored scene features, simulation constraints, and deformation systems.
+use crate::model::common::IntoOwned;
 /// Compiled particle programmes and their typed host boundary.
 pub mod popcorn;
 /// Region-local illumination and cookie programs.
@@ -13,7 +14,7 @@ pub use features::*;
 pub use physics::*;
 use std::mem::replace;
 /// Complete portable feature graph accompanying common geometry and animation.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, IntoOwned)]
 pub struct PhysicsSystem<'a> {
     /// Collision geometry shared by simulation bodies.
     shapes: Vec<(ShapeId, Shape<'a>)>,

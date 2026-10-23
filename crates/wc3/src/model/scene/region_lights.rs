@@ -1,8 +1,9 @@
 //! Region-local point illumination and authored flicker programs.
+use crate::model::common::IntoOwned;
 use crate::model::{FeatureId, Texture};
 use glam::{Vec2, Vec3};
 /// A point light whose activation belongs to a region rather than the root actor table.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct PointLight {
     /// Authored RGBA color bytes.
     pub color: [u8; 4],
@@ -18,7 +19,7 @@ pub struct PointLight {
     pub trailing_controls: [u32; 2],
 }
 /// An independently placed flicker/cookie program associated with a region point light.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, IntoOwned)]
 pub struct PointProgram {
     /// Light receiving this program.
     pub light: FeatureId,

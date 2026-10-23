@@ -1,11 +1,12 @@
 //! Shared illumination components with explicit activation semantics.
+use crate::model::common::{Detached, IntoOwned};
 use crate::model::profiles::{m2, mdlx, wmo};
 use crate::model::Construct;
 use crate::model::{Link, Property, ValidateLinks};
 use glam::Vec3;
 use m2::values::LightKind as ActorLightKind;
 /// Complete illumination models.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum Light {
     /// RGB lighting with cone and shadow controls.
     SingleEmission(Box<SingleEmissionLight>),
@@ -18,7 +19,7 @@ pub enum Light {
     Point(wmo::PointLight),
 }
 /// Directional interpretation shared by ambient/diffuse light programs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, IntoOwned)]
 pub enum IlluminationKind {
     /// Radiates from a position.
     Point,
@@ -38,7 +39,7 @@ pub enum UnknownIlluminationKind {
     M2(u16),
 }
 /// Independently animated RGB emission and multiplier.
-#[derive(Clone, Debug, Construct, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq, IntoOwned)]
 pub struct LightEmission {
     /// RGB emission color.
     pub color: Property<Vec3>,
@@ -63,8 +64,16 @@ pub struct AmbientDiffuseLight<K = IlluminationKind, A = LightActivation> {
     /// Quadratic, linear, and damping attenuation coefficients.
     pub falloff: Option<[Property<f32>; 3]>,
 }
+owned_components!(AmbientDiffuseLight<K, A> { kind, activation; diffuse, ambient, attenuation, shadows, falloff });
+
+impl<'owned> Detached<'owned> for ActorLightKind {
+    type Detached = Self;
+    fn into_detached(self) -> Self {
+        self
+    }
+}
 /// Distinct authored activation programs.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum LightActivation {
     /// Fractional visibility.
     Visibility(Property<f32>),
@@ -72,7 +81,7 @@ pub enum LightActivation {
     Enabled(Property<bool>),
 }
 /// Independently authored shadow parameters.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct LightShadows {
     /// Explicit shadow casting.
     pub casting: Option<bool>,
@@ -235,7 +244,7 @@ pub enum EmissionKind {
     Unknown(u32),
 }
 /// One RGB emission component with optional cone and shadow parameters.
-#[derive(Clone, Debug, Construct)]
+#[derive(Clone, Debug, Construct, IntoOwned)]
 pub struct SingleEmissionLight {
     /// Spatial interpretation.
     pub kind: EmissionKind,

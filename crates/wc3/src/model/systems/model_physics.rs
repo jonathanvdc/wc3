@@ -1,4 +1,5 @@
 //! Physics bodies, collision shapes, and constraints use hierarchy identities.
+use crate::model::common::IntoOwned;
 use crate::model::values::model::{
     PhysicsBodyKind, PhysicsGameFlags, PhysicsKind, PhysicsMotorMode,
 };
@@ -7,7 +8,7 @@ use crate::model::ValueGroups;
 use crate::model::{Error, Link, NodeId, PackedArray, ValidateLinks};
 use glam::{Mat4, Vec2, Vec3, Vec4};
 /// Physics simulation data, optionally supplied by an external resource.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct Physics<'a> {
     /// Simulation role.
     pub kind: PhysicsKind,
@@ -27,7 +28,7 @@ pub struct Physics<'a> {
     pub vegetation: Vec<Vegetation>,
 }
 /// A collision body anchored in the common hierarchy.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct Body<'a> {
     /// Body placement node, including its local body offset.
     pub node: NodeId,
@@ -53,7 +54,7 @@ pub struct Body<'a> {
     pub shapes: Vec<Shape<'a>>,
 }
 /// A local collision shape and contact response.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct Shape<'a> {
     /// Local affine transform relative to the body.
     pub transform: Mat4,
@@ -73,7 +74,7 @@ pub struct Shape<'a> {
     pub collision_mask: CollisionMask,
 }
 /// Geometry of a collision primitive or convex polytope.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum ShapeGeometry<'a> {
     /// Box dimensions as half extents.
     Box(Vec3),

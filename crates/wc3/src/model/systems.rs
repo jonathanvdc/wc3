@@ -1,4 +1,5 @@
 //! Independently authored scene systems and model-wide metadata.
+use crate::model::common::IntoOwned;
 /// Model collision, customization, and texture program ownership.
 pub mod model;
 /// Model-family bodies, constraints, and environmental response.
@@ -8,7 +9,7 @@ use crate::model::profiles::{m2, mdlx, wmo};
 use crate::model::profiles::{Either, PropertiesPayload, Unavailable};
 use crate::model::{scene, Link, ValidateLinks};
 /// Model-wide metadata chosen by the universal vocabulary.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum ModelMetadata<'a> {
     /// Warcraft III animation resources and transition policy.
     Mdlx(mdlx::ModelMetadata<'a>),
@@ -29,7 +30,7 @@ impl ValidateLinks for ModelMetadata<'_> {
     }
 }
 /// A scene system with its own logical relationships, independent of file tables.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum System<'a> {
     /// Portable simulation bodies, collision shapes, and constraints.
     Physics(scene::PhysicsSystem<'a>),

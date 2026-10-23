@@ -1,7 +1,24 @@
 //! Logical behaviors grouped by purpose rather than their source vocabulary.
+use crate::model::common::IntoOwned;
 use crate::model::profiles::{m2, mdlx, Profile, Universal};
 use crate::model::EffectResourceId;
 use crate::model::{Link, NodeId, ValidateLinks};
+
+// Generic components can hide borrowed payloads behind their type parameters.
+// Map every such parameter rather than treating the wrapper as an owned leaf.
+macro_rules! owned_components {
+    ($name:ident<$($parameter:ident),+> { $($detach:ident),* ; $($preserve:ident),* }) => {
+        impl<'owned, $($parameter: Detached<'owned>),+> Detached<'owned> for $name<$($parameter),+> {
+            type Detached = $name<$(<$parameter as Detached<'owned>>::Detached),+>;
+            fn into_detached(self) -> Self::Detached {
+                $name {
+                    $($detach: Detached::into_detached(self.$detach),)*
+                    $($preserve: self.$preserve,)*
+                }
+            }
+        }
+    };
+}
 mod illumination;
 pub use illumination::*;
 mod cameras;
@@ -22,7 +39,7 @@ mod links;
 /// Complete logical payload of an attached behavior.
 pub type NodeFeature<'a> = FeatureSet<'a, Universal>;
 /// An external effect or a composed simulation definition.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum ParticleEmitter<'a> {
     /// Instance of an externally defined effect resource.
     Resource(EffectResourceId),
@@ -34,7 +51,7 @@ pub enum ParticleEmitter<'a> {
     M2(Box<m2::ParticleEmitter<'a>>),
 }
 /// Ribbon generation from persistent cross sections or an external resource.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum RibbonEmitter {
     /// Instance of an externally defined effect resource.
     Resource(EffectResourceId),

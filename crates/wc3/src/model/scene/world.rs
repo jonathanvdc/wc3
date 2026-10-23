@@ -1,6 +1,7 @@
 //! Group visibility, environmental volumes, placements, and liquid grids.
 use crate::model::common::packed_identity;
 use crate::model::common::AsULE;
+use crate::model::common::IntoOwned;
 use crate::model::profiles::wmo::{DoodadSetId, GroupId, PortalId};
 use crate::model::values::world::{AmbientFlags, FogFlags, GroupFlags2, LightFlags};
 use crate::model::Construct;
@@ -43,7 +44,7 @@ pub struct GroupOptions {
     pub supplemental: GroupFlags2,
 }
 /// Portal boundary and authored culling plane.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct Portal<'a> {
     /// Boundary polygon in world coordinates.
     pub vertices: PackedArray<'a, Vec3>,
@@ -67,7 +68,7 @@ pub struct PortalConnection {
     pub adjusted_plane: bool,
 }
 /// Named set with explicit placement membership.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct DoodadSet<'a> {
     /// Set name.
     pub name: Cow<'a, str>,
@@ -108,7 +109,7 @@ pub enum LightKind {
     Unknown(i32),
 }
 /// Complete world light parameters.
-#[derive(Clone, Debug, Construct, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq, IntoOwned)]
 pub struct Light {
     /// Illumination behavior.
     pub kind: LightKind,
@@ -280,7 +281,7 @@ impl LiquidVertex {
     }
 }
 /// Liquid surface independent of its native grid serialization.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct Liquid<'a> {
     /// Grid origin in world coordinates.
     pub position: Vec3,

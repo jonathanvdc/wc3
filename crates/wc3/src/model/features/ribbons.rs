@@ -1,4 +1,5 @@
 //! Composed ribbon emission, geometry, appearance, and rendering programs.
+use crate::model::common::{Detached, IntoOwned};
 use crate::model::profiles::m2;
 use crate::model::{Axis, MaterialId, Property, Texture};
 use crate::model::{Construct, PropertyValues};
@@ -21,7 +22,7 @@ pub struct TrailComposition<R, S, A, B, C> {
     pub behavior: C,
 }
 /// Animated upper and lower extent of a generated trail.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, IntoOwned)]
 pub struct TrailGeometry {
     /// Signed emitter-local direction of positive cross-section extent.
     /// This is independent of the model's up axis and world gravity.
@@ -53,13 +54,13 @@ pub struct TrailAppearance<S, A = u32> {
     pub texture_slot: S,
 }
 /// A trail rendered by one layered material.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct MdlxRibbonRendering {
     /// Complete layered surface.
     pub material: Option<MaterialId>,
 }
 /// Ordered textures and shader surfaces supplying a trail.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct M2RibbonRendering {
     /// Ordered texture resources.
     pub textures: Vec<Texture>,
@@ -73,7 +74,7 @@ pub struct M2RibbonRendering {
     pub texture_transform: Option<m2::TextureTransform>,
 }
 /// Gravitational acceleration and fractional visibility.
-#[derive(Clone, Debug, Construct, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq, IntoOwned)]
 pub struct MdlxRibbonBehavior {
     /// Gravity acceleration.
     pub gravity: f32,
@@ -81,7 +82,7 @@ pub struct MdlxRibbonBehavior {
     pub visibility: Property<f32>,
 }
 /// Emission direction, discrete activation, and effect identity.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct M2RibbonBehavior {
     /// Emission angle, independently of acceleration.
     pub angle: f32,
@@ -96,6 +97,9 @@ pub type MdlxRibbonEmitter =
 /// Trail composition with fractional edge generation and discrete activation.
 pub type M2RibbonEmitter =
     TrailComposition<f32, Property<u16>, u16, M2RibbonRendering, M2RibbonBehavior>;
+
+owned_components!(TrailComposition<R, S, A, B, C> { emission_rate, appearance, rendering, behavior; lifetime, geometry });
+owned_components!(TrailAppearance<S, A> { atlas, texture_slot; color, opacity });
 
 use crate::model::{Link, ValidateLinks};
 

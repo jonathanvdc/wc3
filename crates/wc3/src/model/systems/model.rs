@@ -1,11 +1,12 @@
 //! Model collision, customization matrices, and physics systems.
 use super::model_physics::Physics;
+use crate::model::common::IntoOwned;
 use crate::model::BoneOverrideResourceId;
 use crate::model::{Bounds, Link, NodeId, PackedArray, ValidateLinks};
 use glam::Mat4;
 use glam::Vec3;
 /// Sparse per-bone transform override supplied by a companion asset.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct BoneOverride<'a> {
     /// External companion resource identity.
     pub resource: Option<BoneOverrideResourceId>,
@@ -16,7 +17,7 @@ pub struct BoneOverride<'a> {
     pub transforms: PackedArray<'a, Mat4>,
 }
 /// Independent authoring systems that can coexist in one logical model.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum System<'a> {
     /// Static collision geometry.
     Collision(Collision<'a>),
@@ -26,7 +27,7 @@ pub enum System<'a> {
     Physics(Physics<'a>),
 }
 /// Collision triangles without native offsets or vertex encodings.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct Collision<'a> {
     /// Collision vertices in model coordinates.
     pub positions: PackedArray<'a, Vec3>,

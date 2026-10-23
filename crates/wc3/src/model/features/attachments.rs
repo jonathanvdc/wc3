@@ -1,4 +1,5 @@
 //! Sockets and authored child models, composed independently.
+use crate::model::common::{Detached, IntoOwned};
 use crate::model::features::{FromFeature, TryFromFeature};
 use crate::model::ModelResourceId;
 use crate::model::{Construct, PropertyValue, PropertyValues};
@@ -11,7 +12,7 @@ use crate::model::{
 };
 
 /// Sockets and authored child model references.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum Attachment<'a> {
     /// A socket exposed to game content, without an instantiated resource.
     Socket(Socket<'a>),
@@ -48,18 +49,6 @@ impl<'a> Attachment<'a> {
         })
     }
 
-    /// Detach borrowed resource paths and socket names from their source storage.
-    pub fn into_owned(self) -> Attachment<'static> {
-        match self {
-            Self::Socket(point) => Attachment::Socket(point.into_owned()),
-            Self::Child(value) => Attachment::Child(ChildModel {
-                resource: value.resource,
-                socket: value.socket.map(Socket::into_owned),
-                appearance: value.appearance,
-            }),
-        }
-    }
-
     /// Sample mounted content visibility; children without a socket are fully visible.
     pub fn visibility(&self, sample: &SampledAnimation<'_, '_>) -> f32 {
         self.socket()
@@ -82,7 +71,7 @@ pub struct SocketDefinition<I, A, C> {
 pub type Socket<'a> = SocketDefinition<SocketIdentity<'a>, Property<f32>, Option<u32>>;
 
 /// Attachment namespaces do not imply correspondence between numeric values.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, IntoOwned)]
 pub enum SocketIdentity<'a> {
     /// Named socket addressed by game content.
     Named(Cow<'a, str>),
@@ -102,16 +91,6 @@ impl Socket<'_> {
         }
     }
 }
-impl SocketIdentity<'_> {
-    /// Preserve the identity namespace while owning any borrowed name.
-    pub fn into_owned(self) -> SocketIdentity<'static> {
-        match self {
-            Self::Named(name) => SocketIdentity::Named(Cow::Owned(name.into_owned())),
-            Self::Role(role) => SocketIdentity::Role(role),
-            Self::Index(index) => SocketIdentity::Index(index),
-        }
-    }
-}
 /// Child resource with an optional exposed socket and authored appearance.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ChildModelDefinition<R, S, A> {
@@ -122,6 +101,8 @@ pub struct ChildModelDefinition<R, S, A> {
     /// Authored placement appearance and flags.
     pub appearance: A,
 }
+owned_components!(SocketDefinition<I, A, C> { identity, visibility, control; });
+owned_components!(ChildModelDefinition<R, S, A> { resource, socket, appearance; });
 
 /// Broad built-in external-placement vocabulary.
 pub type ChildModel<'a> =
@@ -130,7 +111,7 @@ pub type ChildModel<'a> =
 pub type IndexedChildModel<R> =
     ChildModelDefinition<R, SocketDefinition<u32, Property<f32>, ()>, ()>;
 /// World placement appearance, independently reusable from its resource identity.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, IntoOwned)]
 pub struct WorldPlacementAppearance {
     /// Tint and optional linked illumination.
     pub tint: wmo::DoodadTint,
@@ -140,7 +121,7 @@ pub struct WorldPlacementAppearance {
     pub flags: wmo::DoodadFlags,
 }
 /// Appearance of an external resource placement.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum PlacementAppearance {
     /// No authored appearance override.
     Unmodified,

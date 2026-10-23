@@ -1,4 +1,5 @@
 //! Profile-defined actions and their scheduled occurrences.
+use crate::model::common::IntoOwned;
 use crate::model::profiles::{m2, mdlx, Unavailable};
 use crate::model::{Link, TimeSource, ValidateLinks};
 use std::fmt::Debug;
@@ -13,7 +14,7 @@ pub trait EventSourceSchema: Clone + Debug + Send + Sync + ValidateLinks {
 }
 
 /// Complete event-source vocabulary retained when widening native models.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum EventSource<'a> {
     /// Warcraft III named action at a hierarchy anchor.
     Mdlx(mdlx::EventSource<'a>),

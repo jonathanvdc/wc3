@@ -1,4 +1,5 @@
 //! Collision geometry and body constraints with logical identities.
+use crate::model::common::IntoOwned;
 use crate::model::{Id, NodeId, PackedArray, Property};
 use glam::Mat4;
 use glam::{Vec2, Vec3};
@@ -15,7 +16,7 @@ pub enum JointObject {}
 /// Constraint identity scoped to one simulation system.
 pub type JointId = Id<JointObject>;
 /// Collision geometry in local shape coordinates.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum Geometry<'a> {
     /// Box half dimensions.
     Box(Vec3),
@@ -75,7 +76,7 @@ pub struct ContactMaterial {
     pub restitution: f32,
 }
 /// Authored collision shape and placement in a body frame.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct Shape<'a> {
     /// Collision geometry.
     pub geometry: Geometry<'a>,

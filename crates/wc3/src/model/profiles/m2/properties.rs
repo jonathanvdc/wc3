@@ -1,11 +1,12 @@
 //! Model playback, shadow passes, geometry sorting, and external category bindings.
+use crate::model::common::IntoOwned;
 use crate::model::properties::BillboardFlags;
 use crate::model::values::model::{self as values, AnimationId, ModelFlags, SequenceFlags};
 use crate::model::{Bounds, ClipId, Link, NodeId, ValidateLinks};
 use glam::Vec3;
 use std::borrow::Cow;
 /// Native playback selection and transition controls owned by a common clip.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct SequenceProperties {
     /// External animation-data category selecting this playback program.
     pub animation_id: AnimationId,
@@ -73,7 +74,7 @@ impl ValidateLinks for ShadowProperties {
     fn visit_links(&self, _visitor: &mut dyn FnMut(Link)) {}
 }
 /// Model-wide behavior and external game-category bindings.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, IntoOwned)]
 pub struct ModelMetadata<'a> {
     /// Authored model name.
     pub name: Cow<'a, str>,
@@ -97,7 +98,7 @@ impl ValidateLinks for ModelMetadata<'_> {
     }
 }
 /// Sorting and culling behavior attached directly to its logical geometry.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct MeshProperties {
     /// Declared section bone palette, including unused joints. Absence permits
     /// deriving a palette; an explicitly empty declaration remains empty.
@@ -126,7 +127,7 @@ impl ValidateLinks for MeshProperties {
 }
 
 /// Skeleton controls whose meanings are specific to the game model family.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct BoneProperties {
     /// External key-bone category.
     pub key_bone: i32,
@@ -154,7 +155,7 @@ impl Default for BoneProperties {
 }
 
 /// M2 draw-local native metadata and optional shadow behavior.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, IntoOwned)]
 pub struct DrawProperties {
     /// Auxiliary native section/flags word, whose interpretation varies by client version.
     /// This is not a semantic geometry reference.

@@ -1,4 +1,5 @@
 //! Editable Warcraft III effects and scene features.
+use crate::model::common::IntoOwned;
 use crate::model::Construct;
 use crate::model::EffectResourceId;
 use crate::model::IndexedChildModel;
@@ -12,7 +13,7 @@ use glam::Vec3;
 use std::borrow::Cow;
 
 /// Opacity, tint, and shadow behavior for one geometry controller.
-#[derive(Clone, Debug, Construct, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq, IntoOwned)]
 pub struct GeometryAnimation {
     /// Geometry controlled by this feature.
     pub mesh: Option<MeshId>,
@@ -45,7 +46,7 @@ pub type ParticleEmitter2 = MdlxParticleEmitter2;
 /// Ribbon trail generation parameters.
 pub type RibbonEmitter = MdlxRibbonEmitter;
 /// External PopcornFX resource and authored input properties.
-#[derive(Clone, Debug, Construct, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq, IntoOwned)]
 pub struct Popcorn<'a> {
     /// Effect resource path.
     pub resource: Option<EffectResourceId>,
@@ -75,7 +76,7 @@ pub struct Popcorn<'a> {
     pub scaling: bool,
 }
 /// Illumination behavior.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, IntoOwned)]
 pub enum LightKind {
     /// Point illumination.
     #[default]
@@ -94,7 +95,7 @@ pub type Camera = LookAtCamera<f32>;
 /// External model attachment.
 pub type Attachment = IndexedChildModel<ModelResourceId>;
 /// Collision primitives independent of their native vertex packing.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, IntoOwned)]
 pub enum Collision {
     /// Axis-aligned box with minimum and maximum corners.
     Box([Vec3; 2]),

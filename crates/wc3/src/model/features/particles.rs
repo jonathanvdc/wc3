@@ -1,5 +1,6 @@
 //! Owned emitter components, with model-clock controls separate from particle-age appearance.
 
+use crate::model::common::{Detached, IntoOwned};
 use crate::model::materials::mdlx::Blend;
 use crate::model::profiles::mdlx::Frames;
 use crate::model::values::model::{
@@ -77,7 +78,7 @@ impl ValidateLinks for MdlxParticle1Resource {
     }
 }
 /// Simulation-specific controls composed with common emission, motion and lifetime.
-#[derive(Clone, Debug, Construct, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq, IntoOwned)]
 pub struct MdlxParticle1Details {
     /// Model or image resource instantiated per particle.
     pub resource: MdlxParticle1Resource,
@@ -90,7 +91,7 @@ pub struct MdlxParticle1Details {
 }
 
 /// Simulation-specific controls composed with common emission, motion and lifetime.
-#[derive(Clone, Debug, Construct, PartialEq)]
+#[derive(Clone, Debug, Construct, PartialEq, IntoOwned)]
 pub struct MdlxParticle2Details {
     /// Model-space rather than world-space simulation.
     pub model_space: bool,
@@ -102,7 +103,7 @@ pub struct MdlxParticle2Details {
 }
 
 /// Simulation-specific controls composed with common emission, motion and lifetime.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, IntoOwned)]
 pub struct M2ParticleDetails<'a> {
     /// Runtime emitter identifier.
     pub id: u32,
@@ -138,7 +139,7 @@ pub struct M2ParticleDetails<'a> {
 }
 
 /// Appearance controls shared independently of emitter timing.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct MdlxParticle2Appearance {
     /// Lifetime fraction at the middle appearance stage.
     pub middle_time: f32,
@@ -219,7 +220,7 @@ pub struct M2ParticleRendering {
     pub scroll: Option<[f32; 8]>,
 }
 /// Shape controls shared independently of emitter timing.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, IntoOwned)]
 pub struct M2ParticleShape<'a> {
     /// Emission shape.
     pub generator: ParticleGenerator,
@@ -267,3 +268,8 @@ pub type M2ParticleEmitter<'a> = ParticleComposition<
     M2ParticleAppearance<'a>,
     M2ParticleDetails<'a>,
 >;
+
+owned_components!(ParticleEmission<R, T, A, V> { rate, trigger, activation, variation; });
+owned_components!(ParticleMotion<S, V, G> { speed, variation, gravity; });
+owned_components!(ParticleLifetime<D, V> { duration, variation; });
+owned_components!(ParticleComposition<E, M, L, A, D> { emission, motion, lifetime, appearance, details; });

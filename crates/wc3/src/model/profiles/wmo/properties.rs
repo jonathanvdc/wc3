@@ -1,4 +1,5 @@
 //! Static-world regions, catalogs, and environment ownership controls.
+use crate::model::common::IntoOwned;
 use crate::model::scene::world::{
     Ambient, DoodadSet, Fog, GroupOptions, Liquid, Portal, PortalConnection, WorldOptions,
 };
@@ -50,7 +51,7 @@ pub struct AmbientId {
     pub index: u32,
 }
 /// Named group in the world catalog and its placed geometry at each detail level.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct Group<'a> {
     /// Catalog display name.
     pub name: Cow<'a, str>,
@@ -66,7 +67,7 @@ pub struct Group<'a> {
     pub detail_selection: Option<u32>,
 }
 /// Region behavior and authored relationships of one placed world geometry.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct Region<'a> {
     /// Authoring description for this region.
     pub description: Cow<'a, str>,
@@ -124,7 +125,7 @@ pub struct Region<'a> {
     pub detail_doodad_key: Option<u8>,
 }
 /// Historical auxiliary geometry streams with no inferred runtime interpretation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct AuxiliaryGeometry<'a> {
     /// Index selections into the auxiliary geometry stream.
     pub indices: PackedArray<'a, u16>,
@@ -137,7 +138,7 @@ pub struct AuxiliaryGeometry<'a> {
 }
 
 /// Complete static world authoring data.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct WorldSystem<'a> {
     /// Authored world groups in stable local identity order.
     pub groups: Vec<Group<'a>>,
@@ -156,7 +157,7 @@ pub struct WorldSystem<'a> {
 }
 
 /// Model-wide world rendering and environment controls.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct ModelMetadata {
     /// Authored root bounding box, when a root declaration exists.
     pub bounds: Option<Bounds>,

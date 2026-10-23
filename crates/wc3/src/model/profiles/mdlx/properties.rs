@@ -1,4 +1,5 @@
 //! Layered-model ownership, sequence bounds, and hierarchy controls.
+use crate::model::common::IntoOwned;
 use crate::model::properties::BillboardFlags;
 use crate::model::{Bounds, ClipId, EffectResourceId, FeatureId, Link, MeshId, ValidateLinks};
 use std::borrow::Cow;
@@ -28,7 +29,7 @@ impl ValidateLinks for Extent {
 }
 
 /// Authored sequence controls beyond common animation timing.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct SequenceProperties {
     /// Movement speed used by the game animation controller.
     pub move_speed: f32,
@@ -40,7 +41,7 @@ pub struct SequenceProperties {
     pub extent: Extent,
 }
 /// Mesh-level Warcraft III controls.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct MeshProperties {
     /// Include this mesh in glider behavior.
     pub glider: bool,
@@ -60,7 +61,7 @@ pub struct Bone {
     pub animation: Option<FeatureId>,
 }
 /// Warcraft III authoring controls attached directly to one hierarchy node.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, IntoOwned)]
 pub struct NodeProperties {
     /// Original native billboard declarations. Export retains them only when their
     /// effective behavior agrees with the node's current semantic billboard.
@@ -71,7 +72,7 @@ pub struct NodeProperties {
     pub bind_pose: Option<[f32; 12]>,
 }
 /// A named facial-animation target and its independently owned effect resource.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, IntoOwned)]
 pub struct FaceEffect<'a> {
     /// Name identifying the facial-animation target.
     pub name: Cow<'a, str>,
@@ -84,7 +85,7 @@ impl ValidateLinks for FaceEffect<'_> {
     }
 }
 /// Genuinely model-wide Warcraft III authoring controls.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, IntoOwned)]
 pub struct ModelMetadata<'a> {
     /// Authored model name.
     pub name: Cow<'a, str>,

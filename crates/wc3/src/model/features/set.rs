@@ -1,4 +1,5 @@
 //! A shared feature family vocabulary selected independently from graph storage.
+use crate::model::common::Detached;
 use crate::model::profiles::FeaturePayload;
 use crate::model::{FeatureKind, FeatureSchema, FeatureView, Link, ValidateLinks};
 use std::fmt::Debug;
@@ -73,6 +74,38 @@ pub enum FeatureSet<'a, V: FeatureVocabulary<'a>> {
     /// Complete owning definition of this behavior.
     PointLight(<V as FeatureVocabulary<'a>>::PointLight),
 }
+
+macro_rules! feature_ownership {
+    ($($family:ident),+ $(,)?) => {
+        impl<'a, 'owned, V> Detached<'owned> for FeatureSet<'a, V>
+        where
+            V: for<'data> FeatureVocabulary<'data>,
+            $(<V as FeatureVocabulary<'a>>::$family: Detached<'owned,
+                Detached = <V as FeatureVocabulary<'owned>>::$family>,)+
+        {
+            type Detached = FeatureSet<'owned, V>;
+            fn into_detached(self) -> Self::Detached {
+                match self {
+                    $(Self::$family(value) => FeatureSet::$family(value.into_detached()),)+
+                }
+            }
+        }
+    };
+}
+feature_ownership!(
+    Light,
+    Camera,
+    Attachment,
+    Particle,
+    Ribbon,
+    GeometryAnimation,
+    CollisionShape,
+    ParticleProgram,
+    FaceActor,
+    LightProgram,
+    Particle2,
+    PointLight,
+);
 impl<'a, V: FeatureVocabulary<'a>> FeatureSet<'a, V> {
     /// Classifies payloads required by typed graph relationships.
     pub fn kind(&self) -> FeatureKind {
