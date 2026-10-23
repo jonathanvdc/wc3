@@ -89,7 +89,8 @@ mesh pipeline. The effect guides describe simulation, playback, and resource nee
 - [Sprite particles](pre2.md) use GPU-generated heads/tails from immutable MDLX births or compact M2 age-driven samples.
   Billboards and draw ordering follow each view independently; M2 emitter-template resources drive shared child pools without creating model actors.
 - [Ribbons](ribbons.md) retain birth-time cross sections and generate connected geometry on the GPU.
-- [External programmes](popcorn.md) execute supported baked graphs and send billboard and connected-ribbon outputs through shared sampled transport.
+- [External programmes](popcorn.md) execute supported baked graphs and share effect geometry, lighting and ordering.
+  Outputs use CPU samples, or explicitly selected immutable appearance for eligible stationary billboards.
 
 Each family bounds populations and per-update work and exposes omitted-work
 counters. Nested model particles also share configurable actor and emission-work

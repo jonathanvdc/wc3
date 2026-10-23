@@ -13,7 +13,7 @@ fn two_views_sort_shared_heads_and_tails_independently() {
         ..Zeroable::zeroed()
     });
     let mut data = AgeSpriteData {
-        records: Arc::new(records.into()),
+        source: AgeSpriteSource::Sampled(Arc::new(records.into())),
         live_indices: Arc::new(vec![0, 0x8000_0000, 1, 0x8000_0001, 2, 0x8000_0002]),
         uniform: Default::default(),
         style: AgeSpriteStyle {
@@ -42,20 +42,20 @@ fn two_views_sort_shared_heads_and_tails_independently() {
         sorted_indices(&data, &Affine3A::IDENTITY),
         [1, 0x8000_0001, 2, 0x8000_0002, 0, 0x8000_0000]
     );
-    assert_eq!(data.records[0].position[2], -3.);
+    assert_eq!(data.source.sampled().unwrap()[0].position[2], -3.);
 }
 
 #[test]
 fn equal_depth_ties_keep_alive_order_and_head_tail_pairs_without_repeating_particles() {
     let data = AgeSpriteData {
-        records: Arc::new(
+        source: AgeSpriteSource::Sampled(Arc::new(
             [-3., -3., 2., -1.]
                 .map(|z| AgeSpriteRecord {
                     position: [0., 0., z, 0.],
                     ..Zeroable::zeroed()
                 })
                 .into(),
-        ),
+        )),
         live_indices: Arc::new(vec![
             0,
             0x8000_0000,
@@ -119,6 +119,8 @@ fn shade_effect(color: vec4<f32>, position: vec3<f32>, normal: vec3<f32>,
         let mut source = imports.to_owned();
         for line in body.lines() {
             match line.trim() {
+                "#ifndef IMMUTABLE_APPEARANCE" => enabled.push(*enabled.last().unwrap()),
+                "#ifdef IMMUTABLE_APPEARANCE" => enabled.push(false),
                 "#ifdef ALPHA_KEY" => enabled.push(*enabled.last().unwrap() && alpha_key),
                 "#ifdef REFRACTION" => enabled.push(*enabled.last().unwrap() && refraction),
                 "#ifdef SAMPLED_SPRITE" => enabled.push(*enabled.last().unwrap() && sampled),
@@ -206,4 +208,76 @@ fn refraction_composition_shader_validates() {
     Validator::new(ValidationFlags::all(), Capabilities::all())
         .validate(&module)
         .unwrap();
+}
+
+#[test]
+fn immutable_sparse_slots_sort_per_view_and_header_transition_preserves_old_extract() {
+    use crate::effects::age_sprites_gpu::immutable::{
+        BirthSlots, ImmutableAppearance, ImmutableSpriteData,
+    };
+    use bevy::math::Mat3;
+
+    let appearance = Arc::new(ImmutableAppearance {
+        source: String::new(),
+        words_per_slot: 32,
+        requires_time_horizon: false,
+        shader: Default::default(),
+    });
+    let mut births = BirthSlots::new(96, 32).unwrap();
+    for (slot, z) in [(91, -3f32), (4, -3.), (70, 2.), (13, -1.)] {
+        let mut row = [0; 32];
+        row[2] = z.to_bits();
+        births.set(slot, 1, u64::from(slot) + 100, &row).unwrap();
+    }
+    // Live allocation order deliberately differs from slot order, including ties.
+    births.set_live(&[91, 4, 70, 13]);
+    let data = AgeSpriteData {
+        source: AgeSpriteSource::Immutable(ImmutableSpriteData {
+            appearance: appearance.clone(),
+            births: births.snapshot.clone(),
+        }),
+        live_indices: births.live.clone(),
+        uniform: Default::default(),
+        style: AgeSpriteStyle {
+            textures: [None, None, None],
+            blend: ParticleBlend::Alpha,
+            priority: 0.,
+            sort: SortPolicy::Far,
+            composition: Default::default(),
+            uv_flip_v: false,
+            unlit: true,
+            head: true,
+            tail: false,
+        },
+    };
+    let opposite =
+        Affine3A::from_mat3_translation(Mat3::from_diagonal(Vec3::new(-1., 1., -1.)), Vec3::ZERO);
+    assert_eq!(sorted_indices(&data, &Affine3A::IDENTITY), [91, 4, 13, 70]);
+    assert_eq!(sorted_indices(&data, &opposite), [70, 13, 91, 4]);
+
+    // First evolution can replace an initialized center without changing identity.
+    let before = births.snapshot.clone();
+    let mut evolved = [0; 32];
+    evolved[2] = 4f32.to_bits();
+    evolved[31] = 1;
+    births.set(91, 1, 191, &evolved).unwrap();
+    assert!(births.matches(91, 1, 191));
+    assert!(!Arc::ptr_eq(&before, &births.snapshot));
+    assert!(Arc::ptr_eq(&before.blocks[0], &births.snapshot.blocks[0]));
+    assert_eq!(before.position(91), Vec3::new(0., 0., -3.));
+    assert_eq!(births.snapshot.position(91), Vec3::new(0., 0., 4.));
+    let mut changed = data.clone();
+    changed.source = AgeSpriteSource::Immutable(ImmutableSpriteData {
+        appearance,
+        births: births.snapshot.clone(),
+    });
+    assert!(Arc::ptr_eq(&data.live_indices, &changed.live_indices));
+    assert_eq!(
+        sorted_indices(&changed, &Affine3A::IDENTITY),
+        [4, 13, 70, 91]
+    );
+    assert_eq!(sorted_indices(&changed, &opposite), [91, 70, 13, 4]);
+    // The older extracted frame remains valid and retains its two-view order.
+    assert_eq!(sorted_indices(&data, &Affine3A::IDENTITY), [91, 4, 13, 70]);
+    assert_eq!(sorted_indices(&data, &opposite), [70, 13, 91, 4]);
 }

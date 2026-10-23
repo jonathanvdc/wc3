@@ -24,12 +24,13 @@ use bevy::time::TimeUpdateStrategy;
 use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 use bevy_wc3::{
-    spawn_model, AdoptedParticleSource, AdoptedParticleTemplate, AssetSettings, BakeSpace,
-    BakedSource, CameraBinding, DrawPurpose, Lod, LodOverride, LodSettings, ModelAsset, ModelDraw,
-    ModelEmitter, ModelInstance, ModelInstanceError, ModelMaterial, ModelParticleLimits,
-    ModelParticleTreeStats, ModelRig, ParticleProgramEmitter, ParticleRefraction,
-    PhysicsContactPolicy, PhysicsSimulation, Playback, PlaybackError, PoseBaker, PoseOptions,
-    PreparedModel, RibbonEmitter, SpriteEmitter, Wc3BevyPlugin, WorldSelection,
+    effect_upload_stats, spawn_model, AdoptedParticleSource, AdoptedParticleTemplate,
+    AssetSettings, BakeSpace, BakedSource, CameraBinding, DrawPurpose, EffectUploadStats, Lod,
+    LodOverride, LodSettings, ModelAsset, ModelDraw, ModelEmitter, ModelInstance,
+    ModelInstanceError, ModelMaterial, ModelParticleLimits, ModelParticleTreeStats, ModelRig,
+    ParticleProgramEmitter, ParticleRefraction, PhysicsContactPolicy, PhysicsSimulation, Playback,
+    PlaybackError, PoseBaker, PoseOptions, PreparedModel, RibbonEmitter, SpriteEmitter,
+    Wc3BevyPlugin, WorldSelection,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::env::args;
@@ -42,6 +43,7 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 use wc3::model::formats::wmo::Profile as WmoProfile;
 use wc3::model::materials::m2::GuildPalette;
+use wc3::model::scene::popcorn::ExecutionOptions;
 #[path = "support/character.rs"]
 mod character;
 #[path = "support/completion.rs"]
@@ -51,7 +53,7 @@ mod loading;
 #[path = "support/resolver.rs"]
 mod resolver;
 use loading::check_asset;
-use resolver::{parse_wmo_profile, ModelResolver};
+use resolver::{parse_particle_execution, parse_wmo_profile, ModelResolver};
 
 type CaptureResult<T> = Result<T, Box<dyn Error>>;
 const TIMEOUT: Duration = Duration::from_secs(30);
@@ -60,6 +62,7 @@ const HELP: &str = "Usage: capture MODEL OUTPUT_DIR [options]
 Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --character-recipe PATH  Assemble a resolved modern M2 character recipe (JSON)
   --particle-stats      Report effect populations and omitted simulation work at each capture
+  --particle-execution MODE  interpreter|scalar-jit|simd-jit|immutable (loader policy)
   --model-particle-limits A,B,S  Owned actors, admission work and emission work per frame
   --guild-palette RGB:RGB:RGB  Linear background, emblem and border RGB multipliers
   --physics             Enable authored rigid-body secondary motion
@@ -87,6 +90,7 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --illuminance LUX     Scene directional light intensity (default: 5000)
   --times SECONDS,...    Increasing capture times (default: 1)
   --benchmark-frames N   Measure N synchronized frames at each captured pose; write CSV
+  --benchmark-advance-frames N  After captures, measure N advancing synchronized frames
   --single-threaded     Run schedules serially to measure small-scene scheduling cost
   --lod LEVEL|auto       Geometry LOD (default: 0)
   --lod-bias NUMBER       Automatic quality bias (default: 1)
@@ -129,6 +133,7 @@ struct Options {
     bake_pose: bool,
     prepasses: bool,
     particle_stats: bool,
+    particle_execution: Option<ExecutionOptions>,
     model_particle_limits: Option<ModelParticleLimits>,
     guild_palette: Option<GuildPalette>,
     bevy_reference: bool,
@@ -148,6 +153,7 @@ struct Options {
     output: PathBuf,
     times: Vec<f64>,
     benchmark_frames: Option<usize>,
+    benchmark_advance_frames: Option<usize>,
     single_threaded: bool,
     sequence: usize,
     lod: Lod,
@@ -187,6 +193,7 @@ impl Options {
             bake_pose: false,
             prepasses: false,
             particle_stats: false,
+            particle_execution: None,
             model_particle_limits: None,
             guild_palette: None,
             bevy_reference: false,
@@ -206,6 +213,7 @@ impl Options {
             output: output.into(),
             times: vec![1.0],
             benchmark_frames: None,
+            benchmark_advance_frames: None,
             single_threaded: false,
             sequence: 0,
             lod: Lod::Fixed(0),
@@ -277,6 +285,9 @@ impl Options {
                 .next()
                 .ok_or_else(|| format!("missing value for {option}"))?;
             match option.as_str() {
+                "--particle-execution" => {
+                    options.particle_execution = Some(parse_particle_execution(&value)?)
+                }
                 "--physics-contact-policy" => {
                     options.physics_contact_policy =
                         Some(match value.as_str() {
@@ -394,6 +405,13 @@ impl Options {
                         return Err("benchmark-frames must be positive".into());
                     }
                     options.benchmark_frames = Some(count);
+                }
+                "--benchmark-advance-frames" => {
+                    let count = value.parse()?;
+                    if count == 0 {
+                        return Err("benchmark-advance-frames must be positive".into());
+                    }
+                    options.benchmark_advance_frames = Some(count);
                 }
                 "--lod" => {
                     options.lod = if value == "auto" {
@@ -522,6 +540,23 @@ impl Options {
         }
         for &time in &options.times {
             Duration::try_from_secs_f64(time)?;
+        }
+        if options.benchmark_advance_frames.is_some() {
+            if options.bake_pose {
+                return Err(
+                    "benchmark-advance-frames requires the live hierarchy, not bake-pose".into(),
+                );
+            }
+            if options
+                .plays
+                .iter()
+                .any(|change| change.time > *options.times.last().unwrap())
+            {
+                return Err(
+                    "advancing benchmark requires scheduled plays to finish by the final capture"
+                        .into(),
+                );
+            }
         }
         Ok(Some(options))
     }
@@ -697,6 +732,7 @@ fn capture(options: Options) -> CaptureResult<()> {
                 .map(|choice| (choice.index, choice.path.clone()))
                 .collect(),
             wmo_profile: options.wmo_profile,
+            particle_execution: options.particle_execution,
         }),
     });
     app.add_plugins((
@@ -1160,13 +1196,21 @@ fn capture(options: Options) -> CaptureResult<()> {
             }
             let mut programmes = world.query::<&ParticleProgramEmitter>();
             for emitter in programmes.iter(world) {
-                println!("Programme {:?}: alive={}, sprites={}, ribbon_segments={}, omitted_geometry={}, omitted={}, suppressed={}, omitted_spatial_writes={}, omitted_spatial_queries={}, skipped_seconds={:.6}, error={:?}",emitter.feature,emitter.alive,emitter.sprites,emitter.ribbon_segments,emitter.omitted_geometry,emitter.omitted,emitter.suppressed,emitter.omitted_spatial_writes,emitter.omitted_spatial_queries,emitter.skipped_seconds,emitter.error);
+                println!("Programme {:?}: alive={}, sprites={}, ribbon_segments={}, omitted_geometry={}, omitted={}, suppressed={}, omitted_spatial_writes={}, omitted_spatial_queries={}, skipped_seconds={:.6}, error={:?}, immutable_sprites={}",emitter.feature,emitter.alive,emitter.sprites,emitter.ribbon_segments,emitter.omitted_geometry,emitter.omitted,emitter.suppressed,emitter.omitted_spatial_writes,emitter.omitted_spatial_queries,emitter.skipped_seconds,emitter.error,emitter.immutable_sprites);
             }
             let mut ribbons = world.query::<&RibbonEmitter>();
             for emitter in ribbons.iter(world) {
                 println!(
                     "Ribbon {:?}: sections={}, segments={}, omitted={}",
                     emitter.feature, emitter.sections, emitter.segments, emitter.omitted_sections
+                );
+            }
+        }
+        if options.particle_stats {
+            if let Some(render_app) = app.get_sub_app(RenderApp) {
+                println!(
+                    "Effect uploads cumulative: {:?}",
+                    effect_upload_stats(render_app.world())
                 );
             }
         }
@@ -1182,6 +1226,9 @@ fn capture(options: Options) -> CaptureResult<()> {
                 );
             }
         }
+    }
+    if let Some(frames) = options.benchmark_advance_frames {
+        benchmark_advancing(&mut app, &options, elapsed, frames)?;
     }
     Ok(())
 }
@@ -1247,6 +1294,145 @@ fn benchmark_pose(
         samples[frames - frames / 20 - 1]
     );
     println!("Frame components: median update/submission {:.3} ms; median completion wait {:.3} ms (component medians are independent)", step_samples[frames / 2], wait_samples[frames / 2]);
+    Ok(())
+}
+
+/// Advance the already resident live scene; all captures have completed first.
+/// File I/O, observations and final image readback stay outside frame clocks.
+fn benchmark_advancing(
+    app: &mut App,
+    options: &Options,
+    start_seconds: f64,
+    frames: usize,
+) -> CaptureResult<()> {
+    let path = options.output.join("advance-timings.csv");
+    let mut output = File::create(&path)?;
+    let mut programmes = File::create(options.output.join("advance-programmes.csv"))?;
+    writeln!(output, "frame,requested_seconds,engine_seconds,delta_seconds,wall_ms,step_ms,wait_ms,sprite_records,model_particles,ribbon_segments,programme_particles,programme_sprites,immutable_sprites")?;
+    writeln!(programmes, "frame,entity,simulation_seconds,alive,sprites,immutable_sprites,ribbon_segments,omitted_geometry,omitted,suppressed,skipped_seconds,scalar_jit_invocations,rust_packet_committed_lanes,simd_attempted_batches,simd_committed_lanes,immutable_age_invocations,immutable_age_fallbacks")?;
+    let synchronize = |app: &App| -> CaptureResult<()> {
+        let device = app.sub_app(RenderApp).world().resource::<RenderDevice>();
+        completion::wait(device, completion::CompletionWait::SpinPoll, TIMEOUT)?;
+        Ok(())
+    };
+    synchronize(app)?;
+    for _ in 0..8 {
+        step(app, Duration::ZERO)?;
+        synchronize(app)?;
+    }
+    let delta = Duration::try_from_secs_f64(1. / options.fps)?;
+    let mut elapsed = start_seconds;
+    let before_uploads = effect_upload_stats(app.sub_app(RenderApp).world());
+    let mut uploads = File::create(options.output.join("advance-uploads.csv"))?;
+    writeln!(
+        uploads,
+        "observation,category,queue_bytes,queue_writes,initial_bytes,initializations"
+    )?;
+    write_advance_uploads(&mut uploads, "before", before_uploads)?;
+    write_advance_programmes(&mut programmes, -1, app.world_mut())?;
+    let mut samples = Vec::with_capacity(frames);
+    for frame in 0..frames {
+        let start = Instant::now();
+        step(app, delta)?;
+        let submitted = Instant::now();
+        synchronize(app)?;
+        let completed = Instant::now();
+        let wall_ms = (completed - start).as_secs_f64() * 1000.;
+        let step_ms = (submitted - start).as_secs_f64() * 1000.;
+        let wait_ms = (completed - submitted).as_secs_f64() * 1000.;
+        elapsed += delta.as_secs_f64();
+        samples.push(wall_ms);
+        // Exact observations follow completion, outside the measured interval.
+        let world = app.world_mut();
+        let engine_seconds = world.resource::<Time<Virtual>>().elapsed_secs_f64();
+        let mut sprite_query = world.query::<&SpriteEmitter>();
+        let sprite_records: usize = sprite_query.iter(world).map(|emitter| emitter.alive).sum();
+        let mut model_query = world.query::<&ModelEmitter>();
+        let model_particles: usize = model_query.iter(world).map(|emitter| emitter.alive).sum();
+        let mut ribbon_query = world.query::<&RibbonEmitter>();
+        let ribbon_segments: usize = ribbon_query
+            .iter(world)
+            .map(|emitter| emitter.segments)
+            .sum();
+        let (programme_particles, programme_sprites, immutable_sprites) =
+            write_advance_programmes(&mut programmes, frame as i128, world)?;
+        writeln!(output, "{frame},{elapsed:.9},{engine_seconds:.9},{:.9},{wall_ms:.6},{step_ms:.6},{wait_ms:.6},{sprite_records},{model_particles},{ribbon_segments},{programme_particles},{programme_sprites},{immutable_sprites}", delta.as_secs_f64())?;
+    }
+    let after_uploads = effect_upload_stats(app.sub_app(RenderApp).world());
+    write_advance_uploads(&mut uploads, "after", after_uploads)?;
+    samples.sort_by(f64::total_cmp);
+    println!(
+        "{}: {frames} advancing synchronized frames at {:.9}s steps; median {:.3} ms, p95 {:.3} ms",
+        path.display(),
+        delta.as_secs_f64(),
+        samples[frames / 2],
+        samples[frames - frames / 20 - 1]
+    );
+    Ok(())
+}
+
+fn write_advance_programmes(
+    output: &mut File,
+    frame: i128,
+    world: &mut World,
+) -> CaptureResult<(usize, usize, usize)> {
+    let mut programme_query = world.query::<(Entity, &ParticleProgramEmitter)>();
+    let mut programme_particles = 0;
+    let mut programme_sprites = 0;
+    let mut immutable_sprites = 0;
+    for (entity, emitter) in programme_query.iter(world) {
+        programme_particles += emitter.alive;
+        programme_sprites += emitter.sprites;
+        immutable_sprites += emitter.immutable_sprites;
+        let time = emitter
+            .simulation_seconds
+            .map(|time| format!("{time:.9}"))
+            .unwrap_or_default();
+        let route = emitter.execution;
+        writeln!(
+            output,
+            "{frame},{entity:?},{time},{},{},{},{},{},{},{},{:.9},{},{},{},{},{},{}",
+            emitter.alive,
+            emitter.sprites,
+            emitter.immutable_sprites,
+            emitter.ribbon_segments,
+            emitter.omitted_geometry,
+            emitter.omitted,
+            emitter.suppressed,
+            emitter.skipped_seconds,
+            route.scalar_jit_invocations,
+            route.rust_packet_committed_lanes,
+            route.simd_attempted_batches,
+            route.simd_committed_lanes,
+            route.immutable_age_invocations,
+            route.immutable_age_fallbacks
+        )?;
+    }
+    Ok((programme_particles, programme_sprites, immutable_sprites))
+}
+
+fn write_advance_uploads(
+    output: &mut File,
+    observation: &str,
+    stats: EffectUploadStats,
+) -> CaptureResult<()> {
+    for (category, traffic) in [
+        ("birth_records", stats.birth_records),
+        ("sampled_records", stats.sampled_records),
+        ("resident_records", stats.resident_records),
+        ("natural_indices", stats.natural_indices),
+        ("view_orders", stats.view_orders),
+        ("uniforms", stats.uniforms),
+    ] {
+        writeln!(
+            output,
+            "{observation},{category},{},{},{},{}",
+            traffic.queue_bytes,
+            traffic.queue_writes,
+            traffic.initial_bytes,
+            traffic.initializations
+        )?;
+    }
     Ok(())
 }
 
@@ -1452,9 +1638,7 @@ mod tests {
         assert!(options.physics);
         assert!(!options.physics_stats);
         assert!(parse(&["--physics-stats"]).is_err());
-        let stats = parse(&["--physics", "--physics-stats"])
-            .unwrap()
-            .unwrap();
+        let stats = parse(&["--physics", "--physics-stats"]).unwrap().unwrap();
         assert!(stats.physics_stats);
         assert_eq!(stats.physics_contact_policy, None);
         assert_eq!(options.physics_contact_policy, None);
@@ -1554,6 +1738,42 @@ mod tests {
         for values in ["1,2", "1,2,3,4", "-1,2,3", "1.5,2,3", "4294967296,2,3"] {
             assert!(parse(&["--model-particle-limits", values]).is_err());
         }
+    }
+
+    #[test]
+    fn validates_advancing_benchmark_without_changing_frozen_selection() {
+        let options = parse(&[
+            "--benchmark-frames",
+            "5",
+            "--benchmark-advance-frames",
+            "12",
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(options.benchmark_frames, Some(5));
+        assert_eq!(options.benchmark_advance_frames, Some(12));
+        for value in ["0", "-1", "1.5"] {
+            assert!(parse(&["--benchmark-advance-frames", value]).is_err());
+        }
+        assert!(parse(&["--benchmark-advance-frames", "1", "--bake-pose"]).is_err());
+        assert!(parse(&[
+            "--benchmark-advance-frames",
+            "1",
+            "--times",
+            "1",
+            "--play",
+            "2=0"
+        ])
+        .is_err());
+        assert!(parse(&[
+            "--benchmark-advance-frames",
+            "1",
+            "--times",
+            "1",
+            "--play",
+            "0.5=0"
+        ])
+        .is_ok());
     }
 
     #[test]
@@ -1693,5 +1913,20 @@ mod tests {
             .unwrap()
             .camera(&model)
             .is_err());
+    }
+    #[test]
+    fn particle_execution_selection_is_explicit_and_checked() {
+        use wc3::model::scene::popcorn::ExecutionPreference;
+        for (name, preference) in [
+            ("interpreter", ExecutionPreference::Interpreter),
+            ("scalar-jit", ExecutionPreference::ScalarJit),
+            ("simd-jit", ExecutionPreference::Automatic),
+            ("immutable", ExecutionPreference::ImmutableAge),
+        ] {
+            let selected = parse(&["--particle-execution", name]).unwrap().unwrap();
+            assert_eq!(selected.particle_execution.unwrap().preference, preference);
+        }
+        assert!(parse(&["--particle-execution", "unknown"]).is_err());
+        assert!(parse(&[]).unwrap().unwrap().particle_execution.is_none());
     }
 }

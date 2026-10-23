@@ -1,6 +1,7 @@
 //! Prepared external-effect images and renderer bindings.
 use super::ribbon::RibbonMode;
 use crate::diagnostics::{RenderDiagnostic, RenderDiagnosticKind, RenderDiagnosticSource};
+use crate::effects::age_sprites_gpu::immutable::ImmutableAppearance;
 use crate::effects::age_sprites_gpu::{AgeSpriteComposition, AgeSpriteStyle, SpriteUv};
 use crate::effects::render::SortPolicy;
 use crate::textures::{TextureColorSpace, TextureRole};
@@ -71,6 +72,7 @@ impl Debug for ParticleEffect {
 #[derive(Clone)]
 pub(crate) struct ProgrammeRenderer {
     pub(crate) layer: EffectLayerId,
+    pub(crate) immutable: Option<Arc<ImmutableAppearance>>,
     pub(crate) position: EffectFieldId,
     pub(crate) size: EffectFieldId,
     pub(crate) enabled: Option<EffectFieldId>,
@@ -158,6 +160,16 @@ impl ParticleEffect {
         for (index, renderer) in program.renderers().iter().enumerate() {
             match prepare(index, renderer, &program) {
                 Ok(Some(mut prepared)) => {
+                    prepared.immutable = super::immutable::prepare(&program, &prepared);
+                    if program.immutable_recipe(prepared.layer).is_some() {
+                        diagnostics.push(RenderDiagnostic::new(
+                            RenderDiagnosticKind::Unverified, RenderDiagnosticSource::Model,
+                            if prepared.immutable.is_some() {
+                                "external billboard appearance can use immutable Graphics expressions; uncertified births and incoherent authorization retain CPU samples"
+                            } else {
+                                "external renderer retains CPU samples: immutable appearance requires stationary camera-facing geometry and bounded generated expressions"
+                            }));
+                    }
                     if toggle(renderer, b"SoftParticles", false) {
                         diagnostics.push(RenderDiagnostic::new(
                             RenderDiagnosticKind::Unsupported,
@@ -578,6 +590,7 @@ fn prepare(
             .and_then(|property| property.text.as_deref())
             .is_some();
     Ok(Some(ProgrammeRenderer {
+        immutable: None,
         layer: renderer.layer,
         position,
         size,

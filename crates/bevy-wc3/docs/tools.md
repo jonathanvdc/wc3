@@ -83,6 +83,23 @@ segments, and omitted sections.
 External programmes report living controllers and particles, extracted billboard
 sprites and ribbon segments, geometry omissions, simulation omissions and checked
 execution errors; an execution error terminates the capture.
+`--particle-execution interpreter|scalar-jit|simd-jit|immutable` selects preparation
+for external programmes loaded with the model. `simd-jit` requests Automatic:
+eligible native tiles use SIMD, while short or unsupported work retains checked
+scalar fallback. Without native-code feature/platform support, JIT requests retain
+the core's reported interpreter fallback. `immutable` requests the explicit Graphics
+analytic appearance policy; unsupported geometry or expressions can still publish
+CPU samples. Check `immutable_sprites` and the images rather than inferring actual
+GPU admission from the requested option. Manually supplied prepared programme
+bindings retain their own policy.
+
+With `--particle-stats`, capture also prints cumulative shared-effect buffer
+transfer receipts from the completed render world. Birth, sampled and resident
+records, natural indices, per-view order and uniforms are separate. Queue bytes
+count executed `RenderQueue::write_buffer` calls; initial mapped uniform bytes
+are reported separately. Zero-delta warmup and readback can also prepare buffers.
+These receipts exclude textures, meshes, unrelated Bevy buffers and GPU execution.
+
 These counters help distinguish simulation and visibility problems; inspect the
 images to assess appearance.
 
@@ -240,6 +257,13 @@ cargo run -p bevy-wc3 --example capture -- --help
 The [performance guide](performance.md) covers synchronized completed-frame timing
 and pipelined character crowds, including report interpretation and measurement
 limits. Use optimized builds and hold scene and quality settings fixed.
+
+Use `capture --benchmark-advance-frames N` for synchronized live frames after the
+requested images. It advances naturally at `--fps`, reporting frame timing and
+actual programme clocks, populations and execution counters in separate CSVs.
+The existing `--benchmark-frames N` keeps each requested pose frozen. See the
+[completed-frame measurement options](performance.md#measure-completed-frames)
+for their different scopes and fixed comparison inputs.
 
 For a small-scene scheduling experiment, add `--single-threaded` to `capture` or
 `crowd`. It runs main and render schedules with serial executors while retaining

@@ -1,4 +1,6 @@
 //! GPU buffers, binding layouts, and draw plumbing shared by quads and ribbons.
+use crate::effects::age_sprites_gpu::immutable::BirthSnapshot;
+use crate::effects::uploads::{EffectUploadStats, EffectUploadTraffic};
 #[path = "view_orders.rs"]
 mod view_orders;
 use bevy::core_pipeline::core_3d::{Transparent3d, TransparentSortingInfo3d};
@@ -36,8 +38,9 @@ pub(crate) use geometry::{
 };
 use std::any::Any;
 use std::marker::PhantomData;
-use std::mem::take;
+use std::mem::{size_of_val, take};
 use std::num::NonZeroU64;
+use std::ops::Range;
 use std::sync::Arc;
 pub(crate) use view_orders::ViewOrders;
 pub(crate) use view_orders::{SortPolicy, SortScratch};
@@ -47,7 +50,7 @@ use crate::effects::records::{upload_records, RecordRing, RingCursor};
 #[derive(Clone)]
 pub(crate) struct ResidentRecordBuffer {
     pub(crate) buffer: Buffer,
-    capacity: usize,
+    capacity_bytes: usize,
     source: RecordSource,
 }
 #[derive(Clone)]
@@ -57,6 +60,7 @@ enum RecordSource {
         lineage: Arc<()>,
     },
     Sampled(Arc<dyn Any + Send + Sync>),
+    Births(Arc<BirthSnapshot>),
 }
 impl RecordSource {
     fn same(&self, other: &Self) -> bool {
@@ -72,11 +76,113 @@ impl RecordSource {
                 },
             ) => a == b && Arc::ptr_eq(x, y),
             (Self::Sampled(a), Self::Sampled(b)) => Arc::ptr_eq(a, b),
+            (Self::Births(a), Self::Births(b)) => Arc::ptr_eq(a, b),
             _ => false,
         }
     }
 }
+/// Visit word ranges, combining adjacent differing fixed-stride birth slots.
+/// No history is required: compare with the exact resident snapshot or initialize
+/// the full block when lineage, semantic stride or capacity made it unavailable.
+fn changed_birth_ranges(
+    current: &[u32],
+    previous: Option<&[u32]>,
+    stride: usize,
+    mut upload: impl FnMut(Range<usize>),
+) {
+    if current.is_empty() {
+        return;
+    }
+    assert!(stride > 0 && current.len().is_multiple_of(stride));
+    let Some(previous) = previous.filter(|old| old.len() == current.len()) else {
+        upload(0..current.len());
+        return;
+    };
+    let mut start = None;
+    for (index, (new, old)) in current
+        .chunks_exact(stride)
+        .zip(previous.chunks_exact(stride))
+        .enumerate()
+    {
+        let offset = index * stride;
+        if new != old {
+            start.get_or_insert(offset);
+        } else if let Some(start) = start.take() {
+            upload(start..offset);
+        }
+    }
+    if let Some(start) = start {
+        upload(start..current.len());
+    }
+}
+
 impl ResidentRecordBuffer {
+    /// Dirty block uploads for arbitrary stable birth slots, not FIFO retirement.
+    pub(crate) fn prepare_births(
+        values: &Arc<BirthSnapshot>,
+        previous: Option<&Self>,
+        device: &RenderDevice,
+        queue: &RenderQueue,
+        uploads: &mut EffectUploadTraffic,
+    ) -> Self {
+        let words = values.word_count();
+        let reusable = previous.filter(|p| p.capacity_bytes >= words * 4);
+        let (buffer, capacity_bytes) = reusable.map_or_else(
+            || {
+                let capacity = words.max(1).next_power_of_two();
+                (
+                    device.create_buffer(&BufferDescriptor {
+                        label: Some("wc3 immutable appearance births"),
+                        size: (capacity * 4) as u64,
+                        usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                        mapped_at_creation: false,
+                    }),
+                    capacity * 4,
+                )
+            },
+            |p| (p.buffer.clone(), p.capacity_bytes),
+        );
+        let old = reusable.and_then(|p| match &p.source {
+            RecordSource::Births(old)
+                if Arc::ptr_eq(&old.lineage, &values.lineage)
+                    && old.words_per_slot == values.words_per_slot
+                    && old.capacity == values.capacity =>
+            {
+                Some(old)
+            }
+            _ => None,
+        });
+        if !old.is_some_and(|old| Arc::ptr_eq(old, values)) {
+            for (index, block) in values.blocks.iter().enumerate() {
+                let previous_block = old.and_then(|old| old.blocks.get(index));
+                if previous_block.is_some_and(|old| Arc::ptr_eq(old, block)) {
+                    continue;
+                }
+                // The resident snapshot is the actual last uploaded contents,
+                // not merely the previous simulation/extraction observation.
+                changed_birth_ranges(
+                    block,
+                    previous_block.map(|old| old.as_slice()),
+                    values.words_per_slot,
+                    |range| {
+                        let offset = values.block_word_offset(index) + range.start;
+                        let words = &block[range];
+                        queue.write_buffer(
+                            &buffer,
+                            (offset * size_of::<u32>()) as u64,
+                            cast_slice(words),
+                        );
+                        uploads.queued(size_of_val(words));
+                    },
+                );
+            }
+        }
+        Self {
+            buffer,
+            capacity_bytes,
+            source: RecordSource::Births(values.clone()),
+        }
+    }
     /// Upload exactly sampled live records without allocating per-frame meshes.
     /// Immutable birth transports continue to use their write cursors instead.
     pub(crate) fn prepare_slice<R: Pod + Send + Sync>(
@@ -84,15 +190,19 @@ impl ResidentRecordBuffer {
         previous: Option<&Self>,
         device: &RenderDevice,
         queue: &RenderQueue,
+        uploads: &mut EffectUploadTraffic,
     ) -> Self {
         let source = RecordSource::Sampled(values.clone());
-        if let Some(previous) = previous.filter(|p| p.capacity >= values.len()) {
+        if let Some(previous) =
+            previous.filter(|p| p.capacity_bytes >= values.len() * size_of::<R>())
+        {
             if !previous.source.same(&source) && !values.is_empty() {
                 queue.write_buffer(&previous.buffer, 0, cast_slice(values));
+                uploads.queued(values.len() * size_of::<R>());
             }
             return Self {
                 buffer: previous.buffer.clone(),
-                capacity: previous.capacity,
+                capacity_bytes: previous.capacity_bytes,
                 source,
             };
         }
@@ -105,10 +215,11 @@ impl ResidentRecordBuffer {
         });
         if !values.is_empty() {
             queue.write_buffer(&buffer, 0, cast_slice(values));
+            uploads.queued(values.len() * size_of::<R>());
         }
         Self {
             buffer,
-            capacity,
+            capacity_bytes: capacity * size_of::<R>(),
             source,
         }
     }
@@ -119,35 +230,37 @@ impl ResidentRecordBuffer {
         device: &RenderDevice,
         queue: &RenderQueue,
         scratch: &mut Vec<R>,
+        uploads: &mut EffectUploadTraffic,
     ) -> Self {
-        let (buffer, capacity, cursor) =
-            if let Some(previous) = previous.filter(|p| p.capacity >= records.capacity()) {
-                (
-                    previous.buffer.clone(),
-                    previous.capacity,
-                    match &previous.source {
-                        RecordSource::Ring { cursor, lineage }
-                            if Arc::ptr_eq(lineage, records.lineage()) =>
-                        {
-                            Some(*cursor)
-                        }
-                        _ => None,
-                    },
-                )
-            } else {
-                let capacity = records.capacity();
-                let buffer = device.create_buffer(&BufferDescriptor {
-                    label: Some("wc3 immutable effect records"),
-                    size: (capacity * size_of::<R>()) as u64,
-                    usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                });
-                (buffer, capacity, None)
-            };
-        upload_records(records, cursor, &buffer, queue, scratch);
+        let (buffer, capacity_bytes, cursor) = if let Some(previous) =
+            previous.filter(|p| p.capacity_bytes >= records.capacity() * size_of::<R>())
+        {
+            (
+                previous.buffer.clone(),
+                previous.capacity_bytes,
+                match &previous.source {
+                    RecordSource::Ring { cursor, lineage }
+                        if Arc::ptr_eq(lineage, records.lineage()) =>
+                    {
+                        Some(*cursor)
+                    }
+                    _ => None,
+                },
+            )
+        } else {
+            let capacity = records.capacity();
+            let buffer = device.create_buffer(&BufferDescriptor {
+                label: Some("wc3 immutable effect records"),
+                size: (capacity * size_of::<R>()) as u64,
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            (buffer, capacity * size_of::<R>(), None)
+        };
+        upload_records(records, cursor, &buffer, queue, scratch, uploads);
         Self {
             buffer,
-            capacity,
+            capacity_bytes,
             source: RecordSource::Ring {
                 cursor: records.cursor(),
                 lineage: records.lineage().clone(),
@@ -167,10 +280,12 @@ impl DrawOrderBuffer {
         device: &RenderDevice,
         queue: &RenderQueue,
         changed: bool,
+        uploads: &mut EffectUploadTraffic,
     ) -> Self {
         if let Some(previous) = previous.filter(|p| p.capacity >= indices.len()) {
             if changed {
                 queue.write_buffer(&previous.buffer, 0, cast_slice(indices));
+                uploads.queued(size_of_val(indices));
             }
             return Self {
                 buffer: previous.buffer.clone(),
@@ -185,6 +300,7 @@ impl DrawOrderBuffer {
             mapped_at_creation: false,
         });
         queue.write_buffer(&buffer, 0, cast_slice(indices));
+        uploads.queued(size_of_val(indices));
         Self { buffer, capacity }
     }
 }
@@ -276,6 +392,7 @@ pub(crate) struct PassResources<'a> {
     pub(crate) queue: &'a RenderQueue,
     pub(crate) layout: &'a BindGroupLayout,
     pub(crate) image: &'a GpuImage,
+    pub(crate) uploads: &'a mut EffectUploadStats,
 }
 impl<I: Pod + Send + Sync> EffectBuffer<I> {
     pub(crate) fn prepare<U: Pod>(
@@ -326,7 +443,7 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
         )
     }
 
-    fn prepare_center_layers<U: Pod>(
+    pub(crate) fn prepare_center_layers<U: Pod>(
         records: ResidentRecordBuffer,
         indices: &Arc<Vec<I>>,
         uniform_data: &U,
@@ -340,6 +457,7 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
             queue,
             layout,
             image,
+            uploads,
         } = resources;
         let bytes = bytes_of(uniform_data);
         let uniform_bytes = previous
@@ -352,9 +470,11 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
         let uniform = if let Some(previous) = previous.as_deref() {
             if !Arc::ptr_eq(&uniform_bytes, &previous.uniform_bytes) {
                 queue.write_buffer(&previous.uniform, 0, bytes);
+                uploads.uniforms.queued(bytes.len());
             }
             previous.uniform.clone()
         } else {
+            uploads.uniforms.initialized(bytes.len());
             device.create_buffer_with_data(&BufferInitDescriptor {
                 label: Some("wc3 effect pass parameters"),
                 contents: bytes_of(uniform_data),
@@ -369,6 +489,7 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
             previous
                 .as_deref()
                 .is_none_or(|p| !Arc::ptr_eq(&p.draw.source, indices)),
+            &mut uploads.natural_indices,
         );
         let binding = EffectBinding {
             layout: layout.id(),
@@ -444,6 +565,7 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
         self.sorted.retain(live);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn prepare_orders(
         &mut self,
         views: impl Iterator<Item = (RetainedViewEntity, Affine3A, bool)>,
@@ -451,6 +573,7 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
         scratch: &mut SortScratch<I>,
         device: &RenderDevice,
         queue: &RenderQueue,
+        uploads: &mut EffectUploadTraffic,
         mut sort: impl FnMut(&Affine3A, &mut SortScratch<I>),
     ) {
         self.sorted.set_policy(policy);
@@ -465,7 +588,7 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
             self.sorted.prepare(view, affine, |previous| {
                 scratch.clear();
                 sort(&affine, scratch);
-                DrawOrderBuffer::prepare(&scratch.order, previous, device, queue, true)
+                DrawOrderBuffer::prepare(&scratch.order, previous, device, queue, true, uploads)
             });
         }
     }

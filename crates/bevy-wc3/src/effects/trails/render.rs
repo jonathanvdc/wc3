@@ -1,5 +1,6 @@
 //! GPU ribbon quads built from pairs of immutable world-space cross-sections.
 use crate::effects::blend::EffectBlend;
+use crate::effects::uploads::TrailUploads;
 use bevy::core_pipeline::core_3d::Transparent3d;
 use bevy::math::{Affine3A, Vec3A};
 use bevy::mesh::MeshVertexBufferLayoutRef;
@@ -39,6 +40,7 @@ impl Plugin for RibbonRenderPlugin {
             return;
         };
         render_app
+            .init_resource::<TrailUploads>()
             .add_render_command::<Transparent3d, DrawRibbons>()
             .init_resource::<SpecializedMeshPipelines<RibbonPipeline>>()
             .add_systems(RenderStartup, init_pipeline.after(MeshPipelineSystems))
@@ -240,6 +242,7 @@ fn sorted_indices(data: &RibbonInstances, world_from_view: &Affine3A) -> Vec<Rib
 
 #[allow(clippy::too_many_arguments)]
 fn prepare_ribbons(
+    mut upload_totals: ResMut<TrailUploads>,
     mut commands: Commands,
     mut query: Query<(
         Entity,
@@ -287,6 +290,7 @@ fn prepare_ribbons(
                 &device,
                 &queue,
                 &mut scratch,
+                &mut upload_totals.0.resident_records,
             )
         };
         shared_sections.insert(data.emitter, records.clone());
@@ -305,6 +309,7 @@ fn prepare_ribbons(
                 queue: &queue,
                 layout: &pipeline.texture_bind_group_layout,
                 image,
+                uploads: &mut upload_totals.0,
             },
         );
 
@@ -326,6 +331,7 @@ fn prepare_ribbons(
             &mut order_scratch,
             &device,
             &queue,
+            &mut upload_totals.0.view_orders,
             |view, scratch| sort_indices(data, view, scratch),
         );
         commands.entity(entity).insert(buffer);

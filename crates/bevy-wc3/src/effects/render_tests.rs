@@ -243,3 +243,92 @@ fn analytic_center_key_still_requires_live_source_identity_and_rejects_uniform_k
         center: &generic
     }));
 }
+
+#[test]
+fn changed_birth_rows_reconstruct_the_actual_resident_snapshot_after_missed_observations() {
+    const STRIDE: usize = 8;
+    let resident: Vec<u32> = (0..64 * STRIDE).map(|word| word as u32).collect();
+    let mut intermediate = resident.clone();
+    intermediate[STRIDE..3 * STRIDE].fill(7);
+    intermediate[50 * STRIDE..51 * STRIDE].fill(99); // Arbitrary pooled reuse.
+    let mut latest = intermediate;
+    latest[4 * STRIDE..5 * STRIDE].fill(123); // Another extraction was missed.
+    let mut uploaded = resident.clone();
+    let mut ranges = Vec::new();
+    changed_birth_ranges(&latest, Some(&resident), STRIDE, |range| {
+        uploaded[range.clone()].copy_from_slice(&latest[range.clone()]);
+        ranges.push(range);
+    });
+    assert_eq!(
+        ranges,
+        [
+            STRIDE..3 * STRIDE,
+            4 * STRIDE..5 * STRIDE,
+            50 * STRIDE..51 * STRIDE
+        ]
+    );
+    assert_eq!(uploaded, latest);
+    assert_eq!(
+        ranges.iter().map(|range| range.len()).sum::<usize>(),
+        4 * STRIDE
+    );
+    changed_birth_ranges(&latest, Some(&latest), STRIDE, |_| {
+        panic!("unchanged birth row uploaded")
+    });
+}
+
+#[test]
+fn cold_or_incompatible_birth_layout_initializes_all_words_including_last_short_block() {
+    for previous in [None, Some(&[1, 2, 3, 4][..])] {
+        let mut ranges = Vec::new();
+        changed_birth_ranges(&[1, 2, 3, 4, 5, 6], previous, 2, |range| ranges.push(range));
+        assert_eq!(ranges.len(), 1);
+        assert_eq!(ranges[0], 0..6);
+    }
+    changed_birth_ranges(&[], None, 2, |_| panic!("empty block uploaded"));
+    // A changed incarnation which recreates identical bytes needs no transfer.
+    changed_birth_ranges(&[0, 1, 2, 3], Some(&[0, 1, 2, 3]), 2, |_| {
+        panic!("equal contents uploaded")
+    });
+}
+
+#[test]
+fn immutable_header_transition_invalidates_order_revision_with_identical_live_ids_and_clock_key() {
+    use crate::effects::age_sprites_gpu::immutable::BirthSlots;
+    let mut slots = BirthSlots::new(4, 32).unwrap();
+    let mut header = [0; 32];
+    header[2] = (-2f32).to_bits();
+    slots.set(1, 1, 10, &header).unwrap();
+    let old = RecordSource::Births(slots.snapshot.clone());
+    let same = RecordSource::Births(slots.snapshot.clone());
+    let live = Arc::new(vec![1u32]);
+    let center = CenterDependency::AnalyticParticle {
+        clock: None,
+        frame: None,
+    };
+    fn revision<'a>(
+        records: &'a RecordSource,
+        live: &'a Arc<Vec<u32>>,
+        center: &'a CenterDependency,
+    ) -> OrderRevision<'a, u32> {
+        OrderRevision {
+            records,
+            indices: live,
+            center,
+        }
+    }
+    assert!(revision(&old, &live, &center).same(&revision(&same, &live, &center)));
+    header[2] = 3f32.to_bits();
+    header[31] = 1;
+    slots.set(1, 1, 10, &header).unwrap();
+    let changed = RecordSource::Births(slots.snapshot.clone());
+    assert!(
+        !revision(&old, &live, &center).same(&revision(&changed, &live, &center)),
+        "a shared clock/live list must not hide an initialized-to-evolved center change"
+    );
+    let RecordSource::Births(old) = old else {
+        unreachable!()
+    };
+    assert_eq!(old.position(1), Vec3::new(0., 0., -2.));
+    assert_eq!(slots.snapshot.position(1), Vec3::new(0., 0., 3.));
+}

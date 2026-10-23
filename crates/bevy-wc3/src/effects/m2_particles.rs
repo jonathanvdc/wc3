@@ -838,7 +838,7 @@ impl RuntimeM2Particles {
                             EffectGeometry(mesh.clone()),
                             ModelOwnedRenderEntity,
                             AgeSpriteData {
-                                records: Default::default(),
+                                source: Default::default(),
                                 live_indices: Default::default(),
                                 uniform: Default::default(),
                                 style: emitter.gpu_style.clone(),
@@ -1111,7 +1111,7 @@ impl Emitter {
             || !frame.basis_world.is_finite()
             || frame.basis_world.determinant() == 0.
         {
-            data.records = record_snapshot.clone();
+            data.source = record_snapshot.clone().into();
             data.live_indices = index_snapshot.clone();
             return;
         }
@@ -1215,7 +1215,7 @@ impl Emitter {
                 indices.push(index | 0x8000_0000);
             }
         }
-        data.records = record_snapshot.clone();
+        data.source = record_snapshot.clone().into();
         data.live_indices = index_snapshot.clone();
         let axes = if self.flags.attached() {
             node

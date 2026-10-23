@@ -1,3 +1,4 @@
+use super::immutable::ImmutableSpriteData;
 use crate::effects::render::SortPolicy;
 use bevy::ecs::query::QueryItem;
 use bevy::prelude::*;
@@ -114,9 +115,42 @@ pub(crate) struct AgeSpriteStyle {
     pub tail: bool,
 }
 
+/// Explicit source ownership: sampled snapshots or stable immutable birth slots.
+#[derive(Clone)]
+pub(crate) enum AgeSpriteSource {
+    Sampled(Arc<Vec<AgeSpriteRecord>>),
+    Immutable(ImmutableSpriteData),
+}
+impl Default for AgeSpriteSource {
+    fn default() -> Self {
+        Self::Sampled(Default::default())
+    }
+}
+#[cfg(test)]
+impl AgeSpriteSource {
+    pub fn sampled(&self) -> Option<&Arc<Vec<AgeSpriteRecord>>> {
+        match self {
+            Self::Sampled(records) => Some(records),
+            Self::Immutable(_) => None,
+        }
+    }
+}
+impl From<Arc<Vec<AgeSpriteRecord>>> for AgeSpriteSource {
+    fn from(records: Arc<Vec<AgeSpriteRecord>>) -> Self {
+        Self::Sampled(records)
+    }
+}
+impl AgeSpriteUniform {
+    /// Immutable sampled billboards use axes[0].x for their authorized effect time.
+    /// M2/refraction and ordinary sampled sources retain the existing axes contract.
+    pub fn set_immutable_time(&mut self, time: f32) {
+        self.axes[0][0] = time;
+    }
+}
+
 #[derive(Component, Clone)]
 pub(crate) struct AgeSpriteData {
-    pub records: Arc<Vec<AgeSpriteRecord>>,
+    pub source: AgeSpriteSource,
     pub live_indices: Arc<Vec<u32>>,
     pub uniform: AgeSpriteUniform,
     pub style: AgeSpriteStyle,

@@ -113,15 +113,18 @@ fn universal_external_effect_lifecycle_preserves_paused_records_and_retires_geom
         assert_eq!(output.omitted, 0);
         assert!(output.error.is_none(), "{:?}", output.error);
         let data = sprites.single().unwrap();
-        assert_eq!(data.records.len(), expected);
+        assert_eq!(data.source.sampled().unwrap().len(), expected);
         assert_eq!(data.live_indices.len(), expected);
         if time == 0.25 && retained.is_none() {
-            assert_eq!(data.records[0].position, [0., 0., 0., 1.]);
-            assert_eq!(data.records[0].size_spin, [400., 400., 1., 0.]);
-            retained = Some(data.records.clone());
+            assert_eq!(data.source.sampled().unwrap()[0].position, [0., 0., 0., 1.]);
+            assert_eq!(
+                data.source.sampled().unwrap()[0].size_spin,
+                [400., 400., 1., 0.]
+            );
+            retained = Some(data.source.sampled().unwrap().clone());
         } else if step == 4 || step == 5 {
             assert!(
-                Arc::ptr_eq(retained.as_ref().unwrap(), &data.records),
+                Arc::ptr_eq(retained.as_ref().unwrap(), data.source.sampled().unwrap()),
                 "paused extraction must retain its immutable source"
             );
         }
@@ -315,7 +318,7 @@ fn owned_programme_integrates_its_initial_interval_before_extracting_sprites() {
     // The original fixture creates one stationary sprite at start, with two
     // seconds of lifetime. First observing age 2.25 must retire it, rather than
     // start a fresh sprite at the endpoint with zero elapsed simulation.
-    assert!(data.records.is_empty());
+    assert!(data.source.sampled().unwrap().is_empty());
     assert_eq!(statistics.single().unwrap().alive, 0);
     assert!(statistics.single().unwrap().error.is_none());
 }
@@ -468,18 +471,21 @@ fn universal_ribbon_program_emits_segments_and_preserves_paused_records() {
         assert_eq!(output.omitted_geometry, 0);
         assert!(output.error.is_none(), "{:?}", output.error);
         let data = sprites.single().unwrap();
-        assert_eq!(data.records.len(), segments);
+        assert_eq!(data.source.sampled().unwrap().len(), segments);
         if step == 0 {
-            let a = data.records[0].ribbon_parameters();
-            let b = data.records[1].ribbon_parameters();
+            let a = data.source.sampled().unwrap()[0].ribbon_parameters();
+            let b = data.source.sampled().unwrap()[1].ribbon_parameters();
             assert_eq!(a.start, Vec3::new(-200., 0., 0.));
             assert_eq!(a.end, Vec3::ZERO);
             assert_eq!(b.end, Vec3::new(0., 200., 0.));
             assert_eq!(a.end, b.start);
             assert_eq!(a.sections[1], b.sections[0]);
-            retained = Some(data.records.clone());
+            retained = Some(data.source.sampled().unwrap().clone());
         } else if step == 1 {
-            assert!(Arc::ptr_eq(retained.as_ref().unwrap(), &data.records));
+            assert!(Arc::ptr_eq(
+                retained.as_ref().unwrap(),
+                data.source.sampled().unwrap()
+            ));
         }
     }
 }

@@ -184,7 +184,7 @@ impl AdoptedSource {
                     EffectGeometry(self.selector.clone()),
                     ModelOwnedRenderEntity,
                     AgeSpriteData {
-                        records: Default::default(),
+                        source: Default::default(),
                         live_indices: Default::default(),
                         uniform: Default::default(),
                         style: template.kernel().gpu_style.clone(),
@@ -353,7 +353,7 @@ impl AdoptedSource {
                     // Commands batch. Publish into that entity on flush rather
                     // than delaying its first live frame or observing time twice.
                     let mut data = AgeSpriteData {
-                        records: Default::default(),
+                        source: Default::default(),
                         live_indices: Default::default(),
                         uniform: Default::default(),
                         style: pool.template.kernel().gpu_style.clone(),

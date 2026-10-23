@@ -1,4 +1,5 @@
 //! Growing record rings with cheap immutable extraction snapshots and birth-range uploads.
+use super::uploads::EffectUploadTraffic;
 use bevy::render::render_resource::Buffer;
 use bevy::render::renderer::RenderQueue;
 use bytemuck::{cast_slice, Pod};
@@ -172,6 +173,7 @@ pub(crate) fn upload_records<T: Pod>(
     buffer: &Buffer,
     queue: &RenderQueue,
     scratch: &mut Vec<T>,
+    uploads: &mut EffectUploadTraffic,
 ) {
     for range in records.upload_ranges(previous) {
         if range.is_empty() {
@@ -180,6 +182,7 @@ pub(crate) fn upload_records<T: Pod>(
         let offset = (range.start * size_of::<T>()) as u64;
         records.copy_range(range, scratch);
         queue.write_buffer(buffer, offset, cast_slice(scratch));
+        uploads.queued(scratch.len() * size_of::<T>());
     }
 }
 

@@ -1,5 +1,6 @@
 //! Universal controls, independent instances and compact renderer extraction.
 use super::controls::{ParticleProgramControlError, ParticleProgramControls};
+use super::immutable::ImmutableRendererState;
 use super::prepared::{ParticleEffect, ProgrammeRenderer, RendererGeometry};
 use super::ribbon::{RibbonMode, RibbonSample, RibbonSamples};
 use super::sampling::{atlas_sample, lut_cursor};
@@ -7,7 +8,7 @@ use super::visibility::VisibilityGuide;
 use crate::coordinates::render_basis;
 use crate::diagnostics::{RenderDiagnosticKind, RenderIssue};
 use crate::effects::age_sprites_gpu::{
-    AgeSpriteData, AgeSpriteRecord, AgeSpriteUniform, SampleBuffers,
+    AgeSpriteData, AgeSpriteRecord, AgeSpriteSource, AgeSpriteUniform, SampleBuffers,
 };
 use crate::effects::emission::EffectChange;
 use crate::effects::frame::EffectStart;
@@ -26,7 +27,7 @@ use std::sync::Arc;
 use wc3::model::profiles::mdlx::Popcorn;
 use wc3::model::scene::popcorn::{
     EffectAttributeId, EffectFieldId, EffectInstance, EffectLimitation, EffectRuntimeError,
-    ParticleView, SceneContext, SceneInputs, Value, ValueType,
+    ExecutionStats, ParticleView, SceneContext, SceneInputs, Value, ValueType,
 };
 use wc3::model::{ClipId, FeatureId, Model, NodeFeature, NodeId, Property};
 
@@ -43,8 +44,16 @@ pub struct ParticleProgramEmitter {
     pub node: NodeId,
     /// Living particles, including structural controllers.
     pub alive: usize,
+    /// Actual core clock; absent until an instance is available.
+    pub simulation_seconds: Option<f64>,
+    /// Cumulative actual execution-route work for the current core instance.
+    /// Restart retains these counters; replacing the instance begins a new ledger.
+    /// These are distinct from birth, retirement and omission statistics.
+    pub execution: ExecutionStats,
     /// Billboard sprite records prepared for all renderer declarations.
     pub sprites: usize,
+    /// Billboards currently published through immutable WGSL appearance.
+    pub immutable_sprites: usize,
     /// Connected ribbon segments prepared for all renderer declarations.
     pub ribbon_segments: usize,
     /// Invalid ribbon samples and collapsed segments omitted in the current extraction.
@@ -108,6 +117,7 @@ struct RendererState {
     entity: Entity,
     samples: SampleBuffers,
     ribbons: RibbonSamples,
+    immutable: Option<ImmutableRendererState>,
 }
 struct State {
     entity: Entity,
@@ -116,6 +126,7 @@ struct State {
     started: bool,
     sampled: bool,
     sprites: usize,
+    immutable_sprites: usize,
     ribbon_segments: usize,
     omitted_geometry: usize,
     error: Option<EffectRuntimeError>,
@@ -249,7 +260,10 @@ impl RuntimeProgramParticles {
                             feature: emitter.feature,
                             node: emitter.node,
                             alive: 0,
+                            simulation_seconds: None,
+                            execution: ExecutionStats::default(),
                             sprites: 0,
+                            immutable_sprites: 0,
                             ribbon_segments: 0,
                             omitted_geometry: 0,
                             omitted: 0,
@@ -289,7 +303,7 @@ impl RuntimeProgramParticles {
                                 ),
                                 ModelOwnedRenderEntity,
                                 AgeSpriteData {
-                                    records: Default::default(),
+                                    source: Default::default(),
                                     live_indices: Default::default(),
                                     uniform: Default::default(),
                                     style,
@@ -305,6 +319,12 @@ impl RuntimeProgramParticles {
                             entity,
                             samples: Default::default(),
                             ribbons: Default::default(),
+                            immutable: renderer.immutable.clone().and_then(|appearance| {
+                                ImmutableRendererState::new(
+                                    appearance,
+                                    emitter.effect.limits.particles,
+                                )
+                            }),
                         }
                     })
                     .collect();
@@ -333,6 +353,7 @@ impl RuntimeProgramParticles {
                     started: false,
                     sampled: false,
                     sprites: 0,
+                    immutable_sprites: 0,
                     ribbon_segments: 0,
                     omitted_geometry: 0,
                     error,
@@ -434,6 +455,11 @@ impl RuntimeProgramParticles {
             let (inputs, scale) = emitter.inputs(frame);
             if frame.change == EffectChange::Reset {
                 state.started = false;
+                for renderer in &mut state.renderers {
+                    if let Some(immutable) = &mut renderer.immutable {
+                        immutable.reset();
+                    }
+                }
                 if state.instance.is_some() {
                     state.error = None;
                 }
@@ -500,11 +526,47 @@ impl RuntimeProgramParticles {
                 || frame.change == EffectChange::Reset
             {
                 let mut sprite_count = 0;
+                let mut immutable_count = 0;
                 let mut ribbon_count = 0;
                 let mut omitted_geometry = 0;
                 for (renderer, output) in emitter.effect.renderers.iter().zip(&mut state.renderers)
                 {
                     if let Ok(mut data) = sprites.get_mut(output.entity) {
+                        let uniform = AgeSpriteUniform {
+                            axes: [[0.; 4]; 2],
+                            flags: [
+                                renderer.geometry.code(),
+                                u32::from(renderer.geometry.axis_fields()[0].is_some())
+                                    | (u32::from(renderer.geometry.axis_fields()[1].is_some())
+                                        << 1),
+                                u32::from(data.style.unlit),
+                                u32::from(!emitter.unfogged),
+                            ],
+                            atlas: [
+                                renderer.atlas[0],
+                                renderer.atlas[1],
+                                data.style.composition.flags()
+                                    | (u32::from(data.style.uv_flip_v) << 3),
+                                u32::from(data.style.blend.raw()),
+                            ],
+                        };
+                        if state.error.is_none()
+                            && output.immutable.as_mut().is_some_and(|immutable| {
+                                state.instance.as_ref().is_some_and(|instance| {
+                                    immutable.publish(
+                                        renderer,
+                                        instance,
+                                        emitter.world_from_space,
+                                        uniform,
+                                        &mut data,
+                                    )
+                                })
+                            })
+                        {
+                            sprite_count += data.live_indices.len();
+                            immutable_count += data.live_indices.len();
+                            continue;
+                        }
                         let (records, indices) = output.samples.begin();
                         if state.error.is_none() {
                             if let Some(instance) = &state.instance {
@@ -555,35 +617,20 @@ impl RuntimeProgramParticles {
                         } else {
                             sprite_count += records.len();
                         }
-                        data.records = records.clone();
+                        data.source = AgeSpriteSource::Sampled(records.clone());
                         data.live_indices = indices.clone();
-                        data.uniform = AgeSpriteUniform {
-                            axes: [[0.; 4]; 2],
-                            flags: [
-                                renderer.geometry.code(),
-                                u32::from(renderer.geometry.axis_fields()[0].is_some())
-                                    | (u32::from(renderer.geometry.axis_fields()[1].is_some())
-                                        << 1),
-                                u32::from(data.style.unlit),
-                                u32::from(!emitter.unfogged),
-                            ],
-                            atlas: [
-                                renderer.atlas[0],
-                                renderer.atlas[1],
-                                data.style.composition.flags()
-                                    | (u32::from(data.style.uv_flip_v) << 3),
-                                u32::from(data.style.blend.raw()),
-                            ],
-                        };
+                        data.uniform = uniform;
                     }
                 }
                 state.sprites = sprite_count;
+                state.immutable_sprites = immutable_count;
                 state.ribbon_segments = ribbon_count;
                 state.omitted_geometry = omitted_geometry;
                 state.sampled = true;
             }
             if let Ok(mut output) = statistics.get_mut(state.entity) {
                 output.sprites = state.sprites;
+                output.immutable_sprites = state.immutable_sprites;
                 output.ribbon_segments = state.ribbon_segments;
                 output.omitted_geometry = state.omitted_geometry;
                 if output.control_error != state.control_error {
@@ -594,6 +641,8 @@ impl RuntimeProgramParticles {
                 }
                 if let Some(instance) = &state.instance {
                     output.alive = instance.active_count();
+                    output.simulation_seconds = Some(instance.time());
+                    output.execution = instance.execution_stats();
                     let stats = instance.stats();
                     output.omitted = stats
                         .omitted_births
@@ -602,6 +651,9 @@ impl RuntimeProgramParticles {
                     output.skipped_seconds = stats.skipped_seconds;
                     output.omitted_spatial_writes = stats.omitted_spatial_writes;
                     output.omitted_spatial_queries = stats.omitted_spatial_queries;
+                } else {
+                    output.simulation_seconds = None;
+                    output.execution = ExecutionStats::default();
                 }
             }
         }
@@ -883,7 +935,7 @@ fn sample_point(
         texture_id: cursor,
     })
 }
-fn sprite_record(
+pub(super) fn sprite_record(
     renderer: &ProgrammeRenderer,
     particle: &ParticleView<'_>,
     world_from_space: Mat4,

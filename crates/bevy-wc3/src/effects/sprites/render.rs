@@ -1,5 +1,6 @@
 //! Instanced PRE2 quads evaluated from immutable spawn records.
 use crate::effects::blend::EffectBlend;
+use crate::effects::uploads::SpriteUploads;
 use bevy::core_pipeline::core_3d::Transparent3d;
 use bevy::math::{Affine3A, Vec3A};
 use bevy::mesh::MeshVertexBufferLayoutRef;
@@ -38,6 +39,7 @@ impl Plugin for ParticleRenderPlugin {
             return;
         };
         render_app
+            .init_resource::<SpriteUploads>()
             .add_render_command::<Transparent3d, DrawParticles>()
             .init_resource::<SpecializedMeshPipelines<ParticlePipeline>>()
             .add_systems(RenderStartup, init_pipeline.after(MeshPipelineSystems))
@@ -224,6 +226,7 @@ fn sorted_indices(data: &ParticleInstances, world_from_view: &Affine3A) -> Vec<u
 
 #[allow(clippy::too_many_arguments)]
 fn prepare_particles(
+    mut upload_totals: ResMut<SpriteUploads>,
     mut commands: Commands,
     mut query: Query<(
         Entity,
@@ -265,6 +268,7 @@ fn prepare_particles(
             &device,
             &queue,
             &mut scratch,
+            &mut upload_totals.0.resident_records,
         );
         let image = data
             .texture
@@ -281,6 +285,7 @@ fn prepare_particles(
                 queue: &queue,
                 layout: &pipeline.texture_bind_group_layout,
                 image,
+                uploads: &mut upload_totals.0,
             },
             data.uniform.center_dependency(data.stationary),
         );
@@ -300,6 +305,7 @@ fn prepare_particles(
             &mut order_scratch,
             &device,
             &queue,
+            &mut upload_totals.0.view_orders,
             |view, scratch| sort_indices(data, view, scratch),
         );
         commands.entity(entity).insert(buffer);

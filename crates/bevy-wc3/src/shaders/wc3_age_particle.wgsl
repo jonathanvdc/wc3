@@ -18,7 +18,11 @@ struct Emitter {
 @group(2) @binding(0) var primary: texture_2d<f32>;
 @group(2) @binding(1) var primary_sampler: sampler;
 @group(2) @binding(2) var<uniform> emitter: Emitter;
+#ifndef IMMUTABLE_APPEARANCE
 @group(2) @binding(3) var<storage, read> particles: array<Particle>;
+#endif
+// Matches AgeSpriteUniform::set_immutable_time; used only by the immutable source.
+fn immutable_authorized_time() -> f32 { return emitter.axes[0].x; }
 @group(2) @binding(4) var secondary: texture_2d<f32>;
 @group(2) @binding(5) var secondary_sampler: sampler;
 @group(2) @binding(6) var tertiary: texture_2d<f32>;
@@ -141,7 +145,11 @@ fn vertex(input: VertexInput) -> VertexOutput {
 #ifdef SAMPLED_RIBBON
     return ribbon_vertex(input);
 #else
+#ifdef IMMUTABLE_APPEARANCE
+    let particle = immutable_particle(input.particle_index & 0x7fffffffu);
+#else
     let particle = particles[input.particle_index & 0x7fffffffu];
+#endif
     let tail = (input.particle_index & 0x80000000u) != 0u;
     let camera_back = safe_normalize(view.world_from_view[2].xyz);
     var right = safe_normalize(view.world_from_view[0].xyz);

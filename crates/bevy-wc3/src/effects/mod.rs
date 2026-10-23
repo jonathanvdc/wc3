@@ -1,6 +1,8 @@
 //! Semantic effect compilation, shared simulation clocks, and composed transports.
 use crate::diagnostics::RenderIssue;
 mod age_appearance;
+mod uploads;
+pub use uploads::{effect_upload_stats, EffectUploadStats, EffectUploadTraffic};
 pub(crate) mod age_sprites_gpu;
 mod atlas_sprites;
 mod bones;

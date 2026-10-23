@@ -14,6 +14,36 @@ PNG and prints median and p95 wall times. CSV columns separate the complete
 `wall_ms` sample, CPU/update/submission `step_ms`, and completion `wait_ms`;
 component medians are independent and need not add to the wall median.
 
+To include changing animation, effect execution and uploads, pass
+`--benchmark-advance-frames N`. After every requested PNG and frozen-pose benchmark
+has finished, the tool warms residency with eight zero-delta frames and then
+advances the existing live scene for `N` completed frames at `--fps`. It never
+seeks, restarts or resets the instance. This option excludes `--bake-pose`;
+scheduled sequence changes must finish by the final requested capture.
+
+`advance-timings.csv` records each rounded input delta, requested accumulated time,
+actual Bevy clock, wall/update/wait times and published effect populations.
+`advance-programmes.csv` records each programme's actual core clock, populations,
+omissions and cumulative execution-route counters, outside the timed interval.
+Its frame `-1` row captures the initial instance ledger after warmup, before any
+measured advancement. Subtract successive counters to identify actual work per frame;
+controllers are included in programme populations. Programme restart retains
+execution counters, while replacing the underlying instance begins a new ledger.
+An absent instance has an empty clock and zero route counters. These execution
+diagnostics are distinct from the simulation birth and omission statistics.
+`advance-uploads.csv` contains cumulative render-world transfer snapshots just
+before and after the advancing interval. Subtract matching categories to measure
+actual birth/sample/resident records, source/view indices and uniform writes.
+The initial snapshot follows residency warmup; the final snapshot follows the
+last completed frame. Initialized buffer bytes remain separate from queue writes.
+These receipts cover shared effect buffers, not textures, meshes or all Bevy work.
+Zero birth bytes alone does not establish GPU evolution: require positive actual
+immutable route counters and published immutable sprites as well.
+PNG readback, observations and CSV writes are excluded from the frame clocks.
+Keep the initial captures, FPS, execution selection and advancing frame count
+identical in paired runs; frozen-pose timings cannot establish CPU programme
+execution speed or changing-record upload cost.
+
 Use `--msaa 1`, `2`, `4` or `8` to select the sample count; the default is four.
 Keep this count, tone mapping, viewport, camera and scene lighting fixed when
 comparing renderers. Match simulation steps as well as the final time: floating

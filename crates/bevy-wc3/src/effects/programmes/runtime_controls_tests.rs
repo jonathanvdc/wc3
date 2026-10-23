@@ -536,3 +536,59 @@ fn handles_follow_programme_identity_and_setters_preserve_explicit_values() {
         Err(ParticleProgramControlError::WrongProgram)
     );
 }
+
+#[test]
+fn published_execution_observations_follow_the_actual_instance_and_absence() {
+    let (model, node, feature) = model();
+    let runtime = RuntimeProgramParticles::compile(
+        &model,
+        &HashMap::from([(node, 0)]),
+        &HashMap::from([(
+            feature,
+            ParticleEffect::new(programme(), |_| Some(Handle::default())),
+        )]),
+    );
+    let mut world = World::new();
+    let mut states = spawn(&runtime, &mut world);
+    let entity = states.states[0].entity;
+    assert_eq!(
+        world
+            .get::<ParticleProgramEmitter>(entity)
+            .unwrap()
+            .simulation_seconds,
+        None
+    );
+    for (time, change) in [
+        (0., EffectChange::Continuous),
+        (0.25, EffectChange::Continuous),
+        (0.25, EffectChange::Continuous),
+        (0.5, EffectChange::Reset),
+    ] {
+        tick(
+            &runtime,
+            &mut states,
+            &mut world,
+            &model,
+            time,
+            change,
+            false,
+        );
+        let instance = states.states[0].instance.as_ref().unwrap();
+        let output = world.get::<ParticleProgramEmitter>(entity).unwrap();
+        assert_eq!(output.simulation_seconds, Some(instance.time()));
+        assert_eq!(output.execution, instance.execution_stats());
+    }
+    states.states[0].instance = None;
+    tick(
+        &runtime,
+        &mut states,
+        &mut world,
+        &model,
+        0.75,
+        EffectChange::Continuous,
+        false,
+    );
+    let output = world.get::<ParticleProgramEmitter>(entity).unwrap();
+    assert_eq!(output.simulation_seconds, None);
+    assert_eq!(output.execution, ExecutionStats::default());
+}

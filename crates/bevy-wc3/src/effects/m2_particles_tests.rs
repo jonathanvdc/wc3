@@ -222,7 +222,7 @@ fn appearance_uses_normalized_particle_age_and_reuses_mesh_buffers() {
         panic!("positions absent")
     };
     assert_eq!(positions.len(), 16);
-    for (quad, expected_z) in positions.chunks_exact(4).zip([-2., -2., 2., 2.]) {
+    for (quad, expected_z) in positions.as_chunks::<4>().0.iter().zip([-2., -2., 2., 2.]) {
         assert!(quad.iter().all(|position| position[2] == expected_z));
     }
     assert_eq!(
@@ -573,7 +573,7 @@ fn indexed_sprite_topology_reuses_storage_through_budget_and_empty_transitions()
             assert_eq!(indices, &[0, 1, 2]);
         } else {
             assert_eq!(indices.len(), vertices / 4 * 6);
-            for (quad, triangle_pair) in indices.chunks_exact(6).enumerate() {
+            for (quad, triangle_pair) in indices.as_chunks::<6>().0.iter().enumerate() {
                 let base = quad as u16 * 4;
                 assert_eq!(
                     triangle_pair,
@@ -704,7 +704,7 @@ fn gpu_live_samples_preserve_cpu_geometry_across_views_and_coordinate_frames() {
     );
     let node = basis * Mat4::from_rotation_x(0.7);
     let mut data = AgeSpriteData {
-        records: Default::default(),
+        source: Default::default(),
         live_indices: Default::default(),
         uniform: Default::default(),
         style: emitter.gpu_style.clone(),
@@ -737,10 +737,10 @@ fn gpu_live_samples_preserve_cpu_geometry_across_views_and_coordinate_frames() {
                 assert_eq!(data.uniform.flags[3], u32::from(mode != 1));
                 assert_eq!(data.uniform.atlas[2] & 8, u32::from(mode == 2) << 3);
                 assert_eq!(data.uniform.atlas[2] & 7, data.style.composition.flags());
-                assert_eq!(data.records.len(), 1);
+                assert_eq!(data.source.sampled().unwrap().len(), 1);
                 assert_eq!(data.live_indices.as_slice(), &[0, 0x8000_0000]);
-                assert!((data.records[0].color[3] - 0.8125).abs() < 1e-6);
-                let snapshot = data.records.clone();
+                assert!((data.source.sampled().unwrap()[0].color[3] - 0.8125).abs() < 1e-6);
+                let snapshot = data.source.sampled().unwrap().clone();
                 let mut mesh = Mesh::new(
                     PrimitiveTopology::TriangleList,
                     RenderAssetUsages::default(),
@@ -756,11 +756,19 @@ fn gpu_live_samples_preserve_cpu_geometry_across_views_and_coordinate_frames() {
                 else {
                     panic!("normals absent")
                 };
-                for (quad_index, (quad, tail)) in
-                    positions.chunks_exact(4).zip([false, true]).enumerate()
+                for (quad_index, (quad, tail)) in positions
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .zip([false, true])
+                    .enumerate()
                 {
-                    let generated =
-                        gpu_sample_corners(&data.records[0], &data.uniform, camera, tail);
+                    let generated = gpu_sample_corners(
+                        &data.source.sampled().unwrap()[0],
+                        &data.uniform,
+                        camera,
+                        tail,
+                    );
                     let normal = (generated[1] - generated[0])
                         .cross(generated[2] - generated[0])
                         .normalize_or_zero();
@@ -779,7 +787,7 @@ fn gpu_live_samples_preserve_cpu_geometry_across_views_and_coordinate_frames() {
                     }
                 }
                 assert!(
-                    Arc::ptr_eq(&snapshot, &data.records),
+                    Arc::ptr_eq(&snapshot, data.source.sampled().unwrap()),
                     "per-view expansion must not rewrite shared samples"
                 );
             }
@@ -875,7 +883,7 @@ fn benchmark_compact_samples_against_cpu_corner_transport() {
         basis_world: Mat4::IDENTITY,
     };
     let mut data = AgeSpriteData {
-        records: Default::default(),
+        source: Default::default(),
         live_indices: Default::default(),
         uniform: Default::default(),
         style: emitter.gpu_style.clone(),
@@ -939,7 +947,7 @@ fn benchmark_compact_samples_against_cpu_corner_transport() {
     );
     println!(
         "live payload: {} compact bytes vs {} indexed-corner bytes, excluding draw-order buffers",
-        data.records.len() * size_of::<AgeSpriteRecord>(),
+        data.source.sampled().unwrap().len() * size_of::<AgeSpriteRecord>(),
         MAX_PARTICLES * 2 * 204
     );
 }
@@ -1403,7 +1411,7 @@ fn disabled_geometry_keeps_m2_simulation_and_statistics_without_live_records() {
         );
         let stats = statistics.get(entity).unwrap();
         let draw = data.get(entity).unwrap();
-        assert!(draw.records.is_empty());
+        assert!(draw.source.sampled().unwrap().is_empty());
         assert!(draw.live_indices.is_empty());
         assert_eq!(stats.alive, instances.emitters[0].births.len());
         if time > 0. {
@@ -1599,7 +1607,9 @@ fn natural_and_sorted_transport_orders_preserve_every_living_particle() {
             panic!("positions missing")
         };
         let centers: Vec<_> = positions
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|quad| quad.iter().map(|p| p[2]).sum::<f32>() * 0.25)
             .collect();
         assert_eq!(centers, expected);
@@ -1840,7 +1850,7 @@ fn lifetime_scale_is_half_extent_while_tail_time_is_full_displacement() {
     let sample = program.sample(AnimationSample::default()).unwrap();
     let camera = Mat4::from_translation(Vec3::Z * 10.);
     let mut data = AgeSpriteData {
-        records: Default::default(),
+        source: Default::default(),
         live_indices: Default::default(),
         uniform: Default::default(),
         style: emitter.gpu_style.clone(),
@@ -1862,9 +1872,17 @@ fn lifetime_scale_is_half_extent_while_tail_time_is_full_displacement() {
             basis_world: Mat4::IDENTITY,
         };
         emitter.sample_gpu(&mut state, &frame, Mat4::IDENTITY, &mut data);
-        assert_eq!(data.records.len(), 1);
-        assert_eq!(&data.records[0].size_spin[..2], &half_extent.to_array());
-        let head = gpu_sample_corners(&data.records[0], &data.uniform, camera, false);
+        assert_eq!(data.source.sampled().unwrap().len(), 1);
+        assert_eq!(
+            &data.source.sampled().unwrap()[0].size_spin[..2],
+            &half_extent.to_array()
+        );
+        let head = gpu_sample_corners(
+            &data.source.sampled().unwrap()[0],
+            &data.uniform,
+            camera,
+            false,
+        );
         assert!(head[0].abs_diff_eq(
             center - half_extent.x * Vec3::X - half_extent.y * Vec3::Y,
             1e-6
@@ -1873,7 +1891,12 @@ fn lifetime_scale_is_half_extent_while_tail_time_is_full_displacement() {
             center + half_extent.x * Vec3::X + half_extent.y * Vec3::Y,
             1e-6
         ));
-        let tail = gpu_sample_corners(&data.records[0], &data.uniform, camera, true);
+        let tail = gpu_sample_corners(
+            &data.source.sampled().unwrap()[0],
+            &data.uniform,
+            camera,
+            true,
+        );
         let end = center - Vec3::X * 1.5;
         assert!(((tail[0] + tail[1]) * 0.5).abs_diff_eq(end, 1e-6));
         assert!(((tail[2] + tail[3]) * 0.5).abs_diff_eq(center, 1e-6));

@@ -17,6 +17,10 @@ wc3 = { workspace = true, features = ["blp-decode"] }
 bytemuck = { version = "1", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 
+[features]
+default = []
+popcorn-jit = ["wc3/popcorn-jit"]
+
 [dev-dependencies]
 serde_json = "1"
 criterion = { workspace = true }

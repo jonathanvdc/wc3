@@ -1,4 +1,8 @@
-//! View-specific M2 sprite ordering and GPU corner expansion.
+//! View-specific sampled geometry ordering and GPU corner expansion.
+use super::records::AgeSpriteSource;
+use crate::effects::render::CenterDependency;
+use crate::effects::uploads::SampledUploads;
+use crate::Wc3Systems;
 use bevy::core_pipeline::core_3d::Transparent3d;
 use bevy::math::{Affine3A, Vec3A};
 use bevy::mesh::MeshVertexBufferLayoutRef;
@@ -38,10 +42,15 @@ impl Plugin for AgeSpriteRenderPlugin {
             ExtractComponentPlugin::<AgeSpriteData>::default(),
             RefractionPlugin,
         ));
+        app.add_systems(
+            PostUpdate,
+            prepare_immutable_shaders.after(Wc3Systems::SimulateEffects),
+        );
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
         };
         render_app
+            .init_resource::<SampledUploads>()
             .add_render_command::<Transparent3d, DrawAgeSprites>()
             .add_render_command::<Transparent3d, DrawRefractionSprites>()
             .init_resource::<SpecializedMeshPipelines<AgeSpritePipeline>>()
@@ -53,6 +62,26 @@ impl Plugin for AgeSpriteRenderPlugin {
                     prepare_age_sprites.in_set(RenderSystems::PrepareResources),
                 ),
             );
+    }
+}
+
+// Shader Assets remain normal Bevy-owned resources; one shared recipe owns its handle.
+fn prepare_immutable_shaders(
+    mut shaders: Option<ResMut<Assets<Shader>>>,
+    sources: Query<&AgeSpriteData>,
+) {
+    let Some(shaders) = shaders.as_mut() else {
+        return;
+    };
+    for data in &sources {
+        if let AgeSpriteSource::Immutable(source) = &data.source {
+            source.appearance.shader.get_or_init(|| {
+                shaders.add(Shader::from_wgsl(
+                    source.appearance.source.clone(),
+                    "wc3 immutable appearance",
+                ))
+            });
+        }
     }
 }
 
@@ -97,9 +126,10 @@ fn init_pipeline(
     });
 }
 
-#[derive(Clone, Copy, Hash, Eq, PartialEq)]
+#[derive(Clone, Hash, Eq, PartialEq)]
 struct AgeSpriteKey {
     mesh: MeshPipelineKey,
+    shader: Option<Handle<Shader>>,
     filter: u8,
     refraction: bool,
     sampled: bool,
@@ -113,7 +143,14 @@ impl SpecializedMeshPipeline for AgeSpritePipeline {
         layout: &MeshVertexBufferLayoutRef,
     ) -> Result<RenderPipelineDescriptor, SpecializedMeshPipelineError> {
         let mut descriptor = self.mesh_pipeline.specialize(key.mesh, layout)?;
-        descriptor.vertex.shader = self.shader.clone();
+        let shader = key.shader.clone().unwrap_or_else(|| self.shader.clone());
+        descriptor.vertex.shader = shader.clone();
+        if key.shader.is_some() {
+            descriptor
+                .vertex
+                .shader_defs
+                .push("IMMUTABLE_APPEARANCE".into());
+        }
         if key.sampled {
             descriptor.vertex.shader_defs.push("SAMPLED_SPRITE".into());
         }
@@ -140,7 +177,10 @@ impl SpecializedMeshPipeline for AgeSpritePipeline {
             descriptor.layout.push(mask_view_layout());
         }
         if let Some(fragment) = descriptor.fragment.as_mut() {
-            fragment.shader = self.shader.clone();
+            fragment.shader = shader;
+            if key.shader.is_some() {
+                fragment.shader_defs.push("IMMUTABLE_APPEARANCE".into());
+            }
             if key.sampled {
                 fragment.shader_defs.push("SAMPLED_SPRITE".into());
             }
@@ -270,11 +310,21 @@ fn queue_age_sprites(
                 warn_once!("Particle refraction mask does not support {}x MSAA on this adapter; distortion omitted", mesh_key.msaa_samples());
                 continue;
             }
+            let shader = match &data.source {
+                AgeSpriteSource::Sampled(_) => None,
+                AgeSpriteSource::Immutable(source) => {
+                    let Some(shader) = source.appearance.shader.get() else {
+                        continue;
+                    };
+                    Some(shader.clone())
+                }
+            };
             let Ok(id) = pipelines.specialize(
                 &cache,
                 &pipeline,
                 AgeSpriteKey {
                     mesh: mesh_key,
+                    shader,
                     refraction: data.style.composition == AgeSpriteComposition::Refraction,
                     sampled: matches!(
                         data.style.composition,
@@ -314,14 +364,21 @@ type AgeSpriteBuffer = EffectBuffer<u32>;
 fn sort_indices(data: &AgeSpriteData, world_from_view: &Affine3A, scratch: &mut SortScratch<u32>) {
     let eye = world_from_view.translation;
     let forward = -world_from_view.matrix3.z_axis;
-    for (index, record) in data.records.iter().enumerate() {
-        let center = if matches!(data.style.composition, AgeSpriteComposition::Ribbon { .. }) {
-            let parameters = record.ribbon_parameters();
-            Vec3A::from(parameters.start * 0.5 + parameters.end * 0.5)
-        } else {
-            Vec3A::from(Vec3::from_slice(&record.position[..3]))
-        };
-        scratch.push(index as u32, (center - eye).dot(forward));
+    if let AgeSpriteSource::Immutable(source) = &data.source {
+        for &slot in data.live_indices.iter() {
+            let center = Vec3A::from(source.births.position(slot));
+            scratch.push(slot, (center - eye).dot(forward));
+        }
+    } else if let AgeSpriteSource::Sampled(records) = &data.source {
+        for (index, record) in records.iter().enumerate() {
+            let center = if matches!(data.style.composition, AgeSpriteComposition::Ribbon { .. }) {
+                let parameters = record.ribbon_parameters();
+                Vec3A::from(parameters.start * 0.5 + parameters.end * 0.5)
+            } else {
+                Vec3A::from(Vec3::from_slice(&record.position[..3]))
+            };
+            scratch.push(index as u32, (center - eye).dot(forward));
+        }
     }
     scratch.sort(data.style.sort == SortPolicy::Near, |index, order| {
         if data.style.head {
@@ -349,6 +406,7 @@ fn sorted_indices(data: &AgeSpriteData, world_from_view: &Affine3A) -> Vec<u32> 
 
 #[allow(clippy::too_many_arguments)]
 fn prepare_age_sprites(
+    mut upload_totals: ResMut<SampledUploads>,
     mut commands: Commands,
     mut query: Query<(
         Entity,
@@ -383,12 +441,22 @@ fn prepare_age_sprites(
             // Keep resident records and allocated capacity across emission gaps.
             continue;
         }
-        let records = ResidentRecordBuffer::prepare_slice(
-            &data.records,
-            previous.as_deref().map(|p| &p.records),
-            &device,
-            &queue,
-        );
+        let records = match &data.source {
+            AgeSpriteSource::Sampled(values) => ResidentRecordBuffer::prepare_slice(
+                values,
+                previous.as_deref().map(|p| &p.records),
+                &device,
+                &queue,
+                &mut upload_totals.0.sampled_records,
+            ),
+            AgeSpriteSource::Immutable(source) => ResidentRecordBuffer::prepare_births(
+                &source.births,
+                previous.as_deref().map(|p| &p.records),
+                &device,
+                &queue,
+                &mut upload_totals.0.birth_records,
+            ),
+        };
         let textures = data.style.textures.each_ref().map(|handle| {
             handle
                 .as_ref()
@@ -396,7 +464,7 @@ fn prepare_age_sprites(
                 .unwrap_or(&fallback.d2)
         });
         let [image, secondary, tertiary] = textures;
-        let mut buffer = AgeSpriteBuffer::prepare_layers(
+        let mut buffer = AgeSpriteBuffer::prepare_center_layers(
             records,
             &data.live_indices,
             &data.uniform,
@@ -406,8 +474,15 @@ fn prepare_age_sprites(
                 queue: &queue,
                 layout: &pipeline.texture_bind_group_layout,
                 image,
+                uploads: &mut upload_totals.0,
             },
             Some([secondary, tertiary]),
+            matches!(&data.source, AgeSpriteSource::Immutable(_)).then_some(
+                CenterDependency::AnalyticParticle {
+                    clock: None,
+                    frame: None,
+                },
+            ),
         );
         buffer.prepare_orders(
             views.iter().map(|(view, visible)| {
@@ -421,6 +496,7 @@ fn prepare_age_sprites(
             &mut order_scratch,
             &device,
             &queue,
+            &mut upload_totals.0.view_orders,
             |view, scratch| sort_indices(data, view, scratch),
         );
         commands.entity(entity).insert(buffer);

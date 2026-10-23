@@ -216,13 +216,15 @@ fn actual_parent_loop_retains_children_from_sources_dead_at_endpoint() {
         "the actual occurrence hook must retain subframe sources"
     );
     let data = test.world.get::<AgeSpriteData>(draws[0].0).unwrap();
-    assert!(!data.records.is_empty());
+    assert!(!data.source.sampled().unwrap().is_empty());
     assert!(data
-        .records
+        .source
+        .sampled()
+        .unwrap()
         .iter()
         .all(|record| (record.position[0] - 7.).abs() < 1e-5));
     let population = draws[0].1;
-    let records = data.records.clone();
+    let records = data.source.sampled().unwrap().clone();
     test.step(1.5, EffectChange::Continuous);
     assert_eq!(
         test.child_draws()[0].1,
@@ -232,7 +234,12 @@ fn actual_parent_loop_retains_children_from_sources_dead_at_endpoint() {
     assert!(
         Arc::ptr_eq(
             &records,
-            &test.world.get::<AgeSpriteData>(draws[0].0).unwrap().records
+            test.world
+                .get::<AgeSpriteData>(draws[0].0)
+                .unwrap()
+                .source
+                .sampled()
+                .unwrap()
         ),
         "unchanged paused views reuse the published sample"
     );
@@ -395,19 +402,24 @@ fn captured_ready_draw_is_fully_published_in_the_same_unflushed_commands_batch()
     assert!(draw.1 > 0);
     let data = test.world.get::<AgeSpriteData>(draw.0).unwrap();
     assert_eq!(
-        data.records.len(),
+        data.source.sampled().unwrap().len(),
         draw.1,
         "first rendered frame has the exact simulation population"
     );
     assert_eq!(data.live_indices.len(), draw.1);
     let provenance = test.world.get::<AdoptedParticleTemplate>(draw.0).unwrap();
     assert_eq!(provenance.model, test.handle);
-    let records = data.records.clone();
+    let records = data.source.sampled().unwrap().clone();
     test.step(0.5, EffectChange::Continuous);
     assert!(
         Arc::ptr_eq(
             &records,
-            &test.world.get::<AgeSpriteData>(draw.0).unwrap().records
+            test.world
+                .get::<AgeSpriteData>(draw.0)
+                .unwrap()
+                .source
+                .sampled()
+                .unwrap()
         ),
         "deferred publication participates in the ordinary unchanged-sample cache"
     );

@@ -44,7 +44,7 @@ fn published(
         basis_world: Mat4::IDENTITY,
     };
     let mut data = AgeSpriteData {
-        records: Default::default(),
+        source: Default::default(),
         live_indices: Default::default(),
         uniform: Default::default(),
         style: pool.template.kernel().gpu_style.clone(),
@@ -53,7 +53,7 @@ fn published(
     data
 }
 fn center(data: &AgeSpriteData, index: usize) -> Vec3 {
-    let position = data.records[index].position;
+    let position = data.source.sampled().unwrap()[index].position;
     Vec3::new(position[0], position[1], position[2])
 }
 
@@ -123,8 +123,8 @@ fn attached_births_ignore_driving_translation_and_publish_in_current_owner_frame
         // The same clock and births are observed under a changed owner frame.
         let attached_data = published(&mut attached, &values, owner, 0.5);
         let detached_data = published(&mut detached, &detached_values, owner, 0.5);
-        assert_eq!(attached_data.records.len(), 2);
-        assert_eq!(detached_data.records.len(), 2);
+        assert_eq!(attached_data.source.sampled().unwrap().len(), 2);
+        assert_eq!(detached_data.source.sampled().unwrap().len(), 2);
         for (index, point) in local.iter().enumerate() {
             assert!(center(&attached_data, index).abs_diff_eq(owner.transform_point3(*point), 1e-5));
             assert!(center(&detached_data, index)
@@ -193,6 +193,6 @@ fn attached_template_inheritance_preserves_the_common_inverse_owner_policy() {
         .velocity
         .abs_diff_eq(Vec3::X * 3., 1e-5));
     let data = published(&mut pool, &values, owner, 0.25);
-    let velocity = data.records[0].velocity_tail;
+    let velocity = data.source.sampled().unwrap()[0].velocity_tail;
     assert!(Vec3::new(velocity[0], velocity[1], velocity[2]).abs_diff_eq(Vec3::Y * 6., 1e-5));
 }

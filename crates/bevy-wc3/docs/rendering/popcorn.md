@@ -3,11 +3,13 @@
 MDLX Popcorn features reference baked effects rather than ordinary sprite-emitter
 parameters. The model loader imports the feature into `Model<Universal>`, resolves
 its `.pkb` companion, and compiles a shared `wc3::model::scene::popcorn::EffectProgram`.
-Each spawned model owns an independent bounded simulation. Supported billboard and connected-ribbon
-outputs use the same compact sampled records, per-view sorting, Bevy lighting,
-fog and output processing as M2 sprites.
+Each spawned model owns an independent bounded simulation. Billboard and connected-ribbon
+outputs share procedural geometry, per-view sorting, Bevy lighting, fog and output
+processing with M2 sprites. Ordinary outputs use compact CPU samples;
+[eligible immutable billboards](#immutable-appearance-rendering) instead retain
+birth records and evaluate appearance in WGSL.
 
-This is a partial interpreter. Supported graphs can initialize and evolve particles,
+Programme and renderer coverage is partial. Supported graphs can initialize and evolve particles,
 sample curves and event streams, generate timestamped children, and retire them.
 Typed routed payloads preserve birth-time values and native world-space frames
 independently across child and fanout particles.
@@ -323,3 +325,60 @@ no allocation within its configured capacities.
 This establishes a storage contract, not native random-sequence fidelity or a
 full-renderer performance comparison. The [core programme guide](../../../wc3/docs/popcorn.md)
 describes supported execution policies and their remaining limits.
+
+## Immutable appearance rendering
+
+For a prepared in-memory effect, select core `ExecutionPreference::ImmutableAge`
+with `NumericPolicy::Graphics` before constructing `ParticleEffect`. This is an
+explicit analytic appearance policy: CPU lifetime and retirement remain authoritative,
+while supported Size, Color, Rotation and TextureID expressions use birth captures
+and the last authorized effect time. The first renderer subset requires stationary
+Position, fixed axes and camera-facing billboards (facing 0). It shares the ordinary
+effect fragment shader, lighting, fog, texture roles and per-view sorting.
+
+Admitted births occupy stable GPU slots. With unchanged population and view,
+appearance changes update the shared time uniform rather than rewriting complete
+particle records or per-view order. Dead slots leave the live index list, and
+reused slots receive fresh birth data.
+`ParticleProgramEmitter::immutable_sprites` reports the currently published subset
+of `sprites`; it is zero when that renderer publishes CPU samples. `capture
+--particle-stats` includes the count. Recipe preparation alone does not establish
+that the GPU route was used.
+
+Each renderer reserves a CPU birth payload of `128 + 16 * capture_count` bytes per
+configured particle slot, including slots used by controllers or other layers.
+The GPU buffer stores the same rows with rounded allocation capacity. These are
+additional renderer allocations outside the core `EffectLimits` storage prediction;
+live/order indices, admission metadata and retained COW snapshots add overhead.
+The core's allocation contract does not imply allocation-free renderer birth
+publication. Unchanged births share snapshots; fresh or first-evolved rows can
+copy a COW block and upload its changed contiguous slot ranges.
+
+A conservative interval certificate rejects nonfinite appearance and requires
+positive size. Recipes using only immutable captures and appearance Life are
+certified over the complete Life range 0–1 when an evolved birth is first admitted.
+Recipes containing an explicit Time node instead use a finite time horizon;
+advancing beyond it rechecks living captures before publishing the new uniform.
+Life still changes with the authorized clock, but its bounded range does not need
+these horizon checks. Both routes retain the finite authorized-clock guard.
+
+Moving geometry, unsupported expressions, or an inconclusive finite/positive-size
+certificate use the existing sampled transport. A birth initialized exactly at the
+current effect time retains its ordinary initialized header. Its first authorized
+evolution replaces that slot once with evolved stationary geometry and captures, then subsequent appearance
+frames update only the shared time uniform. Initialized and evolved slots remain
+in the same draw and global per-view order. This preserves authored differences
+in initial Position, axes and Enabled without evaluating the appearance DAG early.
+Any core work omission or guard failure restores the last authorized values and
+latches CPU execution until reset.
+The GPU never advances an unauthorized sample. Renderer certificate failures latch
+that renderer to sampled publication until reset without manufacturing a VM fault.
+
+`CompileOptions::particle_execution` selects preparation for companions resolved
+by the asset loader. Return these options from `ResourceResolver::compile_options`.
+The default is Interpreter without `bevy-wc3/popcorn-jit`, or Automatic with that
+optional feature. Set Interpreter explicitly to avoid native preparation, or set
+ImmutableAge/Graphics explicitly for analytic appearance. Supplied prepared
+`CompileOptions::particle_effects` keep their own policy and are never recompiled
+by this option. `capture --particle-execution` exposes the same loader selection.
+No route changes authored native graph bytes.

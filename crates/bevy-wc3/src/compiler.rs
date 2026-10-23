@@ -32,6 +32,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use wc3::model::profiles::wmo::Pass as WorldPass;
 use wc3::model::properties::DrawProperties;
+use wc3::model::scene::popcorn::{ExecutionOptions, ExecutionPreference};
 
 use wc3::model::profiles::Universal;
 use wc3::model::systems::ModelMetadata;
@@ -79,6 +80,10 @@ pub struct CompileOptions {
     /// Prepared external particle programmes, keyed by their authored Universal programme feature.
     /// Absent, foreign or wrong-family keys fail before image resolution, even for hidden geometry.
     pub particle_effects: HashMap<FeatureId, ParticleEffect>,
+    /// Preparation policy for external programmes resolved by the asset loader.
+    /// Already prepared `particle_effects` retain their own captured execution plan.
+    /// Defaults to Automatic with `popcorn-jit`, otherwise Interpreter.
+    pub particle_execution: ExecutionOptions,
     /// Maximum potential unconnected-dynamic body pairs prepared across source physics systems.
     /// Sources remain isolated; their shared bound is checked before joint exclusions or quadratic enumeration.
     /// Zero disables preparation when any potential pairs exist. Composition also caps retained remapped pairs.
@@ -91,6 +96,14 @@ impl Default for CompileOptions {
             draws: Default::default(),
             child_models: Default::default(),
             particle_effects: Default::default(),
+            particle_execution: ExecutionOptions {
+                preference: if cfg!(feature = "popcorn-jit") {
+                    ExecutionPreference::Automatic
+                } else {
+                    ExecutionPreference::Interpreter
+                },
+                ..Default::default()
+            },
             physics_contact_pair_budget: DEFAULT_CONTACT_PAIR_BUDGET,
         }
     }

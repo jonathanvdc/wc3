@@ -70,6 +70,7 @@ pub(super) async fn resolve_programmes(
                         },
                     )
                     .map_err(|error| error.to_string())
+                    .map(|program| program.with_execution(options.particle_execution))
             })();
             match compiled {
                 Ok(program) => {

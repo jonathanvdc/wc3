@@ -1,10 +1,11 @@
 //! Model resource choices shared by the interactive viewer and capture tool.
 use bevy::asset::AssetPath;
-use bevy_wc3::{PathResolver, ResourceResolver, TextureRequest};
+use bevy_wc3::{CompileOptions, PathResolver, ResourceResolver, TextureRequest};
 use std::collections::HashMap;
 use wc3::model::conversion::{ImportOptions, LossPolicy, UnknownPolicy};
 use wc3::model::formats::wmo::Profile as WmoProfile;
-use wc3::model::{ImageResource, ResourceLocator as ModelResource};
+use wc3::model::scene::popcorn::{ExecutionOptions, ExecutionPreference, NumericPolicy};
+use wc3::model::{ImageResource, Model, ResourceLocator as ModelResource};
 
 #[derive(Default)]
 pub struct ModelResolver {
@@ -13,8 +14,17 @@ pub struct ModelResolver {
     pub bitmaps: HashMap<usize, String>,
     pub replaceables: HashMap<u32, String>,
     pub wmo_profile: Option<WmoProfile>,
+    pub particle_execution: Option<ExecutionOptions>,
 }
 impl ResourceResolver for ModelResolver {
+    fn compile_options(&self, _owner: &AssetPath<'_>, _model: &Model<'_>) -> CompileOptions {
+        let mut options = CompileOptions::default();
+        if let Some(execution) = self.particle_execution {
+            options.particle_execution = execution;
+        }
+        options
+    }
+
     fn import_options(&self, _owner: &AssetPath<'_>) -> ImportOptions {
         if self.allow_loss {
             ImportOptions {
@@ -78,4 +88,21 @@ pub fn parse_wmo_profile(name: &str) -> Result<WmoProfile, &'static str> {
         "warwithin" => Ok(WmoProfile::WarWithin),
         _ => Err("unsupported WMO profile"),
     }
+}
+
+/// `simd-jit` requests Automatic: eligible tiles use SIMD, with checked scalar fallback.
+pub fn parse_particle_execution(name: &str) -> Result<ExecutionOptions, &'static str> {
+    let preference = match name {
+        "interpreter" => ExecutionPreference::Interpreter,
+        "scalar-jit" => ExecutionPreference::ScalarJit,
+        "simd-jit" => ExecutionPreference::Automatic,
+        "immutable" => ExecutionPreference::ImmutableAge,
+        _ => {
+            return Err("particle-execution must be interpreter, scalar-jit, simd-jit or immutable")
+        }
+    };
+    Ok(ExecutionOptions {
+        preference,
+        numeric_policy: NumericPolicy::Graphics,
+    })
 }
