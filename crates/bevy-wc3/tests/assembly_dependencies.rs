@@ -11,6 +11,7 @@ use bevy_wc3::{
     PartBinding, ParticleEffect, ParticleProgramControls, RenderDiagnosticKind,
 };
 use std::collections::HashMap;
+use std::sync::Arc;
 use wc3::model::conversion::ImportOptions;
 use wc3::model::formats::pkb::{Document, EffectCompileOptions};
 use wc3::model::io;
@@ -88,7 +89,7 @@ fn part(source: Source, node: NodeId) -> Part {
 #[test]
 fn empty_dependencies_preserve_existing_features_diagnostics_and_images() {
     let (model, _, _, _, _) = source();
-    let models: Models<'_> = HashMap::from([(resource("root"), model)]);
+    let models: Models<'_> = HashMap::from([(resource("root"), Arc::new(model))]);
     let plan = Assembly::new(Source::new(resource("root")));
     let mut old_images = Assets::default();
     let old = compile_assembly(&plan, &models, &mut old_images, pixels).unwrap();
@@ -132,7 +133,11 @@ fn every_source_binding_is_checked_before_any_image_even_when_hidden() {
     let (model, _, _, light, child) = source();
     let (foreign_model, _, foreign, _, _) = source();
     assert!(foreign_model.feature(foreign).is_some());
-    let models: Models<'_> = [(resource("root"), root), (resource("part"), model)].into();
+    let models: Models<'_> = [
+        (resource("root"), Arc::new(root)),
+        (resource("part"), Arc::new(model)),
+    ]
+    .into();
     for hidden in [false, true] {
         for invalid in 0..3 {
             let mut selected = Source::new(resource("part"));
@@ -200,7 +205,7 @@ fn every_source_binding_is_checked_before_any_image_even_when_hidden() {
 #[test]
 fn invalid_plan_and_failed_resolver_do_not_decode_images() {
     let (model, _, _, _, _) = source();
-    let models: Models<'_> = [(resource("root"), model)].into();
+    let models: Models<'_> = [(resource("root"), Arc::new(model))].into();
     let missing = Assembly::new(Source::new(resource("missing")));
     let mut resolutions = 0;
     let mut images = Assets::default();
@@ -235,7 +240,7 @@ fn invalid_plan_and_failed_resolver_do_not_decode_images() {
 #[test]
 fn repeated_resources_share_programme_handles_but_keep_actor_controls_independent() {
     let (model, node, programme, _, child) = source();
-    let models: Models<'_> = [(resource("root"), model)].into();
+    let models: Models<'_> = [(resource("root"), Arc::new(model))].into();
     let mut plan = Assembly::new(Source::new(resource("root")));
     plan.parts.push(part(Source::new(resource("root")), node));
     plan.parts.push(part(Source::new(resource("root")), node));
@@ -348,7 +353,11 @@ fn repeated_resources_share_programme_handles_but_keep_actor_controls_independen
 fn resolution_is_stable_and_uses_resource_identity_not_model_equivalence() {
     let (root, node, _, _, _) = source();
     let other = root.clone();
-    let models: Models<'_> = [(resource("root"), root), (resource("other"), other)].into();
+    let models: Models<'_> = [
+        (resource("root"), Arc::new(root)),
+        (resource("other"), Arc::new(other)),
+    ]
+    .into();
     let mut plan = Assembly::new(Source::new(resource("root")));
     plan.parts.push(part(Source::new(resource("other")), node));
     plan.parts.push(part(Source::new(resource("root")), node));

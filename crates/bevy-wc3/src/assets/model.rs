@@ -653,8 +653,13 @@ impl ModelLoader {
                 return Err(ModelLoadError::UnsupportedExtension { owner, extension });
             }
         };
-        let mut native = NativeReader::new(format, owner_key(&owner), bytes);
-        let native = loop {
+        let mut native = NativeReader::new(
+            format,
+            owner_key(&owner),
+            bytes,
+            self.resolver.import_options(&owner),
+        );
+        let conversion = loop {
             match native.poll().map_err(|source| ModelLoadError::Native {
                 owner: owner.clone(),
                 source: Box::new(source),
@@ -669,15 +674,9 @@ impl ModelLoader {
                             source: Box::new(source),
                         })?;
                 }
-                Progress::Ready(native) => break native,
+                Progress::Ready(conversion) => break conversion,
             }
         };
-        let conversion = native
-            .import(&self.resolver.import_options(&owner))
-            .map_err(|source| ModelLoadError::Native {
-                owner: owner.clone(),
-                source: Box::new(source),
-            })?;
         let children = ChildModelContext {
             ancestry: &settings.ancestry,
             graph: &self.dependencies,

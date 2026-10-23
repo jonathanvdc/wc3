@@ -16,12 +16,13 @@ pub use image_sink::ImageSink;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::fmt::{Debug, Formatter, Result as FmtResult};
+use std::sync::Arc;
 use wc3::model::{
     ClipId, FeatureId, ImageResource, ImageResourceId, MaterialSelection, Model, ResourceLocator,
 };
 
-/// Models resolved from a coherent application resource provider.
-pub type Models<'data> = HashMap<ResourceLocator<'static>, Model<'data>>;
+/// Shared immutable models resolved from a coherent application resource provider.
+pub type Models<'data> = HashMap<ResourceLocator<'static>, Arc<Model<'data>>>;
 /// Prepared optional dependencies shared by every occurrence of one source resource.
 ///
 /// Bindings use identities from that source's Universal model. Programme images,

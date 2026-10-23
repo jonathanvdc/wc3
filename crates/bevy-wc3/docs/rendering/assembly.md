@@ -14,8 +14,12 @@ translates those choices into supported semantic geometry, images and bindings;
 the renderer supplies no race, sex, customization-slot or inventory schema.
 
 Load or author the required models before resolving graph-scoped identities.
-`Models` maps resource identities to `Model<Universal>` values. An
-`Assembly` has a root `Source` and an ordered list of `Part`s.
+`Models` maps resource identities to shared `Arc<Model<Universal>>` values.
+The native [asset reader](../../../wc3/docs/loading.md) returns an owned
+`Model<'static>` suitable for retaining in such a cache. Clone the `Arc` when
+building another registry; all references retain the same graph-scoped node,
+look, draw and feature identities. Compilation borrows these immutable graphs.
+An `Assembly` has a root `Source` and an ordered list of `Part`s.
 Each source selects its model resource, material look, `DrawSelection` and image
 replacements by dependency or structural input address. Each part supplies a
 `PartBinding` and optional host-to-part clip mappings. Public assembly plans use
@@ -177,8 +181,9 @@ directly into the renderer's image store. The dependency-aware variant additiona
 resource-scoped callback described above. Both use the same compiler and runtime.
 Compilation validates selections, compiles sources, resolves
 bindings and returns a `CompiledModel`. Prepare and spawn it with the ordinary
-renderer APIs. Failed setup returns no partial assembly; images already inserted
-remain available in the asset store.
+renderer APIs. The compiled result owns its geometry and animation data, so the
+source model registry can be released after compilation. Failed setup returns no
+partial assembly; images already inserted remain available in the asset store.
 
 For preparation on a worker, supply an `ImageSink` implementation or an
 `FnMut(Image) -> Handle<Image>` callback. It receives the same interpreted pixels,

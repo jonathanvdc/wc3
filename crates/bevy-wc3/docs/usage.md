@@ -232,12 +232,14 @@ owner cleanup for children moving outside the parent hierarchy.
 ## Prepare custom model sources
 
 Use [`wc3::model::io::asset::Reader`](../../wc3/docs/loading.md) to load native
-bytes and required companions without a Bevy asset source. Its owned native asset
-imports a Universal graph with an explicit conversion policy and report. Retain
-the asset while using that graph. Format-specific `io::{mdlx, m2, wmo}` imports
-remain useful for already decoded documents; widen those models to Universal.
-You can also author a Universal graph directly. Compile, prepare, and spawn it
-with the ordinary APIs:
+bytes and required companions without a Bevy asset source. Choose the import
+policy when creating the reader. Completion returns a checked, owned
+`Model<'static>` and its conversion report, so the reader and source bytes can be
+released. Format-specific `io::{mdlx, m2, wmo}` imports remain useful for already
+decoded documents; widen those models to Universal and call `into_owned()` if
+they must outlive those documents. Ownership conversion preserves graph-scoped
+identities. You can also author a Universal graph directly. Compile, prepare,
+and spawn it with the ordinary APIs:
 
 ```rust
 let compiled = compile_model(&model, |request| resolve_image(request))?;
@@ -258,6 +260,8 @@ Use `assembly::Assembly` for resource plans with geometry choices, image replace
 atlases, and mounted or skinned parts. `assembly::compile_assembly` resolves the
 plan into a reusable `CompiledModel`. Applications can implement
 `assembly::Resolver<Selection>` for their own selection vocabulary. The
+`assembly::Models` registry holds `Arc<Model>` values, so several plans can share
+an owned graph and its typed identities without copying its contents. The
 [assembly guide](rendering/assembly.md) covers explicit skeleton bindings and
 clip mappings; `CompiledModel::compose` is available for already compiled parts.
 

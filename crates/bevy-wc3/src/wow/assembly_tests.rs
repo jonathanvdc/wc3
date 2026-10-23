@@ -6,6 +6,7 @@ use bevy::math::Mat4;
 use bevy::math::Vec3;
 use bevy::prelude::Assets;
 use std::collections::HashMap;
+use std::sync::Arc;
 use wc3::model::common::PackedArray;
 use wc3::model::materials::bindings::ImageSelection;
 use wc3::model::materials::program::MaterialStep;
@@ -128,8 +129,8 @@ fn assembly_selects_geosets_and_reuses_character_joint_for_armor() {
     let (body, joint) = model("body", &[0, 401]);
     let (armor, _) = model("armor", &[2201]);
     let models = HashMap::from([
-        (ResourceLocator::FileDataId(1), body),
-        (ResourceLocator::FileDataId(2), armor),
+        (ResourceLocator::FileDataId(1), Arc::new(body)),
+        (ResourceLocator::FileDataId(2), Arc::new(armor)),
     ]);
     let mut definition = definition();
     definition.textures.insert(
@@ -178,7 +179,7 @@ fn assembly_selects_geosets_and_reuses_character_joint_for_armor() {
 #[test]
 fn unresolved_armor_cannot_silently_produce_a_partial_character() {
     let (body, _) = model("body", &[401]);
-    let models = HashMap::from([(ResourceLocator::FileDataId(1), body)]);
+    let models = HashMap::from([(ResourceLocator::FileDataId(1), Arc::new(body))]);
     let result = compile_character(&definition(), &models, &mut Assets::default(), |_| {
         Ok(RgbaImage::new(1, 1, vec![255; 4]).unwrap())
     });
@@ -209,7 +210,7 @@ fn repeated_atlas_sources_are_decoded_once() {
         layers: vec![layer.clone(), layer],
     };
     let (body, _) = model("body", &[401]);
-    let models = HashMap::from([(ResourceLocator::FileDataId(1), body)]);
+    let models = HashMap::from([(ResourceLocator::FileDataId(1), Arc::new(body))]);
     let mut definition = definition();
     definition.parts.clear();
     definition.textures.insert(1, replacement);
@@ -259,7 +260,7 @@ fn hidden_hair_texture_is_optional_but_selected_missing_texture_is_an_error() {
         Ok(())
     })
     .unwrap();
-    let models = HashMap::from([(ResourceLocator::FileDataId(1), body)]);
+    let models = HashMap::from([(ResourceLocator::FileDataId(1), Arc::new(body))]);
     let mut definition = definition();
     definition.parts.clear();
     let mut requested_hair = false;
@@ -306,8 +307,8 @@ fn collection_shared_by_chest_and_wrists_compiles_one_rig_with_union_of_geosets(
         })
         .unwrap();
     let models = HashMap::from([
-        (ResourceLocator::FileDataId(1), body),
-        (ResourceLocator::FileDataId(2), collection),
+        (ResourceLocator::FileDataId(1), Arc::new(body)),
+        (ResourceLocator::FileDataId(2), Arc::new(collection)),
     ]);
     let mut definition = definition();
     definition.parts[0].geosets = Some(GeosetSelection {
@@ -347,8 +348,8 @@ fn collection_policy_conflicts_fail_before_images_are_resolved() {
     let (body, _) = model("body", &[401]);
     let (part, _) = model("part", &[2201]);
     let models = HashMap::from([
-        (ResourceLocator::FileDataId(1), body),
-        (ResourceLocator::FileDataId(2), part),
+        (ResourceLocator::FileDataId(1), Arc::new(body)),
+        (ResourceLocator::FileDataId(2), Arc::new(part)),
     ]);
     let mut calls = 0;
     let error = compile_character(&definition, &models, &mut Assets::default(), |_| {
@@ -388,8 +389,8 @@ fn rigid_equipment_mounts_at_the_attachment_feature_and_preserves_its_pivot() {
         .unwrap();
     let (shoulder, _) = model("shoulder", &[2201]);
     let models = HashMap::from([
-        (ResourceLocator::FileDataId(1), body),
-        (ResourceLocator::FileDataId(2), shoulder),
+        (ResourceLocator::FileDataId(1), Arc::new(body)),
+        (ResourceLocator::FileDataId(2), Arc::new(shoulder)),
     ]);
     let mut recipe = definition();
     recipe.parts[0].binding = EquipmentBinding::Attachment(SocketIdentity::Role(6));
@@ -441,7 +442,7 @@ fn selected_native_bone_resources_are_checked_and_retained_in_compiled_pose() {
     .unwrap();
     let mut definition = definition();
     definition.parts.clear();
-    let models = Models::from([(definition.model.clone(), body)]);
+    let models = Models::from([(definition.model.clone(), Arc::new(body))]);
     let mut images = Assets::default();
     definition.bone_sets.insert(resource);
     let compiled = compile_character(&definition, &models, &mut images, |_| {

@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fs::{read, read_dir};
 use std::path::Path;
+use std::sync::Arc;
 use wc3::blp::Blp;
 use wc3::model::conversion::{ImportOptions, LossPolicy, UnknownPolicy};
 use wc3::model::formats::m2::{Bundle, Chunked, FileKey, V274};
@@ -229,7 +230,10 @@ pub fn load(
         for loss in &converted.report.issues {
             eprintln!("Character import {id}: {loss:?}");
         }
-        models.insert(ResourceLocator::FileDataId(id), converted.value.widen());
+        models.insert(
+            ResourceLocator::FileDataId(id),
+            Arc::new(converted.value.widen()),
+        );
     }
     Ok(compile_character(
         &definition,

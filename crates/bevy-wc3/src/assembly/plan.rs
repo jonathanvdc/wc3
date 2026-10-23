@@ -9,6 +9,7 @@ fn source_model<'a, 'data>(
 ) -> Result<&'a Model<'data>, ModelError> {
     models
         .get(&source.model)
+        .map(AsRef::as_ref)
         .ok_or_else(|| ModelError(format!("missing assembly model {:?}", source.model)))
 }
 fn validate_source(source: &Source, model: &Model<'_>) -> Result<(), ModelError> {

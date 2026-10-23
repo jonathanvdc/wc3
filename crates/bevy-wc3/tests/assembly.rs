@@ -7,6 +7,7 @@ use bevy_wc3::assembly::{
     TextureLayer, TextureReplacement,
 };
 use bevy_wc3::{BakeSpace, ModelError, PartBinding, PoseBaker, PoseOptions};
+use std::sync::Arc;
 use wc3::model::materials::mdlx::{MaterialInputs, MaterialStep as MdlxStep, Shader};
 use wc3::model::profiles::mdlx::Material as MdlxMaterial;
 use wc3::model::ModelBuilder;
@@ -68,6 +69,45 @@ fn model(textured: bool) -> (Model<'static>, NodeId, Option<Texture>) {
         node,
         texture,
     )
+}
+
+#[test]
+fn shared_owned_models_retain_graph_ids_across_registries_and_release_after_compilation() {
+    let (model, mounting_frame, _) = model(false);
+    let model = Arc::new(model);
+    let weak = Arc::downgrade(&model);
+    let first: Models<'static> = [(resource("shared"), model.clone())].into();
+    let second: Models<'static> = [(resource("shared"), model.clone())].into();
+    assert!(Arc::ptr_eq(
+        &first[&resource("shared")],
+        &second[&resource("shared")]
+    ));
+    let mut plan = Assembly::new(Source::new(resource("shared")));
+    plan.parts.push(Part::new(
+        Source::new(resource("shared")),
+        PartBinding::Mounted(ModelMount::new(MountTarget::Node(mounting_frame))),
+    ));
+    let mut images = Assets::default();
+    let compiled = [&first, &second].map(|models| {
+        compile_assembly(&plan, models, &mut images, |_| {
+            panic!("the untextured source needs no image")
+        })
+        .unwrap()
+    });
+    assert_eq!(Arc::strong_count(&model), 3);
+    drop((first, second, model));
+    assert!(weak.upgrade().is_none());
+
+    let mut meshes = Assets::default();
+    let mut binds = Assets::<SkinnedMeshInverseBindposes>::default();
+    for compiled in compiled {
+        let prepared = compiled.prepare(&mut meshes, &mut binds);
+        assert_eq!(prepared.mounts().count(), 1);
+        let baked = PoseBaker::default()
+            .bake(&prepared, &meshes, &binds, PoseOptions::default())
+            .unwrap();
+        assert_eq!(baked.parts.len(), 2);
+    }
 }
 
 // These choices belong to the application; the renderer imposes no inventory,
@@ -149,7 +189,11 @@ fn application_defined_machine_configuration_compiles_without_native_character_m
         .nodes()
         .iter()
         .all(|(_, node)| node.properties.is_none()));
-    let models: Models<'_> = [(resource("chassis"), chassis), (resource("module"), module)].into();
+    let models: Models<'_> = [
+        (resource("chassis"), Arc::new(chassis)),
+        (resource("module"), Arc::new(module)),
+    ]
+    .into();
     let selection = Configuration {
         chassis: Chassis::Tripod,
         modules: vec![
