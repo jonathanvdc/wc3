@@ -90,7 +90,8 @@ mesh pipeline. The effect guides describe simulation, playback, and resource nee
   Billboards and draw ordering follow each view independently; M2 emitter-template resources drive shared child pools without creating model actors.
 - [Ribbons](ribbons.md) retain birth-time cross sections and generate connected geometry on the GPU.
 - [External programmes](popcorn.md) execute supported baked graphs and share effect geometry, lighting and ordering.
-  Outputs use CPU samples, or explicitly selected immutable appearance for eligible stationary billboards.
+  Outputs use CPU samples, or explicitly selected immutable appearance for closed billboard expressions,
+  including moving centers and authored axes. CPU position projections retain per-view ordering.
 
 Each family bounds populations and per-update work and exposes omitted-work
 counters. Nested model particles also share configurable actor and emission-work

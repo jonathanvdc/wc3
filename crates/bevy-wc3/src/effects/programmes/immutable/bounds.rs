@@ -1,4 +1,7 @@
 //! Conservative birth admission over the complete finite appearance domain.
+use super::super::prepared::{ProgrammeRenderer, RendererGeometry};
+use super::super::MODEL_UNITS_PER_EFFECT_UNIT;
+use bevy::math::Mat4;
 use wc3::model::scene::popcorn::{
     EffectFieldId, ImmutableExpression, ImmutableNodeId, ImmutableParticleView, ImmutableRecipe,
     ValueType,
@@ -98,7 +101,8 @@ fn input(
 /// This is conservative admission, not a new runtime failure for legal CPU values.
 pub(super) fn admit(
     particle: ImmutableParticleView<'_>,
-    size: EffectFieldId,
+    renderer: &ProgrammeRenderer,
+    world_from_space: Mat4,
     time_end: f32,
 ) -> Option<()> {
     let recipe = particle.recipe();
@@ -178,13 +182,51 @@ pub(super) fn admit(
     }
     if let Some(output) = (0..recipe.output_count())
         .filter_map(|i| recipe.output(i))
-        .find(|out| out.field == size)
+        .find(|out| out.field == renderer.size)
     {
         let range = values[output.value.index()][0];
         if range.lo <= 0. {
             return None;
         }
-        range.mul(Range::point(100.)?)?.mul(Range::point(2.)?)?;
+        range
+            .mul(Range::point(MODEL_UNITS_PER_EFFECT_UNIT)?)?
+            .mul(Range::point(2.)?)?;
+    }
+    // Bound transformed geometry too: finite authored values can overflow when
+    // converted into model units or projected through an affine basis.
+    let rows = world_from_space.transpose().to_cols_array_2d();
+    let longitudinal = matches!(renderer.geometry, RendererGeometry::Billboard { facing, .. } if facing.longitudinal_axis());
+    for (field, scale, point) in [
+        (Some(renderer.position), MODEL_UNITS_PER_EFFECT_UNIT, true),
+        (
+            renderer.geometry.axis_fields()[0],
+            if longitudinal {
+                MODEL_UNITS_PER_EFFECT_UNIT
+            } else {
+                1.
+            },
+            false,
+        ),
+        (renderer.geometry.axis_fields()[1], 1., false),
+    ] {
+        let Some(value) = field.and_then(|field| {
+            (0..recipe.output_count())
+                .filter_map(|i| recipe.output(i))
+                .find(|output| output.field == field)
+                .map(|output| output.value)
+        }) else {
+            continue;
+        };
+        for row in rows.iter().take(3) {
+            let mut result = Range::point(if point { row[3] } else { 0. })?;
+            for (component, coefficient) in row.iter().take(3).enumerate() {
+                result = result.add(
+                    values[value.index()][component]
+                        .mul(Range::point(scale)?)?
+                        .mul(Range::point(*coefficient)?)?,
+                )?;
+            }
+        }
     }
     Some(())
 }

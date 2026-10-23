@@ -1,5 +1,6 @@
 use super::immutable::ImmutableSpriteData;
 use crate::effects::render::SortPolicy;
+use crate::effects::snapshots::SnapshotPool;
 use bevy::ecs::query::QueryItem;
 use bevy::prelude::*;
 use bevy::render::extract_component::ExtractComponent;
@@ -160,31 +161,13 @@ pub(crate) struct AgeSpriteData {
 /// Replacing a shared Vec before clearing would copy a whole previous frame.
 #[derive(Default)]
 pub(crate) struct SampleBuffers {
-    records: Vec<Arc<Vec<AgeSpriteRecord>>>,
-    indices: Vec<Arc<Vec<u32>>>,
+    records: SnapshotPool<AgeSpriteRecord>,
+    indices: SnapshotPool<u32>,
 }
 impl SampleBuffers {
     pub(crate) fn begin(&mut self) -> (&mut Arc<Vec<AgeSpriteRecord>>, &mut Arc<Vec<u32>>) {
-        (writable(&mut self.records), writable(&mut self.indices))
+        (self.records.begin(), self.indices.begin())
     }
-}
-fn writable<T>(pool: &mut Vec<Arc<Vec<T>>>) -> &mut Arc<Vec<T>> {
-    let index = if let Some(index) = pool
-        .iter()
-        .position(|buffer| Arc::strong_count(buffer) == 1)
-    {
-        index
-    } else {
-        let capacity = pool
-            .iter()
-            .map(|buffer| buffer.capacity())
-            .max()
-            .unwrap_or(0);
-        pool.push(Arc::new(Vec::with_capacity(capacity)));
-        pool.len() - 1
-    };
-    Arc::get_mut(&mut pool[index]).unwrap().clear();
-    &mut pool[index]
 }
 impl SyncComponent for AgeSpriteData {
     type Target = Self;

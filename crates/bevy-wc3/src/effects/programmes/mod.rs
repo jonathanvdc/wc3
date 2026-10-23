@@ -15,3 +15,5 @@ pub(crate) use runtime::{ProgramInstances, RuntimeProgramParticles};
 
 #[cfg(test)]
 mod tests;
+
+pub(super) const MODEL_UNITS_PER_EFFECT_UNIT: f32 = 100.;

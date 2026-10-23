@@ -9,10 +9,12 @@ use wc3::model::scene::popcorn::{
 };
 
 fn effect() -> ParticleEffect {
-    let document = Document::read(include_bytes!(
+    effect_from(include_bytes!(
         "../../../../../wc3/tests/fixtures/pkb/immutable-128.pkb"
     ))
-    .unwrap();
+}
+fn effect_from(bytes: &[u8]) -> ParticleEffect {
+    let document = Document::read(bytes).unwrap();
     let (root, _) = document.effect_roots().next().unwrap().unwrap();
     let program = document
         .compile_effect(root, &EffectCompileOptions::default())
@@ -484,4 +486,119 @@ fn life_only_births_remain_certified_across_old_time_horizons_without_cpu_recipe
     assert!(Arc::ptr_eq(&initial.births, &after.births));
     assert_eq!(state.certified_until, f32::MAX);
     assert!(data.uniform.axes[0][0] > 2.);
+}
+
+#[test]
+fn moving_positions_and_axes_share_recipes_across_all_billboard_geometries() {
+    let fixtures: [&[u8]; 5] = [
+        include_bytes!("../../../../../wc3/tests/fixtures/pkb/immutable-motion-128-facing0.pkb"),
+        include_bytes!("../../../../../wc3/tests/fixtures/pkb/immutable-motion-128-facing2.pkb"),
+        include_bytes!("../../../../../wc3/tests/fixtures/pkb/immutable-motion-128-facing3.pkb"),
+        include_bytes!("../../../../../wc3/tests/fixtures/pkb/immutable-motion-128-facing4.pkb"),
+        include_bytes!("../../../../../wc3/tests/fixtures/pkb/immutable-motion-128-facing5.pkb"),
+    ];
+    for bytes in fixtures {
+        let effect = effect_from(bytes);
+        let renderer = &effect.renderers[0];
+        let appearance = renderer
+            .immutable
+            .clone()
+            .expect("moving recipe must specialize");
+        assert!(appearance.position_projection.is_some());
+        validate_shader(&appearance.source);
+        let mut instance = effect
+            .program
+            .instantiate(
+                EffectLimits {
+                    particles: 132,
+                    ..Default::default()
+                },
+                42,
+            )
+            .unwrap();
+        instance
+            .start(
+                &effect.program,
+                effect.program.default_entry(),
+                SceneInputs::default(),
+            )
+            .unwrap();
+        for _ in 0..2 {
+            instance
+                .advance(&effect.program, 1. / 64., SceneInputs::default())
+                .unwrap();
+        }
+        let world = Mat4::from_scale_rotation_translation(
+            Vec3::new(1., 2., 3.),
+            Quat::from_rotation_y(0.5),
+            Vec3::new(4., 5., 6.),
+        );
+        let mut state = ImmutableRendererState::new(appearance, 132).unwrap();
+        let mut data = AgeSpriteData {
+            source: Default::default(),
+            live_indices: Default::default(),
+            uniform: Default::default(),
+            style: renderer.style.clone(),
+        };
+        assert!(state.publish(
+            renderer,
+            &instance,
+            world,
+            AgeSpriteUniform::default(),
+            &mut data
+        ));
+        let AgeSpriteSource::Immutable(before) = data.source.clone() else {
+            panic!("sampled fallback");
+        };
+        let before_centers = before.centers.as_ref().unwrap().clone();
+        assert_eq!(before_centers.len(), 128);
+        assert_eq!(data.live_indices.len(), 128);
+        for (center, particle) in before_centers
+            .iter()
+            .zip(instance.particles(renderer.layer))
+        {
+            let value = particle
+                .field(renderer.position)
+                .unwrap()
+                .words()
+                .map(f32::from_bits);
+            let expected =
+                world.transform_point3(Vec3::from_slice(&value) * MODEL_UNITS_PER_EFFECT_UNIT);
+            assert_eq!(*center, expected);
+        }
+        instance
+            .advance(&effect.program, 1. / 64., SceneInputs::default())
+            .unwrap();
+        assert!(state.publish(
+            renderer,
+            &instance,
+            world,
+            AgeSpriteUniform::default(),
+            &mut data
+        ));
+        let AgeSpriteSource::Immutable(after) = &data.source else {
+            panic!("sampled fallback");
+        };
+        assert!(
+            Arc::ptr_eq(&before.births, &after.births),
+            "motion changes uniforms/ordering, not birth rows"
+        );
+        assert!(!Arc::ptr_eq(
+            &before_centers,
+            after.centers.as_ref().unwrap()
+        ));
+        assert_ne!(before_centers[0], after.centers.as_ref().unwrap()[0]);
+        let frozen = after.centers.as_ref().unwrap().clone();
+        assert!(state.publish(
+            renderer,
+            &instance,
+            world,
+            AgeSpriteUniform::default(),
+            &mut data
+        ));
+        let AgeSpriteSource::Immutable(paused) = &data.source else {
+            panic!();
+        };
+        assert!(Arc::ptr_eq(&frozen, paused.centers.as_ref().unwrap()));
+    }
 }

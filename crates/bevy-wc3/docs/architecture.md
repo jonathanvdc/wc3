@@ -80,11 +80,23 @@ The GPU expands shared heads and tails for each view; camera motion updates thei
 billboards and sorting without rebuilding particle vertices. Paused, unchanged
 samples reuse GPU records. All effect transports cache bindings, identical
 uniform data, and per-view draw orders. The shared `effects/view_orders.rs` cache
-invalidates ordering when its source, uniforms, policy, or camera frame changes;
-unchanged views avoid sorting and index uploads. Empty or hidden effects disable
+invalidates ordering when its record source, center or index-expansion inputs,
+policy, or camera frame changes. Appearance-only time changes need not invalidate
+an unchanged center dependency; unchanged views avoid sorting and index uploads. Empty or hidden effects disable
 draws while retaining resident capacity, and removed views release their order
 buffers. Ring lineage distinguishes reset simulations from older snapshots with
 the same write cursor.
+
+External programmes can retain immutable birth slots for closed billboard
+expressions. `effects/programmes/immutable.rs` prepares a shared core projection
+of the renderer's changing fields. That exact compact recipe drives WGSL,
+capture layout and finite-domain admission; it does not replace full source
+execution authorization. All supported billboard geometries share the ordinary
+fragment and per-view geometry path. Moving centers use a separate position-only
+CPU projection and reusable scratch for sort keys, while changing axes and other
+appearance remain shader expressions. Stable center snapshots can reuse view
+orders independently of appearance time. Generated shader assets are interned by
+equal WGSL source, with strong ownership held by live appearances.
 
 M2 template adoption shares immutable birth/motion kernels, age curves and child
 image bindings with ordinary M2 sprites. `effects/m2_particles/templates.rs`

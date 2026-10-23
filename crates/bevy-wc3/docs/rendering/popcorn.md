@@ -329,50 +329,70 @@ describes supported execution policies and their remaining limits.
 ## Immutable appearance rendering
 
 For a prepared in-memory effect, select core `ExecutionPreference::ImmutableAge`
-with `NumericPolicy::Graphics` before constructing `ParticleEffect`. This is an
-explicit analytic appearance policy: CPU lifetime and retirement remain authoritative,
-while supported Size, Color, Rotation and TextureID expressions use birth captures
-and the last authorized effect time. The first renderer subset requires stationary
-Position, fixed axes and camera-facing billboards (facing 0). It shares the ordinary
-effect fragment shader, lighting, fog, texture roles and per-view sorting.
+with `NumericPolicy::Graphics` before constructing `ParticleEffect`. CPU lifetime,
+retirement, initialization and routed events remain authoritative. Closed
+expressions can drive Position, Axis0/Axis1, Size, Color, Rotation and TextureID
+from initialized captures and the last authorized observation. All billboard
+modes in the [facing table](#rendering-and-budgets) use the same per-view geometry
+as ordinary samples, including capsules and changing authored axes. Enabled must
+remain stationary within each initialized or evolved phase. Connected ribbons
+retain CPU sampling.
 
-Admitted births occupy stable GPU slots. With unchanged population and view,
-appearance changes update the shared time uniform rather than rewriting complete
-particle records or per-view order. Dead slots leave the live index list, and
-reused slots receive fresh birth data.
+Preparation selects the changing outputs consumed by that renderer with the
+core's `ImmutableProjection`. WGSL generation, uploaded captures and renderer
+bounds use that same compact recipe. Stationary values stay in the per-phase
+header; unused outputs and captures add no shader expressions or birth stride.
+The complete source evolution still determines core eligibility and authorization,
+including guards on computations outside the renderer projection. This projection
+is not permission to ignore a source error. Equal generated WGSL sources share
+Bevy shader assets; live appearances own their handles, while the source index
+does not keep unused shader assets alive. This is shader sharing, not a cache of
+native executable preparations.
+
+Admitted particles occupy stable GPU slots. Changing appearance updates the
+shared authorized-time uniform instead of rewriting whole particle records.
+Dead slots leave the live index list, and reused slots receive fresh birth data.
+Moving Position is also sampled once per living particle through a separate
+position-only CPU projection for sorting. Each view sorts those shared current
+centers independently; it does not evaluate every appearance output again.
+Stationary centers, or a position snapshot whose bits did not change, retain
+cached orders when population and view are unchanged. Changing axes and facing
+remain per-view shader geometry and do not redefine the center sort convention.
+
 `ParticleProgramEmitter::immutable_sprites` reports the currently published subset
 of `sprites`; it is zero when that renderer publishes CPU samples. `capture
 --particle-stats` includes the count. Recipe preparation alone does not establish
-that the GPU route was used.
+that the GPU route was used or that it improves performance.
 
-Each renderer reserves a CPU birth payload of `128 + 16 * capture_count` bytes per
-configured particle slot, including slots used by controllers or other layers.
-The GPU buffer stores the same rows with rounded allocation capacity. These are
-additional renderer allocations outside the core `EffectLimits` storage prediction;
-live/order indices, admission metadata and retained COW snapshots add overhead.
-The core's allocation contract does not imply allocation-free renderer birth
-publication. Unchanged births share snapshots; fresh or first-evolved rows can
-copy a COW block and upload its changed contiguous slot ranges.
+An endpoint newborn retains its authored initialized header until its first
+authorized evolution. That transition replaces its slot once with the evolved
+header and compact captures. Initialized and evolved slots stay in the same draw
+and global per-view order; the shader does not run evolved expressions on an
+initialized slot. Invalid initial geometry can omit that phase without preventing
+later valid evolved geometry.
 
 A conservative interval certificate rejects nonfinite appearance and requires
-positive size. Recipes using only immutable captures and appearance Life are
-certified over the complete Life range 0–1 when an evolved birth is first admitted.
-Recipes containing an explicit Time node instead use a finite time horizon;
-advancing beyond it rechecks living captures before publishing the new uniform.
-Life still changes with the authorized clock, but its bounded range does not need
-these horizon checks. Both routes retain the finite authorized-clock guard.
+positive size, including finite transformed positions and axes. Compact recipes
+using only captures and appearance Life are certified over the complete Life
+range 0–1 when an evolved birth is first admitted. An explicit Time dependency in
+that compact recipe instead uses a finite horizon; crossing it rechecks living
+captures before publishing the next uniform. Unused source Time expressions do
+not add a renderer horizon. Both cases retain the finite authorized-clock guard.
+Unsupported expressions or an inconclusive certificate use sampled transport.
+Renderer certificate failures latch that renderer to samples until reset without
+manufacturing a VM fault. A core work omission or guard failure restores the last
+authorized values and latches ordinary execution until reset. The GPU never
+advances an unauthorized observation.
 
-Moving geometry, unsupported expressions, or an inconclusive finite/positive-size
-certificate use the existing sampled transport. A birth initialized exactly at the
-current effect time retains its ordinary initialized header. Its first authorized
-evolution replaces that slot once with evolved stationary geometry and captures, then subsequent appearance
-frames update only the shared time uniform. Initialized and evolved slots remain
-in the same draw and global per-view order. This preserves authored differences
-in initial Position, axes and Enabled without evaluating the appearance DAG early.
-Any core work omission or guard failure restores the last authorized values and
-latches CPU execution until reset.
-The GPU never advances an unauthorized sample. Renderer certificate failures latch
-that renderer to sampled publication until reset without manufacturing a VM fault.
+Each renderer reserves a CPU birth payload of `128 + 16 * capture_count` bytes per
+configured particle slot, where capture_count belongs to its compact renderer
+projection. Slots used by controllers or other layers still count toward that
+capacity. The GPU stores the same rows with rounded allocation capacity. These
+renderer allocations are additional to core `EffectLimits` storage prediction;
+live/order indices, moving-center snapshots, admission metadata and retained COW
+snapshots add overhead. Core allocation guarantees do not imply allocation-free
+renderer publication. Unchanged births share snapshots; fresh or first-evolved
+rows can copy a COW block and upload changed contiguous ranges.
 
 `CompileOptions::particle_execution` selects preparation for companions resolved
 by the asset loader. Return these options from `ResourceResolver::compile_options`.

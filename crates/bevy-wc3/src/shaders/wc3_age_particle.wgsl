@@ -14,6 +14,9 @@ struct Emitter {
     axes: array<vec4<f32>, 2>,
     flags: vec4<u32>,
     atlas: vec4<u32>,
+#ifdef IMMUTABLE_APPEARANCE
+    world_from_space: array<vec4<f32>, 3>,
+#endif
 };
 @group(2) @binding(0) var primary: texture_2d<f32>;
 @group(2) @binding(1) var primary_sampler: sampler;

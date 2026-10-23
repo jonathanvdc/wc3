@@ -1,4 +1,5 @@
 //! Emit the core's closed numeric recipe; never decode particle instructions here.
+use super::super::MODEL_UNITS_PER_EFFECT_UNIT;
 use super::AppearancePhase;
 use std::fmt::Write;
 use wc3::model::scene::popcorn::{
@@ -12,7 +13,10 @@ const EXPANSION_LIMIT: usize = 4096;
 
 #[derive(Clone, Copy)]
 pub(super) struct AppearanceFields {
-    pub size: EffectFieldId,
+    pub position: Option<EffectFieldId>,
+    pub axes: [Option<EffectFieldId>; 2],
+    pub longitudinal_axis: bool,
+    pub size: Option<EffectFieldId>,
     pub color: Option<EffectFieldId>,
     pub rotation: Option<EffectFieldId>,
     pub texture: Option<EffectFieldId>,
@@ -110,6 +114,11 @@ pub(super) fn emit(recipe: ImmutableRecipe<'_>, fields: AppearanceFields) -> Opt
     let stride = HEADER_WORDS.checked_add(recipe.capture_count().checked_mul(4)?)?;
     let mut text =
         String::from("@group(2) @binding(3) var<storage, read> immutable_words: array<u32>;\n");
+    writeln!(
+        text,
+        "const MODEL_UNITS_PER_EFFECT_UNIT: f32 = {MODEL_UNITS_PER_EFFECT_UNIT:?};"
+    )
+    .ok()?;
     let mut budget = EXPANSION_LIMIT;
     for i in 0..recipe.node_count() {
         if let ImmutableExpression::Curve { sampler, .. } = recipe.node(i)?.expression {
@@ -257,8 +266,26 @@ pub(super) fn emit(recipe: ImmutableRecipe<'_>, fields: AppearanceFields) -> Opt
         )
         .ok()?;
     }
-    if let Some(value) = output(recipe, fields.size) {
-        writeln!(text, "    particle.size_spin.x = (v{}.x * 100.0) * 2.0;\n    particle.size_spin.y = particle.size_spin.x;", value.index()).ok()?;
+    if let Some(value) = fields.position.and_then(|field| output(recipe, field)) {
+        writeln!(text, "    let position = vec4<f32>(v{}.xyz * MODEL_UNITS_PER_EFFECT_UNIT, 1.0);\n    particle.position = vec4<f32>(dot(emitter.world_from_space[0], position), dot(emitter.world_from_space[1], position), dot(emitter.world_from_space[2], position), 1.0);", value.index()).ok()?;
+    }
+    for (index, field) in fields.axes.into_iter().enumerate() {
+        if let Some(value) = field.and_then(|field| output(recipe, field)) {
+            let target = if index == 0 {
+                "velocity_tail"
+            } else {
+                "offsets"
+            };
+            let scale = if index == 0 && fields.longitudinal_axis {
+                " * MODEL_UNITS_PER_EFFECT_UNIT"
+            } else {
+                ""
+            };
+            writeln!(text, "    let axis_{index} = vec4<f32>(v{}.xyz, 0.0);\n    particle.{target} = vec4<f32>(vec3<f32>(dot(emitter.world_from_space[0], axis_{index}), dot(emitter.world_from_space[1], axis_{index}), dot(emitter.world_from_space[2], axis_{index})){scale}, 0.0);", value.index()).ok()?;
+        }
+    }
+    if let Some(value) = fields.size.and_then(|field| output(recipe, field)) {
+        writeln!(text, "    particle.size_spin.x = (v{}.x * MODEL_UNITS_PER_EFFECT_UNIT) * 2.0;\n    particle.size_spin.y = particle.size_spin.x;", value.index()).ok()?;
     }
     if let Some(value) = fields.color.and_then(|field| output(recipe, field)) {
         writeln!(

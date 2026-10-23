@@ -1,24 +1,28 @@
-//! Stationary billboard admission and immutable birth publication.
+//! Projected billboard appearance and immutable birth publication.
 mod bounds;
 mod wgsl;
-use super::prepared::{ProgrammeRenderer, RendererGeometry, SpriteFacing};
+use super::prepared::{ProgrammeRenderer, RendererGeometry};
 use super::runtime::sprite_record;
+use super::MODEL_UNITS_PER_EFFECT_UNIT;
 use crate::effects::age_sprites_gpu::immutable::{
     BirthSlots, ImmutableAppearance, ImmutableSpriteData,
 };
 use crate::effects::age_sprites_gpu::{AgeSpriteData, AgeSpriteSource, AgeSpriteUniform};
+use crate::effects::snapshots::SnapshotPool;
 use bevy::prelude::*;
 use bytemuck::cast_slice;
 use std::slice::from_ref;
 use std::sync::{Arc, OnceLock};
-use wc3::model::scene::popcorn::{EffectInstance, EffectProgram, ImmutableExpression};
+use wc3::model::scene::popcorn::{
+    EffectInstance, EffectProgram, ImmutableExpression, ImmutableProjectionScratch, Value,
+};
 
 pub(super) fn prepare(
     program: &EffectProgram,
     renderer: &ProgrammeRenderer,
 ) -> Option<Arc<ImmutableAppearance>> {
     let RendererGeometry::Billboard {
-        facing: SpriteFacing::Camera,
+        facing,
         axes,
         rotation,
     } = renderer.geometry
@@ -29,26 +33,52 @@ pub(super) fn prepare(
     if renderer.atlas[0].checked_mul(renderer.atlas[1])? > 1 << 24 {
         return None;
     }
-    if !bounds::stationary(recipe, renderer.position)
-        || axes
-            .into_iter()
-            .flatten()
-            .any(|field| !bounds::stationary(recipe, field))
-        || renderer
-            .enabled
-            .is_some_and(|field| !bounds::stationary(recipe, field))
+    if renderer
+        .enabled
+        .is_some_and(|field| !bounds::stationary(recipe, field))
     {
         return None;
     }
-    let prefix = wgsl::emit(
-        recipe,
-        wgsl::AppearanceFields {
-            size: renderer.size,
-            color: renderer.color,
-            rotation,
-            texture: renderer.texture_id,
-        },
-    )?;
+    // Stationary outputs are already in the initialized/evolved header. Only
+    // changing renderer outputs need shader expressions or birth captures.
+    let dynamic = |field| !bounds::stationary(recipe, field);
+    let fields = wgsl::AppearanceFields {
+        position: dynamic(renderer.position).then_some(renderer.position),
+        axes: axes.map(|field| field.filter(|field| dynamic(*field))),
+        longitudinal_axis: facing.longitudinal_axis(),
+        size: dynamic(renderer.size).then_some(renderer.size),
+        color: renderer.color.filter(|field| dynamic(*field)),
+        rotation: rotation.filter(|field| dynamic(*field)),
+        texture: renderer.texture_id.filter(|field| dynamic(*field)),
+    };
+    let position_projection = fields
+        .position
+        .map(|field| recipe.project(&[field]))
+        .transpose()
+        .ok()?;
+    let outputs: Vec<_> = [
+        fields.position,
+        fields.axes[0],
+        fields.axes[1],
+        fields.size,
+        fields.color,
+        fields.rotation,
+        fields.texture,
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let projection = recipe.project(&outputs).ok()?;
+    let recipe = projection.recipe(recipe).ok()?;
+    let prefix = wgsl::emit(recipe, fields)?;
+    let requires_clock = (0..recipe.node_count()).any(|index| {
+        recipe.node(index).is_some_and(|node| {
+            matches!(
+                node.expression,
+                ImmutableExpression::Time | ImmutableExpression::Life
+            )
+        })
+    });
     Some(Arc::new(ImmutableAppearance {
         source: format!(
             "{}\n{prefix}",
@@ -60,6 +90,9 @@ pub(super) fn prepare(
                 .node(index)
                 .is_some_and(|node| matches!(node.expression, ImmutableExpression::Time))
         }),
+        position_projection,
+        requires_clock,
+        projection,
         shader: OnceLock::new(),
     }))
 }
@@ -103,6 +136,8 @@ fn stationary_enabled(
 
 pub(super) struct ImmutableRendererState {
     appearance: Arc<ImmutableAppearance>,
+    position_scratch: Option<ImmutableProjectionScratch>,
+    centers: SnapshotPool<Vec3>,
     slots: BirthSlots,
     order: Vec<u32>,
     row: Vec<u32>,
@@ -115,6 +150,11 @@ pub(super) struct ImmutableRendererState {
 impl ImmutableRendererState {
     pub fn new(appearance: Arc<ImmutableAppearance>, capacity: usize) -> Option<Self> {
         Some(Self {
+            position_scratch: appearance
+                .position_projection
+                .as_ref()
+                .map(|projection| projection.new_scratch()),
+            centers: Default::default(),
             slots: BirthSlots::new(capacity, appearance.words_per_slot)?,
             row: vec![0; appearance.words_per_slot],
             order: Vec::with_capacity(capacity),
@@ -173,6 +213,12 @@ impl ImmutableRendererState {
             self.certified_until
         };
         self.order.clear();
+        let centers = self
+            .appearance
+            .position_projection
+            .as_ref()
+            .map(|_| self.centers.begin());
+        let mut centers = centers;
         for particle in instance.particles(renderer.layer) {
             let immutable = particle.immutable_sample();
             let phase = match immutable {
@@ -209,13 +255,21 @@ impl ImmutableRendererState {
             ) {
                 continue;
             }
-            if let Some(immutable) = immutable {
+            let projected = if let Some(view) = immutable {
+                match self.appearance.projection.view(view) {
+                    Ok(projected) => Some(projected),
+                    Err(_) => return false,
+                }
+            } else {
+                None
+            };
+            if let Some(immutable) = projected {
                 let admitted = if fresh || recertify {
                     #[cfg(test)]
                     {
                         self.certifications += 1;
                     }
-                    bounds::admit(immutable, renderer.size, horizon).is_some()
+                    bounds::admit(immutable, renderer, world_from_space, horizon).is_some()
                 } else {
                     true
                 };
@@ -237,7 +291,7 @@ impl ImmutableRendererState {
                 self.row.fill(0);
                 self.row[..28].copy_from_slice(cast_slice(from_ref(&base)));
                 self.row[wgsl::PHASE_WORD] = phase as u32;
-                if let Some(immutable) = immutable {
+                if let Some(immutable) = projected {
                     let birth = immutable.birth();
                     self.row[28..31].copy_from_slice(&[
                         birth.time.to_bits(),
@@ -268,17 +322,79 @@ impl ImmutableRendererState {
                     return false;
                 }
             }
+            if let Some(centers) = &mut centers {
+                let position = if let Some(view) = immutable {
+                    let mut values = [Value::from(0f32)];
+                    let projection = self
+                        .appearance
+                        .position_projection
+                        .as_ref()
+                        .expect("moving position projection");
+                    if projection
+                        .evaluate(
+                            view,
+                            self.position_scratch.as_mut().expect("position scratch"),
+                            &mut values,
+                        )
+                        .is_err()
+                    {
+                        self.disabled = true;
+                        return false;
+                    }
+                    world_from_space.transform_point3(
+                        Vec3::from_slice(&values[0].words().map(f32::from_bits))
+                            * MODEL_UNITS_PER_EFFECT_UNIT,
+                    )
+                } else {
+                    // Endpoint newborns keep their authored initial position.
+                    let Some(value) = particle.field(renderer.position) else {
+                        return false;
+                    };
+                    world_from_space.transform_point3(
+                        Vec3::from_slice(&value.words().map(f32::from_bits))
+                            * MODEL_UNITS_PER_EFFECT_UNIT,
+                    )
+                };
+                if !position.is_finite() {
+                    self.disabled = true;
+                    return false;
+                }
+                Arc::get_mut(centers)
+                    .expect("released center snapshot")
+                    .push(position);
+            }
             self.order.push(slot);
         }
         self.certified_until = horizon;
         self.slots.set_live(&self.order);
+        let centers = centers.map(|centers| {
+            if let AgeSpriteSource::Immutable(previous) = &data.source {
+                if let Some(previous) = previous.centers.as_ref().filter(|previous| {
+                    previous.len() == centers.len()
+                        && previous.iter().zip(centers.iter()).all(|(a, b)| {
+                            a.to_array().map(f32::to_bits) == b.to_array().map(f32::to_bits)
+                        })
+                }) {
+                    return previous.clone();
+                }
+            }
+            centers.clone()
+        });
+        let rows = world_from_space.transpose().to_cols_array_2d();
         data.source = AgeSpriteSource::Immutable(ImmutableSpriteData {
             appearance: self.appearance.clone(),
             births: self.slots.snapshot.clone(),
+            centers,
+            world_from_space: [rows[0], rows[1], rows[2]],
         });
         data.live_indices = self.slots.live.clone();
         data.uniform = uniform;
-        data.uniform.set_immutable_time(time);
+        data.uniform
+            .set_immutable_time(if self.appearance.requires_clock {
+                time
+            } else {
+                0.
+            });
         true
     }
 }

@@ -4,6 +4,7 @@ use bytemuck::Zeroable;
 use naga::front::wgsl::parse_str;
 use naga::valid::{Capabilities, ValidationFlags, Validator};
 use naga::TypeInner;
+use wc3::model::scene::popcorn::ImmutableProjection;
 use wc3::model::values::model::ParticleBlend;
 
 #[test]
@@ -221,6 +222,9 @@ fn immutable_sparse_slots_sort_per_view_and_header_transition_preserves_old_extr
         source: String::new(),
         words_per_slot: 32,
         requires_time_horizon: false,
+        position_projection: None,
+        projection: empty_immutable_projection(),
+        requires_clock: false,
         shader: Default::default(),
     });
     let mut births = BirthSlots::new(96, 32).unwrap();
@@ -235,6 +239,8 @@ fn immutable_sparse_slots_sort_per_view_and_header_transition_preserves_old_extr
         source: AgeSpriteSource::Immutable(ImmutableSpriteData {
             appearance: appearance.clone(),
             births: births.snapshot.clone(),
+            centers: None,
+            world_from_space: [[0.; 4]; 3],
         }),
         live_indices: births.live.clone(),
         uniform: Default::default(),
@@ -270,6 +276,8 @@ fn immutable_sparse_slots_sort_per_view_and_header_transition_preserves_old_extr
     changed.source = AgeSpriteSource::Immutable(ImmutableSpriteData {
         appearance,
         births: births.snapshot.clone(),
+        centers: None,
+        world_from_space: [[0.; 4]; 3],
     });
     assert!(Arc::ptr_eq(&data.live_indices, &changed.live_indices));
     assert_eq!(
@@ -280,4 +288,139 @@ fn immutable_sparse_slots_sort_per_view_and_header_transition_preserves_old_extr
     // The older extracted frame remains valid and retains its two-view order.
     assert_eq!(sorted_indices(&data, &Affine3A::IDENTITY), [91, 4, 13, 70]);
     assert_eq!(sorted_indices(&data, &opposite), [70, 13, 91, 4]);
+}
+
+#[test]
+fn moving_centers_change_two_view_orders_without_rewriting_births() {
+    use crate::effects::age_sprites_gpu::immutable::{
+        BirthSlots, ImmutableAppearance, ImmutableSpriteData,
+    };
+    use bevy::math::Mat3;
+    let mut slots = BirthSlots::new(12, 32).unwrap();
+    for slot in [2, 7] {
+        slots.set(slot, 1, u64::from(slot), &[0; 32]).unwrap();
+    }
+    slots.set_live(&[2, 7]);
+    let births = slots.snapshot.clone();
+    let source = ImmutableSpriteData {
+        appearance: Arc::new(ImmutableAppearance {
+            source: String::new(),
+            words_per_slot: 32,
+            requires_time_horizon: false,
+            position_projection: None,
+            projection: empty_immutable_projection(),
+            requires_clock: false,
+            shader: Default::default(),
+        }),
+        births: births.clone(),
+        centers: Some(Arc::new(vec![
+            Vec3::new(0., 0., -3.),
+            Vec3::new(0., 0., 3.),
+        ])),
+        world_from_space: [[0.; 4]; 3],
+    };
+    let mut data = AgeSpriteData {
+        source: AgeSpriteSource::Immutable(source.clone()),
+        live_indices: slots.live.clone(),
+        uniform: Default::default(),
+        style: AgeSpriteStyle {
+            textures: [None, None, None],
+            blend: ParticleBlend::Alpha,
+            priority: 0.,
+            sort: SortPolicy::Far,
+            composition: Default::default(),
+            uv_flip_v: false,
+            unlit: true,
+            head: true,
+            tail: false,
+        },
+    };
+    let opposite =
+        Affine3A::from_mat3_translation(Mat3::from_diagonal(Vec3::new(-1., 1., -1.)), Vec3::ZERO);
+    assert_eq!(sorted_indices(&data, &Affine3A::IDENTITY), [2, 7]);
+    assert_eq!(sorted_indices(&data, &opposite), [7, 2]);
+    let mut moved = source.clone();
+    moved.centers = Some(Arc::new(vec![
+        Vec3::new(0., 0., 4.),
+        Vec3::new(0., 0., -4.),
+    ]));
+    let old_center = CenterDependency::SampledCenters(source.centers.clone().unwrap());
+    let next_center = CenterDependency::SampledCenters(moved.centers.clone().unwrap());
+    assert!(!old_center.same(&next_center));
+    assert!(old_center.same(&old_center.clone()));
+    assert!(Arc::ptr_eq(&source.births, &moved.births));
+    data.source = AgeSpriteSource::Immutable(moved);
+    assert_eq!(sorted_indices(&data, &Affine3A::IDENTITY), [7, 2]);
+    assert_eq!(sorted_indices(&data, &opposite), [2, 7]);
+    assert!(Arc::ptr_eq(&births, &slots.snapshot));
+    assert_eq!(source.centers.unwrap()[0].z, -3.);
+}
+
+fn empty_immutable_projection() -> ImmutableProjection {
+    use wc3::model::formats::pkb::{Document, EffectCompileOptions};
+    use wc3::model::scene::popcorn::{EffectLayerId, ExecutionOptions, ExecutionPreference};
+    let document = Document::read(include_bytes!(
+        "../../../../wc3/tests/fixtures/pkb/immutable-128.pkb"
+    ))
+    .unwrap();
+    let (root, _) = document.effect_roots().next().unwrap().unwrap();
+    let program = document
+        .compile_effect(root, &EffectCompileOptions::default())
+        .unwrap()
+        .with_execution(ExecutionOptions {
+            preference: ExecutionPreference::ImmutableAge,
+            ..Default::default()
+        });
+    program
+        .immutable_recipe(EffectLayerId(1))
+        .unwrap()
+        .project(&[])
+        .unwrap()
+}
+
+#[test]
+fn equal_generated_shaders_share_assets_and_removed_entries_do_not_pin_assets() {
+    let mut shaders = Assets::<Shader>::default();
+    let mut cache = ImmutableShaderCache::default();
+    let source = "@compute @workgroup_size(1) fn main() {}";
+    let first = cache.prepare(source, &mut shaders);
+    let equal = cache.prepare(source, &mut shaders);
+    assert_eq!(first.id(), equal.id());
+    assert_eq!(shaders.len(), 1);
+    shaders.remove(first.id());
+    let replaced = cache.prepare(source, &mut shaders);
+    assert_ne!(first.id(), replaced.id());
+    assert_eq!(cache.0.len(), 1);
+    assert_eq!(shaders.len(), 1);
+    assert_eq!(size_of::<AgeSpriteUniform>(), 64);
+    assert_eq!(size_of::<ImmutableSpriteUniform>(), 112);
+}
+
+#[test]
+fn sprite_texture_layouts_match_their_sampled_and_immutable_uniform_abis() {
+    let sampled = sprite_texture_layout::<AgeSpriteUniform>();
+    let immutable = sprite_texture_layout::<ImmutableSpriteUniform>();
+    assert_eq!(sampled.entries.len(), immutable.entries.len());
+    for (a, b) in sampled.entries.iter().zip(&immutable.entries) {
+        if a.binding == 2 {
+            let BindingType::Buffer {
+                min_binding_size: Some(sampled),
+                ..
+            } = a.ty
+            else {
+                panic!("sampled uniform binding")
+            };
+            let BindingType::Buffer {
+                min_binding_size: Some(immutable),
+                ..
+            } = b.ty
+            else {
+                panic!("immutable uniform binding")
+            };
+            assert_eq!(sampled.get(), size_of::<AgeSpriteUniform>() as u64);
+            assert_eq!(immutable.get(), size_of::<ImmutableSpriteUniform>() as u64);
+        } else {
+            assert_eq!(a, b);
+        }
+    }
 }

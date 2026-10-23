@@ -33,7 +33,7 @@ use wc3::model::{ClipId, FeatureId, Model, NodeFeature, NodeId, Property};
 
 // The baked programme's numeric space is one hundred native MDLX units per unit.
 // Convert the world translation on input and the complete generated position/size on output.
-const MODEL_UNITS_PER_EFFECT_UNIT: f32 = 100.;
+use super::MODEL_UNITS_PER_EFFECT_UNIT;
 
 /// Runtime population, bounded-work accounting and execution failures for an external effect.
 #[derive(Component, Clone, Debug)]
@@ -858,26 +858,89 @@ struct SampledPoint {
     color: Vec4,
     texture_id: f32,
 }
+const POINT_FIELD_COUNT: usize = 10;
+
+/// One read-only extraction sample; immutable outputs share a single DAG pass.
+struct ParticleFields<'p, 'a> {
+    particle: &'p ParticleView<'a>,
+    cached: Option<(
+        [EffectFieldId; POINT_FIELD_COUNT],
+        [Value; POINT_FIELD_COUNT],
+    )>,
+}
+impl<'p, 'a> ParticleFields<'p, 'a> {
+    fn new(renderer: &ProgrammeRenderer, particle: &'p ParticleView<'a>) -> Option<Self> {
+        let cached = if particle.immutable_sample().is_some() {
+            let (rotation, texture_u, cursor) = match renderer.geometry {
+                RendererGeometry::Billboard { rotation, .. } => (rotation, None, None),
+                RendererGeometry::Ribbon {
+                    texture_u, cursor, ..
+                } => (None, texture_u, cursor),
+            };
+            let axes = renderer.geometry.axis_fields();
+            let field = |field: Option<EffectFieldId>| field.unwrap_or(renderer.position);
+            let bindings = [
+                renderer.position,
+                renderer.size,
+                field(renderer.enabled),
+                field(renderer.color),
+                field(renderer.texture_id),
+                field(axes[0]),
+                field(axes[1]),
+                field(rotation),
+                field(texture_u),
+                field(cursor),
+            ];
+            let mut values = bindings.map(|_| Value::from(0f32));
+            particle.sample_fields(&bindings, &mut values).ok()?;
+            Some((bindings, values))
+        } else {
+            None
+        };
+        Some(Self { particle, cached })
+    }
+    fn field(&self, field: EffectFieldId) -> Option<Value> {
+        if let Some((bindings, values)) = &self.cached {
+            let index = bindings.iter().position(|binding| *binding == field)?;
+            Some(values[index])
+        } else {
+            self.particle.field(field)
+        }
+    }
+}
+
 fn sample_point(
     renderer: &ProgrammeRenderer,
     particle: &ParticleView<'_>,
     world_from_space: Mat4,
 ) -> Option<SampledPoint> {
+    sample_point_fields(
+        renderer,
+        &ParticleFields::new(renderer, particle)?,
+        world_from_space,
+    )
+}
+
+fn sample_point_fields(
+    renderer: &ProgrammeRenderer,
+    fields: &ParticleFields<'_, '_>,
+    world_from_space: Mat4,
+) -> Option<SampledPoint> {
     if renderer
         .enabled
-        .and_then(|field| particle.field(field))
+        .and_then(|field| fields.field(field))
         .is_some_and(|value| value.words()[0] == 0)
     {
         return None;
     }
     let position = world_from_space.transform_point3(
-        Vec3::from_slice(&floats(particle.field(renderer.position)?)[..3])
+        Vec3::from_slice(&floats(fields.field(renderer.position)?)[..3])
             * MODEL_UNITS_PER_EFFECT_UNIT,
     );
-    let half_extent = floats(particle.field(renderer.size)?)[0] * MODEL_UNITS_PER_EFFECT_UNIT;
+    let half_extent = floats(fields.field(renderer.size)?)[0] * MODEL_UNITS_PER_EFFECT_UNIT;
     let sample_axis = |field: Option<EffectFieldId>| {
         field
-            .and_then(|field| particle.field(field))
+            .and_then(|field| fields.field(field))
             .map_or(Vec3::ZERO, |value| {
                 world_from_space.transform_vector3(Vec3::from_slice(&floats(value)[..3]))
             })
@@ -889,7 +952,7 @@ fn sample_point(
             axes,
         } => {
             let rotation = rotation
-                .and_then(|field| particle.field(field))
+                .and_then(|field| fields.field(field))
                 .map_or(0., |value| floats(value)[0]);
             let mut axes = axes.map(sample_axis);
             if facing.longitudinal_axis() {
@@ -911,11 +974,11 @@ fn sample_point(
     };
     let color = renderer
         .color
-        .and_then(|field| particle.field(field))
+        .and_then(|field| fields.field(field))
         .map_or([1.; 4], floats);
     let cursor = renderer
         .texture_id
-        .and_then(|field| particle.field(field))
+        .and_then(|field| fields.field(field))
         .map_or(0., |value| floats(value)[0]);
     if !position.is_finite()
         || !(half_extent * 2.).is_finite()
@@ -969,7 +1032,8 @@ fn ribbon_sample(
     else {
         return None;
     };
-    let sampled = sample_point(renderer, particle, world_from_space)?;
+    let fields = ParticleFields::new(renderer, particle)?;
+    let sampled = sample_point_fields(renderer, &fields, world_from_space)?;
     Some(RibbonSample {
         parent: particle.parent,
         serial: particle.birth_serial,
@@ -978,11 +1042,11 @@ fn ribbon_sample(
         color: sampled.color,
         axis: sampled.axes[0],
         texture_u: texture_u
-            .and_then(|field| particle.field(field))
+            .and_then(|field| fields.field(field))
             .map(|value| floats(value)[0]),
         texture_id: sampled.texture_id,
         cursor: cursor
-            .and_then(|field| particle.field(field))
+            .and_then(|field| fields.field(field))
             .map_or(0., |value| floats(value)[0]),
     })
 }

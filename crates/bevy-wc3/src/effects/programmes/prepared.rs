@@ -167,7 +167,7 @@ impl ParticleEffect {
                             if prepared.immutable.is_some() {
                                 "external billboard appearance can use immutable Graphics expressions; uncertified births and incoherent authorization retain CPU samples"
                             } else {
-                                "external renderer retains CPU samples: immutable appearance requires stationary camera-facing geometry and bounded generated expressions"
+                                "external renderer retains CPU samples: immutable appearance requires billboard geometry, stationary visibility, and bounded generated expressions"
                             }));
                     }
                     if toggle(renderer, b"SoftParticles", false) {

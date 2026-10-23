@@ -1,14 +1,20 @@
 //! Stable pooled birth slots, independent of FIFO retirement and extraction timing.
+use super::AgeSpriteUniform;
 use bevy::prelude::*;
+use bytemuck::{Pod, Zeroable};
 use std::sync::{Arc, OnceLock};
+use wc3::model::scene::popcorn::ImmutableProjection;
 
 const SLOTS_PER_BLOCK: usize = 64;
 
 pub(crate) struct ImmutableAppearance {
     pub source: String,
     pub words_per_slot: usize,
-    /// Any explicit Time node, including otherwise unused guarded expressions.
+    /// Explicit Time nodes retained by the projected appearance.
     pub requires_time_horizon: bool,
+    pub position_projection: Option<ImmutableProjection>,
+    pub projection: ImmutableProjection,
+    pub requires_clock: bool,
     pub shader: OnceLock<Handle<Shader>>,
 }
 #[derive(Clone)]
@@ -40,6 +46,18 @@ impl BirthSnapshot {
 pub(crate) struct ImmutableSpriteData {
     pub appearance: Arc<ImmutableAppearance>,
     pub births: Arc<BirthSnapshot>,
+    /// World-space centers aligned with live indices; absent for fixed centers.
+    pub centers: Option<Arc<Vec<Vec3>>>,
+    /// Fixed model-axis conversion; live actor transforms are already in core fields.
+    pub world_from_space: [[f32; 4]; 3],
+}
+
+/// Only immutable shader variants need an effect-space conversion matrix.
+#[derive(Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+pub(crate) struct ImmutableSpriteUniform {
+    pub common: AgeSpriteUniform,
+    pub world_from_space: [[f32; 4]; 3],
 }
 /// IDs are renderer cache metadata; live membership still belongs to the core instance.
 pub(crate) struct BirthSlots {

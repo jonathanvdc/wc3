@@ -360,3 +360,5 @@ impl RuntimeParticles {
         self.programmes.map_images(map);
     }
 }
+
+mod snapshots;

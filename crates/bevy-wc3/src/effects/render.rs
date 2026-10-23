@@ -333,6 +333,7 @@ pub(crate) struct EffectBuffer<I: Send + Sync + 'static> {
 #[derive(Clone)]
 pub(crate) enum CenterDependency {
     UniformSnapshot(Arc<[u8]>),
+    SampledCenters(Arc<Vec<Vec3>>),
     AnalyticParticle {
         clock: Option<[u32; 2]>,
         frame: Option<[[u32; 4]; 4]>,
@@ -342,6 +343,7 @@ impl CenterDependency {
     pub(crate) fn same(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::UniformSnapshot(a), Self::UniformSnapshot(b)) => Arc::ptr_eq(a, b),
+            (Self::SampledCenters(a), Self::SampledCenters(b)) => Arc::ptr_eq(a, b),
             (
                 Self::AnalyticParticle {
                     clock: a,
@@ -452,6 +454,26 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
         extra_images: Option<[&GpuImage; 2]>,
         center: Option<CenterDependency>,
     ) -> Self {
+        Self::prepare_center_layers_bytes(
+            records,
+            indices,
+            bytes_of(uniform_data),
+            previous,
+            resources,
+            extra_images,
+            center,
+        )
+    }
+
+    pub(crate) fn prepare_center_layers_bytes(
+        records: ResidentRecordBuffer,
+        indices: &Arc<Vec<I>>,
+        bytes: &[u8],
+        previous: Option<&mut Self>,
+        resources: PassResources<'_>,
+        extra_images: Option<[&GpuImage; 2]>,
+        center: Option<CenterDependency>,
+    ) -> Self {
         let PassResources {
             device,
             queue,
@@ -459,7 +481,6 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
             image,
             uploads,
         } = resources;
-        let bytes = bytes_of(uniform_data);
         let uniform_bytes = previous
             .as_deref()
             .filter(|previous| previous.uniform_bytes.as_ref() == bytes)
@@ -467,7 +488,10 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
                 || Arc::from(bytes),
                 |previous| previous.uniform_bytes.clone(),
             );
-        let uniform = if let Some(previous) = previous.as_deref() {
+        let uniform = if let Some(previous) = previous
+            .as_deref()
+            .filter(|previous| previous.uniform_bytes.len() == bytes.len())
+        {
             if !Arc::ptr_eq(&uniform_bytes, &previous.uniform_bytes) {
                 queue.write_buffer(&previous.uniform, 0, bytes);
                 uploads.uniforms.queued(bytes.len());
@@ -477,7 +501,7 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
             uploads.uniforms.initialized(bytes.len());
             device.create_buffer_with_data(&BufferInitDescriptor {
                 label: Some("wc3 effect pass parameters"),
-                contents: bytes_of(uniform_data),
+                contents: bytes,
                 usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             })
         };
