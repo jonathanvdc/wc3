@@ -5,7 +5,9 @@ backends. Native preparation, pool allocation, warmup and rendering are differen
 costs; keep them outside a warmed simulation clock and report them separately.
 The [fixture guide](../benches/fixtures/particle_runtime/README.md) describes the
 original inputs and independent numerical oracle used by the time-driven runtime
-benchmarks. The immutable workload below uses a separate direct-Life variant.
+benchmarks. The immutable workload below uses a separate direct-Life variant;
+the [Delta fixture guide](../benches/fixtures/particle_delta/README.md) describes
+the constant-rate recurrence and routed birth/death controls.
 
 ## Run a paired comparison
 
@@ -82,6 +84,31 @@ It uses five rotating/reversing rounds at two dense layouts and retains raw logs
 actual dispatch, cold projection costs and zero-allocation checks. Position-only
 projection queries are a separately named workload and never replace full-field
 queries in its rankings.
+
+## Compare Delta-driven updates
+
+The Delta workload measures constant-rate vector Position and scalar Rotation
+recurrences through the same four execution choices. It preserves each actual
+rounded VM interval, including partial newborn updates, rather than substituting
+wall-clock age. Generate the original density fixtures, build the client and use
+the guarded driver:
+
+```sh
+python3 crates/wc3/benches/fixtures/particle_delta/generate.py
+cargo build -p wc3 --release --features popcorn-jit --example particle_delta_bench
+python3 crates/wc3/benches/fixtures/particle_delta/compare.py \
+  --repo "$PWD" --binary target/release/examples/particle_delta_bench \
+  --output /tmp/particle-delta-results --execute
+```
+
+The author refuses to overwrite existing fixtures. The driver uses five rotating
+and reversing rounds of four routes over four density cases and a routed
+birth/death control. It checks actual dispatch, full-field trajectories, clocks,
+populations, zero omissions and zero hot allocator calls before accepting a run.
+Full-field and selected-field query clocks remain separate from advancement.
+Delta-dependent fields still require CPU sampling in the current renderer;
+[this study](#delta-affine-updates-2026-10-22) therefore establishes no completed-
+frame or WGSL performance gain.
 
 ## Scalar native measurements, 2026-10-22
 
@@ -449,3 +476,94 @@ preserves raw totals, medians, batch sizes, per-call estimates, allocator rows a
 frozen source/fixture/binary/host receipts. This was one fixed-order run, not a
 paired arithmetic-throughput or rendered-frame comparison. Earlier coarse
 single-call hot timings were timer-quantized and are excluded from this record.
+
+## Delta-affine updates, 2026-10-22
+
+Immutable Delta advancement was faster than the selected CPU alternative in
+these controlled workloads, but public field queries became more expensive.
+Against that same alternative, eight full-field sweeps cost 2.89–3.38× more and
+selected queries cost 3.09–4.33× more. Those costs are measured separately;
+applications extracting fields on the CPU must include them when choosing an
+execution policy. These fixtures' Delta-dependent outputs retain CPU transport,
+so reduced advancement time does not establish an end-to-end rendering gain.
+
+The frozen release artifact used the M4 Pro host with 14 logical CPUs, macOS
+27.0.1, Rust 1.98.1 and Cranelift 0.137.0. All 100 guarded processes reported
+disabled debug assertions and matched the preserved build/source hashes. The
+five rounds rotated and reversed four execution choices over density populations
+1, 128, 1,024 and 8,192, plus one routed control. Every process used five samples
+of 64 advances at 1/64 second after 32 warmup ticks, covering 0.5–1.5 seconds.
+Each density pool also reserved its one ordinary controller. Children lived for
+8 seconds, so the measured density interval contained no births or deaths.
+The routed control instead maintained 16 children through one retirement and
+one partial newborn update per tick.
+
+The CPU comparator is the fixed requested route with the lowest median of five
+process frame medians for that workload, selected after measurement. Ratios below
+divide ImmutableAge by that same CPU route in every round; smaller is faster.
+Times summarize the five process medians; ratios summarize the five within-round
+ratios, so dividing the displayed times need not reproduce the ratio.
+
+| Workload | Actual CPU alternative | CPU median | Immutable median | Paired median ratio | Paired p95 ratio |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Density 1 | Scalar native | 0.208 µs | 0.167 µs | 0.803 | 0.799 |
+| Density 128 | Native SIMD | 2.459 µs | 1.458 µs | 0.576 | 0.590 |
+| Density 1024 | Native SIMD | 18.541 µs | 11.167 µs | 0.602 | 0.595 |
+| Density 8192 | Native SIMD | 160.083 µs | 88.500 µs | 0.562 | 0.568 |
+| Routed births/deaths | Scalar native | 0.833 µs | 0.500 µs | 0.600 | 0.618 |
+
+The density-1 difference, 167 versus 208 ns, is approximately one 41.7 ns timer
+quantum. Treat the apparent 20% reduction as a timer-quantized small-workload
+observation, with no statistical significance claim. Dense Interpreter runs used
+the checked Rust packet. Dense native runs committed real SIMD lanes. Density 1
+and the routed stream made no SIMD commits: their Automatic requests used scalar
+native tails. The record preserves all alternatives, including the
+scalar JIT regressions against Rust packets on these simple dense updates.
+
+The query ratios use the same selected CPU comparator as advancement. Full
+queries request all fourteen child fields. Selected queries request Position and
+Rotation for density, or Rotation alone for the routed control; they are distinct
+workloads and must not replace the full-field costs in a ranking.
+
+| Workload | Full-field query ratio | Selected-field query ratio |
+| --- | ---: | ---: |
+| Density 1 | 3.074 | 4.000 |
+| Density 128 | 3.054 | 4.024 |
+| Density 1024 | 3.379 | 4.330 |
+| Density 8192 | 3.220 | 4.065 |
+| Routed births/deaths | 2.885 | 3.091 |
+
+Read/compile/preparation, pool allocation, start/first-birth and projection setup
+remain outside the advance clock. For the 8,192-child immutable case, median
+native/immutable preparation was 1.72 ms, fresh pool allocation 248 µs and
+start/first-birth 2.73 ms. Eight full-field sweeps cost 15.09 ms, versus 4.65 ms
+for the selected SIMD route. These separate phase medians are not additive frame
+measurements. Fresh-instance observations followed untimed trajectory admission,
+so executable code was already warm.
+
+Every complete source trajectory passed its fixed Graphics comparison bound of
+`2e-6 + 2e-6*max(abs(a),abs(b))` for ordinary float fields. Canonical lifetime,
+root values, Boolean bits, inactive words and structural identities remained
+exact. All 100 final full-field hashes also matched source exactly; that endpoint
+observation does not strengthen the declared whole-trajectory numerical bound.
+Each immutable sample exposed the same actual integrated Delta as the independent
+partial-birth oracle. All 500 hot advance intervals and 500 query intervals made
+zero Rust allocation, reallocation or deallocation calls, with no omissions or
+immutable fallback. The counters do not observe foreign C or driver allocators.
+
+A separate before/after control retained the earlier Life/Time fixtures with
+ImmutableAge and prepared projection queries. Twenty runs formed five alternating
+pairs at 128 children in one instance and 1,024 children in eight instances.
+Numeric bits, structures, actual dispatch and zero-allocation ledgers matched
+exactly. Paired after/before advance medians were 1.000 and 1.00729, with p95
+ratios 1.00069 and 1.00669; query medians were 1.00629 and 1.02316. This records
+small measured overhead on the existing path, rather than a zero-regression or
+significance claim.
+
+The [Delta record](../benches/results/popcorn-delta-affine-2026-10-22.json)
+retains all per-process quantiles, paired ratios and regressions, separate cold
+and query observations, deduplicated actual work/population profiles, raw-log
+hashes and frozen binary/source/PKB pins. It also pins the Life/Time control. These original synthetic controls establish neither
+an acquired-effect applicability gain nor native-game, cross-engine or GPU
+performance. The closure covers constant-rate accumulation; discrete
+constant-acceleration recurrences are a separate unimplemented family.
