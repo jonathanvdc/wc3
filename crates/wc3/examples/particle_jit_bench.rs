@@ -1,16 +1,59 @@
-//! Compare explicit scalar native execution with the strongest Rust evaluator.
+//! Compare the checked Rust packet, scalar native, and native SIMD routes.
+use std::array::from_fn;
 use std::env;
 use std::hint::black_box;
 use std::time::Instant;
 use wc3::model::formats::pkb::{Document, EffectCompileOptions};
 use wc3::model::scene::popcorn::{
     EffectFieldId, EffectInstance, EffectLayerId, ExecutionBackend, ExecutionOptions,
-    ExecutionPreference, NumericPolicy, SceneInputs,
+    ExecutionPreference, ExecutionStage, ExecutionStats, NumericPolicy, SceneInputs,
 };
 
 #[path = "../benches/support/particle_runtime.rs"]
 mod support;
 use support::{fixture, verify_frame, verify_trajectory, warm, DT, STEPS};
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Route {
+    Interpreter,
+    ScalarJit,
+    SimdJit,
+}
+impl Route {
+    fn preference(self) -> ExecutionPreference {
+        match self {
+            Self::Interpreter => ExecutionPreference::Interpreter,
+            Self::ScalarJit => ExecutionPreference::ScalarJit,
+            Self::SimdJit => ExecutionPreference::Automatic,
+        }
+    }
+    fn work(self, children: usize) -> [u64; 4] {
+        let n = children as u64;
+        match self {
+            Self::Interpreter => [0, 0, 0, if children >= 16 { n } else { 0 }],
+            Self::ScalarJit => [n + 1, 0, 0, 0],
+            Self::SimdJit if children >= 16 => [1, n / 16, n, 0],
+            Self::SimdJit => [n + 1, 0, 0, 0],
+        }
+    }
+}
+fn counters(stats: ExecutionStats) -> [u64; 4] {
+    [
+        stats.scalar_jit_invocations,
+        stats.simd_attempted_batches,
+        stats.simd_committed_lanes,
+        stats.rust_packet_committed_lanes,
+    ]
+}
+fn difference(current: ExecutionStats, previous: ExecutionStats) -> [u64; 4] {
+    let current = counters(current);
+    let previous = counters(previous);
+    from_fn(|index| {
+        current[index]
+            .checked_sub(previous[index])
+            .expect("execution counter regressed")
+    })
+}
 
 // Public structure hash deliberately excludes numeric field values, whose independent
 // analytic oracle is checked separately. It cannot hide births, ownership or order.
@@ -51,11 +94,12 @@ fn main() {
     assert_eq!(
         args.len(),
         6,
-        "usage: jit-stage-bench interpreter|scalar-jit N C INSTANCES SAMPLES"
+        "usage: particle_jit_bench interpreter|scalar-jit|simd-jit N C INSTANCES SAMPLES"
     );
-    let jit = match args[1].as_str() {
-        "interpreter" => false,
-        "scalar-jit" => true,
+    let route = match args[1].as_str() {
+        "interpreter" => Route::Interpreter,
+        "scalar-jit" => Route::ScalarJit,
+        "simd-jit" => Route::SimdJit,
         _ => panic!("unknown route"),
     };
     let children: usize = args[2].parse().unwrap();
@@ -75,56 +119,49 @@ fn main() {
     let compile_ns = begin.elapsed().as_nanos();
     let begin = Instant::now();
     let program = base.with_execution(ExecutionOptions {
-        preference: if jit {
-            ExecutionPreference::Automatic
-        } else {
-            ExecutionPreference::Interpreter
-        },
+        preference: route.preference(),
         numeric_policy: NumericPolicy::Graphics,
     });
     let prepare_ns = begin.elapsed().as_nanos();
-    let expected = if jit {
-        ExecutionBackend::ScalarJit
-    } else {
-        ExecutionBackend::Interpreter
-    };
     assert!(!program.execution_reports().is_empty());
     for report in program.execution_reports() {
-        assert_eq!(report.backend, expected, "requested route was not selected");
+        let expected = match route {
+            Route::Interpreter => ExecutionBackend::Interpreter,
+            Route::ScalarJit => ExecutionBackend::ScalarJit,
+            Route::SimdJit
+                if report.layer == EffectLayerId(1)
+                    && report.stage == ExecutionStage::Evolution =>
+            {
+                ExecutionBackend::SimdJit
+            }
+            Route::SimdJit => ExecutionBackend::ScalarJit,
+        };
+        assert_eq!(report.backend, expected, "requested route was not prepared");
         assert!(
             report.fallback.is_none(),
-            "fallback is not an admitted JIT measurement"
+            "fallback is not an admitted native measurement"
         );
     }
     verify_trajectory(&program, children, capacity);
-    let mut invocation_deltas = Vec::with_capacity(STEPS);
+    // Route proof is an independent untimed trajectory, not a timed statistics
+    // read on every simulated frame. All four deltas must match exactly.
+    let expected_work = route.work(children);
+    let mut work_deltas = Vec::with_capacity(STEPS);
     let mut route_probe = warm(&program, children, capacity);
-    let mut previous = route_probe.execution_stats().scalar_jit_invocations;
-    if jit {
-        assert!(
-            previous > 0,
-            "selected JIT never entered native code during start/warmup"
-        );
-    } else {
-        assert_eq!(previous, 0);
-    }
+    let mut previous = route_probe.execution_stats();
     for _ in 0..STEPS {
         route_probe
             .advance(&program, DT, SceneInputs::default())
             .unwrap();
-        let current = route_probe.execution_stats().scalar_jit_invocations;
-        let delta = current
-            .checked_sub(previous)
-            .expect("invocation counter regressed");
-        if jit {
-            assert!(delta > 0, "no actual JIT invocation in advancing frame");
-        } else {
-            assert_eq!(delta, 0, "Interpreter unexpectedly entered JIT");
-        }
-        invocation_deltas.push(delta);
+        let current = route_probe.execution_stats();
+        let delta = difference(current, previous);
+        assert_eq!(
+            delta, expected_work,
+            "actual work does not match the requested route"
+        );
+        work_deltas.push(delta);
         previous = current;
     }
-    println!("invocation_deltas={invocation_deltas:?}");
     let mut structural = Vec::with_capacity(STEPS + 1);
     let mut numeric = Vec::with_capacity((STEPS + 1) * children * 14);
     let mut admission = warm(&program, children, capacity);
@@ -142,17 +179,22 @@ fn main() {
                 .unwrap();
         }
     }
-    // Allocation and destruction of each fixed instance set are outside clocks.
+    // Allocation/warmup/destruction are outside steady clocks; setup has its own clock.
     // Full admission above scans every field/frame; timed endpoints repeat it.
     let mut blocks = Vec::with_capacity(samples);
     let mut frames = Vec::with_capacity(samples * STEPS);
     let mut setup = Vec::with_capacity(samples);
+    let mut measured_work_deltas = Vec::with_capacity(samples * count);
     for _ in 0..samples {
         let begin = Instant::now();
         let mut instances: Vec<_> = (0..count)
             .map(|_| warm(&program, children, capacity))
             .collect();
         setup.push(begin.elapsed().as_nanos());
+        let before: Vec<_> = instances
+            .iter()
+            .map(EffectInstance::execution_stats)
+            .collect();
         let begin = Instant::now();
         for _ in 0..STEPS {
             let frame = Instant::now();
@@ -164,20 +206,17 @@ fn main() {
             frames.push(frame.elapsed().as_nanos());
         }
         blocks.push(begin.elapsed().as_nanos());
-        for instance in &instances {
+        for (instance, previous) in instances.iter().zip(before) {
             verify_frame(instance, children);
-            let calls = instance.execution_stats().scalar_jit_invocations;
-            if jit {
-                assert!(calls > 0);
-            } else {
-                assert_eq!(calls, 0);
-            }
+            let delta = difference(instance.execution_stats(), previous);
+            assert_eq!(delta, expected_work.map(|value| value * STEPS as u64));
+            measured_work_deltas.push(delta);
             black_box(instance);
         }
     }
     println!("route={:?}", program.execution_reports());
-    println!("{{\"kind\":\"result\",\"route\":\"{}\",\"children\":{},\"capacity_child_units\":{},\"capacity_total\":{},\"instances\":{},\"samples\":{},\"steps\":{},\"compile_ns\":{},\"prepare_ns\":{},\"block_median_ns\":{},\"block_p95_ns\":{},\"frame_median_ns\":{},\"frame_p95_ns\":{},\"setup_ns\":{:?},\"blocks_ns\":{:?},\"frames_ns\":{:?},\"structure\":{:?},\"numeric\":{:?}}}",
+    println!("{{\"kind\":\"result\",\"route\":\"{}\",\"children\":{},\"capacity_child_units\":{},\"capacity_total\":{},\"instances\":{},\"samples\":{},\"steps\":{},\"compile_ns\":{},\"prepare_ns\":{},\"block_median_ns\":{},\"block_p95_ns\":{},\"frame_median_ns\":{},\"frame_p95_ns\":{},\"setup_ns\":{:?},\"blocks_ns\":{:?},\"frames_ns\":{:?},\"structure\":{:?},\"numeric\":{:?},\"work_columns\":[\"scalar_jit\",\"simd_batches\",\"simd_lanes\",\"rust_lanes\"],\"work_deltas\":{:?},\"measured_work_deltas\":{:?}}}",
         args[1], children, capacity, capacity + 1, count, samples, STEPS, compile_ns, prepare_ns,
         percentile(&blocks, 50), percentile(&blocks, 95), percentile(&frames, 50), percentile(&frames, 95),
-        setup, blocks, frames, structural, numeric);
+        setup, blocks, frames, structural, numeric, work_deltas, measured_work_deltas);
 }

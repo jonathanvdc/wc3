@@ -171,7 +171,7 @@ pub(crate) fn fixture(count: usize) -> EffectProgram {
 }
 #[test]
 fn plan_checks_canonical_lifecycle_aliases_callbacks_resources_and_persistent_operands() {
-    let mut program = fixture(WIDTH);
+    let mut program = fixture(PARTICLE_BATCH_SIZE);
     let graph = Arc::get_mut(&mut program.inner).unwrap();
     let original = graph.layers[0].evolve.as_ref().unwrap().clone();
     let mut controller = graph.layers[0].clone();
@@ -206,7 +206,7 @@ fn plan_checks_canonical_lifecycle_aliases_callbacks_resources_and_persistent_op
 }
 #[test]
 fn packet_scratch_accounts_exact_owned_allocations_and_ineligible_graph_allocates_none() {
-    let program = fixture(WIDTH);
+    let program = fixture(PARTICLE_BATCH_SIZE);
     let shape = Scratch::shape(&program.inner.layers).unwrap();
     let scratch = Scratch::new(shape);
     assert_eq!(
@@ -302,7 +302,7 @@ fn layer_plan(layer: &EffectLayer) -> Option<&PureEvolution> {
 }
 #[test]
 fn persistent_eligibility_requires_sources_before_destination_within_evolution_only() {
-    let mut program = persistent_fixture(WIDTH);
+    let mut program = persistent_fixture(PARTICLE_BATCH_SIZE);
     let graph = Arc::get_mut(&mut program.inner).unwrap();
     let original = graph.layers[0].evolve.as_ref().unwrap().clone();
     assert_eq!(original.program.counts, [0, 2, 2, 2]);
@@ -362,11 +362,209 @@ fn persistent_eligibility_requires_sources_before_destination_within_evolution_o
 
 #[test]
 fn preparation_clears_the_selected_plan_when_evolution_is_removed() {
-    let mut program = fixture(WIDTH);
+    let mut program = fixture(PARTICLE_BATCH_SIZE);
     let graph = Arc::get_mut(&mut program.inner).unwrap();
     assert!(graph.layers[0].pure_evolution.is_some());
     graph.layers[0].evolve = None;
     prepare(&mut graph.layers, &graph.samplers);
     assert!(graph.layers[0].pure_evolution.is_none());
     assert_eq!(Scratch::shape(&graph.layers), None);
+}
+
+// Boolean values are copied as opaque words, never converted through float ALU.
+pub(crate) fn boolean_copy_fixture(word: u32) -> EffectProgram {
+    let mut program = fixture(PARTICLE_BATCH_SIZE);
+    let graph = Arc::get_mut(&mut program.inner).unwrap();
+    let layer = &mut graph.layers[0];
+    let mut fields = layer.fields.to_vec();
+    for (kind, initial) in [
+        (ValueType::Bool, [word, 17, 18, 19]),
+        (ValueType::Bool, [42; 4]),
+        (ValueType::Bool3, [word, 0, u32::MAX, 23]),
+        (ValueType::Bool3, [42; 4]),
+        (ValueType::Bool, [42; 4]),
+    ] {
+        fields.push(EffectField {
+            name: format!("bool{}", fields.len())
+                .into_bytes()
+                .into_boxed_slice(),
+            native_type: 0,
+            value_type: Some(kind),
+            initial,
+        });
+    }
+    layer.fields = fields.into_boxed_slice();
+    let destination = |slot, kind| Destination {
+        scope: 1,
+        slot,
+        kind,
+    };
+    let source = |slot, kind| Source {
+        address: Address::Slot { scope: 1, slot },
+        kind,
+    };
+    let operations = vec![
+        Instruction::Load {
+            destination: destination(0, ValueType::Bool),
+            external: 0,
+        },
+        Instruction::Store {
+            source: source(0, ValueType::Bool),
+            external: 1,
+        },
+        Instruction::Load {
+            destination: destination(1, ValueType::Bool3),
+            external: 2,
+        },
+        Instruction::Store {
+            source: source(1, ValueType::Bool3),
+            external: 3,
+        },
+        Instruction::Store {
+            source: Source {
+                address: Address::Constant([word, 31, 32, 33]),
+                kind: ValueType::Bool,
+            },
+            external: 4,
+        },
+    ];
+    layer.evolve = Some(BoundProgram {
+        program: Program {
+            counts: [0, 2, 0, 0],
+            max_arguments: 0,
+            operations: operations
+                .into_iter()
+                .enumerate()
+                .map(|(offset, instruction)| VmOperation {
+                    offset,
+                    instruction,
+                })
+                .collect(),
+        },
+        externals: (6..11).map(External::Field).collect(),
+        callbacks: Box::new([]),
+    });
+    prepare(&mut graph.layers, &graph.samplers);
+    assert!(graph.layers[0].pure_evolution.is_some());
+    program
+}
+
+#[test]
+fn boolean_copy_packets_preserve_zero_and_all_ones_and_normalize_inactive_components() {
+    for word in [0, u32::MAX, 1, 0x7f80_0001, 0x7fc1_2345] {
+        let program = boolean_copy_fixture(word);
+        let plan = program.inner.layers[0].pure_evolution.as_ref().unwrap();
+        let mut scratch = Scratch::new((plan.registers, plan.fields.len()));
+        scratch.poison();
+        scratch.count = PARTICLE_BATCH_SIZE;
+        for (index, binding) in plan.fields.iter().enumerate() {
+            let words = program.inner.layers[0].fields[binding.canonical].initial;
+            for (component, value) in words.into_iter().enumerate() {
+                scratch.fields[index][component].fill(value);
+            }
+        }
+        scratch.execute(plan, &program.inner.samplers, 0.).unwrap();
+        for (canonical, expected) in [
+            (7, [word, 0, 0, 0]),
+            (9, [word, 0, u32::MAX, 0]),
+            (10, [word, 0, 0, 0]),
+        ] {
+            let field = plan
+                .fields
+                .iter()
+                .position(|field| field.canonical == canonical)
+                .unwrap();
+            for (component, value) in expected.into_iter().enumerate() {
+                assert_eq!(
+                    scratch.fields[field][component],
+                    [value; PARTICLE_BATCH_SIZE]
+                );
+            }
+        }
+        let layer = &program.inner.layers[0];
+        let original = layer.evolve.as_ref().unwrap();
+        for instruction in [
+            Instruction::Binary {
+                destination: Destination {
+                    scope: 1,
+                    slot: 0,
+                    kind: ValueType::Bool,
+                },
+                left: Source {
+                    address: Address::Slot { scope: 1, slot: 0 },
+                    kind: ValueType::Bool,
+                },
+                right: Source {
+                    address: Address::Constant([word, 0, 0, 0]),
+                    kind: ValueType::Bool,
+                },
+                operation: BinaryOperation::Add,
+            },
+            Instruction::Swizzle {
+                destination: Destination {
+                    scope: 1,
+                    slot: 1,
+                    kind: ValueType::Bool3,
+                },
+                source: Source {
+                    address: Address::Slot { scope: 1, slot: 1 },
+                    kind: ValueType::Bool3,
+                },
+                lanes: [2, 1, 0, 0],
+            },
+        ] {
+            let mut bound = original.clone();
+            bound.program.operations.push(VmOperation {
+                offset: 99,
+                instruction,
+            });
+            assert!(PureEvolution::prepare(layer, &bound, &program.inner.samplers).is_none());
+        }
+    }
+}
+
+#[test]
+fn actual_native_benchmark_child_has_a_shared_pure_plan_including_enabled_copy() {
+    let document = Document::read(include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/benches/fixtures/particle_runtime/burst-1.pkb"
+    )))
+    .unwrap();
+    let (root, _) = document.effect_roots().next().unwrap().unwrap();
+    let program = document
+        .compile_effect(root, &EffectCompileOptions::default())
+        .unwrap();
+    let layer = &program.inner.layers[1];
+    let plan = layer
+        .pure_evolution
+        .as_ref()
+        .expect("actual benchmark, not a similar hand-built graph");
+    assert!(plan
+        .fields
+        .iter()
+        .any(|field| field.written
+            && layer.fields[field.canonical].value_type == Some(ValueType::Bool)));
+}
+
+#[test]
+fn ordered_field_dependencies_exclude_write_only_and_post_store_loads() {
+    let program = fixture(PARTICLE_BATCH_SIZE);
+    let plan = program.inner.layers[0].pure_evolution.as_ref().unwrap();
+    let binding = |canonical| {
+        plan.fields
+            .iter()
+            .find(|field| field.canonical == canonical)
+            .unwrap()
+    };
+    // original2 is read before any store; original3 is written before its
+    // curve-coordinate read; original5 is only the curve's final output.
+    assert!(binding(2).read_before_write);
+    assert_eq!(binding(2).components, 1);
+    assert!(!binding(3).read_before_write);
+    assert!(binding(3).written);
+    assert!(!binding(5).read_before_write);
+    assert!(binding(5).written);
+    assert!(binding(4).read_before_write);
+    assert_eq!(binding(4).components, 3);
+    assert!(binding(4).written);
 }

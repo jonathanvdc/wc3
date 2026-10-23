@@ -1,14 +1,16 @@
 //! Scalar curve interval selection; interpolation algebra is shared with SIMD.
 use super::Lower;
 use crate::model::scene::popcorn::graph::EffectSampler;
-use crate::model::scene::popcorn::native::interpolation;
+use crate::model::scene::popcorn::native::interpolation::{
+    constant, coordinate, hermite, hermite_weights, linear,
+};
 use crate::model::scene::popcorn::Destination;
 use cranelift_codegen::ir::condcodes::FloatCC;
 use cranelift_codegen::ir::{types, Block, InstBuilder, Value};
 
 impl Lower<'_, '_> {
     fn float_constant(&mut self, value: f32) -> Value {
-        interpolation::constant(self.builder, types::F32, value)
+        constant(self.builder, types::F32, value)
     }
     pub(super) fn curve(
         &mut self,
@@ -138,11 +140,11 @@ impl Lower<'_, '_> {
         // Constants are bit-exact values, never pre-expanded cubic coefficients.
         let key0 = self.float_constant(times[index]);
         let key1 = self.float_constant(times[index + 1]);
-        let t = interpolation::coordinate(self.builder, time, key0, key1);
+        let t = coordinate(self.builder, time, key0, key1);
         let weights = if tangents.is_empty() {
             None
         } else {
-            Some(interpolation::hermite_weights(self.builder, t))
+            Some(hermite_weights(self.builder, t))
         };
         let mut words = Vec::new();
         for component in 0..destination.kind.components() {
@@ -151,9 +153,9 @@ impl Lower<'_, '_> {
             let result = if let Some(weights) = weights {
                 let out = self.float_constant(tangents[index * 2 + 1][component]);
                 let input = self.float_constant(tangents[(index + 1) * 2][component]);
-                interpolation::hermite(self.builder, [a, out, b, input], weights)
+                hermite(self.builder, [a, out, b, input], weights)
             } else {
-                interpolation::linear(self.builder, a, b, t)
+                linear(self.builder, a, b, t)
             };
             words.push(self.bits(result));
         }

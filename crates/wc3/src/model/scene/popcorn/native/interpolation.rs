@@ -6,7 +6,7 @@ use cranelift_frontend::FunctionBuilder;
 
 /// Construct the same f32 bits, optionally broadcast across native SIMD lanes.
 pub(crate) fn constant(builder: &mut FunctionBuilder<'_>, lane_type: Type, value: f32) -> Value {
-    debug_assert!(lane_type == types::F32 || lane_type == types::F32X4);
+    debug_assert!(lane_type.lane_type() == types::F32);
     let scalar = builder.ins().f32const(Ieee32::with_bits(value.to_bits()));
     if lane_type == types::F32 {
         scalar

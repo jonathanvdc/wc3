@@ -222,15 +222,19 @@ view still reports `None`; unused sparse curves remain unresolved.
 Ordinary effect compilation retains the Rust evaluator, including its eligible
 16-particle batches. Enable the optional `wc3/popcorn-jit` feature and call
 `program.with_execution(ExecutionOptions::default())` before instantiation to
-prepare scalar native code. Preparation happens once for that programme handle;
+prepare scalar native code and eligible 16-particle SIMD batches, each lowered
+as four groups of four lanes. Preparation happens once for that programme handle;
 instances share the executable allocation and keep their own particle storage.
 The crate requires Rust 1.97. The feature supports native execution on Unix and Windows
 with a Cranelift-supported x86-64, AArch64, RISC-V64 or s390x host. Other builds
-retain the Rust evaluator.
+retain the Rust evaluator. SIMD lowering currently supports x86-64 and AArch64.
 
 `ExecutionOptions` separates backend preference from `EffectLimits` and native
 format interpretation. Choose `ExecutionPreference::Interpreter` to skip native
-preparation. `NumericPolicy::Strict` preserves evaluator arithmetic policies;
+preparation. Successful `ExecutionPreference::ScalarJit` preparation selects
+scalar native execution without packet dispatch, providing a direct comparison
+route; unavailable native execution retains the Rust fallback.
+`NumericPolicy::Strict` preserves evaluator arithmetic policies;
 `Graphics` permits reassociation and equivalent analytic trajectories while
 retaining ordered callbacks, lifecycle, budgets and checked failure boundaries.
 A policy grants permission for transformations; it does not require them.
@@ -239,8 +243,11 @@ Inspect `execution_reports()` for each layer's initialization and selected
 evolution route, including preparation fallback reasons. An instance captures
 its plan at allocation, so preparing another handle for the same graph does not
 switch existing instances. Programme and attribute identities remain shared.
-`execution_stats()` exposes native invocation attempts separately from semantic
-simulation counters. Reports establish preparation; counters establish dispatch,
+`execution_stats()` exposes scalar invocation attempts, SIMD batch entries and
+committed native/Rust packet lanes separately from semantic simulation counters.
+These execution counters remain cumulative across `start()` calls.
+Automatic execution retains the checked Rust packet path when a native tile is
+unavailable. Reports establish preparation; counters establish dispatch,
 and neither alone establishes a performance improvement.
 The [performance guide](popcorn-performance.md) provides paired comparisons and
 recorded measurements against the packet-enabled Rust evaluator.
@@ -249,9 +256,10 @@ Generated scalar arithmetic uses the checked typed instruction representation.
 Eligible immutable curves embed their interpolation directly within bounded
 preparation work; other curve calls retain checked services.
 Operations that need checked host services retain their original ordered call
-boundary. A failure leaves earlier writes visible and does not replay the
-invocation. Native compilation is bounded; unsupported platforms, disabled
-features and preparation failures select Rust execution before simulation.
+boundary. A scalar invocation failure leaves earlier writes visible and does not
+replay the invocation. Failed speculative SIMD batches discard staged output and
+replay their invocations through the scalar path. Native compilation is bounded;
+unsupported platforms, disabled features and preparation failures select Rust execution before simulation.
 
 ## Execution policies
 

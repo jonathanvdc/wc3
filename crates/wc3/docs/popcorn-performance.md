@@ -22,15 +22,28 @@ a fresh output directory. It preserves raw output, preparation times, actual
 native invocation counts, block and frame samples, input hashes and failed jobs.
 The client checks the full authored trajectory outside its clocks. The driver
 requires identical structural results and reports whether numeric words match
-exactly; the independent field oracle remains mandatory for both routes.
+exactly; the independent field oracle remains mandatory for all routes.
 
-The Rust route retains its existing pure-packet optimization. The native route
-requires successful scalar JIT preparation and one real native call for every
-controller and child in each observation frame. Runtime tests separately verify
+The default comparison rotates and reverses runs of `interpreter`
+(`Interpreter`), `scalar-jit` (`ScalarJit`) and `simd-jit` (`Automatic`). Use
+`--routes interpreter,scalar-jit` for a two-route comparison; historical results
+below describe their frozen implementation artifacts.
+
+The Rust route retains its existing pure-packet optimization. The scalar native route requires successful JIT preparation and one real native
+call for every controller and child in each observation frame. The SIMD route
+requires real native batch entries and committed lanes for dense populations,
+while short populations retain scalar native calls. Runtime tests separately verify
 positive dense Rust packet commits and zero substituted Rust packet commits on
-the scalar JIT route. Keep builds and GPU captures idle during a comparison.
+the scalar JIT route. The maintained comparison additionally requires these
+actual counters from its own workload. Keep builds and GPU captures idle during a comparison.
 
 ## Scalar native measurements, 2026-10-22
+
+The historical synthetic fixture below did not qualify for Rust packets because
+its `Enabled` boolean copy was outside that admission subset. Its Rust timings
+therefore measure scalar execution. The scalar speedups remain valid for those
+artifacts, but do not establish a win over Rust packets. The explicit SIMD stage
+adds boolean-copy admission and compares all three routes with actual counters.
 
 These CPU measurements used an Apple M4 Pro (Mac16,8, 14 logical CPUs), macOS
 27.0.1, Rust 1.99.0 release optimization and Cranelift 0.137.0 with `opt_level=speed`.
@@ -123,3 +136,64 @@ allocator calls. The [curve-stage record](../benches/results/popcorn-scalar-curv
 retains paired ratios and workload/artifact provenance. The checked feature suite
 passed 300 unit and seven integration tests, including distinct incoming/outgoing
 tangents, nonuniform eight-knot curves, exceptional coordinates and failure prefixes.
+
+## Explicit SIMD, 2026-10-22
+
+Automatic native preparation now lowers the shared checked pure plan to fixed
+SIMD groups. Particle batch size, native lane count and value component count
+have separate named constants: this build uses 16 particles, four SIMD lanes
+and four value words. Generated instructions specialize those dimensions before
+execution. The Rust packet and native tile both gather only old field values
+actually read by the programme, component by component, with a bulk-copy path
+for contiguous slots. Write-only outputs and inactive components need no gather.
+
+The first measured native tile was 2–10% slower than scalar JIT on dense synthetic
+cases. Input-only gathering and one shared checked Time input reversed that
+result. A direct five-pair comparison of the frozen initial and revised SIMD
+artifacts measured a further 1.84–1.88× speedup, with exact outputs and actual
+native entries in both builds. The failed preparation attempt and slower
+measurements remain in the evidence record.
+
+These final comparisons used the same host, compiler and synthetic protocol as
+the scalar stages, with five rotated/reversed triples. Unlike the historical
+synthetic results above, this fixture now qualifies for the Rust packet through
+its boolean-copy support. Every dense Rust frame committed its child population
+through that packet; native frames used exactly the required SIMD entries and
+committed lanes. All 180 synthetic jobs passed the independent field oracle and
+matched full trajectories exactly. The frame p95 column is SIMD divided by scalar
+JIT; smaller is faster.
+
+| Children | Child capacity | Instances | Versus Rust packet | Versus scalar JIT | Frame p95 ratio |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 128 | 128 | 1 | 2.16× | 1.63× | 0.626 |
+| 128 | 128 | 8 | 2.12× | 1.63× | 0.602 |
+| 1024 | 1024 | 1 | 2.19× | 1.65× | 0.600 |
+| 1024 | 1024 | 8 | 2.17× | 1.63× | 0.631 |
+
+The acquired Lich workload retained its continuous 120-tick warmup and 600-tick
+measurement. Dense emission multiplier 64 produced real SIMD work, zero Rust
+packet fallback and the following paired frame results. All 120 jobs retained
+exact structural/full-field trajectories and made no steady allocator calls.
+
+| Total capacity | Instances | Versus Rust evaluator | Versus scalar JIT | Frame p95 ratio |
+| ---: | ---: | ---: | ---: | ---: |
+| 128 | 1 | 2.91× | 1.21× | 0.885 |
+| 128 | 8 | 2.93× | 1.23× | 0.806 |
+| 1024 | 1 | 2.92× | 1.37× | 0.691 |
+| 1024 | 8 | 2.62× | 1.31× | 0.661 |
+
+Sparse synthetic and multiplier-1 Lich observations made no SIMD calls. They
+retain scalar native execution; their raw observations remain in the record
+without a SIMD speed claim. Synthetic native preparation took approximately
+1.8–2.0 ms for scalar-only execution and 2.9–3.3 ms with SIMD on this host.
+
+The [SIMD record](../benches/results/popcorn-simd-jit-2026-10-22.json) retains all
+paired summaries, cold/allocation observations, actual route evidence and frozen
+artifact/source hashes. Validation passed 322 feature-enabled unit tests and
+seven integration tests, 295 feature-disabled unit tests and six integration
+tests, plus strict Clippy. A focused native-code check executed the dumped
+2,836-byte AArch64 kernel and confirmed packed add/subtract/multiply instructions.
+The optimized corpus again matched 58 effects, 330 cases and 83,064 rows exactly.
+
+These are CPU simulation results. x86-64 execution, larger supported curves,
+unmeasured effects and completed rendered frames have no performance claim here.

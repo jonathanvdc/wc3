@@ -3,10 +3,11 @@ use super::callbacks::ExecutionHost;
 use super::execution::with_scratch;
 use super::graph::{EffectGraph, EffectLayerId};
 use super::native::NativeCode;
+use super::packet::{PureEvolution, Scratch as PacketScratch};
 use super::ExecutionFallback;
 use super::{
     ExecutionBackend, ExecutionError, ExecutionOptions, ExecutionPreference, ExecutionReport,
-    ExecutionStage, Program, State,
+    ExecutionStage, ExecutionStats, Program, State,
 };
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
@@ -22,7 +23,9 @@ impl ExecutionPlan {
         let fallback = if options.preference == ExecutionPreference::Interpreter {
             None
         } else {
-            match catch_unwind(AssertUnwindSafe(|| NativeCode::prepare(graph))) {
+            match catch_unwind(AssertUnwindSafe(|| {
+                NativeCode::prepare(graph, options.preference == ExecutionPreference::Automatic)
+            })) {
                 Ok(Ok(code)) => {
                     native = Some(code);
                     None
@@ -43,6 +46,12 @@ impl ExecutionPlan {
             .iter()
             .enumerate()
             .flat_map(|(index, layer)| {
+                let evolution_backend = if native.as_ref().is_some_and(|code| code.has_simd(index))
+                {
+                    ExecutionBackend::SimdJit
+                } else {
+                    backend
+                };
                 [
                     Some(ExecutionStage::Initialization),
                     layer.evolve.as_ref().map(|_| ExecutionStage::Evolution),
@@ -54,7 +63,11 @@ impl ExecutionPlan {
                     move |stage| ExecutionReport {
                         layer: EffectLayerId(index as u32),
                         stage,
-                        backend,
+                        backend: if stage == ExecutionStage::Evolution {
+                            evolution_backend
+                        } else {
+                            backend
+                        },
                         fallback: fallback.clone(),
                     }
                 })
@@ -74,6 +87,23 @@ impl ExecutionPlan {
     }
     pub(super) fn is_native(&self) -> bool {
         self.native.is_some()
+    }
+    /// Scalar-only native preparation is the explicit comparison route. Native
+    /// fallback still keeps the established Rust packet implementation.
+    pub(super) fn allows_packets(&self) -> bool {
+        self.options.preference != ExecutionPreference::ScalarJit || self.native.is_none()
+    }
+    pub(super) fn execute_packet(
+        &self,
+        layer: EffectLayerId,
+        plan: &PureEvolution,
+        scratch: &mut PacketScratch,
+        time: f64,
+        stats: &mut ExecutionStats,
+    ) -> Option<Result<(), ()>> {
+        self.native
+            .as_ref()?
+            .execute_simd(layer.0 as usize, plan, scratch, time, stats)
     }
     #[allow(clippy::too_many_arguments)]
     pub(super) fn execute(

@@ -3,7 +3,7 @@ use super::callbacks::{ExecutionHost, Scratch};
 use super::execution_plan::ExecutionPlan;
 use super::graph::*;
 use super::lifetime::Lifetime;
-use super::packet::{Lane, Scratch as PacketScratch, MINIMUM, WIDTH};
+use super::packet::{Lane, Scratch as PacketScratch, PARTICLE_BATCH_SIZE};
 use super::payload::{Handle as PayloadHandle, Storage as PayloadStorage};
 use super::spatial::Store as SpatialStore;
 use super::{ExecutionReport, ExecutionStage, ExecutionStats, Failure, State, Value, ValueType};
@@ -213,6 +213,15 @@ impl FieldPlanes {
     #[cfg(any(test, feature = "popcorn-jit"))]
     pub(super) fn layout(&self) -> &FieldLayout {
         &self.layout
+    }
+    /// Checked read-only component plane for the private batch gather path.
+    pub(super) fn component(&self, field: usize, component: usize) -> Option<&[u32]> {
+        let ordinal = *self.layout.ordinals.get(field)?.get(component)?;
+        if ordinal == FieldLayout::ABSENT {
+            return None;
+        }
+        let start = ordinal.checked_mul(self.capacity)?;
+        self.data.get(start..start.checked_add(self.capacity)?)
     }
     pub fn read(&self, field: usize, slot: usize) -> [u32; 4] {
         let ordinals = self.layout.ordinals[field];
@@ -525,7 +534,7 @@ impl EffectInstance {
     pub fn execution_reports(&self) -> &[ExecutionReport] {
         self.execution.reports()
     }
-    /// Cumulative native invocation attempts over this instance's lifetime.
+    /// Cumulative native invocations and committed packet lanes over this instance's lifetime.
     /// Restarting with `start` retains these diagnostics while resetting simulation statistics.
     pub fn execution_stats(&self) -> ExecutionStats {
         self.execution_stats
@@ -807,7 +816,10 @@ impl EffectInstance {
             store.begin_tick();
         }
         // Existing-active processing can only retire; births are drained later.
-        if !self.execution.is_native() && self.packet.is_some() && self.active.len() >= MINIMUM {
+        if self.execution.allows_packets()
+            && self.packet.is_some()
+            && self.active.len() >= PARTICLE_BATCH_SIZE
+        {
             self.evolve_packet_active(program, end, inputs, work)?;
         } else {
             self.evolve_active::<false>(program, end, inputs, work)?;
@@ -860,7 +872,7 @@ impl EffectInstance {
                 continue;
             }
             if PACKETS
-                && self.active.len() - index >= MINIMUM
+                && self.active.len() - index >= PARTICLE_BATCH_SIZE
                 && index >= scalar_until
                 && layer.evolve.is_some()
                 && layer.pure_evolution.is_some()
@@ -893,7 +905,7 @@ impl EffectInstance {
         work: &mut usize,
     ) -> (usize, usize) {
         let remaining = self.limits.work_per_update.saturating_sub(*work);
-        if remaining < MINIMUM {
+        if remaining < PARTICLE_BATCH_SIZE {
             return (0, remaining.max(1));
         }
         let layer_id = self.particles[self.active[index]].layer;
@@ -905,7 +917,10 @@ impl EffectInstance {
             return (0, 1);
         };
         scratch.count = 0;
-        for &slot in self.active[index..].iter().take(WIDTH.min(remaining)) {
+        for &slot in self.active[index..]
+            .iter()
+            .take(PARTICLE_BATCH_SIZE.min(remaining))
+        {
             let particle = &self.particles[slot];
             if particle.layer != layer_id {
                 break;
@@ -927,11 +942,20 @@ impl EffectInstance {
             scratch.count += 1;
         }
         let count = scratch.count;
-        if count < MINIMUM {
+        if count < PARTICLE_BATCH_SIZE {
             return (0, count);
         }
         scratch.stage(plan, &self.fields, layer.life);
-        if scratch.execute(plan, &program.inner.samplers, end).is_err() {
+        let native =
+            self.execution
+                .execute_packet(layer_id, plan, scratch, end, &mut self.execution_stats);
+        let is_simd = native.is_some();
+        let result = native.unwrap_or_else(|| {
+            scratch
+                .execute(plan, &program.inner.samplers, end)
+                .map_err(|_| ())
+        });
+        if result.is_err() {
             #[cfg(test)]
             {
                 scratch.fallbacks += 1;
@@ -957,6 +981,17 @@ impl EffectInstance {
                 f32::from_bits(self.fields.read(layer.inverse_life, value.slot)[0]),
             )
             .is_ok());
+        }
+        if is_simd {
+            self.execution_stats.simd_committed_lanes = self
+                .execution_stats
+                .simd_committed_lanes
+                .saturating_add(count as u64);
+        } else {
+            self.execution_stats.rust_packet_committed_lanes = self
+                .execution_stats
+                .rust_packet_committed_lanes
+                .saturating_add(count as u64);
         }
         (count, count)
     }

@@ -19,7 +19,7 @@ fn wrappers(count: usize) -> (EffectProgram, EffectProgram) {
     let interpreted = program
         .clone()
         .with_execution(options(ExecutionPreference::Interpreter));
-    let automatic = program.with_execution(options(ExecutionPreference::Automatic));
+    let automatic = program.with_execution(options(ExecutionPreference::ScalarJit));
     assert!(interpreted.same_program(&automatic));
     (interpreted, automatic)
 }
@@ -417,3 +417,11 @@ mod supported {
         }
     }
 }
+
+#[cfg(all(
+    feature = "popcorn-jit",
+    any(unix, windows),
+    any(target_arch = "x86_64", target_arch = "aarch64")
+))]
+#[path = "simd_runtime_tests.rs"]
+mod simd_tests;

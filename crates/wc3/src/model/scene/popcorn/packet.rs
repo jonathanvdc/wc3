@@ -6,10 +6,10 @@ use super::runtime::FieldPlanes;
 use super::{Address, BinaryOperation, Destination, Instruction, Source, ValueType};
 use std::mem::size_of;
 
-pub(super) const WIDTH: usize = 16;
 // Full tiles keep natural low-population effects on the cheap scalar path.
-pub(super) const MINIMUM: usize = WIDTH;
-type Planes = [[u32; WIDTH]; 4];
+pub(super) const PARTICLE_BATCH_SIZE: usize = 16;
+const VALUE_COMPONENTS: usize = 4;
+type Planes = [[u32; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS];
 #[derive(Clone, Copy, Debug)]
 struct Register {
     slot: usize,
@@ -17,7 +17,7 @@ struct Register {
 }
 #[derive(Clone, Copy, Debug)]
 enum Location {
-    Constant([u32; 4]),
+    Constant([u32; VALUE_COMPONENTS]),
     Register(usize),
 }
 #[derive(Clone, Copy, Debug)]
@@ -72,6 +72,8 @@ struct Operation {
 struct Field {
     canonical: usize,
     written: bool,
+    read_before_write: bool,
+    components: usize,
 }
 #[derive(Clone, Debug)]
 pub(crate) struct PureEvolution {
@@ -85,7 +87,11 @@ pub(crate) struct PureEvolution {
 fn supported(kind: ValueType) -> bool {
     matches!(
         kind,
-        ValueType::Float | ValueType::Float3 | ValueType::Float4
+        ValueType::Bool
+            | ValueType::Bool3
+            | ValueType::Float
+            | ValueType::Float3
+            | ValueType::Float4
     )
 }
 fn local(scope: usize, slot: usize, counts: [usize; 4]) -> Option<usize> {
@@ -120,13 +126,21 @@ fn operand(source: Source, counts: [usize; 4]) -> Option<Operand> {
         },
     })
 }
-fn field(fields: &mut Vec<Field>, canonical: usize, written: bool) -> usize {
+fn field(fields: &mut Vec<Field>, canonical: usize, components: usize, written: bool) -> usize {
     if let Some(index) = fields.iter().position(|field| field.canonical == canonical) {
-        fields[index].written |= written;
+        let field = &mut fields[index];
+        debug_assert_eq!(field.components, components);
+        field.read_before_write |= !written && !field.written;
+        field.written |= written;
         index
     } else {
         let index = fields.len();
-        fields.push(Field { canonical, written });
+        fields.push(Field {
+            canonical,
+            written,
+            read_before_write: !written,
+            components,
+        });
         index
     }
 }
@@ -161,7 +175,12 @@ impl PureEvolution {
                             if layer.fields.get(*index)?.value_type != Some(destination.kind) {
                                 return None;
                             }
-                            Input::Field(field(&mut fields, *index, false))
+                            Input::Field(field(
+                                &mut fields,
+                                *index,
+                                destination.kind.components(),
+                                false,
+                            ))
                         }
                         External::Time if destination.kind == ValueType::Float => Input::Time,
                         External::Delta if destination.kind == ValueType::Float => Input::Delta,
@@ -184,7 +203,7 @@ impl PureEvolution {
                         return None;
                     }
                     InstructionPlan::Store {
-                        field: field(&mut fields, *index, true),
+                        field: field(&mut fields, *index, source.kind.components(), true),
                         input: operand(*source, counts)?,
                     }
                 }
@@ -329,7 +348,7 @@ pub(super) struct Lane {
 pub(super) struct Scratch {
     registers: Vec<Planes>,
     fields: Vec<Planes>,
-    pub lanes: [Lane; WIDTH],
+    pub lanes: [Lane; PARTICLE_BATCH_SIZE],
     pub count: usize,
     #[cfg(test)]
     pub attempts: usize,
@@ -359,9 +378,9 @@ impl Scratch {
     }
     pub fn new((registers, fields): (usize, usize)) -> Box<Self> {
         Box::new(Self {
-            registers: vec![[[0; WIDTH]; 4]; registers],
-            fields: vec![[[0; WIDTH]; 4]; fields],
-            lanes: [Lane::default(); WIDTH],
+            registers: vec![[[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS]; registers],
+            fields: vec![[[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS]; fields],
+            lanes: [Lane::default(); PARTICLE_BATCH_SIZE],
             count: 0,
             #[cfg(test)]
             attempts: 0,
@@ -372,20 +391,41 @@ impl Scratch {
         })
     }
     pub fn stage(&mut self, plan: &PureEvolution, fields: &FieldPlanes, life_field: usize) {
-        // Original invocation locals always begin at zero. Persistent planes
-        // may retain arbitrary previous lanes: eligibility proves each read is
-        // preceded by a normalized write in this evolution.
-        self.registers[..plan.locals].fill([[0; WIDTH]; 4]);
-        for (index, binding) in plan.fields.iter().enumerate() {
-            for lane in 0..self.count {
-                let value = self.lanes[lane];
-                let words = if binding.canonical == life_field {
-                    [value.life.to_bits(), 0, 0, 0]
+        // One range proof per batch, shared by every gathered component plane.
+        let contiguous = self.lanes[..self.count].first().and_then(|first| {
+            let end = first.slot.checked_add(self.count)?;
+            self.lanes[..self.count]
+                .iter()
+                .enumerate()
+                .all(|(index, lane)| lane.slot == first.slot + index)
+                .then_some((first.slot, end))
+        });
+        for (index, binding) in plan
+            .fields
+            .iter()
+            .enumerate()
+            .filter(|(_, binding)| binding.read_before_write)
+        {
+            if binding.canonical == life_field {
+                for (word, lane) in self.fields[index][0][..self.count]
+                    .iter_mut()
+                    .zip(&self.lanes[..self.count])
+                {
+                    *word = lane.life.to_bits();
+                }
+                continue;
+            }
+            for component in 0..binding.components {
+                let input = fields
+                    .component(binding.canonical, component)
+                    .expect("prepared packet component has physical storage");
+                let output = &mut self.fields[index][component][..self.count];
+                if let Some((start, end)) = contiguous {
+                    output.copy_from_slice(&input[start..end]);
                 } else {
-                    fields.read(binding.canonical, value.slot)
-                };
-                for (component, word) in words.into_iter().enumerate() {
-                    self.fields[index][component][lane] = word;
+                    for (word, lane) in output.iter_mut().zip(&self.lanes[..self.count]) {
+                        *word = input[lane.slot];
+                    }
                 }
             }
         }
@@ -396,6 +436,10 @@ impl Scratch {
         samplers: &[EffectSampler],
         time: f64,
     ) -> Result<(), usize> {
+        // Only the Rust evaluator uses retained register planes. Native SIMD
+        // initializes its invocation locals in SSA and needs no scratch clearing.
+        // Persistent reads are proven to follow a write within this invocation.
+        self.registers[..plan.locals].fill([[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS]);
         #[cfg(test)]
         {
             self.attempts += 1;
@@ -403,7 +447,7 @@ impl Scratch {
         for operation in &plan.operations {
             match operation.instruction {
                 InstructionPlan::Load { output, input } => {
-                    let mut result = [[0; WIDTH]; 4];
+                    let mut result = [[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS];
                     for lane in 0..self.count {
                         match input {
                             Input::Field(index) => {
@@ -429,7 +473,7 @@ impl Scratch {
                     self.registers[output.slot] = result;
                 }
                 InstructionPlan::Store { field, input } => {
-                    let mut result = [[0; WIDTH]; 4];
+                    let mut result = [[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS];
                     for (component, words) in result.iter_mut().enumerate().take(input.width) {
                         for (lane, word) in words.iter_mut().enumerate().take(self.count) {
                             *word = input.word(&self.registers, lane, component);
@@ -443,7 +487,7 @@ impl Scratch {
                     right,
                     operation,
                 } => {
-                    let mut result = [[0; WIDTH]; 4];
+                    let mut result = [[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS];
                     for (component, words) in result.iter_mut().enumerate().take(output.width) {
                         for (lane, word) in words.iter_mut().enumerate().take(self.count) {
                             *word = float_arithmetic(
@@ -460,7 +504,7 @@ impl Scratch {
                     input,
                     sampler,
                 } => {
-                    let mut result = [[0; WIDTH]; 4];
+                    let mut result = [[0; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS];
                     for (lane, _) in self.lanes.iter().enumerate().take(self.count) {
                         let value = sample(
                             &samplers[sampler],
@@ -479,8 +523,10 @@ impl Scratch {
     }
     #[cfg(test)]
     pub fn poison(&mut self) {
-        self.registers.fill([[0xdeadbeef; WIDTH]; 4]);
-        self.fields.fill([[0x7fc00001; WIDTH]; 4]);
+        self.registers
+            .fill([[0xdeadbeef; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS]);
+        self.fields
+            .fill([[0x7fc00001; PARTICLE_BATCH_SIZE]; VALUE_COMPONENTS]);
     }
     pub fn commit(&self, plan: &PureEvolution, lane: usize, fields: &mut FieldPlanes) {
         for (index, binding) in plan
@@ -501,3 +547,10 @@ impl Scratch {
 #[cfg(test)]
 #[path = "packet_tests.rs"]
 pub(super) mod tests;
+
+#[cfg(all(
+    feature = "popcorn-jit",
+    any(unix, windows),
+    any(target_arch = "x86_64", target_arch = "aarch64")
+))]
+pub(crate) mod simd;

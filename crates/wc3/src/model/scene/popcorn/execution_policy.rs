@@ -4,12 +4,16 @@ use super::graph::EffectLayerId;
 /// Preferred execution strategy when preparing an effect programme.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ExecutionPreference {
-    /// Prepare native execution when available; otherwise retain the Rust evaluator.
+    /// Prepare scalar native execution and eligible SIMD tiles when available;
+    /// otherwise retain the checked Rust evaluator and its pure packet path.
     #[default]
     Automatic,
     /// Use the checked Rust evaluator without preparing native executable code.
     /// Its existing eligible pure-batch optimization remains an implementation detail.
     Interpreter,
+    /// Prepare only scalar native execution; successful preparation disables
+    /// packet execution. Unavailable native execution retains the Rust fallback.
+    ScalarJit,
 }
 
 /// Numerical transformations permitted during execution preparation.
@@ -51,11 +55,16 @@ pub enum ExecutionStage {
 pub enum ExecutionBackend {
     /// The checked Rust evaluator, including its eligible pure-batch fast path.
     Interpreter,
-    /// Native scalar machine code prepared through the optional JIT compiler.
+    /// Native scalar code is available. Automatic execution may retain Rust
+    /// packets when a native SIMD tile is unavailable; ScalarJit preference
+    /// selects only this scalar entry.
     ScalarJit,
+    /// Evolution has an eligible native SIMD tile. Short/terminal/newborn runs
+    /// and checked tile failure replay still use the scalar native entry.
+    SimdJit,
 }
 
-/// Why automatic native preparation retained the interpreter.
+/// Why preferred native preparation retained the interpreter.
 /// This is a preparation result, not an execution fault or a deferred retry.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -89,13 +98,19 @@ pub struct ExecutionReport {
     pub stage: ExecutionStage,
     /// Implementation selected for this stage.
     pub backend: ExecutionBackend,
-    /// Reason automatic native preparation retained interpreter execution.
+    /// Reason preferred native preparation retained interpreter execution.
     pub fallback: Option<ExecutionFallback>,
 }
 
-/// Actual generated-code entries, separate from semantic simulation statistics.
+/// Cumulative execution-route work, separate from semantic simulation statistics.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ExecutionStats {
     /// Scalar native invocations attempted, including invocations ending in a fault.
     pub scalar_jit_invocations: u64,
+    /// Canonical lanes successfully committed through the checked Rust packet.
+    pub rust_packet_committed_lanes: u64,
+    /// Actual generated SIMD tile entries, including failed speculative tiles.
+    pub simd_attempted_batches: u64,
+    /// Canonical lanes successfully committed after a native SIMD tile.
+    pub simd_committed_lanes: u64,
 }

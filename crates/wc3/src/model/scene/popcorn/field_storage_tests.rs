@@ -151,3 +151,23 @@ fn complete_read_write_trajectory_matches_original_separate_plane_contract() {
         }
     }
 }
+
+#[test]
+fn checked_component_borrows_expose_only_the_selected_full_plane() {
+    let mut fields = FieldPlanes::new(FieldLayout::from_widths(&[1, 3, 0]).unwrap(), 3).unwrap();
+    for slot in 0..3 {
+        fields.write(
+            1,
+            slot,
+            [10 + slot as u32, 20 + slot as u32, 30 + slot as u32, 0],
+        );
+    }
+    assert_eq!(fields.component(1, 0), Some([10, 11, 12].as_slice()));
+    assert_eq!(fields.component(1, 2), Some([30, 31, 32].as_slice()));
+    assert_eq!(fields.component(1, 3), None);
+    assert_eq!(fields.component(2, 0), None);
+    assert_eq!(fields.component(3, 0), None);
+    assert_eq!(fields.component(0, usize::MAX), None);
+    let empty = FieldPlanes::new(FieldLayout::from_widths(&[1]).unwrap(), 0).unwrap();
+    assert_eq!(empty.component(0, 0), Some([].as_slice()));
+}
