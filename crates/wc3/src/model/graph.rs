@@ -373,5 +373,6 @@ impl<'a, P: Profile> Model<'a, P> {
 mod builder;
 pub use builder::ModelBuilder;
 mod narrowing;
+mod ownership;
 mod validation;
 mod widening;
