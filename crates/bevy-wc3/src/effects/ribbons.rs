@@ -232,7 +232,10 @@ impl RuntimeRibbons {
                             None
                         };
                     let Some(state) = effect_state(&material) else {
-                        diagnostic(RenderDiagnosticKind::Unsupported, "Trail blend equation is unsupported by the transport and is not drawn");
+                        diagnostic(
+                            RenderDiagnosticKind::Unsupported,
+                            "Trail blend equation is unsupported by the transport and is not drawn",
+                        );
                         continue;
                     };
                     if surface.coordinate != 0 {

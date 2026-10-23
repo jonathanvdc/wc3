@@ -2,12 +2,12 @@
 
 use super::{CombinerUniform, HdUniform, ModelMaterialExtension, ModelMaterialKey, WorldUniform};
 use bevy::ecs::system::{
-    SystemParamItem,
     lifetimeless::{SRes, SResMut},
+    SystemParamItem,
 };
 use bevy::prelude::{App, Handle, Image, Resource, StandardMaterial};
 use bevy::render::render_asset::RenderAssets;
-use bevy::render::render_resource::encase::{UniformBuffer, internal::WriteInto};
+use bevy::render::render_resource::encase::{internal::WriteInto, UniformBuffer};
 use bevy::render::render_resource::{
     AsBindGroup, AsBindGroupError, BindGroupLayout, BindGroupLayoutEntry, BindingType,
     BindlessDescriptor, BindlessSlabResourceLimit, Buffer, BufferBindingType, BufferInitDescriptor,

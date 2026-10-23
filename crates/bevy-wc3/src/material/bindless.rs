@@ -66,11 +66,9 @@ mod tests {
     fn descriptor_uses_one_data_buffer_and_disjoint_extension_indices() {
         let d = BindlessSnapshot::bindless_descriptor().unwrap();
         assert_eq!(d.resources.len(), 63);
-        assert!(
-            d.resources[..50]
-                .iter()
-                .all(|v| *v == BindlessResourceType::None)
-        );
+        assert!(d.resources[..50]
+            .iter()
+            .all(|v| *v == BindlessResourceType::None));
         assert_eq!(d.resources[50], BindlessResourceType::DataBuffer);
         assert!(!d.resources.contains(&BindlessResourceType::Buffer));
         assert_eq!(d.buffers.len(), 1);

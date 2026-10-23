@@ -4,9 +4,9 @@ use bevy::asset::uuid_handle;
 use bevy::ecs::system::SystemState;
 use bevy::pbr::ExtendedMaterial;
 use bevy::prelude::*;
-use bevy::render::RenderStartup;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy::render::render_resource::{BindGroupEntry, BufferId};
+use bevy::render::RenderStartup;
 use bevy::winit::WinitPlugin;
 use std::thread::yield_now;
 use std::time::{Duration, Instant};
@@ -170,13 +170,11 @@ fn material_uniform_resources_share_evict_reset_and_retry_without_changing_image
         prepare(world, &material),
         Err(AsBindGroupError::RetryNextUpdate)
     ));
-    assert!(
-        world
-            .resource::<MaterialUniformBuffers>()
-            .combiner
-            .entries
-            .is_empty()
-    );
+    assert!(world
+        .resource::<MaterialUniformBuffers>()
+        .combiner
+        .entries
+        .is_empty());
     let handle = material.secondary.clone().unwrap();
     let image = world.resource::<FallbackImage>().d2.clone();
     world
@@ -223,32 +221,25 @@ fn bindless_snapshot_emits_plain_data_without_uniform_buffer_arrays() {
         .unprepared_bind_group(&layout, &device, &mut params.get_mut(world).unwrap(), false)
         .unwrap();
     assert_eq!(group.bindings.len(), 13);
-    assert!(
-        group.bindings.iter().any(
-            |(slot, resource)| *slot == 50 && matches!(resource, OwnedBindingResource::Data(_))
-        )
-    );
-    assert!(
-        !group
-            .bindings
-            .iter()
-            .any(|(_, resource)| matches!(resource, OwnedBindingResource::Buffer(_)))
-    );
+    assert!(group
+        .bindings
+        .iter()
+        .any(|(slot, resource)| *slot == 50 && matches!(resource, OwnedBindingResource::Data(_))));
+    assert!(!group
+        .bindings
+        .iter()
+        .any(|(_, resource)| matches!(resource, OwnedBindingResource::Buffer(_))));
     let cached_entries = ModelMaterialExtension::bind_group_layout_entries(&device, true);
     assert_eq!(
         cached_entries
             .iter()
             .map(|entry| entry.binding)
             .collect::<Vec<_>>(),
-        [
-            100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 114, 115
-        ]
+        [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 114, 115]
     );
-    assert!(
-        entries
-            .iter()
-            .any(|entry| entry.binding == 116 && entry.count.is_none())
-    );
+    assert!(entries
+        .iter()
+        .any(|entry| entry.binding == 116 && entry.count.is_none()));
     let data_before = group.bindings.iter().find(|(slot, _)| *slot == 50).unwrap();
     let OwnedBindingResource::Data(before) = &data_before.1 else {
         panic!("plain data")
