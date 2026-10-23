@@ -148,30 +148,32 @@ fn order_revisions_detect_motion_population_and_uniform_changes_without_scanning
     let replaced = Arc::new(vec![0u32, 1]);
     let uniform: Arc<[u8]> = Arc::from([0u8; 16]);
     let changed_uniform: Arc<[u8]> = Arc::from([1u8; 16]);
+    let center = CenterDependency::UniformSnapshot(uniform);
+    let changed_center = CenterDependency::UniformSnapshot(changed_uniform);
     let revision = OrderRevision {
         records: &source,
         indices: &indices,
-        uniform: &uniform,
+        center: &center,
     };
     assert!(revision.same(&OrderRevision {
         records: &same,
         indices: &indices,
-        uniform: &uniform
+        center: &center
     }));
     assert!(!revision.same(&OrderRevision {
         records: &different,
         indices: &indices,
-        uniform: &uniform
+        center: &center
     }));
     assert!(!revision.same(&OrderRevision {
         records: &source,
         indices: &replaced,
-        uniform: &uniform
+        center: &center
     }));
     assert!(!revision.same(&OrderRevision {
         records: &source,
         indices: &indices,
-        uniform: &changed_uniform
+        center: &changed_center
     }));
 }
 
@@ -186,4 +188,58 @@ fn reset_ring_lineages_cannot_reuse_a_repeated_cursor_as_the_same_source() {
     };
     assert!(source(&first).same(&source(&first.clone())));
     assert!(!source(&first).same(&source(&second)));
+}
+
+#[test]
+fn analytic_center_key_still_requires_live_source_identity_and_rejects_uniform_key_switches() {
+    let records: RecordRing<u32> = vec![1, 2].into();
+    let source = RecordSource::Ring {
+        cursor: records.cursor(),
+        lineage: records.lineage().clone(),
+    };
+    let indices = Arc::new(vec![0u32, 1]);
+    let center = CenterDependency::AnalyticParticle {
+        clock: None,
+        frame: None,
+    };
+    let revision = OrderRevision {
+        records: &source,
+        indices: &indices,
+        center: &center,
+    };
+    let changed_indices = Arc::new(vec![0u32]);
+    assert!(!revision.same(&OrderRevision {
+        records: &source,
+        indices: &changed_indices,
+        center: &center
+    }));
+    let reset: RecordRing<u32> = vec![1, 2].into();
+    assert_eq!(reset.cursor(), records.cursor());
+    let reset_source = RecordSource::Ring {
+        cursor: reset.cursor(),
+        lineage: reset.lineage().clone(),
+    };
+    assert!(!revision.same(&OrderRevision {
+        records: &reset_source,
+        indices: &indices,
+        center: &center
+    }));
+    let mut changed = records.clone();
+    changed.pop_front();
+    changed.push(3, 16);
+    let changed_source = RecordSource::Ring {
+        cursor: changed.cursor(),
+        lineage: changed.lineage().clone(),
+    };
+    assert!(!revision.same(&OrderRevision {
+        records: &changed_source,
+        indices: &indices,
+        center: &center
+    }));
+    let generic = CenterDependency::UniformSnapshot(Arc::from([0u8; 16]));
+    assert!(!revision.same(&OrderRevision {
+        records: &source,
+        indices: &indices,
+        center: &generic
+    }));
 }

@@ -39,7 +39,7 @@ use std::marker::PhantomData;
 use std::mem::take;
 use std::num::NonZeroU64;
 use std::sync::Arc;
-use view_orders::ViewOrders;
+pub(crate) use view_orders::ViewOrders;
 pub(crate) use view_orders::{SortPolicy, SortScratch};
 
 use crate::effects::records::{upload_records, RecordRing, RingCursor};
@@ -205,22 +205,52 @@ pub(crate) struct EffectBuffer<I: Send + Sync + 'static> {
     draw: DrawState<I>,
     uniform: Buffer,
     uniform_bytes: Arc<[u8]>,
+    center: CenterDependency,
     binding: EffectBinding,
     pub(crate) order: DrawOrderBuffer,
     pub(crate) texture: BindGroup,
     pub(crate) sorted: ViewOrders<RetainedViewEntity, DrawOrderBuffer>,
 }
 
+/// The exact inputs used by an effect family's current CPU sorting center.
+/// Other families retain their conservative full-uniform snapshot dependency.
+#[derive(Clone)]
+pub(crate) enum CenterDependency {
+    UniformSnapshot(Arc<[u8]>),
+    AnalyticParticle {
+        clock: Option<[u32; 2]>,
+        frame: Option<[[u32; 4]; 4]>,
+    },
+}
+impl CenterDependency {
+    pub(crate) fn same(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::UniformSnapshot(a), Self::UniformSnapshot(b)) => Arc::ptr_eq(a, b),
+            (
+                Self::AnalyticParticle {
+                    clock: a,
+                    frame: af,
+                },
+                Self::AnalyticParticle {
+                    clock: b,
+                    frame: bf,
+                },
+            ) => a == b && af == bf,
+            _ => false,
+        }
+    }
+}
+
 struct OrderRevision<'a, I> {
     records: &'a RecordSource,
     indices: &'a Arc<Vec<I>>,
-    uniform: &'a Arc<[u8]>,
+    center: &'a CenterDependency,
 }
 impl<I> OrderRevision<'_, I> {
     fn same(&self, other: &Self) -> bool {
         self.records.same(other.records)
             && Arc::ptr_eq(self.indices, other.indices)
-            && Arc::ptr_eq(self.uniform, other.uniform)
+            && self.center.same(other.center)
     }
 }
 
@@ -265,6 +295,45 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
         previous: Option<&mut Self>,
         resources: PassResources<'_>,
         extra_images: Option<[&GpuImage; 2]>,
+    ) -> Self {
+        Self::prepare_center_layers(
+            records,
+            indices,
+            uniform_data,
+            previous,
+            resources,
+            extra_images,
+            None,
+        )
+    }
+
+    pub(crate) fn prepare_center<U: Pod>(
+        records: ResidentRecordBuffer,
+        indices: &Arc<Vec<I>>,
+        uniform_data: &U,
+        previous: Option<&mut Self>,
+        resources: PassResources<'_>,
+        center: CenterDependency,
+    ) -> Self {
+        Self::prepare_center_layers(
+            records,
+            indices,
+            uniform_data,
+            previous,
+            resources,
+            None,
+            Some(center),
+        )
+    }
+
+    fn prepare_center_layers<U: Pod>(
+        records: ResidentRecordBuffer,
+        indices: &Arc<Vec<I>>,
+        uniform_data: &U,
+        previous: Option<&mut Self>,
+        resources: PassResources<'_>,
+        extra_images: Option<[&GpuImage; 2]>,
+        center: Option<CenterDependency>,
     ) -> Self {
         let PassResources {
             device,
@@ -338,16 +407,18 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
                 )),
             )
         };
+        let center =
+            center.unwrap_or_else(|| CenterDependency::UniformSnapshot(uniform_bytes.clone()));
         let revision = OrderRevision {
             records: &records.source,
             indices,
-            uniform: &uniform_bytes,
+            center: &center,
         };
         let changed = previous.as_deref().is_none_or(|p| {
             !revision.same(&OrderRevision {
                 records: &p.records.source,
                 indices: &p.draw.source,
-                uniform: &p.uniform_bytes,
+                center: &p.center,
             })
         });
         let mut sorted = previous.map(|p| take(&mut p.sorted)).unwrap_or_default();
@@ -359,6 +430,7 @@ impl<I: Pod + Send + Sync> EffectBuffer<I> {
             draw: DrawState::new(indices),
             uniform,
             uniform_bytes,
+            center,
             binding,
             order,
             texture,

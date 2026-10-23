@@ -54,7 +54,12 @@ Staged particles support view-facing heads, velocity tails, fixed-plane heads,
 normalized lifetime size/color/alpha stages, and atlas frames. Shaded sprites
 use Bevy lighting; unlit sprites retain texture/color directly. Authored blend
 and depth states remain separate from lighting. Per-view particle ordering
-changes draw indices rather than birth records.
+changes draw indices rather than birth records. MDLX staged emitters also retain
+per-view ordering while their accepted particles have stationary trajectory
+centers and the view is unchanged. Lifetime appearance still updates normally.
+Moving particles and attached-emitter transforms invalidate that ordering when
+their sorting centers change; births, retirement and reset retain independent
+source invalidation.
 
 MDLX `ParticleScaling` values are head half extents and tail half widths; tail
 length still follows velocity and the authored tail time. Staged RGB interpolates

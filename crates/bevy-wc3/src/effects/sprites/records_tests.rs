@@ -101,3 +101,115 @@ fn fog_and_lighting_are_independent_of_motion_and_each_other() {
     assert_eq!(fogged.clock_tail, unfogged.clock_tail);
     assert_eq!(fogged.world_from_local, unfogged.world_from_local);
 }
+
+#[test]
+fn stationary_certificate_is_sufficient_for_bit_identical_centers_in_its_clock_domain() {
+    let mut record = ParticleInstance::new(
+        Vec3::new(-0.0, 0.0, -7.),
+        Vec3::new(-0.0, 0.0, -0.0),
+        0.,
+        0.,
+        10.,
+        Vec3::ONE,
+        false,
+    )
+    .with_acceleration(Vec3::new(-0.0, -0.0, 0.0), 0.);
+    assert!(record.stationary());
+    for birth in [0., 0.125, -0.125, 1e12, -1e12, 2f64.powi(60)] {
+        let [high, low] = split_time(birth);
+        record.position_birth[3] = high;
+        record.lifetime_tail_birth[2] = low;
+        assert!(record.stationary());
+        let initial = record
+            .center(&ParticleEmitterUniform::from_staged(
+                &emitter(),
+                Mat4::IDENTITY,
+                birth,
+            ))
+            .to_array()
+            .map(f32::to_bits);
+        for now in [
+            -2f64.powi(60),
+            -1e12,
+            -1.,
+            0.,
+            0.125,
+            1.,
+            1e12,
+            2f64.powi(60),
+        ] {
+            let uniform = ParticleEmitterUniform::from_staged(&emitter(), Mat4::IDENTITY, now);
+            assert!(bounded_clock([
+                uniform.clock_tail[0],
+                uniform.clock_tail[1]
+            ]));
+            assert_eq!(
+                record.center(&uniform).to_array().map(f32::to_bits),
+                initial
+            );
+        }
+    }
+    record.velocity_gravity[0] = f32::MIN_POSITIVE;
+    assert!(!record.stationary());
+    record.velocity_gravity[0] = 0.;
+    record.acceleration_drag[0] = f32::NAN;
+    assert!(!record.stationary());
+    record.acceleration_drag[0] = 0.;
+    record.acceleration_drag[3] = 0.000001; // Even zero-drag branch damped inputs remain conservative.
+    assert!(!record.stationary());
+    record.acceleration_drag[3] = 0.;
+    record.position_birth[3] = f32::INFINITY;
+    assert!(!record.stationary());
+}
+
+#[test]
+fn center_dependencies_exclude_appearance_but_keep_actual_frame_and_unsafe_clock_inputs() {
+    let mut parameters = emitter();
+    let a = ParticleEmitterUniform::from_staged(&parameters, Mat4::IDENTITY, 1.);
+    parameters.colors = [[0.25; 4]; 3];
+    parameters.scales = [3., 4., 5.];
+    parameters.tail_length = 100.;
+    parameters.xy_quad = true;
+    parameters.atlas = [4, 8];
+    parameters.fog_enabled = false;
+    parameters.unlit = true;
+    let b = ParticleEmitterUniform::from_staged(
+        &parameters,
+        Mat4::from_translation(Vec3::splat(40.)),
+        2.,
+    );
+    assert!(a.center_dependency(true).same(&b.center_dependency(true)));
+    assert!(!a.center_dependency(false).same(&b.center_dependency(false)));
+    parameters.model_space = true;
+    let attached = ParticleEmitterUniform::from_staged(&parameters, Mat4::IDENTITY, 1.);
+    assert!(!attached
+        .center_dependency(true)
+        .same(&a.center_dependency(true)));
+    for matrix in [
+        Mat4::from_translation(Vec3::X),
+        Mat4::from_scale(Vec3::new(-2., 3., 4.)),
+        Mat4::from_rotation_y(0.5),
+    ] {
+        let moved = ParticleEmitterUniform::from_staged(&parameters, matrix, 2.);
+        assert!(!attached
+            .center_dependency(true)
+            .same(&moved.center_dependency(true)));
+    }
+    for time in [f64::INFINITY, 1e30, 2e30] {
+        let extreme = ParticleEmitterUniform::from_staged(&parameters, Mat4::IDENTITY, time);
+        assert!(!attached
+            .center_dependency(true)
+            .same(&extreme.center_dependency(true)));
+    }
+    let boundary = 2f64.powi(60);
+    let at_boundary = ParticleEmitterUniform::from_staged(&emitter(), Mat4::IDENTITY, boundary);
+    let outside = ParticleEmitterUniform::from_staged(&emitter(), Mat4::IDENTITY, boundary * 2.);
+    assert!(a
+        .center_dependency(true)
+        .same(&at_boundary.center_dependency(true)));
+    assert!(!a
+        .center_dependency(true)
+        .same(&outside.center_dependency(true)));
+    assert!(!bounded_clock([-0.0, 0.]));
+    assert!(!bounded_clock([0., f32::NAN]));
+}

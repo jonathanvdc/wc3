@@ -98,10 +98,12 @@ pub(crate) struct RuntimeAtlasParticles {
 struct Expiration {
     time: f64,
     lifetime: f32,
+    stationary: bool,
 }
 struct State {
     entity: Entity,
     live: LiveRecords<ParticleInstance, Expiration>,
+    dynamic_records: usize,
     indices: Arc<Vec<u32>>,
     phase: EmissionPhase,
     rng: EmitterRng,
@@ -117,6 +119,40 @@ struct State {
     dropped: u64,
     skipped_seconds: f64,
     seek_pending: bool,
+}
+impl State {
+    fn reset_records(&mut self) {
+        self.live = Default::default();
+        self.indices = Arc::default();
+        self.dynamic_records = 0;
+    }
+    fn retire(&mut self, time: f64) {
+        let dynamic = &mut self.dynamic_records;
+        self.live.retire(|birth| {
+            let expired = time - birth.time >= f64::from(birth.lifetime);
+            if expired && !birth.stationary {
+                *dynamic -= 1;
+            }
+            expired
+        });
+    }
+    fn push(&mut self, record: ParticleInstance, time: f64, lifetime: f32) {
+        if self.live.len() >= CAPACITY {
+            self.dropped = self.dropped.saturating_add(1);
+            return;
+        }
+        let stationary = record.stationary();
+        self.live.push(
+            record,
+            Expiration {
+                time,
+                lifetime,
+                stationary,
+            },
+            CAPACITY,
+        );
+        self.dynamic_records += usize::from(!stationary);
+    }
 }
 #[derive(Default)]
 pub(crate) struct AtlasParticleInstances {
@@ -311,6 +347,7 @@ impl RuntimeAtlasParticles {
                                 records: Default::default(),
                                 live_indices: Default::default(),
                                 uniform: Default::default(),
+                                stationary: true,
                                 texture: emitter.texture.clone(),
                                 filter: emitter.blend,
                                 priority_plane: emitter.priority,
@@ -332,6 +369,7 @@ impl RuntimeAtlasParticles {
                     State {
                         entity,
                         live: Default::default(),
+                        dynamic_records: 0,
                         indices: Arc::default(),
                         phase: Default::default(),
                         rng: EmitterRng::new(emitter.anchor as u32),
@@ -367,8 +405,7 @@ impl RuntimeAtlasParticles {
         for (emitter, state) in self.emitters.iter().zip(&mut instances.states) {
             let node = frame.basis_world * frame.feature_matrix(emitter.anchor);
             if reset || instances.previous_time.is_none() {
-                state.live = Default::default();
-                state.indices = Arc::default();
+                state.reset_records();
                 state.phase.reset();
                 state.rng = EmitterRng::new(emitter.anchor as u32);
                 state.previous_node = node;
@@ -378,9 +415,7 @@ impl RuntimeAtlasParticles {
             }
             state.seek_pending |= frame.change == EffectChange::Seek;
             state.birth_start = previous;
-            state
-                .live
-                .retire(|birth| frame.time - birth.time >= f64::from(birth.lifetime));
+            state.retire(frame.time);
             let enabled = frame.sample.animated(&emitter.activation) > 0.
                 && frame
                     .node_visible
@@ -463,6 +498,7 @@ impl RuntimeAtlasParticles {
             if let Ok(mut data) = render.get_mut(state.entity) {
                 data.records = state.live.records.clone();
                 data.live_indices = state.indices.clone();
+                data.stationary = state.dynamic_records == 0;
                 data.uniform =
                     ParticleEmitterUniform::from_staged(&emitter.parameters, node, frame.time);
             }
@@ -580,21 +616,10 @@ impl RuntimeAtlasParticles {
         )
         .with_acceleration(acceleration, 0.)
         .with_facing(facing);
-        state
-            .live
-            .retire(|birth| time - birth.time >= f64::from(birth.lifetime));
-        let mut push = |record| {
-            if state.live.len() < CAPACITY {
-                state
-                    .live
-                    .push(record, Expiration { time, lifetime }, CAPACITY);
-            } else {
-                state.dropped = state.dropped.saturating_add(1);
-            }
-        };
-        push(record);
+        state.retire(time);
+        state.push(record, time, lifetime);
         if matches!(emitter.frames, Frames::Both) {
-            push(record.as_tail());
+            state.push(record.as_tail(), time, lifetime);
         }
     }
     #[allow(clippy::too_many_arguments)]
@@ -979,5 +1004,40 @@ mod tests {
         assert_eq!(state.live.len(), 5);
         advance(&runtime, &program, &mut state, 10.6, 0.25, true);
         assert_eq!(state.live.len(), 8);
+    }
+
+    #[test]
+    fn accepted_physical_records_own_motion_certificate_through_partial_capacity_retirement_and_reset(
+    ) {
+        let (_, _, mut state) = fixture(Vec::new());
+        let stationary =
+            ParticleInstance::new(Vec3::ZERO, Vec3::ZERO, 0., 0., 1., Vec3::ONE, false);
+        let moving = ParticleInstance::new(Vec3::ZERO, Vec3::X, 0., 0., 1., Vec3::ONE, false);
+        for _ in 0..CAPACITY - 1 {
+            state.push(stationary, 0., 1.);
+        }
+        state.push(moving, 0., 1.);
+        state.push(moving.as_tail(), 0., 1.); // Both only admitted its head.
+        assert_eq!(state.live.len(), CAPACITY);
+        assert_eq!(state.dynamic_records, 1);
+        assert_eq!(state.dropped, 1);
+        state.retire(0.5);
+        assert_eq!(state.dynamic_records, 1);
+        state.retire(1.);
+        assert_eq!(state.live.len(), 0);
+        assert_eq!(state.dynamic_records, 0);
+        state.push(moving, 1., 0.5);
+        state.push(moving.as_tail(), 1., 0.5);
+        state.push(stationary, 1., 5.);
+        assert_eq!(state.dynamic_records, 2);
+        state.retire(1.5); // Both moving records retire; stationary suffix survives.
+        assert_eq!(state.dynamic_records, 0);
+        assert_eq!(state.live.len(), 1);
+        state.push(moving, 1.5, 2.);
+        assert_eq!(state.dynamic_records, 1);
+        state.reset_records();
+        assert_eq!(state.dynamic_records, 0);
+        assert_eq!(state.live.len(), 0);
+        assert!(state.indices.is_empty());
     }
 }

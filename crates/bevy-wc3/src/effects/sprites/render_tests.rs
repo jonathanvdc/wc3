@@ -25,9 +25,11 @@ fn emitter() -> StagedSpriteParameters {
 }
 
 fn instances(records: Vec<ParticleInstance>, uniform: ParticleEmitterUniform) -> ParticleInstances {
+    let stationary = records.iter().all(ParticleInstance::stationary);
     ParticleInstances {
         live_indices: Arc::new((0..records.len() as u32).collect()),
         records: Arc::new(records.into()),
+        stationary,
         uniform,
         texture: None,
         filter: EffectBlend::Alpha,
@@ -141,6 +143,144 @@ fn shade_effect(color: vec4<f32>, position: vec3<f32>, normal: vec3<f32>,
                 panic!("expected struct")
             };
             assert_eq!(span as usize, size);
+        }
+    }
+}
+
+// An independent stable-sort baseline, without SortScratch or the order cache.
+fn baseline_order(data: &ParticleInstances, view: &Affine3A) -> Vec<u32> {
+    let mut entries: Vec<_> = data
+        .live_indices
+        .iter()
+        .copied()
+        .map(|slot| {
+            let center = Vec3A::from(data.records[slot as usize].center(&data.uniform));
+            (slot, (center - view.translation).dot(-view.matrix3.z_axis))
+        })
+        .collect();
+    entries.sort_by(|a, b| b.1.total_cmp(&a.1));
+    entries.into_iter().map(|(slot, _)| slot).collect()
+}
+
+#[test]
+fn certified_stationary_orders_match_independent_baseline_across_advancing_appearance_and_views() {
+    use crate::effects::render::{CenterDependency, ViewOrders};
+    let records: Vec<_> = [(-4., false), (-4., true), (2., false), (0., false)]
+        .into_iter()
+        .map(|(z, tail)| {
+            ParticleInstance::new(
+                Vec3::new(-0., 0., z),
+                Vec3::new(-0., 0., 0.),
+                0.,
+                0.,
+                100.,
+                Vec3::ONE,
+                tail,
+            )
+        })
+        .collect();
+    let mut data = instances(records, ParticleEmitterUniform::default());
+    let mut cache = ViewOrders::<u32, Vec<u32>>::default();
+    let mut previous: Option<CenterDependency> = None;
+    let mut sorts = 0;
+    for step in 0..120 {
+        let mut parameters = emitter();
+        parameters.colors = [[step as f32 / 120.; 4]; 3];
+        parameters.scales = [1. + step as f32; 3];
+        parameters.tail_length = step as f32;
+        data.uniform = ParticleEmitterUniform::from_staged(
+            &parameters,
+            Mat4::from_translation(Vec3::splat(step as f32)),
+            f64::from(step) / 60.,
+        );
+        let center = data.uniform.center_dependency(data.stationary);
+        if previous.as_ref().is_none_or(|old| !old.same(&center)) {
+            cache.invalidate();
+        }
+        previous = Some(center);
+        let views = [
+            (1, Affine3A::IDENTITY),
+            (
+                2,
+                Affine3A::from_quat(Quat::from_rotation_y(if step < 60 { 0.7 } else { 1.2 })),
+            ),
+        ];
+        for (id, view) in views {
+            cache.prepare(id, view, |_| {
+                sorts += 1;
+                sorted_indices(&data, &view)
+            });
+            assert_eq!(
+                cache.get(&id).unwrap(),
+                &baseline_order(&data, &view),
+                "frame {step}, view {id}"
+            );
+        }
+    }
+    assert_eq!(sorts, 3); // Two initial views and only the changed camera.
+}
+
+#[test]
+fn moving_and_attached_centers_match_independent_multiview_baseline() {
+    use crate::effects::render::{CenterDependency, ViewOrders};
+    for model_space in [false, true] {
+        for moving in [false, true] {
+            let records = [-2., 1., 1., 4.]
+                .into_iter()
+                .enumerate()
+                .map(|(i, z)| {
+                    ParticleInstance::new(
+                        Vec3::Z * z,
+                        if moving {
+                            Vec3::Z * (i as f32 - 2.)
+                        } else {
+                            Vec3::ZERO
+                        },
+                        0.,
+                        0.,
+                        100.,
+                        Vec3::ONE,
+                        i % 2 == 0,
+                    )
+                })
+                .collect();
+            let mut data = instances(records, ParticleEmitterUniform::default());
+            let mut cache = ViewOrders::<u32, Vec<u32>>::default();
+            let mut previous: Option<CenterDependency> = None;
+            let mut sorts = 0;
+            for step in 0..30 {
+                let mut parameters = emitter();
+                parameters.model_space = model_space;
+                let matrix = Mat4::from_scale_rotation_translation(
+                    Vec3::new(-2., 3., 0.5),
+                    Quat::from_rotation_y(step as f32 * 0.13),
+                    Vec3::new(1., 2., step as f32 * 0.03),
+                );
+                data.uniform =
+                    ParticleEmitterUniform::from_staged(&parameters, matrix, f64::from(step) / 10.);
+                let center = data.uniform.center_dependency(data.stationary);
+                if previous.as_ref().is_none_or(|old| !old.same(&center)) {
+                    cache.invalidate();
+                }
+                previous = Some(center);
+                for (id, view) in [
+                    (1, Affine3A::IDENTITY),
+                    (
+                        2,
+                        Affine3A::from_rotation_translation(
+                            Quat::from_rotation_y(1.2),
+                            Vec3::new(3., 1., 4.),
+                        ),
+                    ),
+                ] {
+                    cache.prepare(id, view, |_| {
+                        sorts += 1;
+                        sorted_indices(&data, &view)
+                    });
+                    assert_eq!(cache.get(&id).unwrap(), &baseline_order(&data, &view));
+                }
+            }
+            assert_eq!(sorts, if model_space || moving { 60 } else { 2 });
         }
     }
 }

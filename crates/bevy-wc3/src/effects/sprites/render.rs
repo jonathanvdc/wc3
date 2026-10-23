@@ -271,7 +271,7 @@ fn prepare_particles(
             .as_ref()
             .and_then(|handle| images.get(handle))
             .unwrap_or(&fallback.d2);
-        let mut buffer = ParticleBuffer::prepare(
+        let mut buffer = ParticleBuffer::prepare_center(
             records,
             &data.live_indices,
             &data.uniform,
@@ -282,6 +282,7 @@ fn prepare_particles(
                 layout: &pipeline.texture_bind_group_layout,
                 image,
             },
+            data.uniform.center_dependency(data.stationary),
         );
         buffer.prepare_orders(
             views.iter().map(|(view, visible)| {

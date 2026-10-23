@@ -1,6 +1,7 @@
 //! Birth records, shader parameters, and immutable extraction snapshots.
 use crate::effects::blend::EffectBlend;
 use crate::effects::records::RecordRing;
+use crate::effects::render::CenterDependency;
 use crate::effects::simulation::split_time;
 use bevy::ecs::query::QueryItem;
 use bevy::prelude::*;
@@ -65,6 +66,16 @@ impl ParticleInstance {
         self
     }
 
+    /// Sufficient certificate for the existing zero-drag quadratic center.
+    /// Signed zero coefficients are allowed, but the clock domain guarantees
+    /// that age is +0 or positive and its quadratic intermediate stays finite.
+    pub(crate) fn stationary(&self) -> bool {
+        self.position_birth[..3].iter().all(|v| v.is_finite())
+            && self.velocity_gravity[..3].iter().all(|v| *v == 0.)
+            && self.acceleration_drag.iter().all(|v| *v == 0.)
+            && bounded_clock([self.position_birth[3], self.lifetime_tail_birth[2]])
+    }
+
     pub(crate) fn center(&self, uniform: &ParticleEmitterUniform) -> Vec3 {
         let age = ((uniform.clock_tail[0] - self.position_birth[3])
             + (uniform.clock_tail[1] - self.lifetime_tail_birth[2]))
@@ -85,6 +96,15 @@ impl ParticleInstance {
             center
         }
     }
+}
+
+// Each difference is at most 2^61, age at most 2^62, and 0.5*age*age
+// at most 2^123. Exclude -0 clocks so subtraction/max cannot yield -0 age.
+fn bounded_clock(clock: [f32; 2]) -> bool {
+    const BOUND: f32 = 1_152_921_504_606_846_976.; // 2^60
+    clock
+        .into_iter()
+        .all(|v| v.is_finite() && v.abs() <= BOUND && v.to_bits() != (-0.0f32).to_bits())
 }
 
 /// All fields occupy whole 16-byte lanes, matching the WGSL uniform layout.
@@ -119,6 +139,14 @@ pub(crate) struct StagedSpriteParameters {
     pub plane_axes: [Vec3; 2],
 }
 impl ParticleEmitterUniform {
+    pub(crate) fn center_dependency(&self, stationary: bool) -> CenterDependency {
+        let clock = [self.clock_tail[0], self.clock_tail[1]];
+        CenterDependency::AnalyticParticle {
+            clock: (!(stationary && bounded_clock(clock))).then(|| clock.map(f32::to_bits)),
+            frame: (self.atlas_flags[2] != 0)
+                .then(|| self.world_from_local.map(|column| column.map(f32::to_bits))),
+        }
+    }
     pub(crate) fn from_staged(
         parameters: &StagedSpriteParameters,
         transform: Mat4,
@@ -158,6 +186,7 @@ pub(crate) struct ParticleInstances {
     pub(crate) records: Arc<RecordRing<ParticleInstance>>,
     pub(crate) live_indices: Arc<Vec<u32>>,
     pub(crate) uniform: ParticleEmitterUniform,
+    pub(crate) stationary: bool,
     pub(crate) texture: Option<Handle<Image>>,
     pub(crate) filter: EffectBlend,
     pub(crate) priority_plane: u32,
