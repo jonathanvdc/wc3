@@ -26,6 +26,15 @@ fn apply_hd(in: VertexOutput, is_front: bool, input: PbrInput) -> PbrInput {
 #endif
 #endif
         if hd.maps.x == 1u {
+        // The authored AO path is independent of the animated diffuse UV.
+        // Standard-material occlusion is disabled for this path, but the input
+        // can already contain SSAO; preserve Bevy's minimum combination rule.
+#ifdef VERTEX_UVS_B
+        if hd.fresnel.w != 0.0 && hd.maps.y != 0u {
+            let ao = sample_orm_bias(in.uv_b, in.instance_index, view.mip_bias).r;
+            result.diffuse_occlusion = min(result.diffuse_occlusion, vec3(ao));
+        }
+#endif
         var team = vec3(1.0);
         if hd.maps.z != 0u {
             team = sample_team_bias(uv, in.instance_index, view.mip_bias).rgb;

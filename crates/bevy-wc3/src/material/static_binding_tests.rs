@@ -175,6 +175,7 @@ fn pruning_visits_every_uv_transform_weight_and_hd_control() {
         texture: Some(texture),
         hd: Some(HdAnimation {
             programme: HdProgramme::DefaultUnit,
+            authored_ambient_occlusion: false,
             slots: std::array::from_fn(|_| Some(texture)),
             gain: Some(scalar()),
             fresnel: Some(mdlx::Fresnel {

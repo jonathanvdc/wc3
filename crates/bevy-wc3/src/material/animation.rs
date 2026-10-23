@@ -40,7 +40,7 @@ impl HdAnimation {
         changed |= replace_handle(&mut material.base.normal_map_texture, handles[1]);
         changed |= replace_handle(
             &mut material.base.occlusion_texture,
-            if self.programme == HdProgramme::Crystal {
+            if self.programme == HdProgramme::Crystal || self.authored_ambient_occlusion {
                 None
             } else {
                 handles[2]
@@ -99,7 +99,11 @@ impl HdAnimation {
                 } else {
                     0.
                 },
-                0.,
+                if self.authored_ambient_occlusion {
+                    1.
+                } else {
+                    0.
+                },
             ),
         );
         changed

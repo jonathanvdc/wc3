@@ -72,13 +72,19 @@ fn basic_world_shaders_keep_black_baked_light_separate_from_surface_albedo() {
 
 #[test]
 fn default_unit_binds_roles_controls_and_preserves_static_material_sharing() {
-    hd_role_case(HdProgramme::DefaultUnit);
+    hd_role_case(HdProgramme::DefaultUnit, false);
 }
 #[test]
 fn crystal_keeps_its_programme_and_mask_role_through_appearance_updates() {
-    hd_role_case(HdProgramme::Crystal);
+    hd_role_case(HdProgramme::Crystal, false);
 }
-fn hd_role_case(programme: HdProgramme) {
+#[test]
+fn authored_hd_occlusion_keeps_optional_raw_uv1_and_survives_appearance_updates() {
+    hd_role_case(HdProgramme::DefaultUnit, true);
+    hd_role_case(HdProgramme::Crystal, true);
+}
+
+fn hd_role_case(programme: HdProgramme, authored_ao: bool) {
     let mut slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let ids = from_fn::<_, 6, _>(|slot| {
@@ -99,6 +105,7 @@ fn hd_role_case(programme: HdProgramme) {
     let mut hd = mdlx::ReforgedInputs::construct(&mut slot_values);
     hd.inputs.opacity = slot_values.add(0.8);
     layer.state.blend = BlendOperations::AlphaKey(());
+    layer.state.rasterization.controls.ambient_occlusion = authored_ao;
     hd.inputs.binding.image = slot_values.add(Some(ids[0]));
     hd.textures = ids
         .iter()
@@ -159,7 +166,7 @@ fn hd_role_case(programme: HdProgramme) {
     );
     assert_eq!(
         pass.material.occlusion_texture,
-        if programme == HdProgramme::Crystal {
+        if programme == HdProgramme::Crystal || authored_ao {
             None
         } else {
             pass.material.metallic_roughness_texture.clone()
@@ -192,8 +199,19 @@ fn hd_role_case(programme: HdProgramme) {
             } else {
                 0.
             },
-            0.
+            if programme == HdProgramme::DefaultUnit && authored_ao {
+                1.
+            } else {
+                0.
+            }
         )
+    );
+    let requested_ao = programme == HdProgramme::DefaultUnit && authored_ao;
+    assert_eq!(pass.secondary_coordinate, requested_ao.then_some(1));
+    assert_eq!(pass.coordinates_for_mesh(false), [None, None, None]);
+    assert_eq!(
+        pass.coordinates_for_mesh(true),
+        [requested_ao.then_some(1), None, None]
     );
     assert_eq!(
         ModelMaterialKey::from(&pass.state).crystal,
@@ -236,6 +254,19 @@ fn hd_role_case(programme: HdProgramme) {
     assert_eq!(
         materials.get(&handle).unwrap().extension.hd.maps.x,
         programme as u32
+    );
+    assert_eq!(
+        materials.get(&handle).unwrap().extension.hd.fresnel.w,
+        if requested_ao { 1. } else { 0. }
+    );
+    assert_eq!(
+        materials
+            .get(&handle)
+            .unwrap()
+            .base
+            .occlusion_texture
+            .is_some(),
+        programme == HdProgramme::DefaultUnit && !authored_ao
     );
 }
 
@@ -510,4 +541,14 @@ fn m2_material_program_compiles_steps_in_order_with_independent_controls() {
     );
     assert_eq!(passes[0].material.depth_bias, 3.);
     assert_eq!(passes[1].material.depth_bias, -2.);
+}
+
+#[test]
+fn optional_hd_occlusion_does_not_relax_other_material_coordinate_requests() {
+    let pass = SurfacePass {
+        secondary_coordinate: Some(1),
+        third_coordinate: Some(2),
+        ..Default::default()
+    };
+    assert_eq!(pass.coordinates_for_mesh(false), [Some(1), Some(2), None]);
 }

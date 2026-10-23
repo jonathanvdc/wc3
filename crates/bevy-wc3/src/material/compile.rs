@@ -220,7 +220,7 @@ fn compile_mdlx(
         || options.wrap_v
         || options.unlit
         || options.back_faces_for_shadows
-        || options.ambient_occlusion
+        || (options.ambient_occlusion && hd_inputs.is_none())
     {
         pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Unsupported, "authored layer wrapping, Unlit, back-face shadow, or ambient-occlusion declarations require an additional interpreter"));
     }
@@ -295,8 +295,18 @@ fn compile_mdlx(
         } else {
             HdProgramme::DefaultUnit
         };
+        let authored_ambient_occlusion =
+            programme == HdProgramme::DefaultUnit && options.ambient_occlusion;
+        if authored_ambient_occlusion {
+            if slots[2].is_some() {
+                pass.secondary_coordinate = Some(1);
+            }
+            pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Approximation,
+                "DefaultUnit authored occlusion samples ORM red at raw UV1 when that stream and image are present; Bevy applies it to ambient diffuse and combines SSAO, rather than attenuating all native illumination"));
+        }
         let hd = HdAnimation {
             programme,
+            authored_ambient_occlusion,
             slots,
             fresnel: hd_inputs.fresnel.clone(),
             gain: *emissive_gain,

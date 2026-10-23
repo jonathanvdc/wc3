@@ -343,13 +343,19 @@ pub(crate) fn compile_with_geometry(
             .collect::<Result<Vec<_>, ModelError>>()?;
         for (draw_source, subset_id, material_id, subset, draw_controls) in selections {
             for (pass, surface) in materials[&material_id].iter().enumerate() {
+                let coordinates = surface.coordinates_for_mesh(
+                    source
+                        .texture_coordinates()
+                        .get(1)
+                        .is_some_and(|uv| !uv.is_empty()),
+                );
                 let key = (
                     instance.mesh,
                     subset_id,
                     surface.coordinate,
-                    surface.secondary_coordinate,
-                    surface.third_coordinate,
-                    surface.fourth_coordinate,
+                    coordinates[0],
+                    coordinates[1],
+                    coordinates[2],
                     skin_id,
                     color_adjustment.as_ref().map(|_| instance_id),
                 );
@@ -360,11 +366,7 @@ pub(crate) fn compile_with_geometry(
                         source,
                         &subset,
                         surface.coordinate,
-                        [
-                            surface.secondary_coordinate,
-                            surface.third_coordinate,
-                            surface.fourth_coordinate,
-                        ],
+                        coordinates,
                         |vertex, color| {
                             color_adjustment
                                 .as_ref()

@@ -162,7 +162,7 @@ struct WorldUniform {
 
 #[derive(Clone, Copy, Debug, ShaderType)]
 struct HdUniform {
-    // fresnel.xy: opacity/team; z: Crystal normal-image presence.
+    // fresnel.xy: opacity/team; z: Crystal normal presence; w: authored UV1 AO.
     // maps.x: DefaultUnit1, M2 packed-normal2, Crystal3; y/z/w: role presence.
     fresnel_color: Vec4,
     fresnel: Vec4,
@@ -435,11 +435,28 @@ enum HdProgramme {
 #[derive(Clone)]
 struct HdAnimation {
     programme: HdProgramme,
+    authored_ambient_occlusion: bool,
     slots: [Option<Property<Option<Texture>>>; 6],
     fresnel: Option<mdlx::Fresnel>,
     gain: Option<Property<f32>>,
     images: Arc<TextureImages>,
 }
+impl SurfacePass {
+    /// Only authored HD occlusion is optional when the draw has no second UV
+    /// stream. Other shader inputs keep their ordinary strict coordinate checks.
+    pub(crate) fn coordinates_for_mesh(&self, has_secondary: bool) -> [Option<u32>; 3] {
+        let optional_ao = self
+            .animation
+            .hd
+            .as_ref()
+            .is_some_and(|hd| hd.authored_ambient_occlusion);
+        let secondary = self
+            .secondary_coordinate
+            .filter(|&source| !(optional_ao && source == 1 && !has_secondary));
+        [secondary, self.third_coordinate, self.fourth_coordinate]
+    }
+}
+
 impl Default for SurfacePass {
     fn default() -> Self {
         Self {

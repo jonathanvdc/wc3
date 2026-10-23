@@ -52,6 +52,19 @@ mapped into the authored environment convention. Missing normal/ORM roles retain
 rough nonmetallic base; absent team/emissive/environment maps contribute nothing.
 Ordinary Bevy reflectance remains active on shaded surfaces.
 
+Without the authored `AmbientOcclusion` layer flag, DefaultUnit retains its
+primary-UV ORM-red occlusion through StandardMaterial. This existing PBR
+interpretation remains unchanged. With the flag, DefaultUnit instead samples
+ORM red at raw UV1, independently of the primary texture animation. Both a
+second UV stream and an ORM image must be present; otherwise this authored
+occlusion contributes nothing and does not fall back to UV0. The same image
+and sampler supply roughness, metallic and occlusion without another resource.
+Bevy applies this factor to ambient diffuse and combines it with existing SSAO
+by the minimum rule. Direct/specular lighting and emissive are unaffected;
+attenuation of all native lighting is not reproduced. This is an explicit PBR
+approximation with unverified game fidelity. Crystal ignores this flag and
+continues using ORM red solely for diffuse displacement.
+
 ## Images and animated coordinates
 
 Role-aware `TextureRequest` values request linear normal/ORM images and sRGB color
@@ -66,8 +79,8 @@ a game-content variant; that choice belongs to the resource provider.
 Role texture choices, gain, Fresnel controls, and UV transforms animate through the
 same semantic programme as nodes. Each layer selects its authored coordinate set.
 Equal compiled coordinates share geometry, exact differences retain distinct meshes,
-and authored tangents retain their source basis. Missing requested coordinates
-produce compilation errors.
+and authored tangents retain their source basis. Apart from optional authored
+occlusion, missing requested coordinates produce compilation errors.
 
 The native emissive-gain header admits NaN as an unspecified unity default.
 Semantic import resolves that header to one and reports the representation
@@ -77,10 +90,12 @@ and invalid animation keys remain rejected.
 DefaultUnit Fresnel contributes an authored fifth-power rim with color/team influence, opacity,
 and mesh tint, separate from Bevy's physical surface Fresnel. Common unshaded
 lighting and unfogged controls follow their Bevy equivalents. The independent
-native layer `Unlit`, U/V wrap, `BackFacesForShadows`, and `AmbientOcclusion`
-declarations are retained for native export but have no renderer interpretation
-yet. Compilation reports that these declarations require an additional interpreter;
-their game behavior remains unverified. Surface properties sample the
+native layer `Unlit`, U/V wrap and `BackFacesForShadows`
+declarations remain retained and diagnosed without an active interpreter.
+Back-face-only shadow culling cannot be selected through Bevy's public material
+specialization independently of camera depth-only passes; it remains a pipeline
+integration boundary rather than changing the camera's face selection.
+The remaining declarations' game behavior is unverified. Surface properties sample the
 destination directly during node-pose transitions.
 
 ## Crystal surface composition
