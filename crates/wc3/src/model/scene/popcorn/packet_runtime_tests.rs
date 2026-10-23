@@ -11,7 +11,7 @@ use std::path::Path;
 fn equivalent(a: &EffectInstance, b: &EffectInstance, program: &EffectProgram) {
     assert_eq!(a.attributes, b.attributes);
     assert_eq!(a.seed, b.seed);
-    assert_eq!(a.fields.planes, b.fields.planes);
+    assert_eq!(a.fields, b.fields);
     assert_eq!(a.active, b.active);
     assert_eq!(a.free, b.free);
     assert_eq!(format!("{:?}", a.pending), format!("{:?}", b.pending));

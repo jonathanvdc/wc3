@@ -7,7 +7,6 @@ use super::payload::{Handle as PayloadHandle, Storage as PayloadStorage};
 use super::spatial::Store as SpatialStore;
 use super::{Failure, State, Value, ValueType};
 use glam::Mat4;
-use std::array::from_fn;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::error::Error;
@@ -124,42 +123,123 @@ pub(crate) fn mix(mut x: u64) -> u64 {
     x = (x ^ (x >> 27)).wrapping_mul(0x94d049bb133111eb);
     x ^ (x >> 31)
 }
+/// Programme-wide physical planes shared by layer-local field indices.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct FieldLayout {
+    ordinals: Vec<[usize; 4]>,
+    plane_count: usize,
+}
+impl FieldLayout {
+    pub(super) const ABSENT: usize = usize::MAX;
+
+    /// One authoritative width union for runtime storage and native preparation.
+    pub(super) fn for_graph(graph: &EffectGraph) -> Option<Self> {
+        let count = graph
+            .layers
+            .iter()
+            .map(|layer| layer.fields.len())
+            .max()
+            .unwrap_or(0);
+        let mut widths = vec![0; count];
+        for layer in &graph.layers {
+            for (width, field) in widths.iter_mut().zip(&layer.fields) {
+                *width = (*width).max(field.value_type.map_or(1, ValueType::components));
+            }
+        }
+        Self::from_widths(&widths)
+    }
+    fn from_widths(widths: &[usize]) -> Option<Self> {
+        let mut plane_count = 0usize;
+        let mut ordinals = Vec::with_capacity(widths.len());
+        for &width in widths {
+            if width > 4 {
+                return None;
+            }
+            let mut field = [Self::ABSENT; 4];
+            for ordinal in field.iter_mut().take(width) {
+                *ordinal = plane_count;
+                plane_count = plane_count.checked_add(1)?;
+            }
+            ordinals.push(field);
+        }
+        Some(Self {
+            ordinals,
+            plane_count,
+        })
+    }
+    #[cfg(any(test, feature = "popcorn-jit"))]
+    pub(super) fn component_ordinals(&self) -> &[[usize; 4]] {
+        &self.ordinals
+    }
+    pub(super) fn storage_bytes(&self, capacity: usize) -> Option<usize> {
+        self.plane_count
+            .checked_mul(capacity)?
+            .checked_mul(size_of::<u32>())?
+            .checked_add(self.ordinals.len().checked_mul(size_of::<[usize; 4]>())?)?
+            .checked_add(size_of::<FieldPlanes>())
+    }
+}
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) struct FieldPlanes {
-    planes: Vec<[Vec<u32>; 4]>,
+    layout: FieldLayout,
+    data: Vec<u32>,
+    capacity: usize,
 }
 impl FieldPlanes {
-    fn new(widths: &[usize], count: usize) -> Self {
-        Self {
-            planes: widths
-                .iter()
-                .map(|width| {
-                    from_fn(|component| {
-                        if component < *width {
-                            vec![0; count]
-                        } else {
-                            Vec::new()
-                        }
-                    })
-                })
-                .collect(),
-        }
+    fn new(layout: FieldLayout, capacity: usize) -> Option<Self> {
+        let words = layout.plane_count.checked_mul(capacity)?;
+        // Reject impossible byte sizes before Vec's allocation/capacity arithmetic.
+        words
+            .checked_mul(size_of::<u32>())
+            .filter(|&bytes| bytes <= isize::MAX as usize)?;
+        Some(Self {
+            layout,
+            data: vec![0; words],
+            capacity,
+        })
+    }
+    /// Borrowed invocation ABI only: buffers never resize during pool simulation.
+    /// The caller must not retain this pointer beyond the exclusive invocation.
+    #[cfg(any(test, feature = "popcorn-jit"))]
+    pub(super) fn data_mut_ptr(&mut self) -> *mut u32 {
+        self.data.as_mut_ptr()
+    }
+    #[cfg(any(test, feature = "popcorn-jit"))]
+    pub(super) fn plane_stride(&self) -> usize {
+        self.capacity
+    }
+    #[cfg(any(test, feature = "popcorn-jit"))]
+    pub(super) fn layout(&self) -> &FieldLayout {
+        &self.layout
     }
     pub fn read(&self, field: usize, slot: usize) -> [u32; 4] {
-        from_fn(|component| {
-            self.planes[field][component]
-                .get(slot)
-                .copied()
-                .unwrap_or(0)
+        let ordinals = self.layout.ordinals[field];
+        if slot >= self.capacity {
+            return [0; 4];
+        }
+        ordinals.map(|ordinal| {
+            if ordinal == FieldLayout::ABSENT {
+                0
+            } else {
+                self.data[ordinal * self.capacity + slot]
+            }
         })
     }
     pub fn write(&mut self, field: usize, slot: usize, words: [u32; 4]) {
-        for (plane, word) in self.planes[field].iter_mut().zip(words) {
-            if let Some(value) = plane.get_mut(slot) {
-                *value = word;
+        let ordinals = self.layout.ordinals[field];
+        if slot >= self.capacity {
+            return;
+        }
+        for (ordinal, word) in ordinals.into_iter().zip(words) {
+            if ordinal != FieldLayout::ABSENT {
+                self.data[ordinal * self.capacity + slot] = word;
             }
         }
     }
 }
+#[cfg(test)]
+#[path = "field_storage_tests.rs"]
+mod field_storage_tests;
 struct Particle {
     state: State,
     layer: EffectLayerId,
@@ -292,19 +372,8 @@ impl EffectProgram {
             }
             arguments = arguments.max(program.max_arguments);
         }
-        let max_fields = self
-            .inner
-            .layers
-            .iter()
-            .map(|layer| layer.fields.len())
-            .max()
-            .unwrap_or(0);
-        let mut widths = vec![0usize; max_fields];
-        for layer in &self.inner.layers {
-            for (width, field) in widths.iter_mut().zip(&layer.fields) {
-                *width = (*width).max(field.value_type.map_or(1, ValueType::components));
-            }
-        }
+        let field_layout = FieldLayout::for_graph(&self.inner)
+            .ok_or_else(|| failure("effect field layout exceeds its checked storage domain"))?;
         let payload_width = if self.inner.layers.iter().any(|layer| {
             Some(&layer.init)
                 .into_iter()
@@ -337,11 +406,10 @@ impl EffectProgram {
             .iter()
             .sum::<usize>()
             .checked_mul(16)
-            .and_then(|bytes| {
-                bytes.checked_add(widths.iter().sum::<usize>() * 4 + size_of::<Particle>())
-            });
+            .and_then(|bytes| bytes.checked_add(size_of::<Particle>()));
         let bytes = words
             .and_then(|bytes| bytes.checked_mul(limits.particles))
+            .and_then(|bytes| bytes.checked_add(field_layout.storage_bytes(limits.particles)?))
             .and_then(|bytes| {
                 bytes.checked_add((counts[0] + counts[1]) * 16 + arguments * size_of::<Value>())
             })
@@ -420,7 +488,8 @@ impl EffectProgram {
             particles,
             active: Vec::with_capacity(limits.particles),
             free: (0..limits.particles).rev().collect(),
-            fields: FieldPlanes::new(&widths, limits.particles),
+            fields: FieldPlanes::new(field_layout, limits.particles)
+                .ok_or_else(|| failure("effect field storage exceeds its checked size"))?,
             pending: BinaryHeap::with_capacity(limits.pending_events),
             scratch: Scratch::new(limits, payload_width, !self.inner.spatial.is_empty()),
             payload: PayloadStorage::new(limits.particles, limits.pending_events, payload_width)
