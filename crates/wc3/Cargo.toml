@@ -100,3 +100,7 @@ required-features = ["popcorn-jit"]
 [[example]]
 name = "particle_plan_bench"
 required-features = ["popcorn-jit"]
+
+[[example]]
+name = "particle_delta_bench"
+required-features = ["popcorn-jit"]
