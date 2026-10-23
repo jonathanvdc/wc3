@@ -88,3 +88,7 @@ harness = false
 [[bench]]
 name = "particle_runtime"
 harness = false
+
+[[example]]
+name = "particle_jit_bench"
+required-features = ["popcorn-jit"]

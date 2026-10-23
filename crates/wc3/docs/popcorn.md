@@ -217,6 +217,40 @@ resolves it from the return registers of its bound `sample` calls. All uses acro
 owning layers and programme stages must agree, and values/tangents must fit that width. The borrowed native
 view still reports `None`; unused sparse curves remain unresolved.
 
+## Prepare native execution
+
+Ordinary effect compilation retains the Rust evaluator, including its eligible
+16-particle batches. Enable the optional `wc3/popcorn-jit` feature and call
+`program.with_execution(ExecutionOptions::default())` before instantiation to
+prepare scalar native code. Preparation happens once for that programme handle;
+instances share the executable allocation and keep their own particle storage.
+The crate requires Rust 1.97. The feature supports native execution on Unix and Windows
+with a Cranelift-supported x86-64, AArch64, RISC-V64 or s390x host. Other builds
+retain the Rust evaluator.
+
+`ExecutionOptions` separates backend preference from `EffectLimits` and native
+format interpretation. Choose `ExecutionPreference::Interpreter` to skip native
+preparation. `NumericPolicy::Strict` preserves evaluator arithmetic policies;
+`Graphics` permits reassociation and equivalent analytic trajectories while
+retaining ordered callbacks, lifecycle, budgets and checked failure boundaries.
+A policy grants permission for transformations; it does not require them.
+
+Inspect `execution_reports()` for each layer's initialization and selected
+evolution route, including preparation fallback reasons. An instance captures
+its plan at allocation, so preparing another handle for the same graph does not
+switch existing instances. Programme and attribute identities remain shared.
+`execution_stats()` exposes native invocation attempts separately from semantic
+simulation counters. Reports establish preparation; counters establish dispatch,
+and neither alone establishes a performance improvement.
+The [performance guide](popcorn-performance.md) provides paired comparisons and
+recorded measurements against the packet-enabled Rust evaluator.
+
+Generated scalar arithmetic uses the checked typed instruction representation.
+Operations that need checked host services retain their original ordered call
+boundary. A failure leaves earlier writes visible and does not replay the
+invocation. Native compilation is bounded; unsupported platforms, disabled
+features and preparation failures select Rust execution before simulation.
+
 ## Execution policies
 
 `EffectCompileOptions` makes stage selection, random policy, missing-payload
