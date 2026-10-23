@@ -68,6 +68,21 @@ This CPU-only client does not measure shader execution or renderer uploads; use
 advancing completed-frame captures for those costs. No performance result is
 implied merely by adding a route or passing its preparation checks.
 
+To compare extraction methods, the same client accepts
+`--query-method individual|bulk|projection`, defaulting to individual reads.
+The [query driver](../benches/support/immutable_queries/README.md) compares the
+same fourteen-field request across all four routes and three methods:
+
+```sh
+python3 crates/wc3/benches/support/immutable_queries/compare.py \
+  target/release/examples/particle_immutable_bench /tmp/particle-query-results --execute
+```
+
+It uses five rotating/reversing rounds at two dense layouts and retains raw logs,
+actual dispatch, cold projection costs and zero-allocation checks. Position-only
+projection queries are a separately named workload and never replace full-field
+queries in its rankings.
+
 ## Scalar native measurements, 2026-10-22
 
 The historical synthetic fixture below did not qualify for Rust packets because
@@ -309,3 +324,71 @@ The [default-layout receipt](../benches/results/popcorn-simd-default-layout-2026
 records byte-identical 2,836-byte machine code and executed parity for the same
 diagnostic kernel before and after this refactor. This establishes code identity
 for that kernel, not all programmes or rendered-frame performance.
+
+## Bulk and projected queries, 2026-10-22
+
+The next study compares individual reads, one-pass `sample_fields`, and a
+prepared `ImmutableProjection` within the same frozen binary. Each method returns
+all fourteen public child fields, combining projected virtual outputs with unchanged
+canonical fields. This measures deferred CPU extraction, separately from
+advancement; it does not measure WGSL, renderer uploads or completed frames.
+
+The release artifact used an Apple M4 Pro with 14 logical CPUs, macOS 27.0.1,
+Rust 1.98.1 and Cranelift 0.137.0. This is a different compiler snapshot from the
+historical measurements above. The driver completed 120 guarded processes: five
+rotating/reversing rounds of four routes and three query methods, at 128 children
+in one instance and 1,024 children in eight instances. Child capacity equals the
+population; each pool also reserves one controller slot. Each process uses five
+samples, two warmup ticks and 64 measured ticks per sample at 1/64 second. Its
+separate query clock performs eight fixed-time sweeps of the complete field set.
+
+Every route passed the independent authored oracle, public structure and actual
+dispatch checks. All observed full-field numeric hashes were identical, including
+ImmutableAge, although its declared Graphics comparison still permits bounded
+appearance differences. Every measured advance and full-field query interval
+made zero allocation, reallocation and deallocation calls.
+
+Within ImmutableAge, bulk and prepared queries reduced the cost of repeated
+individual reads. The speedups below are reciprocals of the median of five
+paired query-median ratios. The projected cost is the median of the five process
+query medians; the slowdown column uses paired ratios against the strongest
+observed materialized-field query configuration. All columns concern the same
+fourteen-field request.
+
+| Children | Instances | Bulk vs individual | Projection vs individual | Projected eight-sweep cost | Projection vs materialized query |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 128 | 1 | 4.37× faster | 6.39× faster | 0.205 ms | 2.63× slower |
+| 1024 | 8 | 4.39× faster | 6.38× faster | 13.437 ms | 2.64× slower |
+
+Prepared full-field extraction therefore remains more expensive than reading
+ordinary, already materialized fields. The strongest observed configuration was
+Interpreter with the requested projection method, which uses canonical bulk
+sampling when no immutable recipe exists. That label does not mean an immutable
+projection was prepared for the ordinary route, or establish a difference in VM
+execution speed. Applications should compare their actual extraction workload,
+not infer a total-frame gain from reduced advancement alone.
+
+Advancement remained separate from those query clocks. Comparing only the five
+paired runs using the same individual query method gives the results below;
+the other method runs are not additional independent advance pairs. Speedup uses
+paired frame medians against SIMD, and p95 is ImmutableAge divided by SIMD.
+
+| Children | Instances | Advance vs SIMD | Frame p95 ratio |
+| ---: | ---: | ---: | ---: |
+| 128 | 1 | 3.79× faster | 0.223 |
+| 1024 | 8 | 3.76× faster | 0.252 |
+
+The full query projection contains 22 nodes, six captures and six virtual outputs;
+the remaining requested fields are canonical reads. A separate Position-only
+projection contains one node, one capture and one output. Its raw timings and
+both projections' cold preparation costs remain in the record, outside hot
+advancement and full-field rankings. A one-field result is not an equivalent
+fourteen-field query.
+
+The [query record](../benches/results/popcorn-immutable-queries-2026-10-22.json)
+retains the complete summaries, paired ratios, compact exact dispatch/zero-
+allocation ledgers, per-job configurations and raw-log hashes. It also identifies
+the full preserved manifest and frozen build/host receipts by path and SHA256.
+Its 94 guarded compiled inputs and measured binary match the build receipt.
+These are public workload results on this host, with no private VM-state,
+native-game fidelity, cross-engine or rendering-performance claim.

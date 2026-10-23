@@ -7,8 +7,9 @@ use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use std::time::Instant;
 use wc3::model::formats::pkb::{Document, EffectCompileOptions};
 use wc3::model::scene::popcorn::{
-    EffectFieldId, EffectInstance, EffectLayerId, ExecutionBackend, ExecutionOptions,
-    ExecutionPreference, ExecutionStage, ExecutionStats, NumericPolicy, SceneInputs,
+    EffectFieldId, EffectInstance, EffectLayerId, EffectProgram, ExecutionBackend,
+    ExecutionOptions, ExecutionPreference, ExecutionStage, ExecutionStats, ImmutableProjection,
+    ImmutableProjectionScratch, NumericPolicy, ParticleView, SceneInputs, Value,
 };
 
 #[path = "../benches/support/particle_immutable.rs"]
@@ -94,6 +95,156 @@ fn difference(current: ExecutionStats, previous: ExecutionStats) -> [u64; 6] {
     })
 }
 
+const FIELD_COUNT: usize = 14;
+const FIELDS: [EffectFieldId; FIELD_COUNT] = [
+    EffectFieldId(0),
+    EffectFieldId(1),
+    EffectFieldId(2),
+    EffectFieldId(3),
+    EffectFieldId(4),
+    EffectFieldId(5),
+    EffectFieldId(6),
+    EffectFieldId(7),
+    EffectFieldId(8),
+    EffectFieldId(9),
+    EffectFieldId(10),
+    EffectFieldId(11),
+    EffectFieldId(12),
+    EffectFieldId(13),
+];
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QueryMethod {
+    Individual,
+    Bulk,
+    Projection,
+}
+impl QueryMethod {
+    fn parse(value: &str) -> Self {
+        match value {
+            "individual" => Self::Individual,
+            "bulk" => Self::Bulk,
+            "projection" => Self::Projection,
+            _ => panic!("unknown query method; expected individual|bulk|projection"),
+        }
+    }
+    fn name(self) -> &'static str {
+        match self {
+            Self::Individual => "individual",
+            Self::Bulk => "bulk",
+            Self::Projection => "projection",
+        }
+    }
+}
+struct ProjectionQuery {
+    projection: ImmutableProjection,
+    scratch: ImmutableProjectionScratch,
+    values: Vec<Value>,
+    positions: Vec<usize>,
+    raw_positions: Vec<usize>,
+}
+impl ProjectionQuery {
+    fn prepare(program: &EffectProgram, requested: &[EffectFieldId]) -> Option<Self> {
+        let recipe = program.immutable_recipe(EffectLayerId(1))?;
+        let mut positions = Vec::new();
+        let mut raw_positions = Vec::new();
+        let mut fields = Vec::new();
+        for (position, &field) in requested.iter().enumerate() {
+            if (0..recipe.output_count()).any(|i| recipe.output(i).unwrap().field == field) {
+                positions.push(position);
+                fields.push(field);
+            } else {
+                raw_positions.push(position);
+            }
+        }
+        let projection = recipe.project(&fields).unwrap();
+        let scratch = projection.new_scratch();
+        Some(Self {
+            values: vec![Value::from(0f32); fields.len()],
+            projection,
+            scratch,
+            positions,
+            raw_positions,
+        })
+    }
+    fn counts(&self) -> [usize; 3] {
+        [
+            self.projection.node_count(),
+            self.projection.capture_count(),
+            self.projection.output_count(),
+        ]
+    }
+    fn read(
+        &mut self,
+        particle: &ParticleView<'_>,
+        fields: &[EffectFieldId],
+        values: &mut [Value],
+    ) {
+        if let Some(sample) = particle.immutable_sample() {
+            self.projection
+                .evaluate(sample, &mut self.scratch, &mut self.values)
+                .unwrap();
+            for (&position, &value) in self.positions.iter().zip(&self.values) {
+                values[position] = value;
+            }
+            for &position in &self.raw_positions {
+                values[position] = particle.field(fields[position]).unwrap();
+            }
+        } else {
+            particle.sample_fields(fields, values).unwrap();
+        }
+    }
+}
+struct Queries {
+    method: QueryMethod,
+    full: Option<ProjectionQuery>,
+    position: Option<ProjectionQuery>,
+    full_prepare_ns: u128,
+    position_prepare_ns: u128,
+}
+impl Queries {
+    fn prepare(program: &EffectProgram, method: QueryMethod) -> Self {
+        let begin = Instant::now();
+        let full = (method == QueryMethod::Projection)
+            .then(|| ProjectionQuery::prepare(program, &FIELDS))
+            .flatten();
+        let full_prepare_ns = if full.is_some() {
+            begin.elapsed().as_nanos()
+        } else {
+            0
+        };
+        let begin = Instant::now();
+        let position = (method == QueryMethod::Projection)
+            .then(|| ProjectionQuery::prepare(program, &[EffectFieldId(8)]))
+            .flatten();
+        let position_prepare_ns = if position.is_some() {
+            begin.elapsed().as_nanos()
+        } else {
+            0
+        };
+        Self {
+            method,
+            full,
+            position,
+            full_prepare_ns,
+            position_prepare_ns,
+        }
+    }
+    fn read(&mut self, particle: &ParticleView<'_>, values: &mut [Value; FIELD_COUNT]) {
+        match self.method {
+            QueryMethod::Individual => {
+                for (&field, value) in FIELDS.iter().zip(values) {
+                    *value = particle.field(field).unwrap();
+                }
+            }
+            QueryMethod::Bulk => particle.sample_fields(&FIELDS, values).unwrap(),
+            QueryMethod::Projection => match &mut self.full {
+                Some(query) => query.read(particle, &FIELDS, values),
+                None => particle.sample_fields(&FIELDS, values).unwrap(),
+            },
+        }
+    }
+}
+
 // Public structure hash deliberately excludes numeric field values, whose independent
 // analytic oracle is checked separately. It cannot hide births, ownership or order.
 fn structure(instance: &EffectInstance) -> u64 {
@@ -130,11 +281,15 @@ fn percentile(values: &[u128], numerator: usize) -> u128 {
 }
 fn main() {
     let args: Vec<_> = env::args().collect();
-    assert_eq!(
-        args.len(),
-        6,
-        "usage: particle_immutable_bench interpreter|scalar-jit|simd-jit|immutable-age N C INSTANCES SAMPLES"
+    assert!(
+        args.len() == 6 || (args.len() == 8 && args[6] == "--query-method"),
+        "usage: particle_immutable_bench interpreter|scalar-jit|simd-jit|immutable-age N C INSTANCES SAMPLES [--query-method individual|bulk|projection]"
     );
+    let query_method = if args.len() == 8 {
+        QueryMethod::parse(&args[7])
+    } else {
+        QueryMethod::Individual
+    };
     let route = match args[1].as_str() {
         "interpreter" => Route::Interpreter,
         "scalar-jit" => Route::ScalarJit,
@@ -188,6 +343,7 @@ fn main() {
             "fallback is not an admitted native measurement"
         );
     }
+    let mut queries = Queries::prepare(&program, query_method);
     verify_trajectory(&program, children, capacity);
     if route == Route::ImmutableAge {
         let probe = warm(&program, children, capacity);
@@ -221,8 +377,15 @@ fn main() {
         verify_frame(&admission, children);
         structural.push(structure(&admission));
         for p in admission.particles(EffectLayerId(1)) {
-            for index in 0..14 {
-                numeric.push(p.field(EffectFieldId(index)).unwrap().words());
+            let mut values = [Value::from(0f32); FIELD_COUNT];
+            queries.read(&p, &mut values);
+            for (&field, value) in FIELDS.iter().zip(values) {
+                assert_eq!(
+                    Some(value),
+                    p.field(field),
+                    "query methods must return identical full fields"
+                );
+                numeric.push(value.words());
             }
         }
         if frame < STEPS {
@@ -239,6 +402,8 @@ fn main() {
     let mut instantiate_ns = Vec::with_capacity(samples);
     let mut birth_ns = Vec::with_capacity(samples);
     let mut query_ns = Vec::with_capacity(samples);
+    let mut position_query_ns = Vec::with_capacity(samples);
+    let mut query_allocation_deltas = Vec::with_capacity(samples);
     let mut allocation_deltas = Vec::with_capacity(samples);
     let mut measured_work_deltas = Vec::with_capacity(samples * count);
     for _ in 0..samples {
@@ -293,22 +458,138 @@ fn main() {
             black_box(instance);
         }
         // Separate fixed-time public query sweep; no advancement or proof in clock.
+        let mut values = [Value::from(0f32); FIELD_COUNT];
+        let allocations_before = allocations();
         let begin = Instant::now();
         for _ in 0..8 {
             for instance in &instances {
                 for particle in instance.particles(EffectLayerId(1)) {
-                    for field in 0..14 {
-                        black_box(particle.field(EffectFieldId(field)).unwrap());
+                    queries.read(&particle, &mut values);
+                    for value in values {
+                        black_box(value);
                     }
                 }
             }
         }
         query_ns.push(begin.elapsed().as_nanos());
+        let delta = from_fn(|i| allocations()[i] - allocations_before[i]);
+        assert_eq!(delta, [0; 3], "hot queries allocated");
+        query_allocation_deltas.push(delta);
+        // This is deliberately a different workload: one Position field, not
+        // a replacement for the full-field query cost or its numeric oracle.
+        if let Some(position) = &mut queries.position {
+            let mut value = [Value::from(0f32)];
+            let allocations_before = allocations();
+            let begin = Instant::now();
+            for _ in 0..8 {
+                for instance in &instances {
+                    for particle in instance.particles(EffectLayerId(1)) {
+                        position.read(&particle, &[EffectFieldId(8)], &mut value);
+                        black_box(value[0]);
+                    }
+                }
+            }
+            position_query_ns.push(begin.elapsed().as_nanos());
+            assert_eq!(
+                allocations(),
+                allocations_before,
+                "position-only queries allocated"
+            );
+            for instance in &instances {
+                for particle in instance.particles(EffectLayerId(1)) {
+                    position.read(&particle, &[EffectFieldId(8)], &mut value);
+                    assert_eq!(Some(value[0]), particle.field(EffectFieldId(8)));
+                }
+            }
+        }
     }
+    let projection_counts = queries
+        .full
+        .as_ref()
+        .map_or([0; 3], ProjectionQuery::counts);
+    let position_projection_counts = queries
+        .position
+        .as_ref()
+        .map_or([0; 3], ProjectionQuery::counts);
     println!("route={:?}", program.execution_reports());
-    println!("{{\"kind\":\"separate_costs\",\"instantiate_ns\":{instantiate_ns:?},\"start_and_first_birth_tick_ns\":{birth_ns:?},\"fixed_time_8_full_query_sweeps_ns\":{query_ns:?},\"hot_allocation_deltas\":{allocation_deltas:?}}}");
-    println!("{{\"kind\":\"result\",\"route\":\"{}\",\"children\":{},\"capacity_child_units\":{},\"capacity_total\":{},\"instances\":{},\"samples\":{},\"steps\":{},\"compile_ns\":{},\"prepare_ns\":{},\"block_median_ns\":{},\"block_p95_ns\":{},\"frame_median_ns\":{},\"frame_p95_ns\":{},\"setup_ns\":{:?},\"blocks_ns\":{:?},\"frames_ns\":{:?},\"structure\":{:?},\"numeric\":{:?},\"work_columns\":[\"scalar_jit\",\"simd_batches\",\"simd_lanes\",\"rust_lanes\",\"immutable_age\",\"immutable_fallbacks\"],\"work_deltas\":{:?},\"measured_work_deltas\":{:?}}}",
-        args[1], children, capacity, capacity + 1, count, samples, STEPS, compile_ns, prepare_ns,
+    println!("{{\"kind\":\"separate_costs\",\"query_method\":\"{}\",\"instantiate_ns\":{instantiate_ns:?},\"start_and_first_birth_tick_ns\":{birth_ns:?},\"fixed_time_8_full_query_sweeps_ns\":{query_ns:?},\"full_projection_prepare_ns\":{},\"full_projection_counts\":{projection_counts:?},\"position_projection_prepare_ns\":{},\"position_projection_counts\":{position_projection_counts:?},\"fixed_time_8_position_only_projection_sweeps_ns\":{position_query_ns:?},\"query_allocation_deltas\":{query_allocation_deltas:?},\"hot_allocation_deltas\":{allocation_deltas:?}}}", query_method.name(), queries.full_prepare_ns, queries.position_prepare_ns);
+    println!("{{\"kind\":\"result\",\"route\":\"{}\",\"query_method\":\"{}\",\"children\":{},\"capacity_child_units\":{},\"capacity_total\":{},\"instances\":{},\"samples\":{},\"steps\":{},\"compile_ns\":{},\"prepare_ns\":{},\"block_median_ns\":{},\"block_p95_ns\":{},\"frame_median_ns\":{},\"frame_p95_ns\":{},\"setup_ns\":{:?},\"blocks_ns\":{:?},\"frames_ns\":{:?},\"structure\":{:?},\"numeric\":{:?},\"work_columns\":[\"scalar_jit\",\"simd_batches\",\"simd_lanes\",\"rust_lanes\",\"immutable_age\",\"immutable_fallbacks\"],\"work_deltas\":{:?},\"measured_work_deltas\":{:?}}}",
+        args[1], query_method.name(), children, capacity, capacity + 1, count, samples, STEPS, compile_ns, prepare_ns,
         percentile(&blocks, 50), percentile(&blocks, 95), percentile(&frames, 50), percentile(&frames, 95),
         setup, blocks, frames, structural, numeric, work_deltas, measured_work_deltas);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn query_mappings_match_full_fields_across_initial_samples_and_denied_work() {
+        for preference in [
+            ExecutionPreference::Interpreter,
+            ExecutionPreference::ImmutableAge,
+        ] {
+            let document = Document::read(fixture(8)).unwrap();
+            let (root, _) = document.effect_roots().next().unwrap().unwrap();
+            let program = document
+                .compile_effect(root, &EffectCompileOptions::default())
+                .unwrap()
+                .with_execution(ExecutionOptions {
+                    preference,
+                    numeric_policy: NumericPolicy::Graphics,
+                });
+            let mut queries = [
+                QueryMethod::Individual,
+                QueryMethod::Bulk,
+                QueryMethod::Projection,
+            ]
+            .map(|method| Queries::prepare(&program, method));
+            let mut instance = program.instantiate(support::limits(128), 42).unwrap();
+            instance
+                .start(&program, program.default_entry(), SceneInputs::default())
+                .unwrap();
+            for _ in 0..3 {
+                instance
+                    .advance(&program, DT, SceneInputs::default())
+                    .unwrap();
+                let stats = instance.execution_stats();
+                for particle in instance.particles(EffectLayerId(1)) {
+                    let expected = FIELDS.map(|field| particle.field(field).unwrap());
+                    for query in &mut queries {
+                        let mut values = [Value::from(-1f32); FIELD_COUNT];
+                        query.read(&particle, &mut values);
+                        assert_eq!(values, expected);
+                        if let Some(position) = &mut query.position {
+                            let mut value = [Value::from(-1f32)];
+                            position.read(&particle, &[EffectFieldId(8)], &mut value);
+                            assert_eq!(value[0], expected[8]);
+                        }
+                    }
+                }
+                assert_eq!(instance.execution_stats(), stats);
+            }
+            instance
+                .advance_with_step_budget(&program, DT, SceneInputs::default(), || false)
+                .unwrap();
+            for particle in instance.particles(EffectLayerId(1)) {
+                let expected = FIELDS.map(|field| particle.field(field).unwrap());
+                for query in &mut queries {
+                    let mut values = [Value::from(-1f32); FIELD_COUNT];
+                    query.read(&particle, &mut values);
+                    assert_eq!(values, expected);
+                }
+            }
+            if preference == ExecutionPreference::ImmutableAge {
+                let full = queries[2].full.as_ref().unwrap();
+                let position = queries[2].position.as_ref().unwrap();
+                assert!(full.projection.output_count() > 1);
+                assert_eq!(position.counts(), [1, 1, 1]);
+                assert!(position.projection.node_count() < full.projection.node_count());
+                assert!(!full.raw_positions.is_empty());
+            } else {
+                assert!(queries[2].full.is_none());
+                assert!(queries[2].position.is_none());
+            }
+        }
+    }
 }
