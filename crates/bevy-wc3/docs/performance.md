@@ -94,7 +94,7 @@ admission ledger before interpreting those ratios. Record hardware, quality,
 artifact and raw-file hashes beside per-run route/traffic and paired timing
 summaries.
 
-### Immutable WGSL measurements, 2026-10-22
+### Initial stationary WGSL snapshot, 2026-10-22
 
 On an Apple M4 Pro with a 20-core GPU and 24 GiB memory, five alternating pairs
 per case compared optimized Rust 1.98.1 builds with `popcorn-jit`. The workload
@@ -128,8 +128,62 @@ The [measurement record](../benches/results/immutable-frames-2026-10-22.json)
 retains binary/source/input hashes, all run quantiles, paired ratios, actual work
 counters, transfer receipts and raw CSV/log paths. These original synthetic
 controls establish a gain for the admitted stationary-billboard workload on this
-host. Moving geometry and unsupported recipes retain CPU sampling; these results
-do not establish cross-engine parity or exact game fidelity.
+host. That frozen artifact admitted stationary geometry; the specialization study
+below adds moving outputs. Neither establishes cross-engine parity or exact game
+fidelity.
+
+### Compact and moving WGSL specialization, 2026-10-22
+
+A later frozen Rust 1.98.1 build on the same M4 Pro compared compact renderer
+projections for both stationary and moving geometry. Each study used the same
+1,000 children plus one controller per feature, one or 32 features, 160×120
+pixels, 1× MSAA and 64 advancing completed frames at 64 Hz after residency warmup.
+Five alternating SIMD/WGSL pairs per layout produced twenty runs per study.
+The moving workload includes CPU Position projection and per-view sorting in the
+completed frame. Its particles remain coincident; it does not establish worst-case
+spatial ordering cost.
+
+| Geometry | Emitters | SIMD frame median | WGSL frame median | Paired median ratio | Paired p95 ratio |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Stationary | 1 | 3.293 ms | 3.231 ms | 0.983 | 0.984 |
+| Stationary | 32 | 14.276 ms | 8.911 ms | 0.619 | 0.586 |
+| Moving | 1 | 3.407 ms | 3.326 ms | 0.976 | 0.992 |
+| Moving | 32 | 15.670 ms | 11.182 ms | 0.714 | 0.925 |
+
+Frame medians summarize five run medians; ratios summarize the five paired
+WGSL/SIMD quantile ratios. The one-feature median differences are only 1.7% and
+2.4%, with individual regressions, so they do not establish a broad gain. With
+32 features, stationary median completed-frame time fell 38.1%; moving median
+fell 28.6%. Moving wall p95 improved only 7.46%, while its completion-wait p95
+**regressed 14.43%**. Its paired update/submission median ratio was 0.631 and
+wait median ratio was 0.810. These independent component quantiles must not be
+summed or interpreted as GPU timestamps. Spin-poll completion and all CPU/render
+work remain in the wall clock; this is not pipelined throughput.
+
+All forty runs admitted the expected clocks, populations, zero omissions and
+actual execution routes. SIMD frames included native batch entries plus scalar
+remainders; immutable frames authorized and published every child without
+fallback. The record retains the observed work rather than inferring invocation
+counts from FPS. During each stable 64-frame interval, each SIMD feature uploaded
+7,168,000 sampled-record bytes plus 256,000 natural-index and 256,000 view-order
+bytes. Stationary WGSL uploaded only 7,168 uniform bytes. Moving WGSL additionally
+uploaded 256,000 view-order bytes; natural indices remained resident. Both WGSL
+studies had zero birth and sampled-record uploads during that interval. Startup
+residency is recorded separately. These variants use 112-byte uniforms, so their
+64 writes are larger than the earlier snapshot's 64-byte uniforms.
+
+Separate original moving controls covered all five supported billboard facing
+modes, changing axes, one and 128 children, and four matched times. Of forty CPU/WGSL
+image pairs, 39 were exact; the remaining pair differed by one blue-channel unit
+at one pixel. Both complete comparison sheets were inspected. An initial GPU
+preflight caught the 64/112-byte uniform-layout mismatch; separate typed layouts
+resolved it, and the repeated preflight and subsequent captures passed.
+
+The [specialization record](../benches/results/popcorn-immutable-specialization-2026-10-22.json)
+retains all paired wall/update/wait quantiles, raw CSV/log hashes, actual work and
+transfer receipts, frozen build/host inputs and visual comparisons, including the
+failed preflight receipt. These controls establish the measured application-frame
+tradeoff on this host, not native-game fidelity or a universal renderer speedup.
 
 ## Measure effect preparation
 
