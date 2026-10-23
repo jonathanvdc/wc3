@@ -30,6 +30,12 @@ request for retry or reload, and success clears the error. Bevy's `AssetServer`
 also exposes load and recursive-dependency states. Optional missing images and
 unsupported rendering behavior remain in asset and compiled diagnostics.
 
+`ModelLoadError` distinguishes native decoding or import, missing required
+companions, failed source reads, and compilation. Missing companions retain the
+typed request and candidate paths; failed companion reads retain the request and
+failing path. Native errors retain their root context and typed codec or
+conversion cause through standard error sources.
+
 Rendering diagnostics carry a `kind`, `severity`, and typed semantic `source`.
 Use those fields to select application policy; messages explain the limitation
 and can change between releases. `Unsupported` identifies missing interpreters,
@@ -225,8 +231,13 @@ owner cleanup for children moving outside the parent hierarchy.
 
 ## Prepare custom model sources
 
-Import through `wc3::model::io::{mdlx, m2, wmo}` and widen to `Universal`, or author
-a Universal graph directly. Compile, prepare, and spawn it with the ordinary APIs:
+Use [`wc3::model::io::asset::Reader`](../../wc3/docs/loading.md) to load native
+bytes and required companions without a Bevy asset source. Its owned native asset
+imports a Universal graph with an explicit conversion policy and report. Retain
+the asset while using that graph. Format-specific `io::{mdlx, m2, wmo}` imports
+remain useful for already decoded documents; widen those models to Universal.
+You can also author a Universal graph directly. Compile, prepare, and spawn it
+with the ordinary APIs:
 
 ```rust
 let compiled = compile_model(&model, |request| resolve_image(request))?;

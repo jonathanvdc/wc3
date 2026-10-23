@@ -68,7 +68,13 @@ only be selected by a curve.
 
 ## Native loading
 
-`ModelLoader` imports native models and required companions before compilation.
+`ModelLoader` drives the shared
+[`wc3::model::io::asset::Reader`](../../../wc3/docs/loading.md), imports its native
+asset, and compiles the resulting Universal graph. Native format dispatch,
+companion traversal, and bundle validation belong to that renderer-independent
+reader. `ModelLoadError` preserves typed native causes and root context. Missing
+companions carry their request and candidate paths; failed companion reads carry
+the request, failing path, and original source error.
 `ResourceResolver` maps paths, namespaced resources, and file-data IDs into
 registered Bevy asset sources. The default resolver tries the literal filename,
 then BLP, DDS, PNG, and TGA candidates beside the model and under its asset root.
