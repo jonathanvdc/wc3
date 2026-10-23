@@ -1,18 +1,18 @@
 //! Explicit modern WMO layout dispatch and required group loading.
 use super::{CompanionKind, DecodeError, Error, Request};
 use crate::model::common::FileKey;
-use crate::model::conversion::{self, Conversion, ImportOptions};
+use crate::model::conversion::{Conversion, ImportOptions};
 use crate::model::formats::wmo::{self as native, Profile};
 use crate::model::io::wmo as semantic;
 use crate::model::Model;
 use std::collections::BTreeMap;
 
-fn decode_typed<D: native::Dialect>(
-    bytes: &[u8],
+fn decode_typed<'a, D: native::Dialect>(
+    bytes: &'a [u8],
     key: &FileKey,
-    buffers: &BTreeMap<FileKey, Vec<u8>>,
+    buffers: &'a BTreeMap<FileKey, Vec<u8>>,
     missing: &mut Option<Request>,
-) -> Result<Option<native::Bundle<'static, D>>, Error> {
+) -> Result<Option<native::Bundle<'a, D>>, Error> {
     let failure = |key: &FileKey, source| Error::Decode {
         key: key.clone(),
         source: DecodeError::Wmo(source),
@@ -49,32 +49,27 @@ fn decode_typed<D: native::Dialect>(
     bundle
         .validate_complete()
         .map_err(|source| failure(key, source))?;
-    Ok(Some(bundle.into_owned()))
+    Ok(Some(bundle))
 }
 
 macro_rules! bundles {
     ($($dialect:ident),* $(,)?) => {
-        #[derive(Debug)]
-        pub(super) enum Bundle {
-            $($dialect(Box<native::Bundle<'static, native::$dialect>>),)*
-        }
-        impl Bundle {
-            pub(super) fn import(&self, options: &ImportOptions) -> Result<Conversion<Model<'_>>, conversion::Error> {
-                match self {
-                    $(Self::$dialect(bundle) => semantic::import(bundle.as_ref(), options).map(|c| Conversion { value: c.value.widen(), report: c.report }),)*
-                }
-            }
-        }
         pub(super) fn decode(
             bytes: &[u8],
             key: &FileKey,
             profile: Profile,
             buffers: &BTreeMap<FileKey, Vec<u8>>,
             missing: &mut Option<Request>,
-        ) -> Result<Option<Bundle>, Error> {
+            options: &ImportOptions,
+        ) -> Result<Option<Conversion<Model<'static>>>, Error> {
             match profile {
                 $(Profile::$dialect => decode_typed::<native::$dialect>(bytes, key, buffers, missing)
-                    .map(|bundle| bundle.map(|bundle| Bundle::$dialect(Box::new(bundle)))),)*
+                    ?
+                    .map(|bundle| semantic::import(&bundle, options).map(|converted| Conversion {
+                        value: converted.value.widen().into_owned(),
+                        report: converted.report,
+                    }).map_err(|source| Error::Import { key: key.clone(), source }))
+                    .transpose(),)*
                 Profile::Alpha14 | Profile::Legacy16 => Err(Error::UnsupportedProfile { profile }),
             }
         }

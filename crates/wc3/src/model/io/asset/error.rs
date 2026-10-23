@@ -75,7 +75,7 @@ pub enum Error {
         /// Request supplied by the caller.
         supplied: Box<Request>,
     },
-    /// The completed reader has already returned its native asset.
+    /// The completed reader has already returned its checked model.
     Finished,
 }
 impl Display for Error {

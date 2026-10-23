@@ -1,7 +1,7 @@
 //! Runtime M2 dialect dispatch; native bundles remain responsible for the closure.
-use super::{CompanionKind, Request};
+use super::{CompanionKind, DecodeError, Error, Request};
 use crate::model::common::FileKey;
-use crate::model::conversion::{Conversion, Error, ImportOptions};
+use crate::model::conversion::{Conversion, ImportOptions};
 use crate::model::formats::m2::{self as native, DependencyKind};
 use crate::model::io::m2 as semantic;
 use crate::model::Model;
@@ -34,7 +34,7 @@ fn decode_typed<'a, D: native::Dialect>(
     key: &FileKey,
     buffers: &'a BTreeMap<FileKey, Vec<u8>>,
     missing: &mut Option<Request>,
-) -> Result<Option<native::Bundle<'static, D>>, native::ReadError> {
+) -> Result<Option<native::Bundle<'a, D>>, native::ReadError> {
     match native::Bundle::decode(bytes, key.clone(), |dependency| {
         if let Some(bytes) = buffers.get(&dependency.key) {
             Ok(Some(bytes.as_slice()))
@@ -43,7 +43,7 @@ fn decode_typed<'a, D: native::Dialect>(
             Ok(None)
         }
     }) {
-        Ok(bundle) => Ok(Some(bundle.into_owned())),
+        Ok(bundle) => Ok(Some(bundle)),
         Err(_) if missing.is_some() => Ok(None),
         Err(error) => Err(error),
     }
@@ -59,17 +59,6 @@ macro_rules! bundles {
     ($($variant:ident : $envelope:ident<$layout:ident>),* $(,)?) => {
         #[derive(Debug)]
         enum Layout { $($variant,)* }
-        #[derive(Debug)]
-        pub(super) enum Bundle {
-            $($variant(Box<native::Bundle<'static, native::$envelope<native::$layout>>>),)*
-        }
-        impl Bundle {
-            pub(super) fn import(&self, options: &ImportOptions) -> Result<Conversion<Model<'_>>, Error> {
-                match self {
-                    $(Self::$variant(bundle) => semantic::import(bundle.as_ref(), options).map(|c| Conversion { value: c.value.widen(), report: c.report }),)*
-                }
-            }
-        }
         pub(super) fn prepare(bytes: &[u8], key: &FileKey) -> Result<Preparation, native::ReadError> {
             let document = native::DynamicDocument::decode_m2(bytes)?;
             let dependencies = document.dependencies(key).iter()
@@ -84,7 +73,8 @@ macro_rules! bundles {
             key: &FileKey,
             buffers: &BTreeMap<FileKey, Vec<u8>>,
             missing: &mut Option<Request>,
-        ) -> Result<Option<Bundle>, native::ReadError> {
+            options: &ImportOptions,
+        ) -> Result<Option<Conversion<Model<'static>>>, Error> {
             // Prefetch directly declared companions before decoding the full bundle.
             // Recursive companion requirements remain native bundle decisions.
             if let Some(request) = prepared.dependencies.iter().find(|request| !buffers.contains_key(&request.key)) {
@@ -93,7 +83,12 @@ macro_rules! bundles {
             }
             match prepared.layout {
                 $(Layout::$variant => decode_typed::<native::$envelope<native::$layout>>(bytes, key, buffers, missing)
-                    .map(|bundle| bundle.map(|bundle| Bundle::$variant(Box::new(bundle)))),)*
+                    .map_err(|source| Error::Decode { key: key.clone(), source: DecodeError::M2(source) })?
+                    .map(|bundle| semantic::import(&bundle, options).map(|converted| Conversion {
+                        value: converted.value.widen().into_owned(),
+                        report: converted.report,
+                    }).map_err(|source| Error::Import { key: key.clone(), source }))
+                    .transpose(),)*
             }
         }
     };

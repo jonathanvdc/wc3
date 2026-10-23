@@ -1,9 +1,9 @@
 //! Import native documents into checked models and plan explicit native exports.
 use super::conversion::*;
-/// Incremental native model loading with caller-owned resource access.
-pub mod asset;
 /// ANIMATION import and export support.
 pub mod animation;
+/// Incremental native model loading with caller-owned resource access.
+pub mod asset;
 
 /// GEOMETRY import and export support.
 pub mod geometry;

@@ -3,8 +3,8 @@
 //! A [`Reader`] requests the supporting documents required by the native format.
 //! Supply each [`Request`] from an archive, filesystem, or network, then poll again.
 //! Images and optional scene children remain semantic dependencies rather than
-//! required model companions. A completed [`NativeAsset`] owns its native data;
-//! importing it produces a checked model borrowing that asset.
+//! required model companions. Completion returns independently owned checked
+//! semantics together with the report from the session's explicit import policy.
 use super::mdlx as semantic_mdlx;
 use crate::model::common::FileKey;
 use crate::model::conversion::{Conversion, ImportOptions};
@@ -79,60 +79,13 @@ pub struct Request {
     pub kind: CompanionKind,
 }
 
-/// One loading step, requiring either resource access or native import.
+/// One loading step, requiring resource access or returning checked semantics.
 #[derive(Debug)]
 pub enum Progress {
     /// Supply this required companion before continuing.
     Pending(Request),
-    /// All native companions have been decoded and validated.
-    Ready(NativeAsset),
-}
-
-/// Complete, independently owned native model data.
-///
-/// Native parsing and checked semantic import are separate operations. Keep this
-/// value alive while using its imported model; no encoded intermediate is needed.
-#[derive(Debug)]
-pub struct NativeAsset {
-    key: FileKey,
-    format: Format,
-    source: Source,
-}
-#[derive(Debug)]
-enum Source {
-    Mdlx(DynamicDocument<'static>),
-    M2(m2::Bundle),
-    Wmo(world::Bundle),
-}
-impl NativeAsset {
-    /// Caller-supplied root identity.
-    pub fn key(&self) -> &FileKey {
-        &self.key
-    }
-    /// Native family and selected layout provenance.
-    pub fn format(&self) -> Format {
-        self.format
-    }
-    /// Imports checked Universal semantics with an explicit native loss policy.
-    ///
-    /// The report retains accepted losses and approximations. The default options
-    /// reject unsupported semantics rather than silently dropping native data.
-    pub fn import(&self, options: &ImportOptions) -> Result<Conversion<Model<'_>>, Error> {
-        let result = match &self.source {
-            Source::Mdlx(source) => visit_document!(source, |document| {
-                semantic_mdlx::import(document, options).map(|c| Conversion {
-                    value: c.value.widen(),
-                    report: c.report,
-                })
-            }),
-            Source::M2(source) => source.import(options),
-            Source::Wmo(source) => source.import(options),
-        };
-        result.map_err(|source| Error::Import {
-            key: self.key.clone(),
-            source,
-        })
-    }
+    /// Native companions are complete and checked import succeeded.
+    Ready(Box<Conversion<Model<'static>>>),
 }
 
 /// Incremental loading session independent of storage and executor choices.
@@ -145,26 +98,34 @@ pub struct Reader {
     format: Format,
     key: FileKey,
     bytes: Vec<u8>,
+    options: ImportOptions,
     buffers: BTreeMap<FileKey, Vec<u8>>,
     m2: Option<m2::Preparation>,
     pending: Option<Request>,
     finished: bool,
 }
 impl Reader {
-    /// Starts a session from the root bytes and their logical identity.
-    pub fn new(format: Format, key: FileKey, bytes: impl Into<Vec<u8>>) -> Self {
+    /// Starts a session with a fixed native loss and approximation policy.
+    pub fn new(
+        format: Format,
+        key: FileKey,
+        bytes: impl Into<Vec<u8>>,
+        options: ImportOptions,
+    ) -> Self {
         Self {
             format,
             key,
             bytes: bytes.into(),
+            options,
             buffers: BTreeMap::new(),
             m2: None,
             pending: None,
             finished: false,
         }
     }
-    /// Decodes until a required companion is missing or a complete asset is ready.
-    /// A completed reader cannot be polled again.
+    /// Decodes and imports until a companion is missing or an owned model is ready.
+    /// Successful completion releases source buffers and forbids further polling.
+    /// An import failure retains its sources and the session's fixed policy.
     pub fn poll(&mut self) -> Result<Progress, Error> {
         if self.finished {
             return Err(Error::Finished);
@@ -173,7 +134,7 @@ impl Reader {
             return Ok(Progress::Pending(request.clone()));
         }
         let mut missing = None;
-        let source = match self.format {
+        let converted = match self.format {
             Format::Mdlx => {
                 let document = if self.bytes.starts_with(b"MDLX") {
                     DynamicDocument::<NoExtensions>::decode_mdx(&self.bytes, 800)
@@ -184,7 +145,18 @@ impl Reader {
                     DynamicDocument::<NoExtensions>::decode_mdl(text)
                         .map_err(|source| self.decode_error(DecodeError::Mdl(source)))?
                 };
-                Some(Source::Mdlx(document.into_owned()))
+                Some(
+                    visit_document!(&document, |document| {
+                        semantic_mdlx::import(document, &self.options).map(|converted| Conversion {
+                            value: converted.value.widen().into_owned(),
+                            report: converted.report,
+                        })
+                    })
+                    .map_err(|source| Error::Import {
+                        key: self.key.clone(),
+                        source,
+                    })?,
+                )
             }
             Format::M2 => {
                 if self.m2.is_none() {
@@ -199,29 +171,29 @@ impl Reader {
                     &self.key,
                     &self.buffers,
                     &mut missing,
-                )
-                .map_err(|source| self.decode_error(DecodeError::M2(source)))?
-                .map(Source::M2)
+                    &self.options,
+                )?
             }
-            Format::Wmo(profile) => {
-                world::decode(&self.bytes, &self.key, profile, &self.buffers, &mut missing)?
-                    .map(Source::Wmo)
-            }
+            Format::Wmo(profile) => world::decode(
+                &self.bytes,
+                &self.key,
+                profile,
+                &self.buffers,
+                &mut missing,
+                &self.options,
+            )?,
         };
         if let Some(request) = missing {
             self.pending = Some(request.clone());
             return Ok(Progress::Pending(request));
         }
-        let source = source.expect("native decoding either completes or requests a companion");
+        let converted =
+            converted.expect("native decoding either completes or requests a companion");
         self.finished = true;
         self.bytes = Vec::new();
         self.buffers.clear();
         self.m2 = None;
-        Ok(Progress::Ready(NativeAsset {
-            key: self.key.clone(),
-            format: self.format,
-            source,
-        }))
+        Ok(Progress::Ready(Box::new(converted)))
     }
     /// Supplies bytes for the current request. Stale or unrelated requests fail
     /// without changing the session or replacing already accepted buffers.
@@ -254,9 +226,10 @@ pub fn load<E>(
     format: Format,
     key: FileKey,
     bytes: impl Into<Vec<u8>>,
+    options: ImportOptions,
     mut resolve: impl FnMut(&Request) -> Result<Vec<u8>, E>,
-) -> Result<NativeAsset, LoadError<E>> {
-    let mut reader = Reader::new(format, key, bytes);
+) -> Result<Conversion<Model<'static>>, LoadError<E>> {
+    let mut reader = Reader::new(format, key, bytes, options);
     loop {
         match reader.poll().map_err(LoadError::Native)? {
             Progress::Pending(request) => {
@@ -266,7 +239,7 @@ pub fn load<E>(
                 })?;
                 reader.provide(&request, bytes).map_err(LoadError::Native)?;
             }
-            Progress::Ready(asset) => return Ok(asset),
+            Progress::Ready(converted) => return Ok(*converted),
         }
     }
 }

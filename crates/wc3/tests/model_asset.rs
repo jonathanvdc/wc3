@@ -1,14 +1,14 @@
-//! Public native-loading contracts shared by synchronous archive and async asset callers.
+//! Public checked, owned-model loading shared by archive and async asset callers.
 use glam::Vec3;
 use std::borrow::Cow;
 use std::error::Error as _;
 use std::io;
 use wc3::model::common::FileKey;
-use wc3::model::conversion::{ImportOptions, IssueKind, UnknownPolicy};
+use wc3::model::conversion::{Conversion, ImportOptions, IssueKind, UnknownPolicy};
 use wc3::model::formats::m2::{
     chunks::{AnimationFileId, Chunk},
     codec::{Array as M2Array, ArrayRef},
-    companions::{AnimationFile, AnimationStream, Skeleton, SkeletonChunk},
+    companions::{AnimationFile, AnimationStream, Skeleton, SkeletonChunk, Skin, SkinProfile},
     records::{
         Bone, Interpolation, ModelFlags, ParticleEmitter, Sequence, SequenceFlags, Texture,
         TextureSource, TimelineStorage as _, ValuesLeaf, ValuesStorage as _,
@@ -27,14 +27,13 @@ use wc3::model::formats::wmo::{
     Group, Root,
 };
 use wc3::model::io::asset::{
-    load, CompanionKind, DecodeError, Error, Format, LoadError, NativeAsset, Progress, Reader,
-    Request,
+    load, CompanionKind, DecodeError, Error, Format, LoadError, Progress, Reader, Request,
 };
-use wc3::model::{AnimationProgram, AnimationSample, Time};
+use wc3::model::{AnimationProgram, AnimationSample, Model, Time};
 
-fn ready(reader: &mut Reader) -> NativeAsset {
+fn ready(reader: &mut Reader) -> Conversion<Model<'static>> {
     match reader.poll().unwrap() {
-        Progress::Ready(asset) => asset,
+        Progress::Ready(asset) => *asset,
         Progress::Pending(request) => panic!("unexpected companion {request:?}"),
     }
 }
@@ -46,7 +45,7 @@ fn pending(reader: &mut Reader) -> Request {
     }
 }
 
-fn decode_error(reader: &mut Reader) -> Error {
+fn reader_error(reader: &mut Reader) -> Error {
     match reader.poll() {
         Err(error) => error,
         Ok(_) => panic!("invalid native bytes were accepted"),
@@ -61,20 +60,22 @@ fn mdlx_header_selects_binary_independently_of_the_owner_extension() {
         Format::Mdlx,
         FileKey::Path("text.mdx".into()),
         text.to_vec(),
+        ImportOptions::default(),
     );
     let mut binary_reader = Reader::new(
         Format::Mdlx,
         FileKey::Path("binary.mdl".into()),
         binary.to_vec(),
+        ImportOptions::default(),
     );
     let text_asset = ready(&mut text_reader);
     let binary_asset = ready(&mut binary_reader);
     drop((text_reader, binary_reader));
 
-    assert_eq!(text_asset.format(), Format::Mdlx);
-    assert_eq!(text_asset.key(), &FileKey::Path("text.mdx".into()));
-    let text_model = text_asset.import(&ImportOptions::default()).unwrap();
-    let binary_model = binary_asset.import(&ImportOptions::default()).unwrap();
+    let text_model = text_asset;
+    let binary_model = binary_asset;
+    text_model.value.validate().unwrap();
+    binary_model.value.validate().unwrap();
     assert_eq!(text_model.report, binary_model.report);
     assert_eq!(
         text_model.value.nodes().len(),
@@ -150,7 +151,12 @@ fn native_decode_errors_keep_the_root_identity_and_original_source() {
     .enumerate()
     {
         let key = FileKey::FileId(71);
-        let error = decode_error(&mut Reader::new(format, key.clone(), bytes));
+        let error = reader_error(&mut Reader::new(
+            format,
+            key.clone(),
+            bytes,
+            ImportOptions::default(),
+        ));
         assert!(matches!(&error, Error::Decode { key: actual, .. } if actual == &key));
         let source = error.source().expect("typed native decode error");
         assert!(
@@ -196,7 +202,7 @@ fn native_decode_errors_keep_the_root_identity_and_original_source() {
 }
 
 #[test]
-fn native_import_is_a_separate_checked_policy_boundary() {
+fn reader_finishes_only_after_the_fixed_import_policy_accepts_the_model() {
     let mut source =
         mdlx::Document::<mdlx::V800>::decode_mdl(include_str!("fixtures/mdl/quad_model.mdl"))
             .unwrap();
@@ -204,30 +210,45 @@ fn native_import_is_a_separate_checked_policy_boundary() {
         UnknownChunk::new(RawChunk::new(*b"TEST", Cow::Owned(vec![1, 2, 3]))).unwrap(),
     ));
     let key = FileKey::Path("strict.mdx".into());
-    let mut reader = Reader::new(Format::Mdlx, key.clone(), source.encode_mdx().unwrap());
-    let asset = ready(&mut reader);
-    let error = match asset.import(&ImportOptions::default()) {
-        Err(error) => error,
-        Ok(_) => panic!("strict import discarded an unknown native chunk"),
-    };
+    let bytes = source.encode_mdx().unwrap();
+    let mut strict = Reader::new(
+        Format::Mdlx,
+        key.clone(),
+        bytes.clone(),
+        ImportOptions::default(),
+    );
+    let error = reader_error(&mut strict);
     assert!(matches!(&error, Error::Import { key: actual, .. } if actual == &key));
     assert!(error.source().is_some());
-    let accepted = asset
-        .import(&ImportOptions {
+    let mut accepted = Reader::new(
+        Format::Mdlx,
+        key.clone(),
+        bytes.clone(),
+        ImportOptions {
             unknown: UnknownPolicy::Drop,
             ..Default::default()
-        })
-        .unwrap();
+        },
+    );
+    let accepted = ready(&mut accepted);
     assert_eq!(accepted.value.meshes().len(), 1);
     assert!(accepted
         .report
         .issues
         .iter()
-        .any(|issue| { issue.path == "chunks" && issue.kind == IssueKind::Dropped }));
-    assert!(
-        asset.import(&ImportOptions::default()).is_err(),
-        "an accepted import must not mutate native data or policy"
-    );
+        .any(|issue| issue.path == "chunks" && issue.kind == IssueKind::Dropped));
+    let error = load(
+        Format::Mdlx,
+        key.clone(),
+        bytes,
+        ImportOptions::default(),
+        |_| {
+            panic!("MDLX has no required native companions");
+            #[allow(unreachable_code)]
+            Ok::<_, io::Error>(Vec::new())
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(error, LoadError::Native(Error::Import { key: actual, .. }) if actual == key));
 }
 
 fn animation_sequence<V: ModelLayout<Timing = u32>>() -> Sequence<V> {
@@ -292,7 +313,12 @@ fn skeleton_root() -> Vec<u8> {
 
 #[test]
 fn recursive_m2_skeleton_requests_retain_the_declaring_owner_and_animate() {
-    let mut reader = Reader::new(Format::M2, FileKey::FileId(1), skeleton_root());
+    let mut reader = Reader::new(
+        Format::M2,
+        FileKey::FileId(1),
+        skeleton_root(),
+        ImportOptions::default(),
+    );
     let child = pending(&mut reader);
     assert_eq!(
         child,
@@ -368,7 +394,8 @@ fn recursive_m2_skeleton_requests_retain_the_declaring_owner_and_animate() {
         )
         .unwrap();
     let asset = ready(&mut reader);
-    let imported = asset.import(&ImportOptions::default()).unwrap();
+    let imported = asset;
+    drop(reader);
     assert_eq!(imported.value.clips().len(), 1);
     let clip = imported.value.clips().iter().next().unwrap().0;
     let program = AnimationProgram::compile(&imported.value);
@@ -388,21 +415,31 @@ fn recursive_m2_skeleton_requests_retain_the_declaring_owner_and_animate() {
 
 #[test]
 fn m2_parent_cycles_terminate_after_each_unique_file_is_supplied_once() {
-    let mut reader = Reader::new(Format::M2, FileKey::FileId(1), skeleton_root());
+    let mut reader = Reader::new(
+        Format::M2,
+        FileKey::FileId(1),
+        skeleton_root(),
+        ImportOptions::default(),
+    );
     let child = pending(&mut reader);
     reader.provide(&child, skeleton(vec![parent(11)])).unwrap();
     let ancestor = pending(&mut reader);
     reader
         .provide(&ancestor, skeleton(vec![parent(10)]))
         .unwrap();
-    let error = decode_error(&mut reader);
+    let error = reader_error(&mut reader);
     assert!(matches!(error, Error::Decode { .. }));
     assert!(error.to_string().contains("skeleton parent cycle"));
 }
 
 #[test]
 fn a_companion_response_must_match_the_outstanding_request() {
-    let mut reader = Reader::new(Format::M2, FileKey::FileId(1), skeleton_root());
+    let mut reader = Reader::new(
+        Format::M2,
+        FileKey::FileId(1),
+        skeleton_root(),
+        ImportOptions::default(),
+    );
     let request = pending(&mut reader);
     let mut wrong = request.clone();
     wrong.owner = FileKey::FileId(123);
@@ -411,7 +448,15 @@ fn a_companion_response_must_match_the_outstanding_request() {
         matches!(&error, Error::UnexpectedCompanion { expected: Some(expected), supplied } if expected.as_ref() == &request && supplied.as_ref() == &wrong)
     );
     assert_eq!(pending(&mut reader), request);
-    reader.provide(&request, skeleton(Vec::new())).unwrap();
+    reader
+        .provide(
+            &request,
+            skeleton(vec![SkeletonChunk::Bones {
+                bones: Vec::new(),
+                lookup: ZeroVec::new(),
+            }]),
+        )
+        .unwrap();
     let _asset = ready(&mut reader);
     assert!(matches!(reader.poll(), Err(Error::Finished)));
     assert!(reader.provide(&request, Vec::new()).is_err());
@@ -421,15 +466,9 @@ fn a_companion_response_must_match_the_outstanding_request() {
 fn m2_legacy_and_modern_roots_share_the_same_public_loading_contract() {
     fn check<D: M2Dialect>() {
         let bytes = Document::<D>::new().encode_m2().unwrap();
-        let mut reader = Reader::new(Format::M2, FileKey::Root, bytes);
+        let mut reader = Reader::new(Format::M2, FileKey::Root, bytes, ImportOptions::default());
         let asset = ready(&mut reader);
-        assert_eq!(asset.format(), Format::M2);
-        assert!(asset
-            .import(&ImportOptions::default())
-            .unwrap()
-            .value
-            .nodes()
-            .is_empty());
+        assert!(asset.value.nodes().is_empty());
     }
     fn both<V: ModelLayout>() {
         check::<Flat<V>>();
@@ -449,13 +488,18 @@ fn m2_legacy_and_modern_roots_share_the_same_public_loading_contract() {
 #[test]
 fn malformed_required_m2_bytes_remain_a_codec_error_after_supplying_the_request() {
     let root = FileKey::RawPath(b"models/\xff.m2".to_vec());
-    let mut reader = Reader::new(Format::M2, root.clone(), skeleton_root());
+    let mut reader = Reader::new(
+        Format::M2,
+        root.clone(),
+        skeleton_root(),
+        ImportOptions::default(),
+    );
     let request = pending(&mut reader);
     assert_eq!(request.owner, root);
     reader
         .provide(&request, b"not a skeleton".to_vec())
         .unwrap();
-    let error = decode_error(&mut reader);
+    let error = reader_error(&mut reader);
     assert!(matches!(&error, Error::Decode { key, source: DecodeError::M2(_) } if key == &root));
     assert!(error.source().unwrap().source().is_some());
 }
@@ -480,7 +524,12 @@ fn nested_m2_model_companions_keep_their_own_layout_and_skip_texture_bytes() {
         Chunk::RecursiveParticleIds(ZeroVec::alloc_from_slice(&[42])),
     )
     .unwrap();
-    let mut reader = Reader::new(Format::M2, FileKey::Root, root.encode_m2().unwrap());
+    let mut reader = Reader::new(
+        Format::M2,
+        FileKey::Root,
+        root.encode_m2().unwrap(),
+        ImportOptions::default(),
+    );
     let child = pending(&mut reader);
     assert_eq!(
         child,
@@ -499,7 +548,7 @@ fn nested_m2_model_companions_keep_their_own_layout_and_skip_texture_bytes() {
         .provide(&skeleton_request, skeleton(Vec::new()))
         .unwrap();
     let asset = ready(&mut reader);
-    assert_eq!(asset.key(), &FileKey::Root);
+    assert_eq!(asset.value.features().len(), 1);
 }
 
 #[test]
@@ -508,11 +557,16 @@ fn cached_m2_bytes_cannot_satisfy_incompatible_native_roles() {
     root.insert_extension(1, Chunk::SkeletonId(10)).unwrap();
     root.insert_extension(2, Chunk::BoneIds(ZeroVec::alloc_from_slice(&[10])))
         .unwrap();
-    let mut reader = Reader::new(Format::M2, FileKey::Root, root.encode_m2().unwrap());
+    let mut reader = Reader::new(
+        Format::M2,
+        FileKey::Root,
+        root.encode_m2().unwrap(),
+        ImportOptions::default(),
+    );
     let request = pending(&mut reader);
     assert_eq!(request.key, FileKey::FileId(10));
     reader.provide(&request, skeleton(Vec::new())).unwrap();
-    let error = decode_error(&mut reader);
+    let error = reader_error(&mut reader);
     assert!(matches!(
         &error,
         Error::Decode {
@@ -571,15 +625,20 @@ fn wmo_fixture<D: Dialect>() -> (Vec<u8>, Vec<u8>) {
 fn wmo_profile_is_explicit_and_required_group_identity_is_preserved() {
     let (root, group) = wmo_fixture::<Classic>();
     let root_key = FileKey::Path("World/house.wmo".into());
-    let mut reader = Reader::new(Format::Wmo(wmo::Profile::Classic), root_key.clone(), root);
+    let mut reader = Reader::new(
+        Format::Wmo(wmo::Profile::Classic),
+        root_key.clone(),
+        root,
+        ImportOptions::default(),
+    );
     let request = pending(&mut reader);
     assert_eq!(request.owner, root_key);
     assert_eq!(request.key, FileKey::Path("World/house_000.wmo".into()));
     assert_eq!(request.kind, CompanionKind::WmoGroup { index: 0, lod: 0 });
     reader.provide(&request, group).unwrap();
     let asset = ready(&mut reader);
-    assert_eq!(asset.format(), Format::Wmo(wmo::Profile::Classic));
-    let imported = asset.import(&ImportOptions::default()).unwrap();
+    let imported = asset;
+    drop(reader);
     assert_eq!(imported.value.meshes().len(), 1);
     assert_eq!(
         imported
@@ -598,20 +657,16 @@ fn wmo_profile_is_explicit_and_required_group_identity_is_preserved() {
 fn every_modern_wmo_profile_loads_and_imports_its_own_group_layout() {
     fn check<D: Dialect>(profile: wmo::Profile) {
         let (root, group) = wmo_fixture::<D>();
-        let mut reader = Reader::new(Format::Wmo(profile), FileKey::Root, root);
+        let mut reader = Reader::new(
+            Format::Wmo(profile),
+            FileKey::Root,
+            root,
+            ImportOptions::default(),
+        );
         let request = pending(&mut reader);
         reader.provide(&request, group).unwrap();
         let asset = ready(&mut reader);
-        assert_eq!(asset.format(), Format::Wmo(profile));
-        assert_eq!(
-            asset
-                .import(&ImportOptions::default())
-                .unwrap()
-                .value
-                .meshes()
-                .len(),
-            1
-        );
+        assert_eq!(asset.value.meshes().len(), 1);
     }
     check::<wmo::Classic>(wmo::Profile::Classic);
     check::<wmo::Legion>(wmo::Profile::Legion);
@@ -625,10 +680,15 @@ fn every_modern_wmo_profile_loads_and_imports_its_own_group_layout() {
 #[test]
 fn a_malformed_wmo_companion_reports_its_own_identity() {
     let (root, _) = wmo_fixture::<Classic>();
-    let mut reader = Reader::new(Format::Wmo(wmo::Profile::Classic), FileKey::Root, root);
+    let mut reader = Reader::new(
+        Format::Wmo(wmo::Profile::Classic),
+        FileKey::Root,
+        root,
+        ImportOptions::default(),
+    );
     let request = pending(&mut reader);
     reader.provide(&request, b"invalid group".to_vec()).unwrap();
-    let error = decode_error(&mut reader);
+    let error = reader_error(&mut reader);
     assert!(matches!(&error, Error::Decode { key, .. } if key == &request.key));
     assert!(error.source().is_some());
 }
@@ -637,12 +697,17 @@ fn a_malformed_wmo_companion_reports_its_own_identity() {
 fn wmo_root_siblings_preserve_raw_and_unassigned_native_identities() {
     for owner in [FileKey::Root, FileKey::RawPath(b"World\\\xff.wmo".to_vec())] {
         let (root, group) = wmo_fixture::<Classic>();
-        let mut reader = Reader::new(Format::Wmo(wmo::Profile::Classic), owner.clone(), root);
+        let mut reader = Reader::new(
+            Format::Wmo(wmo::Profile::Classic),
+            owner.clone(),
+            root,
+            ImportOptions::default(),
+        );
         let request = pending(&mut reader);
         assert_eq!(request.owner, owner);
         assert_eq!(request.key, owner.sibling("_000.wmo"));
         reader.provide(&request, group).unwrap();
-        assert_eq!(ready(&mut reader).key(), &owner);
+        assert_eq!(ready(&mut reader).value.meshes().len(), 1);
     }
 }
 
@@ -667,20 +732,27 @@ fn wmo_group_aliases_reuse_the_supplied_file_without_another_request() {
         Format::Wmo(wmo::Profile::Classic),
         FileKey::Root,
         root.encode().unwrap(),
+        ImportOptions::default(),
     );
     let request = pending(&mut reader);
     assert_eq!(request.key, FileKey::FileId(100));
     reader
         .provide(&request, Group::<Classic>::new().encode().unwrap())
         .unwrap();
-    let asset = ready(&mut reader);
-    assert_eq!(asset.format(), Format::Wmo(wmo::Profile::Classic));
+    let converted = ready(&mut reader);
+    assert_eq!(converted.value.meshes().len(), 2);
+    assert_eq!(converted.value.instances().len(), 2);
 }
 
 #[test]
 fn historical_wmo_profiles_fail_explicitly_instead_of_guessing_a_modern_layout() {
     for profile in [wmo::Profile::Alpha14, wmo::Profile::Legacy16] {
-        let mut reader = Reader::new(Format::Wmo(profile), FileKey::Root, Vec::new());
+        let mut reader = Reader::new(
+            Format::Wmo(profile),
+            FileKey::Root,
+            Vec::new(),
+            ImportOptions::default(),
+        );
         assert!(
             matches!(reader.poll(), Err(Error::UnsupportedProfile { profile: actual }) if actual == profile)
         );
@@ -690,20 +762,26 @@ fn historical_wmo_profiles_fail_explicitly_instead_of_guessing_a_modern_layout()
 #[test]
 fn synchronous_loading_drives_recursive_requests_without_app_owned_dependency_scanning() {
     let mut requests = Vec::new();
-    let asset = load(Format::M2, FileKey::FileId(1), skeleton_root(), |request| {
-        requests.push(request.clone());
-        match request.key {
-            FileKey::FileId(10) => Ok(skeleton(vec![
-                parent(11),
-                SkeletonChunk::Bones {
-                    bones: vec![Bone::new()],
-                    lookup: ZeroVec::new(),
-                },
-            ])),
-            FileKey::FileId(11) => Ok(skeleton(Vec::new())),
-            _ => Err(io::Error::from(io::ErrorKind::NotFound)),
-        }
-    })
+    let asset = load(
+        Format::M2,
+        FileKey::FileId(1),
+        skeleton_root(),
+        ImportOptions::default(),
+        |request| {
+            requests.push(request.clone());
+            match request.key {
+                FileKey::FileId(10) => Ok(skeleton(vec![
+                    parent(11),
+                    SkeletonChunk::Bones {
+                        bones: vec![Bone::new()],
+                        lookup: ZeroVec::new(),
+                    },
+                ])),
+                FileKey::FileId(11) => Ok(skeleton(Vec::new())),
+                _ => Err(io::Error::from(io::ErrorKind::NotFound)),
+            }
+        },
+    )
     .unwrap();
     assert_eq!(
         requests,
@@ -720,16 +798,20 @@ fn synchronous_loading_drives_recursive_requests_without_app_owned_dependency_sc
             },
         ]
     );
-    assert_eq!(asset.key(), &FileKey::FileId(1));
-    asset.import(&ImportOptions::default()).unwrap();
+    assert_eq!(asset.value.nodes().len(), 1);
+    asset.value.validate().unwrap();
 }
 
 #[test]
 fn synchronous_source_errors_retain_the_request_and_distinguish_missing_from_unreadable() {
     for kind in [io::ErrorKind::NotFound, io::ErrorKind::PermissionDenied] {
-        let error = load(Format::M2, FileKey::FileId(1), skeleton_root(), |_| {
-            Err(io::Error::from(kind))
-        })
+        let error = load(
+            Format::M2,
+            FileKey::FileId(1),
+            skeleton_root(),
+            ImportOptions::default(),
+            |_| Err(io::Error::from(kind)),
+        )
         .unwrap_err();
         let source = error.source().unwrap().downcast_ref::<io::Error>().unwrap();
         assert_eq!(source.kind(), kind);
@@ -745,11 +827,17 @@ fn synchronous_source_errors_retain_the_request_and_distinguish_missing_from_unr
 
 #[test]
 fn synchronous_native_failures_do_not_invoke_the_storage_resolver() {
-    let result = load(Format::M2, FileKey::FileId(1), b"MD20".to_vec(), |_| {
-        panic!("a malformed root cannot request companions");
-        #[allow(unreachable_code)]
-        Ok::<_, io::Error>(Vec::new())
-    });
+    let result = load(
+        Format::M2,
+        FileKey::FileId(1),
+        b"MD20".to_vec(),
+        ImportOptions::default(),
+        |_| {
+            panic!("a malformed root cannot request companions");
+            #[allow(unreachable_code)]
+            Ok::<_, io::Error>(Vec::new())
+        },
+    );
     assert!(matches!(
         result,
         Err(LoadError::Native(Error::Decode {
@@ -757,4 +845,51 @@ fn synchronous_native_failures_do_not_invoke_the_storage_resolver() {
             ..
         }))
     ));
+}
+
+#[test]
+fn import_failure_follows_required_companions_and_preserves_fixed_policy_on_retry() {
+    let mut root = Document::<Chunked<V274>>::new();
+    root.core_mut().skins = 1;
+    root.insert_extension(1, Chunk::SkinIds(ZeroVec::alloc_from_slice(&[42])))
+        .unwrap();
+    root.insert_extension(
+        2,
+        Chunk::Unknown {
+            tag: *b"TEST",
+            data: Cow::Owned(vec![1, 2, 3]),
+        },
+    )
+    .unwrap();
+    let key = FileKey::RawPath(b"models/\xff.m2".to_vec());
+    let mut reader = Reader::new(
+        Format::M2,
+        key.clone(),
+        root.encode_m2().unwrap(),
+        ImportOptions::default(),
+    );
+    let request = pending(&mut reader);
+    assert_eq!(request.owner, key);
+    assert_eq!(request.key, FileKey::FileId(42));
+    let skin = Skin::<V274> {
+        profile: SkinProfile::default(),
+    }
+    .write()
+    .unwrap();
+    reader.provide(&request, skin).unwrap();
+    for _ in 0..2 {
+        let error = reader_error(&mut reader);
+        assert!(matches!(&error, Error::Import { key: actual, .. } if actual == &key));
+        let source = error
+            .source()
+            .unwrap()
+            .downcast_ref::<wc3::model::conversion::Error>()
+            .unwrap();
+        assert!(source.to_string().contains("m2.chunk"));
+    }
+    let error = reader.provide(&request, Vec::new()).unwrap_err();
+    assert!(
+        matches!(error, Error::UnexpectedCompanion { expected: None, supplied } if *supplied == request)
+    );
+    assert!(matches!(reader.poll(), Err(Error::Import { .. })));
 }
