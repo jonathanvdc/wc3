@@ -13,6 +13,7 @@ use std::sync::Mutex;
 
 mod bridge;
 mod codegen;
+pub(super) mod interpolation;
 
 pub(super) const OPERATION_LIMIT: usize = 32_768;
 type Entry = unsafe extern "C" fn(*mut bridge::Invocation) -> u32;
@@ -73,6 +74,7 @@ impl NativeCode {
         let module = owner.0.as_mut().expect("new native module");
         let mut context = module.make_context();
         let mut functions = Vec::with_capacity(graph.layers.len() * 2);
+        let mut curve_budget = codegen::CURVE_INLINE_BUDGET;
         for (layer, data) in graph.layers.iter().enumerate() {
             for (stage, bound) in [Some(&data.init), data.evolve.as_ref()]
                 .into_iter()
@@ -90,7 +92,15 @@ impl NativeCode {
                 }) {
                     return Err("native register offset exceeds its checked address range".into());
                 }
-                codegen::lower_bound(module, bound, &data.fields, &field_layout, &mut context);
+                codegen::lower_bound(
+                    module,
+                    bound,
+                    &data.fields,
+                    &field_layout,
+                    &graph.samplers,
+                    &mut curve_budget,
+                    &mut context,
+                );
                 let id = module
                     .declare_function(
                         &format!("particle_{layer}_{stage}"),

@@ -53,7 +53,16 @@ fn compile(
     let mut owner = ModuleOwner(Some(JITModule::new(builder)));
     let module = owner.0.as_mut().unwrap();
     let mut context = module.make_context();
-    codegen::lower_bound(module, bound, fields, layout, &mut context);
+    let mut budget = codegen::CURVE_INLINE_BUDGET;
+    codegen::lower_bound(
+        module,
+        bound,
+        fields,
+        layout,
+        &[],
+        &mut budget,
+        &mut context,
+    );
     let id = module
         .declare_function("bound_fields", Linkage::Local, &context.func.signature)
         .unwrap();

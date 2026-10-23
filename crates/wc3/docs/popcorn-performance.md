@@ -89,3 +89,37 @@ hashes. The optimized native corpus check additionally matched 58 effects across
 330 cases and 83,064 observation rows exactly. These observations establish the
 measured workloads on this host; they make no cross-engine or completed-frame
 rendering claim.
+
+## Inline curves, 2026-10-22
+
+The next scalar optimization embeds eligible immutable curves directly into
+machine code. Scalar branches and SIMD lane masks share their interpolation
+algebra, while the unchanged Rust sampler remains the numerical oracle. Curves
+outside the bounded knot/code budget retain checked services.
+
+The same host, compiler, fixtures and five-pair protocol produced the following
+block-median speedups. The previous-scalar column comes from a direct paired
+comparison of the two frozen native artifacts, rather than dividing separate
+Rust-relative measurements. Every compared output remained bit-exact.
+
+| Children | Child capacity | Instances | Versus Rust | Versus previous scalar |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 128 | 1 | 2.18× | 1.14× |
+| 1 | 128 | 8 | 2.31× | 1.13× |
+| 8 | 128 | 1 | 4.35× | 1.40× |
+| 8 | 128 | 8 | 4.36× | 1.40× |
+| 1 | 1024 | 1 | 2.17× | 1.15× |
+| 1 | 1024 | 8 | 2.24× | 1.08× |
+| 8 | 1024 | 1 | 4.25× | 1.44× |
+| 8 | 1024 | 8 | 4.41× | 1.39× |
+| 128 | 128 | 1 | 6.01× | 1.66× |
+| 128 | 128 | 8 | 5.82× | 1.66× |
+| 1024 | 1024 | 1 | 6.08× | 1.66× |
+| 1024 | 1024 | 8 | 5.92× | 1.68× |
+
+The eight Lich cases improved to 2.29–4.05× the Rust evaluator using paired frame
+medians. Every trajectory still matched exactly and steady advancement made no
+allocator calls. The [curve-stage record](../benches/results/popcorn-scalar-curves-2026-10-22.json)
+retains paired ratios and workload/artifact provenance. The checked feature suite
+passed 300 unit and seven integration tests, including distinct incoming/outgoing
+tangents, nonuniform eight-knot curves, exceptional coordinates and failure prefixes.

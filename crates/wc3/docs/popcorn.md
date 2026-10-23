@@ -246,6 +246,8 @@ The [performance guide](popcorn-performance.md) provides paired comparisons and
 recorded measurements against the packet-enabled Rust evaluator.
 
 Generated scalar arithmetic uses the checked typed instruction representation.
+Eligible immutable curves embed their interpolation directly within bounded
+preparation work; other curve calls retain checked services.
 Operations that need checked host services retain their original ordered call
 boundary. A failure leaves earlier writes visible and does not replay the
 invocation. Native compilation is bounded; unsupported platforms, disabled

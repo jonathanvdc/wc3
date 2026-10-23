@@ -201,3 +201,7 @@ mod tests;
 #[cfg(test)]
 #[path = "bound_tests.rs"]
 mod bound_tests;
+
+#[cfg(test)]
+#[path = "curve_tests.rs"]
+mod curve_tests;

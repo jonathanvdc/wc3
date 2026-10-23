@@ -1,6 +1,8 @@
 //! Lower checked scalar instructions to machine operations and ordered host barriers.
 use super::bridge::Invocation;
-use crate::model::scene::popcorn::graph::{BoundProgram, EffectField, External};
+use crate::model::scene::popcorn::graph::{
+    BoundProgram, Callback, EffectField, EffectSampler, External,
+};
 use crate::model::scene::popcorn::numeric::{BinaryOperation, UnaryOperation};
 use crate::model::scene::popcorn::runtime::FieldLayout;
 use crate::model::scene::popcorn::{
@@ -15,6 +17,8 @@ use cranelift_module::Module;
 use std::array::from_fn;
 use std::mem::{offset_of, size_of};
 
+mod curve;
+
 #[cfg(test)]
 pub(super) fn lower(module: &mut impl Module, program: &Program, context: &mut Context) {
     lower_impl(module, program, context, None);
@@ -25,6 +29,8 @@ pub(super) fn lower_bound(
     bound: &BoundProgram,
     fields: &[EffectField],
     layout: &FieldLayout,
+    samplers: &[EffectSampler],
+    curve_budget: &mut usize,
     context: &mut Context,
 ) {
     let bindings: Vec<_> = bound
@@ -32,6 +38,65 @@ pub(super) fn lower_bound(
         .operations
         .iter()
         .map(|op| {
+            if let Instruction::Call {
+                destination: Some(destination),
+                result_kind: Some(result_kind),
+                receiver: Some(receiver),
+                function,
+                arguments,
+                ..
+            } = &op.instruction
+            {
+                if arguments.len() != 1
+                    || arguments[0].kind != ValueType::Float
+                    || bound.callbacks.get(usize::from(*function)) != Some(&Callback::Sample)
+                {
+                    return None;
+                }
+                let Some(External::Sampler(index)) = bound.externals.get(usize::from(*receiver))
+                else {
+                    return None;
+                };
+                let Some(
+                    sampler @ EffectSampler::Curve {
+                        kind,
+                        times,
+                        values,
+                        tangents,
+                    },
+                ) = samplers.get(*index)
+                else {
+                    return None;
+                };
+                if destination.kind == *kind
+                    && *result_kind == *kind
+                    && matches!(
+                        kind,
+                        ValueType::Float
+                            | ValueType::Float2
+                            | ValueType::Float3
+                            | ValueType::Float4
+                    )
+                    && !times.is_empty()
+                    && times.len() <= CURVE_KNOT_LIMIT
+                    && values.len() == times.len()
+                    && (tangents.is_empty() || tangents.len() == times.len() * 2)
+                    && times.iter().all(|v| v.is_finite())
+                    && times.windows(2).all(|w| w[0] < w[1])
+                    && values.iter().flatten().all(|v| v.is_finite())
+                    && tangents.iter().flatten().all(|v| v.is_finite())
+                {
+                    let cost = times.len().saturating_sub(1)
+                        * kind.components()
+                        * if tangents.is_empty() { 8 } else { 42 }
+                        + times.len() * 4;
+                    if let Some(remaining) = curve_budget.checked_sub(cost) {
+                        *curve_budget = remaining;
+                        return Some(Direct::Curve(sampler));
+                    }
+                }
+                return None;
+            }
             let (external, kind, store) = match &op.instruction {
                 Instruction::Load {
                     external,
@@ -55,17 +120,22 @@ pub(super) fn lower_bound(
         .collect();
     lower_impl(module, &bound.program, context, Some(&bindings));
 }
+const CURVE_KNOT_LIMIT: usize = 8;
+/// Graph-wide estimated generated-operation allowance; exhaustion uses services.
+pub(super) const CURVE_INLINE_BUDGET: usize = 4096;
+
 #[derive(Clone, Copy)]
-enum Direct {
+enum Direct<'a> {
     Field { ordinals: [usize; 4], store: bool },
     Time,
     Delta,
+    Curve(&'a EffectSampler),
 }
 fn lower_impl(
     module: &mut impl Module,
     program: &Program,
     context: &mut Context,
-    bindings: Option<&[Option<Direct>]>,
+    bindings: Option<&[Option<Direct<'_>>]>,
 ) {
     let pointer = module.target_config().pointer_type();
     context.func.signature.params.push(AbiParam::new(pointer));
@@ -157,7 +227,7 @@ impl Lower<'_, '_> {
             .ins()
             .load(types::I32, MemFlagsData::new(), self.frame, offset as i32)
     }
-    fn direct(&mut self, instruction: &Instruction, binding: Direct, index: usize) -> bool {
+    fn direct(&mut self, instruction: &Instruction, binding: Direct<'_>, index: usize) -> bool {
         let pointer = self.scopes[0];
         let pointer_type = self.builder.func.dfg.value_type(pointer);
         let fields = self.builder.ins().load(
@@ -174,7 +244,14 @@ impl Lower<'_, '_> {
             Direct::Delta => Some(self.invocation_word(offset_of!(Invocation, delta))),
             _ => None,
         };
-        let admitted = if let Some(word) = time_word {
+        let curve_word = if let (Direct::Curve(_), Instruction::Call { arguments, .. }) =
+            (binding, instruction)
+        {
+            Some(self.word(arguments[0], 0))
+        } else {
+            None
+        };
+        let admitted = if let Some(word) = time_word.or(curve_word) {
             let exponent = self.builder.ins().band_imm_s(word, 0x7f800000);
             let finite = self
                 .builder
@@ -230,6 +307,15 @@ impl Lower<'_, '_> {
             }
             (Direct::Time | Direct::Delta, Instruction::Load { destination, .. }) => {
                 self.write(*destination, &[time_word.expect("time binding")]);
+            }
+            (
+                Direct::Curve(sampler),
+                Instruction::Call {
+                    destination: Some(destination),
+                    ..
+                },
+            ) => {
+                self.curve(*destination, curve_word.expect("curve coordinate"), sampler);
             }
             _ => unreachable!("validated direct binding"),
         }
