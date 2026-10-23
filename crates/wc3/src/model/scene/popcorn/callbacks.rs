@@ -1,4 +1,5 @@
 //! Checked numeric callback dispatch with invocation-owned generation capabilities.
+use super::curve::sample;
 use super::graph::*;
 use super::payload::{Element as PayloadElement, Storage as PayloadStorage};
 use super::runtime::{EffectLimits, EffectStats, FieldPlanes, RandomState, Spawn};
@@ -673,40 +674,7 @@ impl Host for ExecutionHost<'_> {
                 else {
                     return Err("curve receiver is not a sampler");
                 };
-                let EffectSampler::Curve {
-                    kind,
-                    times,
-                    values,
-                    tangents,
-                } = &self.graph.samplers[index]
-                else {
-                    return Err("sample receiver is not a curve");
-                };
-                let time = number(a[0]);
-                if !time.is_finite() {
-                    return Err("curve sample coordinate must be finite");
-                }
-                let index = times.partition_point(|key| *key <= time).saturating_sub(1);
-                let mut result = values[index];
-                if time <= times[0] {
-                    result = values[0];
-                } else if index + 1 < times.len() {
-                    let t = (time - times[index]) / (times[index + 1] - times[index]);
-                    for component in 0..kind.components() {
-                        result[component] = if tangents.is_empty() {
-                            values[index][component]
-                                + (values[index + 1][component] - values[index][component]) * t
-                        } else {
-                            let t2 = t * t;
-                            let t3 = t2 * t;
-                            (2. * t3 - 3. * t2 + 1.) * values[index][component]
-                                + (t3 - 2. * t2 + t) * tangents[index * 2 + 1][component]
-                                + (-2. * t3 + 3. * t2) * values[index + 1][component]
-                                + (t3 - t2) * tangents[(index + 1) * 2][component]
-                        };
-                    }
-                }
-                Some(Value::from_words(*kind, result.map(f32::to_bits)))
+                Some(sample(&self.graph.samplers[index], number(a[0]))?)
             }
         })
     }

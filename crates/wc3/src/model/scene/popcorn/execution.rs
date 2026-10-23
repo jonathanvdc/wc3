@@ -403,14 +403,24 @@ fn convert(word: u32, from: Family, to: Family) -> u32 {
         _ => unreachable!(),
     }
 }
+/// Exact scalar word arithmetic shared with the private pure-evolution plan.
+#[inline]
+pub(super) fn float_arithmetic(operation: u8, left: u32, right: u32) -> u32 {
+    let a = f32::from_bits(left);
+    let b = f32::from_bits(right);
+    match operation {
+        0 => (a + b).to_bits(),
+        1 => (a - b).to_bits(),
+        2 => (a * b).to_bits(),
+        _ => unreachable!(),
+    }
+}
 fn binary(operation: u8, left: u32, right: u32, family: Family) -> Option<u32> {
     let result = if family == Family::Float {
         let a = f32::from_bits(left);
         let b = f32::from_bits(right);
         match operation {
-            0 => (a + b).to_bits(),
-            1 => (a - b).to_bits(),
-            2 => (a * b).to_bits(),
+            0..=2 => float_arithmetic(operation, left, right),
             3 => (a / b).to_bits(),
             4 => (a % b).to_bits(),
             5 => (-a).to_bits(),

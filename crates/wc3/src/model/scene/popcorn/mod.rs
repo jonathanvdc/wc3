@@ -243,6 +243,7 @@ pub(crate) enum Instruction {
 
 mod callbacks;
 mod color;
+mod curve;
 pub(crate) mod graph;
 pub(crate) mod layout;
 mod orientation;
