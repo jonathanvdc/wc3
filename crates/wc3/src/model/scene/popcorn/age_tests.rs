@@ -127,6 +127,7 @@ fn ordered_own_field_stores_curve_and_float3_match_original_scalar() {
             &captures,
             &program.inner.samplers,
             AgeSample {
+                integrated_delta: 0.,
                 effect_time: 7.,
                 life,
             },
@@ -261,6 +262,7 @@ fn linear_phase_uses_initialized_phase_clock_and_rate_not_birth_timestamp() {
             &captures,
             &[],
             AgeSample {
+                integrated_delta: 0.,
                 effect_time: f64::from(time),
                 life: 0.25,
             },
@@ -371,6 +373,7 @@ fn curve_error_preserves_native_offset_and_leaves_all_caller_outputs_untouched()
             &captures,
             &program.inner.samplers,
             AgeSample {
+                integrated_delta: 0.,
                 effect_time: 0.,
                 life: f32::NAN,
             },
@@ -395,6 +398,7 @@ fn curve_error_preserves_native_offset_and_leaves_all_caller_outputs_untouched()
         &captures,
         &program.inner.samplers,
         AgeSample {
+            integrated_delta: 0.,
             effect_time: 0.,
             life: 0.3,
         },
@@ -403,6 +407,7 @@ fn curve_error_preserves_native_offset_and_leaves_all_caller_outputs_untouched()
         &captures,
         &program.inner.samplers,
         AgeSample {
+            integrated_delta: 0.,
             effect_time: 0.,
             life: 0.3,
         },
@@ -453,6 +458,7 @@ fn persistent_incoming_registers_and_scalar_word_padding_have_distinct_rules() {
             &captures,
             &program.inner.samplers,
             AgeSample {
+                integrated_delta: 0.,
                 effect_time: 0.,
                 life,
             },
@@ -467,6 +473,7 @@ fn persistent_incoming_registers_and_scalar_word_padding_have_distinct_rules() {
                 &captures,
                 &program.inner.samplers,
                 AgeSample {
+                    integrated_delta: 0.,
                     effect_time: 0.,
                     life
                 }
@@ -541,6 +548,7 @@ fn native_lich_all_selected_modes_close_complete_outputs_and_match_one_scalar_ev
                 &captures,
                 &program.inner.samplers,
                 AgeSample {
+                    integrated_delta: 0.,
                     effect_time: 0.75,
                     life,
                 },
@@ -622,6 +630,7 @@ fn immutable_boolean_capture_constant_and_reinterpreted_words_preserve_exact_bit
             &captures,
             &program.inner.samplers,
             AgeSample {
+                integrated_delta: 0.,
                 effect_time: 1.,
                 life: 0.25,
             },
@@ -681,6 +690,7 @@ fn typed_self_copies_keep_output_normalization_but_arithmetic_feedback_is_not_fr
         &captures,
         &program.inner.samplers,
         AgeSample {
+            integrated_delta: 0.,
             effect_time: 0.,
             life: 0.25,
         },
@@ -708,14 +718,17 @@ fn authorization_checks_finite_life_and_f32_time_even_without_an_explicit_time_n
         let plan = AgePlan::prepare(&program.inner.layers[0], &program.inner.samplers).unwrap();
         for sample in [
             AgeSample {
+                integrated_delta: 0.,
                 effect_time: -0.,
                 life: -0.,
             },
             AgeSample {
+                integrated_delta: 0.,
                 effect_time: f64::from(f32::MAX),
                 life: 1.,
             },
             AgeSample {
+                integrated_delta: 0.,
                 effect_time: f64::from(f32::MIN_POSITIVE),
                 life: -1.,
             },
@@ -727,6 +740,7 @@ fn authorization_checks_finite_life_and_f32_time_even_without_an_explicit_time_n
         }
         for life in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
             assert!(!plan.permitted(AgeSample {
+                integrated_delta: 0.,
                 effect_time: 0.,
                 life
             }));
@@ -740,6 +754,7 @@ fn authorization_checks_finite_life_and_f32_time_even_without_an_explicit_time_n
             f64::from(f32::MAX) * 2.,
         ] {
             assert!(!plan.permitted(AgeSample {
+                integrated_delta: 0.,
                 effect_time,
                 life: 0.25
             }));
@@ -880,6 +895,7 @@ fn affine_phase_constants_capture_expressions_signed_vectors_and_scalar_broadcas
                             &captures,
                             &[],
                             AgeSample {
+                                integrated_delta: 0.,
                                 effect_time: f64::from(time),
                                 life: 0.25,
                             },

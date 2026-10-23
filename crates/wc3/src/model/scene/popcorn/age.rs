@@ -27,6 +27,7 @@ pub(super) enum Expression {
     Capture(usize),
     Life,
     Time,
+    IntegratedDelta,
     Words {
         input: NodeId,
         kind: ValueType,
@@ -58,11 +59,13 @@ pub(super) struct AgePlan {
     pub nodes: Box<[Node]>,
     pub outputs: Box<[Output]>,
     pub phases: usize,
+    pub integrated_delta: bool,
 }
 #[derive(Clone, Copy, Debug)]
 pub(super) struct AgeSample {
     pub effect_time: f64,
     pub life: f32,
+    pub integrated_delta: f64,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct AgeError {
@@ -74,6 +77,7 @@ enum Symbol {
     Constant(Value),
     Field(usize),
     Time,
+    Delta,
     Words {
         input: usize,
         kind: ValueType,
@@ -99,9 +103,13 @@ struct Phase {
     expression: usize,
     phase: usize,
     rate: usize,
-    clock: usize,
-    time: usize,
+    step: Step,
     operation: BinaryOperation,
+}
+#[derive(Clone, Copy, Debug)]
+enum Step {
+    Clock { field: usize, time: usize },
+    IntegratedDelta,
 }
 struct Builder<'a> {
     symbols: &'a [SymbolNode],
@@ -250,7 +258,7 @@ fn invariant_rates(symbols: &[SymbolNode], written: &[bool], life: usize) -> Vec
                 Symbol::Field(field) => field != life && !written[field],
                 Symbol::Words { input, .. } => rates[input],
                 Symbol::Binary { left, right, .. } => rates[left] && rates[right],
-                Symbol::Time | Symbol::Curve { .. } => false,
+                Symbol::Time | Symbol::Delta | Symbol::Curve { .. } => false,
             };
         rates.push(invariant);
     }
@@ -303,37 +311,43 @@ fn phase(
             if !invariant_rates[rate] {
                 continue;
             }
-            let Symbol::Binary {
-                operation: BinaryOperation::Subtract,
-                left,
-                right,
-            } = symbols[delta].symbol
-            else {
-                continue;
-            };
-            if symbols[delta].kind != ValueType::Float
-                || !matches!(symbols[left].symbol, Symbol::Time)
-            {
-                continue;
-            }
-            let Some(clock) = old_field(symbols, right) else {
-                continue;
-            };
-            if clock == field {
-                continue;
-            }
-            if final_fields[clock]
-                .is_some_and(|index| matches!(symbols[index].symbol, Symbol::Time))
-            {
-                return Some(Phase {
-                    expression,
-                    phase: field,
-                    rate,
-                    clock,
+            let step = if matches!(symbols[delta].symbol, Symbol::Delta) {
+                Step::IntegratedDelta
+            } else {
+                let Symbol::Binary {
+                    operation: BinaryOperation::Subtract,
+                    left,
+                    right,
+                } = symbols[delta].symbol
+                else {
+                    continue;
+                };
+                if symbols[delta].kind != ValueType::Float
+                    || !matches!(symbols[left].symbol, Symbol::Time)
+                {
+                    continue;
+                }
+                let Some(clock) = old_field(symbols, right) else {
+                    continue;
+                };
+                if clock == field
+                    || !final_fields[clock]
+                        .is_some_and(|index| matches!(symbols[index].symbol, Symbol::Time))
+                {
+                    continue;
+                }
+                Step::Clock {
+                    field: clock,
                     time: left,
-                    operation,
-                });
-            }
+                }
+            };
+            return Some(Phase {
+                expression,
+                phase: field,
+                rate,
+                step,
+                operation,
+            });
         }
     }
     None
@@ -476,21 +490,28 @@ impl Builder<'_> {
         {
             let initial = self.capture(phase.phase, input.offset)?;
             let rate = self.lower(phase.rate, false)?;
-            let clock = self.capture(phase.clock, input.offset)?;
-            let time = self.node(
-                Expression::Time,
-                ValueType::Float,
-                self.symbols[phase.time].offset,
-            )?;
-            let delta = self.node(
-                Expression::Binary {
-                    operation: BinaryOperation::Subtract,
-                    left: time,
-                    right: clock,
-                },
-                ValueType::Float,
-                input.offset,
-            )?;
+            let delta = match phase.step {
+                Step::Clock { field, time } => {
+                    let clock = self.capture(field, input.offset)?;
+                    let time = self.node(
+                        Expression::Time,
+                        ValueType::Float,
+                        self.symbols[time].offset,
+                    )?;
+                    self.node(
+                        Expression::Binary {
+                            operation: BinaryOperation::Subtract,
+                            left: time,
+                            right: clock,
+                        },
+                        ValueType::Float,
+                        input.offset,
+                    )?
+                }
+                Step::IntegratedDelta => {
+                    self.node(Expression::IntegratedDelta, ValueType::Float, input.offset)?
+                }
+            };
             let increment = self.node(
                 Expression::Binary {
                     operation: BinaryOperation::Multiply,
@@ -526,6 +547,7 @@ impl Builder<'_> {
                     .field(field));
             }
             Symbol::Time => return Err(Rejection::new(Reason::UncertifiedTime).at(input.offset)),
+            Symbol::Delta => return Err(Rejection::new(Reason::UncertifiedDelta).at(input.offset)),
             Symbol::Words { input, kind } => Expression::Words {
                 input: self.lower(input, false)?,
                 kind,
@@ -633,7 +655,10 @@ impl AgePlan {
     pub fn permitted(&self, sample: AgeSample) -> bool {
         // The renderer's analytic life also uses an f32 time anchor, even when
         // the extracted source contains no explicit Time node.
-        sample.life.is_finite() && (sample.effect_time as f32).is_finite()
+        sample.life.is_finite()
+            && (sample.effect_time as f32).is_finite()
+            && (!self.integrated_delta
+                || (sample.integrated_delta >= 0. && (sample.integrated_delta as f32).is_finite()))
     }
     fn build(layer: &EffectLayer, samplers: &[EffectSampler]) -> Result<Self, Rejection> {
         if layer.spawner {
@@ -714,6 +739,9 @@ impl AgePlan {
                         }
                         External::Time if destination.kind == ValueType::Float => {
                             push(&mut symbols, Symbol::Time, ValueType::Float, op.offset)?
+                        }
+                        External::Delta if destination.kind == ValueType::Float => {
+                            push(&mut symbols, Symbol::Delta, ValueType::Float, op.offset)?
                         }
                         binding => {
                             return Err(Rejection::external(*external, binding).at(op.offset))
@@ -863,12 +891,25 @@ impl AgePlan {
         // Clocks are scalar, while an accumulator may use the same checked
         // componentwise Float3/Float4 arithmetic as the source evaluator.
         for phase in &phases {
-            if layer.fields[phase.clock].value_type != Some(ValueType::Float)
+            if matches!(phase.step, Step::Clock { field, .. } if layer.fields[field].value_type != Some(ValueType::Float))
                 || !layer.fields[phase.phase].value_type.is_some_and(arithmetic)
             {
                 return Err(Rejection::new(Reason::InvalidBinding)
                     .at(symbols[phase.expression].offset)
                     .field(phase.phase));
+            }
+        }
+        // An unused Delta load is still a checked host input. It may be
+        // omitted only when an integrated recurrence authorizes the same value.
+        if !phases
+            .iter()
+            .any(|phase| matches!(phase.step, Step::IntegratedDelta))
+        {
+            if let Some(node) = symbols
+                .iter()
+                .find(|node| matches!(node.symbol, Symbol::Delta))
+            {
+                return Err(Rejection::new(Reason::UncertifiedDelta).at(node.offset));
             }
         }
         if phases.is_empty()
@@ -922,7 +963,9 @@ impl AgePlan {
                 })
                 .field(field));
             }
-            let allow_time = phases.iter().any(|phase| phase.clock == field);
+            let allow_time = phases.iter().any(
+                |phase| matches!(phase.step, Step::Clock { field: clock, .. } if clock == field),
+            );
             outputs.push(Output {
                 field,
                 value: builder.lower(
@@ -948,6 +991,9 @@ impl AgePlan {
             nodes: builder.nodes.into_boxed_slice(),
             outputs: outputs.into_boxed_slice(),
             phases: phases.len(),
+            integrated_delta: phases
+                .iter()
+                .any(|phase| matches!(phase.step, Step::IntegratedDelta)),
         })
     }
     #[cfg(test)]
@@ -1012,6 +1058,16 @@ impl AgePlan {
                         });
                     }
                     Value::from(time)
+                }
+                Expression::IntegratedDelta => {
+                    let elapsed = input.integrated_delta as f32;
+                    if !elapsed.is_finite() || elapsed < 0. {
+                        return Err(AgeError {
+                            offset: Some(node.offset),
+                            message: "immutable integrated Delta is outside its finite domain",
+                        });
+                    }
+                    Value::from(elapsed)
                 }
                 Expression::Words { input, kind } => {
                     Value::from_words(kind, scratch[input.0].words())

@@ -259,7 +259,10 @@ and neither alone establishes a performance improvement.
 eligibility without allocating or repeating analysis. The pure-packet verdict
 belongs to the shared graph; the immutable-expression verdict belongs to the
 wrapper's execution policy. A rejection includes a typed reason and, where
-applicable, the original byte offset and canonical field. The first rejection
+applicable, the original byte offset and canonical field. External-binding
+rejections retain both the programme-local binding ordinal and a
+`SpecializationExternal` semantic kind, such as SceneContext, Attribute or Sampler;
+the ordinal alone is not a global capability identifier. The first rejection
 follows deterministic analysis order. `NotExamined` means that this policy did
 not request the analysis; `NotApplicable` means there is no selected evolution.
 Eligibility does not promise a compiled SIMD tile, enough living particles to
@@ -288,10 +291,10 @@ initialization, randomness, event routing and lifetime remain CPU-owned; other
 layers keep their ordinary evaluator. Strict policy retains ordinary execution
 with a typed fallback reason.
 
-Exact value expressions share one bounded DAG across CPU projections and WGSL.
-Normalization reuses identical typed expressions and folds finite literal
-arithmetic while retaining checked curve calls, original preparation bounds and
-finite capture guards. It does not remove source authorization obligations.
+CPU projections and graphics adapters consume the same bounded typed expression
+DAG, with each backend admitting its supported inputs. Normalization reuses
+identical typed expressions and folds finite literal arithmetic while retaining
+checked curve calls, original preparation bounds and finite capture guards. It does not remove source authorization obligations.
 
 The supported subset closes initialized fields, arithmetic, immutable curves driven
 by appearance life, and certified affine phase/clock recurrences. A scalar or
@@ -306,11 +309,33 @@ limitation. `immutable_recipe()` exposes read-only typed nodes, capture bindings
 output fields and curve data for a graphics adapter without exposing native VM
 registers or mutable programme state.
 
+A second affine form updates an accumulator by an invariant rate times the
+invocation's Delta. Its `IntegratedDelta` input is the sum of the actual
+VM-visible f32 cursor intervals over authorized evolutions since birth capture,
+accumulated in f64 and converted to f32 when evaluated. It is independent of
+Time, Life and caller FPS: internal subdivisions and a newborn's partial first
+interval contribute their own rounded intervals, while omitted work contributes
+nothing. Multiple Delta reads count one interval; zero-delta warmup does not
+invoke evolution. `ImmutableParticleView::sample().integrated_delta` exposes the
+committed sum without changing it. Arbitrary Delta outputs and uncertified Delta
+uses retain ordinary execution with `UncertifiedDelta`; this is not a general
+constant-acceleration integrator.
+
+Graphics policy permits reassociation of these repeated source updates into the
+closed expression, so source f32 accumulation need not remain bit-identical.
+Strict retains ordinary execution. Prospective nonfinite interval/sum admission
+restores the previous authorized outputs before executing the current source
+invocation, preserving its checked failure and write prefix. The sum shares
+budgeted per-slot authorization storage within the previous 64-bit footprint
+bound; storage prediction still uses the actual target layout. No sampling call
+allocates or advances that sum.
+
 Canonical Life and retirement still use the CPU's accumulated lifetime. The
 Graphics appearance input instead uses initialized life plus initialized inverse
 life times authorized elapsed time, with explicit f32 time anchors and an upper
-clamp at one. Phase expressions similarly use their initialized phase and clock.
-These analytic expressions can differ slightly from repeated f32 accumulation.
+clamp at one. Paired-clock expressions use their initialized accumulator and
+clock; Delta expressions use their authorized interval sum. These analytic
+expressions can differ slightly from repeated f32 accumulation.
 `ParticleView::field()` returns their evaluated canonical outputs without heap
 allocation; reading Life itself still returns the authoritative CPU value.
 Each individual virtual-output query evaluates the complete bounded recipe.

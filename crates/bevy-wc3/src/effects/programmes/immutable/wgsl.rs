@@ -234,6 +234,7 @@ pub(super) fn emit(recipe: ImmutableRecipe<'_>, fields: AppearanceFields) -> Opt
             }
             ImmutableExpression::Life => "vec4<f32>(life, 0.0, 0.0, 0.0)".to_owned(),
             ImmutableExpression::Time => "vec4<f32>(authorized, 0.0, 0.0, 0.0)".to_owned(),
+            ImmutableExpression::IntegratedDelta => return None,
             ImmutableExpression::Words { input, kind } => {
                 let value = if matches!(
                     recipe.node(input.index())?.kind,

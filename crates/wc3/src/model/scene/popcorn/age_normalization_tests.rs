@@ -29,6 +29,7 @@ fn finish(builder: Builder<'_>, output: NodeId) -> AgePlan {
         }]
         .into_boxed_slice(),
         phases: 0,
+        integrated_delta: false,
     }
 }
 fn value(plan: &AgePlan, captures: &[Value], life: f32) -> Result<Value, AgeError> {
@@ -38,6 +39,7 @@ fn value(plan: &AgePlan, captures: &[Value], life: f32) -> Result<Value, AgeErro
         captures,
         &[],
         AgeSample {
+            integrated_delta: 0.,
             effect_time: 0.,
             life,
         },
@@ -289,6 +291,7 @@ fn repeated_checked_curves_remain_distinct_even_with_unused_results() {
             &[],
             &program.inner.samplers,
             AgeSample {
+                integrated_delta: 0.,
                 effect_time: 0.,
                 life: f32::NAN,
             },

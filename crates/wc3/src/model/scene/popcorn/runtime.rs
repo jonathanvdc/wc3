@@ -1238,7 +1238,7 @@ impl EffectInstance {
         *work += 1;
         if life < 1. || layer.evolve_on_death {
             if let Some(bound) = &layer.evolve {
-                if self.authorize_age(slot, end) {
+                if self.authorize_age(slot, end, delta) {
                     return Ok(false);
                 }
                 self.execute(
@@ -1350,3 +1350,7 @@ mod native_tests;
 #[cfg(test)]
 #[path = "runtime_age_tests.rs"]
 mod age_tests;
+
+#[cfg(test)]
+#[path = "runtime_delta_tests.rs"]
+mod delta_tests;

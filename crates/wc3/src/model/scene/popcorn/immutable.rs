@@ -34,6 +34,9 @@ pub enum ImmutableExpression {
     Life,
     /// Authorized effect-local time, converted to f32.
     Time,
+    /// Sum of VM-visible f32 Delta inputs over authorized evolutions since capture.
+    /// This is runtime-owned step history, not effect elapsed time.
+    IntegratedDelta,
     /// Preserve component words with another checked layout.
     Words {
         /// Earlier input node.
@@ -136,6 +139,7 @@ impl ImmutableRecipe<'_> {
             Expression::Capture(index) => ImmutableExpression::Capture(index),
             Expression::Life => ImmutableExpression::Life,
             Expression::Time => ImmutableExpression::Time,
+            Expression::IntegratedDelta => ImmutableExpression::IntegratedDelta,
             Expression::Words { input, kind } => ImmutableExpression::Words {
                 input: id(input),
                 kind,
@@ -226,6 +230,7 @@ impl ImmutableBirth {
     pub(super) fn sample(self, time: f64) -> ImmutableSample {
         ImmutableSample {
             effect_time: time,
+            integrated_delta: 0.,
             life: (self.life + (time as f32 - self.time) * self.inverse_life).min(1.),
         }
     }
@@ -235,6 +240,9 @@ impl ImmutableBirth {
 pub struct ImmutableSample {
     /// Authorized effect-local seconds.
     pub effect_time: f64,
+    /// Committed sum of actual VM-visible Delta intervals for this particle.
+    /// Zero before the first authorized evolution; independent of appearance Life.
+    pub integrated_delta: f64,
     /// Analytic Graphics appearance life; reading canonical Life uses CPU lifetime.
     pub life: f32,
 }
@@ -242,6 +250,7 @@ impl From<ImmutableSample> for AgeSample {
     fn from(value: ImmutableSample) -> Self {
         Self {
             effect_time: value.effect_time,
+            integrated_delta: value.integrated_delta,
             life: value.life,
         }
     }

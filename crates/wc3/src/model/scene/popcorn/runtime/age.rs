@@ -7,12 +7,35 @@ use crate::model::scene::popcorn::{
 use std::mem::size_of;
 
 #[derive(Clone, Copy, Default)]
+struct AuthorizedClock {
+    effect_time: f64,
+    integrated_delta: f64,
+}
+
+#[derive(Clone, Copy, Default)]
 pub(super) struct AgeState {
     birth: ImmutableBirth,
-    sample: ImmutableSample,
+    clock: AuthorizedClock,
+    life: f32,
     generation: u32,
     valid: bool,
     evaluated: bool,
+}
+impl AgeState {
+    fn sample(self) -> ImmutableSample {
+        ImmutableSample {
+            effect_time: self.clock.effect_time,
+            integrated_delta: self.clock.integrated_delta,
+            life: self.life,
+        }
+    }
+    fn authorize(&mut self, sample: ImmutableSample) {
+        self.clock = AuthorizedClock {
+            effect_time: sample.effect_time,
+            integrated_delta: sample.integrated_delta,
+        };
+        self.life = sample.life;
+    }
 }
 pub(super) struct AgePool {
     slots: Vec<AgeState>,
@@ -54,7 +77,7 @@ impl EffectInstance {
                 continue;
             }
             let state = pool.slots[slot];
-            if !state.valid || !state.evaluated || state.sample.effect_time != self.time {
+            if !state.valid || !state.evaluated || state.clock.effect_time != self.time {
                 return None;
             }
         }
@@ -81,7 +104,7 @@ impl EffectInstance {
             fields: &self.fields,
             slot,
             birth: state.birth,
-            sample: state.sample,
+            sample: state.sample(),
         })
     }
     pub(super) fn capture_age(&mut self, slot: usize) {
@@ -131,16 +154,21 @@ impl EffectInstance {
             self.disable_age();
             return;
         }
+        let sample = birth.sample(particle.birth);
         self.age.as_mut().expect("admitted age pool").slots[slot] = AgeState {
             birth,
-            sample: birth.sample(particle.birth),
+            clock: AuthorizedClock {
+                effect_time: sample.effect_time,
+                integrated_delta: 0.,
+            },
+            life: sample.life,
             generation: particle.generation,
             valid: true,
             evaluated: false,
         };
     }
     /// Caller has already charged work and updated authoritative lifetime.
-    pub(super) fn authorize_age(&mut self, slot: usize, time: f64) -> bool {
+    pub(super) fn authorize_age(&mut self, slot: usize, time: f64, delta: f64) -> bool {
         if !self.immutable_active() {
             return false;
         }
@@ -149,14 +177,22 @@ impl EffectInstance {
             return false;
         };
         let state = self.age.as_ref().expect("age pool").slots[slot];
-        let sample = state.birth.sample(time);
+        let mut sample = state.birth.sample(time);
+        if plan.integrated_delta {
+            let step = delta as f32;
+            if !step.is_finite() || step < 0. {
+                self.disable_age();
+                return false;
+            }
+            sample.integrated_delta = state.clock.integrated_delta + f64::from(step);
+        }
         if !state.valid || state.generation != particle.generation || !plan.permitted(sample.into())
         {
             self.disable_age();
             return false;
         }
         let state = &mut self.age.as_mut().expect("age pool").slots[slot];
-        state.sample = sample;
+        state.authorize(sample);
         state.evaluated = true;
         self.scratch.clear();
         self.execution_stats.immutable_age_invocations = self
@@ -192,5 +228,30 @@ impl EffectInstance {
             .execution_stats
             .immutable_age_fallbacks
             .saturating_add(1);
+    }
+}
+
+#[cfg(all(test, target_pointer_width = "64"))]
+mod layout_tests {
+    use super::*;
+
+    #[test]
+    fn moment_clock_reuses_previous_authorization_padding() {
+        // Per-slot storage is part of admission's memory budget. Compare against
+        // the previous semantic payload without depending on Rust field offsets.
+        #[allow(dead_code)]
+        struct PreviousSample {
+            effect_time: f64,
+            life: f32,
+        }
+        #[allow(dead_code)]
+        struct PreviousState {
+            birth: ImmutableBirth,
+            sample: PreviousSample,
+            generation: u32,
+            valid: bool,
+            evaluated: bool,
+        }
+        assert!(size_of::<AgeState>() <= size_of::<PreviousState>());
     }
 }

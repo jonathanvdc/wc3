@@ -602,3 +602,143 @@ fn moving_positions_and_axes_share_recipes_across_all_billboard_geometries() {
         assert!(Arc::ptr_eq(&frozen, paused.centers.as_ref().unwrap()));
     }
 }
+
+#[test]
+fn delta_affine_rotation_is_core_eligible_but_retains_valid_cpu_sprite_samples() {
+    use wc3::model::scene::popcorn::{EffectFieldId, EffectLayerId};
+
+    let effect = effect_from(include_bytes!(
+        "../../../../../wc3/tests/fixtures/pkb/delta-affine.pkb"
+    ));
+    assert_eq!(effect.renderers.len(), 1);
+    let renderer = &effect.renderers[0];
+    let recipe = effect.program.immutable_recipe(EffectLayerId(1)).unwrap();
+    assert!((0..recipe.node_count()).any(|index| matches!(
+        recipe.node(index).unwrap().expression,
+        ImmutableExpression::IntegratedDelta
+    )));
+    assert!(matches!(
+        renderer.geometry,
+        RendererGeometry::Billboard {
+            rotation: Some(EffectFieldId(10)),
+            ..
+        }
+    ));
+    assert!(prepare(&effect.program, renderer).is_none());
+    assert!(renderer.immutable.is_none());
+
+    let mut instance = effect
+        .program
+        .instantiate(
+            EffectLimits {
+                particles: 3,
+                step_seconds: 1.,
+                ..Default::default()
+            },
+            42,
+        )
+        .unwrap();
+    instance
+        .start(
+            &effect.program,
+            effect.program.default_entry(),
+            SceneInputs::default(),
+        )
+        .unwrap();
+    instance
+        .advance(&effect.program, 0.25, SceneInputs::default())
+        .unwrap();
+    assert!(instance.immutable_active());
+    assert!(instance.execution_stats().immutable_age_invocations > 0);
+    let particle = instance.particles(EffectLayerId(1)).next().unwrap();
+    let sample = particle.immutable_sample().unwrap();
+    let elapsed = f64::from((instance.time() - particle.birth_time) as f32);
+    assert_eq!(sample.sample().integrated_delta, elapsed);
+    let angle = 3. + 2. * elapsed as f32;
+    assert_eq!(
+        particle.field(EffectFieldId(10)).unwrap(),
+        Value::from(angle)
+    );
+    let record = sprite_record(renderer, &particle, Mat4::IDENTITY)
+        .expect("unsupported GPU input must not suppress ordinary CPU geometry");
+    assert_eq!(record.size_spin[2], angle.cos());
+    assert_eq!(record.size_spin[3], angle.sin());
+}
+
+#[test]
+fn renderer_projection_can_prune_delta_without_removing_source_authorization() {
+    use wc3::model::scene::popcorn::EffectLayerId;
+
+    let effect = effect_from(include_bytes!(
+        "../../../../../wc3/tests/fixtures/pkb/delta-affine.pkb"
+    ));
+    let source = effect.program.immutable_recipe(EffectLayerId(1)).unwrap();
+    assert!((0..source.node_count()).any(|index| matches!(
+        source.node(index).unwrap().expression,
+        ImmutableExpression::IntegratedDelta
+    )));
+    // This consumer does not request authored Rotation. The source recurrence
+    // remains unchanged and must still be authorized by the core instance.
+    let mut renderer = effect.renderers[0].clone();
+    let RendererGeometry::Billboard { rotation, .. } = &mut renderer.geometry else {
+        panic!("original Delta fixture must retain its billboard renderer")
+    };
+    *rotation = None;
+    let appearance = prepare(&effect.program, &renderer)
+        .expect("unused Delta output must not reject an ordinary static consumer");
+    let compact = appearance.projection.recipe(source).unwrap();
+    assert!((0..compact.node_count()).all(|index| !matches!(
+        compact.node(index).unwrap().expression,
+        ImmutableExpression::IntegratedDelta
+    )));
+    assert_eq!(appearance.words_per_slot, wgsl::HEADER_WORDS);
+    validate_shader(&appearance.source);
+
+    let mut instance = effect
+        .program
+        .instantiate(
+            EffectLimits {
+                particles: 3,
+                step_seconds: 1.,
+                ..Default::default()
+            },
+            42,
+        )
+        .unwrap();
+    instance
+        .start(
+            &effect.program,
+            effect.program.default_entry(),
+            SceneInputs::default(),
+        )
+        .unwrap();
+    instance
+        .advance(&effect.program, 0.25, SceneInputs::default())
+        .unwrap();
+    let particle = instance.particles(EffectLayerId(1)).next().unwrap();
+    assert!(
+        particle
+            .immutable_sample()
+            .unwrap()
+            .sample()
+            .integrated_delta
+            > 0.
+    );
+    let mut state = ImmutableRendererState::new(appearance, 3).unwrap();
+    let mut data = AgeSpriteData {
+        source: Default::default(),
+        live_indices: Default::default(),
+        uniform: Default::default(),
+        style: renderer.style.clone(),
+    };
+    assert!(state.publish(
+        &renderer,
+        &instance,
+        Mat4::IDENTITY,
+        AgeSpriteUniform::default(),
+        &mut data
+    ));
+    assert!(matches!(data.source, AgeSpriteSource::Immutable(_)));
+    assert_eq!(data.live_indices.len(), 1);
+    assert!(instance.immutable_active());
+}

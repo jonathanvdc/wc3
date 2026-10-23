@@ -71,7 +71,9 @@ pub(super) fn stationary(recipe: ImmutableRecipe<'_>, field: EffectFieldId) -> b
         };
         fixed[i] = match node.expression {
             ImmutableExpression::Constant(_) | ImmutableExpression::Capture(_) => true,
-            ImmutableExpression::Time | ImmutableExpression::Life => false,
+            ImmutableExpression::Time
+            | ImmutableExpression::Life
+            | ImmutableExpression::IntegratedDelta => false,
             ImmutableExpression::Words { input, .. } | ImmutableExpression::Curve { input, .. } => {
                 fixed[input.index()]
             }
@@ -124,6 +126,7 @@ pub(super) fn admit(
                 ImmutableExpression::Capture(index) => {
                     Range::point(f32::from_bits(particle.capture(index)?.words()[c]))?
                 }
+                ImmutableExpression::IntegratedDelta => return None,
                 ImmutableExpression::Life => Range { lo: 0., hi: 1. },
                 ImmutableExpression::Time => Range {
                     lo: 0.,

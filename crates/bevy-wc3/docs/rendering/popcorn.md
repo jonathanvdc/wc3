@@ -75,7 +75,11 @@ let compiled = compile_model_with_options(model, options, |_request| None)?;
 For asynchronous loading, enumerate `ParticleEffect::texture_requests(&program)`,
 load those image interpretations, then supply their handles to `ParticleEffect::new`.
 Preparation diagnostics remain available before attaching the effect to a model.
-The model compiler assigns their feature identity.
+Core specialization reports distinguish optimization eligibility from missing
+native features. An external rejection names its semantic capability together
+with the programme-local binding ordinal and original offset; ordinals alone do
+not identify capabilities across programmes. The model compiler assigns the
+feature identity.
 `effect.with_attribute("Game.TeamColor", Vec4::new(r, g, b, 1.0))?`
 selects a typed exposed control for every new instance. Unknown names and
 incompatible layouts fail during preparation; explicit values take precedence
@@ -344,9 +348,22 @@ bounds use that same compact recipe. Stationary values stay in the per-phase
 header; unused outputs and captures add no shader expressions or birth stride.
 The complete source evolution still determines core eligibility and authorization,
 including guards on computations outside the renderer projection. This projection
-is not permission to ignore a source error. Equal generated WGSL sources share
-Bevy shader assets; live appearances own their handles, while the source index
-does not keep unused shader assets alive. This is shader sharing, not a cache of
+is not permission to ignore a source error.
+
+The core also closes affine accumulators driven by actual authorized Delta
+intervals. Their `IntegratedDelta` input sums each invocation's VM-visible f32
+cursor interval in f64; it is not effect Time, appearance Life or caller FPS.
+Graphics permits reassociation of source accumulation; Strict retains ordinary
+execution. The public immutable sample exposes the committed sum, and denied
+work or a failed admission never adds a skipped interval. Current WGSL transport
+does not consume this per-particle input: a compact renderer recipe retaining
+`IntegratedDelta` uses CPU samples. If the renderer projection removes that
+dependency, its remaining Life/Time expressions can still use WGSL while the full
+source retains its Delta authorization. Existing Life/Time routes are unchanged;
+core recipe preparation alone does not imply shader admission.
+
+Equal generated WGSL sources share Bevy shader assets; live appearances own
+their handles, while the source index does not keep unused shader assets alive. This is shader sharing, not a cache of
 native executable preparations.
 
 Admitted particles occupy stable GPU slots. Changing appearance updates the

@@ -1,0 +1,216 @@
+{
+  "status": "authored_not_strict_imported_or_executed",
+  "provenance": "original repository native author, no acquired or reference implementation bytes",
+  "base_sha256": "bfd277c077105eaec6a352442df2471a3f107a2f7959096c0a64a93687eaa339",
+  "generator_sha256": "c5dbc56086841f2918622f5e5c808a004ddc0d28ab981d81b9831efafd3c1897",
+  "file": {
+    "path": "delta-affine.pkb",
+    "sha256": "29375f7cb7f360d6459203d58113ce8fe17b552cea584d39a5a5b3ca0eb5a463",
+    "bytes": 6763
+  },
+  "controls": {
+    "root_layer": 0,
+    "child_layer": 1,
+    "child_rotation_field": 10,
+    "root_trigger_fraction": "f32(.4)",
+    "root_repeats": true,
+    "child_initial_rotation": 3,
+    "rate": 2,
+    "inverse_life": 4,
+    "expected_first_birth": ".25 * f64(f32(.4))",
+    "expected_first_integrated_delta": "f64(f32(.25-first_birth))"
+  },
+  "native_author_metadata": {
+    "count": 1,
+    "objects": 90,
+    "scripts": [
+      {
+        "link": 37,
+        "stage": 0,
+        "code_bytes": 21,
+        "code_sha256": "d7bcfe32037d51a712cdc3f4a4d4d4ff4567c6e1192ea03a50d4380b3e76e76e",
+        "instructions": [
+          "store remainingBurst=1",
+          "store self.lifeRatio=0",
+          "store self.invLife=0"
+        ],
+        "count": 3,
+        "constant_words": [
+          [
+            0
+          ],
+          [
+            1065353216
+          ],
+          [
+            1065353216
+          ]
+        ]
+      },
+      {
+        "link": 39,
+        "stage": 3,
+        "code_bytes": 127,
+        "code_sha256": "c41d5a14a78c26c20783ca5ef3b92c1d0215ee07c0d86c5c2cac6642fa417f7c",
+        "instructions": [
+          "load remainingBurst",
+          "load accumulator",
+          "load ParticleContextS",
+          "load RandContext",
+          "quantity=remainingBurst*N",
+          "trigger true at fraction f32(.4) each actual root invocation",
+          "initPayload",
+          "kick",
+          "store remainingBurst=0"
+        ],
+        "count": 9,
+        "constant_words": [
+          [
+            0
+          ],
+          [
+            1065353216
+          ],
+          [
+            1065353216
+          ],
+          [
+            4294967295
+          ],
+          [
+            1053609165
+          ]
+        ]
+      },
+      {
+        "link": 75,
+        "stage": 0,
+        "code_bytes": 98,
+        "code_sha256": "bdadc86fa031f8b7c30a3161a4d8747705e5fde195c97188fa71d2346fb66c50",
+        "instructions": [
+          "store self.lifeRatio",
+          "store self.invLife",
+          "store basePosition",
+          "store baseSize",
+          "store baseAlpha",
+          "store baseColor",
+          "store baseRotation",
+          "store coefficient",
+          "store Position",
+          "store Size",
+          "store Rotation",
+          "store Enabled",
+          "store Color",
+          "store TextureID"
+        ],
+        "count": 14,
+        "constant_words": [
+          [
+            0
+          ],
+          [
+            1082130432
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1065353216
+          ],
+          [
+            1061158912
+          ],
+          [
+            1040187392,
+            1048576000,
+            1056964608,
+            1065353216
+          ],
+          [
+            1048576000
+          ],
+          [
+            1073741824
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1065353216
+          ],
+          [
+            1077936128
+          ],
+          [
+            4294967295
+          ],
+          [
+            1065353216,
+            1065353216,
+            1065353216,
+            1065353216
+          ],
+          [
+            0
+          ]
+        ]
+      },
+      {
+        "link": 78,
+        "stage": 3,
+        "code_bytes": 56,
+        "code_sha256": "0db71cd393347c3cf901fd00efa944d1cfbb94a2a8765ae2f32aeaed17712b1d",
+        "instructions": [
+          "load Rotation",
+          "load coefficient",
+          "load scene.dt",
+          "coefficient*Delta",
+          "Rotation+increment",
+          "store Rotation"
+        ],
+        "count": 6,
+        "constant_words": []
+      }
+    ],
+    "child_field_order": [
+      "self.lifeRatio",
+      "self.invLife",
+      "basePosition",
+      "baseSize",
+      "baseAlpha",
+      "baseColor",
+      "baseRotation",
+      "coefficient",
+      "Position",
+      "Size",
+      "Rotation",
+      "Enabled",
+      "Color",
+      "TextureID"
+    ],
+    "child_external_order": [
+      "scene.time",
+      "self.lifeRatio",
+      "self.invLife",
+      "basePosition",
+      "baseSize",
+      "baseAlpha",
+      "baseColor",
+      "baseRotation",
+      "coefficient",
+      "Position",
+      "Size",
+      "Rotation",
+      "Enabled",
+      "Color",
+      "TextureID",
+      "curve"
+    ],
+    "sha256": "29375f7cb7f360d6459203d58113ce8fe17b552cea584d39a5a5b3ca0eb5a463",
+    "bytes": 6763
+  }
+}

@@ -160,6 +160,9 @@ impl ImmutableRecipe<'_> {
                 value: node_ids[output.value.0].expect("selected projection output"),
             })
             .collect();
+        let integrated_delta = nodes
+            .iter()
+            .any(|node| matches!(node.expression, Expression::IntegratedDelta));
         Ok(ImmutableProjection {
             source: Arc::clone(self.plan),
             plan: Arc::new(AgePlan {
@@ -167,6 +170,7 @@ impl ImmutableRecipe<'_> {
                 captures: captures.into_boxed_slice(),
                 outputs,
                 phases: self.plan.phases,
+                integrated_delta,
             }),
         })
     }

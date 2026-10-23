@@ -87,6 +87,8 @@ pub enum SpecializationReason {
     Feedback,
     /// A time reference is outside a certified clock recurrence.
     UncertifiedTime,
+    /// A Delta reference is outside a certified step-history recurrence.
+    UncertifiedDelta,
     /// A curve coordinate lacks the required finite-domain certificate.
     CurveCoordinate {
         /// Immutable sampler ordinal in the prepared effect.
