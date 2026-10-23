@@ -11,6 +11,7 @@ use crate::model::scene::popcorn::graph::{
     BoundProgram, Callback, EffectGraph, EffectSampler, EventRoute, External, SpatialResource,
 };
 use crate::model::scene::popcorn::layout::compact_registers;
+use crate::model::scene::popcorn::packet::prepare as prepare_pure;
 use crate::model::scene::popcorn::payload::Layout as PayloadLayout;
 use crate::model::scene::popcorn::shapes::{Domain, Primitive, Shape};
 use crate::model::scene::popcorn::{
@@ -466,6 +467,7 @@ impl<'a> Document<'a> {
                     fields: fields.into_boxed_slice(),
                     init,
                     evolve,
+                    pure_evolution: None,
                     life,
                     inverse_life,
                     standalone: graph.layers[index].parents.is_empty(),
@@ -485,6 +487,7 @@ impl<'a> Document<'a> {
                 error
             })?);
         }
+        prepare_pure(&mut layers, &lowering.samplers);
         let mut events = Vec::new();
         for event in &graph.events {
             let payload = if let Some(parent) = event.parent {

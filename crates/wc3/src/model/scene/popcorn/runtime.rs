@@ -2,6 +2,7 @@
 use super::callbacks::{ExecutionHost, Scratch};
 use super::graph::*;
 use super::lifetime::Lifetime;
+use super::packet::{Lane, Scratch as PacketScratch, MINIMUM, WIDTH};
 use super::payload::{Handle as PayloadHandle, Storage as PayloadStorage};
 use super::spatial::Store as SpatialStore;
 use super::{Failure, State, Value, ValueType};
@@ -241,6 +242,7 @@ pub struct EffectInstance {
     scratch: Scratch,
     payload: PayloadStorage,
     vm_scratch: State,
+    packet: Option<Box<PacketScratch>>,
     limits: EffectLimits,
     stats: EffectStats,
     attributes: Vec<Value>,
@@ -376,6 +378,12 @@ impl EffectProgram {
         if bytes.is_none_or(|bytes| bytes > limits.storage_bytes) {
             return Err(failure("effect pool exceeds its configured storage budget"));
         }
+        // Optional acceleration cannot reject an otherwise valid scalar pool.
+        // Include the boxed metadata and the exact fixed-plane allocations.
+        let packet = PacketScratch::shape(&self.inner.layers).and_then(|shape| {
+            let total = bytes?.checked_add(PacketScratch::bytes(shape)?)?;
+            (total <= limits.storage_bytes).then(|| PacketScratch::new(shape))
+        });
         let particles = (0..limits.particles)
             .map(|_| Particle {
                 state: State::persistent_for_programs(programs.iter().copied()),
@@ -418,6 +426,7 @@ impl EffectProgram {
             payload: PayloadStorage::new(limits.particles, limits.pending_events, payload_width)
                 .map_err(failure)?,
             vm_scratch: State::scratch_for_programs(programs.iter().copied()),
+            packet,
             limits,
             stats: EffectStats::default(),
             attributes: self
@@ -713,20 +722,11 @@ impl EffectInstance {
         for store in &mut self.spatial {
             store.begin_tick();
         }
-        let mut index = 0;
-        while index < self.active.len() {
-            let slot = self.active[index];
-            let layer = &program.inner.layers[self.particles[slot].layer.0 as usize];
-            if !self.running && layer.spawner {
-                self.retire_at(index);
-                continue;
-            }
-            let dead = self.evolve(program, slot, end, inputs, work)?;
-            if dead {
-                self.retire_at(index);
-            } else {
-                index += 1;
-            }
+        // Existing-active processing can only retire; births are drained later.
+        if self.packet.is_some() && self.active.len() >= MINIMUM {
+            self.evolve_packet_active(program, end, inputs, work)?;
+        } else {
+            self.evolve_active::<false>(program, end, inputs, work)?;
         }
         while let Some(spawn) = self.pending.pop() {
             if *work >= self.limits.work_per_update {
@@ -748,6 +748,135 @@ impl EffectInstance {
         }
         Ok(())
     }
+    // Keep the packet-enabled loop outside the common scalar step frame.
+    #[inline(never)]
+    fn evolve_packet_active(
+        &mut self,
+        program: &EffectProgram,
+        end: f64,
+        inputs: SceneInputs,
+        work: &mut usize,
+    ) -> Result<(), EffectRuntimeError> {
+        self.evolve_active::<true>(program, end, inputs, work)
+    }
+    fn evolve_active<const PACKETS: bool>(
+        &mut self,
+        program: &EffectProgram,
+        end: f64,
+        inputs: SceneInputs,
+        work: &mut usize,
+    ) -> Result<(), EffectRuntimeError> {
+        let mut index = 0;
+        let mut scalar_until = 0;
+        while index < self.active.len() {
+            let slot = self.active[index];
+            let layer = &program.inner.layers[self.particles[slot].layer.0 as usize];
+            if !self.running && layer.spawner {
+                self.retire_at(index);
+                continue;
+            }
+            if PACKETS
+                && self.active.len() - index >= MINIMUM
+                && index >= scalar_until
+                && layer.evolve.is_some()
+                && layer.pure_evolution.is_some()
+            {
+                let (committed, examined) = self.try_packet(program, index, end, work);
+                if committed > 0 {
+                    index += committed;
+                    continue;
+                }
+                // A short run or failed speculative tile is examined only once.
+                // Scalar replay still owns its exact host-write/error prefix.
+                scalar_until = index + examined.max(1);
+            }
+            let dead = self.evolve(program, slot, end, inputs, work)?;
+            if dead {
+                self.retire_at(index);
+            } else {
+                index += 1;
+            }
+        }
+        Ok(())
+    }
+    // Keep packet execution storage and code out of the scalar step frame.
+    #[inline(never)]
+    fn try_packet(
+        &mut self,
+        program: &EffectProgram,
+        index: usize,
+        end: f64,
+        work: &mut usize,
+    ) -> (usize, usize) {
+        let remaining = self.limits.work_per_update.saturating_sub(*work);
+        if remaining < MINIMUM {
+            return (0, remaining.max(1));
+        }
+        let layer_id = self.particles[self.active[index]].layer;
+        let layer = &program.inner.layers[layer_id.0 as usize];
+        let Some(plan) = layer.evolve.as_ref().and(layer.pure_evolution.as_deref()) else {
+            return (0, 1);
+        };
+        let Some(scratch) = &mut self.packet else {
+            return (0, 1);
+        };
+        scratch.count = 0;
+        for &slot in self.active[index..].iter().take(WIDTH.min(remaining)) {
+            let particle = &self.particles[slot];
+            if particle.layer != layer_id {
+                break;
+            }
+            let delta = (end - particle.cursor).max(0.);
+            let Ok(lifetime) = Lifetime::read(
+                f32::from_bits(self.fields.read(layer.life, slot)[0]),
+                f32::from_bits(self.fields.read(layer.inverse_life, slot)[0]),
+            ) else {
+                break;
+            };
+            let life = lifetime.advance(delta);
+            // Terminal, instantaneous and malformed lanes stay at their exact
+            // scalar cursor/work/death boundary; no speculation escapes here.
+            if !life.is_finite() || life >= 1. {
+                break;
+            }
+            scratch.lanes[scratch.count] = Lane { slot, delta, life };
+            scratch.count += 1;
+        }
+        let count = scratch.count;
+        if count < MINIMUM {
+            return (0, count);
+        }
+        scratch.stage(plan, &self.fields, layer.life);
+        if scratch.execute(plan, &program.inner.samplers, end).is_err() {
+            #[cfg(test)]
+            {
+                scratch.fallbacks += 1;
+            }
+            return (0, count);
+        }
+        for lane in 0..count {
+            let value = scratch.lanes[lane];
+            self.particles[value.slot].cursor = end;
+            self.fields
+                .write(layer.life, value.slot, [value.life.to_bits(), 0, 0, 0]);
+            *work += 1;
+            // Preserve the checked host invocation boundary. Pure operations
+            // never allocate capabilities or touch its preserved temporal cache.
+            self.scratch.clear();
+            scratch.commit(plan, lane, &mut self.fields);
+            #[cfg(test)]
+            {
+                scratch.committed += 1;
+            }
+            debug_assert!(Lifetime::read(
+                f32::from_bits(self.fields.read(layer.life, value.slot)[0]),
+                f32::from_bits(self.fields.read(layer.inverse_life, value.slot)[0]),
+            )
+            .is_ok());
+        }
+        (count, count)
+    }
+
     fn birth(
         &mut self,
         program: &EffectProgram,
@@ -972,3 +1101,7 @@ impl EffectInstance {
 #[cfg(test)]
 #[path = "runtime_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "packet_runtime_tests.rs"]
+mod packet_tests;

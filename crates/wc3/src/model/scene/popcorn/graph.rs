@@ -1,4 +1,5 @@
 //! Immutable effect programmes and renderer-independent storage bindings.
+use super::packet::PureEvolution;
 use super::payload::Layout as PayloadLayout;
 use super::shapes::Shape;
 use super::turbulence::Turbulence;
@@ -272,6 +273,7 @@ pub struct EffectLayer {
     pub fields: Box<[EffectField]>,
     pub(crate) init: BoundProgram,
     pub(crate) evolve: Option<BoundProgram>,
+    pub(crate) pure_evolution: Option<Box<PureEvolution>>,
     pub(crate) life: usize,
     pub(crate) inverse_life: usize,
     pub(crate) standalone: bool,

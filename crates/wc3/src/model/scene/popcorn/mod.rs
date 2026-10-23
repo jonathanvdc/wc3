@@ -247,6 +247,7 @@ mod curve;
 pub(crate) mod graph;
 pub(crate) mod layout;
 mod orientation;
+pub(crate) mod packet;
 mod runtime;
 pub use graph::{
     EffectAttribute, EffectAttributeId, EffectEntry, EffectField, EffectFieldId, EffectLayer,

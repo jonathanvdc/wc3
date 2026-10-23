@@ -317,8 +317,9 @@ and reports a new failure if its cause persists. An instantiation failure requir
 correcting the preparation or limits before spawning again. Despawn removes the
 simulation and its render entities.
 
-The scalar evaluator uses shared local scratch and persistent particle storage;
-steady-state execution performs no allocation within its configured capacities.
+The core evaluator combines checked particle batches with scalar fallback over
+shared scratch and persistent particle storage. Steady-state execution performs
+no allocation within its configured capacities.
 This establishes a storage contract, not native random-sequence fidelity or a
 full-renderer performance comparison. The [core programme guide](../../../wc3/docs/popcorn.md)
 describes supported execution policies and their remaining limits.

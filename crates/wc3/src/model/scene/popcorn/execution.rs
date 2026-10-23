@@ -75,6 +75,26 @@ impl State {
         }
         self.arguments.clear();
     }
+    #[cfg(test)]
+    pub(super) fn same_observable(
+        &self,
+        other: &Self,
+        dead: impl Fn(usize, usize) -> bool,
+    ) -> bool {
+        self.arguments == other.arguments
+            && self
+                .scopes
+                .iter()
+                .zip(&other.scopes)
+                .enumerate()
+                .all(|(scope, (a, b))| {
+                    a.len() == b.len()
+                        && a.iter()
+                            .zip(b)
+                            .enumerate()
+                            .all(|(slot, (a, b))| dead(scope, slot) || a == b)
+                })
+    }
     fn read(&self, source: Source) -> Value {
         let words = match source.address {
             Address::Constant(words) => words,
