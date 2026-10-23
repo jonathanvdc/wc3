@@ -241,7 +241,7 @@ impl PhysicsDefinition {
             diagnostic(diagnostics,system_id,RenderDiagnosticKind::Unverified,
                 "Physics uses compound tensor inertia, point contacts, maximum restitution and geometric-mean Coulomb friction; native mass/contact fidelity and stable multipoint manifolds remain unverified");
             diagnostic(diagnostics,system_id,RenderDiagnosticKind::Approximation,
-                "Animated nonuniform body scale uses conservative rounded contact bounds and fixed-mass affine inertia; kinematic targets interpolate over available fixed steps");
+                "Animated body scale retains fixed-mass affine inertia; kinematic targets interpolate over available fixed steps");
             let body_start = output.bodies.len();
             let joint_start = output.joints.len();
             let mut body_indices = HashMap::new();
@@ -280,12 +280,8 @@ impl PhysicsDefinition {
                     diagnostic(diagnostics, system_id, RenderDiagnosticKind::Unsupported, "Native attachment-host and ragdoll body controls need application physics policy");
                 }
                 let fixtures: Vec<_> = body.shapes.iter().map(Fixture::prepare).collect();
-                if fixtures.iter().any(|(fixture, _)| fixture.approximate) {
-                    diagnostic(diagnostics, system_id, RenderDiagnosticKind::Approximation,
-                        "Nonuniform/sheared rounded fixtures use conservative per-fixture bounds for analytical-only pairs; hull inertia uses its declared mass with a spherical tensor approximation");
-                }
                 if fixtures.iter().any(|(fixture, _)| fixture.is_hull()) {
-                    diagnostic(diagnostics, system_id, RenderDiagnosticKind::Approximation, "Convex contacts use bounded iterative GJK/EPA support queries; numerical or work-limit failures omit the query and are exposed in per-instance contact statistics. Native game contact fidelity is unverified");
+                    diagnostic(diagnostics, system_id, RenderDiagnosticKind::Approximation, "Hull inertia uses a spherical tensor approximation; contacts use bounded iterative GJK/EPA support queries. Numerical or work-limit failures omit the query and are exposed in per-instance contact statistics. Native game contact fidelity is unverified");
                 }
                 if fixtures
                     .iter()
@@ -388,14 +384,6 @@ impl PhysicsDefinition {
             for &(a, b) in &system.collision_pairs {
                 if let (Some(&a), Some(&b)) = (body_indices.get(&a), body_indices.get(&b)) {
                     if a != b {
-                        if output.bodies[a]
-                            .fixtures
-                            .iter()
-                            .any(|fa| output.bodies[b].fixtures.iter().any(|fb| !fa.supports(fb)))
-                        {
-                            diagnostic(diagnostics,system_id,RenderDiagnosticKind::Approximation,
-                                "Physics box-box and capsule-box pairs use per-fixture bounding spheres; exact supported capsule contacts are retained elsewhere in the compound");
-                        }
                         output.pairs.push((a, b));
                     }
                 }
@@ -755,12 +743,9 @@ impl PhysicsState {
             return &self.output;
         }
         if reset {
-            if self.contact_scratch.is_none()
-                && definition
-                    .bodies
-                    .iter()
-                    .any(|body| body.fixtures.iter().any(Fixture::is_hull))
-            {
+            // Any admitted primitive can need affine support after scale
+            // animation. Allocate once before stepping, never inside a query.
+            if self.contact_scratch.is_none() && !pairs.is_empty() {
                 self.contact_scratch = Some(Box::default());
             }
             self.bodies.clone_from(&self.targets);

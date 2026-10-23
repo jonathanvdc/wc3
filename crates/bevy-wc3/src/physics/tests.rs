@@ -1568,3 +1568,55 @@ fn joint_projection_still_contributes_constraint_velocity_without_losing_transla
     assert!(state.bodies[1].velocity.distance(Vec3::new(-64., 2., 0.)) < 1e-5);
     assert!((state.bodies[0].velocity + state.bodies[1].velocity).distance(Vec3::Y * 4.) < 1e-5);
 }
+
+#[test]
+fn selected_primitive_pairs_prepare_scratch_before_scale_animation_needs_it() {
+    let (mut definition, mut authored) = fixture(2);
+    authored[1] = Mat4::from_translation(Vec3::X * 0.8);
+    let mut settings = PhysicsSimulation {
+        gravity: Vec3::ZERO,
+        iterations: 1,
+        ..Default::default()
+    };
+    let mut no_contacts = PhysicsState::default();
+    no_contacts.step(&definition, &settings, 0., &authored, &HashMap::new());
+    assert!(no_contacts.contact_scratch.is_none());
+    definition.pairs.push((0, 1));
+    let mut state = PhysicsState::default();
+    state.step(&definition, &settings, 0., &authored, &HashMap::new());
+    let scratch = state.contact_scratch.as_deref().unwrap() as *const ContactScratch;
+    // Uniform spheres initially use the analytical path. A later body scale
+    // makes one an ellipsoid, requiring support without a first-query allocation.
+    authored[1] = Mat4::from_scale_rotation_translation(
+        Vec3::new(0.5, 1., 1.),
+        Quat::IDENTITY,
+        Vec3::X * 0.8,
+    );
+    state.step(
+        &definition,
+        &settings,
+        settings.timestep,
+        &authored,
+        &HashMap::new(),
+    );
+    assert_eq!(
+        state.contact_scratch.as_deref().unwrap() as *const ContactScratch,
+        scratch
+    );
+    assert!(state.contact_stats().support_vertices > 0);
+    assert_eq!(state.contact_stats().inconclusive_queries, 0);
+    // This independently prepared fixture has no inferred pairs. Switching to
+    // that empty selection retains the already owned scratch for later reuse.
+    settings.contact_policy = PhysicsContactPolicy::UnconnectedDynamics;
+    state.step(
+        &definition,
+        &settings,
+        settings.timestep,
+        &authored,
+        &HashMap::new(),
+    );
+    assert_eq!(
+        state.contact_scratch.as_deref().unwrap() as *const ContactScratch,
+        scratch
+    );
+}

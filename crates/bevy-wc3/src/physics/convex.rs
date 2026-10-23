@@ -13,7 +13,7 @@ const MAX_EDGES: usize = 384;
 const MAX_SEED: usize = 16;
 const GJK_STEPS: usize = 48;
 const EPA_STEPS: usize = 80;
-const RELATIVE_TOLERANCE: f64 = 1e-8;
+pub(super) const RELATIVE_TOLERANCE: f64 = 1e-8;
 
 pub(super) struct Hull {
     vertices: Box<[Vec3]>,

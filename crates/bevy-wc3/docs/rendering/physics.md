@@ -105,19 +105,24 @@ query and support allowances. A zero pair or query allowance disables contacts
 while integration and joints continue. Pair exhaustion stops remaining body-pair
 traversal; an already admitted pair can finish its compound queries. Query
 exhaustion truncates the remaining contact passes; support exhaustion omits that
-hull query while analytical contacts can use remaining query allowance. Omitted
-work is never queued for a later frame.
+support-map query while analytical contacts can use remaining query allowance.
+Omitted work is never queued for a later frame.
 
 `ModelRig::physics_contact_stats()` reports saturating cumulative actual body-pair
 examinations (`pair_checks`), queries, support samples and typed numerical/budget
 issues since rig creation or an explicit reset generation. Pair and query
 exhaustions are each counted once per truncated update; using exactly an allowance
 without further requested work is not an exhaustion. Support exhaustion is counted
-per failed hull query. The latest issue remains visible after successful queries.
+per failed support-map query. The latest issue remains visible after successful queries.
 This runtime observation is independent of
 `physics_contact_error()`, which reports contact-policy preparation failure.
-Hull scratch is allocated once when its instance initializes and reused across
-contacts; source hulls above 4096 vertices are rejected before a private vertex copy.
+A fixed support-query scratch buffer is allocated once when an instance initializes
+with selected contact pairs and reused across its contacts. A newly initialized
+instance whose selected policy admits no pairs allocates none; a buffer allocated
+earlier remains owned by its rig when a later policy admits no pairs. Preparing it
+even for initially uniform primitives permits later body-scale animation to require
+support queries without allocating inside a query. Source hulls above 4096
+vertices are rejected before a private vertex copy.
 
 ## Geometry and response limits
 
@@ -129,14 +134,17 @@ swing/twist and hinge limits, distance and weld constraints. Motors, angular joi
 friction and slider limits retain diagnostics.
 
 Each compound fixture retains its own geometry and material response.
-Sphere/capsule pairs use exact segment distances; sphere/orthogonal-box contacts
-use the actual box. Pairs containing a convex hull use bounded support-map distance
-and penetration queries over the original prepared vertices. Affine support retains
-nonuniform scale, reflection and shear. Invalid or degenerate hulls, numerical
-nonconvergence and exhausted work quotas omit the contact rather than substitute
-a sphere. These iterative contacts approximate penetration; native game fidelity
-remains unverified. Other box-box and capsule-box pairs retain conservative fixture
-bounds, as do analytical-only rounded pairs under nonuniform scale or shear.
+Sphere/capsule pairs with similarity transforms use exact segment distances;
+sphere/orthogonal-box contacts use the actual box. These analytical combinations
+consume no support samples. Box-box, capsule-box and pairs whose affine geometry
+cannot be represented by those analytical families use the same bounded support-map
+distance and penetration queries as convex hulls. Support retains the
+original primitive surface or prepared hull vertices under nonuniform scale,
+reflection and shear; conservative bounds are used only for broad-phase rejection.
+Invalid transforms, unavailable or degenerate hulls, numerical nonconvergence and
+exhausted work quotas omit the contact with a typed runtime issue rather than
+substitute a sphere. These iterative contacts approximate penetration; native game
+fidelity remains unverified.
 Compound centers and full tensor inertia retain fixture offsets and orientation;
 contacts produce angular impulses and bounded Coulomb friction. Restitution uses
 the maximum and friction the geometric mean of the two fixtures' values.

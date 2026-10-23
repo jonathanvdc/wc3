@@ -9,7 +9,7 @@ pub struct PhysicsContactLimits {
     /// Zero disables contacts while integration and joints continue normally.
     pub queries_per_update: usize,
     /// Hull vertices examined and closed-form primitive support samples.
-    /// This quota is shared across all hull queries in the same update.
+    /// This quota is shared across all support-map queries in the same update.
     pub support_vertices_per_update: usize,
 }
 impl Default for PhysicsContactLimits {
@@ -29,7 +29,7 @@ pub enum PhysicsContactIssue {
     PairLimit,
     /// The shared per-update narrow-phase query quota was exhausted.
     QueryLimit,
-    /// A hull query exhausted the shared support-sample quota.
+    /// A support-map query exhausted the shared support-sample quota.
     SupportLimit,
     /// A contact input or transformed support was nonfinite or singular.
     InvalidInput,
@@ -59,7 +59,7 @@ pub struct PhysicsContactStats {
     pub inconclusive_queries: u64,
     /// Updates whose remaining contact passes were truncated by their query quota.
     pub query_budget_exhaustions: u64,
-    /// Hull queries omitted after exhausting their shared support quota.
+    /// Support-map queries omitted after exhausting their shared support quota.
     pub support_budget_exhaustions: u64,
     /// Latest retained issue, independently of native contact-admission errors.
     pub last_issue: Option<PhysicsContactIssue>,
