@@ -122,11 +122,22 @@ pub(crate) fn expand(input: DeriveInput) -> TokenStream {
                         .map(|(field, name)| convert(&field.ty, quote!(#name)))
                         .collect();
                     match &variant.fields {
-                        Fields::Named(_) => quote!(
-                            Self::#variant_name { #(#names),* } => #name::#variant_name {
-                                #(#names: #values),*
-                            }
-                        ),
+                        Fields::Named(_) => {
+                            let fields = variant.fields.iter().zip(&names).zip(&values).map(
+                                |((field, name), value)| {
+                                    if rebound(&field.ty, &parameters, &owned_lifetime).1 {
+                                        quote!(#name: #value)
+                                    } else {
+                                        quote!(#name)
+                                    }
+                                },
+                            );
+                            quote!(
+                                Self::#variant_name { #(#names),* } => #name::#variant_name {
+                                    #(#fields),*
+                                }
+                            )
+                        }
                         Fields::Unnamed(_) => quote!(
                             Self::#variant_name(#(#names),*) => #name::#variant_name(#(#values),*)
                         ),
