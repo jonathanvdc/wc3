@@ -1,4 +1,6 @@
 //! Immutable effect programmes and renderer-independent storage bindings.
+#[path = "execution_plans.rs"]
+mod execution_plans;
 use super::execution_plan::ExecutionPlan;
 use super::execution_policy::{ExecutionOptions, ExecutionPreference, ExecutionReport};
 use super::packet::PureEvolution;
@@ -6,6 +8,7 @@ use super::payload::Layout as PayloadLayout;
 use super::shapes::Shape;
 use super::turbulence::Turbulence;
 use super::{ImmutableRecipe, Program, Value, ValueType};
+use execution_plans::ExecutionPlans;
 use glam::{Mat4, Vec3};
 use std::sync::Arc;
 
@@ -232,6 +235,7 @@ pub enum MissingPayloadPolicy {
 pub struct EffectProgram {
     pub(crate) inner: Arc<EffectGraph>,
     pub(super) execution: Arc<ExecutionPlan>,
+    plans: Arc<ExecutionPlans>,
 }
 impl EffectProgram {
     pub(crate) fn new(graph: EffectGraph) -> Self {
@@ -243,17 +247,26 @@ impl EffectProgram {
                 ..ExecutionOptions::default()
             },
         ));
-        Self { inner, execution }
+        let plans = Arc::new(ExecutionPlans::new(&execution));
+        Self {
+            inner,
+            execution,
+            plans,
+        }
     }
 
     /// Prepare an execution plan for new instances of the same immutable graph.
     ///
-    /// Clones retain programme and attribute identity. Existing instances keep
+    /// Clones share live plans prepared for exactly the same choices, retaining
+    /// programme and attribute identity. The cache holds no executable plan alive.
+    /// Existing instances keep
     /// their captured plan: passing this wrapper to their `start` or `advance`
     /// methods does not replace that plan. Preparation failures select the
     /// interpreter before execution and remain visible in `execution_reports`.
     pub fn with_execution(mut self, options: ExecutionOptions) -> Self {
-        self.execution = Arc::new(ExecutionPlan::prepare(&self.inner, options));
+        if self.execution.options() != options {
+            self.execution = self.plans.prepare(&self.inner, options);
+        }
         self
     }
 

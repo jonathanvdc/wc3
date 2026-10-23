@@ -223,8 +223,13 @@ Ordinary effect compilation retains the Rust evaluator, including its eligible
 16-particle batches. Enable the optional `wc3/popcorn-jit` feature and call
 `program.with_execution(ExecutionOptions::default())` before instantiation to
 prepare scalar native code and eligible 16-particle SIMD batches, each lowered
-as four groups of four lanes. Preparation happens once for that programme handle;
-instances share the executable allocation and keep their own particle storage.
+as four groups of four lanes. Cloned programme handles reuse a live preparation
+for exactly equal execution options. Returning the current options does no work;
+a sibling handle shares the prepared plan without allocating. The graph-local
+index owns weak references, so executable storage is released after its last
+wrapper or instance disappears. Independently compiled graphs keep separate
+identities and caches. Instances share executable allocations and retain their
+own particle storage.
 The crate requires Rust 1.97. The feature supports native execution on Unix and Windows
 with a Cranelift-supported x86-64, AArch64, RISC-V64 or s390x host. Other builds
 retain the Rust evaluator. SIMD lowering currently supports x86-64 and AArch64.
