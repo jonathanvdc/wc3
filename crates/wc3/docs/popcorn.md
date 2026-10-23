@@ -270,6 +270,17 @@ batch, successful runtime authorization, or graphics-adapter support. Use
 `execution_reports()` for platform and compilation fallbacks and execution
 counters for actual dispatch; runtime faults retain their ordinary error path.
 
+A [recorded native-corpus audit](../benches/results/popcorn-specialization-corpus-2026-10-22.json)
+compares Interpreter and ImmutableAge Graphics over all reported roots of 58 PKBs,
+three evolution selections and two seeds. Across 330 paired cases, public lifecycle,
+canonical Life, budgets and checked error prefixes matched exactly; actual virtual
+Float outputs stayed within a fixed `512*f32::EPSILON*max(1,abs(reference))` bound.
+The audit retains nine compile rejections and 490 runtime-error observations rather
+than treating those effects as fully supported. Typed rejection reports and Delta
+support left actual immutable admission unchanged in this corpus. This is a public
+trajectory and eligibility check, not native-game fidelity, rendering or performance
+proof; the record includes its workload, diagnostic profiles and evidence hashes.
+
 The [performance guide](popcorn-performance.md) provides paired comparisons and
 recorded measurements against the packet-enabled Rust evaluator.
 

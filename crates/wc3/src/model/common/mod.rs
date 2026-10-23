@@ -3,7 +3,7 @@
 //! [`binary`](crate::model::common::binary) supplies bounded address spaces, sequential cursors, and output
 //! buffers. [`EncodedArray`](crate::model::common::EncodedArray) retains fixed records in borrowed encoded storage
 //! until editing requires ownership; format adapters supply their record layouts
-//! and codecs. Native codecs use [`ZeroVec`] for unaligned scalar arrays.
+//! and codecs. Native codecs use [`zerovec::ZeroVec`] for unaligned scalar arrays.
 //! [`PackedArray`] exposes semantic values through [`PackedValue`], retaining
 //! compatible packed storage independently of glam's aligned memory layout.
 //!
