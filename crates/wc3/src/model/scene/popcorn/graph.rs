@@ -7,7 +7,9 @@ use super::packet::PureEvolution;
 use super::payload::Layout as PayloadLayout;
 use super::shapes::Shape;
 use super::turbulence::Turbulence;
-use super::{ImmutableRecipe, Program, Value, ValueType};
+use super::{
+    ImmutableRecipe, Program, SpecializationReport, SpecializationStatus, Value, ValueType,
+};
 use execution_plans::ExecutionPlans;
 use glam::{Mat4, Vec3};
 use std::sync::Arc;
@@ -282,6 +284,33 @@ impl EffectProgram {
         self.execution.reports()
     }
 
+    /// Eligibility of the selected evolution, separate from backend selection
+    /// and actual runtime work. This does not allocate or repeat analysis.
+    /// Existing instances retain their own fixed execution preparation.
+    pub fn specialization_report(&self, layer: EffectLayerId) -> Option<SpecializationReport> {
+        let definition = self.inner.layers.get(layer.0 as usize)?;
+        Some(SpecializationReport {
+            layer,
+            pure_packet: definition.pure_evolution_status,
+            immutable_expressions: if definition.evolve.is_none() {
+                SpecializationStatus::NotApplicable
+            } else {
+                self.execution.immutable_status(layer)
+            },
+        })
+    }
+
+    /// Allocation-free eligibility snapshots for every layer's selected evolution.
+    /// A prepared capability is not an invocation count or GPU rendering promise.
+    pub fn specialization_reports(
+        &self,
+    ) -> impl ExactSizeIterator<Item = SpecializationReport> + '_ {
+        self.inner.layers.iter().enumerate().map(|(index, _)| {
+            self.specialization_report(EffectLayerId(index as u32))
+                .expect("enumerated effect layer")
+        })
+    }
+
     /// Borrow a certified Graphics recipe prepared for new instances of this wrapper.
     /// Existing instances retain their own fixed recipe and fallback state.
     pub fn immutable_recipe(&self, layer: EffectLayerId) -> Option<ImmutableRecipe<'_>> {
@@ -334,6 +363,7 @@ pub struct EffectLayer {
     pub(crate) init: BoundProgram,
     pub(crate) evolve: Option<BoundProgram>,
     pub(crate) pure_evolution: Option<Box<PureEvolution>>,
+    pub(crate) pure_evolution_status: SpecializationStatus,
     pub(crate) life: usize,
     pub(crate) inverse_life: usize,
     pub(crate) standalone: bool,

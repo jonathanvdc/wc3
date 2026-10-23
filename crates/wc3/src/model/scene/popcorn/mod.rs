@@ -20,6 +20,12 @@ pub(crate) use numeric::{BinaryOperation, UnaryOperation};
 mod execution;
 mod execution_plan;
 mod execution_policy;
+mod specialization;
+pub use specialization::{
+    SpecializationInstruction, SpecializationReason, SpecializationRejection, SpecializationReport,
+    SpecializationResource, SpecializationStatus,
+};
+
 pub use execution_policy::{
     ExecutionBackend, ExecutionFallback, ExecutionOptions, ExecutionPreference, ExecutionReport,
     ExecutionStage, ExecutionStats, NumericPolicy,

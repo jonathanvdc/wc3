@@ -4,6 +4,10 @@ use super::curve::sample;
 use super::execution::float_arithmetic;
 use super::graph::{Callback, EffectLayer, EffectSampler, External};
 use super::{Address, BinaryOperation, Destination, Instruction, Source, Value, ValueType};
+use super::{
+    SpecializationInstruction, SpecializationReason as Reason,
+    SpecializationRejection as Rejection, SpecializationResource as Resource,
+};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 pub(super) const MAX_NODES: usize = 128;
@@ -17,7 +21,7 @@ pub(super) struct Capture {
     pub field: usize,
     pub kind: ValueType,
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Expression {
     Constant(Value),
     Capture(usize),
@@ -97,6 +101,7 @@ struct Phase {
     rate: usize,
     clock: usize,
     time: usize,
+    operation: BinaryOperation,
 }
 struct Builder<'a> {
     symbols: &'a [SymbolNode],
@@ -106,6 +111,7 @@ struct Builder<'a> {
     phases: &'a [Phase],
     captures: Vec<Capture>,
     nodes: Vec<Node>,
+    node_requests: usize,
     memo: Vec<Option<NodeId>>,
 }
 fn supported(kind: ValueType) -> bool {
@@ -129,10 +135,16 @@ fn push(
     symbol: Symbol,
     kind: ValueType,
     offset: usize,
-) -> Option<usize> {
-    supported(kind).then_some(())?;
+) -> Result<usize, Rejection> {
+    if !supported(kind) {
+        return Err(Rejection::new(Reason::Layout(kind)).at(offset));
+    }
     if symbols.len() >= MAX_NODES {
-        return None;
+        return Err(Rejection::new(Reason::Limit {
+            resource: Resource::Nodes,
+            limit: MAX_NODES,
+        })
+        .at(offset));
     }
     let result = symbols.len();
     symbols.push(SymbolNode {
@@ -140,7 +152,7 @@ fn push(
         kind,
         offset,
     });
-    Some(result)
+    Ok(result)
 }
 fn source(
     symbols: &mut Vec<SymbolNode>,
@@ -148,8 +160,10 @@ fn source(
     counts: [usize; 4],
     source: Source,
     offset: usize,
-) -> Option<usize> {
-    supported(source.kind).then_some(())?;
+) -> Result<usize, Rejection> {
+    if !supported(source.kind) {
+        return Err(Rejection::new(Reason::Layout(source.kind)).at(offset));
+    }
     match source.address {
         Address::Constant(words) => push(
             symbols,
@@ -158,9 +172,13 @@ fn source(
             offset,
         ),
         Address::Slot { scope, slot } => {
-            let index = registers[register(scope, slot, counts)?]?;
+            let ordinal = register(scope, slot, counts)
+                .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(offset))?;
+            let index = registers[ordinal].ok_or_else(|| {
+                Rejection::new(Reason::PersistentInput { scope, slot }).at(offset)
+            })?;
             if symbols[index].kind == source.kind {
-                Some(index)
+                Ok(index)
             } else {
                 push(
                     symbols,
@@ -180,10 +198,17 @@ fn set(
     counts: [usize; 4],
     destination: Destination,
     value: usize,
-) -> Option<()> {
-    supported(destination.kind).then_some(())?;
-    *registers.get_mut(register(destination.scope, destination.slot, counts)?)? = Some(value);
-    Some(())
+    offset: usize,
+) -> Result<(), Rejection> {
+    if !supported(destination.kind) {
+        return Err(Rejection::new(Reason::Layout(destination.kind)).at(offset));
+    }
+    let slot = register(destination.scope, destination.slot, counts)
+        .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(offset))?;
+    *registers
+        .get_mut(slot)
+        .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(offset))? = Some(value);
+    Ok(())
 }
 fn old_field(symbols: &[SymbolNode], index: usize) -> Option<usize> {
     if let Symbol::Field(field) = symbols[index].symbol {
@@ -192,24 +217,72 @@ fn old_field(symbols: &[SymbolNode], index: usize) -> Option<usize> {
         None
     }
 }
+fn arithmetic(kind: ValueType) -> bool {
+    matches!(
+        kind,
+        ValueType::Float | ValueType::Float3 | ValueType::Float4
+    )
+}
+fn arithmetic_value(
+    kind: ValueType,
+    operation: BinaryOperation,
+    left: Value,
+    right: Value,
+) -> Value {
+    let mut words = [0; 4];
+    for (component, out) in words.iter_mut().enumerate().take(kind.components()) {
+        *out = float_arithmetic(
+            operation,
+            left.words()[component.min(left.kind().components() - 1)],
+            right.words()[component.min(right.kind().components() - 1)],
+        );
+    }
+    Value::from_words(kind, words)
+}
+fn invariant_rates(symbols: &[SymbolNode], written: &[bool], life: usize) -> Vec<bool> {
+    // Symbols are topological. Compute once, avoiding exponential walks when
+    // several operations reuse the same immutable expression.
+    let mut rates = Vec::with_capacity(symbols.len());
+    for node in symbols {
+        let invariant = arithmetic(node.kind)
+            && match node.symbol {
+                Symbol::Constant(_) => true,
+                Symbol::Field(field) => field != life && !written[field],
+                Symbol::Words { input, .. } => rates[input],
+                Symbol::Binary { left, right, .. } => rates[left] && rates[right],
+                Symbol::Time | Symbol::Curve { .. } => false,
+            };
+        rates.push(invariant);
+    }
+    rates
+}
 fn phase(
     symbols: &[SymbolNode],
     expression: usize,
     field: usize,
     final_fields: &[Option<usize>],
-    written: &[bool],
+    invariant_rates: &[bool],
 ) -> Option<Phase> {
-    // Exactly one immutable angular rate and a paired last-time update. No names,
-    // native selectors, or asset identity participate in this certificate.
+    // An initialized affine accumulator and a paired last-time update. The
+    // rate may be a pure initialized expression, never lifecycle or feedback.
     let Symbol::Binary {
-        operation: BinaryOperation::Add,
+        operation,
         left,
         right,
     } = symbols[expression].symbol
     else {
         return None;
     };
-    for (previous, increment) in [(left, right), (right, left)] {
+    if !matches!(operation, BinaryOperation::Add | BinaryOperation::Subtract) {
+        return None;
+    }
+    let candidates = [(left, right), (right, left)];
+    let candidates = if operation == BinaryOperation::Add {
+        &candidates[..]
+    } else {
+        &candidates[..1]
+    };
+    for &(previous, increment) in candidates {
         if old_field(symbols, previous) != Some(field) {
             continue;
         }
@@ -221,11 +294,13 @@ fn phase(
         else {
             continue;
         };
+        // Reusing the scalar delta is valid only when multiplication has the
+        // same layout as the final accumulator (no intermediate truncation).
+        if symbols[increment].kind != symbols[expression].kind {
+            continue;
+        }
         for (rate, delta) in [(left, right), (right, left)] {
-            let Some(rate) = old_field(symbols, rate) else {
-                continue;
-            };
-            if written[rate] {
+            if !invariant_rates[rate] {
                 continue;
             }
             let Symbol::Binary {
@@ -236,13 +311,15 @@ fn phase(
             else {
                 continue;
             };
-            if !matches!(symbols[left].symbol, Symbol::Time) {
+            if symbols[delta].kind != ValueType::Float
+                || !matches!(symbols[left].symbol, Symbol::Time)
+            {
                 continue;
             }
             let Some(clock) = old_field(symbols, right) else {
                 continue;
             };
-            if clock == field || clock == rate {
+            if clock == field {
                 continue;
             }
             if final_fields[clock]
@@ -254,6 +331,7 @@ fn phase(
                     rate,
                     clock,
                     time: left,
+                    operation,
                 });
             }
         }
@@ -261,9 +339,35 @@ fn phase(
     None
 }
 impl Builder<'_> {
-    fn node(&mut self, expression: Expression, kind: ValueType, offset: usize) -> Option<NodeId> {
-        if self.nodes.len() >= MAX_NODES {
-            return None;
+    fn node(
+        &mut self,
+        expression: Expression,
+        kind: ValueType,
+        offset: usize,
+    ) -> Result<NodeId, Rejection> {
+        // Preserve the original construction budget even when several source
+        // expressions share one value node after normalization.
+        if self.node_requests >= MAX_NODES {
+            return Err(Rejection::new(Reason::Limit {
+                resource: Resource::Nodes,
+                limit: MAX_NODES,
+            })
+            .at(offset));
+        }
+        self.node_requests += 1;
+        let expression = self.fold(expression, kind);
+        // A curve call remains a distinct checked guard at its source offset,
+        // including calls whose results are not consumed by an output.
+        if !matches!(expression, Expression::Curve { .. }) {
+            if let Some((index, node)) = self
+                .nodes
+                .iter_mut()
+                .enumerate()
+                .find(|(_, node)| node.kind == kind && node.expression == expression)
+            {
+                node.offset = node.offset.min(offset);
+                return Ok(NodeId(index));
+            }
         }
         let id = NodeId(self.nodes.len());
         self.nodes.push(Node {
@@ -271,11 +375,65 @@ impl Builder<'_> {
             kind,
             offset,
         });
-        Some(id)
+        Ok(id)
     }
-    fn capture(&mut self, field: usize, offset: usize) -> Option<NodeId> {
-        let kind = self.layer.fields.get(field)?.value_type?;
-        supported(kind).then_some(())?;
+    fn fold(&self, expression: Expression, kind: ValueType) -> Expression {
+        let finite = |value: Value| {
+            !arithmetic(value.kind())
+                || value.words()[..value.kind().components()]
+                    .iter()
+                    .all(|word| f32::from_bits(*word).is_finite())
+        };
+        let value = match expression {
+            Expression::Words { input, kind } => {
+                let Expression::Constant(value) = self.nodes[input.0].expression else {
+                    return expression;
+                };
+                if !finite(value) {
+                    return expression;
+                }
+                Value::from_words(kind, value.words())
+            }
+            Expression::Binary {
+                operation,
+                left,
+                right,
+            } => {
+                let (Expression::Constant(left), Expression::Constant(right)) = (
+                    self.nodes[left.0].expression,
+                    self.nodes[right.0].expression,
+                ) else {
+                    return expression;
+                };
+                if !finite(left) || !finite(right) {
+                    return expression;
+                }
+                arithmetic_value(kind, operation, left, right)
+            }
+            _ => return expression,
+        };
+        // Do not erase nonfinite intermediate nodes observed by the cold
+        // capture guard. No algebraic identities, reassociation or DCE apply.
+        if finite(value) {
+            Expression::Constant(value)
+        } else {
+            expression
+        }
+    }
+    fn capture(&mut self, field: usize, offset: usize) -> Result<NodeId, Rejection> {
+        let kind = self
+            .layer
+            .fields
+            .get(field)
+            .and_then(|field| field.value_type)
+            .ok_or_else(|| {
+                Rejection::new(Reason::InvalidBinding)
+                    .at(offset)
+                    .field(field)
+            })?;
+        if !supported(kind) {
+            return Err(Rejection::new(Reason::Layout(kind)).at(offset).field(field));
+        }
         let index = if let Some(index) = self
             .captures
             .iter()
@@ -284,7 +442,12 @@ impl Builder<'_> {
             index
         } else {
             if self.captures.len() >= MAX_CAPTURES {
-                return None;
+                return Err(Rejection::new(Reason::Limit {
+                    resource: Resource::Captures,
+                    limit: MAX_CAPTURES,
+                })
+                .at(offset)
+                .field(field));
             }
             let index = self.captures.len();
             self.captures.push(Capture { field, kind });
@@ -292,17 +455,18 @@ impl Builder<'_> {
         };
         self.node(Expression::Capture(index), kind, offset)
     }
-    fn lower(&mut self, index: usize, allow_time: bool) -> Option<NodeId> {
+    fn lower(&mut self, index: usize, allow_time: bool) -> Result<NodeId, Rejection> {
         // Time is permitted only inside the certified phase and as its paired
         // clock store. Never memoize an otherwise disallowed Time use.
         let input = self.symbols[index];
         if matches!(input.symbol, Symbol::Time) {
-            return allow_time
-                .then_some(())
-                .and_then(|_| self.node(Expression::Time, ValueType::Float, input.offset));
+            if !allow_time {
+                return Err(Rejection::new(Reason::UncertifiedTime).at(input.offset));
+            }
+            return self.node(Expression::Time, ValueType::Float, input.offset);
         }
         if let Some(result) = self.memo[index] {
-            return Some(result);
+            return Ok(result);
         }
         if let Some(phase) = self
             .phases
@@ -311,7 +475,7 @@ impl Builder<'_> {
             .copied()
         {
             let initial = self.capture(phase.phase, input.offset)?;
-            let rate = self.capture(phase.rate, input.offset)?;
+            let rate = self.lower(phase.rate, false)?;
             let clock = self.capture(phase.clock, input.offset)?;
             let time = self.node(
                 Expression::Time,
@@ -333,20 +497,20 @@ impl Builder<'_> {
                     left: rate,
                     right: delta,
                 },
-                ValueType::Float,
+                input.kind,
                 input.offset,
             )?;
             let result = self.node(
                 Expression::Binary {
-                    operation: BinaryOperation::Add,
+                    operation: phase.operation,
                     left: initial,
                     right: increment,
                 },
-                ValueType::Float,
+                input.kind,
                 input.offset,
             )?;
             self.memo[index] = Some(result);
-            return Some(result);
+            return Ok(result);
         }
         let expression = match input.symbol {
             Symbol::Constant(value) => Expression::Constant(value),
@@ -354,9 +518,14 @@ impl Builder<'_> {
             Symbol::Field(field) if !self.written[field] || self.invariant[field] => {
                 let result = self.capture(field, input.offset)?;
                 self.memo[index] = Some(result);
-                return Some(result);
+                return Ok(result);
             }
-            Symbol::Field(_) | Symbol::Time => return None,
+            Symbol::Field(field) => {
+                return Err(Rejection::new(Reason::Feedback)
+                    .at(input.offset)
+                    .field(field));
+            }
+            Symbol::Time => return Err(Rejection::new(Reason::UncertifiedTime).at(input.offset)),
             Symbol::Words { input, kind } => Expression::Words {
                 input: self.lower(input, false)?,
                 kind,
@@ -377,13 +546,12 @@ impl Builder<'_> {
         };
         let result = self.node(expression, input.kind, input.offset)?;
         self.memo[index] = Some(result);
-        Some(result)
+        Ok(result)
     }
 }
 impl AgePlan {
-    /// First portable offload subset: every potentially failing sample uses
-    /// finite lifecycle Life, including samples whose result is otherwise unused.
-    pub fn total_life_curves(&self, samplers: &[EffectSampler]) -> bool {
+    /// Keep unused samples in the same finite-domain certificate as outputs.
+    fn certify_curves(&self, samplers: &[EffectSampler]) -> Result<(), Rejection> {
         fn life(plan: &AgePlan, id: NodeId) -> bool {
             match plan.nodes[id.0].expression {
                 Expression::Life => true,
@@ -394,29 +562,105 @@ impl AgePlan {
                 _ => false,
             }
         }
-        self.nodes.iter().all(|node| match node.expression {
-            Expression::Curve { sampler, input } => life(self, input)
-                && matches!(samplers.get(sampler), Some(EffectSampler::Curve { times, values, tangents, .. })
+        for node in &self.nodes {
+            if let Expression::Curve { sampler, input } = node.expression {
+                if !life(self, input) {
+                    return Err(Rejection::new(Reason::CurveCoordinate { sampler }).at(node.offset));
+                }
+                if !matches!(samplers.get(sampler), Some(EffectSampler::Curve { times, values, tangents, .. })
                     if !times.is_empty() && values.len() == times.len()
                     && (tangents.is_empty() || tangents.len() == 2 * times.len())
                     && times.iter().all(|t| t.is_finite())
-                    && times.windows(2).all(|t| t[0] < t[1])),
-            _ => true,
-        })
+                    && times.windows(2).all(|t| t[0] < t[1]))
+                {
+                    return Err(Rejection::new(Reason::CurveResource { sampler }).at(node.offset));
+                }
+            }
+        }
+        Ok(())
+    }
+    #[cfg(test)]
+    pub fn total_life_curves(&self, samplers: &[EffectSampler]) -> bool {
+        self.certify_curves(samplers).is_ok()
+    }
+    pub fn analyze(layer: &EffectLayer, samplers: &[EffectSampler]) -> Result<Self, Rejection> {
+        let plan = Self::build(layer, samplers)?;
+        plan.certify_curves(samplers)?;
+        Ok(plan)
+    }
+    #[cfg(test)]
+    pub fn prepare(layer: &EffectLayer, samplers: &[EffectSampler]) -> Option<Self> {
+        // Private evaluator tests also exercise deliberately uncertified curves.
+        Self::build(layer, samplers).ok()
+    }
+    /// Validate initialized arithmetic once, before captures become immutable.
+    /// Finite fields alone do not prevent an overflowing derived rate. Dynamic
+    /// life/time expressions and checked curves retain their ordinary guards.
+    pub fn captures_permitted(&self, mut read: impl FnMut(usize) -> Value) -> bool {
+        let mut values = [Value::from_words(ValueType::Float, [0; 4]); MAX_NODES];
+        let mut initialized = [false; MAX_NODES];
+        for (index, node) in self.nodes.iter().enumerate() {
+            let value = match node.expression {
+                Expression::Constant(value) => value,
+                Expression::Capture(capture) => read(self.captures[capture].field),
+                Expression::Words { input, kind } if initialized[input.0] => {
+                    Value::from_words(kind, values[input.0].words())
+                }
+                Expression::Binary {
+                    operation,
+                    left,
+                    right,
+                } if initialized[left.0] && initialized[right.0] => {
+                    let left = values[left.0];
+                    let right = values[right.0];
+                    arithmetic_value(node.kind, operation, left, right)
+                }
+                _ => continue,
+            };
+            if value.kind() != node.kind
+                || (arithmetic(node.kind)
+                    && value.words()[..node.kind.components()]
+                        .iter()
+                        .any(|word| !f32::from_bits(*word).is_finite()))
+            {
+                return false;
+            }
+            values[index] = value;
+            initialized[index] = true;
+        }
+        true
     }
     pub fn permitted(&self, sample: AgeSample) -> bool {
         // The renderer's analytic life also uses an f32 time anchor, even when
         // the extracted source contains no explicit Time node.
         sample.life.is_finite() && (sample.effect_time as f32).is_finite()
     }
-    pub fn prepare(layer: &EffectLayer, samplers: &[EffectSampler]) -> Option<Self> {
-        if layer.spawner || !layer.rendered || layer.evolve_on_death {
-            return None;
+    fn build(layer: &EffectLayer, samplers: &[EffectSampler]) -> Result<Self, Rejection> {
+        if layer.spawner {
+            return Err(Rejection::new(Reason::Spawner));
         }
-        let bound = layer.evolve.as_ref()?;
+        if !layer.rendered {
+            return Err(Rejection::new(Reason::NotRendered));
+        }
+        if layer.evolve_on_death {
+            return Err(Rejection::new(Reason::EvolutionOnDeath));
+        }
+        let bound = layer
+            .evolve
+            .as_ref()
+            .ok_or_else(|| Rejection::new(Reason::InvalidBinding))?;
         let counts = bound.program.counts;
-        let total = counts.iter().try_fold(0usize, |a, b| a.checked_add(*b))?;
-        let locals = counts[0].checked_add(counts[1])?;
+        let address_limit = || {
+            Rejection::new(Reason::Limit {
+                resource: Resource::RegisterAddress,
+                limit: isize::MAX as usize,
+            })
+        };
+        let total = counts
+            .iter()
+            .try_fold(0usize, |a, b| a.checked_add(*b))
+            .ok_or_else(address_limit)?;
+        let locals = counts[0].checked_add(counts[1]).ok_or_else(address_limit)?;
         let mut symbols = Vec::new();
         let zero = push(
             &mut symbols,
@@ -434,10 +678,26 @@ impl AgePlan {
                     destination,
                     external,
                 } => {
-                    let value = match bound.externals.get(usize::from(*external))? {
+                    let value = match bound
+                        .externals
+                        .get(usize::from(*external))
+                        .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(op.offset))?
+                    {
                         External::Field(field) => {
-                            if layer.fields.get(*field)?.value_type != Some(destination.kind) {
-                                return None;
+                            if layer
+                                .fields
+                                .get(*field)
+                                .ok_or_else(|| {
+                                    Rejection::new(Reason::InvalidBinding)
+                                        .at(op.offset)
+                                        .field(*field)
+                                })?
+                                .value_type
+                                != Some(destination.kind)
+                            {
+                                return Err(Rejection::new(Reason::InvalidBinding)
+                                    .at(op.offset)
+                                    .field(*field));
                             }
                             if let Some(value) = fields[*field] {
                                 value
@@ -455,23 +715,40 @@ impl AgePlan {
                         External::Time if destination.kind == ValueType::Float => {
                             push(&mut symbols, Symbol::Time, ValueType::Float, op.offset)?
                         }
-                        _ => return None,
+                        _ => return Err(Rejection::new(Reason::External(*external)).at(op.offset)),
                     };
-                    set(&mut registers, counts, *destination, value)?;
+                    set(&mut registers, counts, *destination, value, op.offset)?;
                 }
                 Instruction::Store {
                     source: input,
                     external,
                 } => {
-                    let External::Field(field) = bound.externals.get(usize::from(*external))?
+                    let External::Field(field) = bound
+                        .externals
+                        .get(usize::from(*external))
+                        .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(op.offset))?
                     else {
-                        return None;
+                        return Err(Rejection::new(Reason::External(*external)).at(op.offset));
                     };
-                    if *field == layer.life
-                        || *field == layer.inverse_life
-                        || layer.fields.get(*field)?.value_type != Some(input.kind)
+                    if *field == layer.life || *field == layer.inverse_life {
+                        return Err(Rejection::new(Reason::LifecycleWrite)
+                            .at(op.offset)
+                            .field(*field));
+                    }
+                    if layer
+                        .fields
+                        .get(*field)
+                        .ok_or_else(|| {
+                            Rejection::new(Reason::InvalidBinding)
+                                .at(op.offset)
+                                .field(*field)
+                        })?
+                        .value_type
+                        != Some(input.kind)
                     {
-                        return None;
+                        return Err(Rejection::new(Reason::InvalidBinding)
+                            .at(op.offset)
+                            .field(*field));
                     }
                     fields[*field] =
                         Some(source(&mut symbols, &registers, counts, *input, op.offset)?);
@@ -488,11 +765,16 @@ impl AgePlan {
                         BinaryOperation::Add
                             | BinaryOperation::Subtract
                             | BinaryOperation::Multiply
-                    ) || !matches!(destination.kind, ValueType::Float | ValueType::Float4)
-                        || !matches!(left.kind, ValueType::Float | ValueType::Float4)
-                        || !matches!(right.kind, ValueType::Float | ValueType::Float4)
-                    {
-                        return None;
+                    ) {
+                        return Err(Rejection::new(Reason::Instruction(
+                            SpecializationInstruction::Arithmetic,
+                        ))
+                        .at(op.offset));
+                    }
+                    for kind in [destination.kind, left.kind, right.kind] {
+                        if !arithmetic(kind) {
+                            return Err(Rejection::new(Reason::Layout(kind)).at(op.offset));
+                        }
                     }
                     let left = source(&mut symbols, &registers, counts, *left, op.offset)?;
                     let right = source(&mut symbols, &registers, counts, *right, op.offset)?;
@@ -506,7 +788,7 @@ impl AgePlan {
                         destination.kind,
                         op.offset,
                     )?;
-                    set(&mut registers, counts, *destination, value)?;
+                    set(&mut registers, counts, *destination, value, op.offset)?;
                 }
                 Instruction::Call {
                     destination: Some(destination),
@@ -519,21 +801,34 @@ impl AgePlan {
                     && arguments.len() == 1
                     && arguments[0].kind == ValueType::Float =>
                 {
-                    if bound.callbacks.get(usize::from(*function)) != Some(&Callback::Sample) {
-                        return None;
+                    let callback = bound
+                        .callbacks
+                        .get(usize::from(*function))
+                        .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(op.offset))?;
+                    if callback != &Callback::Sample {
+                        return Err(Rejection::new(Reason::Instruction(
+                            SpecializationInstruction::Call,
+                        ))
+                        .at(op.offset));
                     }
-                    let External::Sampler(sampler) = bound.externals.get(usize::from(*receiver))?
+                    let External::Sampler(sampler) = bound
+                        .externals
+                        .get(usize::from(*receiver))
+                        .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(op.offset))?
                     else {
-                        return None;
+                        return Err(Rejection::new(Reason::External(*receiver)).at(op.offset));
                     };
                     if !matches!(
-                        samplers.get(*sampler)?,
+                        samplers
+                            .get(*sampler)
+                            .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(op.offset))?,
                         EffectSampler::Curve {
                             kind: ValueType::Float4,
                             ..
                         }
                     ) {
-                        return None;
+                        return Err(Rejection::new(Reason::CurveResource { sampler: *sampler })
+                            .at(op.offset));
                     }
                     let input = source(&mut symbols, &registers, counts, arguments[0], op.offset)?;
                     let value = push(
@@ -545,28 +840,33 @@ impl AgePlan {
                         ValueType::Float4,
                         op.offset,
                     )?;
-                    set(&mut registers, counts, *destination, value)?;
+                    set(&mut registers, counts, *destination, value, op.offset)?;
                 }
-                _ => return None,
+                instruction => {
+                    return Err(
+                        Rejection::new(Reason::Instruction(instruction.into())).at(op.offset)
+                    )
+                }
             }
         }
+        let invariant_rates = invariant_rates(&symbols, &written, layer.life);
         let phases: Vec<_> = fields
             .iter()
             .enumerate()
             .filter(|(field, _)| written[*field])
-            .filter_map(|(field, value)| phase(&symbols, (*value)?, field, &fields, &written))
+            .filter_map(|(field, value)| {
+                phase(&symbols, (*value)?, field, &fields, &invariant_rates)
+            })
             .collect();
-        // A phase is scalar, and its own clock/rate/phase declarations must be
-        // distinct Float fields. Captured state remains the initialized state.
+        // Clocks are scalar, while an accumulator may use the same checked
+        // componentwise Float3/Float4 arithmetic as the source evaluator.
         for phase in &phases {
-            if phase.rate == layer.life {
-                return None;
-            }
-            if [phase.phase, phase.rate, phase.clock]
-                .iter()
-                .any(|field| layer.fields[*field].value_type != Some(ValueType::Float))
+            if layer.fields[phase.clock].value_type != Some(ValueType::Float)
+                || !layer.fields[phase.phase].value_type.is_some_and(arithmetic)
             {
-                return None;
+                return Err(Rejection::new(Reason::InvalidBinding)
+                    .at(symbols[phase.expression].offset)
+                    .field(phase.phase));
             }
         }
         if phases.is_empty()
@@ -574,7 +874,12 @@ impl AgePlan {
                 .iter()
                 .any(|node| matches!(node.symbol, Symbol::Time))
         {
-            return None;
+            let offset = symbols
+                .iter()
+                .find(|node| matches!(node.symbol, Symbol::Time))
+                .expect("time reference was detected")
+                .offset;
+            return Err(Rejection::new(Reason::UncertifiedTime).at(offset));
         }
         // Exact typed identity stores remain initialized values on every
         // invocation. Retain their output bindings to normalize inactive words;
@@ -599,6 +904,7 @@ impl AgePlan {
             phases: &phases,
             captures: Vec::new(),
             nodes: Vec::new(),
+            node_requests: 0,
             memo: vec![None; symbols.len()],
         };
         let mut outputs = Vec::new();
@@ -608,12 +914,19 @@ impl AgePlan {
             .filter(|(field, _)| written[*field])
         {
             if outputs.len() >= MAX_OUTPUTS {
-                return None;
+                return Err(Rejection::new(Reason::Limit {
+                    resource: Resource::Outputs,
+                    limit: MAX_OUTPUTS,
+                })
+                .field(field));
             }
             let allow_time = phases.iter().any(|phase| phase.clock == field);
             outputs.push(Output {
                 field,
-                value: builder.lower((*value)?, allow_time)?,
+                value: builder.lower(
+                    (*value).ok_or_else(|| Rejection::new(Reason::InvalidBinding).field(field))?,
+                    allow_time,
+                )?,
             });
         }
         // An unused immutable sample still has checked failure semantics. Keep
@@ -626,9 +939,9 @@ impl AgePlan {
             }
         }
         if outputs.is_empty() {
-            return None;
+            return Err(Rejection::new(Reason::NoOutputs));
         }
-        Some(Self {
+        Ok(Self {
             captures: builder.captures.into_boxed_slice(),
             nodes: builder.nodes.into_boxed_slice(),
             outputs: outputs.into_boxed_slice(),
@@ -705,22 +1018,7 @@ impl AgePlan {
                     operation,
                     left,
                     right,
-                } => {
-                    let kind = node.kind;
-                    let left = scratch[left.0];
-                    let right = scratch[right.0];
-                    let a = left.words();
-                    let b = right.words();
-                    let mut words = [0; 4];
-                    for (component, out) in words.iter_mut().enumerate().take(kind.components()) {
-                        *out = float_arithmetic(
-                            operation,
-                            a[component.min(left.kind().components() - 1)],
-                            b[component.min(right.kind().components() - 1)],
-                        );
-                    }
-                    Value::from_words(kind, words)
-                }
+                } => arithmetic_value(node.kind, operation, scratch[left.0], scratch[right.0]),
                 Expression::Curve { sampler, input } => sample(
                     samplers.get(sampler).ok_or(AgeError {
                         offset: Some(node.offset),
@@ -745,6 +1043,10 @@ impl AgePlan {
 #[cfg(test)]
 #[path = "age_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "age_normalization_tests.rs"]
+mod normalization_tests;
 
 impl Display for AgeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {

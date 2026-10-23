@@ -115,7 +115,7 @@ and native selection fidelity remain unverified. Other unknown stages reject.
 
 ```rust
 use wc3::model::formats::pkb::{Document, EffectCompileOptions};
-use wc3::model::scene::popcorn::{EffectLimits, SceneInputs};
+use wc3::model::scene::popcorn::{EffectLimits, SceneInputs, Value};
 
 # fn simulate(bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
 let document = Document::read(bytes)?;
@@ -125,11 +125,11 @@ let mut instance = program.instantiate(EffectLimits::default(), 42)?;
 instance.start(&program, program.default_entry(), SceneInputs::default())?;
 instance.advance(&program, 1.0 / 60.0, SceneInputs::default())?;
 for renderer in program.renderers() {
+    let fields: Vec<_> = renderer.inputs.iter().map(|input| input.field).collect();
+    let mut values = vec![Value::from(0.0f32); fields.len()];
     for particle in instance.particles(renderer.layer) {
-        for input in &renderer.inputs {
-            let value = particle.field(input.field);
-            // Feed these typed canonical values into an application renderer.
-        }
+        particle.sample_fields(&fields, &mut values)?;
+        // Pair renderer.inputs with values to extract typed canonical streams.
     }
 }
 instance.stop();
@@ -254,6 +254,19 @@ These execution counters remain cumulative across `start()` calls.
 Automatic execution retains the checked Rust packet path when a native tile is
 unavailable. Reports establish preparation; counters establish dispatch,
 and neither alone establishes a performance improvement.
+
+`specialization_report(layer)` and `specialization_reports()` explain semantic
+eligibility without allocating or repeating analysis. The pure-packet verdict
+belongs to the shared graph; the immutable-expression verdict belongs to the
+wrapper's execution policy. A rejection includes a typed reason and, where
+applicable, the original byte offset and canonical field. The first rejection
+follows deterministic analysis order. `NotExamined` means that this policy did
+not request the analysis; `NotApplicable` means there is no selected evolution.
+Eligibility does not promise a compiled SIMD tile, enough living particles to
+batch, successful runtime authorization, or graphics-adapter support. Use
+`execution_reports()` for platform and compilation fallbacks and execution
+counters for actual dispatch; runtime faults retain their ordinary error path.
+
 The [performance guide](popcorn-performance.md) provides paired comparisons and
 recorded measurements against the packet-enabled Rust evaluator.
 
@@ -275,8 +288,18 @@ initialization, randomness, event routing and lifetime remain CPU-owned; other
 layers keep their ordinary evaluator. Strict policy retains ordinary execution
 with a typed fallback reason.
 
-The first subset closes initialized fields, arithmetic, immutable curves driven
-by appearance life, and a certified constant-rate phase/clock recurrence.
+Exact value expressions share one bounded DAG across CPU projections and WGSL.
+Normalization reuses identical typed expressions and folds finite literal
+arithmetic while retaining checked curve calls, original preparation bounds and
+finite capture guards. It does not remove source authorization obligations.
+
+The supported subset closes initialized fields, arithmetic, immutable curves driven
+by appearance life, and certified affine phase/clock recurrences. A scalar or
+vector accumulator can add or subtract an immutable rate times the difference
+between the current time and its paired stored clock. Rates may be constants or
+pure expressions of initialized invariant fields. Birth admission checks finite
+capture-only intermediates; changing rates, cross-feedback and observers of an
+old accumulator retain ordinary execution.
 Unproven live inputs or potentially failing curve coordinates retain ordinary
 execution. This is an optimization boundary, not an additional native feature
 limitation. `immutable_recipe()` exposes read-only typed nodes, capture bindings,
@@ -290,10 +313,39 @@ clamp at one. Phase expressions similarly use their initialized phase and clock.
 These analytic expressions can differ slightly from repeated f32 accumulation.
 `ParticleView::field()` returns their evaluated canonical outputs without heap
 allocation; reading Life itself still returns the authoritative CPU value.
-Each virtual-output query evaluates the complete bounded recipe. Bulk CPU
-extraction can therefore cost more than ordinary eager evaluation; include the
-[measured query cost](popcorn-performance.md#immutable-cpu-appearance-2026-10-22)
-when choosing this policy.
+Each individual virtual-output query evaluates the complete bounded recipe.
+Use `ParticleView::sample_fields(fields, outputs)` to read several typed fields
+with one shared evaluation, preserving caller order and duplicate requests.
+It accepts ordinary canonical fields and immutable outputs together, validates
+the request before writing results, and allocates nothing while sampling.
+
+When only part of the recipe is needed, prepare `recipe.project(fields)` once.
+The resulting `ImmutableProjection` retains only those virtual outputs and their
+shared dependency/capture closure. Allocate reusable storage with `new_scratch()`,
+then call `evaluate(view, scratch, outputs)` for each authorized immutable view.
+The projection owns its exact source-plan identity and rejects views from a
+different prepared recipe, even when it belongs to the same graph. Equal-policy
+wrappers sharing a live execution plan also share compatible recipe identity.
+`node_count()`, `capture_count()` and `output_count()` expose the compact cost.
+Requests preserve order and duplicates; an empty projection is valid. Only virtual
+output fields can be projected. Use bulk sampling for mixed raw and virtual fields.
+Output length, scratch capacity and recipe identity are checked before results
+change; checked evaluation failures also leave the output slice unchanged.
+
+A graphics adapter can use `projection.recipe(source_recipe)` to inspect that
+same compact dependency/capture closure, and `projection.view(source_view)` to
+read its remapped captures. These borrowed views retain the source's sampler
+resources, particle identity, birth anchor and authorized observation. They do
+not create a new simulation or authorize an earlier or later sample. `evaluate`
+accepts either the original source view or that projection's own compact view;
+other compact projections require explicit view conversion along their source
+relationship. Source execution guards still cover the complete selected evolution,
+including computations that a renderer's projection does not consume.
+
+Choose this policy using both advance and extraction workloads. The
+[performance guide](popcorn-performance.md#immutable-cpu-appearance-2026-10-22)
+records query costs with their measured method; a new bulk or projected query
+needs its own comparison rather than inheriting individual-query results.
 `immutable_sample()` borrows raw initialized captures and the authorized sample
 without evaluating appearance fields, allowing a renderer to upload births
 rather than resample every output each tick.

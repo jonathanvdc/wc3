@@ -18,7 +18,7 @@ use crate::model::scene::popcorn::{
     EffectAttribute, EffectEntry, EffectField, EffectFieldId, EffectLayer, EffectLayerId,
     EffectLimitation, EffectProgram, EffectRandom, EffectRenderer, EffectRendererInput,
     EffectRendererProperty, EventStreamDuration, Function as Signature, MissingPayloadPolicy,
-    Value, ValueType,
+    SpecializationStatus, Value, ValueType,
 };
 use glam::{Quat, Vec3};
 use std::collections::HashMap;
@@ -468,6 +468,7 @@ impl<'a> Document<'a> {
                     init,
                     evolve,
                     pure_evolution: None,
+                    pure_evolution_status: SpecializationStatus::NotExamined,
                     life,
                     inverse_life,
                     standalone: graph.layers[index].parents.is_empty(),

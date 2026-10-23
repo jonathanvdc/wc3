@@ -601,6 +601,11 @@ fn immutable_boolean_capture_constant_and_reinterpreted_words_preserve_exact_bit
             }
         )));
         let birth = initial(layer);
+        assert_eq!(
+            plan.captures_permitted(|field| birth[field]),
+            word == 0,
+            "raw Boolean is legal, but its all-ones Float reinterpretation is nonfinite"
+        );
         let mut captures = vec![zero(); plan.captures.len()];
         plan.capture(&mut captures, |field| Some(birth[field]))
             .unwrap();
@@ -740,4 +745,262 @@ fn authorization_checks_finite_life_and_f32_time_even_without_an_explicit_time_n
             }));
         }
     }
+}
+
+fn affine_phase(
+    kind: ValueType,
+    subtract: bool,
+    captured_rate: bool,
+    scalar_rate: bool,
+) -> EffectProgram {
+    let mut program = phase_program();
+    let layer = &mut Arc::get_mut(&mut program.inner).unwrap().layers[0];
+    let rate_kind = if scalar_rate { ValueType::Float } else { kind };
+    layer.fields[2].value_type = Some(rate_kind);
+    layer.fields[2].initial = Value::from_words(
+        rate_kind,
+        [
+            2f32.to_bits(),
+            (-1f32).to_bits(),
+            0.5f32.to_bits(),
+            4f32.to_bits(),
+        ],
+    )
+    .words();
+    layer.fields[3].value_type = Some(kind);
+    layer.fields[3].initial =
+        Value::from_words(kind, [3f32.to_bits(), (-2f32).to_bits(), 7f32.to_bits(), 0]).words();
+    let bound = layer.evolve.as_mut().unwrap();
+    let destination = |slot, kind| Destination {
+        scope: 1,
+        slot,
+        kind,
+    };
+    let register = |slot, kind| Source {
+        address: Address::Slot { scope: 1, slot },
+        kind,
+    };
+    let constant = |value: f32| Source {
+        address: Address::Constant([value.to_bits(); 4]),
+        kind: ValueType::Float,
+    };
+    bound.program.operations[0].instruction = Instruction::Load {
+        destination: destination(0, kind),
+        external: 0,
+    };
+    bound.program.operations[1].instruction = if captured_rate {
+        Instruction::Load {
+            destination: destination(1, rate_kind),
+            external: 1,
+        }
+    } else {
+        Instruction::Binary {
+            destination: destination(1, rate_kind),
+            left: constant(2.),
+            right: constant(0.),
+            operation: BinaryOperation::Add,
+        }
+    };
+    bound.program.operations[5].instruction = Instruction::Binary {
+        destination: destination(1, kind),
+        left: register(1, rate_kind),
+        right: register(2, ValueType::Float),
+        operation: BinaryOperation::Multiply,
+    };
+    bound.program.operations[6].instruction = Instruction::Binary {
+        destination: destination(0, kind),
+        left: register(0, kind),
+        right: register(1, kind),
+        operation: if subtract {
+            BinaryOperation::Subtract
+        } else {
+            BinaryOperation::Add
+        },
+    };
+    bound.program.operations[7].instruction = Instruction::Store {
+        source: register(0, kind),
+        external: 0,
+    };
+    let rate_expression = [
+        Instruction::Binary {
+            destination: destination(1, rate_kind),
+            left: register(1, rate_kind),
+            right: constant(0.25),
+            operation: BinaryOperation::Multiply,
+        },
+        Instruction::Binary {
+            destination: destination(1, rate_kind),
+            left: register(1, rate_kind),
+            right: constant(1.),
+            operation: BinaryOperation::Add,
+        },
+    ];
+    bound.program.operations.splice(
+        2..2,
+        rate_expression.into_iter().map(|instruction| Operation {
+            offset: 0,
+            instruction,
+        }),
+    );
+    for (index, operation) in bound.program.operations.iter_mut().enumerate() {
+        operation.offset = index * 7;
+    }
+    program
+}
+
+#[test]
+fn affine_phase_constants_capture_expressions_signed_vectors_and_scalar_broadcast() {
+    for kind in [ValueType::Float, ValueType::Float3, ValueType::Float4] {
+        for subtract in [false, true] {
+            for captured in [false, true] {
+                for scalar_rate in [false, true] {
+                    let program = affine_phase(kind, subtract, captured, scalar_rate);
+                    let layer = &program.inner.layers[0];
+                    let bound = layer.evolve.as_ref().unwrap();
+                    let plan = AgePlan::prepare(layer, &[]).expect("certified affine accumulator");
+                    assert_eq!(plan.phases, 1);
+                    let birth = initial(layer);
+                    let mut captures = vec![zero(); plan.captures.len()];
+                    plan.capture(&mut captures, |field| Some(birth[field]))
+                        .unwrap();
+                    let mut host = Fields {
+                        bound,
+                        samplers: &[],
+                        values: birth.clone(),
+                        time: 5.,
+                    };
+                    let mut state = State::for_programs([&bound.program]);
+                    // Irregular exact-binary intervals, including a repeated clock,
+                    // distinguish the paired clock from birth age or fixed dt.
+                    for time in [5., 5.125, 5.125, 5.75, 8., 12.] {
+                        host.time = time;
+                        bound.program.execute(&mut state, &mut host).unwrap();
+                        let values = run(
+                            &plan,
+                            &captures,
+                            &[],
+                            AgeSample {
+                                effect_time: f64::from(time),
+                                life: 0.25,
+                            },
+                        );
+                        for (binding, value) in plan.outputs.iter().zip(values) {
+                            assert_eq!(value, host.values[binding.field]);
+                        }
+                        let initial = birth[3].words();
+                        let rates = birth[2].words();
+                        for component in 0..kind.components() {
+                            let raw_rate = if captured {
+                                f32::from_bits(rates[if scalar_rate { 0 } else { component }])
+                            } else {
+                                2.
+                            };
+                            let increment = (raw_rate * 0.25 + 1.) * (time - 5.);
+                            let expected = if subtract {
+                                f32::from_bits(initial[component]) - increment
+                            } else {
+                                f32::from_bits(initial[component]) + increment
+                            };
+                            assert_eq!(host.values[3].words()[component], expected.to_bits());
+                        }
+                        assert_eq!(
+                            host.values[3].words()[kind.components()..],
+                            [0; 4][kind.components()..]
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn affine_rate_rejects_lifecycle_time_feedback_and_reversed_subtraction() {
+    for external in [
+        External::Field(0),
+        External::Field(3),
+        External::Time,
+        External::Field(6),
+    ] {
+        let mut program = affine_phase(ValueType::Float, false, true, true);
+        let layer = &mut Arc::get_mut(&mut program.inner).unwrap().layers[0];
+        // Use the actual lifecycle field rather than its fixture-dependent index.
+        let external = if matches!(external, External::Field(0)) {
+            External::Field(layer.life)
+        } else {
+            external
+        };
+        layer.evolve.as_mut().unwrap().externals[1] = external;
+        assert!(AgePlan::prepare(layer, &[]).is_none());
+    }
+    let mut program = affine_phase(ValueType::Float, true, true, true);
+    let layer = &mut Arc::get_mut(&mut program.inner).unwrap().layers[0];
+    let Instruction::Binary { left, right, .. } =
+        &mut layer.evolve.as_mut().unwrap().program.operations[8].instruction
+    else {
+        panic!("original accumulator operation")
+    };
+    std::mem::swap(left, right);
+    assert!(AgePlan::prepare(layer, &[]).is_none());
+}
+
+#[test]
+fn derived_capture_rates_require_finite_intermediates_before_authorization() {
+    let mut program = affine_phase(ValueType::Float, false, true, true);
+    let layer = &mut Arc::get_mut(&mut program.inner).unwrap().layers[0];
+    // Rate = (captured * 2) + 1. All stored inputs can be finite while the
+    // multiplication overflows; a zero clock difference would then poison
+    // iterative history with NaN rather than remain a finite affine rate.
+    let Instruction::Binary { right, .. } =
+        &mut layer.evolve.as_mut().unwrap().program.operations[2].instruction
+    else {
+        panic!("original rate multiplication")
+    };
+    right.address = Address::Constant([2f32.to_bits(); 4]);
+    let plan = AgePlan::prepare(layer, &[]).unwrap();
+    let mut fields = initial(layer);
+    assert!(plan.captures_permitted(|field| fields[field]));
+    fields[2] = Value::from(f32::MAX);
+    assert!(!plan.captures_permitted(|field| fields[field]));
+    fields[2] = Value::from(f32::NAN);
+    assert!(!plan.captures_permitted(|field| fields[field]));
+}
+
+#[test]
+fn raw_boolean_identity_is_not_subject_to_numeric_finite_checks() {
+    use crate::model::scene::popcorn::packet::tests::boolean_copy_fixture;
+    for word in [0, u32::MAX] {
+        let program = boolean_copy_fixture(word);
+        let layer = &program.inner.layers[0];
+        let plan = AgePlan::prepare(layer, &program.inner.samplers).unwrap();
+        let fields = initial(layer);
+        assert!(plan.captures_permitted(|field| fields[field]));
+    }
+}
+
+#[test]
+fn overflowing_rate_cancellation_retains_cpu_fallback() {
+    let mut program = affine_phase(ValueType::Float, false, true, true);
+    let layer = &mut Arc::get_mut(&mut program.inner).unwrap().layers[0];
+    let operations = &mut layer.evolve.as_mut().unwrap().program.operations;
+    let Instruction::Binary { right, .. } = &mut operations[2].instruction else {
+        panic!("rate multiplication")
+    };
+    right.address = Address::Constant([2f32.to_bits(); 4]);
+    let Instruction::Binary {
+        left,
+        right,
+        operation,
+        ..
+    } = &mut operations[3].instruction
+    else {
+        panic!("rate cancellation")
+    };
+    *right = *left;
+    *operation = BinaryOperation::Subtract;
+    let plan = AgePlan::prepare(layer, &[]).unwrap();
+    let mut fields = initial(layer);
+    assert!(plan.captures_permitted(|field| fields[field]));
+    fields[2] = Value::from(f32::MAX);
+    assert!(!plan.captures_permitted(|field| fields[field]));
 }

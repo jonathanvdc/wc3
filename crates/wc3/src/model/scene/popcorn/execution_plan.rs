@@ -11,6 +11,7 @@ use super::{
     ExecutionBackend, ExecutionError, ExecutionOptions, ExecutionPreference, ExecutionReport,
     ExecutionStage, ExecutionStats, Program, State,
 };
+use super::{SpecializationReason, SpecializationRejection, SpecializationStatus};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
@@ -20,25 +21,35 @@ pub(super) struct ExecutionPlan {
     reports: Box<[ExecutionReport]>,
     native: Option<NativeCode>,
     ages: Box<[Option<Arc<AgePlan>>]>,
+    immutable_statuses: Box<[SpecializationStatus]>,
 }
 impl ExecutionPlan {
     pub(super) fn prepare(graph: &EffectGraph, options: ExecutionOptions) -> Self {
-        let ages: Box<[Option<Arc<AgePlan>>]> = if options.preference
-            == ExecutionPreference::ImmutableAge
+        let mut ages = Vec::new();
+        let mut immutable_statuses = Vec::new();
+        if options.preference == ExecutionPreference::ImmutableAge
             && options.numeric_policy == NumericPolicy::Graphics
         {
-            graph
-                .layers
-                .iter()
-                .map(|layer| {
-                    AgePlan::prepare(layer, &graph.samplers)
-                        .filter(|plan| plan.total_life_curves(&graph.samplers))
-                        .map(Arc::new)
-                })
-                .collect()
-        } else {
-            Box::new([])
-        };
+            ages.reserve_exact(graph.layers.len());
+            immutable_statuses.reserve_exact(graph.layers.len());
+            for layer in &graph.layers {
+                if layer.evolve.is_none() {
+                    ages.push(None);
+                    immutable_statuses.push(SpecializationStatus::NotApplicable);
+                    continue;
+                }
+                match AgePlan::analyze(layer, &graph.samplers) {
+                    Ok(plan) => {
+                        ages.push(Some(Arc::new(plan)));
+                        immutable_statuses.push(SpecializationStatus::Accepted);
+                    }
+                    Err(reason) => {
+                        ages.push(None);
+                        immutable_statuses.push(SpecializationStatus::Rejected(reason));
+                    }
+                }
+            }
+        }
         let mut native = None;
         let fallback = if options.preference == ExecutionPreference::Interpreter {
             None
@@ -115,8 +126,23 @@ impl ExecutionPlan {
             options,
             reports,
             native,
-            ages,
+            ages: ages.into_boxed_slice(),
+            immutable_statuses: immutable_statuses.into_boxed_slice(),
         }
+    }
+    pub(super) fn immutable_status(&self, layer: EffectLayerId) -> SpecializationStatus {
+        if self.options.preference != ExecutionPreference::ImmutableAge {
+            return SpecializationStatus::NotExamined;
+        }
+        if self.options.numeric_policy == NumericPolicy::Strict {
+            return SpecializationStatus::Rejected(SpecializationRejection::new(
+                SpecializationReason::NumericPolicy,
+            ));
+        }
+        self.immutable_statuses
+            .get(layer.0 as usize)
+            .copied()
+            .unwrap_or(SpecializationStatus::NotExamined)
     }
     pub(super) fn age(&self, layer: EffectLayerId) -> Option<&AgePlan> {
         self.age_shared(layer).map(Arc::as_ref)

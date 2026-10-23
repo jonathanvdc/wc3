@@ -111,6 +111,14 @@ impl EffectInstance {
                 .iter()
                 .all(|word| f32::from_bits(*word).is_finite())
         });
+        let invariant_permitted = plan.captures_permitted(|field| {
+            Value::from_words(
+                layer.fields[field]
+                    .value_type
+                    .expect("prepared immutable capture type"),
+                self.fields.read(field, slot),
+            )
+        });
         if !birth.time.is_finite()
             || birth.time < 0.
             || !birth.life.is_finite()
@@ -118,6 +126,7 @@ impl EffectInstance {
             || !birth.inverse_life.is_finite()
             || birth.inverse_life < 0.
             || !captures_finite
+            || !invariant_permitted
         {
             self.disable_age();
             return;

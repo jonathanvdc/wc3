@@ -4,6 +4,10 @@ use super::execution::float_arithmetic;
 use super::graph::{BoundProgram, Callback, EffectLayer, EffectSampler, External};
 use super::runtime::FieldPlanes;
 use super::{Address, BinaryOperation, Destination, Instruction, Source, ValueType};
+use super::{
+    SpecializationInstruction, SpecializationReason as Reason,
+    SpecializationRejection as Rejection, SpecializationResource as Resource, SpecializationStatus,
+};
 use std::mem::size_of;
 
 // Full tiles keep natural low-population effects on the cheap scalar path.
@@ -108,27 +112,54 @@ fn local(scope: usize, slot: usize, counts: [usize; 4]) -> Option<usize> {
         .iter()
         .try_fold(slot, |offset, count| offset.checked_add(*count))
 }
-fn readable(operand: Operand, defined: &[bool]) -> bool {
-    match operand.location {
-        Location::Constant(_) => true,
-        Location::Register(slot) => defined[slot],
+fn readable(
+    operand: Operand,
+    defined: &[bool],
+    counts: [usize; 4],
+    offset: usize,
+) -> Result<(), Rejection> {
+    if let Location::Register(slot) = operand.location {
+        if !defined[slot] {
+            let mut local = slot;
+            for (scope, count) in counts.into_iter().enumerate() {
+                if local < count {
+                    return Err(
+                        Rejection::new(Reason::PersistentInput { scope, slot: local }).at(offset),
+                    );
+                }
+                local -= count;
+            }
+            return Err(Rejection::new(Reason::InvalidBinding).at(offset));
+        }
     }
+    Ok(())
 }
-
-fn output(destination: Destination, counts: [usize; 4]) -> Option<Register> {
-    supported(destination.kind).then_some(())?;
-    Some(Register {
-        slot: local(destination.scope, destination.slot, counts)?,
+fn output(
+    destination: Destination,
+    counts: [usize; 4],
+    offset: usize,
+) -> Result<Register, Rejection> {
+    if !supported(destination.kind) {
+        return Err(Rejection::new(Reason::Layout(destination.kind)).at(offset));
+    }
+    Ok(Register {
+        slot: local(destination.scope, destination.slot, counts)
+            .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(offset))?,
         width: destination.kind.components(),
     })
 }
-fn operand(source: Source, counts: [usize; 4]) -> Option<Operand> {
-    supported(source.kind).then_some(())?;
-    Some(Operand {
+fn operand(source: Source, counts: [usize; 4], offset: usize) -> Result<Operand, Rejection> {
+    if !supported(source.kind) {
+        return Err(Rejection::new(Reason::Layout(source.kind)).at(offset));
+    }
+    Ok(Operand {
         width: source.kind.components(),
         location: match source.address {
             Address::Constant(words) => Location::Constant(words),
-            Address::Slot { scope, slot } => Location::Register(local(scope, slot, counts)?),
+            Address::Slot { scope, slot } => Location::Register(
+                local(scope, slot, counts)
+                    .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(offset))?,
+            ),
         },
     })
 }
@@ -151,19 +182,37 @@ fn field(fields: &mut Vec<Field>, canonical: usize, components: usize, written: 
     }
 }
 impl PureEvolution {
+    #[cfg(test)]
     fn prepare(
         layer: &EffectLayer,
         bound: &BoundProgram,
         samplers: &[EffectSampler],
     ) -> Option<Self> {
-        if layer.spawner || !layer.rendered {
-            return None;
+        Self::analyze(layer, bound, samplers).ok()
+    }
+    pub(super) fn analyze(
+        layer: &EffectLayer,
+        bound: &BoundProgram,
+        samplers: &[EffectSampler],
+    ) -> Result<Self, Rejection> {
+        if layer.spawner {
+            return Err(Rejection::new(Reason::Spawner));
+        }
+        if !layer.rendered {
+            return Err(Rejection::new(Reason::NotRendered));
         }
         let counts = bound.program.counts;
+        let address_limit = || {
+            Rejection::new(Reason::Limit {
+                resource: Resource::RegisterAddress,
+                limit: isize::MAX as usize,
+            })
+        };
         let registers = counts
             .iter()
-            .try_fold(0_usize, |total, count| total.checked_add(*count))?;
-        let locals = counts[0].checked_add(counts[1])?;
+            .try_fold(0_usize, |total, count| total.checked_add(*count))
+            .ok_or_else(address_limit)?;
+        let locals = counts[0].checked_add(counts[1]).ok_or_else(address_limit)?;
         let mut defined = vec![false; registers];
         defined[..locals].fill(true);
         #[cfg(test)]
@@ -171,15 +220,32 @@ impl PureEvolution {
         let mut fields = Vec::new();
         let mut operations = Vec::with_capacity(bound.program.operations.len());
         for operation in &bound.program.operations {
+            let offset = operation.offset;
             let instruction = match &operation.instruction {
                 Instruction::Load {
                     destination,
                     external,
                 } => {
-                    let input = match bound.externals.get(usize::from(*external))? {
+                    let input = match bound
+                        .externals
+                        .get(usize::from(*external))
+                        .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(offset))?
+                    {
                         External::Field(index) => {
-                            if layer.fields.get(*index)?.value_type != Some(destination.kind) {
-                                return None;
+                            if layer
+                                .fields
+                                .get(*index)
+                                .ok_or_else(|| {
+                                    Rejection::new(Reason::InvalidBinding)
+                                        .at(offset)
+                                        .field(*index)
+                                })?
+                                .value_type
+                                != Some(destination.kind)
+                            {
+                                return Err(Rejection::new(Reason::InvalidBinding)
+                                    .at(offset)
+                                    .field(*index));
                             }
                             Input::Field(field(
                                 &mut fields,
@@ -190,27 +256,44 @@ impl PureEvolution {
                         }
                         External::Time if destination.kind == ValueType::Float => Input::Time,
                         External::Delta if destination.kind == ValueType::Float => Input::Delta,
-                        _ => return None,
+                        _ => return Err(Rejection::new(Reason::External(*external)).at(offset)),
                     };
                     InstructionPlan::Load {
-                        output: output(*destination, counts)?,
+                        output: output(*destination, counts, offset)?,
                         input,
                     }
                 }
                 Instruction::Store { source, external } => {
-                    let External::Field(index) = bound.externals.get(usize::from(*external))?
+                    let External::Field(index) = bound
+                        .externals
+                        .get(usize::from(*external))
+                        .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(offset))?
                     else {
-                        return None;
+                        return Err(Rejection::new(Reason::External(*external)).at(offset));
                     };
-                    if *index == layer.life
-                        || *index == layer.inverse_life
-                        || layer.fields.get(*index)?.value_type != Some(source.kind)
+                    if *index == layer.life || *index == layer.inverse_life {
+                        return Err(Rejection::new(Reason::LifecycleWrite)
+                            .at(offset)
+                            .field(*index));
+                    }
+                    if layer
+                        .fields
+                        .get(*index)
+                        .ok_or_else(|| {
+                            Rejection::new(Reason::InvalidBinding)
+                                .at(offset)
+                                .field(*index)
+                        })?
+                        .value_type
+                        != Some(source.kind)
                     {
-                        return None;
+                        return Err(Rejection::new(Reason::InvalidBinding)
+                            .at(offset)
+                            .field(*index));
                     }
                     InstructionPlan::Store {
                         field: field(&mut fields, *index, source.kind.components(), true),
-                        input: operand(*source, counts)?,
+                        input: operand(*source, counts, offset)?,
                     }
                 }
                 Instruction::Binary {
@@ -224,16 +307,21 @@ impl PureEvolution {
                         BinaryOperation::Add
                             | BinaryOperation::Subtract
                             | BinaryOperation::Multiply
-                    ) || !ordinary_float(destination.kind)
-                        || !ordinary_float(left.kind)
-                        || !ordinary_float(right.kind)
-                    {
-                        return None;
+                    ) {
+                        return Err(Rejection::new(Reason::Instruction(
+                            SpecializationInstruction::Arithmetic,
+                        ))
+                        .at(offset));
+                    }
+                    for kind in [destination.kind, left.kind, right.kind] {
+                        if !ordinary_float(kind) {
+                            return Err(Rejection::new(Reason::Layout(kind)).at(offset));
+                        }
                     }
                     InstructionPlan::Binary {
-                        output: output(*destination, counts)?,
-                        left: operand(*left, counts)?,
-                        right: operand(*right, counts)?,
+                        output: output(*destination, counts, offset)?,
+                        left: operand(*left, counts, offset)?,
+                        right: operand(*right, counts, offset)?,
                         operation: *operation,
                     }
                 }
@@ -248,29 +336,45 @@ impl PureEvolution {
                     && arguments.len() == 1
                     && arguments[0].kind == ValueType::Float =>
                 {
-                    if bound.callbacks.get(usize::from(*function)) != Some(&Callback::Sample) {
-                        return None;
+                    let callback = bound
+                        .callbacks
+                        .get(usize::from(*function))
+                        .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(offset))?;
+                    if callback != &Callback::Sample {
+                        return Err(Rejection::new(Reason::Instruction(
+                            SpecializationInstruction::Call,
+                        ))
+                        .at(offset));
                     }
-                    let External::Sampler(index) = bound.externals.get(usize::from(*receiver))?
+                    let External::Sampler(index) = bound
+                        .externals
+                        .get(usize::from(*receiver))
+                        .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(offset))?
                     else {
-                        return None;
+                        return Err(Rejection::new(Reason::External(*receiver)).at(offset));
                     };
                     if !matches!(
-                        samplers.get(*index)?,
+                        samplers
+                            .get(*index)
+                            .ok_or_else(|| Rejection::new(Reason::InvalidBinding).at(offset))?,
                         EffectSampler::Curve {
                             kind: ValueType::Float4,
                             ..
                         }
                     ) {
-                        return None;
+                        return Err(
+                            Rejection::new(Reason::CurveResource { sampler: *index }).at(offset)
+                        );
                     }
                     InstructionPlan::Curve {
-                        output: output(*destination, counts)?,
-                        input: operand(arguments[0], counts)?,
+                        output: output(*destination, counts, offset)?,
+                        input: operand(arguments[0], counts, offset)?,
                         sampler: *index,
                     }
                 }
-                _ => return None,
+                instruction => {
+                    return Err(Rejection::new(Reason::Instruction(instruction.into())).at(offset))
+                }
             };
             // Read all operands before defining the output. Persistent slots
             // must be definitely assigned within this selected evolution;
@@ -278,9 +382,7 @@ impl PureEvolution {
             let output = match instruction {
                 InstructionPlan::Load { output, .. } => Some(output),
                 InstructionPlan::Store { input, .. } => {
-                    if !readable(input, &defined) {
-                        return None;
-                    }
+                    readable(input, &defined, counts, offset)?;
                     None
                 }
                 InstructionPlan::Binary {
@@ -289,15 +391,12 @@ impl PureEvolution {
                     right,
                     ..
                 } => {
-                    if !readable(left, &defined) || !readable(right, &defined) {
-                        return None;
-                    }
+                    readable(left, &defined, counts, offset)?;
+                    readable(right, &defined, counts, offset)?;
                     Some(output)
                 }
                 InstructionPlan::Curve { output, input, .. } => {
-                    if !readable(input, &defined) {
-                        return None;
-                    }
+                    readable(input, &defined, counts, offset)?;
                     Some(output)
                 }
             };
@@ -326,7 +425,7 @@ impl PureEvolution {
                 instruction,
             });
         }
-        Some(Self {
+        Ok(Self {
             operations: operations.into_boxed_slice(),
             fields: fields.into_boxed_slice(),
             registers,
@@ -338,11 +437,21 @@ impl PureEvolution {
 }
 pub(crate) fn prepare(layers: &mut [EffectLayer], samplers: &[EffectSampler]) {
     for layer in layers {
-        let plan = layer
-            .evolve
-            .as_ref()
-            .and_then(|bound| PureEvolution::prepare(layer, bound, samplers));
-        layer.pure_evolution = plan.map(Box::new);
+        let Some(bound) = layer.evolve.as_ref() else {
+            layer.pure_evolution = None;
+            layer.pure_evolution_status = SpecializationStatus::NotApplicable;
+            continue;
+        };
+        match PureEvolution::analyze(layer, bound, samplers) {
+            Ok(plan) => {
+                layer.pure_evolution = Some(Box::new(plan));
+                layer.pure_evolution_status = SpecializationStatus::Accepted;
+            }
+            Err(reason) => {
+                layer.pure_evolution = None;
+                layer.pure_evolution_status = SpecializationStatus::Rejected(reason);
+            }
+        }
     }
 }
 #[derive(Clone, Copy, Default)]
