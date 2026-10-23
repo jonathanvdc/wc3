@@ -1,24 +1,25 @@
 use super::images::ImageCompiler;
 use super::plan::plan;
 use super::{
-    Assembly, Models, PendingAssembly, PendingPart, RgbaImage, Source, SourceDependencies,
+    Assembly, ImageSink, Models, PendingAssembly, PendingPart, RgbaImage, Source,
+    SourceDependencies,
 };
 use crate::mesh_interner::MeshInterner;
 use crate::model_compilation::validate_dependencies;
 use crate::{CompiledModel, ModelError, ModelPart, PartBinding};
-use bevy::prelude::{Assets, Image};
 use std::collections::{hash_map::Entry, HashMap};
 use std::iter::once;
 use wc3::model::{ImageResource, Model, ResourceLocator};
 
 /// Compile a checked resource assembly with shared source decoding and typed replacements.
 /// Compatible repeated skinned sources are compiled once with united geometry.
-/// Native image decoding belongs to the caller. Failed decoding may leave
-/// reusable images in the asset store, but never returns a partial assembly.
+/// Native image decoding belongs to the caller. Images are emitted through the
+/// sink during compilation, including before a later failure. A staging sink can
+/// defer their publication until the complete assembly succeeds.
 pub fn compile_assembly(
     assembly: &Assembly,
     models: &Models<'_>,
-    images: &mut Assets<Image>,
+    images: &mut dyn ImageSink,
     mut resolve_image: impl FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
 ) -> Result<CompiledModel, ModelError> {
     compile_assembly_impl(
@@ -46,7 +47,7 @@ pub fn compile_assembly(
 pub fn compile_assembly_with_dependencies(
     assembly: &Assembly,
     models: &Models<'_>,
-    images: &mut Assets<Image>,
+    images: &mut dyn ImageSink,
     mut resolve_dependencies: impl FnMut(
         &ResourceLocator<'static>,
         &Model<'_>,
@@ -67,7 +68,7 @@ pub fn compile_assembly_with_dependencies(
 fn compile_assembly_impl(
     assembly: &Assembly,
     models: &Models<'_>,
-    images: &mut Assets<Image>,
+    images: &mut dyn ImageSink,
     resolve_dependencies: &mut dyn FnMut(
         &ResourceLocator<'static>,
         &Model<'_>,
@@ -98,7 +99,7 @@ fn compile_assembly_impl(
 pub(crate) fn compile_with_bindings<B: Clone + PartialEq>(
     assembly: &PendingAssembly<B>,
     models: &Models<'_>,
-    images: &mut Assets<Image>,
+    images: &mut dyn ImageSink,
     resolve_image: impl FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
     is_skinned: impl Fn(&B) -> bool,
     resolve_binding: impl FnMut(
@@ -122,7 +123,7 @@ pub(crate) fn compile_with_bindings<B: Clone + PartialEq>(
 fn compile_with_dependencies<B: Clone + PartialEq>(
     assembly: &PendingAssembly<B>,
     models: &Models<'_>,
-    images: &mut Assets<Image>,
+    images: &mut dyn ImageSink,
     mut resolve_dependencies: impl FnMut(
         &ResourceLocator<'static>,
         &Model<'_>,

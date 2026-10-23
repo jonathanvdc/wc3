@@ -1,5 +1,6 @@
 use super::{
-    compose_atlas, AtlasLayer, PixelRect, RgbaImage, Source, SourceDependencies, TextureReplacement,
+    compose_atlas, AtlasLayer, ImageSink, PixelRect, RgbaImage, Source, SourceDependencies,
+    TextureReplacement,
 };
 use crate::mesh_interner::MeshInterner;
 use crate::model_compilation::compile_with_geometry;
@@ -8,12 +9,12 @@ use crate::{
     texture_requests, CompileOptions, CompiledModel, ModelError, TextureColorSpace, TextureRequest,
 };
 use bevy::image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor};
-use bevy::prelude::{Assets, Handle, Image};
+use bevy::prelude::{Handle, Image};
 use bevy::render::render_resource::TextureFormat;
 use std::collections::{HashMap, HashSet};
 use wc3::model::{AddressMode, ImageResource, Model, Sampler};
 pub(super) struct ImageCompiler<'a, F> {
-    pub(super) images: &'a mut Assets<Image>,
+    pub(super) images: &'a mut dyn ImageSink,
     pub(super) resolve: &'a mut F,
     pub(super) decoded: &'a mut HashMap<ImageResource<'static>, RgbaImage>,
     pub(super) handles: Vec<(ImageKey<TextureReplacement>, Handle<Image>)>,
@@ -113,7 +114,7 @@ impl<F: FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>> ImageCo
                     image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
                 }
                 image.sampler = ImageSampler::Descriptor(sampler(request.sampler));
-                let handle = self.images.add(image);
+                let handle = self.images.add_image(image);
                 self.handles.push((key, handle.clone()));
                 Some(handle)
             },

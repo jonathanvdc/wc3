@@ -4,6 +4,7 @@ use crate::material::native_fixtures::m2::{Material as M2Material, TextureUnit};
 use crate::wow::ModelPart as EquipmentPart;
 use bevy::math::Mat4;
 use bevy::math::Vec3;
+use bevy::prelude::Assets;
 use std::collections::HashMap;
 use wc3::model::common::PackedArray;
 use wc3::model::materials::bindings::ImageSelection;

@@ -2,14 +2,14 @@ use super::{
     CharacterCatalog, CharacterDefinition, EquipmentBinding, GeosetSelection, JointMatchError,
 };
 use crate::assembly::{
-    compile_with_bindings, Models, PendingAssembly, PendingPart, RgbaImage, Source,
+    compile_with_bindings, ImageSink, Models, PendingAssembly, PendingPart, RgbaImage, Source,
     TextureReplacement,
 };
 use crate::bounds::rest_bounds;
 use crate::mesh_attributes::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT};
 use crate::{CompiledModel, DrawSelection, JointMap, ModelError, PartBinding};
 use bevy::mesh::VertexAttributeValues;
-use bevy::prelude::{Assets, Image, Mat4, Mesh};
+use bevy::prelude::{Mat4, Mesh};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use wc3::model::systems::{model::System as M2System, System};
@@ -27,10 +27,12 @@ struct NativeBinding {
 /// Compiles a resolved WoW appearance through the generic model assembly pipeline.
 /// Native geoset IDs and replacement categories are translated to semantic IDs;
 /// attachment roles and native bone identities provide the equipment bindings.
+/// Images are emitted to the sink during preparation; a staging sink can defer
+/// publication until the entire character has compiled successfully.
 pub fn compile_character(
     definition: &CharacterDefinition,
     models: &Models<'_>,
-    images: &mut Assets<Image>,
+    images: &mut dyn ImageSink,
     mut resolve_image: impl FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
 ) -> Result<CompiledModel, ModelError> {
     compile_character_impl(definition, models, images, &mut resolve_image)
@@ -41,7 +43,7 @@ pub fn compile_character(
 fn compile_character_impl(
     definition: &CharacterDefinition,
     models: &Models<'_>,
-    images: &mut Assets<Image>,
+    images: &mut dyn ImageSink,
     resolve_image: &mut dyn FnMut(&ImageResource<'static>) -> Result<RgbaImage, ModelError>,
 ) -> Result<CompiledModel, ModelError> {
     definition

@@ -293,6 +293,163 @@ fn input_replacement_survives_sampler_edits_and_animated_selection() {
     }
 }
 
+fn sink_fixture() -> (Assembly, Models<'static>) {
+    use wc3::model::materials::mdlx::MaterialStep as MdlxStep;
+    use wc3::model::{AddressMode, ColorSpace};
+
+    let (mut model, _) = model();
+    let material = model.materials().iter().next().unwrap().0;
+    let mut values = SlotValues::default();
+    let image = model
+        .edit(|draft| {
+            let image = draft.add_file_texture("source.blp")?;
+            let mut linear = image;
+            linear.color_space = ColorSpace::Linear;
+            let mut mirrored = image;
+            mirrored.sampler.u = AddressMode::Mirror;
+            let steps = [image, linear, mirrored, image]
+                .into_iter()
+                .map(|image| {
+                    let mut step = MdlxStep::construct(&mut values);
+                    step.shader.inputs_mut().binding.image = values.add(Some(image));
+                    step
+                })
+                .collect();
+            draft.set_material_surface(
+                material,
+                MaterialSurface::from(MdlxMaterial {
+                    declaration: Default::default(),
+                    steps,
+                }),
+            )?;
+            draft.import_values(&values)?;
+            Ok(image)
+        })
+        .unwrap();
+    let resource = ResourceLocator::FileDataId(1);
+    let mut source = Source::new(resource.clone());
+    source.images.insert(
+        image.resource,
+        TextureReplacement::Atlas {
+            atlas: Atlas {
+                width: 2,
+                height: 1,
+                clear: [1, 2, 3, 255],
+            },
+            layers: vec![TextureLayer {
+                resource: ImageResource::file_data_id(2),
+                source: None,
+                destination: PixelRect {
+                    x: 1,
+                    y: 0,
+                    width: 1,
+                    height: 1,
+                },
+                opacity: 255,
+                blend: AtlasBlend::Replace,
+            }],
+        },
+    );
+    (Assembly::new(source), Models::from([(resource, model)]))
+}
+
+#[test]
+fn deferred_image_sink_preserves_interpretation_sharing_and_live_store_ids() {
+    use bevy::render::render_resource::TextureFormat;
+    use std::sync::Barrier;
+    use std::thread;
+
+    let (assembly, models) = sink_fixture();
+    let pixels =
+        |_: &ImageResource<'static>| Ok(RgbaImage::new(1, 1, vec![20, 40, 60, 128]).unwrap());
+    let mut immediate = Assets::<Image>::default();
+    compile_assembly(&assembly, &models, &mut immediate, pixels).unwrap();
+    assert_eq!(immediate.len(), 3);
+
+    let mut live = Assets::<Image>::default();
+    let provider = live.get_handle_provider();
+    let barrier = Barrier::new(2);
+    let (compiled, pending, unrelated) = thread::scope(|scope| {
+        let worker = scope.spawn(|| {
+            let mut pending = Vec::new();
+            let mut publish = |image: Image| {
+                let handle = provider.reserve_handle().typed::<Image>();
+                if pending.is_empty() {
+                    barrier.wait();
+                    barrier.wait();
+                }
+                pending.push((handle.clone(), image));
+                handle
+            };
+            let compiled = compile_assembly(&assembly, &models, &mut publish, pixels).unwrap();
+            (compiled, pending)
+        });
+        barrier.wait();
+        let unrelated: Vec<_> = (0..16).map(|_| live.add(Image::default())).collect();
+        barrier.wait();
+        let (compiled, pending) = worker.join().unwrap();
+        (compiled, pending, unrelated)
+    });
+    assert_eq!(live.len(), unrelated.len());
+    assert_eq!(pending.len(), immediate.len());
+    assert!(pending.iter().all(|(handle, image)| {
+        !unrelated.iter().any(|existing| existing == handle)
+            && immediate.iter().any(|(_, expected)| expected == image)
+    }));
+    assert!(pending
+        .iter()
+        .any(|(_, image)| image.texture_descriptor.format == TextureFormat::Rgba8Unorm));
+    for (handle, image) in pending {
+        assert_eq!(
+            image.data.as_deref(),
+            Some([1, 2, 3, 255, 20, 40, 60, 128].as_slice())
+        );
+        live.insert(handle.id(), image).unwrap();
+    }
+    assert_eq!(live.len(), unrelated.len() + immediate.len());
+    for draw in &compiled.draws {
+        let handle = draw.material.base.base_color_texture.as_ref().unwrap();
+        assert!(live.contains(handle.id()));
+    }
+    assert!(unrelated
+        .iter()
+        .all(|handle| live.get(handle) == Some(&Image::default())));
+}
+
+#[test]
+fn failed_assembly_can_discard_emitted_images_without_publishing() {
+    let (mut assembly, models) = sink_fixture();
+    let model = models.values().next().unwrap();
+    let material = model.materials().iter().next().unwrap().0;
+    assembly.root.inputs.insert(
+        TextureInput::Material {
+            material,
+            step: 1,
+            slot: 0,
+        },
+        TextureReplacement::Image(ImageResource::file_data_id(99)),
+    );
+    let live = Assets::<Image>::default();
+    let provider = live.get_handle_provider();
+    let mut pending = Vec::new();
+    let mut publish = |image| {
+        let handle = provider.reserve_handle().typed::<Image>();
+        pending.push((handle.clone(), image));
+        handle
+    };
+    let result = compile_assembly(&assembly, &models, &mut publish, |resource| {
+        if matches!(resource, ImageResource::FileDataId { id: 99, .. }) {
+            Err(ModelError::new("missing test image"))
+        } else {
+            Ok(RgbaImage::new(1, 1, vec![255; 4]).unwrap())
+        }
+    });
+    assert!(result.is_err());
+    assert!(!pending.is_empty(), "failure follows at least one emission");
+    drop(pending);
+    assert!(live.is_empty());
+}
+
 #[test]
 fn absent_input_is_rejected_before_resolving_images() {
     let (model, _) = model();

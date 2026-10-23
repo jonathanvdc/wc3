@@ -170,13 +170,26 @@ owner clocks; elapsed owner history and reload do not reconstruct old effects.
 
 ## Compile and reuse
 
-`compile_assembly` accepts the resolved plan, semantic model map, Bevy image store
-and decoded-image callback. The dependency-aware variant additionally accepts the
+`compile_assembly` accepts the resolved plan, semantic model map, image sink
+and decoded-image callback. Pass `Assets<Image>` to insert interpreted images
+directly into the renderer's image store. The dependency-aware variant additionally accepts the
 resource-scoped callback described above. Both use the same compiler and runtime.
 Compilation validates selections, compiles sources, resolves
 bindings and returns a `CompiledModel`. Prepare and spawn it with the ordinary
 renderer APIs. Failed setup returns no partial assembly; images already inserted
 remain available in the asset store.
+
+For preparation on a worker, supply an `ImageSink` implementation or an
+`FnMut(Image) -> Handle<Image>` callback. It receives the same interpreted pixels,
+color format and sampler as immediate insertion. Reserve handles through a clone
+of the destination store's `Assets<Image>::get_handle_provider()`, and retain
+each strong handle together with its image until the main thread publishes it
+with `Assets::insert`. All reservations and publication must use that same store;
+independent `Assets<Image>` collections can allocate equal IDs. Publish the batch
+before exposing the compiled model to rendering. Images may be emitted before a
+later compilation error, so discard the staged images and handles if preparation
+fails or its result is no longer needed. The application owns this task lifetime
+and publication policy; the compiler does not run tasks or mutate an ECS world.
 
 Compatible skinned parts that refer to the same resource coalesce into one rig
 with united geometry selections. Bindings, material selections, texture replacements
