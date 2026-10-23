@@ -5,7 +5,7 @@ use super::packet::PureEvolution;
 use super::payload::Layout as PayloadLayout;
 use super::shapes::Shape;
 use super::turbulence::Turbulence;
-use super::{Program, Value, ValueType};
+use super::{ImmutableRecipe, Program, Value, ValueType};
 use glam::{Mat4, Vec3};
 use std::sync::Arc;
 
@@ -267,6 +267,15 @@ impl EffectProgram {
     /// retain their own captured plan and reports. They are not invocation counts.
     pub fn execution_reports(&self) -> &[ExecutionReport] {
         self.execution.reports()
+    }
+
+    /// Borrow a certified Graphics recipe prepared for new instances of this wrapper.
+    /// Existing instances retain their own fixed recipe and fallback state.
+    pub fn immutable_recipe(&self, layer: EffectLayerId) -> Option<ImmutableRecipe<'_>> {
+        Some(ImmutableRecipe {
+            plan: self.execution.age(layer)?,
+            samplers: &self.inner.samplers,
+        })
     }
 
     /// Whether two handles refer to the same immutable compiled programme.

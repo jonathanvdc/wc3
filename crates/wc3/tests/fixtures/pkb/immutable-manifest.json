@@ -1,0 +1,39 @@
+{
+  "provenance": "original direct-Life variant of repository author; encoding is not execution validation",
+  "base": "crates/wc3/benches/fixtures/particle_runtime/generate.py",
+  "base_sha256": "bfd277c077105eaec6a352442df2471a3f107a2f7959096c0a64a93687eaa339",
+  "generator_sha256": "bb8bbb5ed4ef5a0b6fda9625cf433c6c976688b2f820930f9b3498978e4f1a68",
+  "previous_generator_sha256": "afa7d6417887c479b15f9e0bcd94681e59b9604358d23544e73aba1c270d918a",
+  "changes": [
+    "child init inverseLife=.25",
+    "replace child scene.time load by canonical self.lifeRatio",
+    "sample coordinate direct Life rather than Life*coefficient",
+    "identical selected child stages3/4/5"
+  ],
+  "fixtures": [
+    {
+      "path": "immutable-1.pkb",
+      "bytes": 8241,
+      "sha256": "5477af8390ba13f84479503b8368d25a2dbeb51eb2fde7e01641d9edc20ad4ad",
+      "count": 1
+    },
+    {
+      "path": "immutable-8.pkb",
+      "bytes": 8241,
+      "sha256": "5c8d2039ec35cd61bbb5698ff9da17326c99e3c7bf471f5e165342c9bef54d66",
+      "count": 8
+    },
+    {
+      "path": "immutable-128.pkb",
+      "bytes": 8241,
+      "sha256": "354180f78de74775d6f803d8f68840bdba436335f672c832a76d58e18a1a79e3",
+      "count": 128
+    },
+    {
+      "path": "immutable-1024.pkb",
+      "bytes": 8241,
+      "sha256": "72e5946d46575d456313f5ab41e1596af3a72f96cc4b555d460a4e55af8662c7",
+      "count": 1024
+    }
+  ]
+}

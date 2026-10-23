@@ -14,6 +14,9 @@ pub enum ExecutionPreference {
     /// Prepare only scalar native execution; successful preparation disables
     /// packet execution. Unavailable native execution retains the Rust fallback.
     ScalarJit,
+    /// Use certified immutable-age evolution under Graphics policy. Other
+    /// stages retain ordinary CPU execution; instances may fall back until reset.
+    ImmutableAge,
 }
 
 /// Numerical transformations permitted during execution preparation.
@@ -62,6 +65,8 @@ pub enum ExecutionBackend {
     /// Evolution has an eligible native SIMD tile. Short/terminal/newborn runs
     /// and checked tile failure replay still use the scalar native entry.
     SimdJit,
+    /// Closed Graphics appearance expressions with CPU-owned lifetime/admission.
+    ImmutableAge,
 }
 
 /// Why preferred native preparation retained the interpreter.
@@ -69,6 +74,8 @@ pub enum ExecutionBackend {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ExecutionFallback {
+    /// Immutable-age execution requires the explicitly relaxed Graphics policy.
+    NumericPolicy,
     /// The crate was built without optional native execution support.
     FeatureDisabled,
     /// The current platform has no supported native execution implementation.
@@ -107,6 +114,10 @@ pub struct ExecutionReport {
 pub struct ExecutionStats {
     /// Scalar native invocations attempted, including invocations ending in a fault.
     pub scalar_jit_invocations: u64,
+    /// Authorized evolutions replaced by a certified immutable sample.
+    pub immutable_age_invocations: u64,
+    /// Instance-wide restorations to ordinary CPU execution until reset.
+    pub immutable_age_fallbacks: u64,
     /// Canonical lanes successfully committed through the checked Rust packet.
     pub rust_packet_committed_lanes: u64,
     /// Actual generated SIMD tile entries, including failed speculative tiles.

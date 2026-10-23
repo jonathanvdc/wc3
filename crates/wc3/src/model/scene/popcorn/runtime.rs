@@ -1,12 +1,16 @@
 //! Bounded reusable lifecycle storage and deterministic event-time scheduling.
 use super::callbacks::{ExecutionHost, Scratch};
 use super::execution_plan::ExecutionPlan;
+use super::ImmutableParticleView;
+#[path = "runtime/age.rs"]
+mod age_runtime;
 use super::graph::*;
 use super::lifetime::Lifetime;
 use super::packet::{Lane, Scratch as PacketScratch, PARTICLE_BATCH_SIZE};
 use super::payload::{Handle as PayloadHandle, Storage as PayloadStorage};
 use super::spatial::Store as SpatialStore;
 use super::{ExecutionReport, ExecutionStage, ExecutionStats, Failure, State, Value, ValueType};
+use age_runtime::AgePool;
 use glam::Mat4;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -308,10 +312,20 @@ pub struct ParticleView<'a> {
     pub parent: Option<EffectParticleId>,
     fields: &'a FieldPlanes,
     types: &'a [Option<ValueType>],
+    immutable: Option<ImmutableParticleView<'a>>,
 }
-impl ParticleView<'_> {
+impl<'a> ParticleView<'a> {
+    /// Borrow initialized captures and the last authorized immutable appearance,
+    /// without evaluating the DAG. Unevolved newborns and fallback return None.
+    pub fn immutable_sample(&self) -> Option<ImmutableParticleView<'a>> {
+        self.immutable
+    }
+
     /// Read a canonical field with its checked type; opaque metadata returns None.
     pub fn field(&self, field: EffectFieldId) -> Option<Value> {
+        if let Some(value) = self.immutable.and_then(|view| view.field(field)) {
+            return Some(value);
+        }
         let kind = *self.types.get(field.0 as usize)?;
         Some(Value::from_words(
             kind?,
@@ -321,6 +335,8 @@ impl ParticleView<'_> {
 }
 /// Reusable pooled state; callers supply the matching shared programme explicitly.
 pub struct EffectInstance {
+    definition: Arc<EffectGraph>,
+    age: Option<AgePool>,
     execution: Arc<ExecutionPlan>,
     execution_stats: ExecutionStats,
     spatial: Vec<SpatialStore>,
@@ -459,6 +475,14 @@ impl EffectProgram {
         if bytes.is_none_or(|bytes| bytes > limits.storage_bytes) {
             return Err(failure("effect pool exceeds its configured storage budget"));
         }
+        let age_bytes = AgePool::bytes(limits.particles);
+        let age = (self.execution.has_age()
+            && bytes
+                .and_then(|base| base.checked_add(age_bytes?))
+                .is_some_and(|total| total <= limits.storage_bytes))
+        .then(|| AgePool::new(limits.particles));
+        let bytes =
+            bytes.and_then(|base| base.checked_add(if age.is_some() { age_bytes? } else { 0 }));
         // Optional acceleration cannot reject an otherwise valid scalar pool.
         // Include the boxed metadata and the exact fixed-plane allocations.
         let packet = PacketScratch::shape(&self.inner.layers).and_then(|shape| {
@@ -482,6 +506,8 @@ impl EffectProgram {
             })
             .collect();
         Ok(EffectInstance {
+            definition: self.inner.clone(),
+            age,
             execution: self.execution.clone(),
             execution_stats: ExecutionStats::default(),
             spatial: self
@@ -573,6 +599,9 @@ impl EffectInstance {
             store.clear();
         }
         self.spatial_checks = self.limits.spatial_checks_per_update;
+        if let Some(age) = &mut self.age {
+            age.reset();
+        }
         self.active.clear();
         self.free.clear();
         self.free.extend((0..self.particles.len()).rev());
@@ -622,6 +651,7 @@ impl EffectInstance {
         let mut work = 0;
         while let Some(spawn) = self.pending.pop() {
             if let Err(error) = self.birth(program, spawn, 0., inputs, &mut work) {
+                self.disable_age();
                 self.faulted = true;
                 self.running = false;
                 return Err(error);
@@ -709,6 +739,7 @@ impl EffectInstance {
                     parent: particle.parent,
                     fields: &self.fields,
                     types: &self.layout[layer.0 as usize],
+                    immutable: self.immutable_view(slot),
                 }
             })
     }
@@ -759,6 +790,7 @@ impl EffectInstance {
                 break;
             }
             if let Err(error) = self.step(program, next, inputs, &mut work) {
+                self.disable_age();
                 self.faulted = true;
                 self.running = false;
                 return Err(error);
@@ -767,6 +799,7 @@ impl EffectInstance {
             steps += 1;
         }
         if self.time < end {
+            self.disable_age();
             for store in &mut self.spatial {
                 store.clear();
             }
@@ -826,6 +859,7 @@ impl EffectInstance {
         }
         while let Some(spawn) = self.pending.pop() {
             if *work >= self.limits.work_per_update {
+                self.disable_age();
                 self.stats.omitted_births = self
                     .stats
                     .omitted_births
@@ -872,6 +906,8 @@ impl EffectInstance {
                 continue;
             }
             if PACKETS
+                && !(self.immutable_active()
+                    && self.execution.age(self.particles[slot].layer).is_some())
                 && self.active.len() - index >= PARTICLE_BATCH_SIZE
                 && index >= scalar_until
                 && layer.evolve.is_some()
@@ -1050,6 +1086,9 @@ impl EffectInstance {
         self.next_serial = next_serial;
         let layer = &program.inner.layers[spawn.layer.0 as usize];
         let particle = &mut self.particles[slot];
+        if let Some(age) = &mut self.age {
+            age.clear_slot(slot);
+        }
         particle.generation = particle
             .generation
             .checked_add(1)
@@ -1116,6 +1155,7 @@ impl EffectInstance {
             self.retire_at(self.active.len() - 1);
             return Ok(());
         }
+        self.capture_age(slot);
         if end > spawn.time && self.evolve(program, slot, end, inputs, work)? {
             let index = self.active.len() - 1;
             self.retire_at(index);
@@ -1147,12 +1187,16 @@ impl EffectInstance {
         self.fields
             .write(layer.life, slot, [life.to_bits(), 0, 0, 0]);
         if *work >= self.limits.work_per_update {
+            self.disable_age();
             self.stats.omitted_executions = self.stats.omitted_executions.saturating_add(1);
             return Ok(life >= 1.);
         }
         *work += 1;
         if life < 1. || layer.evolve_on_death {
             if let Some(bound) = &layer.evolve {
+                if self.authorize_age(slot, end) {
+                    return Ok(false);
+                }
                 self.execute(
                     program,
                     slot,
@@ -1258,3 +1302,7 @@ mod packet_tests;
 #[cfg(test)]
 #[path = "native_runtime_tests.rs"]
 mod native_tests;
+
+#[cfg(test)]
+#[path = "runtime_age_tests.rs"]
+mod age_tests;

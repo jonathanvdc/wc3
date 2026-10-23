@@ -261,6 +261,49 @@ replay the invocation. Failed speculative SIMD batches discard staged output and
 replay their invocations through the scalar path. Native compilation is bounded;
 unsupported platforms, disabled features and preparation failures select Rust execution before simulation.
 
+## Prepare immutable appearance
+
+`ExecutionPreference::ImmutableAge` with `NumericPolicy::Graphics` prepares
+closed appearance expressions for eligible renderer-bearing leaf layers. It is
+portable and does not require the optional native-code feature. Controllers,
+initialization, randomness, event routing and lifetime remain CPU-owned; other
+layers keep their ordinary evaluator. Strict policy retains ordinary execution
+with a typed fallback reason.
+
+The first subset closes initialized fields, arithmetic, immutable curves driven
+by appearance life, and a certified constant-rate phase/clock recurrence.
+Unproven live inputs or potentially failing curve coordinates retain ordinary
+execution. This is an optimization boundary, not an additional native feature
+limitation. `immutable_recipe()` exposes read-only typed nodes, capture bindings,
+output fields and curve data for a graphics adapter without exposing native VM
+registers or mutable programme state.
+
+Canonical Life and retirement still use the CPU's accumulated lifetime. The
+Graphics appearance input instead uses initialized life plus initialized inverse
+life times authorized elapsed time, with explicit f32 time anchors and an upper
+clamp at one. Phase expressions similarly use their initialized phase and clock.
+These analytic expressions can differ slightly from repeated f32 accumulation.
+`ParticleView::field()` returns their evaluated canonical outputs without heap
+allocation; reading Life itself still returns the authoritative CPU value.
+Each virtual-output query evaluates the complete bounded recipe. Bulk CPU
+extraction can therefore cost more than ordinary eager evaluation; include the
+[measured query cost](popcorn-performance.md#immutable-cpu-appearance-2026-10-22)
+when choosing this policy.
+`immutable_sample()` borrows raw initialized captures and the authorized sample
+without evaluating appearance fields, allowing a renderer to upload births
+rather than resample every output each tick.
+
+A newborn's initializer remains visible until its first authorized evolution.
+`immutable_time()` returns a common clock only when all eligible living particles
+have an observation at that time. An omitted evolution or simulation step, an
+unsupported birth capture or a checked-guard failure restores old virtual outputs and latches the instance
+to ordinary execution until restart. Denied work never animates appearance ahead
+of its authorized observation. A checked failure then comes from the original
+source invocation, retaining its exact location and earlier writes without
+replaying previous invocations. `immutable_active()` and execution counters make
+actual admission observable; preparation alone is not GPU-route or performance
+proof.
+
 ## Execution policies
 
 `EffectCompileOptions` makes stage selection, random policy, missing-payload

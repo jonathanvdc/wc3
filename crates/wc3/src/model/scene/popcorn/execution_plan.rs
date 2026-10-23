@@ -1,10 +1,12 @@
 //! Immutable executable selection, shared by instances but independent of schema identity.
+use super::age::AgePlan;
 use super::callbacks::ExecutionHost;
 use super::execution::with_scratch;
 use super::graph::{EffectGraph, EffectLayerId};
 use super::native::NativeCode;
 use super::packet::{PureEvolution, Scratch as PacketScratch};
 use super::ExecutionFallback;
+use super::NumericPolicy;
 use super::{
     ExecutionBackend, ExecutionError, ExecutionOptions, ExecutionPreference, ExecutionReport,
     ExecutionStage, ExecutionStats, Program, State,
@@ -16,15 +18,37 @@ pub(super) struct ExecutionPlan {
     options: ExecutionOptions,
     reports: Box<[ExecutionReport]>,
     native: Option<NativeCode>,
+    ages: Box<[Option<AgePlan>]>,
 }
 impl ExecutionPlan {
     pub(super) fn prepare(graph: &EffectGraph, options: ExecutionOptions) -> Self {
+        let ages: Box<[Option<AgePlan>]> = if options.preference
+            == ExecutionPreference::ImmutableAge
+            && options.numeric_policy == NumericPolicy::Graphics
+        {
+            graph
+                .layers
+                .iter()
+                .map(|layer| {
+                    AgePlan::prepare(layer, &graph.samplers)
+                        .filter(|plan| plan.total_life_curves(&graph.samplers))
+                })
+                .collect()
+        } else {
+            Box::new([])
+        };
         let mut native = None;
         let fallback = if options.preference == ExecutionPreference::Interpreter {
             None
         } else {
             match catch_unwind(AssertUnwindSafe(|| {
-                NativeCode::prepare(graph, options.preference == ExecutionPreference::Automatic)
+                NativeCode::prepare(
+                    graph,
+                    matches!(
+                        options.preference,
+                        ExecutionPreference::Automatic | ExecutionPreference::ImmutableAge
+                    ),
+                )
             })) {
                 Ok(Ok(code)) => {
                     native = Some(code);
@@ -46,8 +70,9 @@ impl ExecutionPlan {
             .iter()
             .enumerate()
             .flat_map(|(index, layer)| {
-                let evolution_backend = if native.as_ref().is_some_and(|code| code.has_simd(index))
-                {
+                let evolution_backend = if ages.get(index).is_some_and(Option::is_some) {
+                    ExecutionBackend::ImmutableAge
+                } else if native.as_ref().is_some_and(|code| code.has_simd(index)) {
                     ExecutionBackend::SimdJit
                 } else {
                     backend
@@ -68,7 +93,18 @@ impl ExecutionPlan {
                         } else {
                             backend
                         },
-                        fallback: fallback.clone(),
+                        fallback: if stage == ExecutionStage::Evolution
+                            && evolution_backend == ExecutionBackend::ImmutableAge
+                        {
+                            None
+                        } else if stage == ExecutionStage::Evolution
+                            && options.preference == ExecutionPreference::ImmutableAge
+                            && options.numeric_policy == NumericPolicy::Strict
+                        {
+                            Some(ExecutionFallback::NumericPolicy)
+                        } else {
+                            fallback.clone()
+                        },
                     }
                 })
             })
@@ -77,7 +113,14 @@ impl ExecutionPlan {
             options,
             reports,
             native,
+            ages,
         }
+    }
+    pub(super) fn age(&self, layer: EffectLayerId) -> Option<&AgePlan> {
+        self.ages.get(layer.0 as usize)?.as_ref()
+    }
+    pub(super) fn has_age(&self) -> bool {
+        self.ages.iter().any(Option::is_some)
     }
     pub(super) fn options(&self) -> ExecutionOptions {
         self.options

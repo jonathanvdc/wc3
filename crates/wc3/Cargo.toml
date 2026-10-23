@@ -92,3 +92,7 @@ harness = false
 [[example]]
 name = "particle_jit_bench"
 required-features = ["popcorn-jit"]
+
+[[example]]
+name = "particle_immutable_bench"
+required-features = ["popcorn-jit"]

@@ -6,6 +6,13 @@
 
 use glam::{Quat, Vec2, Vec3, Vec4};
 
+mod age;
+mod immutable;
+pub use immutable::{
+    ImmutableBirth, ImmutableCapture, ImmutableCurve, ImmutableExpression, ImmutableNode,
+    ImmutableNodeId, ImmutableOutput, ImmutableParticleView, ImmutableRecipe, ImmutableSample,
+};
+
 mod numeric;
 pub(crate) use numeric::{BinaryOperation, UnaryOperation};
 
@@ -267,8 +274,6 @@ pub(crate) enum Instruction {
     },
 }
 
-#[cfg(test)]
-mod age;
 mod callbacks;
 mod color;
 mod curve;

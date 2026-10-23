@@ -4,7 +4,8 @@ Use the same compiled graph and simulation workload when comparing execution
 backends. Native preparation, pool allocation, warmup and rendering are different
 costs; keep them outside a warmed simulation clock and report them separately.
 The [fixture guide](../benches/fixtures/particle_runtime/README.md) describes the
-original inputs and independent numerical oracle shared by both benchmark tools.
+original inputs and independent numerical oracle used by the time-driven runtime
+benchmarks. The immutable workload below uses a separate direct-Life variant.
 
 ## Run a paired comparison
 
@@ -36,6 +37,36 @@ while short populations retain scalar native calls. Runtime tests separately ver
 positive dense Rust packet commits and zero substituted Rust packet commits on
 the scalar JIT route. The maintained comparison additionally requires these
 actual counters from its own workload. Keep builds and GPU captures idle during a comparison.
+
+## Compare immutable appearance
+
+The separate immutable workload compares the same original checked graph through
+Rust packets, scalar native, SIMD and immutable-age execution:
+
+```sh
+cargo build -p wc3 --release --features popcorn-jit --example particle_immutable_bench
+python3 crates/wc3/benches/compare_particle_immutable.py \
+  target/release/examples/particle_immutable_bench /tmp/particle-immutable-results --execute
+```
+
+The client embeds four original native fixtures; no runtime fixture directory is
+required. The guarded driver rotates and reverses the four routes over the same
+population, capacity and instance cases as the native comparison. It checks
+structural identity, actual route counters and every declared child field outside
+clocks. Constant and lifecycle words remain exact. Size, rotation and color must
+pass an independent polynomial oracle with a declared f32 error bound; comparisons
+involving analytic appearance allow that bound, while ordinary CPU routes must
+remain bit-exact. This is a synthetic workload, not a native asset fidelity claim.
+
+Hot clocks contain 64 natural updates at 1/64 second, with preallocated block and
+frame samples and zero allocator-call admission. Compilation, backend preparation,
+instantiation and start/first-birth costs are reported separately. A separate
+fixed-time measurement reads all fourteen public child fields eight times,
+exposing CPU work deferred by immutable appearance. Report that query cost and
+preparation/birth costs with advance timings instead of treating them as absent.
+This CPU-only client does not measure shader execution or renderer uploads; use
+advancing completed-frame captures for those costs. No performance result is
+implied merely by adding a route or passing its preparation checks.
 
 ## Scalar native measurements, 2026-10-22
 
@@ -197,3 +228,77 @@ The optimized corpus again matched 58 effects, 330 cases and 83,064 rows exactly
 
 These are CPU simulation results. x86-64 execution, larger supported curves,
 unmeasured effects and completed rendered frames have no performance claim here.
+
+## Immutable CPU appearance, 2026-10-22
+
+This stage keeps controller execution, births, lifecycle retirement and bounded
+work on the CPU, while eligible appearance fields use a closed age expression.
+Public field queries evaluate that expression on demand. The following results
+measure CPU advancement and its deferred query cost; WGSL and completed rendered
+frames have not been measured in this record.
+
+The frozen release build used the same M4 Pro host, Rust 1.99.0 and Cranelift
+0.137.0; its build took 5m44s. The synthetic comparison completed 240 guarded jobs:
+five rotated/reversed four-route runs over twelve population/capacity/instance
+cases, each with 31 samples of 64 ticks at 1/64 second after two warmup ticks.
+All four routes passed the independent fourteen-field oracle and matched numeric
+words exactly, although the analytic appearance oracle permits a declared bounded
+rounding difference. Dense Rust runs actually committed packets, Automatic runs
+committed SIMD lanes, scalar-native runs used scalar entries, and immutable runs
+authorized appearance without substituting
+packet work. Every hot block made zero allocator calls.
+
+Speedups below are reciprocals of the median of five paired block-median ratios
+against the strongest current dense alternative, SIMD. The frame p95 column is
+immutable divided by SIMD, again paired per repeat; smaller is faster.
+
+| Children | Child capacity | Instances | Versus SIMD | Frame p95 ratio |
+| ---: | ---: | ---: | ---: | ---: |
+| 128 | 128 | 1 | 3.71× | 0.265 |
+| 128 | 128 | 8 | 3.53× | 0.301 |
+| 1024 | 1024 | 1 | 3.91× | 0.271 |
+| 1024 | 1024 | 8 | 3.89× | 0.256 |
+
+The acquired HD LichAttack programme completed 160 guarded jobs, with 120 warmup
+and 600 measured ticks at 1/64 second, total capacities 128/1024, one/eight instances
+and emission multipliers 1 and 64. Birth identities, ordering, canonical lifetime and
+budget ledgers matched the ordinary evaluator. Only authorized virtual float
+outputs used the declared 512-epsilon relative-or-absolute bound; other words and
+inactive components remained exact. The largest absolute appearance difference
+was below 0.000947 and consumed less than 64% of that bound. Capacity-limited birth
+omissions remain in the matched ledgers; the comparison does not hide them by
+changing capacities or spawning policy. Steady advancement made no allocator
+calls. All observed immutable particles had coherent authorized sample times.
+
+Lich speedups use paired frame medians against SIMD, with the same paired p95
+ratio definition. Sparse cases made no SIMD entries and compare against its
+ordinary scalar fallback; dense cases had actual SIMD entries.
+
+| Total capacity | Instances | Emission multiplier | Versus Automatic | Frame p95 ratio |
+| ---: | ---: | ---: | ---: | ---: |
+| 128 | 1 | 1 | 1.90× | 0.700 |
+| 128 | 1 | 64 | 2.43× | 0.574 |
+| 128 | 8 | 1 | 1.92× | 0.779 |
+| 128 | 8 | 64 | 2.16× | 0.501 |
+| 1024 | 1 | 1 | 1.90× | 0.821 |
+| 1024 | 1 | 64 | 2.50× | 0.470 |
+| 1024 | 8 | 1 | 1.96× | 0.787 |
+| 1024 | 8 | 64 | 2.59× | 0.429 |
+
+Immutable advancement defers CPU field evaluation rather than removing its cost.
+The separate fixed-time eight-sweep query measurement was approximately 17–18×
+slower than SIMD for dense synthetic instances. Compilation, native preparation,
+instantiation, start/first-birth and query observations are recorded separately;
+none is included in the hot advance clock. For one 1,024-child instance, median
+pool creation was 34 µs and start/first-birth 169 µs. Eight complete query sweeps
+cost 10.63 ms versus 0.595 ms for SIMD; the median of paired query ratios was 17.68×.
+These are separate phase medians, not components of an advance-time ratio.
+Applications extracting every field on the CPU must include that query cost in
+their comparison. These measurements do not establish renderer upload savings or
+a total-frame improvement.
+
+The [immutable record](../benches/results/popcorn-immutable-age-2026-10-22.json)
+retains actual route deltas, all paired ratios, cold/birth/query costs, numerical
+contracts and hashes/paths for preserved raw logs and frozen artifacts. Its
+source snapshot precedes subsequent packet specialization; no later unmeasured
+change contributes to these results.

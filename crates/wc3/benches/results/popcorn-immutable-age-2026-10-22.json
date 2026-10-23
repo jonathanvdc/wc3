@@ -1,0 +1,4611 @@
+{
+  "schema": 1,
+  "stage": "immutable-age CPU appearance",
+  "date": "2026-10-22",
+  "host": {
+    "machine": "Apple M4 Pro Mac16,8",
+    "logical_cpus": 14,
+    "os": "macOS27.0.1",
+    "rust": "1.99.0",
+    "cranelift": "0.137.0 opt_level=speed",
+    "profile": "release",
+    "core_build_seconds": 344
+  },
+  "scope": "frozen core before later const-generic packet specialization; no WGSL or completed-render-frame claim",
+  "ratio_definition": "per-repeat numerator/denominator quantile ratio, then median of paired ratios; speedup is reciprocal, never ratio of aggregate medians",
+  "raw_evidence": {
+    "/tmp/wc3-immutable-age-results-01/manifest.json": {
+      "sha256": "bc4ab4d4fba6c077c545dd19a5b0b584e4a0a6a045e05c87aa174e00e8c40682",
+      "bytes": 6765734
+    },
+    "/tmp/wc3-jit-immutable-lich-results-01/manifest.json": {
+      "sha256": "0816da7ced275fe66c0dab2ea726200cd6c50d69ffce6ccd9efc38760c7a1464",
+      "bytes": 201305
+    },
+    "/tmp/wc3-jit-immutable-lich-results-01/summary.json": {
+      "sha256": "019c85bb84e2c054667be59ed2911c3c3ea8e58d8658b06bbf7de6100235af02",
+      "bytes": 482132
+    },
+    "/tmp/wc3-jit-immutable-lich-results-01/results.json": {
+      "sha256": "a1ce20b13ad5b5bf502af58df003f63ed0ca029f6c2ea94589764d13e1fc566b",
+      "bytes": 2578947
+    },
+    "/tmp/wc3-jit-immutable-binaries-01/core-source-hashes.json": {
+      "sha256": "169e2cabcb5773853be08e92ba966ced2ec68296189433d05bcd29aac9abf913",
+      "bytes": 59128
+    }
+  },
+  "artifacts": {
+    "/tmp/wc3-jit-immutable-binaries-01/lich": {
+      "sha256": "f505d1c6ee8599ba8215597714f0aec3b26ab793563fd3de592148357d14525a",
+      "bytes": 3854552
+    },
+    "/tmp/wc3-jit-immutable-binaries-01/synthetic": {
+      "sha256": "cd7b7d310552d603438b1c7f93c8f4d0a44bb019dea3e032b9bb08529d68a629",
+      "bytes": 3829320
+    },
+    "/tmp/wc3-jit-immutable-binaries-01/libwc3.rlib": {
+      "sha256": "c694ae7007dbb9d200d058ea6ded5292e86097dad8967d2c9e209634bf43d31c",
+      "bytes": 147705352
+    }
+  },
+  "source_snapshot": {
+    "crates/wc3/src/model/scene/popcorn/age.rs": "cb48461f511e9418a3749048160186bfdb5e7164b7b6c2b0def5dce0af4fa812",
+    "crates/wc3/src/model/scene/popcorn/execution_plan.rs": "8b1b3860d583149f198678fba57d5a1ae43e9ecc0ffe387a091c7d5a0041f9da",
+    "crates/wc3/src/model/scene/popcorn/execution_policy.rs": "2f868f84a5a5d21b972da9d0c1b50abed8cc468055456caf932f7d1cf2d6074b",
+    "crates/wc3/src/model/scene/popcorn/immutable.rs": "e624bf21adfbfbc566539f529a2c7e5cceef552d4f1285d74b410df752c4c479",
+    "crates/wc3/src/model/scene/popcorn/packet/simd.rs": "8defca06f19b8edc57d16ee9d74738368b1eed5f2de3386e79e77115b608c79e",
+    "crates/wc3/src/model/scene/popcorn/packet.rs": "deeb8145b09e3b9c8a205375b2a173cc5323ad8cb8d05bf2a5ce88b07e65c0da",
+    "crates/wc3/src/model/scene/popcorn/runtime/age.rs": "80810cb301b05a0b912aaba850f2d46c07471d423745aa28e9c80435a762bb2a",
+    "crates/wc3/src/model/scene/popcorn/runtime.rs": "7481827c507c3a26a5dc1bd79ad4448c23da18b41163bbd731354b7fb11e7bd9"
+  },
+  "work_columns": [
+    "scalar_jit",
+    "simd_batches",
+    "simd_lanes",
+    "rust_lanes",
+    "immutable_age",
+    "immutable_fallbacks"
+  ],
+  "synthetic": {
+    "jobs": 240,
+    "repeats": 5,
+    "samples": 31,
+    "warmup": 2,
+    "ticks": 64,
+    "delta_seconds": 0.015625,
+    "capacity_units": "children; one additional controller resident",
+    "all_four_routes_numeric_bit_exact": true,
+    "allocation_admission": "zero allocation, reallocation and deallocation calls in all hot blocks",
+    "oracle": "all14 fields each trajectory; canonical Life/constant/Boolean/inactive words exact; original independent f64 appearance polynomial bound64*f32EPS*max(1,abs(expected)) onlySize/Rotation/Color; all actual routes nevertheless matched bits",
+    "cases": [
+      {
+        "children": 1,
+        "child_capacity": 128,
+        "instances": 1,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.3649680397727273, 0.36216921798979473, 0.3471410196445276, 0.3633984962406015, 0.3817441465897523],
+              "median_ratio": 0.3633984962406015
+            },
+            "block_p95": {
+              "paired_ratios": [0.37012873536436186, 0.3581895805688571, 0.3110904440827714, 0.3588905109489051, 0.37909563535243623],
+              "median_ratio": 0.3588905109489051
+            },
+            "frame_median": {
+              "paired_ratios": [0.334, 0.334, 0.334, 0.334, 0.334],
+              "median_ratio": 0.334
+            },
+            "frame_p95": {
+              "paired_ratios": [0.3856088560885609, 0.3837638376383764, 0.3328, 0.3837638376383764, 0.3837638376383764],
+              "median_ratio": 0.3837638376383764
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.8000129735339907, 0.8049584597125148, 0.762048386061734, 0.7879874788052693, 0.870926877331269],
+              "median_ratio": 0.8000129735339907
+            },
+            "block_p95": {
+              "paired_ratios": [0.8154517453798767, 0.8120463017461251, 0.7546058403308685, 0.7930322580645162, 0.7737676599420076],
+              "median_ratio": 0.7930322580645162
+            },
+            "frame_median": {
+              "paired_ratios": [0.8028846153846154, 0.8028846153846154, 0.7990430622009569, 0.8028846153846154, 0.8028846153846154],
+              "median_ratio": 0.8028846153846154
+            },
+            "frame_p95": {
+              "paired_ratios": [0.836, 0.832, 0.832, 0.832, 0.832],
+              "median_ratio": 0.832
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.7456018378574452, 0.781312, 0.7421875, 0.773312, 0.8048780487804879],
+              "median_ratio": 0.773312
+            },
+            "block_p95": {
+              "paired_ratios": [0.7456871259241873, 0.7821732283464566, 0.7372803526602584, 0.7763531863828712, 0.8069746493372796],
+              "median_ratio": 0.7763531863828712
+            },
+            "frame_median": {
+              "paired_ratios": [0.668, 0.7990430622009569, 0.7990430622009569, 0.7990430622009569, 0.8028846153846154],
+              "median_ratio": 0.7990430622009569
+            },
+            "frame_p95": {
+              "paired_ratios": [0.836, 0.832, 0.832, 0.832, 0.832],
+              "median_ratio": 0.832
+            }
+          }
+        ],
+        "separate_costs": {
+          "interpreter": {
+            "compile_ns": {
+              "raw_ns": [64667, 71209, 66792, 66542, 58458],
+              "median_ns": 66542
+            },
+            "prepare_ns": {
+              "raw_ns": [334, 291, 333, 291, 333],
+              "median_ns": 333
+            },
+            "instantiate_ns": {
+              "median_ns": 3834
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 542
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 625
+            }
+          },
+          "scalar-jit": {
+            "compile_ns": {
+              "raw_ns": [49250, 53125, 62916, 56417, 68917],
+              "median_ns": 56417
+            },
+            "prepare_ns": {
+              "raw_ns": [1745041, 1748416, 1932792, 1772541, 1941708],
+              "median_ns": 1772541
+            },
+            "instantiate_ns": {
+              "median_ns": 3708
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 375
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 583
+            }
+          },
+          "simd-jit": {
+            "compile_ns": {
+              "raw_ns": [59083, 64542, 65000, 64917, 54542],
+              "median_ns": 64542
+            },
+            "prepare_ns": {
+              "raw_ns": [3102250, 3210125, 3105250, 3198542, 2888708],
+              "median_ns": 3105250
+            },
+            "instantiate_ns": {
+              "median_ns": 3709
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 375
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 584
+            }
+          },
+          "immutable-age": {
+            "compile_ns": {
+              "raw_ns": [58375, 57667, 50209, 66166, 66583],
+              "median_ns": 58375
+            },
+            "prepare_ns": {
+              "raw_ns": [2950292, 2817875, 2856166, 3209708, 3055292],
+              "median_ns": 2950292
+            },
+            "instantiate_ns": {
+              "median_ns": 3833
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 500
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 9750
+            }
+          }
+        },
+        "actual_work_each_frame": {
+          "interpreter": [
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0]
+          ],
+          "scalar-jit": [
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0]
+          ],
+          "simd-jit": [
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0]
+          ],
+          "immutable-age": [
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0]
+          ]
+        },
+        "paired_fixed_query_age_over_simd": [14.742128935532234, 16.55308219178082, 15.4656, 16.7958833619211, 17.295025728987994],
+        "median_paired_fixed_query_age_over_simd": 16.55308219178082
+      },
+      {
+        "children": 1,
+        "child_capacity": 128,
+        "instances": 8,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.3240764843694536, 0.3481989578685462, 0.33378038154360123, 0.31125678894711767, 0.3240402193784278],
+              "median_ratio": 0.3240764843694536
+            },
+            "block_p95": {
+              "paired_ratios": [0.2944218352087783, 0.35270148589607486, 0.29529936842105264, 0.2944969905417025, 0.31110223642172524],
+              "median_ratio": 0.29529936842105264
+            },
+            "frame_median": {
+              "paired_ratios": [0.3192032686414709, 0.32978723404255317, 0.32617483577564427, 0.3158160687215765, 0.3197228408809701],
+              "median_ratio": 0.3197228408809701
+            },
+            "frame_p95": {
+              "paired_ratios": [0.2831350892098556, 0.3359559402045633, 0.27270924236414124, 0.26457754859182864, 0.32526829268292684],
+              "median_ratio": 0.2831350892098556
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.727141592920354, 0.8342831257078143, 0.7435684127665665, 0.7195242290748899, 0.8059822297401759],
+              "median_ratio": 0.7435684127665665
+            },
+            "block_p95": {
+              "paired_ratios": [0.7291666666666666, 0.6270446362945522, 0.7105734549138805, 0.7279489904357067, 0.8134376983994386],
+              "median_ratio": 0.7279489904357067
+            },
+            "frame_median": {
+              "paired_ratios": [0.7142857142857143, 0.7804449648711944, 0.7554125219426565, 0.7142857142857143, 0.7564402810304449],
+              "median_ratio": 0.7554125219426565
+            },
+            "frame_p95": {
+              "paired_ratios": [0.7272231314784506, 0.7735507246376812, 0.6348107109879964, 0.7273718647764449, 0.8335],
+              "median_ratio": 0.7273718647764449
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.7176157205240175, 0.8559344877908219, 0.764367816091954, 0.748652414652928, 0.8069068494896798],
+              "median_ratio": 0.764367816091954
+            },
+            "block_p95": {
+              "paired_ratios": [0.6577645895153313, 0.9288765859284891, 0.7626002540058108, 0.776052712672431, 0.7011701170117012],
+              "median_ratio": 0.7626002540058108
+            },
+            "frame_median": {
+              "paired_ratios": [0.7142857142857143, 0.8001200480192077, 0.7744451109778044, 0.7498500299940012, 0.7564402810304449],
+              "median_ratio": 0.7564402810304449
+            },
+            "frame_p95": {
+              "paired_ratios": [0.603713768115942, 0.976, 0.7672991071428571, 0.7622857142857142, 0.7549818840579711],
+              "median_ratio": 0.7622857142857142
+            }
+          }
+        ],
+        "separate_costs": {
+          "interpreter": {
+            "compile_ns": {
+              "raw_ns": [63125, 66208, 61083, 71833, 75458],
+              "median_ns": 66208
+            },
+            "prepare_ns": {
+              "raw_ns": [375, 375, 416, 500, 375],
+              "median_ns": 375
+            },
+            "instantiate_ns": {
+              "median_ns": 30417
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 4084
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 4875
+            }
+          },
+          "scalar-jit": {
+            "compile_ns": {
+              "raw_ns": [57958, 57000, 65625, 56209, 64875],
+              "median_ns": 57958
+            },
+            "prepare_ns": {
+              "raw_ns": [1749541, 1741208, 1908875, 1775500, 1945416],
+              "median_ns": 1775500
+            },
+            "instantiate_ns": {
+              "median_ns": 29208
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 2792
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 4750
+            }
+          },
+          "simd-jit": {
+            "compile_ns": {
+              "raw_ns": [67875, 65666, 75167, 63833, 73583],
+              "median_ns": 67875
+            },
+            "prepare_ns": {
+              "raw_ns": [3261417, 3169208, 3111666, 3238542, 3214708],
+              "median_ns": 3214708
+            },
+            "instantiate_ns": {
+              "median_ns": 29458
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 2791
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 4667
+            }
+          },
+          "immutable-age": {
+            "compile_ns": {
+              "raw_ns": [68375, 61333, 78125, 62584, 67500],
+              "median_ns": 67500
+            },
+            "prepare_ns": {
+              "raw_ns": [3175625, 3235875, 3218833, 2871333, 3184917],
+              "median_ns": 3184917
+            },
+            "instantiate_ns": {
+              "median_ns": 31042
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 3958
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 77416
+            }
+          }
+        },
+        "actual_work_each_frame": {
+          "interpreter": [
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0]
+          ],
+          "scalar-jit": [
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0]
+          ],
+          "simd-jit": [
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0]
+          ],
+          "immutable-age": [
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0]
+          ]
+        },
+        "paired_fixed_query_age_over_simd": [15.880400751408892, 18.501418284966178, 16.306947368421053, 16.516605956717378, 17.225297297297296],
+        "median_paired_fixed_query_age_over_simd": 16.516605956717378
+      },
+      {
+        "children": 8,
+        "child_capacity": 128,
+        "instances": 1,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.09625620690887007, 0.09540591204037491, 0.09955423476968796, 0.0941272860277981, 0.10100451127819549],
+              "median_ratio": 0.09625620690887007
+            },
+            "block_p95": {
+              "paired_ratios": [0.11135197132616488, 0.08823498424939684, 0.11701920995520822, 0.08100276798030012, 0.08664684253882783],
+              "median_ratio": 0.08823498424939684
+            },
+            "frame_median": {
+              "paired_ratios": [0.09678668215253582, 0.09373828271466067, 0.09678668215253582, 0.09523809523809523, 0.0983477576711251],
+              "median_ratio": 0.09678668215253582
+            },
+            "frame_p95": {
+              "paired_ratios": [0.10778885197489849, 0.09090909090909091, 0.10246153846153847, 0.08839611178614824, 0.08953846153846154],
+              "median_ratio": 0.09090909090909091
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.4101529796788188, 0.39817534061913246, 0.42138364779874216, 0.3821970867095977, 0.4233241737464391],
+              "median_ratio": 0.4101529796788188
+            },
+            "block_p95": {
+              "paired_ratios": [0.48441982885512563, 0.3933494587041777, 0.5210954299414222, 0.33980582524271846, 0.42724458204334365],
+              "median_ratio": 0.42724458204334365
+            },
+            "frame_median": {
+              "paired_ratios": [0.4288164665523156, 0.4, 0.4280821917808219, 0.4, 0.4280821917808219],
+              "median_ratio": 0.4280821917808219
+            },
+            "frame_p95": {
+              "paired_ratios": [0.4672, 0.3748125937031484, 0.5, 0.36742424242424243, 0.4362818590704648],
+              "median_ratio": 0.4362818590704648
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.4045998298213124, 0.36928469369530276, 0.4174454828660436, 0.36143820224719103, 0.4159009287925697],
+              "median_ratio": 0.4045998298213124
+            },
+            "block_p95": {
+              "paired_ratios": [0.48290183789698826, 0.3027071962988398, 0.516322582225161, 0.2734375, 0.38016528925619836],
+              "median_ratio": 0.38016528925619836
+            },
+            "frame_median": {
+              "paired_ratios": [0.4280821917808219, 0.4, 0.4280821917808219, 0.4, 0.4],
+              "median_ratio": 0.4
+            },
+            "frame_p95": {
+              "paired_ratios": [0.4672, 0.31565656565656564, 0.4992503748125937, 0.36742424242424243, 0.388],
+              "median_ratio": 0.388
+            }
+          }
+        ],
+        "separate_costs": {
+          "interpreter": {
+            "compile_ns": {
+              "raw_ns": [68500, 68542, 65584, 54750, 70000],
+              "median_ns": 68500
+            },
+            "prepare_ns": {
+              "raw_ns": [375, 458, 417, 334, 292],
+              "median_ns": 375
+            },
+            "instantiate_ns": {
+              "median_ns": 3833
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 4042
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 4500
+            }
+          },
+          "scalar-jit": {
+            "compile_ns": {
+              "raw_ns": [57750, 67458, 63125, 60333, 65667],
+              "median_ns": 63125
+            },
+            "prepare_ns": {
+              "raw_ns": [1766792, 1903209, 1805208, 1768458, 1975875],
+              "median_ns": 1805208
+            },
+            "instantiate_ns": {
+              "median_ns": 3709
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 1459
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 4708
+            }
+          },
+          "simd-jit": {
+            "compile_ns": {
+              "raw_ns": [51292, 77709, 64917, 65666, 88959],
+              "median_ns": 65666
+            },
+            "prepare_ns": {
+              "raw_ns": [2882166, 3219000, 3363500, 3250834, 3148958],
+              "median_ns": 3219000
+            },
+            "instantiate_ns": {
+              "median_ns": 3791
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 1500
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 4542
+            }
+          },
+          "immutable-age": {
+            "compile_ns": {
+              "raw_ns": [72166, 62500, 73042, 64750, 68459],
+              "median_ns": 68459
+            },
+            "prepare_ns": {
+              "raw_ns": [3348750, 2883375, 3283708, 3486584, 3194167],
+              "median_ns": 3283708
+            },
+            "instantiate_ns": {
+              "median_ns": 3875
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 1500
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 77416
+            }
+          }
+        },
+        "actual_work_each_frame": {
+          "interpreter": [
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0]
+          ],
+          "scalar-jit": [
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0]
+          ],
+          "simd-jit": [
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0]
+          ],
+          "immutable-age": [
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0]
+          ]
+        },
+        "paired_fixed_query_age_over_simd": [16.714442976662262, 16.62162162162162, 18.33288043478261, 13.515672577467312, 17.585865257595774],
+        "median_paired_fixed_query_age_over_simd": 16.714442976662262
+      },
+      {
+        "children": 8,
+        "child_capacity": 128,
+        "instances": 8,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.09219256640858618, 0.08684712004828228, 0.08599982466906285, 0.08977505186254171, 0.0869601649756286],
+              "median_ratio": 0.0869601649756286
+            },
+            "block_p95": {
+              "paired_ratios": [0.0991000840422371, 0.09479098394743408, 0.10136457240242065, 0.09557140961516068, 0.09259888488028863],
+              "median_ratio": 0.09557140961516068
+            },
+            "frame_median": {
+              "paired_ratios": [0.09323809523809524, 0.08964000573696036, 0.090698224852071, 0.09160013386240856, 0.08755136346656706],
+              "median_ratio": 0.090698224852071
+            },
+            "frame_p95": {
+              "paired_ratios": [0.09433962264150944, 0.09116981132075472, 0.09363809523809524, 0.09530086848635236, 0.08962264150943396],
+              "median_ratio": 0.09363809523809524
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.38596630923311037, 0.376552852328356, 0.37852128979682553, 0.37999554085462883, 0.3718364087413044],
+              "median_ratio": 0.37852128979682553
+            },
+            "block_p95": {
+              "paired_ratios": [0.40833754798484384, 0.38027093760427094, 0.43524426325774684, 0.39574946454803367, 0.39122530367233593],
+              "median_ratio": 0.39574946454803367
+            },
+            "frame_median": {
+              "paired_ratios": [0.38833796112653707, 0.3781766841468334, 0.3863682193990724, 0.3832, 0.3718762395874653],
+              "median_ratio": 0.3832
+            },
+            "frame_p95": {
+              "paired_ratios": [0.38959015116097867, 0.3814937628296226, 0.38806441427218186, 0.3881256908258329, 0.3701106436029297],
+              "median_ratio": 0.38806441427218186
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.4183542017626018, 0.38539103068450037, 0.366044776119403, 0.3696011882658745, 0.3640974867170334],
+              "median_ratio": 0.3696011882658745
+            },
+            "block_p95": {
+              "paired_ratios": [0.41013185287994447, 0.39663832322658604, 0.4374053078664692, 0.34845294662141313, 0.32291321165595754],
+              "median_ratio": 0.39663832322658604
+            },
+            "frame_median": {
+              "paired_ratios": [0.3982912937347437, 0.3781766841468334, 0.3832, 0.38000793335977784, 0.375],
+              "median_ratio": 0.38000793335977784
+            },
+            "frame_p95": {
+              "paired_ratios": [0.39732994278448824, 0.40550520308828464, 0.3831047381546135, 0.3830450366214742, 0.36776091669247446],
+              "median_ratio": 0.3831047381546135
+            }
+          }
+        ],
+        "separate_costs": {
+          "interpreter": {
+            "compile_ns": {
+              "raw_ns": [63292, 69584, 64208, 63542, 63875],
+              "median_ns": 63875
+            },
+            "prepare_ns": {
+              "raw_ns": [375, 291, 417, 334, 500],
+              "median_ns": 375
+            },
+            "instantiate_ns": {
+              "median_ns": 32500
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 32958
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 37042
+            }
+          },
+          "scalar-jit": {
+            "compile_ns": {
+              "raw_ns": [65375, 56500, 57000, 62125, 63875],
+              "median_ns": 62125
+            },
+            "prepare_ns": {
+              "raw_ns": [1944417, 1765500, 1752458, 1769375, 1918875],
+              "median_ns": 1769375
+            },
+            "instantiate_ns": {
+              "median_ns": 30458
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 11542
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 37333
+            }
+          },
+          "simd-jit": {
+            "compile_ns": {
+              "raw_ns": [55708, 59458, 60709, 66084, 62625],
+              "median_ns": 60709
+            },
+            "prepare_ns": {
+              "raw_ns": [3285500, 2872875, 2920458, 3242417, 3045833],
+              "median_ns": 3045833
+            },
+            "instantiate_ns": {
+              "median_ns": 30708
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 11583
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 37042
+            }
+          },
+          "immutable-age": {
+            "compile_ns": {
+              "raw_ns": [63167, 57958, 58125, 61625, 62125],
+              "median_ns": 61625
+            },
+            "prepare_ns": {
+              "raw_ns": [3053792, 2879333, 2882875, 2906000, 2946958],
+              "median_ns": 2906000
+            },
+            "instantiate_ns": {
+              "median_ns": 31792
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 11875
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 637666
+            }
+          }
+        },
+        "actual_work_each_frame": {
+          "interpreter": [
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0]
+          ],
+          "scalar-jit": [
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0]
+          ],
+          "simd-jit": [
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0]
+          ],
+          "immutable-age": [
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0]
+          ]
+        },
+        "paired_fixed_query_age_over_simd": [18.63275789473684, 17.301158620689655, 16.620684113251013, 16.655543341708544, 16.67207792207792],
+        "median_paired_fixed_query_age_over_simd": 16.67207792207792
+      },
+      {
+        "children": 1,
+        "child_capacity": 1024,
+        "instances": 1,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.36162361623616235, 0.36793846153846155, 0.3513282424742754, 0.365722784404071, 0.3612167300380228],
+              "median_ratio": 0.36162361623616235
+            },
+            "block_p95": {
+              "paired_ratios": [0.3185269841269841, 0.3881571140382105, 0.2798395415472779, 0.3904548286604361, 0.36206741573033707],
+              "median_ratio": 0.36206741573033707
+            },
+            "frame_median": {
+              "paired_ratios": [0.334, 0.334, 0.334, 0.334, 0.334],
+              "median_ratio": 0.334
+            },
+            "frame_p95": {
+              "paired_ratios": [0.3138138138138138, 0.3844731977818854, 0.3328, 0.4, 0.3837638376383764],
+              "median_ratio": 0.3837638376383764
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.7616264610793335, 0.7756372835181942, 0.758594346829641, 0.8135054488842761, 0.7461045488816286],
+              "median_ratio": 0.7616264610793335
+            },
+            "block_p95": {
+              "paired_ratios": [0.6501140369064897, 0.8328983385320516, 0.763, 1.0053904896361419, 0.5991967074924381],
+              "median_ratio": 0.763
+            },
+            "frame_median": {
+              "paired_ratios": [0.668, 0.8028846153846154, 0.7990430622009569, 0.7990430622009569, 0.7990430622009569],
+              "median_ratio": 0.7990430622009569
+            },
+            "frame_p95": {
+              "paired_ratios": [0.7157534246575342, 0.832, 0.832, 1.0, 0.7123287671232876],
+              "median_ratio": 0.832
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.7596899224806202, 0.7693990477416034, 0.762624, 0.7817603790051115, 0.7640586797066015],
+              "median_ratio": 0.7640586797066015
+            },
+            "block_p95": {
+              "paired_ratios": [0.7659236641221374, 0.8307301587301588, 0.770999115826702, 0.9519382671041439, 0.7632160677066886],
+              "median_ratio": 0.770999115826702
+            },
+            "frame_median": {
+              "paired_ratios": [0.7990430622009569, 0.7990430622009569, 0.7990430622009569, 0.7990430622009569, 0.7990430622009569],
+              "median_ratio": 0.7990430622009569
+            },
+            "frame_p95": {
+              "paired_ratios": [0.836, 0.832, 0.832, 1.0, 0.832],
+              "median_ratio": 0.832
+            }
+          }
+        ],
+        "separate_costs": {
+          "interpreter": {
+            "compile_ns": {
+              "raw_ns": [66875, 67334, 65667, 72208, 61292],
+              "median_ns": 66875
+            },
+            "prepare_ns": {
+              "raw_ns": [416, 416, 292, 542, 292],
+              "median_ns": 416
+            },
+            "instantiate_ns": {
+              "median_ns": 25250
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 666
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 584
+            }
+          },
+          "scalar-jit": {
+            "compile_ns": {
+              "raw_ns": [66167, 53208, 66083, 60000, 63334],
+              "median_ns": 63334
+            },
+            "prepare_ns": {
+              "raw_ns": [1977792, 1773000, 2107417, 1790166, 1843792],
+              "median_ns": 1843792
+            },
+            "instantiate_ns": {
+              "median_ns": 24625
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 459
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 625
+            }
+          },
+          "simd-jit": {
+            "compile_ns": {
+              "raw_ns": [65417, 63042, 66500, 55666, 68875],
+              "median_ns": 65417
+            },
+            "prepare_ns": {
+              "raw_ns": [3126708, 3246125, 3303167, 2886334, 2921791],
+              "median_ns": 3126708
+            },
+            "instantiate_ns": {
+              "median_ns": 24459
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 500
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 583
+            }
+          },
+          "immutable-age": {
+            "compile_ns": {
+              "raw_ns": [58750, 69000, 60958, 73875, 95167],
+              "median_ns": 69000
+            },
+            "prepare_ns": {
+              "raw_ns": [2867250, 3282417, 3586250, 3637125, 3172208],
+              "median_ns": 3282417
+            },
+            "instantiate_ns": {
+              "median_ns": 25625
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 1250
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 9792
+            }
+          }
+        },
+        "actual_work_each_frame": {
+          "interpreter": [
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0]
+          ],
+          "scalar-jit": [
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0]
+          ],
+          "simd-jit": [
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0]
+          ],
+          "immutable-age": [
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0]
+          ]
+        },
+        "paired_fixed_query_age_over_simd": [15.6672, 16.7958833619211, 16.295025728987994, 17.152658662092623, 16.767123287671232],
+        "median_paired_fixed_query_age_over_simd": 16.767123287671232
+      },
+      {
+        "children": 1,
+        "child_capacity": 1024,
+        "instances": 8,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.3408437692465613, 0.3351908762939267, 0.3251277287505806, 0.32669885992018266, 0.3444206050979323],
+              "median_ratio": 0.3351908762939267
+            },
+            "block_p95": {
+              "paired_ratios": [0.3588042024832856, 0.4500479924729592, 0.35438884331419196, 0.32949381459060495, 0.35268630849220106],
+              "median_ratio": 0.35438884331419196
+            },
+            "frame_median": {
+              "paired_ratios": [0.3403114628542252, 0.32642748863062154, 0.32986884434545904, 0.3263450366254105, 0.3403114628542252],
+              "median_ratio": 0.32986884434545904
+            },
+            "frame_p95": {
+              "paired_ratios": [0.35056902523503214, 0.41821743388834476, 0.3308168795973674, 0.32789142407553107, 0.3416],
+              "median_ratio": 0.3416
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.750996015936255, 0.7381904415710304, 0.7647464974610416, 0.6946611926750664, 0.7574272481600236],
+              "median_ratio": 0.750996015936255
+            },
+            "block_p95": {
+              "paired_ratios": [0.7162402287893231, 0.9408484886939555, 0.9165513905272716, 0.8047030784508441, 0.6875],
+              "median_ratio": 0.8047030784508441
+            },
+            "frame_median": {
+              "paired_ratios": [0.7442769402568398, 0.7209821428571429, 0.7617142857142857, 0.7048554282596836, 0.7442769402568398],
+              "median_ratio": 0.7442769402568398
+            },
+            "frame_p95": {
+              "paired_ratios": [0.6297777777777778, 0.854, 0.9114666666666666, 0.7696214219759926, 0.7452006980802792],
+              "median_ratio": 0.7696214219759926
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.7347489361702128, 0.7129947753396029, 0.7101811570677229, 0.6842113897159543, 0.6943254050437304],
+              "median_ratio": 0.7101811570677229
+            },
+            "block_p95": {
+              "paired_ratios": [0.6869847632562597, 0.8344060154606906, 0.7960668401306139, 0.6570320304087801, 0.6742116527627768],
+              "median_ratio": 0.6869847632562597
+            },
+            "frame_median": {
+              "paired_ratios": [0.7438616071428571, 0.7048554282596836, 0.7272231314784506, 0.6890666666666667, 0.7109333333333333],
+              "median_ratio": 0.7109333333333333
+            },
+            "frame_p95": {
+              "paired_ratios": [0.6073724817831119, 0.7191578947368421, 0.7322193658954584, 0.7018947368421052, 0.7066611501861813],
+              "median_ratio": 0.7066611501861813
+            }
+          }
+        ],
+        "separate_costs": {
+          "interpreter": {
+            "compile_ns": {
+              "raw_ns": [57416, 65541, 75042, 58708, 63375],
+              "median_ns": 63375
+            },
+            "prepare_ns": {
+              "raw_ns": [333, 334, 542, 292, 375],
+              "median_ns": 334
+            },
+            "instantiate_ns": {
+              "median_ns": 198375
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 4708
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 5334
+            }
+          },
+          "scalar-jit": {
+            "compile_ns": {
+              "raw_ns": [67000, 59459, 66250, 66208, 65417],
+              "median_ns": 66208
+            },
+            "prepare_ns": {
+              "raw_ns": [2092208, 1758459, 1948542, 2021417, 1912500],
+              "median_ns": 1948542
+            },
+            "instantiate_ns": {
+              "median_ns": 198167
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 3666
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 5167
+            }
+          },
+          "simd-jit": {
+            "compile_ns": {
+              "raw_ns": [66042, 118792, 65708, 70708, 60584],
+              "median_ns": 66042
+            },
+            "prepare_ns": {
+              "raw_ns": [3317958, 3200083, 3287959, 3229792, 3213417],
+              "median_ns": 3229792
+            },
+            "instantiate_ns": {
+              "median_ns": 211083
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 3833
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 5458
+            }
+          },
+          "immutable-age": {
+            "compile_ns": {
+              "raw_ns": [64958, 64042, 67833, 71208, 71958],
+              "median_ns": 67833
+            },
+            "prepare_ns": {
+              "raw_ns": [3091083, 3403792, 3221500, 3307250, 2951375],
+              "median_ns": 3221500
+            },
+            "instantiate_ns": {
+              "median_ns": 210542
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 9792
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 78000
+            }
+          }
+        },
+        "actual_work_each_frame": {
+          "interpreter": [
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0]
+          ],
+          "scalar-jit": [
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0]
+          ],
+          "simd-jit": [
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0],
+            [2, 0, 0, 0, 0, 0]
+          ],
+          "immutable-age": [
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0],
+            [1, 0, 0, 0, 1, 0]
+          ]
+        },
+        "paired_fixed_query_age_over_simd": [14.894135862202438, 14.409090909090908, 14.767441860465116, 13.292747021723896, 14.298644192011725],
+        "median_paired_fixed_query_age_over_simd": 14.409090909090908
+      },
+      {
+        "children": 8,
+        "child_capacity": 1024,
+        "instances": 1,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.10107156479450749, 0.10012526951012395, 0.10178416328894035, 0.09240320374633443, 0.09970014992503748],
+              "median_ratio": 0.10012526951012395
+            },
+            "block_p95": {
+              "paired_ratios": [0.1205621301775148, 0.10901456842866669, 0.12316715542521994, 0.08905141451158038, 0.12548948236689308],
+              "median_ratio": 0.1205621301775148
+            },
+            "frame_median": {
+              "paired_ratios": [0.09674922600619196, 0.09678668215253582, 0.0983477576711251, 0.09373828271466067, 0.09678668215253582],
+              "median_ratio": 0.09678668215253582
+            },
+            "frame_p95": {
+              "paired_ratios": [0.12485939257592801, 0.10010284538909839, 0.12485939257592801, 0.08622222222222223, 0.12333825701624815],
+              "median_ratio": 0.12333825701624815
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.4266415094339623, 0.41304347826086957, 0.41200742223741393, 0.40000487305686855, 0.4208860759493671],
+              "median_ratio": 0.41304347826086957
+            },
+            "block_p95": {
+              "paired_ratios": [0.5077881619937694, 0.4662477341389728, 0.4, 0.3799768672983674, 0.5360501567398119],
+              "median_ratio": 0.4662477341389728
+            },
+            "frame_median": {
+              "paired_ratios": [0.4288164665523156, 0.4280821917808219, 0.4, 0.4, 0.4280821917808219],
+              "median_ratio": 0.4280821917808219
+            },
+            "frame_p95": {
+              "paired_ratios": [0.5328, 0.43778110944527737, 0.42045454545454547, 0.36742424242424243, 0.5344],
+              "median_ratio": 0.43778110944527737
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.4266415094339623, 0.4054878048780488, 0.36552082656442914, 0.3983935158221705, 0.41476436394481453],
+              "median_ratio": 0.4054878048780488
+            },
+            "block_p95": {
+              "paired_ratios": [0.5030864197530864, 0.39673007712082264, 0.2736156351791531, 0.3555846967237001, 0.5261538461538462],
+              "median_ratio": 0.39673007712082264
+            },
+            "frame_median": {
+              "paired_ratios": [0.4280821917808219, 0.4, 0.4, 0.4, 0.4280821917808219],
+              "median_ratio": 0.4
+            },
+            "frame_p95": {
+              "paired_ratios": [0.5328, 0.3686868686868687, 0.3997599039615846, 0.36742424242424243, 0.5015015015015015],
+              "median_ratio": 0.3997599039615846
+            }
+          }
+        ],
+        "separate_costs": {
+          "interpreter": {
+            "compile_ns": {
+              "raw_ns": [64042, 88166, 63625, 65084, 68416],
+              "median_ns": 65084
+            },
+            "prepare_ns": {
+              "raw_ns": [500, 375, 333, 417, 333],
+              "median_ns": 375
+            },
+            "instantiate_ns": {
+              "median_ns": 24625
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 4167
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 4500
+            }
+          },
+          "scalar-jit": {
+            "compile_ns": {
+              "raw_ns": [67083, 72292, 66250, 76041, 58250],
+              "median_ns": 67083
+            },
+            "prepare_ns": {
+              "raw_ns": [1952333, 1981459, 1952375, 1980208, 1744000],
+              "median_ns": 1952375
+            },
+            "instantiate_ns": {
+              "median_ns": 24625
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 1542
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 4542
+            }
+          },
+          "simd-jit": {
+            "compile_ns": {
+              "raw_ns": [62417, 75792, 69333, 65834, 65417],
+              "median_ns": 65834
+            },
+            "prepare_ns": {
+              "raw_ns": [3150666, 3423750, 3092042, 3339083, 3318125],
+              "median_ns": 3318125
+            },
+            "instantiate_ns": {
+              "median_ns": 24958
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 1542
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 4750
+            }
+          },
+          "immutable-age": {
+            "compile_ns": {
+              "raw_ns": [62625, 64958, 60875, 59334, 69375],
+              "median_ns": 62625
+            },
+            "prepare_ns": {
+              "raw_ns": [3240167, 3343250, 3462250, 2884541, 3340625],
+              "median_ns": 3340625
+            },
+            "instantiate_ns": {
+              "median_ns": 26250
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 2333
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 78792
+            }
+          }
+        },
+        "actual_work_each_frame": {
+          "interpreter": [
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0]
+          ],
+          "scalar-jit": [
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0]
+          ],
+          "simd-jit": [
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0]
+          ],
+          "immutable-age": [
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0]
+          ]
+        },
+        "paired_fixed_query_age_over_simd": [15.966020349395277, 16.02710531760811, 16.871843039031518, 16.91926685577133, 17.379555555555555],
+        "median_paired_fixed_query_age_over_simd": 16.871843039031518
+      },
+      {
+        "children": 8,
+        "child_capacity": 1024,
+        "instances": 8,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.08764830313620896, 0.09807369291555637, 0.08610629029447639, 0.08658290272455337, 0.09021740280349114],
+              "median_ratio": 0.08764830313620896
+            },
+            "block_p95": {
+              "paired_ratios": [0.08992969067142974, 0.09931075082834935, 0.08849253479182899, 0.0857919780770412, 0.09712735278777897],
+              "median_ratio": 0.08992969067142974
+            },
+            "frame_median": {
+              "paired_ratios": [0.08698951762083194, 0.09562057754828839, 0.08933314693135747, 0.08823529411764706, 0.08899308295807994],
+              "median_ratio": 0.08899308295807994
+            },
+            "frame_p95": {
+              "paired_ratios": [0.0826815216147125, 0.10294117647058823, 0.08878504672897196, 0.07811152360595493, 0.09433962264150944],
+              "median_ratio": 0.08878504672897196
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.371492456325273, 0.40105270435600765, 0.3667265306122449, 0.3802448343079922, 0.39384404124498523],
+              "median_ratio": 0.3802448343079922
+            },
+            "block_p95": {
+              "paired_ratios": [0.3699197418058628, 0.39169554083522334, 0.32993856032792895, 0.36351662825156406, 0.435099890909199],
+              "median_ratio": 0.3699197418058628
+            },
+            "frame_median": {
+              "paired_ratios": [0.3668, 0.3934684241589612, 0.3740487804878049, 0.375, 0.3802062673542245],
+              "median_ratio": 0.375
+            },
+            "frame_p95": {
+              "paired_ratios": [0.3490657216494845, 0.4064096609382257, 0.360722964763062, 0.32886011998736975, 0.4725004725004725],
+              "median_ratio": 0.360722964763062
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.35822542716408756, 0.4062946326608298, 0.36577646188008883, 0.374359005852622, 0.40036619718309857],
+              "median_ratio": 0.374359005852622
+            },
+            "block_p95": {
+              "paired_ratios": [0.3759044125831788, 0.41058971452572174, 0.35448232323232326, 0.35976568304643325, 0.42097104466966534],
+              "median_ratio": 0.3759044125831788
+            },
+            "frame_median": {
+              "paired_ratios": [0.36081054495376746, 0.3934684241589612, 0.3740487804878049, 0.375, 0.3834],
+              "median_ratio": 0.375
+            },
+            "frame_p95": {
+              "paired_ratios": [0.3312949090353157, 0.4117647058823529, 0.36077776089928604, 0.32046153846153846, 0.46151006091932806],
+              "median_ratio": 0.36077776089928604
+            }
+          }
+        ],
+        "separate_costs": {
+          "interpreter": {
+            "compile_ns": {
+              "raw_ns": [79375, 148917, 64292, 63166, 66833],
+              "median_ns": 66833
+            },
+            "prepare_ns": {
+              "raw_ns": [333, 334, 458, 375, 542],
+              "median_ns": 375
+            },
+            "instantiate_ns": {
+              "median_ns": 212833
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 34334
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 38666
+            }
+          },
+          "scalar-jit": {
+            "compile_ns": {
+              "raw_ns": [63667, 73666, 65417, 56875, 62625],
+              "median_ns": 63667
+            },
+            "prepare_ns": {
+              "raw_ns": [1855417, 1989792, 1921375, 1971250, 1803125],
+              "median_ns": 1921375
+            },
+            "instantiate_ns": {
+              "median_ns": 202875
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 12250
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 37250
+            }
+          },
+          "simd-jit": {
+            "compile_ns": {
+              "raw_ns": [65500, 70750, 64917, 64125, 62500],
+              "median_ns": 64917
+            },
+            "prepare_ns": {
+              "raw_ns": [3146542, 3415084, 3316084, 3292500, 2926958],
+              "median_ns": 3292500
+            },
+            "instantiate_ns": {
+              "median_ns": 203541
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 12333
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 37333
+            }
+          },
+          "immutable-age": {
+            "compile_ns": {
+              "raw_ns": [72500, 66709, 66291, 62958, 67000],
+              "median_ns": 66709
+            },
+            "prepare_ns": {
+              "raw_ns": [3428792, 3330458, 3328750, 2936166, 3254166],
+              "median_ns": 3328750
+            },
+            "instantiate_ns": {
+              "median_ns": 214958
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 18125
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 635667
+            }
+          }
+        },
+        "actual_work_each_frame": {
+          "interpreter": [
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0]
+          ],
+          "scalar-jit": [
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0]
+          ],
+          "simd-jit": [
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0],
+            [9, 0, 0, 0, 0, 0]
+          ],
+          "immutable-age": [
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0],
+            [1, 0, 0, 0, 8, 0]
+          ]
+        },
+        "paired_fixed_query_age_over_simd": [16.381422818791947, 18.331107129282728, 16.28726315789474, 16.445642073963946, 17.635355704697986],
+        "median_paired_fixed_query_age_over_simd": 16.445642073963946
+      },
+      {
+        "children": 128,
+        "child_capacity": 128,
+        "instances": 1,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.14268023053998016, 0.1466526740665994, 0.13870834921845215, 0.14471395167575993, 0.1414858008330178],
+              "median_ratio": 0.14268023053998016
+            },
+            "block_p95": {
+              "paired_ratios": [0.15135470224716, 0.14642735614380925, 0.14377452729218695, 0.15281170231095448, 0.15759550561797753],
+              "median_ratio": 0.15135470224716
+            },
+            "frame_median": {
+              "paired_ratios": [0.1440048815214075, 0.1434832515913597, 0.14523076923076922, 0.14658115237405606, 0.14470996732026145],
+              "median_ratio": 0.14470996732026145
+            },
+            "frame_p95": {
+              "paired_ratios": [0.1452894438138479, 0.13520669627605056, 0.14188422247446084, 0.14678899082568808, 0.14812121212121213],
+              "median_ratio": 0.1452894438138479
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.2072685973878478, 0.1968745597399079, 0.2111207564862569, 0.2075662381218558, 0.20820833314759754],
+              "median_ratio": 0.2075662381218558
+            },
+            "block_p95": {
+              "paired_ratios": [0.21923158454689806, 0.18303976590388638, 0.21643394199785176, 0.2215718835352579, 0.23370580577974487],
+              "median_ratio": 0.21923158454689806
+            },
+            "frame_median": {
+              "paired_ratios": [0.21105977045759428, 0.1975858600373617, 0.2110912343470483, 0.2073759695594907, 0.20992592592592593],
+              "median_ratio": 0.20992592592592593
+            },
+            "frame_p95": {
+              "paired_ratios": [0.20776811594202899, 0.18005004549590536, 0.25, 0.20776811594202899, 0.2135368126747437],
+              "median_ratio": 0.20776811594202899
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.2706711160548758, 0.2692680526364156, 0.24917132823072413, 0.2673728715928204, 0.27367915297040435],
+              "median_ratio": 0.2692680526364156
+            },
+            "block_p95": {
+              "paired_ratios": [0.3024137931034483, 0.2612574419365391, 0.26431983881080995, 0.2690970097499286, 0.3034018056798609],
+              "median_ratio": 0.2690970097499286
+            },
+            "frame_median": {
+              "paired_ratios": [0.26971428571428574, 0.2619047619047619, 0.2634418604651163, 0.26570410650665666, 0.26570410650665666],
+              "median_ratio": 0.26570410650665666
+            },
+            "frame_p95": {
+              "paired_ratios": [0.3283253939171858, 0.24512232889439456, 0.25607257828504537, 0.2654814814814815, 0.30978536420483355],
+              "median_ratio": 0.2654814814814815
+            }
+          }
+        ],
+        "separate_costs": {
+          "interpreter": {
+            "compile_ns": {
+              "raw_ns": [59125, 61916, 64833, 81458, 66291],
+              "median_ns": 64833
+            },
+            "prepare_ns": {
+              "raw_ns": [375, 458, 375, 458, 417],
+              "median_ns": 417
+            },
+            "instantiate_ns": {
+              "median_ns": 4291
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 64083
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 74083
+            }
+          },
+          "scalar-jit": {
+            "compile_ns": {
+              "raw_ns": [54833, 65000, 56667, 66166, 66333],
+              "median_ns": 65000
+            },
+            "prepare_ns": {
+              "raw_ns": [1795167, 2013500, 1805292, 2089208, 1930666],
+              "median_ns": 1930666
+            },
+            "instantiate_ns": {
+              "median_ns": 4042
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 19875
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 70542
+            }
+          },
+          "simd-jit": {
+            "compile_ns": {
+              "raw_ns": [57625, 77416, 58667, 66666, 64125],
+              "median_ns": 64125
+            },
+            "prepare_ns": {
+              "raw_ns": [2881625, 3327125, 3425792, 3065209, 2984625],
+              "median_ns": 3065209
+            },
+            "instantiate_ns": {
+              "median_ns": 3791
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 19625
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 70041
+            }
+          },
+          "immutable-age": {
+            "compile_ns": {
+              "raw_ns": [68250, 66959, 70792, 76833, 65084],
+              "median_ns": 68250
+            },
+            "prepare_ns": {
+              "raw_ns": [3177250, 3248292, 3244458, 3236750, 3224917],
+              "median_ns": 3236750
+            },
+            "instantiate_ns": {
+              "median_ns": 5209
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 18292
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 1243459
+            }
+          }
+        },
+        "actual_work_each_frame": {
+          "interpreter": [
+            [0, 0, 0, 128, 0, 0],
+            [0, 0, 0, 128, 0, 0],
+            [0, 0, 0, 128, 0, 0],
+            [0, 0, 0, 128, 0, 0],
+            [0, 0, 0, 128, 0, 0]
+          ],
+          "scalar-jit": [
+            [129, 0, 0, 0, 0, 0],
+            [129, 0, 0, 0, 0, 0],
+            [129, 0, 0, 0, 0, 0],
+            [129, 0, 0, 0, 0, 0],
+            [129, 0, 0, 0, 0, 0]
+          ],
+          "simd-jit": [
+            [1, 8, 128, 0, 0, 0],
+            [1, 8, 128, 0, 0, 0],
+            [1, 8, 128, 0, 0, 0],
+            [1, 8, 128, 0, 0, 0],
+            [1, 8, 128, 0, 0, 0]
+          ],
+          "immutable-age": [
+            [1, 0, 0, 0, 128, 0],
+            [1, 0, 0, 0, 128, 0],
+            [1, 0, 0, 0, 128, 0],
+            [1, 0, 0, 0, 128, 0],
+            [1, 0, 0, 0, 128, 0]
+          ]
+        },
+        "paired_fixed_query_age_over_simd": [17.71928084488154, 17.98248671127967, 16.809130578877596, 18.820541358103963, 17.93050476546978],
+        "median_paired_fixed_query_age_over_simd": 17.93050476546978
+      },
+      {
+        "children": 128,
+        "child_capacity": 128,
+        "instances": 8,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.15226541850220265, 0.16056694864826732, 0.15717411344182108, 0.15217904165010174, 0.1558597165076301],
+              "median_ratio": 0.1558597165076301
+            },
+            "block_p95": {
+              "paired_ratios": [0.1568921995315366, 0.17057399474920548, 0.15919579987646695, 0.1572999854436269, 0.16171849708023567],
+              "median_ratio": 0.15919579987646695
+            },
+            "frame_median": {
+              "paired_ratios": [0.1512352048558422, 0.1583405926094257, 0.1553605607894802, 0.15288969330325045, 0.15537370021397198],
+              "median_ratio": 0.1553605607894802
+            },
+            "frame_p95": {
+              "paired_ratios": [0.15914786967418545, 0.16872144424538602, 0.16400116011684035, 0.16356611630171325, 0.16364857881136952],
+              "median_ratio": 0.16364857881136952
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.21758238991203244, 0.2280510303877813, 0.2202899796495332, 0.21370771119182136, 0.21700856439704677],
+              "median_ratio": 0.21758238991203244
+            },
+            "block_p95": {
+              "paired_ratios": [0.2146233470950757, 0.2308402329862376, 0.21242141189784836, 0.2235778397565923, 0.22304409708194786],
+              "median_ratio": 0.22304409708194786
+            },
+            "frame_median": {
+              "paired_ratios": [0.21792673967043347, 0.22463015366980693, 0.22058693772389573, 0.21479701133810544, 0.2175253578123084],
+              "median_ratio": 0.21792673967043347
+            },
+            "frame_p95": {
+              "paired_ratios": [0.22464516676808127, 0.2343483126214736, 0.23369741697416974, 0.23052554744525547, 0.22484627291705128],
+              "median_ratio": 0.23052554744525547
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.28471531968874075, 0.2830672148776698, 0.2951412525978474, 0.27718272845486785, 0.281159264528474],
+              "median_ratio": 0.2830672148776698
+            },
+            "block_p95": {
+              "paired_ratios": [0.2892586109070898, 0.2970110359823519, 0.3016579293121996, 0.27252217239907567, 0.2939924310221266],
+              "median_ratio": 0.2939924310221266
+            },
+            "frame_median": {
+              "paired_ratios": [0.2834068883934665, 0.28290438273971985, 0.2915451895043732, 0.2800281549430089, 0.28327972075833274],
+              "median_ratio": 0.28327972075833274
+            },
+            "frame_p95": {
+              "paired_ratios": [0.3007084406728292, 0.2942884085572176, 0.31045098039215685, 0.29378604651162793, 0.3035118659663382],
+              "median_ratio": 0.3007084406728292
+            }
+          }
+        ],
+        "separate_costs": {
+          "interpreter": {
+            "compile_ns": {
+              "raw_ns": [73208, 64875, 81250, 63958, 65834],
+              "median_ns": 65834
+            },
+            "prepare_ns": {
+              "raw_ns": [500, 541, 291, 375, 500],
+              "median_ns": 500
+            },
+            "instantiate_ns": {
+              "median_ns": 34917
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 524291
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 602125
+            }
+          },
+          "scalar-jit": {
+            "compile_ns": {
+              "raw_ns": [58000, 61833, 72291, 65000, 64708],
+              "median_ns": 64708
+            },
+            "prepare_ns": {
+              "raw_ns": [1796959, 2027667, 2037250, 2069208, 2076083],
+              "median_ns": 2037250
+            },
+            "instantiate_ns": {
+              "median_ns": 34166
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 163250
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 601333
+            }
+          },
+          "simd-jit": {
+            "compile_ns": {
+              "raw_ns": [59209, 63375, 66500, 93709, 80542],
+              "median_ns": 66500
+            },
+            "prepare_ns": {
+              "raw_ns": [2895250, 2982000, 3168416, 3357125, 3256667],
+              "median_ns": 3168416
+            },
+            "instantiate_ns": {
+              "median_ns": 32875
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 162792
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 592792
+            }
+          },
+          "immutable-age": {
+            "compile_ns": {
+              "raw_ns": [79458, 66375, 99875, 64375, 57125],
+              "median_ns": 66375
+            },
+            "prepare_ns": {
+              "raw_ns": [3342417, 3071584, 2903542, 3186542, 2944583],
+              "median_ns": 3071584
+            },
+            "instantiate_ns": {
+              "median_ns": 40958
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 155375
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 10557958
+            }
+          }
+        },
+        "actual_work_each_frame": {
+          "interpreter": [
+            [0, 0, 0, 128, 0, 0],
+            [0, 0, 0, 128, 0, 0],
+            [0, 0, 0, 128, 0, 0],
+            [0, 0, 0, 128, 0, 0],
+            [0, 0, 0, 128, 0, 0]
+          ],
+          "scalar-jit": [
+            [129, 0, 0, 0, 0, 0],
+            [129, 0, 0, 0, 0, 0],
+            [129, 0, 0, 0, 0, 0],
+            [129, 0, 0, 0, 0, 0],
+            [129, 0, 0, 0, 0, 0]
+          ],
+          "simd-jit": [
+            [1, 8, 128, 0, 0, 0],
+            [1, 8, 128, 0, 0, 0],
+            [1, 8, 128, 0, 0, 0],
+            [1, 8, 128, 0, 0, 0],
+            [1, 8, 128, 0, 0, 0]
+          ],
+          "immutable-age": [
+            [1, 0, 0, 0, 128, 0],
+            [1, 0, 0, 0, 128, 0],
+            [1, 0, 0, 0, 128, 0],
+            [1, 0, 0, 0, 128, 0],
+            [1, 0, 0, 0, 128, 0]
+          ]
+        },
+        "paired_fixed_query_age_over_simd": [17.202866600334264, 17.97343189858391, 18.519085614188747, 17.432622073578596, 17.62692876770239],
+        "median_paired_fixed_query_age_over_simd": 17.62692876770239
+      },
+      {
+        "children": 1024,
+        "child_capacity": 1024,
+        "instances": 1,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.14340486380343387, 0.13912799543901508, 0.1389192451070596, 0.13843312364498994, 0.13986736239690287],
+              "median_ratio": 0.13912799543901508
+            },
+            "block_p95": {
+              "paired_ratios": [0.13997270693314598, 0.14859529958432421, 0.1510293956679464, 0.1414940614334471, 0.14780054794520547],
+              "median_ratio": 0.14780054794520547
+            },
+            "frame_median": {
+              "paired_ratios": [0.14341528239202658, 0.1388974358974359, 0.13957338672416447, 0.13758508134915615, 0.13853503184713375],
+              "median_ratio": 0.1388974358974359
+            },
+            "frame_p95": {
+              "paired_ratios": [0.14563612217795485, 0.14911776507716168, 0.148899517435453, 0.14781530833591572, 0.14665943577801172],
+              "median_ratio": 0.14781530833591572
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.19380317372528674, 0.19570682038778262, 0.19789208427278496, 0.1976342603651254, 0.19774928796624883],
+              "median_ratio": 0.1976342603651254
+            },
+            "block_p95": {
+              "paired_ratios": [0.19377864145178117, 0.21056570138036637, 0.20899356789488427, 0.1999120455203009, 0.20470296102991994],
+              "median_ratio": 0.20470296102991994
+            },
+            "frame_median": {
+              "paired_ratios": [0.1956241956241956, 0.19743052391799545, 0.19817767653758542, 0.1992342078264693, 0.19863013698630136],
+              "median_ratio": 0.19817767653758542
+            },
+            "frame_p95": {
+              "paired_ratios": [0.20434387251613673, 0.20912547528517111, 0.2127308303778892, 0.2086677125445001, 0.20559298789577246],
+              "median_ratio": 0.2086677125445001
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.2540470359555757, 0.2484699594862512, 0.25577739872551547, 0.255552492360348, 0.25684037620876937],
+              "median_ratio": 0.255552492360348
+            },
+            "block_p95": {
+              "paired_ratios": [0.25632518858150094, 0.2549113560134164, 0.2712391527855251, 0.26447769319100073, 0.27208271340310175],
+              "median_ratio": 0.26447769319100073
+            },
+            "frame_median": {
+              "paired_ratios": [0.25568006823189365, 0.25244075774168745, 0.25562973061915284, 0.2568917865495004, 0.25688571833514434],
+              "median_ratio": 0.25568006823189365
+            },
+            "frame_p95": {
+              "paired_ratios": [0.2707753086419753, 0.25680773971835197, 0.2721955990220049, 0.27642780064745615, 0.2669453799403863],
+              "median_ratio": 0.2707753086419753
+            }
+          }
+        ],
+        "separate_costs": {
+          "interpreter": {
+            "compile_ns": {
+              "raw_ns": [69417, 61750, 67250, 61958, 66208],
+              "median_ns": 66208
+            },
+            "prepare_ns": {
+              "raw_ns": [417, 542, 417, 250, 583],
+              "median_ns": 417
+            },
+            "instantiate_ns": {
+              "median_ns": 29750
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 541958
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 591041
+            }
+          },
+          "scalar-jit": {
+            "compile_ns": {
+              "raw_ns": [70042, 94792, 63500, 72208, 66333],
+              "median_ns": 70042
+            },
+            "prepare_ns": {
+              "raw_ns": [1913791, 2054083, 1797875, 1976792, 1952500],
+              "median_ns": 1952500
+            },
+            "instantiate_ns": {
+              "median_ns": 29958
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 176750
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 595541
+            }
+          },
+          "simd-jit": {
+            "compile_ns": {
+              "raw_ns": [69458, 66709, 62417, 70834, 66167],
+              "median_ns": 66709
+            },
+            "prepare_ns": {
+              "raw_ns": [3058292, 3162792, 2895625, 3405334, 3081041],
+              "median_ns": 3081041
+            },
+            "instantiate_ns": {
+              "median_ns": 28708
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 178208
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 594666
+            }
+          },
+          "immutable-age": {
+            "compile_ns": {
+              "raw_ns": [67458, 65833, 71333, 65500, 67166],
+              "median_ns": 67166
+            },
+            "prepare_ns": {
+              "raw_ns": [3332667, 3310709, 3145792, 3135708, 3103291],
+              "median_ns": 3145792
+            },
+            "instantiate_ns": {
+              "median_ns": 34208
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 168959
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 10626167
+            }
+          }
+        },
+        "actual_work_each_frame": {
+          "interpreter": [
+            [0, 0, 0, 1024, 0, 0],
+            [0, 0, 0, 1024, 0, 0],
+            [0, 0, 0, 1024, 0, 0],
+            [0, 0, 0, 1024, 0, 0],
+            [0, 0, 0, 1024, 0, 0]
+          ],
+          "scalar-jit": [
+            [1025, 0, 0, 0, 0, 0],
+            [1025, 0, 0, 0, 0, 0],
+            [1025, 0, 0, 0, 0, 0],
+            [1025, 0, 0, 0, 0, 0],
+            [1025, 0, 0, 0, 0, 0]
+          ],
+          "simd-jit": [
+            [1, 64, 1024, 0, 0, 0],
+            [1, 64, 1024, 0, 0, 0],
+            [1, 64, 1024, 0, 0, 0],
+            [1, 64, 1024, 0, 0, 0],
+            [1, 64, 1024, 0, 0, 0]
+          ],
+          "immutable-age": [
+            [1, 0, 0, 0, 1024, 0],
+            [1, 0, 0, 0, 1024, 0],
+            [1, 0, 0, 0, 1024, 0],
+            [1, 0, 0, 0, 1024, 0],
+            [1, 0, 0, 0, 1024, 0]
+          ]
+        },
+        "paired_fixed_query_age_over_simd": [18.223725651501958, 17.629221132897605, 17.675103618227528, 17.520354355621176, 18.154156921114183],
+        "median_paired_fixed_query_age_over_simd": 17.675103618227528
+      },
+      {
+        "children": 1024,
+        "child_capacity": 1024,
+        "instances": 8,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.13942168103575978, 0.1414247858824515, 0.1416080391221374, 0.13952315037338409, 0.13779924303644545],
+              "median_ratio": 0.13952315037338409
+            },
+            "block_p95": {
+              "paired_ratios": [0.1449630810077598, 0.14228782413781332, 0.13967773840967945, 0.14012150534576737, 0.14037344208620325],
+              "median_ratio": 0.14037344208620325
+            },
+            "frame_median": {
+              "paired_ratios": [0.13598768994037314, 0.13779756144764854, 0.13681018761879363, 0.13491962401688087, 0.1362300614074153],
+              "median_ratio": 0.1362300614074153
+            },
+            "frame_p95": {
+              "paired_ratios": [0.14306478989468946, 0.14482507513862186, 0.14384002342640764, 0.14092522981079278, 0.13930725509862923],
+              "median_ratio": 0.14306478989468946
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.20032551331502502, 0.20207136401163608, 0.20198944431346066, 0.19881288713456335, 0.197837692382554],
+              "median_ratio": 0.20032551331502502
+            },
+            "block_p95": {
+              "paired_ratios": [0.20876598899565574, 0.2065438659514991, 0.20375956488942673, 0.19577212677600347, 0.20304742122692582],
+              "median_ratio": 0.20375956488942673
+            },
+            "frame_median": {
+              "paired_ratios": [0.1964251184107291, 0.19701162147205312, 0.19518020355920723, 0.1929061985737795, 0.1966427564164956],
+              "median_ratio": 0.1964251184107291
+            },
+            "frame_p95": {
+              "paired_ratios": [0.20666086115142718, 0.20837747345793092, 0.20699046842169358, 0.20120963510612927, 0.2021514015354401],
+              "median_ratio": 0.20666086115142718
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "block_median": {
+              "paired_ratios": [0.2572673502579267, 0.258351173054086, 0.2588618355719195, 0.2573014034419021, 0.2510802735425517],
+              "median_ratio": 0.2573014034419021
+            },
+            "block_p95": {
+              "paired_ratios": [0.26654730021758155, 0.2582186642377046, 0.2503836454047047, 0.251790841518602, 0.25539992348819834],
+              "median_ratio": 0.25539992348819834
+            },
+            "frame_median": {
+              "paired_ratios": [0.25181075798243663, 0.25323082701204697, 0.25219014710855114, 0.2504158548951248, 0.2532186089080485],
+              "median_ratio": 0.25219014710855114
+            },
+            "frame_p95": {
+              "paired_ratios": [0.25930836210706254, 0.26065550778397356, 0.2564346335108625, 0.25254620039608894, 0.2517120391267996],
+              "median_ratio": 0.2564346335108625
+            }
+          }
+        ],
+        "separate_costs": {
+          "interpreter": {
+            "compile_ns": {
+              "raw_ns": [72458, 81458, 62000, 66250, 67291],
+              "median_ns": 67291
+            },
+            "prepare_ns": {
+              "raw_ns": [541, 458, 416, 458, 333],
+              "median_ns": 458
+            },
+            "instantiate_ns": {
+              "median_ns": 236458
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 4402417
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 4811542
+            }
+          },
+          "scalar-jit": {
+            "compile_ns": {
+              "raw_ns": [65125, 63542, 68916, 70750, 64708],
+              "median_ns": 65125
+            },
+            "prepare_ns": {
+              "raw_ns": [1950083, 1844792, 1959000, 2022875, 2050083],
+              "median_ns": 1959000
+            },
+            "instantiate_ns": {
+              "median_ns": 243459
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 1448833
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 4820542
+            }
+          },
+          "simd-jit": {
+            "compile_ns": {
+              "raw_ns": [64709, 73083, 60500, 66875, 65625],
+              "median_ns": 65625
+            },
+            "prepare_ns": {
+              "raw_ns": [2946708, 3137542, 2914000, 3353042, 3024583],
+              "median_ns": 3024583
+            },
+            "instantiate_ns": {
+              "median_ns": 240333
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 1432875
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 4808708
+            }
+          },
+          "immutable-age": {
+            "compile_ns": {
+              "raw_ns": [69917, 65458, 68916, 56000, 69875],
+              "median_ns": 68916
+            },
+            "prepare_ns": {
+              "raw_ns": [3237500, 3220209, 3213417, 2927542, 3244459],
+              "median_ns": 3220209
+            },
+            "instantiate_ns": {
+              "median_ns": 248042
+            },
+            "start_and_first_birth_tick_ns": {
+              "median_ns": 1332416
+            },
+            "fixed_time_8_full_query_sweeps_ns": {
+              "median_ns": 84148667
+            }
+          }
+        },
+        "actual_work_each_frame": {
+          "interpreter": [
+            [0, 0, 0, 1024, 0, 0],
+            [0, 0, 0, 1024, 0, 0],
+            [0, 0, 0, 1024, 0, 0],
+            [0, 0, 0, 1024, 0, 0],
+            [0, 0, 0, 1024, 0, 0]
+          ],
+          "scalar-jit": [
+            [1025, 0, 0, 0, 0, 0],
+            [1025, 0, 0, 0, 0, 0],
+            [1025, 0, 0, 0, 0, 0],
+            [1025, 0, 0, 0, 0, 0],
+            [1025, 0, 0, 0, 0, 0]
+          ],
+          "simd-jit": [
+            [1, 64, 1024, 0, 0, 0],
+            [1, 64, 1024, 0, 0, 0],
+            [1, 64, 1024, 0, 0, 0],
+            [1, 64, 1024, 0, 0, 0],
+            [1, 64, 1024, 0, 0, 0]
+          ],
+          "immutable-age": [
+            [1, 0, 0, 0, 1024, 0],
+            [1, 0, 0, 0, 1024, 0],
+            [1, 0, 0, 0, 1024, 0],
+            [1, 0, 0, 0, 1024, 0],
+            [1, 0, 0, 0, 1024, 0]
+          ]
+        },
+        "paired_fixed_query_age_over_simd": [17.26715824759547, 17.567826472814595, 17.53974602739393, 17.793575145481007, 17.3735275759587],
+        "median_paired_fixed_query_age_over_simd": 17.53974602739393
+      }
+    ]
+  },
+  "lich": {
+    "jobs": 160,
+    "repeats": 5,
+    "warmup": 120,
+    "ticks": 600,
+    "delta_seconds": 0.015625,
+    "asset": "HD LichAttack",
+    "asset_sha256": "6c7d44d676cf7017dcd94cf6330d33c2877b2985fc96f0754f4b7fff0e9d16cc",
+    "capacity_units": "total controller+particle slots",
+    "allocation_admission": "zero hot calls and requested/retained/peak bytes for alloc/realloc/dealloc",
+    "oracle": "lockstep againstInterpreter; exact birth/identity/order/lifetime/omission ledgers and nonvirtual/inactive words; authorized virtual float outputs only512*f32EPS*max(1,abs(Rust)); finite outputs required",
+    "virtual_outputs": {
+      "layer3": [4, 8, 10, 11, 12, 13]
+    },
+    "max_absolute_error": 0.000946044921875,
+    "maximum_fraction_of_allowed_bound": 0.6332763480201099,
+    "cases": [
+      {
+        "case": "capacity1024-instances1-rate1",
+        "public_proofs_match": true,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.139, 0.139, 0.140973630831643, 0.13708086785009863, 0.140973630831643],
+              "median_ratio": 0.139
+            },
+            "frame_p95": {
+              "paired_ratios": [0.25806451612903225, 0.22006239500839933, 0.21266275210620372, 0.2945932289034866, 0.24204143506821627],
+              "median_ratio": 0.24204143506821627
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.5265151515151515, 0.527180783817952, 0.5265151515151515, 0.5265151515151515, 0.5265151515151515],
+              "median_ratio": 0.5265151515151515
+            },
+            "frame_p95": {
+              "paired_ratios": [0.856898029134533, 0.8151111111111111, 0.6895695364238411, 1.0, 0.8515555555555555],
+              "median_ratio": 0.8515555555555555
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.5265151515151515, 0.527180783817952, 0.527180783817952, 0.5265151515151515, 0.5265151515151515],
+              "median_ratio": 0.5265151515151515
+            },
+            "frame_p95": {
+              "paired_ratios": [0.8888888888888888, 0.8151111111111111, 0.7404444444444445, 0.9991431019708654, 0.8209083119108826],
+              "median_ratio": 0.8209083119108826
+            }
+          }
+        ],
+        "routes": {
+          "interpreter": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 37875.0,
+                "alloc_calls": 2071.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 1656509.0,
+                "retained_delta_bytes": 1656301.0,
+                "peak_additional_bytes": 1656365.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 417.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 1874864,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [112667, 99541, 90958, 104542, 103625],
+                "median_ns": 103625
+              },
+              "prepare_ns": {
+                "raw_ns": [333, 291, 250, 416, 417],
+                "median_ns": 333
+              }
+            },
+            "actual_work": [
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "scalar-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 35792.0,
+                "alloc_calls": 2071.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 1656509.0,
+                "retained_delta_bytes": 1656301.0,
+                "peak_additional_bytes": 1656365.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 375.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 519410,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [93625, 103666, 99542, 90250, 102833],
+                "median_ns": 99542
+              },
+              "prepare_ns": {
+                "raw_ns": [2404833, 2675167, 2575042, 2390875, 2661125],
+                "median_ns": 2575042
+              }
+            },
+            "actual_work": [
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "simd-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 39625.0,
+                "alloc_calls": 2071.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 1656509.0,
+                "retained_delta_bytes": 1656301.0,
+                "peak_additional_bytes": 1656365.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 416.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 510369,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [103875, 103375, 88125, 96917, 104791],
+                "median_ns": 103375
+              },
+              "prepare_ns": {
+                "raw_ns": [4151958, 4086250, 3792417, 4081834, 4036375],
+                "median_ns": 4081834
+              }
+            },
+            "actual_work": [
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "immutable-age": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 36791.5,
+                "alloc_calls": 2072.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 1697469.0,
+                "retained_delta_bytes": 1697261.0,
+                "peak_additional_bytes": 1697325.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 1042.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 330382,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [115250, 100375, 103459, 99833, 104750],
+                "median_ns": 103459
+              },
+              "prepare_ns": {
+                "raw_ns": [3858375, 4469250, 4215333, 4153041, 4257584],
+                "median_ns": 4215333
+              }
+            },
+            "actual_work": [
+              [1294, 0, 0, 0, 4498, 0],
+              [1294, 0, 0, 0, 4498, 0],
+              [1294, 0, 0, 0, 4498, 0],
+              [1294, 0, 0, 0, 4498, 0],
+              [1294, 0, 0, 0, 4498, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ],
+            "common_authorization": {
+              "all_five_runs_all_observations_coherent": true,
+              "observations_per_run": [720, 720, 720, 720, 720],
+              "resident_particles_per_run": [5229, 5229, 5229, 5229, 5229]
+            }
+          }
+        }
+      },
+      {
+        "case": "capacity1024-instances1-rate64",
+        "public_proofs_match": true,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.16162215481373254, 0.1648965274290383, 0.1653192061689282, 0.1594367675354207, 0.157497247706422],
+              "median_ratio": 0.16162215481373254
+            },
+            "frame_p95": {
+              "paired_ratios": [0.2027341280592432, 0.19509570041608876, 0.1955617198335645, 0.19425444596443228, 0.20888006639301976],
+              "median_ratio": 0.1955617198335645
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.351013965175652, 0.35014005602240894, 0.35026200389443857, 0.35812978848798377, 0.33661176470588233],
+              "median_ratio": 0.35026200389443857
+            },
+            "frame_p95": {
+              "paired_ratios": [0.38517962466487937, 0.3867880947667129, 0.38350232821271596, 0.38274932614555257, 0.3731193781677585],
+              "median_ratio": 0.38350232821271596
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.4013924959938111, 0.40804213962460123, 0.39954853273137697, 0.396843537414966, 0.38898959504042346],
+              "median_ratio": 0.39954853273137697
+            },
+            "frame_p95": {
+              "paired_ratios": [0.43058885585499185, 0.49297670115232567, 0.4924422340811936, 0.45416165596295066, 0.4695338694632818],
+              "median_ratio": 0.4695338694632818
+            }
+          }
+        ],
+        "routes": {
+          "interpreter": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 37896.0,
+                "alloc_calls": 2071.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 1656509.0,
+                "retained_delta_bytes": 1656301.0,
+                "peak_additional_bytes": 1656365.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 417.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 41796088,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [102500, 96708, 100458, 168333, 88708],
+                "median_ns": 100458
+              },
+              "prepare_ns": {
+                "raw_ns": [292, 292, 333, 375, 250],
+                "median_ns": 292
+              }
+            },
+            "actual_work": [
+              [0, 0, 0, 230128, 0, 0],
+              [0, 0, 0, 230128, 0, 0],
+              [0, 0, 0, 230128, 0, 0],
+              [0, 0, 0, 230128, 0, 0],
+              [0, 0, 0, 230128, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 479],
+                "live": 481,
+                "spawned": 7203,
+                "retired": 6722,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "scalar-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 35583.0,
+                "alloc_calls": 2071.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 1656509.0,
+                "retained_delta_bytes": 1656301.0,
+                "peak_additional_bytes": 1656365.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 334.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 20232713,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [95458, 94125, 104292, 92708, 120208],
+                "median_ns": 95458
+              },
+              "prepare_ns": {
+                "raw_ns": [2601542, 2401833, 2636125, 2402083, 2455500],
+                "median_ns": 2455500
+              }
+            },
+            "actual_work": [
+              [295517, 0, 0, 0, 0, 0],
+              [295517, 0, 0, 0, 0, 0],
+              [295517, 0, 0, 0, 0, 0],
+              [295517, 0, 0, 0, 0, 0],
+              [295517, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 479],
+                "live": 481,
+                "spawned": 7203,
+                "retired": 6722,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "simd-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 36895.5,
+                "alloc_calls": 2071.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 1656509.0,
+                "retained_delta_bytes": 1656301.0,
+                "peak_additional_bytes": 1656365.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 375.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 17522911,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [103250, 119500, 97833, 100125, 93958],
+                "median_ns": 100125
+              },
+              "prepare_ns": {
+                "raw_ns": [4279542, 4108291, 4124000, 4027459, 3739541],
+                "median_ns": 4108291
+              }
+            },
+            "actual_work": [
+              [65389, 14383, 230128, 0, 0, 0],
+              [65389, 14383, 230128, 0, 0, 0],
+              [65389, 14383, 230128, 0, 0, 0],
+              [65389, 14383, 230128, 0, 0, 0],
+              [65389, 14383, 230128, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 479],
+                "live": 481,
+                "spawned": 7203,
+                "retired": 6722,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "immutable-age": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 38020.5,
+                "alloc_calls": 2072.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 1697469.0,
+                "retained_delta_bytes": 1697261.0,
+                "peak_additional_bytes": 1697325.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 1125.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 6985869,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [102625, 100000, 93666, 113541, 102833],
+                "median_ns": 102625
+              },
+              "prepare_ns": {
+                "raw_ns": [4277541, 4137167, 3773584, 4313958, 4248833],
+                "median_ns": 4248833
+              }
+            },
+            "actual_work": [
+              [7200, 0, 0, 0, 288317, 0],
+              [7200, 0, 0, 0, 288317, 0],
+              [7200, 0, 0, 0, 288317, 0],
+              [7200, 0, 0, 0, 288317, 0],
+              [7200, 0, 0, 0, 288317, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 479],
+                "live": 481,
+                "spawned": 7203,
+                "retired": 6722,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ],
+            "common_authorization": {
+              "all_five_runs_all_observations_coherent": true,
+              "observations_per_run": [720, 720, 720, 720, 720],
+              "resident_particles_per_run": [334206, 334206, 334206, 334206, 334206]
+            }
+          }
+        }
+      },
+      {
+        "case": "capacity1024-instances8-rate1",
+        "public_proofs_match": true,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.1355656418600668, 0.13599077438586565, 0.13333333333333333, 0.13648970321678933, 0.1326021505376344],
+              "median_ratio": 0.1355656418600668
+            },
+            "frame_p95": {
+              "paired_ratios": [0.24247972796233325, 0.2627118644067797, 0.24026287812892627, 0.25729354429534684, 0.23289607785120164],
+              "median_ratio": 0.24247972796233325
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.5168979591836734, 0.5172984605197815, 0.5102040816326531, 0.5102040816326531, 0.5138333333333334],
+              "median_ratio": 0.5138333333333334
+            },
+            "frame_p95": {
+              "paired_ratios": [0.7606153846153846, 0.8086393989983306, 0.7131382673551349, 0.7369729419638589, 0.7763287671232877],
+              "median_ratio": 0.7606153846153846
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.5031786395422759, 0.5137267795495644, 0.5208333333333334, 0.5102040816326531, 0.5103459692103957],
+              "median_ratio": 0.5103459692103957
+            },
+            "frame_p95": {
+              "paired_ratios": [0.7177005709861608, 0.8378378378378378, 0.7781719532554258, 0.8221866666666666, 0.7871111111111111],
+              "median_ratio": 0.7871111111111111
+            }
+          }
+        ],
+        "routes": {
+          "interpreter": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 295083.5,
+                "alloc_calls": 16568.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 13252072.0,
+                "retained_delta_bytes": 13250408.0,
+                "peak_additional_bytes": 13250472.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 2646.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 14595122,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [94875, 131375, 100583, 100083, 106875],
+                "median_ns": 100583
+              },
+              "prepare_ns": {
+                "raw_ns": [250, 375, 292, 375, 458],
+                "median_ns": 375
+              }
+            },
+            "actual_work": [
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "scalar-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 287416.5,
+                "alloc_calls": 16568.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 13252072.0,
+                "retained_delta_bytes": 13250408.0,
+                "peak_additional_bytes": 13250472.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 2375.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 4156568,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [89000, 99417, 102083, 91208, 105875],
+                "median_ns": 99417
+              },
+              "prepare_ns": {
+                "raw_ns": [2384625, 2526917, 2473125, 2409125, 2671834],
+                "median_ns": 2473125
+              }
+            },
+            "actual_work": [
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "simd-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 314208.5,
+                "alloc_calls": 16568.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 13252072.0,
+                "retained_delta_bytes": 13250408.0,
+                "peak_additional_bytes": 13250472.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 3062.5,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 4059018,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [114834, 99792, 102125, 100250, 99375],
+                "median_ns": 100250
+              },
+              "prepare_ns": {
+                "raw_ns": [4197542, 3948625, 4324917, 4206541, 4081041],
+                "median_ns": 4197542
+              }
+            },
+            "actual_work": [
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "immutable-age": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 300687.5,
+                "alloc_calls": 16576.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 13579752.0,
+                "retained_delta_bytes": 13578088.0,
+                "peak_additional_bytes": 13578152.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 8229.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 2394405,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [93958, 116959, 91375, 98000, 100625],
+                "median_ns": 98000
+              },
+              "prepare_ns": {
+                "raw_ns": [3770417, 4005875, 3776958, 4430250, 3982291],
+                "median_ns": 3982291
+              }
+            },
+            "actual_work": [
+              [10352, 0, 0, 0, 35696, 0],
+              [10352, 0, 0, 0, 35696, 0],
+              [10352, 0, 0, 0, 35696, 0],
+              [10352, 0, 0, 0, 35696, 0],
+              [10352, 0, 0, 0, 35696, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ],
+            "common_authorization": {
+              "all_five_runs_all_observations_coherent": true,
+              "observations_per_run": [720, 720, 720, 720, 720],
+              "resident_particles_per_run": [41577, 41577, 41577, 41577, 41577]
+            }
+          }
+        }
+      },
+      {
+        "case": "capacity1024-instances8-rate64",
+        "public_proofs_match": true,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.1821670428893905, 0.1783570715206328, 0.17893649531676248, 0.1780674233309317, 0.17857086779707146],
+              "median_ratio": 0.17857086779707146
+            },
+            "frame_p95": {
+              "paired_ratios": [0.21939519885345754, 0.21834379666030015, 0.22549149502135163, 0.22727863376146307, 0.22786687299242692],
+              "median_ratio": 0.22549149502135163
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.33753883578798377, 0.3360657513788488, 0.34092617187955665, 0.332782991303718, 0.3431358251911302],
+              "median_ratio": 0.33753883578798377
+            },
+            "frame_p95": {
+              "paired_ratios": [0.3225624968393372, 0.3177814158152136, 0.32902563797513534, 0.326089552238806, 0.334528744731979],
+              "median_ratio": 0.326089552238806
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.3864631581367016, 0.3835909631391201, 0.38986871868752987, 0.3792684253773624, 0.3862740066193925],
+              "median_ratio": 0.3862740066193925
+            },
+            "frame_p95": {
+              "paired_ratios": [0.42012487135506005, 0.4175876077009599, 0.44197342023931485, 0.4357368789363191, 0.42886732141330397],
+              "median_ratio": 0.42886732141330397
+            }
+          }
+        ],
+        "routes": {
+          "interpreter": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 323979.0,
+                "alloc_calls": 16568.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 13252072.0,
+                "retained_delta_bytes": 13250408.0,
+                "peak_additional_bytes": 13250472.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 3270.5,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 348645928,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [100958, 103875, 95875, 104917, 103583],
+                "median_ns": 103583
+              },
+              "prepare_ns": {
+                "raw_ns": [291, 333, 334, 292, 375],
+                "median_ns": 333
+              }
+            },
+            "actual_work": [
+              [0, 0, 0, 1839472, 0, 0],
+              [0, 0, 0, 1839472, 0, 0],
+              [0, 0, 0, 1839472, 0, 0],
+              [0, 0, 0, 1839472, 0, 0],
+              [0, 0, 0, 1839472, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 479],
+                "live": 481,
+                "spawned": 7203,
+                "retired": 6722,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "scalar-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 311687.5,
+                "alloc_calls": 16568.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 13252072.0,
+                "retained_delta_bytes": 13250408.0,
+                "peak_additional_bytes": 13250472.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 2833.5,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 192683362,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [92167, 106083, 116042, 102500, 98125],
+                "median_ns": 102500
+              },
+              "prepare_ns": {
+                "raw_ns": [2393042, 3328792, 2459666, 2520917, 2396208],
+                "median_ns": 2459666
+              }
+            },
+            "actual_work": [
+              [2363324, 0, 0, 0, 0, 0],
+              [2363324, 0, 0, 0, 0, 0],
+              [2363324, 0, 0, 0, 0, 0],
+              [2363324, 0, 0, 0, 0, 0],
+              [2363324, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 479],
+                "live": 481,
+                "spawned": 7203,
+                "retired": 6722,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "simd-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 302333.5,
+                "alloc_calls": 16568.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 13252072.0,
+                "retained_delta_bytes": 13250408.0,
+                "peak_additional_bytes": 13250472.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 2791.5,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 165402705,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [102666, 101083, 108583, 94333, 101709],
+                "median_ns": 101709
+              },
+              "prepare_ns": {
+                "raw_ns": [4001167, 3791333, 4066792, 3771125, 4309750],
+                "median_ns": 4001167
+              }
+            },
+            "actual_work": [
+              [523852, 114967, 1839472, 0, 0, 0],
+              [523852, 114967, 1839472, 0, 0, 0],
+              [523852, 114967, 1839472, 0, 0, 0],
+              [523852, 114967, 1839472, 0, 0, 0],
+              [523852, 114967, 1839472, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 479],
+                "live": 481,
+                "spawned": 7203,
+                "retired": 6722,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "immutable-age": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 297416.5,
+                "alloc_calls": 16576.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 13579752.0,
+                "retained_delta_bytes": 13578088.0,
+                "peak_additional_bytes": 13578152.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 7937.5,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 66837169,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [103750, 102750, 101875, 98667, 99750],
+                "median_ns": 101875
+              },
+              "prepare_ns": {
+                "raw_ns": [4046709, 4061250, 4172792, 3980583, 3781958],
+                "median_ns": 4046709
+              }
+            },
+            "actual_work": [
+              [57600, 0, 0, 0, 2305724, 0],
+              [57600, 0, 0, 0, 2305724, 0],
+              [57600, 0, 0, 0, 2305724, 0],
+              [57600, 0, 0, 0, 2305724, 0],
+              [57600, 0, 0, 0, 2305724, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 479],
+                "live": 481,
+                "spawned": 7203,
+                "retired": 6722,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ],
+            "common_authorization": {
+              "all_five_runs_all_observations_coherent": true,
+              "observations_per_run": [720, 720, 720, 720, 720],
+              "resident_particles_per_run": [2673022, 2673022, 2673022, 2673022, 2673022]
+            }
+          }
+        }
+      },
+      {
+        "case": "capacity128-instances1-rate1",
+        "public_proofs_match": true,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.14300411522633744, 0.140973630831643, 0.14092598850963164, 0.139, 0.1232741617357002],
+              "median_ratio": 0.14092598850963164
+            },
+            "frame_p95": {
+              "paired_ratios": [0.2112, 0.22828072006261413, 0.2839607201309329, 0.2210154079312958, 0.16844856260394392],
+              "median_ratio": 0.2210154079312958
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.5006002400960384, 0.5265151515151515, 0.5265151515151515, 0.5265151515151515, 0.4734848484848485],
+              "median_ratio": 0.5265151515151515
+            },
+            "frame_p95": {
+              "paired_ratios": [0.576, 0.6777691711851278, 0.8927958833619211, 0.7243377483443708, 0.5314842578710645],
+              "median_ratio": 0.6777691711851278
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.527180783817952, 0.5265151515151515, 0.527180783817952, 0.5265151515151515, 0.4734848484848485],
+              "median_ratio": 0.5265151515151515
+            },
+            "frame_p95": {
+              "paired_ratios": [0.6786632390745502, 0.7, 0.9253333333333333, 0.7237386269644334, 0.6080617495711835],
+              "median_ratio": 0.7
+            }
+          }
+        ],
+        "routes": {
+          "interpreter": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 5583.0,
+                "alloc_calls": 279.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 911037.0,
+                "retained_delta_bytes": 910829.0,
+                "peak_additional_bytes": 910893.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 250.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 1812895,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [226917, 99916, 117625, 101416, 100875],
+                "median_ns": 101416
+              },
+              "prepare_ns": {
+                "raw_ns": [291, 458, 292, 292, 375],
+                "median_ns": 292
+              }
+            },
+            "actual_work": [
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "scalar-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 5541.5,
+                "alloc_calls": 279.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 911037.0,
+                "retained_delta_bytes": 910829.0,
+                "peak_additional_bytes": 910893.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 250.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 543007,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [178583, 98417, 90750, 100625, 100959],
+                "median_ns": 100625
+              },
+              "prepare_ns": {
+                "raw_ns": [3584416, 2617709, 2364833, 2677875, 2628167],
+                "median_ns": 2628167
+              }
+            },
+            "actual_work": [
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "simd-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 5375.0,
+                "alloc_calls": 279.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 911037.0,
+                "retained_delta_bytes": 910829.0,
+                "peak_additional_bytes": 910893.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 229.5,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 525202,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [97042, 103500, 92042, 102875, 99417],
+                "median_ns": 99417
+              },
+              "prepare_ns": {
+                "raw_ns": [3768833, 4040125, 3754833, 4170667, 4239584],
+                "median_ns": 4040125
+              }
+            },
+            "actual_work": [
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0],
+              [5792, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "immutable-age": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 5583.0,
+                "alloc_calls": 280.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 916157.0,
+                "retained_delta_bytes": 915949.0,
+                "peak_additional_bytes": 916013.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 333.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 311335,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [89166, 102916, 102666, 105458, 122708],
+                "median_ns": 102916
+              },
+              "prepare_ns": {
+                "raw_ns": [3773125, 4006833, 4223792, 4027958, 4284541],
+                "median_ns": 4027958
+              }
+            },
+            "actual_work": [
+              [1294, 0, 0, 0, 4498, 0],
+              [1294, 0, 0, 0, 4498, 0],
+              [1294, 0, 0, 0, 4498, 0],
+              [1294, 0, 0, 0, 4498, 0],
+              [1294, 0, 0, 0, 4498, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ],
+            "common_authorization": {
+              "all_five_runs_all_observations_coherent": true,
+              "observations_per_run": [720, 720, 720, 720, 720],
+              "resident_particles_per_run": [5229, 5229, 5229, 5229, 5229]
+            }
+          }
+        }
+      },
+      {
+        "case": "capacity128-instances1-rate64",
+        "public_proofs_match": true,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.16224, 0.16701879841811582, 0.16333774834437087, 0.1568627450980392, 0.16388039867109636],
+              "median_ratio": 0.16333774834437087
+            },
+            "frame_p95": {
+              "paired_ratios": [0.22426458142920008, 0.224042159236576, 0.20796694214876033, 0.21326555313483417, 0.20484107746406746],
+              "median_ratio": 0.21326555313483417
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.3842364532019704, 0.3833623476747078, 0.3894151825186308, 0.37304153195722456, 0.385375],
+              "median_ratio": 0.3842364532019704
+            },
+            "frame_p95": {
+              "paired_ratios": [0.58669854764435, 0.5572579930918431, 0.5550555849655903, 0.5343094784266158, 0.5517241379310345],
+              "median_ratio": 0.5550555849655903
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.40788415124698313, 0.41338160364709037, 0.41338160364709037, 0.40219868615095855, 0.4110666666666667],
+              "median_ratio": 0.4110666666666667
+            },
+            "frame_p95": {
+              "paired_ratios": [0.6334863262574106, 0.5945384106586035, 0.5740487270736381, 0.5736744186046512, 0.5496015388843088],
+              "median_ratio": 0.5740487270736381
+            }
+          }
+        ],
+        "routes": {
+          "interpreter": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 5833.0,
+                "alloc_calls": 279.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 911037.0,
+                "retained_delta_bytes": 910829.0,
+                "peak_additional_bytes": 910893.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 291.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 12099034,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [103042, 101083, 104375, 106166, 90667],
+                "median_ns": 103042
+              },
+              "prepare_ns": {
+                "raw_ns": [417, 416, 375, 334, 250],
+                "median_ns": 375
+              }
+            },
+            "actual_work": [
+              [0, 0, 0, 57152, 0, 0],
+              [0, 0, 0, 57152, 0, 0],
+              [0, 0, 0, 57152, 0, 0],
+              [0, 0, 0, 57152, 0, 0],
+              [0, 0, 0, 57152, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 126],
+                "live": 128,
+                "spawned": 1946,
+                "retired": 1818,
+                "omitted_births": 5257,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "scalar-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 5292.0,
+                "alloc_calls": 279.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 911037.0,
+                "retained_delta_bytes": 910829.0,
+                "peak_additional_bytes": 910893.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 229.5,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 5201029,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [92000, 88709, 100791, 100875, 87459],
+                "median_ns": 92000
+              },
+              "prepare_ns": {
+                "raw_ns": [2385542, 2389375, 2589375, 2498834, 2339375],
+                "median_ns": 2389375
+              }
+            },
+            "actual_work": [
+              [78369, 0, 0, 0, 0, 0],
+              [78369, 0, 0, 0, 0, 0],
+              [78369, 0, 0, 0, 0, 0],
+              [78369, 0, 0, 0, 0, 0],
+              [78369, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 126],
+                "live": 128,
+                "spawned": 1946,
+                "retired": 1818,
+                "omitted_births": 5257,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "simd-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 5437.5,
+                "alloc_calls": 279.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 911037.0,
+                "retained_delta_bytes": 910829.0,
+                "peak_additional_bytes": 910893.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 250.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 4756706,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [102625, 97750, 109625, 99750, 96583],
+                "median_ns": 99750
+              },
+              "prepare_ns": {
+                "raw_ns": [4186292, 3757209, 4257458, 4002542, 3743667],
+                "median_ns": 4002542
+              }
+            },
+            "actual_work": [
+              [21217, 3572, 57152, 0, 0, 0],
+              [21217, 3572, 57152, 0, 0, 0],
+              [21217, 3572, 57152, 0, 0, 0],
+              [21217, 3572, 57152, 0, 0, 0],
+              [21217, 3572, 57152, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 126],
+                "live": 128,
+                "spawned": 1946,
+                "retired": 1818,
+                "omitted_births": 5257,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "immutable-age": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 5625.0,
+                "alloc_calls": 280.0,
+                "dealloc_calls": 2.0,
+                "realloc_calls": 1.0,
+                "requested_bytes": 916157.0,
+                "retained_delta_bytes": 915949.0,
+                "peak_additional_bytes": 916013.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 334.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 2128726,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [103541, 92333, 100542, 100000, 118166],
+                "median_ns": 100542
+              },
+              "prepare_ns": {
+                "raw_ns": [4129292, 4250584, 4015375, 4097583, 4161333],
+                "median_ns": 4129292
+              }
+            },
+            "actual_work": [
+              [2769, 0, 0, 0, 75600, 0],
+              [2769, 0, 0, 0, 75600, 0],
+              [2769, 0, 0, 0, 75600, 0],
+              [2769, 0, 0, 0, 75600, 0],
+              [2769, 0, 0, 0, 75600, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 126],
+                "live": 128,
+                "spawned": 1946,
+                "retired": 1818,
+                "omitted_births": 5257,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ],
+            "common_authorization": {
+              "all_five_runs_all_observations_coherent": true,
+              "observations_per_run": [720, 720, 720, 720, 720],
+              "resident_particles_per_run": [89987, 89987, 89987, 89987, 89987]
+            }
+          }
+        }
+      },
+      {
+        "case": "capacity128-instances8-rate1",
+        "public_proofs_match": true,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.13379914937939416, 0.13689749339490687, 0.13189304812834224, 0.1362048894062864, 0.12811205534440792],
+              "median_ratio": 0.13379914937939416
+            },
+            "frame_p95": {
+              "paired_ratios": [0.2246526387134539, 0.26666666666666666, 0.24174117050282162, 0.27380701384496453, 0.23268955888707907],
+              "median_ratio": 0.24174117050282162
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.5138333333333334, 0.5138333333333334, 0.5174555219872441, 0.507, 0.507013689369613],
+              "median_ratio": 0.5138333333333334
+            },
+            "frame_p95": {
+              "paired_ratios": [0.7000095996928098, 0.8, 0.8714285714285714, 0.8238528230069783, 0.7466666666666667],
+              "median_ratio": 0.8
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.5247659574468085, 0.521041068108839, 0.5247659574468085, 0.507, 0.5035246727089627],
+              "median_ratio": 0.521041068108839
+            },
+            "frame_p95": {
+              "paired_ratios": [0.8102222222222222, 0.7792207792207793, 0.8472222222222222, 0.7759410476000796, 0.7209805335255948],
+              "median_ratio": 0.7792207792207793
+            }
+          }
+        ],
+        "routes": {
+          "interpreter": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 42916.5,
+                "alloc_calls": 2232.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 7288296.0,
+                "retained_delta_bytes": 7286632.0,
+                "peak_additional_bytes": 7286696.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 1750.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 14652156,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [100958, 100833, 98583, 100792, 95458],
+                "median_ns": 100792
+              },
+              "prepare_ns": {
+                "raw_ns": [458, 292, 375, 459, 291],
+                "median_ns": 375
+              }
+            },
+            "actual_work": [
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "scalar-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 43708.0,
+                "alloc_calls": 2232.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 7288296.0,
+                "retained_delta_bytes": 7286632.0,
+                "peak_additional_bytes": 7286696.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 1562.5,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 4036005,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [98583, 104500, 90708, 101416, 98875],
+                "median_ns": 98875
+              },
+              "prepare_ns": {
+                "raw_ns": [2496917, 2571833, 2567167, 2806042, 3265125],
+                "median_ns": 2571833
+              }
+            },
+            "actual_work": [
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "simd-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 43541.0,
+                "alloc_calls": 2232.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 7288296.0,
+                "retained_delta_bytes": 7286632.0,
+                "peak_additional_bytes": 7286696.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 1583.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 3979500,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [109375, 99958, 113417, 98292, 93875],
+                "median_ns": 99958
+              },
+              "prepare_ns": {
+                "raw_ns": [4555208, 4047750, 4102875, 4093792, 3734333],
+                "median_ns": 4093792
+              }
+            },
+            "actual_work": [
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0],
+              [46048, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "immutable-age": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 42896.0,
+                "alloc_calls": 2240.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 7329256.0,
+                "retained_delta_bytes": 7327592.0,
+                "peak_additional_bytes": 7327656.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 2250.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 2379664,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [92541, 102292, 99375, 102625, 103333],
+                "median_ns": 102292
+              },
+              "prepare_ns": {
+                "raw_ns": [3752041, 4058750, 4087834, 4044459, 4447209],
+                "median_ns": 4058750
+              }
+            },
+            "actual_work": [
+              [10352, 0, 0, 0, 35696, 0],
+              [10352, 0, 0, 0, 35696, 0],
+              [10352, 0, 0, 0, 35696, 0],
+              [10352, 0, 0, 0, 35696, 0],
+              [10352, 0, 0, 0, 35696, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 8],
+                "live": 10,
+                "spawned": 116,
+                "retired": 106,
+                "omitted_births": 0,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ],
+            "common_authorization": {
+              "all_five_runs_all_observations_coherent": true,
+              "observations_per_run": [720, 720, 720, 720, 720],
+              "resident_particles_per_run": [41577, 41577, 41577, 41577, 41577]
+            }
+          }
+        }
+      },
+      {
+        "case": "capacity128-instances8-rate64",
+        "public_proofs_match": true,
+        "paired_hot": [
+          {
+            "denominator": "interpreter",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.19049861991653558, 0.18449767421640656, 0.18869541567575773, 0.18970783406041442, 0.18365758754863815],
+              "median_ratio": 0.18869541567575773
+            },
+            "frame_p95": {
+              "paired_ratios": [0.23042396685766028, 0.22475980994277334, 0.23908918406072105, 0.23487015384615384, 0.23226677520872838],
+              "median_ratio": 0.23226677520872838
+            }
+          },
+          {
+            "denominator": "scalar-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.44001044431872577, 0.43356367802336526, 0.43886347254299124, 0.434280148854518, 0.4369043475685162],
+              "median_ratio": 0.4369043475685162
+            },
+            "frame_p95": {
+              "paired_ratios": [0.4509708645362907, 0.4444957065381139, 0.4243986562954713, 0.44465985031363303, 0.4274881689780555],
+              "median_ratio": 0.4444957065381139
+            }
+          },
+          {
+            "denominator": "simd-jit",
+            "numerator": "immutable-age",
+            "frame_median": {
+              "paired_ratios": [0.47800119764253524, 0.4498349535144302, 0.48183440601455185, 0.4625794514078673, 0.45604217230664584],
+              "median_ratio": 0.4625794514078673
+            },
+            "frame_p95": {
+              "paired_ratios": [0.500216644649934, 0.4823397190293742, 0.5042258932001537, 0.5286204986149584, 0.5013392761480275],
+              "median_ratio": 0.5013392761480275
+            }
+          }
+        ],
+        "routes": {
+          "interpreter": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 43313.0,
+                "alloc_calls": 2232.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 7288296.0,
+                "retained_delta_bytes": 7286632.0,
+                "peak_additional_bytes": 7286696.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 1750.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 97557472,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [103084, 102042, 105125, 97375, 96833],
+                "median_ns": 102042
+              },
+              "prepare_ns": {
+                "raw_ns": [334, 292, 458, 333, 292],
+                "median_ns": 333
+              }
+            },
+            "actual_work": [
+              [0, 0, 0, 455840, 0, 0],
+              [0, 0, 0, 455840, 0, 0],
+              [0, 0, 0, 455840, 0, 0],
+              [0, 0, 0, 455840, 0, 0],
+              [0, 0, 0, 455840, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 126],
+                "live": 128,
+                "spawned": 1946,
+                "retired": 1818,
+                "omitted_births": 5257,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "scalar-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 42334.0,
+                "alloc_calls": 2232.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 7288296.0,
+                "retained_delta_bytes": 7286632.0,
+                "peak_additional_bytes": 7286696.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 1542.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 44152547,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [100791, 113375, 109458, 101417, 99375],
+                "median_ns": 101417
+              },
+              "prepare_ns": {
+                "raw_ns": [2719500, 2775167, 2597166, 2392291, 2625000],
+                "median_ns": 2625000
+              }
+            },
+            "actual_work": [
+              [627025, 0, 0, 0, 0, 0],
+              [627025, 0, 0, 0, 0, 0],
+              [627025, 0, 0, 0, 0, 0],
+              [627025, 0, 0, 0, 0, 0],
+              [627025, 0, 0, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 126],
+                "live": 128,
+                "spawned": 1946,
+                "retired": 1818,
+                "omitted_births": 5257,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "simd-jit": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 43563.0,
+                "alloc_calls": 2232.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 7288296.0,
+                "retained_delta_bytes": 7286632.0,
+                "peak_additional_bytes": 7286696.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 1583.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 40510636,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [103833, 101292, 110250, 88459, 102292],
+                "median_ns": 102292
+              },
+              "prepare_ns": {
+                "raw_ns": [4266125, 4174583, 3795083, 3752000, 3766292],
+                "median_ns": 3795083
+              }
+            },
+            "actual_work": [
+              [171185, 28490, 455840, 0, 0, 0],
+              [171185, 28490, 455840, 0, 0, 0],
+              [171185, 28490, 455840, 0, 0, 0],
+              [171185, 28490, 455840, 0, 0, 0],
+              [171185, 28490, 455840, 0, 0, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 126],
+                "live": 128,
+                "spawned": 1946,
+                "retired": 1818,
+                "omitted_births": 5257,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ]
+          },
+          "immutable-age": {
+            "phases": {
+              "fresh_instantiate": {
+                "nanoseconds": 42541.5,
+                "alloc_calls": 2240.0,
+                "dealloc_calls": 16.0,
+                "realloc_calls": 8.0,
+                "requested_bytes": 7329256.0,
+                "retained_delta_bytes": 7327592.0,
+                "peak_additional_bytes": 7327656.0
+              },
+              "fresh_configure_start": {
+                "nanoseconds": 2250.0,
+                "alloc_calls": 0.0,
+                "dealloc_calls": 0.0,
+                "realloc_calls": 0.0,
+                "requested_bytes": 0.0,
+                "retained_delta_bytes": 0.0,
+                "peak_additional_bytes": 0.0
+              },
+              "steady_advance_only": {
+                "nanoseconds": 18915056,
+                "alloc_calls": 0,
+                "dealloc_calls": 0,
+                "realloc_calls": 0,
+                "requested_bytes": 0,
+                "retained_delta_bytes": 0,
+                "peak_additional_bytes": 0
+              }
+            },
+            "cold": {
+              "compile_ns": {
+                "raw_ns": [98459, 90500, 94834, 169958, 82666],
+                "median_ns": 94834
+              },
+              "prepare_ns": {
+                "raw_ns": [4294000, 3739334, 3756667, 3885291, 3667417],
+                "median_ns": 3756667
+              }
+            },
+            "actual_work": [
+              [22225, 0, 0, 0, 604800, 0],
+              [22225, 0, 0, 0, 604800, 0],
+              [22225, 0, 0, 0, 604800, 0],
+              [22225, 0, 0, 0, 604800, 0],
+              [22225, 0, 0, 0, 604800, 0]
+            ],
+            "example_final_first_instance_ledgers": [
+              {
+                "layers": [0, 1, 1, 126],
+                "live": 128,
+                "spawned": 1946,
+                "retired": 1818,
+                "omitted_births": 5257,
+                "omitted_executions": 0,
+                "suppressed_births": 0,
+                "omitted_spatial_writes": 0,
+                "omitted_spatial_queries": 0,
+                "skipped_seconds_bits": 0
+              }
+            ],
+            "common_authorization": {
+              "all_five_runs_all_observations_coherent": true,
+              "observations_per_run": [720, 720, 720, 720, 720],
+              "resident_particles_per_run": [719903, 719903, 719903, 719903, 719903]
+            }
+          }
+        }
+      }
+    ],
+    "population_scope": "compact examples show first instance final ledger; preserved raw result contains every instance/time ledger"
+  },
+  "raw_recovery": {
+    "compression_manifest": "/tmp/wc3-immutable-age-results-01-compression.json",
+    "compression_manifest_sha256": "0eeddcf7e0cbc7409b2c49a02de075803eb16073ba6c073fb72ca9776ab8578d",
+    "contract": "80 stdout logs larger than1MiB losslessly gzipped after measurement; original manifest attribution/SHAs retained and byte roundtrip verified by root;240 outputs remain recoverable",
+    "command": "gzip -dk ORIGINAL.stdout.gz",
+    "overlap": "no timed work overlapped compression"
+  }
+}
