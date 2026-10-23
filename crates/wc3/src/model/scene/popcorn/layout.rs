@@ -61,7 +61,7 @@ fn visit_registers(instruction: &mut Instruction, visit: &mut impl FnMut(usize, 
             source: input,
             ..
         }
-        | Instruction::UnaryFunction {
+        | Instruction::Unary {
             destination: output,
             source: input,
             ..
@@ -79,12 +79,6 @@ fn visit_registers(instruction: &mut Instruction, visit: &mut impl FnMut(usize, 
             }
         }
         Instruction::Binary {
-            destination: output,
-            left,
-            right,
-            ..
-        }
-        | Instruction::BinaryFunction {
             destination: output,
             left,
             right,

@@ -2,7 +2,9 @@ use super::*;
 use crate::model::formats::pkb::{Document, EffectCompileOptions, EffectEvolution};
 use crate::model::scene::popcorn::curve::sample;
 use crate::model::scene::popcorn::packet::{prepare, tests::fixture};
-use crate::model::scene::popcorn::{Address, Destination, Instruction, Operation, Source};
+use crate::model::scene::popcorn::{
+    Address, BinaryOperation, Destination, Instruction, Operation, Source,
+};
 use std::fs::read;
 use std::path::Path;
 
@@ -412,7 +414,7 @@ fn alias_broadcasts_and_nonfinite_float_words_keep_scalar_normalization_and_orde
                     ]),
                     kind: ValueType::Float4,
                 },
-                operation: 2,
+                operation: BinaryOperation::Multiply,
             },
         ];
         if alias {
@@ -431,7 +433,7 @@ fn alias_broadcasts_and_nonfinite_float_words_keep_scalar_normalization_and_orde
                     ]),
                     kind: ValueType::Float4,
                 },
-                operation: 0,
+                operation: BinaryOperation::Add,
             });
         }
         operations.push(Instruction::Store {

@@ -401,6 +401,12 @@ receivers and call arguments before producing an owned
 `scene::popcorn::Program`. Compilation has configurable storage and instruction
 limits; unsupported operations fail with their instruction byte location.
 
+The checked programme uses typed numeric operations, with logical and bitwise
+operations kept distinct. Native encodings are resolved during compilation;
+execution retains the checked value layouts and original instruction locations.
+This lets an application reuse a compiled programme without interpreting native
+operation selectors or rebuilding its callback bindings.
+
 Allocate a particle with `Program::new_state()`, or use `State::for_programs()`
 to share storage across a layer's initialization and alternative evolution
 programmes. Execution clears local scratch and preserves input/stream storage.

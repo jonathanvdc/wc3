@@ -6,6 +6,9 @@
 
 use glam::{Quat, Vec2, Vec3, Vec4};
 
+mod numeric;
+pub(crate) use numeric::{BinaryOperation, UnaryOperation};
+
 mod execution;
 pub use execution::{ExecutionError, Failure, Host, State};
 
@@ -211,18 +214,12 @@ pub(crate) enum Instruction {
         destination: Destination,
         left: Source,
         right: Source,
-        operation: u8,
+        operation: BinaryOperation,
     },
-    UnaryFunction {
+    Unary {
         destination: Destination,
         source: Source,
-        function: u8,
-    },
-    BinaryFunction {
-        destination: Destination,
-        left: Source,
-        right: Source,
-        function: u8,
+        operation: UnaryOperation,
     },
     Select {
         destination: Destination,

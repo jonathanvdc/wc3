@@ -1,6 +1,7 @@
 use super::{Instruction as NativeInstruction, Register, Script};
 use crate::model::scene::popcorn::{
-    Address, Destination, Family, Function, Instruction, Operation, Program, Source, ValueType,
+    Address, BinaryOperation, Destination, Family, Function, Instruction, Operation, Program,
+    Source, UnaryOperation, ValueType,
 };
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -332,11 +333,42 @@ impl Compiler<'_, '_> {
                     }
                     _ => return Err(self.error("unsupported basic-operation selector")),
                 }
-                Instruction::Binary {
-                    destination,
-                    left,
-                    right,
-                    operation: *operation,
+                if matches!(operation, 5 | 11) {
+                    let operation = match operation {
+                        5 => UnaryOperation::Negate,
+                        11 if left.kind.family() == Family::Bool => UnaryOperation::LogicalNot,
+                        11 => UnaryOperation::BitNot,
+                        _ => unreachable!(),
+                    };
+                    Instruction::Unary {
+                        destination,
+                        source: left,
+                        operation,
+                    }
+                } else {
+                    let operation = match operation {
+                        0 => BinaryOperation::Add,
+                        1 => BinaryOperation::Subtract,
+                        2 => BinaryOperation::Multiply,
+                        3 => BinaryOperation::Divide,
+                        4 => BinaryOperation::Remainder,
+                        8 if left.kind.family() == Family::Bool => BinaryOperation::LogicalAnd,
+                        8 => BinaryOperation::BitAnd,
+                        9 if left.kind.family() == Family::Bool => BinaryOperation::LogicalOr,
+                        9 => BinaryOperation::BitOr,
+                        12 => BinaryOperation::Less,
+                        13 => BinaryOperation::LessEqual,
+                        14 => BinaryOperation::Greater,
+                        15 => BinaryOperation::GreaterEqual,
+                        16 => BinaryOperation::Equal,
+                        _ => unreachable!(),
+                    };
+                    Instruction::Binary {
+                        destination,
+                        left,
+                        right,
+                        operation,
+                    }
                 }
             }
             NativeInstruction::UnaryFunction {
@@ -372,10 +404,21 @@ impl Compiler<'_, '_> {
                     }
                     _ => return Err(self.error("unsupported unary-function selector")),
                 }
-                Instruction::UnaryFunction {
+                let operation = match function {
+                    0 => UnaryOperation::SquareRoot,
+                    1 => UnaryOperation::ReciprocalSquareRoot,
+                    7 => UnaryOperation::SineCosine,
+                    13 => UnaryOperation::Exponential,
+                    17 => UnaryOperation::Reciprocal,
+                    23 => UnaryOperation::SignedFraction,
+                    24 => UnaryOperation::Saturate,
+                    51 => UnaryOperation::IsFinite,
+                    _ => unreachable!(),
+                };
+                Instruction::Unary {
                     destination,
                     source,
-                    function: *function,
+                    operation,
                 }
             }
             NativeInstruction::BinaryFunction {
@@ -404,11 +447,17 @@ impl Compiler<'_, '_> {
                     }
                     _ => return Err(self.error("unsupported binary-function selector")),
                 }
-                Instruction::BinaryFunction {
+                let operation = match function {
+                    27 => BinaryOperation::Minimum,
+                    28 => BinaryOperation::Maximum,
+                    29 => BinaryOperation::Dot,
+                    _ => unreachable!(),
+                };
+                Instruction::Binary {
                     destination,
                     left,
                     right,
-                    function: *function,
+                    operation,
                 }
             }
             NativeInstruction::Select {
@@ -496,3 +545,7 @@ impl Compiler<'_, '_> {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "compile_tests.rs"]
+mod tests;

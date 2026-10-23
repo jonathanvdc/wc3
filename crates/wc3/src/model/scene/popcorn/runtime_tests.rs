@@ -1,6 +1,8 @@
 use super::*;
 use crate::model::formats::pkb::{Document, EffectCompileOptions};
-use crate::model::scene::popcorn::{Address, Destination, Instruction, Operation, Program, Source};
+use crate::model::scene::popcorn::{
+    Address, BinaryOperation, Destination, Instruction, Operation, Program, Source,
+};
 
 fn sprite() -> EffectProgram {
     Document::read(include_bytes!("../../../../tests/fixtures/pkb/sprite.pkb"))
@@ -45,7 +47,7 @@ fn initialization_is_once_and_pool_reuse_changes_identity() {
                     address: Address::Constant([1f32.to_bits(), 0, 0, 0]),
                     kind: ValueType::Float,
                 },
-                operation: 0,
+                operation: BinaryOperation::Add,
             },
         },
         Operation {

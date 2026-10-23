@@ -3,7 +3,7 @@ use super::curve::sample;
 use super::execution::float_arithmetic;
 use super::graph::{BoundProgram, Callback, EffectLayer, EffectSampler, External};
 use super::runtime::FieldPlanes;
-use super::{Address, Destination, Instruction, Source, ValueType};
+use super::{Address, BinaryOperation, Destination, Instruction, Source, ValueType};
 use std::mem::size_of;
 
 pub(super) const WIDTH: usize = 16;
@@ -55,7 +55,7 @@ enum InstructionPlan {
         output: Register,
         left: Operand,
         right: Operand,
-        operation: u8,
+        operation: BinaryOperation,
     },
     Curve {
         output: Register,
@@ -194,8 +194,12 @@ impl PureEvolution {
                     right,
                     operation,
                 } => {
-                    if *operation > 2
-                        || !matches!(destination.kind, ValueType::Float | ValueType::Float4)
+                    if !matches!(
+                        operation,
+                        BinaryOperation::Add
+                            | BinaryOperation::Subtract
+                            | BinaryOperation::Multiply
+                    ) || !matches!(destination.kind, ValueType::Float | ValueType::Float4)
                         || !matches!(left.kind, ValueType::Float | ValueType::Float4)
                         || !matches!(right.kind, ValueType::Float | ValueType::Float4)
                     {

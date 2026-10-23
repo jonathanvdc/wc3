@@ -1,4 +1,7 @@
-use super::{Address, Destination, Family, Instruction, Program, Source, Value};
+use super::{
+    Address, BinaryOperation, Destination, Family, Instruction, Program, Source, UnaryOperation,
+    Value,
+};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::mem::swap;
@@ -276,26 +279,35 @@ impl Program {
                 let left_words = state.read(*left).words();
                 let right_words = state.read(*right).words();
                 let mut words = [0; 4];
-                for (index, word) in words
-                    .iter_mut()
-                    .enumerate()
-                    .take(destination.kind.components())
-                {
-                    let lhs = left_words[index.min(left.kind.components() - 1)];
-                    let rhs = right_words[index.min(right.kind.components() - 1)];
-                    *word = binary(*operation, lhs, rhs, left.kind.family())
-                        .ok_or(Failure::IntegerDivisionByZero)?;
+                if *operation == BinaryOperation::Dot {
+                    words[0] = (0..left.kind.components())
+                        .map(|index| {
+                            f32::from_bits(left_words[index]) * f32::from_bits(right_words[index])
+                        })
+                        .sum::<f32>()
+                        .to_bits();
+                } else {
+                    for (index, word) in words
+                        .iter_mut()
+                        .enumerate()
+                        .take(destination.kind.components())
+                    {
+                        let lhs = left_words[index.min(left.kind.components() - 1)];
+                        let rhs = right_words[index.min(right.kind.components() - 1)];
+                        *word = binary(*operation, lhs, rhs, left.kind.family())
+                            .ok_or(Failure::IntegerDivisionByZero)?;
+                    }
                 }
                 state.write(*destination, words);
             }
-            Instruction::UnaryFunction {
+            Instruction::Unary {
                 destination,
                 source,
-                function,
+                operation,
             } => {
                 let input = state.read(*source).words();
                 let mut words = [0; 4];
-                if *function == 7 {
+                if *operation == UnaryOperation::SineCosine {
                     let (sin, cos) = f32::from_bits(input[0]).sin_cos();
                     words[0] = sin.to_bits();
                     words[1] = cos.to_bits();
@@ -305,44 +317,8 @@ impl Program {
                         .enumerate()
                         .take(destination.kind.components())
                     {
-                        let value = f32::from_bits(input[index.min(source.kind.components() - 1)]);
-                        *word = match function {
-                            0 => value.sqrt().to_bits(),
-                            1 => value.sqrt().recip().to_bits(),
-                            13 => value.exp().to_bits(),
-                            17 => value.recip().to_bits(),
-                            23 => value.fract().to_bits(),
-                            24 => value.clamp(0.0, 1.0).to_bits(),
-                            51 => truth(value.is_finite()),
-                            _ => unreachable!(),
-                        };
-                    }
-                }
-                state.write(*destination, words);
-            }
-            Instruction::BinaryFunction {
-                destination,
-                left,
-                right,
-                function,
-            } => {
-                let lhs = state.read(*left).words().map(f32::from_bits);
-                let rhs = state.read(*right).words().map(f32::from_bits);
-                let mut words = [0; 4];
-                if *function == 29 {
-                    words[0] = (0..left.kind.components())
-                        .map(|index| lhs[index] * rhs[index])
-                        .sum::<f32>()
-                        .to_bits();
-                } else {
-                    for (index, word) in words
-                        .iter_mut()
-                        .enumerate()
-                        .take(destination.kind.components())
-                    {
-                        let a = lhs[index.min(left.kind.components() - 1)];
-                        let b = rhs[index.min(right.kind.components() - 1)];
-                        *word = (if *function == 27 { a.min(b) } else { a.max(b) }).to_bits();
+                        let input = input[index.min(source.kind.components() - 1)];
+                        *word = unary(*operation, input, source.kind.family());
                     }
                 }
                 state.write(*destination, words);
@@ -425,59 +401,76 @@ fn convert(word: u32, from: Family, to: Family) -> u32 {
 }
 /// Exact scalar word arithmetic shared with the private pure-evolution plan.
 #[inline]
-pub(super) fn float_arithmetic(operation: u8, left: u32, right: u32) -> u32 {
+pub(super) fn float_arithmetic(operation: BinaryOperation, left: u32, right: u32) -> u32 {
     let a = f32::from_bits(left);
     let b = f32::from_bits(right);
     match operation {
-        0 => (a + b).to_bits(),
-        1 => (a - b).to_bits(),
-        2 => (a * b).to_bits(),
+        BinaryOperation::Add => (a + b).to_bits(),
+        BinaryOperation::Subtract => (a - b).to_bits(),
+        BinaryOperation::Multiply => (a * b).to_bits(),
         _ => unreachable!(),
     }
 }
-fn binary(operation: u8, left: u32, right: u32, family: Family) -> Option<u32> {
+fn unary(operation: UnaryOperation, word: u32, family: Family) -> u32 {
+    let value = f32::from_bits(word);
+    match operation {
+        UnaryOperation::Negate if family == Family::Float => (-value).to_bits(),
+        UnaryOperation::Negate => (word as i32).wrapping_neg() as u32,
+        UnaryOperation::LogicalNot => truth(word == 0),
+        UnaryOperation::BitNot => !word,
+        UnaryOperation::SquareRoot => value.sqrt().to_bits(),
+        UnaryOperation::ReciprocalSquareRoot => value.sqrt().recip().to_bits(),
+        UnaryOperation::Exponential => value.exp().to_bits(),
+        UnaryOperation::Reciprocal => value.recip().to_bits(),
+        UnaryOperation::SignedFraction => value.fract().to_bits(),
+        UnaryOperation::Saturate => value.clamp(0.0, 1.0).to_bits(),
+        UnaryOperation::IsFinite => truth(value.is_finite()),
+        UnaryOperation::SineCosine => unreachable!("pair result is handled by the instruction"),
+    }
+}
+fn binary(operation: BinaryOperation, left: u32, right: u32, family: Family) -> Option<u32> {
     let result = if family == Family::Float {
         let a = f32::from_bits(left);
         let b = f32::from_bits(right);
         match operation {
-            0..=2 => float_arithmetic(operation, left, right),
-            3 => (a / b).to_bits(),
-            4 => (a % b).to_bits(),
-            5 => (-a).to_bits(),
-            12 => truth(a < b),
-            13 => truth(a <= b),
-            14 => truth(a > b),
-            15 => truth(a >= b),
-            16 => truth(a == b),
+            BinaryOperation::Add | BinaryOperation::Subtract | BinaryOperation::Multiply => {
+                float_arithmetic(operation, left, right)
+            }
+            BinaryOperation::Divide => (a / b).to_bits(),
+            BinaryOperation::Remainder => (a % b).to_bits(),
+            BinaryOperation::Less => truth(a < b),
+            BinaryOperation::LessEqual => truth(a <= b),
+            BinaryOperation::Greater => truth(a > b),
+            BinaryOperation::GreaterEqual => truth(a >= b),
+            BinaryOperation::Equal => truth(a == b),
+            BinaryOperation::Minimum => a.min(b).to_bits(),
+            BinaryOperation::Maximum => a.max(b).to_bits(),
             _ => unreachable!(),
         }
     } else if family == Family::Bool {
         match operation {
-            8 => truth(left != 0 && right != 0),
-            9 => truth(left != 0 || right != 0),
-            11 => truth(left == 0),
-            16 => truth((left != 0) == (right != 0)),
+            BinaryOperation::LogicalAnd => truth(left != 0 && right != 0),
+            BinaryOperation::LogicalOr => truth(left != 0 || right != 0),
+            BinaryOperation::Equal => truth((left != 0) == (right != 0)),
             _ => unreachable!(),
         }
     } else {
         let a = left as i32;
         let b = right as i32;
         match operation {
-            0 => a.wrapping_add(b) as u32,
-            1 => a.wrapping_sub(b) as u32,
-            2 => a.wrapping_mul(b) as u32,
-            3 if b != 0 => a.wrapping_div(b) as u32,
-            4 if b != 0 => a.wrapping_rem(b) as u32,
-            3 | 4 => return None,
-            5 => a.wrapping_neg() as u32,
-            8 => left & right,
-            9 => left | right,
-            11 => !left,
-            12 => truth(a < b),
-            13 => truth(a <= b),
-            14 => truth(a > b),
-            15 => truth(a >= b),
-            16 => truth(a == b),
+            BinaryOperation::Add => a.wrapping_add(b) as u32,
+            BinaryOperation::Subtract => a.wrapping_sub(b) as u32,
+            BinaryOperation::Multiply => a.wrapping_mul(b) as u32,
+            BinaryOperation::Divide if b != 0 => a.wrapping_div(b) as u32,
+            BinaryOperation::Remainder if b != 0 => a.wrapping_rem(b) as u32,
+            BinaryOperation::Divide | BinaryOperation::Remainder => return None,
+            BinaryOperation::BitAnd => left & right,
+            BinaryOperation::BitOr => left | right,
+            BinaryOperation::Less => truth(a < b),
+            BinaryOperation::LessEqual => truth(a <= b),
+            BinaryOperation::Greater => truth(a > b),
+            BinaryOperation::GreaterEqual => truth(a >= b),
+            BinaryOperation::Equal => truth(a == b),
             _ => unreachable!(),
         }
     };

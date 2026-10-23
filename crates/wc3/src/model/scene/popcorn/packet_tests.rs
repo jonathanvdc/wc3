@@ -68,7 +68,7 @@ pub(crate) fn fixture(count: usize) -> EffectProgram {
                 address: Address::Constant([0.125f32.to_bits(), 0, 0, 0]),
                 kind: ValueType::Float,
             },
-            operation: 0,
+            operation: BinaryOperation::Add,
         },
         Instruction::Store {
             source: src(0, ValueType::Float),
@@ -94,7 +94,7 @@ pub(crate) fn fixture(count: usize) -> EffectProgram {
                 address: Address::Constant([1.5f32.to_bits(), 0, 0, 0]),
                 kind: ValueType::Float,
             },
-            operation: 2,
+            operation: BinaryOperation::Multiply,
         },
         Instruction::Store {
             source: src(2, ValueType::Float4),
@@ -120,7 +120,7 @@ pub(crate) fn fixture(count: usize) -> EffectProgram {
             destination: reg(4, ValueType::Float),
             left: src(4, ValueType::Float),
             right: src(5, ValueType::Float),
-            operation: 1,
+            operation: BinaryOperation::Subtract,
         },
         Instruction::Store {
             source: src(4, ValueType::Float),
@@ -198,7 +198,7 @@ fn plan_checks_canonical_lifecycle_aliases_callbacks_resources_and_persistent_op
     assert!(PureEvolution::prepare(&graph.layers[0], &bound, &graph.samplers).is_none());
     let mut bound = original.clone();
     if let Instruction::Binary { operation, .. } = &mut bound.program.operations[2].instruction {
-        *operation = 3;
+        *operation = BinaryOperation::Divide;
     }
     assert!(PureEvolution::prepare(&graph.layers[0], &bound, &graph.samplers).is_none());
     graph.samplers[0] = EffectSampler::Events(vec![0.].into_boxed_slice());
@@ -329,7 +329,7 @@ fn persistent_eligibility_requires_sources_before_destination_within_evolution_o
                 address: Address::Constant([0; 4]),
                 kind: ValueType::Float,
             },
-            operation: 0,
+            operation: BinaryOperation::Add,
         },
         Instruction::Call {
             destination: Some(Destination {

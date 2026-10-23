@@ -1,5 +1,7 @@
 use super::*;
-use crate::model::scene::popcorn::{Host, Operation, State, Value, ValueType};
+use crate::model::scene::popcorn::{
+    BinaryOperation, Host, Operation, State, UnaryOperation, Value, ValueType,
+};
 
 type Call = (u16, Option<u16>, Vec<Value>, Vec<u8>, u8);
 #[derive(Default, Debug, PartialEq)]
@@ -100,7 +102,7 @@ fn pair() -> (Program, Program) {
             destination: output(2, 900, Float),
             left: slot(2, 900, Float),
             right: constant(0.25f32.into()),
-            operation: 0,
+            operation: BinaryOperation::Add,
         },
         Instruction::Convert {
             destination: output(1, 30, Int),
@@ -124,16 +126,16 @@ fn pair() -> (Program, Program) {
             source: slot(3, 1010, Float4),
             lanes: [2, 1, 0, 0],
         },
-        Instruction::UnaryFunction {
+        Instruction::Unary {
             destination: output(1, 41, Float3),
             source: slot(1, 40, Float3),
-            function: 24,
+            operation: UnaryOperation::Saturate,
         },
-        Instruction::BinaryFunction {
+        Instruction::Binary {
             destination: output(1, 42, Float3),
             left: slot(1, 41, Float3),
             right: constant(Value::from_words(Float3, [0.5f32.to_bits(); 4])),
-            function: 27,
+            operation: BinaryOperation::Minimum,
         },
         Instruction::Select {
             destination: output(3, 1000, Float4),
