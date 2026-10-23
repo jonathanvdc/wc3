@@ -127,7 +127,7 @@
     "pair_order": "alternating, exact argv retained per job",
     "clock": "natural CPU simulation/render/submission plus SpinPoll completion; observation reads and CSV writes outside",
     "quantiles": "each run uses sorted[n//2] median and sorted[n-n//20-1] p95; report uses median of five run quantiles and separately median of five paired ratios",
-    "scope": "completed wall frames, no GPU timestamps or pipelined throughput; coincident particle geometry is not worst-case spatial ordering"
+    "scope": "completed wall frames, no GPU timestamps or pipelined throughput; stationary geometry is coincident; moving geometry is tightly clustered, not worst-case spatial ordering"
   },
   "profiles": {
     "work": {
@@ -5511,7 +5511,7 @@
   "limitations": [
     "Small I1 median differences1.7% static/2.4% moving include regressions in individual pairs and do not establish a broad speedup.",
     "Moving I32 paired completed-wall p95 improves7.46%, while completion-wait p95 regresses14.43%; component quantiles are not additive.",
-    "Moving CPU Position projection and per-view sorting are included in the complete frame; coincident particles do not stress spatial depth reordering.",
+    "Moving CPU Position projection and per-view sorting are included in the complete frame; moving particles form a tight age-dependent cluster from distributed birth times, not a worst-case depth-ordering workload.",
     "No game-client fidelity, cross-engine parity, GPU timestamp, throughput or universal performance claim.",
     "Zero interval birth uploads concern the measured stable population, not initial allocation or continuous-spawn traffic.",
     "Prior64-byte immutable time-only measurements are a separate dated artifact; this shader ABI uploads112-byte uniform records."

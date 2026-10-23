@@ -140,8 +140,8 @@ projections for both stationary and moving geometry. Each study used the same
 pixels, 1× MSAA and 64 advancing completed frames at 64 Hz after residency warmup.
 Five alternating SIMD/WGSL pairs per layout produced twenty runs per study.
 The moving workload includes CPU Position projection and per-view sorting in the
-completed frame. Its particles remain coincident; it does not establish worst-case
-spatial ordering cost.
+completed frame. Its moving particles remain tightly clustered because their
+initial birth times differ; it does not establish worst-case spatial ordering cost.
 
 | Geometry | Emitters | SIMD frame median | WGSL frame median | Paired median ratio | Paired p95 ratio |
 | --- | ---: | ---: | ---: | ---: | ---: |
