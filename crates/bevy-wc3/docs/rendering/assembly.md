@@ -89,7 +89,8 @@ and uses Sa² + Da(1-Sa) for alpha; `AlphaStraight` instead uses Sa + Da(1-Sa).
 then use the `Alpha` equation. Native appearance adapters select these equations
 explicitly; generic layers retain the default.
 Invalid dimensions, pixel storage and rectangles are errors. Image callbacks
-supply `RgbaImage` values; source decoding is cached within an assembly compilation.
+supply immutable `RgbaImage` values whose clones share pixel storage; source decoding
+is cached within an assembly compilation.
 Across the assembly's source compilations, equal resolved image sources, effective
 color spaces and samplers share a Bevy image. Different sampling or color interpretation receives a separate
 image; native metadata and input addresses do not enter the physical cache key. Atlas composition happens during setup, rather than animation updates.

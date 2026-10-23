@@ -3,13 +3,15 @@ use bevy::prelude::Image;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::sync::Arc;
 
 /// Decoded, tightly packed, top-to-bottom straight-alpha sRGB pixels.
+/// Clones share immutable pixel storage.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RgbaImage {
     width: u32,
     height: u32,
-    pixels: Vec<u8>,
+    pixels: Arc<Vec<u8>>,
 }
 impl RgbaImage {
     /// Checks dimensions and storage before accepting decoded pixels.
@@ -21,7 +23,7 @@ impl RgbaImage {
         Ok(Self {
             width,
             height,
-            pixels,
+            pixels: Arc::new(pixels),
         })
     }
     /// Pixel width.
@@ -45,14 +47,15 @@ impl RgbaImage {
                 depth_or_array_layers: 1,
             },
             TextureDimension::D2,
-            self.pixels,
+            self.into_pixels(),
             TextureFormat::Rgba8UnormSrgb,
             RenderAssetUsages::default(),
         )
     }
-    /// Takes the tightly packed RGBA bytes.
+    /// Takes the tightly packed RGBA bytes, reusing uniquely owned storage.
+    /// When another image shares the pixels, this returns an independent copy.
     pub fn into_pixels(self) -> Vec<u8> {
-        self.pixels
+        Arc::unwrap_or_clone(self.pixels)
     }
 }
 /// A checked rectangle uses top-left image coordinates.

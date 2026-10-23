@@ -1,4 +1,48 @@
 use super::*;
+
+#[test]
+fn image_clones_share_immutable_storage_and_compare_by_pixels() {
+    let original = pixel([12, 34, 56, 78]);
+    let cloned = original.clone();
+    assert!(Arc::ptr_eq(&original.pixels, &cloned.pixels));
+    assert_eq!(original.pixels().as_ptr(), cloned.pixels().as_ptr());
+    assert_eq!(original, cloned);
+    assert_eq!(original, pixel([12, 34, 56, 78]));
+}
+
+#[test]
+fn pixel_extraction_reuses_unique_storage_and_copies_shared_storage() {
+    let original = pixel([12, 34, 56, 78]);
+    let allocation = original.pixels().as_ptr();
+    let mut extracted = original.clone().into_pixels();
+    assert_eq!(extracted, [12, 34, 56, 78]);
+    assert_ne!(allocation, extracted.as_ptr());
+    extracted[0] = 99;
+    assert_eq!(original.pixels(), [12, 34, 56, 78]);
+    let unique = original.into_pixels();
+    assert_eq!(allocation, unique.as_ptr());
+    assert_eq!(unique, [12, 34, 56, 78]);
+}
+
+#[test]
+fn bevy_image_extraction_keeps_dimensions_format_and_exact_bytes() {
+    let original = RgbaImage::new(2, 1, vec![12, 34, 56, 78, 90, 123, 45, 67]).unwrap();
+    let allocation = original.pixels().as_ptr();
+    let shared = original.clone().into_image();
+    assert_eq!(shared.texture_descriptor.size.width, 2);
+    assert_eq!(shared.texture_descriptor.size.height, 1);
+    assert_eq!(
+        shared.texture_descriptor.format,
+        TextureFormat::Rgba8UnormSrgb
+    );
+    assert_eq!(shared.asset_usage, RenderAssetUsages::default());
+    assert_eq!(shared.data.as_deref(), Some(original.pixels()));
+    assert_ne!(shared.data.as_ref().unwrap().as_ptr(), allocation);
+    let unique = original.into_image();
+    assert_eq!(unique, shared);
+    assert_eq!(unique.data.as_ref().unwrap().as_ptr(), allocation);
+}
+
 fn pixel(color: [u8; 4]) -> RgbaImage {
     RgbaImage::new(1, 1, color.to_vec()).unwrap()
 }
