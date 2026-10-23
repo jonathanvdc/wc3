@@ -40,9 +40,9 @@ native output and inspect conversion decisions.
 
 For M2 models with companions, WMO roots with groups, or a common ingestion path
 across formats, use `io::asset::Reader`. It requests supporting files by typed
-identity and returns an owned native asset whose `import` method produces a
-checked Universal model and conversion report. Your application controls source
-reads and retains the asset while using borrowed semantic data. The
+identity and returns an owned, checked Universal model with its conversion report.
+Your application controls source reads and import policies; the completed graph
+can outlive every source buffer and native document. The
 [model loading guide](docs/loading.md) shows the complete workflow.
 
 For a native edit, decode a document, change its records, and encode it again.

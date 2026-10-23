@@ -9,8 +9,8 @@ documents, resolves dependencies, and writes the encoded outputs.
 When starting with encoded bytes rather than decoded documents,
 [`io::asset::Reader`](loading.md) coordinates native decoding and required
 companion requests across MDLX, M2, and modern WMO. It retains source identity and
-returns an owned native asset; its `import` method applies the same policies and
-produces a Universal graph. Use the format-specific entry points below when you
+applies explicit import policies to return an owned Universal graph with its
+conversion report. Use the format-specific entry points below when you
 already have a native document or need a particular semantic profile.
 
 The graph contains authoring values rather than an embedded source file.
@@ -20,12 +20,20 @@ arrays once when the native layout differs from the semantic element layout. Ret
 original native document separately if the application also needs its codec APIs
 or original physical layout.
 
+Any built-in profile can detach an imported graph with `Model::into_owned()`.
+This consumes the graph, copies its borrowed buffers, and moves its owned buffers
+without changing identities or authoring values. The result no longer borrows
+the decoded document. Choose borrowing import when a native document already
+has the required lifetime, or detach before placing the graph in a longer-lived
+asset cache. The shared reader performs this detachment before releasing its
+temporary native documents and companion bytes.
+
 Resource paths preserve byte spellings, including non-UTF-8 paths. MDLX
 particles, popcorn effects, attachments, and facial animation references resolve
 through the model's resource declarations, and native output writes those bytes
 without Unicode replacement. A profile `FaceEffect` pairs its target name with
 an `EffectResourceId`; removing that declaration while retaining the reference
-fails normal graph validation. Display names and visibility-guide text still
+fails normal graph validation. MDLX display names and visibility-guide text still
 use Unicode strings, so invalid UTF-8 in those fields requires an explicit
 import loss policy.
 

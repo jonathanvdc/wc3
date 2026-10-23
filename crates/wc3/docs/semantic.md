@@ -102,6 +102,22 @@ owned storage. Variable-length rows use `ValueGroups`, a packed element array
 with encoded row offsets. These storage rules apply independently of graph
 identity and transactional validation.
 
+Call `Model::into_owned()` when the whole graph must outlive its native document
+and input buffers. It returns the same profile with a `'static` storage lifetime,
+copying borrowed strings and arrays and moving buffers that are already owned.
+It preserves graph and property scopes, every ID, animation targets and clocks,
+material assignments, and local physics identities. Ownership conversion does
+not encode a file, reimport the model, or validate a different set of meanings.
+All four built-in profiles support it:
+
+```rust
+use wc3::model::{Model, profiles::M2};
+
+fn retain(model: Model<'_, M2>) -> Model<'static, M2> {
+    model.into_owned()
+}
+```
+
 
 ## Declare resources once
 
@@ -185,5 +201,11 @@ The detailed guides separate common editing tasks from the graph overview:
 
 Custom profiles implement `Profile` and relationship validation through
 `ValidateLinks`. Their payloads can reuse the topic modules under `model` while
-selecting their own supported combinations. The [API reference](https://docs.rs/wc3/latest/wc3/model/)
+selecting their own supported combinations. Detachment is optional: existing
+profiles need no additional methods. `Model::into_owned` is available when the
+selected payloads implement the ownership conversion traits in `model::common`;
+those implementations must transform every borrowed payload into its matching
+owned type. The `IntoOwned` derive handles declared lifetimes; a generic component
+whose type parameters contain borrows needs an explicit `Detached` implementation
+that maps those components. The [API reference](https://docs.rs/wc3/latest/wc3/model/)
 contains the trait contracts and individual payload definitions.

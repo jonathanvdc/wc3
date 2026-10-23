@@ -17,10 +17,12 @@ native `decode_m2_with_layout` and bundle APIs.
 
 ## Supply required companions
 
-For synchronous sources, call `asset::load` with the root bytes and a resolver.
+For synchronous sources, call `asset::load` with the root bytes, import policy,
+and a resolver.
 Each `Request` carries the owning document, required file identity, and its
 `CompanionKind`. The resolver returns that companion's bytes or its own typed
-source error. Successful loading returns a `NativeAsset`:
+source error. Successful loading returns an owned Universal model and its
+conversion report:
 
 ```rust
 use std::{error::Error, fs, io};
@@ -29,10 +31,11 @@ use wc3::model::conversion::ImportOptions;
 use wc3::model::io::asset::{self, Format};
 
 fn inspect(path: &str) -> Result<(), Box<dyn Error>> {
-    let asset = asset::load(
+    let imported = asset::load(
         Format::M2,
         FileKey::Path(path.to_owned()),
         fs::read(path)?,
+        ImportOptions::default(),
         |request| {
             let FileKey::Path(path) = &request.key else {
                 return Err(io::Error::new(io::ErrorKind::Unsupported,
@@ -41,7 +44,6 @@ fn inspect(path: &str) -> Result<(), Box<dyn Error>> {
             fs::read(path)
         },
     )?;
-    let imported = asset.import(&ImportOptions::default())?;
     println!("{}: {} nodes", imported.value.name(), imported.value.nodes().len());
     Ok(())
 }
@@ -59,31 +61,32 @@ fetch image pixels or compile a renderer. Imported resource declarations retain
 the image and external-resource identities needed by later processing.
 
 For asynchronous loading or source retries, create a `Reader` with the same
-format, identity, and root bytes. Call `poll` to obtain `Progress::Pending(request)`,
+format, identity, root bytes, and import policy. Call `poll` to obtain `Progress::Pending(request)`,
 await your source read, then call `provide(&request, bytes)` and poll again.
-`Progress::Ready(asset)` completes the session. Polling while a request remains
+`Progress::Ready(imported)` completes the session. Polling while a request remains
 pending returns that same request, so a failed source read need not restart
 decoding. The reader itself performs no I/O and depends on no executor.
 
 ## Import checked semantics
 
-`NativeAsset` owns the decoded native bundle. Calling `import` returns a
-`Model<Universal>` and the ordinary conversion report. Compatible semantic arrays
-may borrow the asset, so retain it while using the imported model. Compilation
-and other processing can produce their own owned output. For a self-contained
-MDLX model whose semantic values must outlive every source, the format-specific
-`io::mdlx::decode_mdx` and `decode_mdl` helpers still return owned models.
+The completed `Conversion<Model<'static, Universal>>` owns its semantic storage.
+It can outlive the reader, root bytes, companion buffers, and temporary native
+documents. The reader imports from borrowed native records, then detaches the
+checked graph before releasing those sources. It retains no native backing
+bundle in the result. Applications can edit the graph, share it in an asset
+cache, evaluate it, or pass it to a renderer.
 
-Import is strict by default. Explicit `ImportOptions` can permit supported loss,
+`ImportOptions::default()` is strict. Explicit options can permit supported loss,
 and the returned report records accepted drops and approximations. Those options
-do not make malformed native data or absent required companions valid. See
+do not make malformed native data or absent required companions valid. The policy
+is fixed when the session starts and applies to its complete import. See
 [import and export](conversion.md) for policy selection and native output.
 
 Reader failures distinguish native decoding, unsupported provenance, and invalid
-request sequencing; import failures retain the conversion error. Match the typed
+request sequencing; import failures retain the conversion error and root identity. Match the typed
 errors or follow their standard error sources instead of parsing display text.
 `LoadError::Companion` retains the request and the resolver's original error;
-`LoadError::Native` retains the native loading failure. Source policy remains
+`LoadError::Native` retains the decoding or import failure. Source policy remains
 application-owned, where the resolver can retain its archive path, attempted
 locations, and underlying I/O failure.
 
