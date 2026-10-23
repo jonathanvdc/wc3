@@ -38,6 +38,13 @@ losses are recorded there. The [model guide](docs/semantic.md) introduces checke
 editing, and the [import and export guide](docs/conversion.md) shows how to plan
 native output and inspect conversion decisions.
 
+For M2 models with companions, WMO roots with groups, or a common ingestion path
+across formats, use `io::asset::Reader`. It requests supporting files by typed
+identity and returns an owned native asset whose `import` method produces a
+checked Universal model and conversion report. Your application controls source
+reads and retains the asset while using borrowed semantic data. The
+[model loading guide](docs/loading.md) shows the complete workflow.
+
 For a native edit, decode a document, change its records, and encode it again.
 MDX and MDL share the same document types; import their codec traits as `_` to
 make the methods available:

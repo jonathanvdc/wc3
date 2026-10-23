@@ -6,6 +6,13 @@ Use `wc3::model::io` to import a native document into a checked
 export. These operations work in memory. Your application supplies native
 documents, resolves dependencies, and writes the encoded outputs.
 
+When starting with encoded bytes rather than decoded documents,
+[`io::asset::Reader`](loading.md) coordinates native decoding and required
+companion requests across MDLX, M2, and modern WMO. It retains source identity and
+returns an owned native asset; its `import` method applies the same policies and
+produces a Universal graph. Use the format-specific entry points below when you
+already have a native document or need a particular semantic profile.
+
 The graph contains authoring values rather than an embedded source file.
 Compatible geometry and animation arrays borrow native encoded storage through
 `PackedArray`, so their decoded source must outlive those arrays. Adapters materialize
