@@ -1,4 +1,6 @@
 //! Immutable effect programmes and renderer-independent storage bindings.
+use super::execution_plan::ExecutionPlan;
+use super::execution_policy::{ExecutionOptions, ExecutionPreference, ExecutionReport};
 use super::packet::PureEvolution;
 use super::payload::Layout as PayloadLayout;
 use super::shapes::Shape;
@@ -229,8 +231,44 @@ pub enum MissingPayloadPolicy {
 #[derive(Clone, Debug)]
 pub struct EffectProgram {
     pub(crate) inner: Arc<EffectGraph>,
+    pub(super) execution: Arc<ExecutionPlan>,
 }
 impl EffectProgram {
+    pub(crate) fn new(graph: EffectGraph) -> Self {
+        let inner = Arc::new(graph);
+        let execution = Arc::new(ExecutionPlan::prepare(
+            &inner,
+            ExecutionOptions {
+                preference: ExecutionPreference::Interpreter,
+                ..ExecutionOptions::default()
+            },
+        ));
+        Self { inner, execution }
+    }
+
+    /// Prepare an execution plan for new instances of the same immutable graph.
+    ///
+    /// Clones retain programme and attribute identity. Existing instances keep
+    /// their captured plan: passing this wrapper to their `start` or `advance`
+    /// methods does not replace that plan. Preparation failures select the
+    /// interpreter before execution and remain visible in `execution_reports`.
+    pub fn with_execution(mut self, options: ExecutionOptions) -> Self {
+        self.execution = Arc::new(ExecutionPlan::prepare(&self.inner, options));
+        self
+    }
+
+    /// Choices used to prepare this wrapper's execution plan for new instances.
+    pub fn execution_options(&self) -> ExecutionOptions {
+        self.execution.options()
+    }
+
+    /// Prepared route for each layer initializer and existing selected evolution.
+    /// These reports describe new instances of this wrapper; existing instances
+    /// retain their own captured plan and reports. They are not invocation counts.
+    pub fn execution_reports(&self) -> &[ExecutionReport] {
+        self.execution.reports()
+    }
+
     /// Whether two handles refer to the same immutable compiled programme.
     /// Clones share identity; independently compiled equal graphs do not.
     pub fn same_program(&self, other: &Self) -> bool {

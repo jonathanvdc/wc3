@@ -1,11 +1,12 @@
 //! Bounded reusable lifecycle storage and deterministic event-time scheduling.
 use super::callbacks::{ExecutionHost, Scratch};
+use super::execution_plan::ExecutionPlan;
 use super::graph::*;
 use super::lifetime::Lifetime;
 use super::packet::{Lane, Scratch as PacketScratch, MINIMUM, WIDTH};
 use super::payload::{Handle as PayloadHandle, Storage as PayloadStorage};
 use super::spatial::Store as SpatialStore;
-use super::{Failure, State, Value, ValueType};
+use super::{ExecutionReport, ExecutionStage, ExecutionStats, Failure, State, Value, ValueType};
 use glam::Mat4;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -180,6 +181,7 @@ impl FieldLayout {
     }
 }
 #[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(test, derive(Clone))]
 pub(crate) struct FieldPlanes {
     layout: FieldLayout,
     data: Vec<u32>,
@@ -310,6 +312,8 @@ impl ParticleView<'_> {
 }
 /// Reusable pooled state; callers supply the matching shared programme explicitly.
 pub struct EffectInstance {
+    execution: Arc<ExecutionPlan>,
+    execution_stats: ExecutionStats,
     spatial: Vec<SpatialStore>,
     spatial_checks: usize,
     identity: Arc<()>,
@@ -469,6 +473,8 @@ impl EffectProgram {
             })
             .collect();
         Ok(EffectInstance {
+            execution: self.execution.clone(),
+            execution_stats: ExecutionStats::default(),
             spatial: self
                 .inner
                 .spatial
@@ -515,6 +521,15 @@ impl EffectProgram {
     }
 }
 impl EffectInstance {
+    /// Prepared routes captured when this instance was allocated.
+    pub fn execution_reports(&self) -> &[ExecutionReport] {
+        self.execution.reports()
+    }
+    /// Cumulative native invocation attempts over this instance's lifetime.
+    /// Restarting with `start` retains these diagnostics while resetting simulation statistics.
+    pub fn execution_stats(&self) -> ExecutionStats {
+        self.execution_stats
+    }
     fn compatible(&self, program: &EffectProgram) -> Result<(), EffectRuntimeError> {
         if !Arc::ptr_eq(&self.identity, &program.inner.identity) {
             Err(failure("instance and effect programme identities differ"))
@@ -792,7 +807,7 @@ impl EffectInstance {
             store.begin_tick();
         }
         // Existing-active processing can only retire; births are drained later.
-        if self.packet.is_some() && self.active.len() >= MINIMUM {
+        if !self.execution.is_native() && self.packet.is_some() && self.active.len() >= MINIMUM {
             self.evolve_packet_active(program, end, inputs, work)?;
         } else {
             self.evolve_active::<false>(program, end, inputs, work)?;
@@ -1044,7 +1059,15 @@ impl EffectInstance {
             self.payload.arena.release(handle).map_err(failure)?;
         }
         self.active.push(slot);
-        self.execute(program, slot, &layer.init, spawn.time, 0., inputs)?;
+        self.execute(
+            program,
+            slot,
+            &layer.init,
+            ExecutionStage::Initialization,
+            spawn.time,
+            0.,
+            inputs,
+        )?;
         *work += 1;
         self.stats.spawned = self.stats.spawned.saturating_add(1);
         let life = f32::from_bits(self.fields.read(layer.life, slot)[0]);
@@ -1095,7 +1118,15 @@ impl EffectInstance {
         *work += 1;
         if life < 1. || layer.evolve_on_death {
             if let Some(bound) = &layer.evolve {
-                self.execute(program, slot, bound, end, delta, inputs)?;
+                self.execute(
+                    program,
+                    slot,
+                    bound,
+                    ExecutionStage::Evolution,
+                    end,
+                    delta,
+                    inputs,
+                )?;
             }
         }
         let life = f32::from_bits(self.fields.read(layer.life, slot)[0]);
@@ -1110,11 +1141,13 @@ impl EffectInstance {
         })?;
         Ok(life >= 1.)
     }
+    #[allow(clippy::too_many_arguments)]
     fn execute(
         &mut self,
         program: &EffectProgram,
         slot: usize,
         bound: &BoundProgram,
+        stage: ExecutionStage,
         time: f64,
         delta: f64,
         inputs: SceneInputs,
@@ -1151,9 +1184,21 @@ impl EffectInstance {
             stats: &mut self.stats,
             order: &mut self.order,
         };
-        bound
-            .program
-            .execute_with_scratch(&mut particle.state, &mut self.vm_scratch, &mut host)
+        if self.execution.is_native() {
+            self.execution_stats.scalar_jit_invocations = self
+                .execution_stats
+                .scalar_jit_invocations
+                .saturating_add(1);
+        }
+        self.execution
+            .execute(
+                layer,
+                stage,
+                &bound.program,
+                &mut particle.state,
+                &mut self.vm_scratch,
+                &mut host,
+            )
             .map_err(|error| EffectRuntimeError {
                 layer: Some(layer),
                 offset: Some(error.offset),
@@ -1174,3 +1219,7 @@ mod tests;
 #[cfg(test)]
 #[path = "packet_runtime_tests.rs"]
 mod packet_tests;
+
+#[cfg(test)]
+#[path = "native_runtime_tests.rs"]
+mod native_tests;

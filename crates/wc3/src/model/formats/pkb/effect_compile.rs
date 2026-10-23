@@ -543,78 +543,76 @@ impl<'a> Document<'a> {
         });
         let payload_policies = payload_policies(&layers, &events);
         let uses_spatial = !spatial.is_empty();
-        Ok(EffectProgram {
-            inner: Arc::new(EffectGraph {
-                identity: Arc::new(()),
-                default_entry: graph.default_entry,
-                entries: graph
-                    .entries
-                    .into_iter()
-                    .map(|entry| EffectEntry {
-                        name: entry.name.into(),
-                        event: entry.event.0 as usize,
-                    })
-                    .collect(),
-                layers: layers.into_boxed_slice(),
-                events: events.into_boxed_slice(),
-                renderers: renderers.into_boxed_slice(),
-                attributes: lowering.attributes.into_boxed_slice(),
-                limitations: {
-                    let mut limitations = vec![
-                        EffectLimitation::RandomSequence,
-                        EffectLimitation::BirthScheduling,
-                        EffectLimitation::StreamDuration,
-                        EffectLimitation::CoordinateMetadata,
-                        EffectLimitation::TransformMask,
-                        EffectLimitation::FieldInitialization,
-                        EffectLimitation::DeathEvolution,
-                        EffectLimitation::InstantLifetime,
-                        EffectLimitation::CurveInterpolation,
-                        EffectLimitation::OrientationPolicies,
-                    ];
-                    if options.missing_payload == MissingPayloadPolicy::Zero {
-                        limitations.push(EffectLimitation::MissingPayloadZero);
-                    }
-                    if layers_use_inverse {
-                        limitations.push(EffectLimitation::InverseTransform);
-                    }
-                    if uses_spatial {
-                        limitations.push(EffectLimitation::SpatialSnapshots);
-                    }
-                    if redundant_programme {
-                        limitations.push(EffectLimitation::RedundantProgramme);
-                    }
-                    limitations.extend(payload_policies);
-                    if lowering
-                        .samplers
-                        .iter()
-                        .any(|sampler| matches!(sampler, EffectSampler::Shape(_)))
-                    {
-                        limitations.extend([
-                            EffectLimitation::ShapeDefaults,
-                            EffectLimitation::ShapeCoordinates,
-                            EffectLimitation::ShapeSampling,
-                        ]);
-                    }
-                    if lowering
-                        .samplers
-                        .iter()
-                        .any(|sampler| matches!(sampler, EffectSampler::Turbulence(_)))
-                    {
-                        limitations.extend([
-                            EffectLimitation::TurbulenceField,
-                            EffectLimitation::TurbulenceDomain,
-                        ]);
-                    }
-                    limitations.into_boxed_slice()
-                },
-                duration: options.stream_duration,
-                samplers: lowering.samplers.into_boxed_slice(),
-                spatial: spatial.into_boxed_slice(),
-                random: options.random,
-                missing_payload: options.missing_payload,
-            }),
-        })
+        Ok(EffectProgram::new(EffectGraph {
+            identity: Arc::new(()),
+            default_entry: graph.default_entry,
+            entries: graph
+                .entries
+                .into_iter()
+                .map(|entry| EffectEntry {
+                    name: entry.name.into(),
+                    event: entry.event.0 as usize,
+                })
+                .collect(),
+            layers: layers.into_boxed_slice(),
+            events: events.into_boxed_slice(),
+            renderers: renderers.into_boxed_slice(),
+            attributes: lowering.attributes.into_boxed_slice(),
+            limitations: {
+                let mut limitations = vec![
+                    EffectLimitation::RandomSequence,
+                    EffectLimitation::BirthScheduling,
+                    EffectLimitation::StreamDuration,
+                    EffectLimitation::CoordinateMetadata,
+                    EffectLimitation::TransformMask,
+                    EffectLimitation::FieldInitialization,
+                    EffectLimitation::DeathEvolution,
+                    EffectLimitation::InstantLifetime,
+                    EffectLimitation::CurveInterpolation,
+                    EffectLimitation::OrientationPolicies,
+                ];
+                if options.missing_payload == MissingPayloadPolicy::Zero {
+                    limitations.push(EffectLimitation::MissingPayloadZero);
+                }
+                if layers_use_inverse {
+                    limitations.push(EffectLimitation::InverseTransform);
+                }
+                if uses_spatial {
+                    limitations.push(EffectLimitation::SpatialSnapshots);
+                }
+                if redundant_programme {
+                    limitations.push(EffectLimitation::RedundantProgramme);
+                }
+                limitations.extend(payload_policies);
+                if lowering
+                    .samplers
+                    .iter()
+                    .any(|sampler| matches!(sampler, EffectSampler::Shape(_)))
+                {
+                    limitations.extend([
+                        EffectLimitation::ShapeDefaults,
+                        EffectLimitation::ShapeCoordinates,
+                        EffectLimitation::ShapeSampling,
+                    ]);
+                }
+                if lowering
+                    .samplers
+                    .iter()
+                    .any(|sampler| matches!(sampler, EffectSampler::Turbulence(_)))
+                {
+                    limitations.extend([
+                        EffectLimitation::TurbulenceField,
+                        EffectLimitation::TurbulenceDomain,
+                    ]);
+                }
+                limitations.into_boxed_slice()
+            },
+            duration: options.stream_duration,
+            samplers: lowering.samplers.into_boxed_slice(),
+            spatial: spatial.into_boxed_slice(),
+            random: options.random,
+            missing_payload: options.missing_payload,
+        }))
     }
 }
 impl Lowering<'_, '_> {

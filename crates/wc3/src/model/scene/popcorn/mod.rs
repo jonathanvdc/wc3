@@ -10,6 +10,35 @@ mod numeric;
 pub(crate) use numeric::{BinaryOperation, UnaryOperation};
 
 mod execution;
+mod execution_plan;
+mod execution_policy;
+pub use execution_policy::{
+    ExecutionBackend, ExecutionFallback, ExecutionOptions, ExecutionPreference, ExecutionReport,
+    ExecutionStage, ExecutionStats, NumericPolicy,
+};
+#[cfg(all(
+    feature = "popcorn-jit",
+    any(unix, windows),
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "s390x"
+    )
+))]
+mod native;
+#[cfg(not(all(
+    feature = "popcorn-jit",
+    any(unix, windows),
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "s390x"
+    )
+)))]
+#[path = "native_unavailable.rs"]
+mod native;
 pub use execution::{ExecutionError, Failure, Host, State};
 
 /// Value layouts accepted by the scalar particle evaluator.

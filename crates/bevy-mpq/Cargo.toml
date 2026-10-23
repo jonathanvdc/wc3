@@ -2,7 +2,7 @@
 name = "bevy-mpq"
 version.workspace = true
 edition = "2021"
-rust-version = "1.95"
+rust-version = "1.97"
 description = "Caller-configured MPQ asset sources for Bevy"
 license = "MIT OR Apache-2.0"
 readme = "README.md"

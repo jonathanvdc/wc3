@@ -31,8 +31,8 @@ pub trait Host {
 /// Reusable storage for one particle, including allocation-free call scratch.
 #[derive(Clone, Debug)]
 pub struct State {
-    scopes: [Vec<[u32; 4]>; 4],
-    arguments: Vec<Value>,
+    pub(super) scopes: [Vec<[u32; 4]>; 4],
+    pub(super) arguments: Vec<Value>,
 }
 impl State {
     /// Allocate the maximum storage required by a layer's alternative programmes.
@@ -183,18 +183,9 @@ impl Program {
         scratch: &mut State,
         host: &mut H,
     ) -> Result<(), ExecutionError<H::Error>> {
-        for scope in 0..2 {
-            swap(&mut state.scopes[scope], &mut scratch.scopes[scope]);
-        }
-        swap(&mut state.arguments, &mut scratch.arguments);
-        let result = self.execute(state, host);
-        for scope in 0..2 {
-            swap(&mut state.scopes[scope], &mut scratch.scopes[scope]);
-        }
-        swap(&mut state.arguments, &mut scratch.arguments);
-        result
+        with_scratch(state, scratch, |state| self.execute(state, host))
     }
-    fn execute_instruction<H: Host>(
+    pub(super) fn execute_instruction<H: Host>(
         &self,
         instruction: &Instruction,
         state: &mut State,
@@ -480,3 +471,29 @@ fn binary(operation: BinaryOperation, left: u32, right: u32, family: Family) -> 
 #[cfg(test)]
 #[path = "execution_tests.rs"]
 mod tests;
+
+/// Swap temporary scopes for one invocation and restore them during unwinding too.
+pub(super) fn with_scratch<T>(
+    state: &mut State,
+    scratch: &mut State,
+    run: impl FnOnce(&mut State) -> T,
+) -> T {
+    struct Restore<'a> {
+        state: &'a mut State,
+        scratch: &'a mut State,
+    }
+    impl Drop for Restore<'_> {
+        fn drop(&mut self) {
+            swap_scratch(self.state, self.scratch);
+        }
+    }
+    fn swap_scratch(state: &mut State, scratch: &mut State) {
+        for scope in 0..2 {
+            swap(&mut state.scopes[scope], &mut scratch.scopes[scope]);
+        }
+        swap(&mut state.arguments, &mut scratch.arguments);
+    }
+    swap_scratch(state, scratch);
+    let restore = Restore { state, scratch };
+    run(restore.state)
+}
