@@ -1,9 +1,10 @@
 //! Model-owned external dependency declarations and profile-specific addressing.
+use crate::model::common::IntoOwned;
 use crate::model::{Error, Link, ValidateLinks};
 use std::borrow::Cow;
 
 /// An image source addressed externally, supplied by the application, or embedded.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, IntoOwned)]
 pub enum ImageResource<'a> {
     /// Unresolved caller-provided asset root.
     Root,
@@ -44,35 +45,6 @@ pub enum ImageResource<'a> {
         name: Cow<'a, str>,
     },
 }
-impl ImageResource<'_> {
-    /// Detaches the complete resource identity, including nested owners and raw paths.
-    pub fn into_owned(self) -> ImageResource<'static> {
-        match self {
-            Self::Root => ImageResource::Root,
-            Self::Relative { owner, suffix } => ImageResource::Relative {
-                owner: Box::new(owner.into_owned()),
-                suffix: Cow::Owned(suffix.into_owned()),
-            },
-            Self::Path(value) => ImageResource::Path(Cow::Owned(value.into_owned())),
-            Self::FileDataId { id, filename } => ImageResource::FileDataId {
-                id,
-                filename: Cow::Owned(filename.into_owned()),
-            },
-
-            Self::Replaceable { id, filename } => ImageResource::Replaceable {
-                id,
-                filename: Cow::Owned(filename.into_owned()),
-            },
-            Self::EmbeddedImage { bytes } => ImageResource::EmbeddedImage {
-                bytes: Cow::Owned(bytes.into_owned()),
-            },
-            Self::Named { namespace, name } => ImageResource::Named {
-                namespace: Cow::Owned(namespace.into_owned()),
-                name: Cow::Owned(name.into_owned()),
-            },
-        }
-    }
-}
 
 impl ValidateLinks for ImageResource<'_> {
     fn visit_links(&self, visitor: &mut dyn FnMut(Link)) {
@@ -85,7 +57,7 @@ impl ValidateLinks for ImageResource<'_> {
 }
 
 /// A dependency addressed by native path bytes.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, IntoOwned)]
 pub enum PathResource<'a> {
     /// Native path spelling, including non-UTF-8 bytes.
     Path(Cow<'a, [u8]>),
@@ -113,7 +85,7 @@ impl ValidateLinks for PathResource<'_> {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
 /// M2 child-model addresses, including GPID/RPID file-data identities.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, IntoOwned)]
 pub enum M2ModelResource<'a> {
     /// Legacy native path spelling, including non-UTF-8 bytes.
     Path(Cow<'a, [u8]>),
@@ -156,7 +128,7 @@ impl<'a> TryFrom<ResourceLocator<'a>> for M2ModelResource<'a> {
 }
 
 /// Warcraft III image paths and application replacement categories.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, IntoOwned)]
 pub enum MdlxImageResource<'a> {
     /// Native path spelling, including non-UTF-8 bytes.
     Path(Cow<'a, [u8]>),
@@ -201,7 +173,7 @@ impl ValidateLinks for MdlxImageResource<'_> {
     }
 }
 /// WoW image paths, file-data identities, and replacement categories.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, IntoOwned)]
 pub enum M2ImageResource<'a> {
     /// Native path spelling, including non-UTF-8 bytes.
     Path(Cow<'a, [u8]>),
@@ -263,7 +235,7 @@ impl ValidateLinks for M2ImageResource<'_> {
     }
 }
 /// World image paths, file-data identities, and embedded lightmaps.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, IntoOwned)]
 pub enum WorldImageResource<'a> {
     /// Native path spelling, including non-UTF-8 bytes.
     Path(Cow<'a, [u8]>),
@@ -307,7 +279,7 @@ impl ValidateLinks for WorldImageResource<'_> {
     fn visit_links(&self, _: &mut dyn FnMut(Link)) {}
 }
 /// World child-model and skybox addresses.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, IntoOwned)]
 pub enum WorldModelResource<'a> {
     /// Native path spelling, including non-UTF-8 bytes.
     Path(Cow<'a, [u8]>),
@@ -345,7 +317,7 @@ impl ValidateLinks for WorldModelResource<'_> {
 }
 
 /// Resource identity interpreted by an application resolver, not by a file layout.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, IntoOwned)]
 pub enum ResourceLocator<'a> {
     /// Unresolved caller-provided asset root.
     Root,
@@ -368,25 +340,6 @@ pub enum ResourceLocator<'a> {
         /// Provider identity.
         name: Cow<'a, str>,
     },
-}
-impl ResourceLocator<'_> {
-    /// Detaches the complete resource identity, including nested owners and raw paths.
-    pub fn into_owned(self) -> ResourceLocator<'static> {
-        match self {
-            Self::Root => ResourceLocator::Root,
-            Self::Relative { owner, suffix } => ResourceLocator::Relative {
-                owner: Box::new(owner.into_owned()),
-                suffix: Cow::Owned(suffix.into_owned()),
-            },
-            Self::Path(value) => ResourceLocator::Path(Cow::Owned(value.into_owned())),
-            Self::FileDataId(value) => ResourceLocator::FileDataId(value),
-
-            Self::Named { namespace, name } => ResourceLocator::Named {
-                namespace: Cow::Owned(namespace.into_owned()),
-                name: Cow::Owned(name.into_owned()),
-            },
-        }
-    }
 }
 
 impl ValidateLinks for ResourceLocator<'_> {
@@ -476,7 +429,7 @@ impl<'a> From<PathResource<'a>> for WorldImageResource<'a> {
 mod resource_tests {}
 
 /// Companion addresses supported by the WoW model vocabulary.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, IntoOwned)]
 pub enum M2ResourceLocator<'a> {
     /// The application-provided root asset.
     Root,

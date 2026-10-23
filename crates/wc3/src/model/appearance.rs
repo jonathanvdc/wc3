@@ -3,6 +3,7 @@
 mod resolution;
 pub use resolution::MaterialSelection;
 
+use crate::model::common::IntoOwned;
 use crate::model::profiles::Either;
 use crate::model::{Error, Link, Look, LookId, Scope, ValidateLinks};
 use std::collections::BTreeMap;
@@ -34,7 +35,7 @@ pub trait DrawAppearanceSchema<'data>: AppearanceSchema<'data> {
 
 /// Exactly one authored material assignment, as supported by MDLX and WMO.
 /// The look always exists; an empty binding vector represents an empty assignment.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub struct SingleLook<'data> {
     id: LookId,
     look: Look<'data>,
@@ -91,7 +92,7 @@ impl<'data> DrawAppearanceSchema<'data> for SingleLook<'data> {
 }
 
 /// Named alternatives assigning materials directly to placement draws.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, IntoOwned)]
 pub struct DrawLooks<'data> {
     looks: BTreeMap<LookId, Look<'data>>,
     default: Option<LookId>,
@@ -142,7 +143,7 @@ impl<'data> DrawAppearanceSchema<'data> for DrawLooks<'data> {
 }
 
 /// Appearance capabilities shared by the built-in profiles.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoOwned)]
 pub enum UniversalAppearance<'data> {
     /// Draw-based material alternatives.
     Draw(DrawLooks<'data>),

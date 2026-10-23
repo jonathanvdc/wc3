@@ -1,4 +1,5 @@
 //! Complete authored material assignments for instance draw bindings.
+use crate::model::common::IntoOwned;
 use crate::model::{DrawId, InstanceId, MaterialId};
 use std::borrow::Cow;
 /// A material assignment for one draw of a mesh placement.
@@ -12,7 +13,7 @@ pub struct LookBinding {
     pub material: MaterialId,
 }
 /// A named complete material assignment for every instance draw.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, IntoOwned)]
 pub struct Look<'a> {
     /// Authoring name of the material alternative.
     pub name: Cow<'a, str>,

@@ -1,4 +1,5 @@
 //! Explicit buffer ownership at the model boundary.
+use glam::{Mat3, Mat4, Quat, Vec2, Vec3, Vec4};
 use std::array::from_fn;
 use std::borrow::Cow;
 use zerovec::{ule::AsULE, ZeroVec};
@@ -80,8 +81,21 @@ unchanged_ownership!(
     usize,
     isize,
     f32,
-    f64
+    f64,
+    Vec2,
+    Vec3,
+    Vec4,
+    Quat,
+    Mat3,
+    Mat4
 );
+
+impl<'owned> Detached<'owned> for Cow<'_, str> {
+    type Detached = Cow<'owned, str>;
+    fn into_detached(self) -> Self::Detached {
+        Cow::Owned(self.into_owned())
+    }
+}
 
 /// Internal ownership conversion preserving an explicitly selected buffer lifetime.
 #[doc(hidden)]

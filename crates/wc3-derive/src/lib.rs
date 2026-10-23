@@ -59,7 +59,19 @@ pub fn derive_mdx_value(input: TokenStream) -> TokenStream {
     expand_value(parse_macro_input!(input as DeriveInput)).into()
 }
 
+mod into_owned;
 mod ownership;
+/// Detaches declared buffer lifetimes without generating borrowed views.
+///
+/// Lifetime-bearing fields delegate to `common::Detached`; other fields move.
+/// Type and const parameters retain their meaning. Type parameters must be static;
+/// containers whose type parameters carry borrowed data need a component-mapping
+/// implementation instead. Import this derive through `wc3::model::common`.
+#[proc_macro_derive(IntoOwned)]
+pub fn derive_into_owned(input: TokenStream) -> TokenStream {
+    into_owned::expand(parse_macro_input!(input as DeriveInput)).into()
+}
+
 /// Compares versioned model records across different buffer lifetimes.
 #[proc_macro_derive(ModelPartialEq)]
 pub fn derive_model_partial_eq(input: TokenStream) -> TokenStream {

@@ -1,5 +1,45 @@
 use std::borrow::Cow;
-use wc3::model::common::{AsULE, Ownership, ZeroVec};
+use wc3::model::common::{AsULE, IntoOwned, Ownership, ZeroVec};
+
+#[derive(Debug, IntoOwned)]
+struct SemanticRecord<'a, 'label, const N: usize> {
+    label: Cow<'label, str>,
+    payloads: [Cow<'a, [u8]>; N],
+}
+
+#[derive(Debug, IntoOwned)]
+enum SemanticTree<'a> {
+    Branch(Vec<SemanticTree<'a>>),
+    Leaf(Cow<'a, str>),
+}
+
+#[test]
+fn semantic_detachment_handles_distinct_lifetime_names_and_moves_owned_buffers() {
+    let label = "borrowed label".to_owned();
+    let owned = vec![1, 2, 3];
+    let allocation = owned.as_ptr();
+    let detached: SemanticRecord<'static, 'static, 1> = SemanticRecord {
+        label: Cow::Borrowed(&label),
+        payloads: [Cow::Owned(owned)],
+    }
+    .into_owned();
+    drop(label);
+    assert_eq!(detached.label, "borrowed label");
+    assert!(matches!(detached.label, Cow::Owned(_)));
+    assert_eq!(detached.payloads[0].as_ptr(), allocation);
+}
+
+#[test]
+fn semantic_detachment_recurses_without_a_self_referential_trait_bound() {
+    let value = "leaf".to_owned();
+    let detached: SemanticTree<'static> =
+        SemanticTree::Branch(vec![SemanticTree::Leaf(Cow::Borrowed(&value))]).into_owned();
+    drop(value);
+    let SemanticTree::Branch(children) = detached else {
+        panic!("branch expected")
+    };
+    assert!(matches!(&children[0], SemanticTree::Leaf(Cow::Owned(value)) if value == "leaf"));
+}
 
 #[derive(Clone, Debug, Ownership)]
 struct Record<'data, T: AsULE, const N: usize> {

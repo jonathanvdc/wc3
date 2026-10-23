@@ -119,6 +119,7 @@ pub use texture_transform::*;
 pub mod systems;
 pub use systems::{ModelMetadata, System, SystemMember, SystemPayload};
 mod graph;
+mod ownership;
 pub use graph::*;
 
 #[cfg(test)]

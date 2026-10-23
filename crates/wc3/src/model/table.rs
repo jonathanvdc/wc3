@@ -1,4 +1,5 @@
 //! Typed collections of independently identified graph objects.
+use super::common::Detached;
 use super::ids::Scope;
 use super::{Error, Id};
 use std::collections::{btree_map, BTreeMap};
@@ -42,6 +43,12 @@ impl<K, V: Debug> Debug for Table<K, V> {
     }
 }
 impl<K, V> Table<K, V> {
+    /// Transforms definitions without reallocating their graph identities.
+    pub(crate) fn map_values<U>(self, mut map: impl FnMut(V) -> U) -> Table<K, U> {
+        self.into_iter()
+            .map(|(id, value)| (id, map(value)))
+            .collect()
+    }
     /// Number of definitions in this collection.
     pub fn len(&self) -> usize {
         self.entries.len()
@@ -91,6 +98,12 @@ impl<K, V> Table<K, V> {
     }
     pub(crate) fn remove(&mut self, id: &Id<K>) -> Option<V> {
         self.entries.remove(id)
+    }
+}
+impl<'owned, K, V: Detached<'owned>> Detached<'owned> for Table<K, V> {
+    type Detached = Table<K, V::Detached>;
+    fn into_detached(self) -> Self::Detached {
+        self.map_values(Detached::into_detached)
     }
 }
 impl<K, V> FromIterator<(Id<K>, V)> for Table<K, V> {

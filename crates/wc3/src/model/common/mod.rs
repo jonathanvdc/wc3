@@ -24,7 +24,7 @@ pub use zerovec::{ule::AsULE, ZeroVec};
 
 pub mod binary;
 
-pub use wc3_derive::{CommonPartialEq, Ownership};
+pub use wc3_derive::{CommonPartialEq, IntoOwned, Ownership};
 
 mod io_error;
 pub use io_error::IoError;
