@@ -1,7 +1,9 @@
-//! Preparation-only comparison of exact-policy live reuse and weak-cache misses.
+//! Compare exact-policy live reuse in batches with single-call cold preparation.
 //! Run with `--features popcorn-jit --example particle_plan_bench -- [SAMPLES]`.
 //! Fixture parsing/graph compilation, wrapper cloning, report checks and drops
-//! are outside each prepare-only clock. No particle simulation is measured.
+//! are outside clocks. Hot clocks include Vec movement and loop work.
+//! Per-call estimates are batch totals divided by call count, not isolated calls.
+//! No particle simulation is measured.
 use md5::compute;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
@@ -105,6 +107,7 @@ fn verify(program: &EffectProgram, source: &EffectProgram, options: ExecutionOpt
     black_box(program.execution_reports());
 }
 struct Measurements {
+    calls: usize,
     times: Vec<u128>,
     allocations: Vec<[u64; 3]>,
 }
@@ -115,17 +118,22 @@ impl Measurements {
         sorted[(sorted.len() - 1) / 2]
     }
     fn report(&self, route: &str, case: &str) {
-        println!("{{\"kind\":\"result\",\"route\":\"{route}\",\"case\":\"{case}\",\"median_ns\":{},\"prepare_ns\":{:?},\"calling_thread_alloc_realloc_dealloc\":{:?}}}", self.median(), self.times, self.allocations);
+        let per_call: Vec<_> = self
+            .times
+            .iter()
+            .map(|&total| total as f64 / self.calls as f64)
+            .collect();
+        println!("{{\"kind\":\"result\",\"route\":\"{route}\",\"case\":\"{case}\",\"calls_per_sample\":{},\"total_median_ns\":{},\"total_ns\":{:?},\"estimated_median_ns_per_call\":{},\"estimated_ns_per_call\":{per_call:?},\"calling_thread_alloc_realloc_dealloc\":{:?}}}", self.calls, self.median(), self.times, self.median() as f64 / self.calls as f64, self.allocations);
     }
 }
-fn measure(
+fn measure_cold(
     request_source: &EffectProgram,
     graph_source: &EffectProgram,
     options: ExecutionOptions,
     samples: usize,
-    hot: bool,
 ) -> Measurements {
     let mut result = Measurements {
+        calls: 1,
         times: Vec::with_capacity(samples),
         allocations: Vec::with_capacity(samples),
     };
@@ -140,19 +148,61 @@ fn measure(
         let elapsed = begin.elapsed().as_nanos();
         let allocations = allocation_scope.finish();
         verify(&prepared, graph_source, options);
-        if hot {
-            assert_eq!(allocations, [0; 3], "live plan reuse must allocate nothing");
-        } else {
-            assert!(
-                allocations[0] > 0,
-                "cold preparation unexpectedly reused a live plan"
-            );
-        }
+        assert!(
+            allocations[0] > 0,
+            "cold preparation unexpectedly reused a live plan"
+        );
         result.times.push(elapsed);
         result.allocations.push(allocations);
         // Destruction is deliberately outside the prepare-only clock. In the
         // cold case no prepared wrapper/instance remains: the cache is weak.
         drop(prepared);
+    }
+    result
+}
+fn measure_hot(
+    request_source: &EffectProgram,
+    graph_source: &EffectProgram,
+    options: ExecutionOptions,
+    samples: usize,
+    calls: usize,
+) -> Measurements {
+    let mut result = Measurements {
+        calls,
+        times: Vec::with_capacity(samples),
+        allocations: Vec::with_capacity(samples),
+    };
+    for _ in 0..samples {
+        let mut requests: Vec<_> = (0..calls).map(|_| request_source.clone()).collect();
+        let mut prepared = Vec::with_capacity(calls);
+        black_box(&mut requests);
+        black_box(&mut prepared);
+        let options = black_box(options);
+        let allocation_scope = AllocationScope::begin();
+        let begin = Instant::now();
+        // drain keeps the input allocation resident: consuming a Vec iterator
+        // here would free it inside the measured interval. Output capacity is
+        // also reserved, keeping both backing allocations out of the clock.
+        for request in requests.drain(..) {
+            prepared.push(request.with_execution(options));
+        }
+        let elapsed = begin.elapsed().as_nanos();
+        let allocations = allocation_scope.finish();
+        assert_eq!(
+            allocations, [0; 3],
+            "live plan batches must allocate nothing"
+        );
+        assert_eq!(prepared.len(), calls);
+        assert!(requests.is_empty());
+        for program in &prepared {
+            verify(program, graph_source, options);
+        }
+        result.times.push(elapsed);
+        result.allocations.push(allocations);
+        // Both Vec allocations and all strong wrapper references are released
+        // after timing/observation. The caller retains the live prepared plan.
+        drop(prepared);
+        drop(requests);
     }
     result
 }
@@ -172,7 +222,7 @@ fn main() {
         source.execution_options().preference,
         ExecutionPreference::Interpreter
     );
-    println!("{{\"kind\":\"metadata\",\"crate_version\":\"{}\",\"os\":\"{OS}\",\"arch\":\"{ARCH}\",\"samples\":{samples},\"fixture\":\"tests/fixtures/pkb/immutable-128.pkb\",\"fixture_bytes\":{},\"fixture_md5\":\"{:x}\",\"source_md5\":\"{:x}\",\"allocation_scope\":\"calling thread, prepare only\",\"clock\":\"single prepare call; clone, observers and drop excluded\"}}", env!("CARGO_PKG_VERSION"), FIXTURE.len(), compute(FIXTURE), compute(include_bytes!("particle_plan_bench.rs")));
+    println!("{{\"kind\":\"metadata\",\"crate_version\":\"{}\",\"os\":\"{OS}\",\"arch\":\"{ARCH}\",\"samples\":{samples},\"fixture\":\"tests/fixtures/pkb/immutable-128.pkb\",\"fixture_bytes\":{},\"fixture_md5\":\"{:x}\",\"source_md5\":\"{:x}\",\"allocation_scope\":\"calling thread, prepare only\",\"hot_batch_sizes\":[1024,4096],\"clock\":\"cold one prepare call; hot batch includes Vec moves and loop; clones, observers and outer drops excluded; per-call values are estimates\"}}", env!("CARGO_PKG_VERSION"), FIXTURE.len(), compute(FIXTURE), compute(include_bytes!("particle_plan_bench.rs")));
     for (route, preference) in [
         ("scalar-jit", ExecutionPreference::ScalarJit),
         ("simd-jit", ExecutionPreference::Automatic),
@@ -187,11 +237,14 @@ fn main() {
         let warm = source.clone().with_execution(options);
         verify(&warm, &source, options);
         drop(warm);
-        measure(&source, &source, options, samples, false).report(route, "cold_prepare");
+        measure_cold(&source, &source, options, samples).report(route, "cold_prepare");
         let live = source.clone().with_execution(options);
         verify(&live, &source, options);
-        measure(&live, &source, options, samples, true).report(route, "same_wrapper");
-        measure(&source, &source, options, samples, true).report(route, "live_sibling_hit");
+        for calls in [1024, 4096] {
+            measure_hot(&live, &source, options, samples, calls).report(route, "same_wrapper");
+            measure_hot(&source, &source, options, samples, calls)
+                .report(route, "live_sibling_hit");
+        }
         drop(live);
     }
 }

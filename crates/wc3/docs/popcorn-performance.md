@@ -392,3 +392,60 @@ the full preserved manifest and frozen build/host receipts by path and SHA256.
 Its 94 guarded compiled inputs and measured binary match the build receipt.
 These are public workload results on this host, with no private VM-state,
 native-game fidelity, cross-engine or rendering-performance claim.
+
+## Plan preparation and live reuse, 2026-10-22
+
+Execution wrappers for one immutable graph can reuse a live plan prepared for
+exactly the same `ExecutionOptions`. A same-wrapper request returns its existing
+plan; a sibling wrapper can find a live exact-policy plan through the graph's
+weak cache. The cache does not keep executable code alive after its last owner
+drops. These are preparation paths, separate from particle advancement and field
+sampling.
+
+Reproduce the focused preparation workload with the maintained example:
+
+```sh
+cargo run -p wc3 --release --features popcorn-jit --example particle_plan_bench -- 15
+```
+
+The recorded run used the same original 128-child fixture, M4 Pro host, Rust
+1.98.1 and Graphics policy as the query study. Parsing and compiling its source
+graph occur before measurement. Each case has 15 samples. Cold requests prepare
+one plan per sample and drop it before the next request, leaving no strong cache
+owner. Their median preparation times were:
+
+| Preference | Cold single-call median |
+| --- | ---: |
+| ScalarJit | 1.664 ms |
+| Automatic | 2.645 ms |
+| ImmutableAge | 2.272 ms |
+
+Live cases hold a prepared owner throughout measurement. Their requests and
+output capacity are prepared before timing; options and inputs pass through
+`black_box`. Batches of 1,024 or 4,096 calls avoid treating a single-call timer
+quantum as an exact cost. Reported per-call values below divide the batch median
+by its call count. They include loop, Vec draining/push/movement and actual API
+work, including Arc operations. They are not isolated cache-lookup timings or
+timer-overhead subtractions.
+
+| Preference | Calls per sample | Same-wrapper estimate | Live sibling estimate |
+| --- | ---: | ---: | ---: |
+| ScalarJit | 1024 | 2.40 ns/call | 7.32 ns/call |
+| ScalarJit | 4096 | 3.01 ns/call | 7.50 ns/call |
+| Automatic | 1024 | 2.77 ns/call | 7.36 ns/call |
+| Automatic | 4096 | 2.93 ns/call | 7.36 ns/call |
+| ImmutableAge | 1024 | 2.65 ns/call | 7.24 ns/call |
+| ImmutableAge | 4096 | 2.87 ns/call | 7.71 ns/call |
+
+All 180 hot batch samples made zero calling-thread allocation, reallocation and
+deallocation calls, covering 460,800 requests. Each of the 45 cold samples made
+real allocations. Wrapper cloning, report checks and outer wrapper/Vec destruction
+are excluded equally; cold preparation can include cleaning an expired weak
+entry. Requested backend reports and exact options were checked after each call.
+No particle programme was executed in these clocks.
+
+The [preparation record](../benches/results/popcorn-plan-preparation-2026-10-22.json)
+preserves raw totals, medians, batch sizes, per-call estimates, allocator rows and
+frozen source/fixture/binary/host receipts. This was one fixed-order run, not a
+paired arithmetic-throughput or rendered-frame comparison. Earlier coarse
+single-call hot timings were timer-quantized and are excluded from this record.

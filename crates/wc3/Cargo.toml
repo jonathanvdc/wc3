@@ -96,3 +96,7 @@ required-features = ["popcorn-jit"]
 [[example]]
 name = "particle_immutable_bench"
 required-features = ["popcorn-jit"]
+
+[[example]]
+name = "particle_plan_bench"
+required-features = ["popcorn-jit"]

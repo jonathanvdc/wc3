@@ -1,0 +1,2037 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-22",
+  "stage": "exact-policy plan preparation and live reuse",
+  "status": "complete_expected_rows_and_client_admission_verified",
+  "measurement": true,
+  "evidence": {
+    "raw_results": {
+      "path": "/private/tmp/wc3-specialization-release-02/plan-preparation.jsonl",
+      "bytes": 11381,
+      "sha256": "386ca1dd0ba62144ce33ca71566ccd8f3c37949afbc871c2b8797ee5da894880"
+    },
+    "stderr": {
+      "path": "/private/tmp/wc3-specialization-release-02/plan-preparation.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "build_receipt": {
+      "path": "/private/tmp/wc3-specialization-release-02/build-receipt.json",
+      "bytes": 98526,
+      "sha256": "7d5819a0376774dc3d79a50b122fd66901774298c8687d75cbc50a2b600c7144"
+    },
+    "host_receipt": {
+      "path": "/private/tmp/wc3-specialization-release-02/host.json",
+      "bytes": 306,
+      "sha256": "efb9b9d6956bb50fe4317c007c80135b9daafe801b430349e49ebd50b87edcd9"
+    }
+  },
+  "host": {
+    "os": "ProductName:\t\tmacOS\nProductVersion:\t\t27.0.1\nBuildVersion:\t\t26A434",
+    "cpu": "Apple M4 Pro",
+    "memory_bytes": 25769803776,
+    "logical_cpus": 14,
+    "gpu": [
+      {
+        "sppci_model": "Apple M4 Pro",
+        "spdisplays_vendor": "sppci_vendor_Apple",
+        "sppci_cores": "20"
+      }
+    ]
+  },
+  "build": {
+    "status": "built_and_frozen",
+    "command": [
+      "/opt/homebrew/Cellar/rust/1.98.1/bin/cargo",
+      "build",
+      "--release",
+      "-p",
+      "bevy-wc3",
+      "-p",
+      "wc3",
+      "--features",
+      "bevy-wc3/popcorn-jit",
+      "--example",
+      "capture",
+      "--example",
+      "particle_immutable_bench",
+      "--example",
+      "particle_plan_bench",
+      "--example",
+      "particle_specialization_audit"
+    ],
+    "environment": {
+      "RUSTC": "/opt/homebrew/Cellar/rust/1.98.1/bin/rustc",
+      "SDKROOT": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "CARGO_INCREMENTAL": "0",
+      "CARGO_BUILD_JOBS": "1",
+      "CARGO_PROFILE_RELEASE_DEBUG": "0"
+    },
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01) (Homebrew)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: aarch64-apple-darwin\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05) (Homebrew)\n",
+    "head": "b74751a4006007feff3d1df1534eb863d0852022",
+    "sources_unchanged": true,
+    "elapsed_seconds": 207.33400416374207,
+    "source_scope": "frozen working tree; HEAD alone does not identify uncommitted sources",
+    "compiled_source_receipt_count": 807,
+    "measured_binary": {
+      "path": "/private/tmp/wc3-specialization-release-02/particle_plan_bench",
+      "sha256": "1bd4970d4b0c3c50eec9b802d15c4d4c7e79c8c36effbba2cbabe601cdd9e44f",
+      "bytes": 3570016
+    },
+    "verified_input_sha256": {
+      "crates/wc3/examples/particle_plan_bench.rs": "37bccdf8a78e646c180f9d365c5ce35bffc87f7a84fe66534e5d6a29b5ff9615",
+      "crates/wc3/tests/fixtures/pkb/immutable-128.pkb": "354180f78de74775d6f803d8f68840bdba436335f672c832a76d58e18a1a79e3"
+    },
+    "cargo_lock_sha256": "5bceb5302df3172c0a6d4030609a596c0e460dabc54d43f106cde8a0187d5005"
+  },
+  "protocol": {
+    "samples_per_case": 15,
+    "routes": [
+      "ScalarJit",
+      "Automatic",
+      "ImmutableAge"
+    ],
+    "numeric_policy": "Graphics",
+    "fixture_children": 128,
+    "cold_calls_per_sample": 1,
+    "hot_batch_calls": [
+      1024,
+      4096
+    ],
+    "ordering": "one run, fixed route/case order; no randomized or paired cold/hot speedup claim",
+    "same_wrapper": "source already owns exactly requested execution options, taking with_execution fast return",
+    "live_sibling_hit": "request clones ordinary Interpreter wrapper while another wrapper keeps the exact requested plan alive",
+    "cold_prepare": "request clones ordinary Interpreter wrapper; no requested-plan strong owner survives between samples; weak cache may clean an expired entry",
+    "included_hot": "with_execution, loop and Vec draining/push/movement; inputs/options black-boxed before clock",
+    "excluded": "source document parsing, graph compilation, request cloning, vector reservation, report validation and outer vector/wrapper destruction",
+    "allocation_scope": "calling-thread allocator counts across timed call/batch; hot alloc/realloc/dealloc all zero",
+    "admission": "client verifies exact requested options, programme identity and expected real native/immutable preparation reports with no fallback; no particle execution is measured",
+    "estimates": "batch total divided by calls; not an isolated lookup, timer-overhead subtraction or arithmetic speedup",
+    "excluded_experiment": "release-01 coarse single-call hot timings were timer-quantized and are not used"
+  },
+  "client_metadata": {
+    "kind": "metadata",
+    "crate_version": "0.3.0",
+    "os": "macos",
+    "arch": "aarch64",
+    "samples": 15,
+    "fixture": "tests/fixtures/pkb/immutable-128.pkb",
+    "fixture_bytes": 8241,
+    "fixture_md5": "68a98045e0503b3aa821bf3bd267c4f5",
+    "source_md5": "33aca8d48479add785da0f5a8c4d4b70",
+    "allocation_scope": "calling thread, prepare only",
+    "hot_batch_sizes": [
+      1024,
+      4096
+    ],
+    "clock": "cold one prepare call; hot batch includes Vec moves and loop; clones, observers and outer drops excluded; per-call values are estimates"
+  },
+  "results": [
+    {
+      "kind": "result",
+      "route": "scalar-jit",
+      "case": "cold_prepare",
+      "calls_per_sample": 1,
+      "total_median_ns": 1663791,
+      "total_ns": [
+        1663791,
+        2554833,
+        2921958,
+        2509208,
+        1697500,
+        2417500,
+        2205750,
+        1937541,
+        1557583,
+        1408000,
+        1624416,
+        1505625,
+        1577791,
+        1533792,
+        1416708
+      ],
+      "estimated_median_ns_per_call": 1663791,
+      "estimated_ns_per_call": [
+        1663791.0,
+        2554833.0,
+        2921958.0,
+        2509208.0,
+        1697500.0,
+        2417500.0,
+        2205750.0,
+        1937541.0,
+        1557583.0,
+        1408000.0,
+        1624416.0,
+        1505625.0,
+        1577791.0,
+        1533792.0,
+        1416708.0
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          2784,
+          662,
+          2755
+        ],
+        [
+          2784,
+          662,
+          2755
+        ],
+        [
+          2784,
+          662,
+          2755
+        ],
+        [
+          2784,
+          662,
+          2755
+        ],
+        [
+          2784,
+          662,
+          2755
+        ],
+        [
+          2784,
+          662,
+          2755
+        ],
+        [
+          2784,
+          662,
+          2755
+        ],
+        [
+          2784,
+          662,
+          2755
+        ],
+        [
+          2784,
+          662,
+          2755
+        ],
+        [
+          2784,
+          662,
+          2755
+        ],
+        [
+          2784,
+          662,
+          2755
+        ],
+        [
+          2784,
+          662,
+          2755
+        ],
+        [
+          2784,
+          662,
+          2755
+        ],
+        [
+          2784,
+          662,
+          2755
+        ],
+        [
+          2784,
+          662,
+          2755
+        ]
+      ]
+    },
+    {
+      "kind": "result",
+      "route": "scalar-jit",
+      "case": "same_wrapper",
+      "calls_per_sample": 1024,
+      "total_median_ns": 2459,
+      "total_ns": [
+        3916,
+        2667,
+        2417,
+        2459,
+        2459,
+        2583,
+        2375,
+        2417,
+        2500,
+        2333,
+        2375,
+        2709,
+        2333,
+        2458,
+        2500
+      ],
+      "estimated_median_ns_per_call": 2.4013671875,
+      "estimated_ns_per_call": [
+        3.82421875,
+        2.6044921875,
+        2.3603515625,
+        2.4013671875,
+        2.4013671875,
+        2.5224609375,
+        2.3193359375,
+        2.3603515625,
+        2.44140625,
+        2.2783203125,
+        2.3193359375,
+        2.6455078125,
+        2.2783203125,
+        2.400390625,
+        2.44140625
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "result",
+      "route": "scalar-jit",
+      "case": "live_sibling_hit",
+      "calls_per_sample": 1024,
+      "total_median_ns": 7500,
+      "total_ns": [
+        8417,
+        7500,
+        7458,
+        7500,
+        7500,
+        8250,
+        7458,
+        7500,
+        7583,
+        7416,
+        7458,
+        7625,
+        7500,
+        7500,
+        7458
+      ],
+      "estimated_median_ns_per_call": 7.32421875,
+      "estimated_ns_per_call": [
+        8.2197265625,
+        7.32421875,
+        7.283203125,
+        7.32421875,
+        7.32421875,
+        8.056640625,
+        7.283203125,
+        7.32421875,
+        7.4052734375,
+        7.2421875,
+        7.283203125,
+        7.4462890625,
+        7.32421875,
+        7.32421875,
+        7.283203125
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "result",
+      "route": "scalar-jit",
+      "case": "same_wrapper",
+      "calls_per_sample": 4096,
+      "total_median_ns": 12334,
+      "total_ns": [
+        12334,
+        11833,
+        11916,
+        13958,
+        15166,
+        14416,
+        12209,
+        13916,
+        11667,
+        15416,
+        15125,
+        11959,
+        12042,
+        12166,
+        15250
+      ],
+      "estimated_median_ns_per_call": 3.01123046875,
+      "estimated_ns_per_call": [
+        3.01123046875,
+        2.888916015625,
+        2.9091796875,
+        3.40771484375,
+        3.70263671875,
+        3.51953125,
+        2.980712890625,
+        3.3974609375,
+        2.848388671875,
+        3.763671875,
+        3.692626953125,
+        2.919677734375,
+        2.93994140625,
+        2.97021484375,
+        3.72314453125
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "result",
+      "route": "scalar-jit",
+      "case": "live_sibling_hit",
+      "calls_per_sample": 4096,
+      "total_median_ns": 30709,
+      "total_ns": [
+        30917,
+        30709,
+        35417,
+        30667,
+        33792,
+        37833,
+        30584,
+        30166,
+        30000,
+        30917,
+        30791,
+        30042,
+        30917,
+        30709,
+        30042
+      ],
+      "estimated_median_ns_per_call": 7.497314453125,
+      "estimated_ns_per_call": [
+        7.548095703125,
+        7.497314453125,
+        8.646728515625,
+        7.487060546875,
+        8.25,
+        9.236572265625,
+        7.466796875,
+        7.36474609375,
+        7.32421875,
+        7.548095703125,
+        7.517333984375,
+        7.33447265625,
+        7.548095703125,
+        7.497314453125,
+        7.33447265625
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "result",
+      "route": "simd-jit",
+      "case": "cold_prepare",
+      "calls_per_sample": 1,
+      "total_median_ns": 2644708,
+      "total_ns": [
+        2902166,
+        2605500,
+        2487875,
+        2475833,
+        2457916,
+        2599084,
+        2804625,
+        2637500,
+        2742333,
+        2709583,
+        2793625,
+        3007417,
+        2855750,
+        2644708,
+        2478833
+      ],
+      "estimated_median_ns_per_call": 2644708,
+      "estimated_ns_per_call": [
+        2902166.0,
+        2605500.0,
+        2487875.0,
+        2475833.0,
+        2457916.0,
+        2599084.0,
+        2804625.0,
+        2637500.0,
+        2742333.0,
+        2709583.0,
+        2793625.0,
+        3007417.0,
+        2855750.0,
+        2644708.0,
+        2478833.0
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          3170,
+          776,
+          3137
+        ],
+        [
+          3170,
+          776,
+          3137
+        ],
+        [
+          3170,
+          776,
+          3137
+        ],
+        [
+          3170,
+          776,
+          3137
+        ],
+        [
+          3170,
+          776,
+          3137
+        ],
+        [
+          3170,
+          776,
+          3137
+        ],
+        [
+          3170,
+          776,
+          3137
+        ],
+        [
+          3170,
+          776,
+          3137
+        ],
+        [
+          3170,
+          776,
+          3137
+        ],
+        [
+          3170,
+          776,
+          3137
+        ],
+        [
+          3170,
+          776,
+          3137
+        ],
+        [
+          3170,
+          776,
+          3137
+        ],
+        [
+          3170,
+          776,
+          3137
+        ],
+        [
+          3170,
+          776,
+          3137
+        ],
+        [
+          3170,
+          776,
+          3137
+        ]
+      ]
+    },
+    {
+      "kind": "result",
+      "route": "simd-jit",
+      "case": "same_wrapper",
+      "calls_per_sample": 1024,
+      "total_median_ns": 2833,
+      "total_ns": [
+        3250,
+        2833,
+        2667,
+        2750,
+        2750,
+        2833,
+        2666,
+        2750,
+        2666,
+        2667,
+        2833,
+        2875,
+        2833,
+        2875,
+        2916
+      ],
+      "estimated_median_ns_per_call": 2.7666015625,
+      "estimated_ns_per_call": [
+        3.173828125,
+        2.7666015625,
+        2.6044921875,
+        2.685546875,
+        2.685546875,
+        2.7666015625,
+        2.603515625,
+        2.685546875,
+        2.603515625,
+        2.6044921875,
+        2.7666015625,
+        2.8076171875,
+        2.7666015625,
+        2.8076171875,
+        2.84765625
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "result",
+      "route": "simd-jit",
+      "case": "live_sibling_hit",
+      "calls_per_sample": 1024,
+      "total_median_ns": 7541,
+      "total_ns": [
+        7750,
+        7625,
+        7583,
+        7458,
+        7458,
+        7541,
+        7542,
+        7500,
+        7458,
+        7541,
+        7459,
+        7417,
+        7584,
+        7542,
+        7458
+      ],
+      "estimated_median_ns_per_call": 7.3642578125,
+      "estimated_ns_per_call": [
+        7.568359375,
+        7.4462890625,
+        7.4052734375,
+        7.283203125,
+        7.283203125,
+        7.3642578125,
+        7.365234375,
+        7.32421875,
+        7.283203125,
+        7.3642578125,
+        7.2841796875,
+        7.2431640625,
+        7.40625,
+        7.365234375,
+        7.283203125
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "result",
+      "route": "simd-jit",
+      "case": "same_wrapper",
+      "calls_per_sample": 4096,
+      "total_median_ns": 12000,
+      "total_ns": [
+        12084,
+        11709,
+        12000,
+        11958,
+        11958,
+        12042,
+        12042,
+        11500,
+        12250,
+        11750,
+        11625,
+        12167,
+        12167,
+        12209,
+        11834
+      ],
+      "estimated_median_ns_per_call": 2.9296875,
+      "estimated_ns_per_call": [
+        2.9501953125,
+        2.858642578125,
+        2.9296875,
+        2.91943359375,
+        2.91943359375,
+        2.93994140625,
+        2.93994140625,
+        2.8076171875,
+        2.99072265625,
+        2.86865234375,
+        2.838134765625,
+        2.970458984375,
+        2.970458984375,
+        2.980712890625,
+        2.88916015625
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "result",
+      "route": "simd-jit",
+      "case": "live_sibling_hit",
+      "calls_per_sample": 4096,
+      "total_median_ns": 30166,
+      "total_ns": [
+        30167,
+        30084,
+        30375,
+        30166,
+        30250,
+        30250,
+        30083,
+        30167,
+        32125,
+        30166,
+        30125,
+        29875,
+        29791,
+        29625,
+        29750
+      ],
+      "estimated_median_ns_per_call": 7.36474609375,
+      "estimated_ns_per_call": [
+        7.364990234375,
+        7.3447265625,
+        7.415771484375,
+        7.36474609375,
+        7.38525390625,
+        7.38525390625,
+        7.344482421875,
+        7.364990234375,
+        7.843017578125,
+        7.36474609375,
+        7.354736328125,
+        7.293701171875,
+        7.273193359375,
+        7.232666015625,
+        7.26318359375
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "result",
+      "route": "immutable-age",
+      "case": "cold_prepare",
+      "calls_per_sample": 1,
+      "total_median_ns": 2271958,
+      "total_ns": [
+        2299708,
+        2271958,
+        2257042,
+        2911834,
+        2422500,
+        2243458,
+        2224959,
+        2629042,
+        2478708,
+        2222667,
+        2218958,
+        2631334,
+        2372208,
+        2263291,
+        2223250
+      ],
+      "estimated_median_ns_per_call": 2271958,
+      "estimated_ns_per_call": [
+        2299708.0,
+        2271958.0,
+        2257042.0,
+        2911834.0,
+        2422500.0,
+        2243458.0,
+        2224959.0,
+        2629042.0,
+        2478708.0,
+        2222667.0,
+        2218958.0,
+        2631334.0,
+        2372208.0,
+        2263291.0,
+        2223250.0
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          3183,
+          787,
+          3144
+        ],
+        [
+          3183,
+          787,
+          3144
+        ],
+        [
+          3183,
+          787,
+          3144
+        ],
+        [
+          3183,
+          787,
+          3144
+        ],
+        [
+          3183,
+          787,
+          3144
+        ],
+        [
+          3183,
+          787,
+          3144
+        ],
+        [
+          3183,
+          787,
+          3144
+        ],
+        [
+          3183,
+          787,
+          3144
+        ],
+        [
+          3183,
+          787,
+          3144
+        ],
+        [
+          3183,
+          787,
+          3144
+        ],
+        [
+          3183,
+          787,
+          3144
+        ],
+        [
+          3183,
+          787,
+          3144
+        ],
+        [
+          3183,
+          787,
+          3144
+        ],
+        [
+          3183,
+          787,
+          3144
+        ],
+        [
+          3183,
+          787,
+          3144
+        ]
+      ]
+    },
+    {
+      "kind": "result",
+      "route": "immutable-age",
+      "case": "same_wrapper",
+      "calls_per_sample": 1024,
+      "total_median_ns": 2709,
+      "total_ns": [
+        3083,
+        2792,
+        2666,
+        2708,
+        2709,
+        2708,
+        2667,
+        2666,
+        2792,
+        2625,
+        2667,
+        2750,
+        2917,
+        2834,
+        2875
+      ],
+      "estimated_median_ns_per_call": 2.6455078125,
+      "estimated_ns_per_call": [
+        3.0107421875,
+        2.7265625,
+        2.603515625,
+        2.64453125,
+        2.6455078125,
+        2.64453125,
+        2.6044921875,
+        2.603515625,
+        2.7265625,
+        2.5634765625,
+        2.6044921875,
+        2.685546875,
+        2.8486328125,
+        2.767578125,
+        2.8076171875
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "result",
+      "route": "immutable-age",
+      "case": "live_sibling_hit",
+      "calls_per_sample": 1024,
+      "total_median_ns": 7416,
+      "total_ns": [
+        7542,
+        7541,
+        7375,
+        7375,
+        7417,
+        7375,
+        7417,
+        7375,
+        7458,
+        7458,
+        7375,
+        7375,
+        7375,
+        7416,
+        7500
+      ],
+      "estimated_median_ns_per_call": 7.2421875,
+      "estimated_ns_per_call": [
+        7.365234375,
+        7.3642578125,
+        7.2021484375,
+        7.2021484375,
+        7.2431640625,
+        7.2021484375,
+        7.2431640625,
+        7.2021484375,
+        7.283203125,
+        7.283203125,
+        7.2021484375,
+        7.2021484375,
+        7.2021484375,
+        7.2421875,
+        7.32421875
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "result",
+      "route": "immutable-age",
+      "case": "same_wrapper",
+      "calls_per_sample": 4096,
+      "total_median_ns": 11750,
+      "total_ns": [
+        12292,
+        11625,
+        11792,
+        11917,
+        11583,
+        11875,
+        11791,
+        11708,
+        11833,
+        11625,
+        11791,
+        11708,
+        11625,
+        11750,
+        11625
+      ],
+      "estimated_median_ns_per_call": 2.86865234375,
+      "estimated_ns_per_call": [
+        3.0009765625,
+        2.838134765625,
+        2.87890625,
+        2.909423828125,
+        2.827880859375,
+        2.899169921875,
+        2.878662109375,
+        2.8583984375,
+        2.888916015625,
+        2.838134765625,
+        2.878662109375,
+        2.8583984375,
+        2.838134765625,
+        2.86865234375,
+        2.838134765625
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "result",
+      "route": "immutable-age",
+      "case": "live_sibling_hit",
+      "calls_per_sample": 4096,
+      "total_median_ns": 31583,
+      "total_ns": [
+        30042,
+        29792,
+        32792,
+        32917,
+        30458,
+        34167,
+        31583,
+        31875,
+        35125,
+        37167,
+        35125,
+        30959,
+        30750,
+        29709,
+        29792
+      ],
+      "estimated_median_ns_per_call": 7.710693359375,
+      "estimated_ns_per_call": [
+        7.33447265625,
+        7.2734375,
+        8.005859375,
+        8.036376953125,
+        7.43603515625,
+        8.341552734375,
+        7.710693359375,
+        7.781982421875,
+        8.575439453125,
+        9.073974609375,
+        8.575439453125,
+        7.558349609375,
+        7.50732421875,
+        7.253173828125,
+        7.2734375
+      ],
+      "calling_thread_alloc_realloc_dealloc": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    }
+  ],
+  "summaries": [
+    {
+      "route": "scalar-jit",
+      "cold_single_call_median_ns": 1663791,
+      "cold_alloc_realloc_dealloc_per_call": [
+        2784,
+        662,
+        2755
+      ],
+      "cold_allocation_counts_constant_across_samples": true,
+      "hot_batches": [
+        {
+          "case": "same_wrapper",
+          "calls_per_sample": 1024,
+          "total_median_ns": 2459,
+          "estimated_median_ns_per_call": 2.4013671875
+        },
+        {
+          "case": "live_sibling_hit",
+          "calls_per_sample": 1024,
+          "total_median_ns": 7500,
+          "estimated_median_ns_per_call": 7.32421875
+        },
+        {
+          "case": "same_wrapper",
+          "calls_per_sample": 4096,
+          "total_median_ns": 12334,
+          "estimated_median_ns_per_call": 3.01123046875
+        },
+        {
+          "case": "live_sibling_hit",
+          "calls_per_sample": 4096,
+          "total_median_ns": 30709,
+          "estimated_median_ns_per_call": 7.497314453125
+        }
+      ]
+    },
+    {
+      "route": "simd-jit",
+      "cold_single_call_median_ns": 2644708,
+      "cold_alloc_realloc_dealloc_per_call": [
+        3170,
+        776,
+        3137
+      ],
+      "cold_allocation_counts_constant_across_samples": true,
+      "hot_batches": [
+        {
+          "case": "same_wrapper",
+          "calls_per_sample": 1024,
+          "total_median_ns": 2833,
+          "estimated_median_ns_per_call": 2.7666015625
+        },
+        {
+          "case": "live_sibling_hit",
+          "calls_per_sample": 1024,
+          "total_median_ns": 7541,
+          "estimated_median_ns_per_call": 7.3642578125
+        },
+        {
+          "case": "same_wrapper",
+          "calls_per_sample": 4096,
+          "total_median_ns": 12000,
+          "estimated_median_ns_per_call": 2.9296875
+        },
+        {
+          "case": "live_sibling_hit",
+          "calls_per_sample": 4096,
+          "total_median_ns": 30166,
+          "estimated_median_ns_per_call": 7.36474609375
+        }
+      ]
+    },
+    {
+      "route": "immutable-age",
+      "cold_single_call_median_ns": 2271958,
+      "cold_alloc_realloc_dealloc_per_call": [
+        3183,
+        787,
+        3144
+      ],
+      "cold_allocation_counts_constant_across_samples": true,
+      "hot_batches": [
+        {
+          "case": "same_wrapper",
+          "calls_per_sample": 1024,
+          "total_median_ns": 2709,
+          "estimated_median_ns_per_call": 2.6455078125
+        },
+        {
+          "case": "live_sibling_hit",
+          "calls_per_sample": 1024,
+          "total_median_ns": 7416,
+          "estimated_median_ns_per_call": 7.2421875
+        },
+        {
+          "case": "same_wrapper",
+          "calls_per_sample": 4096,
+          "total_median_ns": 11750,
+          "estimated_median_ns_per_call": 2.86865234375
+        },
+        {
+          "case": "live_sibling_hit",
+          "calls_per_sample": 4096,
+          "total_median_ns": 31583,
+          "estimated_median_ns_per_call": 7.710693359375
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "cold_samples": 45,
+    "hot_batch_samples": 180,
+    "hot_measured_calls": 460800,
+    "cold_samples_each_allocate": true,
+    "all_hot_allocator_rows_zero": true,
+    "medians_and_estimates_recomputed": true,
+    "source_fixture_and_binary_match_build_receipt": true,
+    "stderr_empty": true
+  }
+}
