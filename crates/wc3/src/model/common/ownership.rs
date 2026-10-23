@@ -97,8 +97,34 @@ impl<'owned> Detached<'owned> for Cow<'_, str> {
     }
 }
 
-/// Internal ownership conversion preserving an explicitly selected buffer lifetime.
-#[doc(hidden)]
+/// Converts component storage to an explicitly selected buffer lifetime.
+///
+/// This is the extension contract behind [`IntoOwned`]. Implementations copy
+/// borrowed buffers and move owned buffers while preserving authored values and
+/// identities. A custom profile payload `Payload<'data>` maps to
+/// `Payload<'owned>`; a generic container maps each component that can borrow.
+/// Implementing `Detached<'static>` also provides the blanket `IntoOwned` impl.
+/// The resulting type can retain unchanged generic parameters; the profile's
+/// exact payload-family bounds enforce the owned model's storage lifetime.
+///
+/// ```
+/// use std::borrow::Cow;
+/// use wc3::model::common::{Detached, IntoOwned};
+///
+/// struct Wrapper<T>(T);
+/// impl<'owned, T: Detached<'owned>> Detached<'owned> for Wrapper<T> {
+///     type Detached = Wrapper<T::Detached>;
+///     fn into_detached(self) -> Self::Detached {
+///         Wrapper(self.0.into_detached())
+///     }
+/// }
+///
+/// let source = vec![1_u8, 2, 3];
+/// let view = Wrapper(Cow::Borrowed(source.as_slice()));
+/// let owned: Wrapper<Cow<'static, [u8]>> = view.into_owned();
+/// drop(source);
+/// assert_eq!(owned.0.as_ref(), &[1, 2, 3]);
+/// ```
 pub trait Detached<'owned> {
     /// Detached record type.
     type Detached;
