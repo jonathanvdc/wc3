@@ -2736,3 +2736,88 @@ fn illumination_arity_checks_preserve_unresolved_payloads_and_constant_programme
         assert_eq!(value.textures, textures);
     }
 }
+
+#[test]
+fn compatibility_alias_keeps_unknown_native_routes_and_nonidentity_third_transform() {
+    for selector in [0x801e, 0x801f] {
+        let source = material_routes(selector, 3);
+        let imported = io::m2::import(&source, &ImportOptions::default())
+            .unwrap()
+            .value;
+        let step = &imported.materials().iter().next().unwrap().1.surface.steps[0];
+        let mp::MaterialStep::Unresolved(retained) = step else {
+            panic!("retain unknown native selector");
+        };
+        assert_eq!(retained.shader, selector);
+        assert_eq!(
+            retained
+                .textures
+                .iter()
+                .map(|unit| unit.coordinates.source)
+                .collect::<Vec<_>>(),
+            [7, 7, 7]
+        );
+        let third = &retained.textures[2].coordinates.transform;
+        let third_translation = third.translation;
+        assert!(imported.is_animated(third_translation));
+        let mut slots = SlotValues::default();
+        let program = sm::AnimationProgram::compile(&imported);
+        let sample = program
+            .sample(sm::AnimationSample {
+                shared_time: sm::Time::seconds(0.5).unwrap(),
+                ..SlotConstruct::construct(&mut slots)
+            })
+            .unwrap();
+        assert_eq!(sample.animated(&third_translation), Vec3::new(30., 0., 0.));
+        let compatibility = retained.compatibility_equation().unwrap();
+        assert_eq!(
+            compatibility
+                .inputs()
+                .iter()
+                .map(|unit| unit.coordinates.source)
+                .collect::<Vec<_>>(),
+            [0, 1, 0]
+        );
+        assert_eq!(compatibility.inputs()[2].coordinates.transform, *third);
+        let universal = imported.widen::<sm::profiles::Universal>();
+        let imported = universal.try_narrow::<sm::profiles::M2>().unwrap();
+        let exported = io::m2::plan::<m2::Chunked<m2::V274>>(&imported, &ExportOptions::default())
+            .unwrap()
+            .execute()
+            .value;
+        assert_eq!(
+            exported.skin(0, false).unwrap().profile.batches[0].shader_id,
+            selector
+        );
+        let bytes = exported.encode().unwrap();
+        let decoded = m2::Bundle::<m2::Chunked<m2::V274>>::decode(
+            &bytes.model,
+            m2::FileKey::Root,
+            |dependency| Ok(bytes.files.get(&dependency.key).map(Vec::as_slice)),
+        )
+        .unwrap();
+        let reread = io::m2::import(&decoded, &ImportOptions::default())
+            .unwrap()
+            .value;
+        let step = &reread.materials().iter().next().unwrap().1.surface.steps[0];
+        assert_eq!(step.native_shader(), selector);
+        assert_eq!(
+            step.inputs()
+                .iter()
+                .map(|unit| unit.coordinates.source)
+                .collect::<Vec<_>>(),
+            [7, 7, 7]
+        );
+        let program = sm::AnimationProgram::compile(&reread);
+        let sample = program
+            .sample(sm::AnimationSample {
+                shared_time: sm::Time::seconds(0.5).unwrap(),
+                ..SlotConstruct::construct(&mut slots)
+            })
+            .unwrap();
+        assert_eq!(
+            sample.animated(&step.inputs()[2].coordinates.transform.translation),
+            Vec3::new(30., 0., 0.)
+        );
+    }
+}

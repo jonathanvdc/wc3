@@ -344,3 +344,94 @@ fn illumination_keeps_diffuse_opacity_weights_and_uv_transforms_independent() {
         "emission weights are not saturated"
     );
 }
+
+#[test]
+fn compatibility_aliases_use_independent_transforms_and_raw_third_uv0() {
+    let mut values = SlotValues::default();
+    for selector in [0x801e, 0x801f] {
+        // These raw unresolved sources deliberately disagree with the chosen
+        // compatibility coordinates. The authored payload must remain intact.
+        let mut shader = surface(&mut values, selector, &[7, 8, 9]);
+        for (slot, input) in shader.textures.iter_mut().enumerate() {
+            input.coordinates.transform.translation =
+                values.add(Vec3::new(0.125 * (slot + 1) as f32, 0.25, 0.));
+        }
+        let retained = shader.clone();
+        let pass = compile(&shader, &values);
+        assert_eq!(pass.state.combiner.mode.x, 19);
+        assert_eq!(pass.coordinate, 0);
+        assert_eq!(pass.secondary_coordinate, Some(1));
+        assert_eq!(pass.third_coordinate, None);
+        assert_eq!(pass.state.combiner.coordinates.w, 0);
+        assert_ne!(
+            Mat3::from(pass.material.uv_transform),
+            pass.state.combiner.uv_transform
+        );
+        assert_eq!(pass.state.combiner.third_transform, Mat3::IDENTITY);
+        assert!(pass.animation.transform.is_some());
+        assert!(pass.animation.secondary_transform.is_some());
+        assert!(pass.animation.third_transform.is_none());
+        assert!((pass.material.base_color.alpha() - 0.2).abs() < 1e-6);
+        assert!(pass
+            .diagnostics
+            .iter()
+            .any(|issue| issue.kind == RenderDiagnosticKind::Unverified
+                && issue.message.contains(&format!("{selector:#06x}"))));
+        assert!(!pass
+            .diagnostics
+            .iter()
+            .any(|issue| issue.kind == RenderDiagnosticKind::Unsupported));
+        assert_eq!(shader.shader, retained.shader);
+        assert_eq!(shader.textures, retained.textures);
+    }
+    for (selector, sources) in [
+        (0x801e, vec![0, 1]),
+        (0x801f, vec![0, 1, 0, 0]),
+        (0x8024, vec![0, 1, 0]),
+    ] {
+        let shader = surface(&mut values, selector, &sources);
+        let pass = compile(&shader, &values);
+        assert_eq!(pass.state.combiner.mode.x, 0);
+        assert!(pass.diagnostics.iter().any(|issue| {
+            issue.kind == RenderDiagnosticKind::Approximation
+                && issue.message.contains("approximated by its first input")
+        }));
+        assert!(!pass
+            .diagnostics
+            .iter()
+            .any(|issue| issue.message.contains("compatibility approximation")));
+    }
+}
+
+#[test]
+fn double_interpolation_separates_tinted_diffuse_and_untinted_replacement() {
+    // Independent algebra oracle. The selected controls distinguish both the
+    // previous interpolation order and tinting of the replacement contribution.
+    let a = Vec4::new(0.8, 0.4, 0.2, 0.25);
+    let b = Vec4::new(0.1, 0.3, 0.6, 0.9);
+    let d = Vec4::new(0.2, 0.5, 0.9, 0.6);
+    let tint = Vec4::new(0.25, 0.5, 0.75, 0.8);
+    let secondary = (2. * b.truncate()).lerp(Vec3::ONE, a.w);
+    let diffuse = a.truncate() * secondary * (1. - d.w);
+    let emission = d.truncate() * d.w;
+    let expected = tint.truncate() * diffuse + emission;
+    assert!(
+        (expected - Vec3::new(0.152, 0.356, 0.609))
+            .abs()
+            .max_element()
+            < 1e-6
+    );
+    let previous = (2. * a.truncate() * b.truncate())
+        .lerp(d.truncate(), d.w)
+        .lerp(a.truncate(), a.w)
+        * tint.truncate();
+    assert!((expected - previous).abs().max_element() > 0.1);
+    assert!((emission - emission * tint.truncate()).abs().max_element() > 0.1);
+    // Native primary alpha whitens modulation; secondary alpha never masks it.
+    let opaque_modulation = Vec3::ONE;
+    assert_eq!((2. * b.truncate()).lerp(Vec3::ONE, 1.), opaque_modulation);
+    assert_eq!((Vec3::ZERO + emission).extend(tint.w).w, tint.w);
+    let mut values = SlotValues::default();
+    let row20 = compile(&surface(&mut values, 0x8014, &[0, -1, 1]), &values);
+    assert_eq!(row20.state.combiner.mode.x, 19);
+}

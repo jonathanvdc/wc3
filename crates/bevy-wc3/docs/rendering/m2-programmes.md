@@ -17,7 +17,8 @@ contributions enter emissive.
 
 `U` denotes UV0 with native transform slot zero, `V` denotes UV1 with its native
 transform, `U′` denotes UV0 with native transform slot one, and `E` denotes
-sphere environment coordinates. Entries 20 and 24
+sphere environment coordinates. `R` is raw UV0 with no transform, used only
+by the compatibility aliases. Entries 20 and 24
 read the UV1 transform from native slot two. Repeated `U` routes share their
 controls during native import. Native lighting and exact game pass ordering
 remain approximate even for implemented equations.
@@ -54,8 +55,8 @@ remain approximate even for implemented equations.
 | 27 | Guild base and emblem | 2: U, V | Implemented with application-supplied guild palette |
 | 28 | Opaque guild base, emblem and border | 3: U, V, U | Implemented with application-supplied guild palette; six-binding variant unresolved |
 | 29 | Primary-modulated illumination | 2: U, U′ | Implemented inferred equation; game fidelity unverified |
-| 30 | Three-image constant product | 3; third route unresolved | Unsupported: coordinate interpretation and constant sourcing missing |
-| 31 | Three-image constant product with colour vertex programme | 3; routes unresolved | Unsupported: vertex colour/coordinate interpretation and constant sourcing missing |
+| 30 | Three-image compatibility double interpolation | 3: U, V, R | Implemented approximation; native equation, constants and vertex programme unknown |
+| 31 | Three-image compatibility double interpolation | 3: U, V, R | Same approximation; native colour-vertex behavior unknown |
 | 32 | Opaque | 1: U | Implemented |
 | 33 | Doubled modulated product and edge opacity | 2: U, V | Implemented facing fade |
 | 34 | Modulated edge opacity | 1: U | Implemented facing fade |
@@ -67,6 +68,17 @@ not affect emission or coverage; primary alpha supplies texture coverage. Its
 two UV0 inputs use independent native transform slots. This is an inferred
 interpretation with an explicit unverified diagnostic; no representative game
 asset establishes its native fidelity.
+
+Rows 20, 30 and 31 share the double-interpolation composition. Let A be the
+primary sample, B the secondary sample, D the third sample, and C the ordinary
+surface tint/opacity. RGB is `mix(C.rgb * A.rgb * mix(2 * B.rgb, 1, A.a),
+D.rgb, D.a)`; alpha is `C.a`. The D contribution is unlit emission, so it does
+not inherit C's RGB tint or Bevy lighting. B alpha is unused. Rows 30 and 31
+are explicit compatibility aliases, not an interpretation of unknown native
+constants: they retain their unresolved selector and complete authored bindings
+for export, use effective U/V/R coordinates only during compilation, and report
+unverified native fidelity. Their retained third transform does not affect the
+compiled material. No additional constant or vertex-color behavior is guessed.
 
 Unsupported selectors and incompatible input counts produce fallback diagnostics.
 The renderer does not wrap table indices or guess an equation from texture count.

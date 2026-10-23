@@ -23,7 +23,9 @@ inputs; guild steps own their palettes. Native selectors are interpreted by the
 model adapter and derived again on export. The renderer matches these definitions
 to its shared GPU composition transport without decoding native selector bits.
 Unknown selectors and incompatible input layouts remain unresolved definitions
-with their complete authored inputs.
+with their complete authored inputs. Regular selectors `0x801e` and `0x801f`
+have a bounded compatibility interpretation; their raw selection and bindings
+remain unresolved for native round trips.
 
 Modern low-bit selectors support one input and the common two-input multiplication,
 addition and alpha combinations. The environment bits and explicit coordinate
@@ -37,8 +39,10 @@ including all four supported inputs. Rotation and scale therefore share a
 half-unit pivot, with translation applied before either. Native game fidelity
 remains unverified.
 
-The high-bit shader table interprets entries 0 through 29 and 32 through 35. The [programme inventory](m2-programmes.md) lists every established
-entry, resource requirement and unresolved family. These include environment modulation, masked additive contributions,
+The high-bit shader table interprets entries 0 through 29 and 32 through 35,
+and supplies explicit compatibility aliases for entries 30 and 31. The
+[programme inventory](m2-programmes.md) lists each interpretation, resource
+requirement and unresolved family. These include environment modulation, masked additive contributions,
 weighted and masked crossfades, guild composition, glow and edge opacity. Input counts
 must match the selected programme. Legacy selectors with surplus bindings use
 their established first-two-input equation and diagnose the unsampled bindings.
@@ -67,6 +71,19 @@ still feed the shared forward/prepass coverage rule. A zero secondary weight
 removes emission without hiding diffuse; HDR emission weights are not saturated.
 Bevy lighting affects diffuse while emission remains unlit. This inferred equation
 reports unverified game fidelity because no representative game asset is available.
+
+The double-interpolation equation uses primary alpha to interpolate doubled
+secondary RGB toward white, multiplies that response by tinted primary RGB,
+then interpolates toward the third RGB by its alpha. The third contribution
+enters emissive independently of surface tint and lighting. Secondary alpha is
+unused; texture alpha does not change the surface opacity. Row 20 uses its
+established UV0/environment/UV1 routes. The compatibility aliases for rows 30
+and 31 select UV0 with transform zero, UV1 with transform one, and raw UV0 for
+the third sample. The retained third transform is neither applied nor animated
+by those aliases. Both aliases emit an unverified diagnostic: their native
+vertex programmes, constants and equations are unknown, and no representative
+game asset establishes their fidelity. Arbitrary selectors or incompatible
+input counts do not receive this approximation.
 
 ## Animation and opacity
 
@@ -108,8 +125,9 @@ sharing; source textures and unchanged material definitions retain their sharing
 
 ## Remaining interpretation limits
 
-Constant programmes, the modern six-binding guild resource layout,
-and special projective/waterfall families remain unsupported. Historical
+Native constant/vertex behavior for the two compatibility aliases remains
+unresolved. The modern six-binding guild resource layout and special
+projective/waterfall families remain unsupported. Historical
 combiner and blend-override normalization also remains unresolved. The
 [programme inventory](m2-programmes.md) defines these boundaries and their missing
 information.

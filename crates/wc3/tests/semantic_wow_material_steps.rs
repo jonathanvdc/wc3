@@ -284,3 +284,62 @@ fn unresolved_coordinate_selectors_are_not_replaced_by_environment_routes() {
     assert_eq!(value.shader, 0x8000);
     assert_eq!(value.textures[1].coordinates.source, -2);
 }
+
+#[test]
+fn m2_compatibility_aliases_preserve_selector_and_raw_bindings() {
+    let mut values = SlotValues::default();
+    for selector in [0x801e, 0x801f] {
+        let mut textures: Vec<m2::TextureUnit> = (0..3)
+            .map(|_| SlotConstruct::construct(&mut values))
+            .collect();
+        for (index, input) in textures.iter_mut().enumerate() {
+            input.coordinates.source = index as i16 + 7;
+        }
+        let step = m2::MaterialStep::from_native(
+            selector,
+            SlotConstruct::construct(&mut values),
+            textures.clone(),
+            Default::default(),
+        );
+        let m2::MaterialStep::Unresolved(retained) = &step else {
+            panic!("unknown native interpretation must remain retained");
+        };
+        let approximated = retained.compatibility_equation().unwrap();
+        assert!(matches!(
+            approximated,
+            m2::MaterialStep::DoubledModulationDoubleInterpolation(_)
+        ));
+        assert_eq!(
+            approximated
+                .inputs()
+                .iter()
+                .map(|unit| unit.coordinates.source)
+                .collect::<Vec<_>>(),
+            [0, 1, 0]
+        );
+        for (original, effective) in textures.iter().zip(approximated.inputs()) {
+            assert_eq!(original.image, effective.image);
+            assert_eq!(
+                original.coordinates.transform,
+                effective.coordinates.transform
+            );
+            assert_eq!(original.contribution, effective.contribution);
+        }
+        assert_eq!(step.native_shader(), selector);
+        assert_eq!(retained.textures, textures);
+    }
+    for (selector, count) in [(0x801e, 2), (0x801f, 4), (0x8024, 3), (0xffff, 3)] {
+        let step = m2::MaterialStep::from_native(
+            selector,
+            SlotConstruct::construct(&mut values),
+            (0..count)
+                .map(|_| SlotConstruct::construct(&mut values))
+                .collect(),
+            Default::default(),
+        );
+        let m2::MaterialStep::Unresolved(retained) = step else {
+            panic!("unresolved input");
+        };
+        assert!(retained.compatibility_equation().is_none());
+    }
+}

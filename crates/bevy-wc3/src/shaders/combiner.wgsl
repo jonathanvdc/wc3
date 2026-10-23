@@ -68,7 +68,11 @@ fn compose(
             emission=a.rgb*b.rgb*weights.y;
             alpha=a.a;
         }
-        case 19u: {rgb=mix(mix(2.0*a.rgb*b.rgb,c.rgb,c.a),a.rgb,a.a);}
+        case 19u: {
+            let secondary = mix(2.0 * b.rgb, vec3(1.0), a.a);
+            rgb = a.rgb * secondary * (1.0 - c.a);
+            emission = c.rgb * c.a;
+        }
         case 20u: {emission=b.rgb*(1.0-a.a); alpha=a.a+b.a;}
         case 21u: {alpha=1.0;}
         case 22u: {alpha=a.a;}

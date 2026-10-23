@@ -120,6 +120,21 @@ pub(super) fn compile_m2(
     images: &TextureImages,
 ) -> Result<SurfacePass, ModelError> {
     if let m2::MaterialStep::Unresolved(value) = surface {
+        if let Some(equation) = value.compatibility_equation() {
+            let mut pass = compile_m2(model, &equation, images)?;
+            // The alias uses raw UV0 for its third sample. Preserve the authored
+            // transform in the unresolved model, but never animate it here.
+            pass.state.combiner.third_transform = Mat3::IDENTITY;
+            pass.animation.third_transform = None;
+            pass.diagnostics.push(RenderIssue::new(
+                RenderDiagnosticKind::Unverified,
+                format!(
+                    "M2 selector {:#06x} uses a three-image compatibility approximation with raw third-input UV0; native equations, constants and vertex behavior remain unknown",
+                    value.shader
+                ),
+            ));
+            return Ok(pass);
+        }
         if let Some(equation) = value.partial_equation() {
             let mut pass = compile_m2(model, &equation, images)?;
             pass.diagnostics.push(RenderIssue::new(RenderDiagnosticKind::Unverified, "M2 single-input UV1 transform ownership remains unresolved; rendering the established texture equation"));

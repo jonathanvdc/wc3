@@ -990,6 +990,38 @@ impl SurfacePayload for MaterialStep<'_> {
 }
 
 impl<'a> UnresolvedMaterialStep<'a> {
+    /// Selects a compatibility approximation for regular native programmes 30/31.
+    ///
+    /// Their native equations and vertex programmes remain unknown. This selects
+    /// an existing three-image equation with effective sources UV0, UV1, UV0,
+    /// without changing the retained selector or authored input payload. The
+    /// caller must sample the third image with its RAW, untransformed UV0;
+    /// its retained transform is not part of this compatibility interpretation.
+    /// No additional native constants or vertex-colour behavior are inferred.
+    pub fn compatibility_equation(&self) -> Option<MaterialStep<'a>> {
+        if !matches!(self.shader, 0x801e | 0x801f)
+            || self.textures.len() != 3
+            || self.guild_palette != GuildPalette::default()
+        {
+            return None;
+        }
+        let mut inputs = self.textures.clone().into_iter();
+        let mut diffuse = inputs.next().expect("three inputs checked");
+        let mut modulation = inputs.next().expect("three inputs checked");
+        let mut replacement = inputs.next().expect("three inputs checked");
+        diffuse.coordinates.source = 0;
+        modulation.coordinates.source = 1;
+        replacement.coordinates.source = 0;
+        Some(MaterialStep::DoubledModulationDoubleInterpolation(
+            Box::new(DoubledModulationDoubleInterpolationMaterialStep {
+                declaration: self.declaration.clone(),
+                diffuse,
+                modulation,
+                replacement,
+            }),
+        ))
+    }
+
     /// Extracts the established equation of a single-input UV1 programme.
     /// Its native second-transform ownership remains unresolved on this definition.
     pub fn partial_equation(&self) -> Option<MaterialStep<'a>> {
