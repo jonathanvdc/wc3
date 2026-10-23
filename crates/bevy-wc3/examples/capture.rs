@@ -63,6 +63,7 @@ Render offscreen and write frame-0000-1.000s.png, etc. Requires a GPU.
   --model-particle-limits A,B,S  Owned actors, admission work and emission work per frame
   --guild-palette RGB:RGB:RGB  Linear background, emblem and border RGB multipliers
   --physics             Enable authored rigid-body secondary motion
+  --physics-stats       Report cumulative contact work/issues per rig (requires --physics)
   --physics-contact-policy authored|unconnected-dynamics
                         Select contact admission (requires --physics)
   --allow-loss          Explicitly discard unsupported native data, retaining diagnostics
@@ -120,6 +121,7 @@ struct PlaybackChange {
 struct Options {
     character_recipe: Option<PathBuf>,
     physics: bool,
+    physics_stats: bool,
     physics_contact_policy: Option<PhysicsContactPolicy>,
     allow_loss: bool,
     wmo_profile: Option<WmoProfile>,
@@ -177,6 +179,7 @@ impl Options {
         let mut options = Self {
             character_recipe: None,
             physics: false,
+            physics_stats: false,
             physics_contact_policy: None,
             allow_loss: false,
             wmo_profile: None,
@@ -232,6 +235,10 @@ impl Options {
             }
             if option == "--single-threaded" {
                 options.single_threaded = true;
+                continue;
+            }
+            if option == "--physics-stats" {
+                options.physics_stats = true;
                 continue;
             }
             if option == "--physics" {
@@ -449,6 +456,9 @@ impl Options {
                 }
                 _ => return Err(format!("unknown option: {option}").into()),
             }
+        }
+        if options.physics_stats && !options.physics {
+            return Err("physics-stats requires --physics".into());
         }
         if options.physics_contact_policy.is_some() && !options.physics {
             return Err("physics-contact-policy requires --physics".into());
@@ -1160,6 +1170,18 @@ fn capture(options: Options) -> CaptureResult<()> {
                 );
             }
         }
+        if options.physics_stats {
+            let world = app.world_mut();
+            let mut rigs = world.query::<(Entity, &ModelRig)>();
+            for (entity, rig) in rigs.iter(world) {
+                println!(
+                    "Physics {entity:?}: policy={:?}, error={:?}, stats={:?}",
+                    options.physics_contact_policy.unwrap_or_default(),
+                    rig.physics_contact_error(),
+                    rig.physics_contact_stats(),
+                );
+            }
+        }
     }
     Ok(())
 }
@@ -1428,6 +1450,13 @@ mod tests {
             Some(PathBuf::from("character.json"))
         );
         assert!(options.physics);
+        assert!(!options.physics_stats);
+        assert!(parse(&["--physics-stats"]).is_err());
+        let stats = parse(&["--physics", "--physics-stats"])
+            .unwrap()
+            .unwrap();
+        assert!(stats.physics_stats);
+        assert_eq!(stats.physics_contact_policy, None);
         assert_eq!(options.physics_contact_policy, None);
         assert!(parse(&["--physics-contact-policy", "authored"]).is_err());
         assert!(parse(&["--physics", "--physics-contact-policy", "invalid"]).is_err());

@@ -111,7 +111,15 @@ Add `--physics` for authored secondary motion; it cannot be combined with
 `--bake-pose`. Contacts default to authored grants. Add
 `--physics-contact-policy unconnected-dynamics` alongside `--physics` to select
 prepared source-local topology admission. Unavailable admission terminates capture
-with its typed cause. The tool adds no ground or authored contact grants. See
+with its typed cause. Add `--physics-stats` to report the selected policy, typed
+admission error and `PhysicsContactStats` for every live rig after each requested
+frame. Pair examinations, narrow-phase queries, support samples, inconclusive
+queries and quota exhaustion counts are cumulative since rig creation or an
+explicit reset, not per-frame deltas. `last_issue` retains an earlier issue even
+if later queries succeed. The flag requires `--physics` and only reads existing
+statistics; it changes no simulation limits or contact policy. Unavailable
+admission still terminates capture rather than producing a successful frame.
+The tool adds no ground or authored contact grants. See
 [secondary motion](rendering/physics.md) for the preparation budget and remaining
 native-filtering limits.
 
