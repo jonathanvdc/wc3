@@ -13,7 +13,7 @@ Loading, compilation, preparation, and spawning have separate ownership boundari
 | Stage | Responsibility | Main modules |
 | --- | --- | --- |
 | Load | Resolve native models, required companions, and image variants into a `ModelAsset`. | `assets/model.rs`, `textures.rs` |
-| Compile | Build owned geometry, animation, materials, effects, and scene definitions. | `compiler.rs`, `geometry.rs`, `material/compile.rs` |
+| Compile | Build owned geometry, animation, materials, effects, and scene definitions. | `model_compilation/`, `geometry.rs`, `material/compile.rs` |
 | Prepare | Insert shared meshes and inverse binds into Bevy asset stores. | `compiled.rs` |
 | Spawn | Populate application roots and maintain independent live state. | `instances.rs`, `runtime/` |
 

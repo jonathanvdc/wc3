@@ -1,43 +1,48 @@
-use super::super::DrawSource;
-use super::*;
-use wc3::model::appearance::UniversalAppearance;
+//! Cross-boundary model preparation invariants.
+use super::{compile_model, compile_model_with_options, CompileOptions};
+use crate::composition::DrawSelection;
+use crate::material::native_fixtures::wmo::Material as WmoMaterial;
+use crate::{BakeSpace, PoseBaker, PoseOptions};
+use bevy::asset::Assets;
+use bevy::math::{Mat4, Vec2, Vec3, Vec4};
+use bevy::mesh::{skinning::SkinnedMeshInverseBindposes, Mesh, VertexAttributeValues};
+use std::collections::HashSet;
+use std::sync::Arc;
 use wc3::model::materials::mdlx::MaterialStep as MdlxStep;
+use wc3::model::materials::program::MaterialStep;
 use wc3::model::profiles::mdlx::Material as MdlxMaterial;
-use wc3::model::ModelMetadata;
-use wc3::model::{Construct as SlotConstruct, PropertyValues as SlotValues};
+use wc3::model::profiles::wmo::draw as world_draw;
+use wc3::model::profiles::wmo::{ModelMetadata as WorldMetadata, Region};
+use wc3::model::profiles::Universal;
+use wc3::model::properties::{DrawProperties, InstanceProperties};
+use wc3::model::scene::world::WorldOptions;
 use wc3::model::{
-    InstanceId, Material as SemanticMaterial, MaterialId, MaterialSurface, Mesh as ModelMesh,
-    MeshInstance, ModelBuilder,
+    Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Construct as SlotConstruct,
+    Curve, Draw, DynamicTrack, ExplicitBinding, GeometryData, GeometryInfluences, IdentityBinding,
+    ImageResource, Influence, Material as SemanticMaterial, MaterialSurface, Mesh as ModelMesh,
+    MeshInstance, Model, ModelBuilder, ModelMetadata, PropertyValues as SlotValues, Skin, Texture,
+    Time, TimeSource, Track, UniversalBinding,
 };
 
-fn material(builder: &mut ModelBuilder<'static>, name: &str) -> MaterialId {
-    let slot_values = builder.values_mut();
-    let surface = MaterialSurface::from(MdlxMaterial { declaration: Default::default(),
-        steps: vec![MdlxStep::construct(slot_values)],
-    });
-    builder
-        .add_material(SemanticMaterial {
-            name: name.to_owned().into(),
-            surface,
-        })
-        .unwrap()
-}
-fn instance(builder: &mut ModelBuilder<'static>, controls: Option<MeshProperties>) -> InstanceId {
-    let node = builder.add_named_node("whole geometry").unwrap();
-    let mesh = builder
-        .add_mesh(
-            ModelMesh::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]])
-                .with_properties(controls),
-        )
-        .unwrap();
-    builder.add_instance(MeshInstance::new(node, mesh)).unwrap()
+fn triangle_mesh<const N: usize>(
+    positions: [[f32; 3]; N],
+    triangles: [[u32; 3]; 1],
+) -> ModelMesh<'static> {
+    ModelMesh::triangles(positions.map(Vec3::from_array), triangles)
 }
 
 #[test]
 fn generic_empty_draw_instances_remain_without_render_passes() {
     let slot_values = SlotValues::default();
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
-    instance(&mut builder, None);
+    let node = builder.add_named_node("whole geometry").unwrap();
+    let mesh = builder
+        .add_mesh(triangle_mesh(
+            [[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
+            [[0, 1, 2]],
+        ))
+        .unwrap();
+    builder.add_instance(MeshInstance::new(node, mesh)).unwrap();
     let model = {
         builder.import_values(&slot_values).unwrap();
         builder.finish()
@@ -48,32 +53,27 @@ fn generic_empty_draw_instances_remain_without_render_passes() {
 
 #[test]
 fn world_draw_materials_separate_lighting_classes_and_preserve_source_colors() {
-    let mut slot_values = SlotValues::default();
-    use crate::material::native_fixtures::wmo::Material as WmoMaterial;
-    use bevy::mesh::VertexAttributeValues;
-    use wc3::model::profiles::wmo::ModelMetadata as WorldMetadata;
-    use wc3::model::properties::{DrawProperties, InstanceProperties};
-    use wc3::model::profiles::wmo::{draw as world_draw, Region};
-    use wc3::model::scene::world::WorldOptions;
-    use wc3::model::{Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Draw};
+    let slot_values = SlotValues::default();
 
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     builder.set_metadata(ModelMetadata::Wmo(WorldMetadata {
         ambient: [32, 64, 96, 255],
         options: WorldOptions {
             no_vertex_attenuation: true,
-            ..SlotConstruct::construct(&mut slot_values)
+            ..Default::default()
         },
-        ..SlotConstruct::construct(&mut slot_values)
+        ..Default::default()
     }));
     let node = builder.add_named_node("room").unwrap();
-    let mut mesh = ModelMesh::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]);
+    let mut mesh = triangle_mesh([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]);
     mesh.geometry
         .attributes
         .insert(Attribute {
             semantic: AttributeSemantic::Color(0),
             domain: AttributeDomain::Vertex,
-            values: AttributeValues::Vector4([[0.5, 0.5, 0.5, 0.]; 3].into_iter().collect()),
+            values: AttributeValues::Vector4(
+                [Vec4::new(0.5, 0.5, 0.5, 0.); 3].into_iter().collect(),
+            ),
         })
         .unwrap();
     let subset = mesh.add_primary_subset(0, 1);
@@ -83,8 +83,8 @@ fn world_draw_materials_separate_lighting_classes_and_preserve_source_colors() {
             name: "stone".into(),
             surface: MaterialSurface::from(WmoMaterial {
                 shader: Some(0),
-                uv_scroll: [[0.25, 0.], [0.; 2]],
-                ..SlotConstruct::construct(&mut slot_values)
+                uv_scroll: [Vec2::new(0.25, 0.), Vec2::ZERO],
+                ..Default::default()
             }),
         })
         .unwrap();
@@ -99,7 +99,7 @@ fn world_draw_materials_separate_lighting_classes_and_preserve_source_colors() {
             subset,
             Some(DrawProperties::Wmo(world_draw::DrawProperties {
                 lighting,
-                ..SlotConstruct::construct(&mut slot_values)
+                ..Default::default()
             })),
         ));
     }
@@ -136,19 +136,12 @@ fn world_draw_materials_separate_lighting_classes_and_preserve_source_colors() {
     let AttributeValues::Vector4(values) = &original.values else {
         panic!("expected raw colors")
     };
-    assert_eq!(values.get(0), Some([0.5, 0.5, 0.5, 0.]));
+    assert_eq!(values.get(0), Some(Vec4::new(0.5, 0.5, 0.5, 0.)));
 }
 
 #[test]
 fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
     let mut slot_values = SlotValues::default();
-    use crate::{BakeSpace, PoseBaker, PoseOptions};
-    use bevy::mesh::skinning::SkinnedMeshInverseBindposes;
-    use bevy::mesh::VertexAttributeValues;
-    use wc3::model::{
-        Draw, ExplicitBinding, GeometryData, GeometryInfluences, IdentityBinding, Influence, Skin,
-        UniversalBinding,
-    };
 
     for explicit in [false, true] {
         let mut builder = Model::<Universal>::builder(ModelMetadata::Mdlx(Default::default()));
@@ -156,7 +149,7 @@ fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
             .map(|i| builder.add_named_node(format!("joint {i}")).unwrap())
             .collect();
         let matrices: Vec<_> = (0..12)
-            .map(|i| Mat4::from_translation(Vec3::X * i as f32).to_cols_array_2d())
+            .map(|i| Mat4::from_translation(Vec3::X * i as f32))
             .collect();
         let binding = if explicit {
             UniversalBinding::Explicit(ExplicitBinding::new(matrices.clone()).unwrap())
@@ -181,7 +174,8 @@ fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
                 [0., 0., 0.],
                 [1., 0., 0.],
                 [0., 1., 0.],
-            ],
+            ]
+            .map(Vec3::from_array),
             [[0, 1, 2], [3, 4, 5]],
         )
         .unwrap();
@@ -216,7 +210,8 @@ fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
         let material = builder
             .add_material(SemanticMaterial {
                 name: "two passes".into(),
-                surface: MaterialSurface::from(MdlxMaterial { declaration: Default::default(),
+                surface: MaterialSurface::from(MdlxMaterial {
+                    declaration: Default::default(),
                     steps: vec![
                         MdlxStep::construct(&mut slot_values),
                         MdlxStep::construct(&mut slot_values),
@@ -226,10 +221,7 @@ fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
             .unwrap();
         let mut instance = MeshInstance::new(joints[0], mesh);
         instance.skin = Some(skin);
-        instance.draws = vec![
-            Draw::new(first, SlotConstruct::construct(&mut slot_values)),
-            Draw::new(second, SlotConstruct::construct(&mut slot_values)),
-        ];
+        instance.draws = vec![Draw::new(first, None), Draw::new(second, None)];
         builder
             .add_instance_with_materials(instance, vec![material; 2])
             .unwrap();
@@ -247,7 +239,7 @@ fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
             let palette = &compiled.skins[draw.skin.unwrap()];
             assert_eq!(palette.joints, vec![slot]);
             let expected = if explicit {
-                Mat4::from_cols_array_2d(&matrices[slot])
+                matrices[slot]
             } else {
                 Mat4::IDENTITY
             };
@@ -278,7 +270,7 @@ fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
                 &binds,
                 PoseOptions {
                     space: BakeSpace::Authored,
-                    ..SlotConstruct::construct(&mut slot_values)
+                    ..Default::default()
                 },
             )
             .unwrap();
@@ -305,27 +297,23 @@ fn draw_skin_palettes_compact_subsets_share_passes_and_preserve_baking() {
 #[test]
 fn a_pass_stack_keeps_world_lighting_local_to_each_pass() {
     let mut slot_values = SlotValues::default();
-    use crate::material::native_fixtures::wmo::Material as WmoMaterial;
-    use wc3::model::properties::DrawProperties;
-    use wc3::model::profiles::wmo::draw as world_draw;
-    use wc3::model::materials::program::{MaterialStep, MaterialSurface};
-    use wc3::model::Draw;
 
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let node = builder.add_named_node("room").unwrap();
-    let mut mesh = ModelMesh::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]);
+    let mut mesh = triangle_mesh([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]);
     let subset = mesh.add_primary_subset(0, 1);
     let mesh = builder.add_mesh(mesh).unwrap();
     let interior = WmoMaterial {
         shader: Some(0),
-        ..SlotConstruct::construct(&mut slot_values)
+        ..Default::default()
     };
     let mut exterior = interior.clone();
     exterior.state.rasterization.controls.exterior_lit = true;
     let material = builder
         .add_material(SemanticMaterial {
             name: "two lighting programmes".into(),
-            surface: MaterialSurface { declaration: Default::default(),
+            surface: MaterialSurface {
+                declaration: Default::default(),
                 steps: vec![
                     MaterialStep::Wmo(Box::new(interior.into())),
                     MaterialStep::Wmo(Box::new(exterior.into())),
@@ -339,7 +327,7 @@ fn a_pass_stack_keeps_world_lighting_local_to_each_pass() {
         subset,
         Some(DrawProperties::Wmo(world_draw::DrawProperties {
             lighting: world_draw::Lighting::Interior,
-            ..SlotConstruct::construct(&mut slot_values)
+            ..Default::default()
         })),
     ));
     builder
@@ -359,8 +347,6 @@ fn a_pass_stack_keeps_world_lighting_local_to_each_pass() {
 
 #[test]
 fn draw_selection_resolves_images_referenced_by_texture_slots_and_curves() {
-    use wc3::model::{Curve, Draw, DynamicTrack, ImageResource, Time, TimeSource, Track};
-
     let mut builder = ModelBuilder::new(ModelMetadata::Mdlx(Default::default()));
     let first = Texture::new(
         builder.add_image_resource(ImageResource::Path(b"first.blp".as_slice().into())),
@@ -371,7 +357,10 @@ fn draw_selection_resolves_images_referenced_by_texture_slots_and_curves() {
     let layer = MdlxStep::construct(builder.values_mut());
     let image = layer.shader.inputs().binding.image;
     builder.values_mut().set(image, Some(first)).unwrap();
-    let surface = MaterialSurface::from(MdlxMaterial { declaration: Default::default(),  steps: vec![layer] });
+    let surface = MaterialSurface::from(MdlxMaterial {
+        declaration: Default::default(),
+        steps: vec![layer],
+    });
     let material = builder
         .add_material(SemanticMaterial {
             name: "animated texture".into(),
@@ -379,7 +368,9 @@ fn draw_selection_resolves_images_referenced_by_texture_slots_and_curves() {
         })
         .unwrap();
     let node = builder.add_named_node("root").unwrap();
-    let mut mesh = ModelMesh::triangles([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]);
+    let mut mesh = triangle_mesh([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]], [[0, 1, 2]]);
+    mesh.geometry
+        .set_texture_coordinates(vec![[Vec2::ZERO, Vec2::X, Vec2::Y].into_iter().collect()]);
     let subset = mesh.add_primary_subset(0, 1);
     let mesh = builder.add_mesh(mesh).unwrap();
     let mut instance = MeshInstance::new(node, mesh);

@@ -3,8 +3,8 @@ use super::plan::plan;
 use super::{
     Assembly, Models, PendingAssembly, PendingPart, RgbaImage, Source, SourceDependencies,
 };
-use crate::compiler::validate_dependencies;
 use crate::mesh_interner::MeshInterner;
+use crate::model_compilation::validate_dependencies;
 use crate::{CompiledModel, ModelError, ModelPart, PartBinding};
 use bevy::prelude::{Assets, Image};
 use std::collections::{hash_map::Entry, HashMap};

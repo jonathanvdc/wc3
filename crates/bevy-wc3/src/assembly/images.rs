@@ -1,8 +1,8 @@
 use super::{
     compose_atlas, AtlasLayer, PixelRect, RgbaImage, Source, SourceDependencies, TextureReplacement,
 };
-use crate::compiler::compile_with_geometry;
 use crate::mesh_interner::MeshInterner;
+use crate::model_compilation::compile_with_geometry;
 use crate::textures::ImageKey;
 use crate::{
     texture_requests, CompileOptions, CompiledModel, ModelError, TextureColorSpace, TextureRequest,

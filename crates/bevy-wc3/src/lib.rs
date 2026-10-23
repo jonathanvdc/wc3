@@ -36,7 +36,6 @@ mod camera;
 mod child_coordinates;
 mod child_models;
 mod compiled;
-mod compiler;
 mod composition;
 mod coordinates;
 mod diagnostics;
@@ -47,6 +46,7 @@ mod features;
 mod geometry;
 mod hierarchy;
 mod image_replacements;
+mod model_compilation;
 pub use image_replacements::ImageReplacements;
 mod instances;
 mod layers;
@@ -79,7 +79,6 @@ pub use camera::CameraBinding;
 pub use child_coordinates::CoordinatePolicy;
 pub use child_models::{ChildModelBinding, ChildModelKey, ChildModelRole};
 pub use compiled::{CompiledModel, DrawPurpose, DrawSource, PreparedModel, PreparedMount};
-pub use compiler::{compile_model, compile_model_with_options, CompileOptions};
 pub use composition::{DrawSelection, JointMap, ModelPart, PartBinding};
 pub use diagnostics::{
     RenderDiagnostic, RenderDiagnosticKind, RenderDiagnosticSeverity, RenderDiagnosticSource,
@@ -100,6 +99,7 @@ pub use features::{
 pub use instances::{ModelInstance, ModelInstanceError, ModelRebind, ModelSource};
 pub use lod::{Lod, LodOverride, LodSettings, LodState};
 pub use material::{ModelMaterial, ModelMaterialExtension};
+pub use model_compilation::{compile_model, compile_model_with_options, CompileOptions};
 pub use physics::{
     PhysicsBodyInfo, PhysicsContactError, PhysicsContactIssue, PhysicsContactLimits,
     PhysicsContactPolicy, PhysicsContactStats, PhysicsFrame, PhysicsSimulation,

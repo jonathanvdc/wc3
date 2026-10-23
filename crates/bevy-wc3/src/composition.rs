@@ -2,9 +2,9 @@
 use crate::bounds::{rest_bounds, transform_bounds};
 use crate::child_coordinates::ChildCoordinates;
 use crate::compiled::{CompiledModel, RuntimeMount, RuntimeNode, RuntimeSkin};
-use crate::compiler::node_order;
 use crate::lod::LodDefinition;
 use crate::mesh_attributes::{EXTRA_JOINT_INDEX, EXTRA_JOINT_WEIGHT};
+use crate::model_compilation::node_order;
 use crate::pose::local_transform;
 use crate::pose::{evaluate_pose, EvaluatedPose};
 use crate::{ModelError, PartBinding::*};
