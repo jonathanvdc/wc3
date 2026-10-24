@@ -5,6 +5,7 @@ use super::{
 };
 use crate::model::common::FileKey;
 use crate::model::conversion::{Context, Error, ExportOptions, IssueKind, Plan};
+use crate::model::error::Location;
 use crate::model::formats::wmo::legacy::{
     Batch14, Batch16, Bundle16, Group14, Group16, GroupInfo14, HeaderBatchRange, Root14, Root16,
 };
@@ -16,6 +17,7 @@ use crate::model::profiles::Wmo;
 use crate::model::WorldModelResource;
 use crate::model::{InstanceId, Model, Quat};
 use std::collections::BTreeMap;
+use std::error::Error as StdError;
 
 pub(super) fn alpha<'a>(
     asset: &'a Model<'_, Wmo>,
@@ -41,7 +43,7 @@ fn alpha_model<'a>(
     let controls = model.metadata();
     if model.bounds().is_some() || controls.options != Default::default() {
         context.unsupported(
-            "world.root",
+            Location::new().field("world").field("root"),
             "historical monolithic root has no authored global bounds or later rendering options",
         )?;
     }
@@ -52,7 +54,7 @@ fn alpha_model<'a>(
                 || light.modern.is_some()
             {
                 context.unsupported(
-                    "world.light",
+                    Location::new().field("world").field("light"),
                     "historical monolithic light has no orientation or later light extension",
                 )?;
             }
@@ -108,7 +110,10 @@ fn alpha_model<'a>(
         );
         if region.interior_windows.is_none() && region.exterior_windows.is_none() {
             context.unsupported(
-                "world.group.lighting",
+                Location::new()
+                    .field("world")
+                    .field("group")
+                    .field("lighting"),
                 "historical monolithic header requires explicit interior/exterior geometry windows",
             )?;
         }
@@ -116,7 +121,7 @@ fn alpha_model<'a>(
             || region.batch_control != 0
             || region.supplemental_controls.len() > 2
         {
-            context.unsupported("world.group.controls","historical monolithic header cannot encode extra classification or more than two supplemental controls")?;
+            context.unsupported(Location::new().field("world").field("group").field("controls"),"historical monolithic header cannot encode extra classification or more than two supplemental controls")?;
         }
         for (bytes, value) in group
             .header
@@ -168,7 +173,7 @@ fn beta_model<'a>(
 ) -> Result<Plan<Bundle16<'a>>, Error> {
     let world = world(model)?;
     if model.bounds().is_none() {
-        context.unsupported("world.bounds", "destination world header requires a bounding declaration; absent source bounds cannot be represented")?;
+        context.unsupported(Location::new().field("world").field("bounds"), "destination world header requires a bounding declaration; absent source bounds cannot be represented")?;
     }
     let mut root = Root16::new();
     let controls = model.metadata();
@@ -216,7 +221,7 @@ fn beta_model<'a>(
             || region.exterior_windows.is_some()
             || region.supplemental_controls.len() > 1
         {
-            context.unsupported("world.group.controls","historical split header cannot encode vertex lighting windows or multiple supplemental controls")?;
+            context.unsupported(Location::new().field("world").field("group").field("controls"),"historical split header cannot encode vertex lighting windows or multiple supplemental controls")?;
         }
         let body = legacy_encode_geometry::write::<Batch16>(
             model,
@@ -284,8 +289,8 @@ fn names(model: &Model<'_, Wmo>, world: &WorldSystem<'_>) -> Result<Names, Error
 }
 fn name(bytes: &mut Vec<u8>, name: &str) -> Result<u32, Error> {
     if name.as_bytes().contains(&0) {
-        return Err(Error::new(
-            "world.name",
+        return Err(Error::requirement(
+            Location::new().field("world").field("name"),
             "name contains an interior terminator",
         ));
     }
@@ -303,8 +308,8 @@ fn skybox<'a>(
         match model.model_resource(*resource).expect("validated skybox") {
             WorldModelResource::Path(path) => {
                 if path.contains(&0) {
-                    return Err(Error::new(
-                        "world.skybox",
+                    return Err(Error::requirement(
+                        Location::new().field("world").field("skybox"),
                         "skybox path contains an interior terminator",
                     ));
                 }
@@ -313,7 +318,7 @@ fn skybox<'a>(
                 root.append(RootChunk::SkyboxName(encode::array(&bytes)?))?;
             }
             _ => context.unsupported(
-                "world.skybox",
+                Location::new().field("world").field("skybox"),
                 "historical skybox requires a model file path",
             )?,
         }
@@ -326,12 +331,20 @@ fn world<'a, 'data>(model: &'a Model<'data, Wmo>) -> Result<&'a WorldSystem<'dat
         .iter()
         .next()
         .map(|(_, system)| system)
-        .ok_or_else(|| Error::new("world.system", "world system is missing"))
+        .ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("world").field("system"),
+                "world system is missing",
+            )
+        })
 }
 fn placement(group: &WorldGroup<'_>, model: &Model<'_, Wmo>) -> Result<InstanceId, Error> {
     let [instance] = group.instances.as_slice() else {
-        return Err(Error::new(
-            "world.group.instances",
+        return Err(Error::requirement(
+            Location::new()
+                .field("world")
+                .field("group")
+                .field("instances"),
             "historical group requires one base geometry placement",
         ));
     };
@@ -341,8 +354,8 @@ fn placement(group: &WorldGroup<'_>, model: &Model<'_, Wmo>) -> Result<InstanceI
         .lod
         .is_some_and(|lod| lod != 0)
     {
-        return Err(Error::new(
-            "world.group.lod",
+        return Err(Error::requirement(
+            Location::new().field("world").field("group").field("lod"),
             "historical group cannot encode additional detail levels",
         ));
     }
@@ -353,8 +366,8 @@ fn liquid_type(region: &Region<'_>) -> Result<u32, Error> {
 }
 fn fogs(region: &Region<'_>) -> Result<[u8; 4], Error> {
     if region.fogs.len() > 4 {
-        return Err(Error::new(
-            "world.group.fogs",
+        return Err(Error::requirement(
+            Location::new().field("world").field("group").field("fogs"),
             "historical header cannot encode more than four fog selections",
         ));
     }
@@ -364,6 +377,6 @@ fn fogs(region: &Region<'_>) -> Result<[u8; 4], Error> {
     }
     Ok(fogs)
 }
-fn error(error: impl std::fmt::Display) -> Error {
-    Error::new("world.historical", error.to_string())
+fn error(error: impl StdError + Send + Sync + 'static) -> Error {
+    Error::from_source(Location::new().field("world").field("historical"), error)
 }

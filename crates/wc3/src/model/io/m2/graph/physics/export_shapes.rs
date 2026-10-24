@@ -1,5 +1,6 @@
 //! Rebuilds fixture tables and half-edge connectivity from logical geometry.
 use super::*;
+use crate::model::error::Location;
 use glam::Mat4;
 use glam::Vec3;
 use native::companions::{
@@ -22,7 +23,10 @@ impl Geometry {
     pub(super) fn add(&mut self, shape: &Shape<'_>, context: &mut Context) -> Result<(), Error> {
         if shape.collision_mask.bits() != 0 {
             context.unsupported(
-                "physics.shape.collision_mask",
+                Location::new()
+                    .field("physics")
+                    .field("shape")
+                    .field("collision_mask"),
                 "M2 fixtures have no independent collision mask",
             )?;
         }
@@ -65,8 +69,11 @@ impl Geometry {
                 faces,
             } => {
                 if shape.transform != Mat4::from_cols_array_2d(&identity()) {
-                    return Err(Error::new(
-                        "physics.polytope.transform",
+                    return Err(Error::requirement(
+                        Location::new()
+                            .field("physics")
+                            .field("polytope")
+                            .field("transform"),
                         "native polytope export requires geometry in fixture coordinates",
                     ));
                 }
@@ -74,8 +81,8 @@ impl Geometry {
                 let points = vertices.to_vec();
                 let polygons = faces.to_vec();
                 if points.len() > 256 || polygons.len() > 256 {
-                    return Err(Error::new(
-                        "physics.polytope",
+                    return Err(Error::requirement(
+                        Location::new().field("physics").field("polytope"),
                         "geometry exceeds byte-indexed topology",
                     ));
                 }
@@ -91,8 +98,11 @@ impl Geometry {
                         .take(polygon.len())
                     {
                         if !used.insert((from, to)) {
-                            return Err(Error::new(
-                                "physics.polytope.faces",
+                            return Err(Error::requirement(
+                                Location::new()
+                                    .field("physics")
+                                    .field("polytope")
+                                    .field("faces"),
                                 "directed edge belongs to multiple faces",
                             ));
                         }
@@ -104,8 +114,8 @@ impl Geometry {
                             directed.insert((to, from), index + 1);
                             edges.push(PhysicsEdge {
                                 origin_vertex: u8::try_from(from).map_err(|_| {
-                                    Error::new(
-                                        "physics.polytope",
+                                    Error::requirement(
+                                        Location::new().field("physics").field("polytope"),
                                         "vertex index exceeds byte range",
                                     )
                                 })?,
@@ -114,8 +124,8 @@ impl Geometry {
                             });
                             edges.push(PhysicsEdge {
                                 origin_vertex: u8::try_from(to).map_err(|_| {
-                                    Error::new(
-                                        "physics.polytope",
+                                    Error::requirement(
+                                        Location::new().field("physics").field("polytope"),
                                         "vertex index exceeds byte range",
                                     )
                                 })?,
@@ -127,17 +137,26 @@ impl Geometry {
                         boundary.push(edge);
                     }
                     if edges.len() > 256 {
-                        return Err(Error::new(
-                            "physics.polytope",
+                        return Err(Error::requirement(
+                            Location::new().field("physics").field("polytope"),
                             "edge count exceeds byte-indexed topology",
                         ));
                     }
                     first.push(
                         u8::try_from(*boundary.first().ok_or_else(|| {
-                            Error::new("physics.polytope.faces", "empty boundary")
+                            Error::requirement(
+                                Location::new()
+                                    .field("physics")
+                                    .field("polytope")
+                                    .field("faces"),
+                                "empty boundary",
+                            )
                         })?)
                         .map_err(|_| {
-                            Error::new("physics.polytope", "edge index exceeds byte range")
+                            Error::requirement(
+                                Location::new().field("physics").field("polytope"),
+                                "edge index exceeds byte range",
+                            )
                         })?,
                     );
                     for (&edge, &next) in boundary
@@ -150,8 +169,11 @@ impl Geometry {
                     }
                 }
                 if directed.keys().any(|edge| !used.contains(edge)) {
-                    return Err(Error::new(
-                        "physics.polytope.faces",
+                    return Err(Error::requirement(
+                        Location::new()
+                            .field("physics")
+                            .field("polytope")
+                            .field("faces"),
                         "convex boundary is not closed",
                     ));
                 }
@@ -192,7 +214,10 @@ impl Geometry {
             shape: PhysicsShape {
                 shape_type: kind,
                 shape_index: i16::try_from(index).map_err(|_| {
-                    Error::new("physics.shape", "geometry index exceeds native range")
+                    Error::requirement(
+                        Location::new().field("physics").field("shape"),
+                        "geometry index exceeds native range",
+                    )
                 })?,
                 game_flags: PhysicsGameFlags::from_bits_retain(shape.game_flags.bits()),
                 friction: shape.friction,
@@ -229,8 +254,11 @@ fn uniform_scale(matrix: [[f32; 4]; 4]) -> Result<f32, Error> {
             .iter()
             .any(|length| (*length - scale).abs() > 0.000001)
     {
-        return Err(Error::new(
-            "physics.shape.transform",
+        return Err(Error::requirement(
+            Location::new()
+                .field("physics")
+                .field("shape")
+                .field("transform"),
             "sphere and capsule require a uniform orthogonal transform",
         ));
     }

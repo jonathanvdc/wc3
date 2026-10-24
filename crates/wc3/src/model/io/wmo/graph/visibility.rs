@@ -1,6 +1,7 @@
 //! Portal polygons, authored separating planes, and historical visibility regions.
 use crate::model::common::PackedArray;
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::io::materialize;
 use crate::model::profiles::wmo as profile;
 use glam::Vec4;
@@ -23,14 +24,20 @@ pub(super) fn read<'a, 'data: 'a>(
     for chunk in root.common_chunks() {
         if let RootChunk::Portals(rows) = chunk {
             for row in rows.iter() {
-                let row = row.map_err(|error| Error::new("world.portal", error.to_string()))?;
-                let source = vertices
-                    .ok_or_else(|| Error::new("world.portal", "portal vertices are missing"))?;
+                let row = row.map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("portal"), error)
+                })?;
+                let source = vertices.ok_or_else(|| {
+                    Error::requirement(
+                        Location::new().field("world").field("portal"),
+                        "portal vertices are missing",
+                    )
+                })?;
                 let start = usize::from(row.start_vertex);
                 let count = usize::from(row.vertex_count);
                 if start + count > source.len() {
-                    return Err(Error::new(
-                        "world.portal",
+                    return Err(Error::requirement(
+                        Location::new().field("world").field("portal"),
                         "vertex range exceeds portal table",
                     ));
                 }
@@ -53,12 +60,17 @@ pub(super) fn read<'a, 'data: 'a>(
     for chunk in root.common_chunks() {
         if let RootChunk::PortalExtras(rows) = chunk {
             for row in rows.iter() {
-                let row = row.map_err(|error| Error::new("world.portal", error.to_string()))?;
+                let row = row.map_err(|error| {
+                    Error::from_source(Location::new().field("world").field("portal"), error)
+                })?;
                 let portal = world
                     .portals
                     .get_mut(row.portal_index as usize)
                     .ok_or_else(|| {
-                        Error::new("world.portal", "adjustment references absent portal")
+                        Error::requirement(
+                            Location::new().field("world").field("portal"),
+                            "adjustment references absent portal",
+                        )
                     })?;
                 portal.adjustment = Some(row.unknown);
             }
@@ -75,16 +87,23 @@ pub(super) fn read<'a, 'data: 'a>(
         match chunk {
             RootChunk::VisibleBlocks(rows) => {
                 for row in rows.iter() {
-                    let row =
-                        row.map_err(|error| Error::new("world.visibility", error.to_string()))?;
+                    let row = row.map_err(|error| {
+                        Error::from_source(
+                            Location::new().field("world").field("visibility"),
+                            error,
+                        )
+                    })?;
                     let source = visible.ok_or_else(|| {
-                        Error::new("world.visibility", "visibility vertices are missing")
+                        Error::requirement(
+                            Location::new().field("world").field("visibility"),
+                            "visibility vertices are missing",
+                        )
                     })?;
                     let start = usize::from(row.first_vertex);
                     let count = usize::from(row.count);
                     if start + count > source.len() {
-                        return Err(Error::new(
-                            "world.visibility",
+                        return Err(Error::requirement(
+                            Location::new().field("world").field("visibility"),
                             "visibility range exceeds table",
                         ));
                     }
@@ -101,8 +120,9 @@ pub(super) fn read<'a, 'data: 'a>(
             }
             RootChunk::ConvexPlanes(rows) => {
                 world.occluders = PackedArray::from_storage(
-                    ZeroVec::parse_bytes(rows.as_bytes())
-                        .map_err(|error| Error::new("world.occluders", error.to_string()))?,
+                    ZeroVec::parse_bytes(rows.as_bytes()).map_err(|error| {
+                        Error::from_source(Location::new().field("world").field("occluders"), error)
+                    })?,
                 )
             }
             _ => {}
@@ -117,8 +137,12 @@ pub(super) fn write<'a, D: Dialect>(
 ) -> Result<(), Error> {
     use crate::model::formats::wmo::records::{Portal, PortalExtra, VisibleBlock};
     let capacity = |value: usize| {
-        u16::try_from(value)
-            .map_err(|_| Error::new("world.visibility", "vertex range exceeds native capacity"))
+        u16::try_from(value).map_err(|_| {
+            Error::requirement(
+                Location::new().field("world").field("visibility"),
+                "vertex range exceeds native capacity",
+            )
+        })
     };
     let mut vertices = Vec::new();
     let mut portals = Vec::new();
@@ -132,8 +156,12 @@ pub(super) fn write<'a, D: Dialect>(
         vertices.extend(portal.vertices.iter());
         if let Some(unknown) = portal.adjustment {
             extras.push(PortalExtra {
-                portal_index: u32::try_from(index)
-                    .map_err(|_| Error::new("world.portal", "portal count exceeds capacity"))?,
+                portal_index: u32::try_from(index).map_err(|_| {
+                    Error::requirement(
+                        Location::new().field("world").field("portal"),
+                        "portal count exceeds capacity",
+                    )
+                })?,
                 unknown,
             });
         }
@@ -153,10 +181,12 @@ pub(super) fn write<'a, D: Dialect>(
             RootChunk::PortalExtras(super::encode::array(&extras)?),
         )?;
     }
-    root.portal_count(
-        u32::try_from(portals.len())
-            .map_err(|_| Error::new("world.portal", "portal count exceeds capacity"))?,
-    );
+    root.portal_count(u32::try_from(portals.len()).map_err(|_| {
+        Error::requirement(
+            Location::new().field("world").field("portal"),
+            "portal count exceeds capacity",
+        )
+    })?);
     let mut visible = Vec::new();
     let mut blocks = Vec::new();
     for polygon in &source.visibility {

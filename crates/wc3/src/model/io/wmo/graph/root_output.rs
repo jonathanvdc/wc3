@@ -1,9 +1,11 @@
 //! Destination-selected native chunk sinks for shared root records.
 use super::encode::array;
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::wmo::legacy::{Light14, Root14, Root16, RootChunk14};
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::formats::wmo::{Classic, Dialect, Root};
+use std::error::Error as StdError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Addressing {
@@ -85,8 +87,8 @@ impl<'a> RootOutput<'a, Classic> for Root14<'a> {
                 RootChunk14::Lights(array(&rows)?)
             }
             RootChunk::Materials(_) | RootChunk::Groups(_) => {
-                return Err(Error::new(
-                    "world.root",
+                return Err(Error::requirement(
+                    Location::new().field("world").field("root"),
                     "historical tables require their own logical record writer",
                 ));
             }
@@ -108,6 +110,6 @@ impl<'a> RootOutput<'a, Classic> for Root14<'a> {
         self.header_mut().texture_count = count;
     }
 }
-fn write_error(error: impl std::fmt::Display) -> Error {
-    Error::new("world.root", error.to_string())
+fn write_error(error: impl StdError + Send + Sync + 'static) -> Error {
+    Error::from_source(Location::new().field("world").field("root"), error)
 }

@@ -1,5 +1,6 @@
 //! Exact integer controls interpreted by the target's numeric property fields.
 use super::*;
+use crate::model::error::Location;
 fn float_track<T: Copy + Into<f64>>(track: &sm::Track<T>) -> Result<sm::Track, Error> {
     let components = |values: &[T]| -> Result<Vec<f32>, Error> {
         values
@@ -8,8 +9,8 @@ fn float_track<T: Copy + Into<f64>>(track: &sm::Track<T>) -> Result<sm::Track, E
                 let value = value.into();
                 let encoded = value as f32;
                 if f64::from(encoded) != value {
-                    return Err(Error::new(
-                        "animation.integer",
+                    return Err(Error::requirement(
+                        Location::new().field("animation").field("integer"),
                         "integer cannot be represented exactly by this M2 numeric control",
                     ));
                 }
@@ -42,7 +43,11 @@ pub(in super::super) fn numeric_tracks(
 ) -> Result<(), Error> {
     for (index, clip) in model.clips.iter_mut().enumerate() {
         for (channel, track) in clip.integer_tracks.iter().enumerate() {
-            let path = format!("clips[{index}].integer_tracks[{channel}]");
+            let path = Location::new()
+                .field("clips")
+                .index(index)
+                .field("integer_tracks")
+                .index(channel);
             if matches!(track.target(), sm::Target::NativeProperty { .. }) {
                 context.unsupported(
                     path,
@@ -63,7 +68,7 @@ pub(in super::super) fn numeric_tracks(
             match converted {
                 Ok(track) => clip.tracks.push(track),
                 Err(error) => {
-                    context.unsupported(path, error.description)?;
+                    context.unsupported_source(path, error)?;
                 }
             }
         }

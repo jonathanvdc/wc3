@@ -1,6 +1,7 @@
 //! Typed M2 output planning and native graph construction.
 use super::animation::{encode, time_ms};
 use super::*;
+use crate::model::error::Location;
 use crate::model::TimeSource;
 use crate::model::{Billboard, TransformSemantics};
 use crate::model::{M2ImageResource, M2ModelResource};
@@ -44,7 +45,7 @@ where
     for (_, clip) in model.clips() {
         if !clip.is_looping() {
             context.unsupported(
-                "m2.clips.looping",
+                Location::new().field("m2").field("clips").field("looping"),
                 "M2 playback looping has no verified native mapping",
             )?;
         }
@@ -101,8 +102,12 @@ where
                     .iter()
                     .flatten()
                     .map(|v| {
-                        u16::try_from(v)
-                            .map_err(|_| Error::new("m2.collision", "index exceeds u16"))
+                        u16::try_from(v).map_err(|_| {
+                            Error::requirement(
+                                Location::new().field("m2").field("collision"),
+                                "index exceeds u16",
+                            )
+                        })
                     })
                     .collect::<Result<Vec<_>, _>>()?,
             );
@@ -220,7 +225,12 @@ where
         start = start
             .checked_add(duration)
             .and_then(|v| v.checked_add(1))
-            .ok_or_else(|| Error::new("m2.animation", "legacy timeline overflow"))?
+            .ok_or_else(|| {
+                Error::requirement(
+                    Location::new().field("m2").field("animation"),
+                    "legacy timeline overflow",
+                )
+            })?
     }
     if let Some(family) = family {
         core.sequence_lookup = ZeroVec::alloc_from_slice(
@@ -240,21 +250,27 @@ where
                 .map(|id| {
                     id.map(|id| {
                         if model.node(id).is_none_or(|node| node.properties.is_none()) {
-                            return Err(Error::new(
-                                "m2.key_bone_lookup",
+                            return Err(Error::requirement(
+                                Location::new().field("m2").field("key_bone_lookup"),
                                 "key-bone binding requires a declared bone",
                             ));
                         }
                         let index =
                             nodes.iter().position(|value| *value == id).ok_or_else(|| {
-                                Error::new("m2.key_bone_lookup", "key-bone binding is not exported")
+                                Error::requirement(
+                                    Location::new().field("m2").field("key_bone_lookup"),
+                                    "key-bone binding is not exported",
+                                )
                             })?;
                         let index = u16::try_from(index).map_err(|_| {
-                            Error::new("m2.key_bone_lookup", "bone index exceeds lookup width")
+                            Error::requirement(
+                                Location::new().field("m2").field("key_bone_lookup"),
+                                "bone index exceeds lookup width",
+                            )
                         })?;
                         if index == u16::MAX {
-                            return Err(Error::new(
-                                "m2.key_bone_lookup",
+                            return Err(Error::requirement(
+                                Location::new().field("m2").field("key_bone_lookup"),
                                 "bone index collides with the unbound sentinel",
                             ));
                         }
@@ -268,9 +284,9 @@ where
     }
     let mut globals = Vec::new();
     for id in &nodes {
-        let node = model
-            .node(*id)
-            .ok_or_else(|| Error::new("m2.bone", "missing node"))?;
+        let node = model.node(*id).ok_or_else(|| {
+            Error::requirement(Location::new().field("m2").field("bone"), "missing node")
+        })?;
         let data = bone_controls.get(id).copied();
         let mut bone = Bone::<D::Layout>::new();
         bone.pivot = (node.transform.pivot).to_array();
@@ -280,10 +296,19 @@ where
                 nodes
                     .iter()
                     .position(|v| *v == p)
-                    .ok_or_else(|| Error::new("m2.bone.parent", "parent is not an exported bone"))
+                    .ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("m2").field("bone").field("parent"),
+                            "parent is not an exported bone",
+                        )
+                    })
                     .and_then(|i| {
-                        i16::try_from(i)
-                            .map_err(|_| Error::new("m2.bone.parent", "index exceeds i16"))
+                        i16::try_from(i).map_err(|_| {
+                            Error::requirement(
+                                Location::new().field("m2").field("bone").field("parent"),
+                                "index exceeds i16",
+                            )
+                        })
                     })
             })
             .transpose()?
@@ -302,7 +327,7 @@ where
                 || node.camera_anchored)
         {
             context.unsupported(
-                "node.transform_semantics",
+                Location::new().field("node").field("transform_semantics"),
                 "M2 requires affine composition for selective inheritance and camera controls",
             )?;
         }
@@ -340,7 +365,13 @@ where
             &starts,
             &mut globals,
             &mut context,
-            |v, c| RotationComponents::encode(v.to_array(), c, "m2.bone.rotation"),
+            |v, c| {
+                RotationComponents::encode(
+                    v.to_array(),
+                    c,
+                    &Location::new().field("m2").field("bone").field("rotation"),
+                )
+            },
         )?;
         if *model
             .values()
@@ -389,7 +420,7 @@ where
                         .expect("validated slot")
                         .to_array(),
                     &mut context,
-                    "m2.bone.rotation",
+                    &Location::new().field("m2").field("bone").field("rotation"),
                 )?,
                 &mut globals,
             )

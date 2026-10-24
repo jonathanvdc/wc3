@@ -2,6 +2,7 @@
 use super::{environment, legacy_geometry, materials, root_view::CommonRoot, scene, visibility};
 use crate::model::common::FileKey;
 use crate::model::conversion::{Context, Conversion, Error, ImportOptions};
+use crate::model::error::Location;
 use crate::model::formats::wmo::legacy::{Bundle16, Root14, RootChunk14};
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::profiles::wmo::{ModelMetadata, WorldOptions, WorldSystem};
@@ -10,6 +11,7 @@ use crate::model::Model;
 use crate::model::{ModelBuilder, WorldModelResource};
 use glam::Vec3;
 use std::borrow::Cow;
+use std::error::Error as StdError;
 
 pub(super) fn alpha<'a>(
     source: &'a Root14<'_>,
@@ -43,8 +45,11 @@ pub(super) fn alpha<'a>(
         )?;
         let header = &group.header;
         let portal_start = usize::try_from(header.portal_start).map_err(|_| {
-            Error::new(
-                "world.group.portal",
+            Error::requirement(
+                Location::new()
+                    .field("world")
+                    .field("group")
+                    .field("portal"),
                 "negative portal start cannot address a portal table",
             )
         })?;
@@ -101,7 +106,10 @@ pub(super) fn alpha<'a>(
             for (index, row) in rows.iter().enumerate() {
                 let row = row.map_err(read_error)?;
                 let group = world.groups.get_mut(index).ok_or_else(|| {
-                    Error::new("world.catalog", "catalog exceeds embedded groups")
+                    Error::requirement(
+                        Location::new().field("world").field("catalog"),
+                        "catalog exceeds embedded groups",
+                    )
                 })?;
                 group.name = if row.name_offset < 0 {
                     Cow::Borrowed("")
@@ -160,8 +168,11 @@ pub(super) fn beta<'a>(
         )?;
         let header = &group.header;
         let portal_start = usize::try_from(header.portal_start).map_err(|_| {
-            Error::new(
-                "world.group.portal",
+            Error::requirement(
+                Location::new()
+                    .field("world")
+                    .field("group")
+                    .field("portal"),
                 "negative portal start cannot address a portal table",
             )
         })?;
@@ -205,7 +216,10 @@ pub(super) fn beta<'a>(
             for (index, row) in rows.iter().enumerate() {
                 let row = row.map_err(read_error)?;
                 let group = world.groups.get_mut(index).ok_or_else(|| {
-                    Error::new("world.catalog", "catalog exceeds resolved groups")
+                    Error::requirement(
+                        Location::new().field("world").field("catalog"),
+                        "catalog exceeds resolved groups",
+                    )
                 })?;
                 group.name = if row.name_offset < 0 {
                     Cow::Borrowed("")
@@ -236,8 +250,8 @@ fn skybox<'a, 'data: 'a>(source: &'a impl CommonRoot<'data>) -> Option<WorldMode
         _ => None,
     })
 }
-fn read_error(error: impl std::fmt::Display) -> Error {
-    Error::new("world", error.to_string())
+fn read_error(error: impl StdError + Send + Sync + 'static) -> Error {
+    Error::from_source(Location::new().field("world"), error)
 }
 
 fn collect_root<'a, 'data: 'a>(

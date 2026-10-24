@@ -677,7 +677,12 @@ fn absent_model_info_stays_absent_and_encoding_requires_bounds_for_metadata() {
     assert!(asset.bounds().is_none());
     asset.validate().unwrap();
     let error = io::mdlx::plan::<mdlx::V800>(&asset, &ExportOptions::default()).unwrap_err();
-    assert_eq!(error.path, "model.info");
+    assert_eq!(
+        error.location(),
+        &wc3::model::error::Location::new()
+            .field("model")
+            .field("info")
+    );
 }
 
 #[test]
@@ -709,7 +714,12 @@ fn empty_material_declarations_survive_import_widening_and_export() {
     assert_eq!(material.try_shader().unwrap(), "empty shader");
     // An uninterpreted declaration cannot be normalized into a numeric selector.
     let error = io::mdlx::plan::<mdlx::V1800>(&restored, &ExportOptions::default()).unwrap_err();
-    assert_eq!(error.path, "material.shader");
+    assert_eq!(
+        error.location(),
+        &wc3::model::error::Location::new()
+            .field("material")
+            .field("shader")
+    );
 }
 
 #[test]

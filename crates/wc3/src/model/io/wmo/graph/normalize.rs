@@ -2,6 +2,7 @@
 use crate::model::common::PackedArray;
 use crate::model::common::PackedValue;
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::io::{materialize, owned};
 use crate::model::profiles::Wmo;
 use crate::model::{
@@ -9,7 +10,7 @@ use crate::model::{
     PrimitiveSelection, WmoGeometry,
 };
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Display;
+use std::error::Error as StdError;
 
 pub(super) fn prepare<'data>(
     model: &Model<'data, Wmo>,
@@ -55,8 +56,7 @@ pub(super) fn prepare<'data>(
                 || instance.selection_group != first.selection_group
                 || mesh.name != first_mesh.name
             {
-                return Err(Error::new(
-                    "world.group.merge",
+                return Err(Error::requirement(Location::new().field("world").field("group").field("merge"),
                     "geometry placements at one detail level must share region behavior, descriptions, and geometry names",
                 ));
             }
@@ -66,8 +66,7 @@ pub(super) fn prepare<'data>(
                 || mesh.geometry.lightmap_coordinates().is_empty()
                     != first_mesh.geometry.lightmap_coordinates().is_empty()
             {
-                return Err(Error::new(
-                    "world.group.merge.streams",
+                return Err(Error::requirement(Location::new().field("world").field("group").field("merge").field("streams"),
                     "joined geometry must use the same normal, texture, color, and baked-light stream vocabulary",
                 ));
             }
@@ -100,14 +99,14 @@ pub(super) fn prepare<'data>(
             let source_vertices = u32::try_from(mesh.positions().len()).map_err(error)?;
             let source_faces = u32::try_from(mesh.topology().primitive_count()).map_err(error)?;
             let next_vertex = vertex_base.checked_add(source_vertices).ok_or_else(|| {
-                Error::new(
-                    "world.group.merge",
+                Error::requirement(
+                    Location::new().field("world").field("group").field("merge"),
                     "vertex count exceeds logical connectivity capacity",
                 )
             })?;
             let next_face = face_base.checked_add(source_faces).ok_or_else(|| {
-                Error::new(
-                    "world.group.merge",
+                Error::requirement(
+                    Location::new().field("world").field("group").field("merge"),
                     "face count exceeds logical draw capacity",
                 )
             })?;
@@ -125,8 +124,8 @@ pub(super) fn prepare<'data>(
                 lightmap_coordinates.push(mesh.geometry.lightmap_coordinates().clone());
             }
             let crate::model::Topology::Triangles(connectivity) = mesh.topology() else {
-                return Err(Error::new(
-                    "world.group.merge",
+                return Err(Error::requirement(
+                    Location::new().field("world").field("group").field("merge"),
                     "world geometry requires triangle connectivity",
                 ));
             };
@@ -158,17 +157,26 @@ pub(super) fn prepare<'data>(
                     connectivity: subsets.primary(),
                     range: PrimitiveRange::Primitives {
                         first: source_draw.first.checked_add(face_base).ok_or_else(|| {
-                            Error::new("world.group.merge", "draw selection exceeds face capacity")
+                            Error::requirement(
+                                Location::new().field("world").field("group").field("merge"),
+                                "draw selection exceeds face capacity",
+                            )
                         })?,
                         count: source_draw.count,
                     },
                 };
                 if let Some([first, last]) = &mut subset.vertex_window {
                     *first = first.checked_add(vertex_base).ok_or_else(|| {
-                        Error::new("world.group.merge", "vertex window exceeds capacity")
+                        Error::requirement(
+                            Location::new().field("world").field("group").field("merge"),
+                            "vertex window exceeds capacity",
+                        )
                     })?;
                     *last = last.checked_add(vertex_base).ok_or_else(|| {
-                        Error::new("world.group.merge", "vertex window exceeds capacity")
+                        Error::requirement(
+                            Location::new().field("world").field("group").field("merge"),
+                            "vertex window exceeds capacity",
+                        )
                     })?;
                 }
                 if let Some(strip) = &mut subset.strip {
@@ -180,7 +188,10 @@ pub(super) fn prepare<'data>(
                             .first()
                             .checked_add(strip_base)
                             .ok_or_else(|| {
-                                Error::new("world.group.merge", "strip window exceeds capacity")
+                                Error::requirement(
+                                    Location::new().field("world").field("group").field("merge"),
+                                    "strip window exceeds capacity",
+                                )
                             })?,
                         count: strip.selection.range.count(),
                     };
@@ -190,13 +201,19 @@ pub(super) fn prepare<'data>(
                         .first_vertex
                         .checked_add(vertex_base)
                         .ok_or_else(|| {
-                            Error::new("world.group.merge", "tangent vertex exceeds capacity")
+                            Error::requirement(
+                                Location::new().field("world").field("group").field("merge"),
+                                "tangent vertex exceeds capacity",
+                            )
                         })?;
                     tangents.first_tangent = tangents
                         .first_tangent
                         .checked_add(tangent_base)
                         .ok_or_else(|| {
-                            Error::new("world.group.merge", "tangent pool exceeds capacity")
+                            Error::requirement(
+                                Location::new().field("world").field("group").field("merge"),
+                                "tangent pool exceeds capacity",
+                            )
                         })?;
                 }
                 let mut draw = source.clone();
@@ -208,12 +225,18 @@ pub(super) fn prepare<'data>(
             strip_base = strip_base
                 .checked_add(u32::try_from(mesh.geometry.strip_indices().len()).map_err(error)?)
                 .ok_or_else(|| {
-                    Error::new("world.group.merge", "strip pool exceeds logical capacity")
+                    Error::requirement(
+                        Location::new().field("world").field("group").field("merge"),
+                        "strip pool exceeds logical capacity",
+                    )
                 })?;
             tangent_base = tangent_base
                 .checked_add(u32::try_from(mesh.geometry.tangent_vectors().len()).map_err(error)?)
                 .ok_or_else(|| {
-                    Error::new("world.group.merge", "tangent pool exceeds logical capacity")
+                    Error::requirement(
+                        Location::new().field("world").field("group").field("merge"),
+                        "tangent pool exceeds logical capacity",
+                    )
                 })?;
         }
         let geometry = WmoGeometry::triangles(concat(positions)?, concat(triangles)?)?
@@ -310,9 +333,12 @@ fn concat<'data, T: PackedValue + Clone + Send + Sync + 'data>(
     let mut ends = Vec::with_capacity(parts.len());
     let mut length = 0usize;
     for part in &parts {
-        length = length
-            .checked_add(part.len())
-            .ok_or_else(|| Error::new("world.group.merge", "stream length overflows"))?;
+        length = length.checked_add(part.len()).ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("world").field("group").field("merge"),
+                "stream length overflows",
+            )
+        })?;
         ends.push(length);
     }
     Ok(materialize(length, move |index| {
@@ -323,6 +349,9 @@ fn concat<'data, T: PackedValue + Clone + Send + Sync + 'data>(
             .expect("checked concatenated stream")
     }))
 }
-fn error(error: impl Display) -> Error {
-    Error::new("world.group.merge", error.to_string())
+fn error(error: impl StdError + Send + Sync + 'static) -> Error {
+    Error::from_source(
+        Location::new().field("world").field("group").field("merge"),
+        error,
+    )
 }

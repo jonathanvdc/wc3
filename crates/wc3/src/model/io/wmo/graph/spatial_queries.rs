@@ -1,5 +1,6 @@
 //! Collision membership is the set of faces reachable through the BSP root.
 use crate::model::conversion::{Context, Error, IssueKind};
+use crate::model::error::Location;
 use crate::model::formats::wmo::group::GroupChunk;
 use crate::model::formats::wmo::Dialect;
 use std::collections::BTreeSet;
@@ -22,8 +23,8 @@ pub(super) fn faces<'a, 'data: 'a, D: Dialect>(
         return Ok(faces);
     };
     let Some(nodes) = nodes else {
-        return Err(Error::new(
-            "world.query",
+        return Err(Error::requirement(
+            Location::new().field("world").field("query"),
             "BSP face references have no tree",
         ));
     };
@@ -40,17 +41,33 @@ pub(super) fn faces<'a, 'data: 'a, D: Dialect>(
         }
         let node = nodes
             .get(index)
-            .ok_or_else(|| Error::new("world.query", "BSP child is outside the tree"))?
-            .map_err(|error| Error::new("world.query", error.to_string()))?;
+            .ok_or_else(|| {
+                Error::requirement(
+                    Location::new().field("world").field("query"),
+                    "BSP child is outside the tree",
+                )
+            })?
+            .map_err(|error| {
+                Error::from_source(Location::new().field("world").field("query"), error)
+            })?;
         if node.flags.leaf() {
-            let start = usize::try_from(node.first_face)
-                .map_err(|_| Error::new("world.query", "BSP window exceeds addressable storage"))?;
+            let start = usize::try_from(node.first_face).map_err(|_| {
+                Error::requirement(
+                    Location::new().field("world").field("query"),
+                    "BSP window exceeds addressable storage",
+                )
+            })?;
             let end = start
                 .checked_add(usize::from(node.face_count))
-                .ok_or_else(|| Error::new("world.query", "BSP window overflows"))?;
+                .ok_or_else(|| {
+                    Error::requirement(
+                        Location::new().field("world").field("query"),
+                        "BSP window overflows",
+                    )
+                })?;
             if end > references.len() {
-                return Err(Error::new(
-                    "world.query",
+                return Err(Error::requirement(
+                    Location::new().field("world").field("query"),
                     "BSP window exceeds face references",
                 ));
             }
@@ -59,7 +76,9 @@ pub(super) fn faces<'a, 'data: 'a, D: Dialect>(
                 let face = references
                     .get(slot)
                     .expect("checked BSP window")
-                    .map_err(|error| Error::new("world.query", error.to_string()))?;
+                    .map_err(|error| {
+                        Error::from_source(Location::new().field("world").field("query"), error)
+                    })?;
                 faces.insert(usize::from(face));
             }
         } else {

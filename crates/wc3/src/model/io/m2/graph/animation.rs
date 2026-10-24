@@ -1,5 +1,6 @@
 //! Borrowed native curves expressed as typed logical channels.
 use super::*;
+use crate::model::error::Location;
 use crate::model::io::animation::crop;
 use crate::model::io::materialize;
 use crate::model::PropertyValue;
@@ -81,7 +82,10 @@ where
     let len = range.map_or(resolved.timestamps.len(), |r| r.end.saturating_sub(r.start));
     let timestamps = resolved.timestamps;
     if first + len > timestamps.len() {
-        return Err(Error::new("m2.animation", "timestamp range exceeds array"));
+        return Err(Error::requirement(
+            Location::new().field("m2").field("animation"),
+            "timestamp range exceeds array",
+        ));
     }
     let times = materialize(len, move |i| {
         let ms = timestamps.get(first + i).unwrap();
@@ -102,8 +106,8 @@ where
         NativeInterpolation::Hermite => semantic::Interpolation::Hermite,
         NativeInterpolation::Bezier => semantic::Interpolation::Bezier,
         _ => {
-            return Err(Error::new(
-                "m2.animation",
+            return Err(Error::requirement(
+                Location::new().field("m2").field("animation"),
                 "unrecognized interpolation operation",
             ));
         }
@@ -141,11 +145,15 @@ pub(in super::super) fn bind<'a, T: CurveValue + PropertyValue + 'a>(
         clock: if global == u16::MAX {
             TimeSource::Animation
         } else {
-            TimeSource::Shared(
-                *clocks
-                    .get(global as usize)
-                    .ok_or_else(|| Error::new("m2.animation.clock", "missing shared clock"))?,
-            )
+            TimeSource::Shared(*clocks.get(global as usize).ok_or_else(|| {
+                Error::requirement(
+                    Location::new()
+                        .field("m2")
+                        .field("animation")
+                        .field("clock"),
+                    "missing shared clock",
+                )
+            })?)
         },
     })
 }
@@ -160,8 +168,11 @@ pub(in super::super) trait ChannelValue: PropertyValue + CurveValue {
         Self: Sized,
     {
         if track.curve.times().iter().any(|t| t < start || t > end) {
-            return Err(Error::new(
-                "m2.animation.window",
+            return Err(Error::requirement(
+                Location::new()
+                    .field("m2")
+                    .field("animation")
+                    .field("window"),
                 "nonfloating keys exceed the native clock interval",
             ));
         }
@@ -218,8 +229,11 @@ where
         .flatten()
         .any(|track| track.curve.uses_spherical_controls())
     {
-        return Err(Error::new(
-            "m2.animation.interpolation",
+        return Err(Error::requirement(
+            Location::new()
+                .field("m2")
+                .field("animation")
+                .field("interpolation"),
             "M2 export cannot preserve spherical spline controls",
         ));
     }
@@ -228,8 +242,8 @@ where
         .flatten()
         .any(|t| t.clock != first.clock || t.curve.interpolation() != first.curve.interpolation())
     {
-        return Err(Error::new(
-            "m2.animation",
+        return Err(Error::requirement(
+            Location::new().field("m2").field("animation"),
             "clock and interpolation differ across clips",
         ));
     }
@@ -239,7 +253,15 @@ where
             let duration = time_ms(
                 model
                     .clock(id)
-                    .ok_or_else(|| Error::new("m2.animation.clock", "missing clock"))?
+                    .ok_or_else(|| {
+                        Error::requirement(
+                            Location::new()
+                                .field("m2")
+                                .field("animation")
+                                .field("clock"),
+                            "missing clock",
+                        )
+                    })?
                     .period(),
                 context,
             )?;
@@ -250,19 +272,33 @@ where
                     globals.push(duration);
                     globals.len() - 1
                 });
-            u16::try_from(i).map_err(|_| Error::new("m2.animation.clock", "too many clocks"))?
+            u16::try_from(i).map_err(|_| {
+                Error::requirement(
+                    Location::new()
+                        .field("m2")
+                        .field("animation")
+                        .field("clock"),
+                    "too many clocks",
+                )
+            })?
         }
     };
     let interpolation = match first.curve.interpolation() {
         semantic::Interpolation::Slerp | semantic::Interpolation::Nlerp => {
-            return Err(Error::new(
-                "m2.animation.interpolation",
+            return Err(Error::requirement(
+                Location::new()
+                    .field("m2")
+                    .field("animation")
+                    .field("interpolation"),
                 "M2 has no distinct spherical or normalized-linear interpolation directive",
             ));
         }
         semantic::Interpolation::Tcb => {
-            return Err(Error::new(
-                "m2.animation.interpolation",
+            return Err(Error::requirement(
+                Location::new()
+                    .field("m2")
+                    .field("animation")
+                    .field("interpolation"),
                 "M2 has no tension/continuity/bias key encoding",
             ));
         }
@@ -303,8 +339,12 @@ where
                     context,
                 )?;
                 ts.push(if V::VERSION < 264 && global == u16::MAX {
-                    time.checked_add(starts[index])
-                        .ok_or_else(|| Error::new("m2.animation", "legacy time overflow"))?
+                    time.checked_add(starts[index]).ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("m2").field("animation"),
+                            "legacy time overflow",
+                        )
+                    })?
                 } else {
                     time
                 });
@@ -336,14 +376,14 @@ where
 pub(super) fn time_ms(time: Time, context: &mut Context) -> Result<u32, Error> {
     let value = time.as_seconds() * 1000.;
     if !(0. ..=f64::from(u32::MAX)).contains(&value) {
-        return Err(Error::new(
-            "m2.animation.time",
+        return Err(Error::requirement(
+            Location::new().field("m2").field("animation").field("time"),
             "time exceeds the unsigned millisecond clock",
         ));
     }
     let rounded = value.round();
     context.approximate(
-        "m2.animation.time",
+        Location::new().field("m2").field("animation").field("time"),
         ((rounded - value) / 1000.).abs() as f32,
         "time quantized to milliseconds",
     )?;
@@ -386,8 +426,8 @@ where
     let first = range.as_ref().map_or(0, |r| r.start);
     let len = range.map_or(times.len(), |r| r.end - r.start);
     if first.checked_add(len).is_none_or(|end| end > times.len()) {
-        return Err(Error::new(
-            "m2.camera.spline",
+        return Err(Error::requirement(
+            Location::new().field("m2").field("camera").field("spline"),
             "timestamp range exceeds array",
         ));
     }
@@ -412,7 +452,12 @@ where
         NativeInterpolation::Linear => semantic::Interpolation::Linear,
         NativeInterpolation::Hermite => semantic::Interpolation::Hermite,
         NativeInterpolation::Bezier => semantic::Interpolation::Bezier,
-        _ => return Err(Error::new("m2.camera.spline", "unknown interpolation")),
+        _ => {
+            return Err(Error::requirement(
+                Location::new().field("m2").field("camera").field("spline"),
+                "unknown interpolation",
+            ))
+        }
     };
     let curve = if matches!(
         interpolation,
@@ -454,14 +499,14 @@ where
 }
 pub(super) fn fixed_alpha(value: f32, context: &mut Context) -> Result<i16, Error> {
     if !value.is_finite() || !(0. ..=1.).contains(&value) {
-        return Err(Error::new(
-            "m2.alpha",
+        return Err(Error::requirement(
+            Location::new().field("m2").field("alpha"),
             "opacity must be within zero and one",
         ));
     }
     let raw = (value * 32767.).round() as i16;
     context.approximate(
-        "m2.alpha",
+        Location::new().field("m2").field("alpha"),
         (f32::from(raw) / 32767. - value).abs(),
         "opacity quantized to fixed16",
     )?;
@@ -529,8 +574,11 @@ pub(in super::super) fn insert<'a>(
                 }
                 builder.add_track(clip, channel)?
             } else {
-                return Err(Error::new(
-                    "m2.animation.clock",
+                return Err(Error::requirement(
+                    Location::new()
+                        .field("m2")
+                        .field("animation")
+                        .field("clock"),
                     "sequence curve has no playback clip",
                 ));
             }

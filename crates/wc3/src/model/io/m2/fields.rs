@@ -1,5 +1,6 @@
 //! Dialect-selected scalar fields without document dependencies.
 use super::*;
+use crate::model::error::Location;
 /// Reads and constructs dialect-selected bone-name checksum fields.
 pub trait NameCrcField: Sized {
     /// Returns the stored checksum, zero when the field is absent.
@@ -14,7 +15,7 @@ impl NameCrcField for () {
     fn make(value: u32, context: &mut Context) -> Result<Self, Error> {
         if value != 0 {
             context.unsupported(
-                "bones.name_crc",
+                Location::new().field("bones").field("name_crc"),
                 "target classic layout omits bone-name CRCs",
             )?;
         }
@@ -43,7 +44,7 @@ impl BlendField for u32 {
     fn make(parts: [u32; 2], context: &mut Context) -> Result<Self, Error> {
         if parts[0] != parts[1] {
             context.unsupported(
-                "clips.blend",
+                Location::new().field("clips").field("blend"),
                 "target layout has one shared transition duration",
             )?;
         }
@@ -56,10 +57,18 @@ impl BlendField for native::records::SplitBlendTime {
     }
     fn make(parts: [u32; 2], _: &mut Context) -> Result<Self, Error> {
         Ok(Self {
-            incoming: u16::try_from(parts[0])
-                .map_err(|_| Error::new("clips.blend_in", "transition exceeds u16"))?,
-            outgoing: u16::try_from(parts[1])
-                .map_err(|_| Error::new("clips.blend_out", "transition exceeds u16"))?,
+            incoming: u16::try_from(parts[0]).map_err(|_| {
+                Error::requirement(
+                    Location::new().field("clips").field("blend_in"),
+                    "transition exceeds u16",
+                )
+            })?,
+            outgoing: u16::try_from(parts[1]).map_err(|_| {
+                Error::requirement(
+                    Location::new().field("clips").field("blend_out"),
+                    "transition exceeds u16",
+                )
+            })?,
         })
     }
 }
@@ -83,7 +92,7 @@ impl<'data, V: ModelLayout> FlipbookField<'data, V> for () {
     ) -> Result<Self, Error> {
         if !records.is_empty() {
             context.unsupported(
-                "textures.flipbooks",
+                Location::new().field("textures").field("flipbooks"),
                 "target core layout has no legacy texture-frame array",
             )?;
         }
@@ -118,7 +127,7 @@ impl SectionSorting for () {
     fn make(value: Option<([f32; 3], f32)>, context: &mut Context) -> Result<Self, Error> {
         if value.is_some() {
             context.unsupported(
-                "m2.geoset.sorting",
+                Location::new().field("m2").field("geoset").field("sorting"),
                 "target dialect has no authored sorting sphere",
             )?
         }

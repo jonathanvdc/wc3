@@ -1,5 +1,6 @@
 //! Native M2 camera-facing declarations.
 use crate::model::conversion::{Context, Error};
+use crate::model::error::Location;
 use crate::model::properties::BillboardFlags;
 use crate::model::{Billboard, BillboardAxis, BillboardFrame, BillboardScale};
 pub(super) fn decode(flags: BillboardFlags) -> Billboard {
@@ -29,7 +30,7 @@ pub(super) fn encode(
         Billboard::ScreenAxis(BillboardAxis::X) => flags.x = true,
         Billboard::ScreenAxis(BillboardAxis::Y) => flags.y = true,
         Billboard::ScreenAxis(BillboardAxis::Z) => flags.z = true,
-        _ => context.unsupported("node.billboard", "M2 requires YZ spherical facing with local signed basis lengths or a camera screen axis")?,
+        _ => context.unsupported(Location::new().field("node").field("billboard"), "M2 requires YZ spherical facing with local signed basis lengths or a camera screen axis")?,
     }
     Ok(flags)
 }

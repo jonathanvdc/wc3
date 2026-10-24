@@ -516,7 +516,12 @@ fn known_shader_header_requires_matching_steps_for_layout_normalization() {
         })
         .unwrap();
     let error = export::<native::V1800>(&model).unwrap_err();
-    assert_eq!(error.path, "material.shader");
+    assert_eq!(
+        error.location(),
+        &wc3::model::error::Location::new()
+            .field("material")
+            .field("shader")
+    );
 }
 
 #[test]

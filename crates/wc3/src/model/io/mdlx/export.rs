@@ -2,6 +2,7 @@
 use super::billboard;
 use super::encode_animation::{unsigned_frame, Encoder};
 use crate::model::conversion::{Context, Error, ExportOptions, Plan};
+use crate::model::error::Location;
 use crate::model::formats::mdlx::mdx::FixedText;
 use crate::model::formats::mdlx::scene::{Node as NativeNode, NodeFlags};
 use crate::model::formats::mdlx::{
@@ -27,15 +28,14 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
             || !model.metadata().animation_file.is_empty()
             || model.metadata().blend_time != 0.)
     {
-        return Err(Error::new(
-            "model.info",
+        return Err(Error::requirement(Location::new().field("model").field("info"),
             "the native model-info declaration requires bounds to encode the model name, animation filename, or blend time",
         ));
     }
     let mut context = Context::export(options);
     if model.systems().iter().next().is_some() {
         context.unsupported(
-            "model.systems",
+            Location::new().field("model").field("systems"),
             "Warcraft III cannot encode the authored global system without semantic translation",
         )?;
     }
@@ -47,7 +47,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
         periods.push(unsigned_frame(
             clock.period().as_seconds(),
             &mut context,
-            "clock.period",
+            &Location::new().field("clock").field("period"),
         )?);
     }
     result.set_global_sequences(&periods);
@@ -55,14 +55,19 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     for (_, clip) in model.clips() {
         let metadata = &clip.properties;
         let start = clip.source_start.as_seconds();
-        let first = unsigned_frame(start, &mut context, "clip.start")?;
+        let first = unsigned_frame(
+            start,
+            &mut context,
+            &Location::new().field("clip").field("start"),
+        )?;
         let last = unsigned_frame(
             start + clip.duration().as_seconds(),
             &mut context,
-            "clip.end",
+            &Location::new().field("clip").field("end"),
         )?;
-        let mut sequence = Sequence::new(clip.name(), [first, last])
-            .map_err(|error| Error::new("clip.name", error.to_string()))?;
+        let mut sequence = Sequence::new(clip.name(), [first, last]).map_err(|error| {
+            Error::from_source(Location::new().field("clip").field("name"), error)
+        })?;
         sequence.flags.set_non_looping(!clip.is_looping());
         {
             sequence.flags = SequenceFlags(0);
@@ -87,13 +92,14 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
             MdlxImageResource::Replaceable { filename, .. } => filename.as_ref(),
         };
         if path.len() > 260 || path.contains(&0) {
-            return Err(Error::new(
-                "texture.path",
+            return Err(Error::requirement(
+                Location::new().field("texture").field("path"),
                 "resource path exceeds the native field or contains NUL",
             ));
         }
-        let mut value =
-            Texture::new("").map_err(|error| Error::new("texture.path", error.to_string()))?;
+        let mut value = Texture::new("").map_err(|error| {
+            Error::from_source(Location::new().field("texture").field("path"), error)
+        })?;
         let mut field = [0u8; 260];
         field[..path.len()].copy_from_slice(path);
         value.path = FixedText::from_bytes(field);
@@ -108,7 +114,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
             || !matches!(source.sampler.v, AddressMode::Repeat | AddressMode::Clamp)
         {
             context.unsupported(
-                "texture.sampler",
+                Location::new().field("texture").field("sampler"),
                 "Warcraft III texture addressing supports only repeat and clamp",
             )?;
         }
@@ -144,7 +150,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
             &texture_ids,
             &mut encoder,
             &mut transforms,
-            "material",
+            &Location::new().field("material"),
         )?);
     }
     result.set_materials(materials);
@@ -158,8 +164,9 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
     let mut nodes = BTreeMap::new();
     let mut pivots = Vec::new();
     for (id, source) in model.nodes() {
-        let mut node = NativeNode::new(&source.name, node_ids[&id])
-            .map_err(|error| Error::new("node.name", error.to_string()))?;
+        let mut node = NativeNode::new(&source.name, node_ids[&id]).map_err(|error| {
+            Error::from_source(Location::new().field("node").field("name"), error)
+        })?;
         node.parent_id = source.parent.map_or(u32::MAX, |parent| node_ids[&parent]);
         node.flags = NodeFlags(0);
         node.flags
@@ -176,7 +183,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
                 || source.billboard != Billboard::None
                 || source.camera_anchored)
         {
-            encoder.context.unsupported("node.transform_semantics", "Warcraft III requires pivot-local composition for selective inheritance and camera controls")?;
+            encoder.context.unsupported(Location::new().field("node").field("transform_semantics"), "Warcraft III requires pivot-local composition for selective inheritance and camera controls")?;
         }
         let flags = billboard::encode(
             source.billboard,
@@ -189,7 +196,7 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
         node.flags.set_billboard_lock_z(flags.z);
         if !encoder.constant(source.visible) {
             encoder.context.unsupported(
-                "node.visible",
+                Location::new().field("node").field("visible"),
                 "generic Warcraft III hierarchy nodes have no static hidden flag",
             )?;
         }
@@ -197,19 +204,19 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
             source.transform.translation,
             |v| Ok(v.to_array()),
             [0.; 3],
-            "node.translation",
+            &Location::new().field("node").field("translation"),
         )?;
         node.rotation = encoder.optional(
             source.transform.rotation,
             |value: Quat| Ok(value.to_array()),
             Quat::default().to_array(),
-            "node.rotation",
+            &Location::new().field("node").field("rotation"),
         )?;
         node.scaling = encoder.optional(
             source.transform.scale,
             |v| Ok(v.to_array()),
             [1.; 3],
-            "node.scale",
+            &Location::new().field("node").field("scale"),
         )?;
         pivots.push(source.transform.pivot);
         nodes.insert(id, node);
@@ -231,8 +238,9 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
         &meshes,
     )?;
     if let Some(bounds) = model.bounds() {
-        let mut info = ModelInfo::new(model.name())
-            .map_err(|error| Error::new("model.name", error.to_string()))?;
+        let mut info = ModelInfo::new(model.name()).map_err(|error| {
+            Error::from_source(Location::new().field("model").field("name"), error)
+        })?;
         info.minimum_extent = (bounds.minimum).to_array();
         info.maximum_extent = (bounds.maximum).to_array();
         info.bounds_radius = bounds.sphere_radius;
@@ -240,9 +248,17 @@ pub(in crate::model::io::mdlx) fn write<'a, 'data, T: Dialect>(
             let metadata = model.metadata();
             info.animation_file_name
                 .set_text(&metadata.animation_file)
-                .map_err(|error| Error::new("model.animation_file", error.to_string()))?;
-            info.blend_time =
-                unsigned_frame(metadata.blend_time, encoder.context, "model.blend_time")?;
+                .map_err(|error| {
+                    Error::from_source(
+                        Location::new().field("model").field("animation_file"),
+                        error,
+                    )
+                })?;
+            info.blend_time = unsigned_frame(
+                metadata.blend_time,
+                encoder.context,
+                &Location::new().field("model").field("blend_time"),
+            )?;
         }
         result.set_model_info(&info);
     }

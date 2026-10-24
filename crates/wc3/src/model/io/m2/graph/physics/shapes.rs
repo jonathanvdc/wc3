@@ -1,6 +1,7 @@
 //! Fixtures retain their actual geometric and contact properties.
 use super::*;
 use crate::model::common::PackedArray;
+use crate::model::error::Location;
 use crate::model::io::materialize;
 use crate::model::ValueGroups;
 use glam::Mat4;
@@ -19,8 +20,12 @@ pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Er
         .collect();
     let mut out = Vec::new();
     for definition in definitions {
-        let index = usize::try_from(definition.shape_index)
-            .map_err(|_| Error::new("physics.shape", "negative geometry index"))?;
+        let index = usize::try_from(definition.shape_index).map_err(|_| {
+            Error::requirement(
+                Location::new().field("physics").field("shape"),
+                "negative geometry index",
+            )
+        })?;
         let mut transform = identity();
         let mut mass_properties = None;
         let geometry = match definition.shape_type {
@@ -37,7 +42,12 @@ pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Er
                     })
                     .flatten()
                     .nth(index)
-                    .ok_or_else(|| Error::new("physics.box", "missing geometry"))?;
+                    .ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("physics").field("box"),
+                            "missing geometry",
+                        )
+                    })?;
                 let f = frame(&value.frame);
                 transform = [
                     [f.axis_x[0], f.axis_x[1], f.axis_x[2], 0.],
@@ -60,7 +70,12 @@ pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Er
                     })
                     .flatten()
                     .nth(index)
-                    .ok_or_else(|| Error::new("physics.sphere", "missing geometry"))?;
+                    .ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("physics").field("sphere"),
+                            "missing geometry",
+                        )
+                    })?;
                 transform[3] = [value.position[0], value.position[1], value.position[2], 1.];
                 ShapeGeometry::Sphere(value.radius)
             }
@@ -77,7 +92,12 @@ pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Er
                     })
                     .flatten()
                     .nth(index)
-                    .ok_or_else(|| Error::new("physics.capsule", "missing geometry"))?;
+                    .ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("physics").field("capsule"),
+                            "missing geometry",
+                        )
+                    })?;
                 ShapeGeometry::Capsule {
                     radius: value.radius,
                     endpoints: [
@@ -99,7 +119,12 @@ pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Er
                     })
                     .flatten()
                     .nth(index)
-                    .ok_or_else(|| Error::new("physics.polytope", "missing geometry"))?;
+                    .ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("physics").field("polytope"),
+                            "missing geometry",
+                        )
+                    })?;
                 let mut faces = Vec::new();
                 for first in value.face_first_edge.iter() {
                     let first = first as usize;
@@ -107,7 +132,13 @@ pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Er
                     let mut face = Vec::new();
                     loop {
                         let row = value.edges.get(edge).ok_or_else(|| {
-                            Error::new("physics.polytope.faces", "edge is absent")
+                            Error::requirement(
+                                Location::new()
+                                    .field("physics")
+                                    .field("polytope")
+                                    .field("faces"),
+                                "edge is absent",
+                            )
                         })?;
                         face.push(u32::from(row.origin_vertex));
                         edge = row.next_edge as usize;
@@ -115,8 +146,11 @@ pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Er
                             break;
                         }
                         if face.len() > value.edges.len() {
-                            return Err(Error::new(
-                                "physics.polytope.faces",
+                            return Err(Error::requirement(
+                                Location::new()
+                                    .field("physics")
+                                    .field("polytope")
+                                    .field("faces"),
                                 "boundary is not closed",
                             ));
                         }
@@ -143,8 +177,8 @@ pub(super) fn shapes<'a>(file: &'a PhysicsFile<'_>) -> Result<Vec<Shape<'a>>, Er
                 }
             }
             PhysicsShapeKind::Unknown(value) => {
-                return Err(Error::new(
-                    "physics.shape",
+                return Err(Error::requirement(
+                    Location::new().field("physics").field("shape"),
                     format!("unknown geometry selector {value}"),
                 ));
             }

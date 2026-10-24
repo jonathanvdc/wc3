@@ -1,5 +1,6 @@
 //! Borrowed section geometry and logical shader passes.
 use super::*;
+use crate::model::error::Location;
 use crate::model::io::materialize;
 use crate::model::materials::bindings::{Coordinates, ImageSelection};
 use crate::model::materials::m2::FrameSampling;
@@ -54,7 +55,7 @@ where
             ProfileRef::Skin(s) => &s.profile,
             ProfileRef::Geometry(_) => {
                 context.unsupported(
-                    "m2.geometry",
+                    Location::new().field("m2").field("geometry"),
                     "geometry companion has no verified logical schema",
                 )?;
                 continue;
@@ -74,8 +75,8 @@ where
                 || start + faces * 3 > profile.indices.len()
                 || !section.index_count.is_multiple_of(3)
             {
-                return Err(Error::new(
-                    "m2.section",
+                return Err(Error::requirement(
+                    Location::new().field("m2").field("section"),
                     "section window exceeds geometry arrays",
                 ));
             }
@@ -85,7 +86,10 @@ where
                     .get(base + profile.vertices.get(i).unwrap() as usize)
                     .is_none()
                 {
-                    return Err(Error::new("m2.section", "missing model vertex"));
+                    return Err(Error::requirement(
+                        Location::new().field("m2").field("section"),
+                        "missing model vertex",
+                    ));
                 }
             }
             let model_vertices = &core.vertices;
@@ -147,7 +151,10 @@ where
                     declared_palette.push(node);
                 } else {
                     context.unsupported(
-                        "m2.mesh.bone_palette",
+                        Location::new()
+                            .field("m2")
+                            .field("mesh")
+                            .field("bone_palette"),
                         "declared section palette references an absent bone or combination entry",
                     )?;
                 }
@@ -161,8 +168,11 @@ where
                         } else {
                             Some(*nodes.get(section.center_bone_index as usize).ok_or_else(
                                 || {
-                                    Error::new(
-                                        "m2.mesh.center_bone",
+                                    Error::requirement(
+                                        Location::new()
+                                            .field("m2")
+                                            .field("mesh")
+                                            .field("center_bone"),
                                         "sorting center selects an absent bone",
                                     )
                                 },
@@ -206,7 +216,12 @@ where
                     let native_material = core
                         .materials
                         .get(batch.material_index as usize)
-                        .ok_or_else(|| Error::new("m2.material", "missing render state"))?;
+                        .ok_or_else(|| {
+                            Error::requirement(
+                                Location::new().field("m2").field("material"),
+                                "missing render state",
+                            )
+                        })?;
                     let declaration = profile::MaterialDeclaration {
                         batch_flags: profile::values::BatchFlags::from_bits_retain(
                             batch.flags.bits(),
@@ -233,17 +248,34 @@ where
                             .texture_combos
                             .get(batch.texture_combo_index as usize + slot)
                             .ok_or_else(|| {
-                                Error::new("m2.material.texture", "missing texture combination")
+                                Error::requirement(
+                                    Location::new()
+                                        .field("m2")
+                                        .field("material")
+                                        .field("texture"),
+                                    "missing texture combination",
+                                )
                             })? as usize;
-                        let record = core
-                            .textures
-                            .get(texture)
-                            .ok_or_else(|| Error::new("m2.material.texture", "missing texture"))?;
+                        let record = core.textures.get(texture).ok_or_else(|| {
+                            Error::requirement(
+                                Location::new()
+                                    .field("m2")
+                                    .field("material")
+                                    .field("texture"),
+                                "missing texture",
+                            )
+                        })?;
                         textures_for_step.push(profile::TextureUnit {
                             image: ImageSelection {
                                 source: profile::values::TextureSource::from_raw(record.kind.raw()),
                                 texture: Some(*textures.get(texture).ok_or_else(|| {
-                                    Error::new("m2.material.texture", "missing logical texture")
+                                    Error::requirement(
+                                        Location::new()
+                                            .field("m2")
+                                            .field("material")
+                                            .field("texture"),
+                                        "missing logical texture",
+                                    )
                                 })?),
                             },
                             coordinates: Coordinates {
@@ -471,32 +503,41 @@ where
     let mut transforms = Vec::new();
     let mut uv_sets = Vec::new();
     for (instance_id, instance) in model.instances() {
-        let mesh = model
-            .mesh(instance.mesh)
-            .ok_or_else(|| Error::new("m2.mesh", "missing geometry"))?;
-        let placement = model
-            .node(instance.node)
-            .ok_or_else(|| Error::new("m2.mesh", "missing placement"))?;
+        let mesh = model.mesh(instance.mesh).ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("m2").field("mesh"),
+                "missing geometry",
+            )
+        })?;
+        let placement = model.node(instance.node).ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("m2").field("mesh"),
+                "missing placement",
+            )
+        })?;
         if placement.transform.defaults(model.values()).translation != Vec3::from_array([0.; 3])
             || placement.transform.defaults(model.values()).rotation != semantic::Quat::default()
             || placement.transform.defaults(model.values()).scale != Vec3::from_array([1.; 3])
         {
             context.unsupported(
-                "m2.mesh.placement",
+                Location::new().field("m2").field("mesh").field("placement"),
                 "a nonidentity mesh placement requires vertex and normal rebasing",
             )?
         }
         let triangles = if let Topology::Triangles(t) = mesh.topology() {
             t
         } else {
-            return Err(Error::new(
-                "m2.mesh.topology",
+            return Err(Error::requirement(
+                Location::new().field("m2").field("mesh").field("topology"),
                 "M2 requires triangle geometry",
             ));
         };
         let count = mesh.positions().len();
         if count > u16::MAX as usize || triangles.len() * 3 > u16::MAX as usize {
-            return Err(Error::new("m2.mesh", "section exceeds u16 limits"));
+            return Err(Error::requirement(
+                Location::new().field("m2").field("mesh"),
+                "section exceeds u16 limits",
+            ));
         }
         let profile = profiles.entry(instance.lod.unwrap_or(0)).or_default();
         let first = profile.vertices.len();
@@ -510,16 +551,23 @@ where
         if let Some(declared) = declared_palette {
             for joint in declared {
                 let index = nodes.iter().position(|node| node == joint).ok_or_else(|| {
-                    Error::new(
-                        "m2.mesh.bone_palette",
+                    Error::requirement(
+                        Location::new()
+                            .field("m2")
+                            .field("mesh")
+                            .field("bone_palette"),
                         "declared palette requires an exported bone",
                     )
                 })?;
-                palette.push(
-                    u16::try_from(index).map_err(|_| {
-                        Error::new("m2.mesh.bone_palette", "bone index exceeds u16")
-                    })?,
-                );
+                palette.push(u16::try_from(index).map_err(|_| {
+                    Error::requirement(
+                        Location::new()
+                            .field("m2")
+                            .field("mesh")
+                            .field("bone_palette"),
+                        "bone index exceeds u16",
+                    )
+                })?);
             }
         }
         let mut bone_maps = Vec::new();
@@ -531,8 +579,8 @@ where
                     .is_none_or(|node| node.properties.is_none())
                     || !nodes.contains(joint)
                 {
-                    return Err(Error::new(
-                        "m2.mesh.skin",
+                    return Err(Error::requirement(
+                        Location::new().field("m2").field("mesh").field("skin"),
                         "skin palette requires exported declared bones",
                     ));
                 }
@@ -557,8 +605,11 @@ where
             };
             let row = mesh.influences().joint_weights(i).unwrap_or_default();
             if row.len() > 4 {
-                return Err(Error::new(
-                    "m2.mesh.influences",
+                return Err(Error::requirement(
+                    Location::new()
+                        .field("m2")
+                        .field("mesh")
+                        .field("influences"),
                     "M2 supports at most four influences",
                 ));
             }
@@ -571,22 +622,36 @@ where
                 }
                 let joint_id = skin
                     .and_then(|s| s.joints.get(influence.joint as usize))
-                    .ok_or_else(|| Error::new("m2.mesh.skin", "missing authored joint"))?;
+                    .ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("m2").field("mesh").field("skin"),
+                            "missing authored joint",
+                        )
+                    })?;
                 if model
                     .node(*joint_id)
                     .is_none_or(|node| node.properties.is_none())
                 {
-                    return Err(Error::new(
-                        "m2.mesh.skin",
+                    return Err(Error::requirement(
+                        Location::new().field("m2").field("mesh").field("skin"),
                         "influence requires a declared bone",
                     ));
                 }
                 let joint = nodes
                     .iter()
                     .position(|node| node == joint_id)
-                    .ok_or_else(|| Error::new("m2.mesh.skin", "missing exported joint"))?;
-                v.bone_indices[slot] = u8::try_from(joint)
-                    .map_err(|_| Error::new("m2.mesh.skin", "joint exceeds byte width"))?;
+                    .ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("m2").field("mesh").field("skin"),
+                            "missing exported joint",
+                        )
+                    })?;
+                v.bone_indices[slot] = u8::try_from(joint).map_err(|_| {
+                    Error::requirement(
+                        Location::new().field("m2").field("mesh").field("skin"),
+                        "joint exceeds byte width",
+                    )
+                })?;
                 let scaled = influence.weight * 255.;
                 v.bone_weights[slot] = scaled.floor() as u8;
                 total += u32::from(v.bone_weights[slot]);
@@ -597,13 +662,17 @@ where
                     index
                 } else {
                     if declared_palette.is_some() {
-                        context.unsupported("m2.mesh.bone_palette", "exporting a skin influence requires expanding the declared palette, which changes body-particle generator eligibility")?;
+                        context.unsupported(Location::new().field("m2").field("mesh").field("bone_palette"), "exporting a skin influence requires expanding the declared palette, which changes body-particle generator eligibility")?;
                     }
                     palette.push(joint as u16);
                     palette.len() - 1
                 };
-                mapping[slot] = u8::try_from(index)
-                    .map_err(|_| Error::new("m2.mesh.skin", "palette exceeds 256 bones"))?
+                mapping[slot] = u8::try_from(index).map_err(|_| {
+                    Error::requirement(
+                        Location::new().field("m2").field("mesh").field("skin"),
+                        "palette exceeds 256 bones",
+                    )
+                })?
             }
             remainder.sort_by(|a, b| b.1.total_cmp(&a.1));
             for (slot, _) in remainder.iter().take(255u32.saturating_sub(total) as usize) {
@@ -614,7 +683,7 @@ where
                     continue;
                 }
                 context.approximate(
-                    "m2.mesh.skin",
+                    Location::new().field("m2").field("mesh").field("skin"),
                     (influence.weight - f32::from(v.bone_weights[slot]) / 255.).abs(),
                     "weights quantized to bytes summing to 255",
                 )?
@@ -624,20 +693,23 @@ where
         }
         let mut lookup: Vec<_> = profile.vertices.iter().collect();
         for i in core_start..core_start + count {
-            lookup.push(
-                u16::try_from(i).map_err(|_| {
-                    Error::new("m2.mesh.vertices", "global vertex index exceeds u16")
-                })?,
-            )
+            lookup.push(u16::try_from(i).map_err(|_| {
+                Error::requirement(
+                    Location::new().field("m2").field("mesh").field("vertices"),
+                    "global vertex index exceeds u16",
+                )
+            })?)
         }
         profile.vertices = ZeroVec::alloc_from_slice(&lookup);
         let mut indices: Vec<_> = profile.indices.iter().collect();
         for t in triangles.iter() {
             for i in t {
-                indices.push(
-                    u16::try_from(first + i as usize)
-                        .map_err(|_| Error::new("m2.mesh.indices", "profile index exceeds u16"))?,
-                )
+                indices.push(u16::try_from(first + i as usize).map_err(|_| {
+                    Error::requirement(
+                        Location::new().field("m2").field("mesh").field("indices"),
+                        "profile index exceeds u16",
+                    )
+                })?)
             }
         }
         profile.indices = ZeroVec::alloc_from_slice(&indices);
@@ -649,17 +721,35 @@ where
         let section_index = profile.sections.len();
         let geoset = mesh.properties.as_ref();
         profile.sections.push(SkinSection {
-            id: u16::try_from(instance.selection_group)
-                .map_err(|_| Error::new("m2.mesh.selection", "selection group exceeds u16"))?,
+            id: u16::try_from(instance.selection_group).map_err(|_| {
+                Error::requirement(
+                    Location::new().field("m2").field("mesh").field("selection"),
+                    "selection group exceeds u16",
+                )
+            })?,
             level: (index_start >> 16) as u16,
             vertex_start: first as u16,
             vertex_count: count as u16,
             index_start: index_start as u16,
             index_count: (triangles.len() * 3) as u16,
-            bone_count: u16::try_from(bone_combos.len() - palette_start)
-                .map_err(|_| Error::new("m2.mesh.bone_palette", "palette count exceeds u16"))?,
-            bone_combo_index: u16::try_from(palette_start)
-                .map_err(|_| Error::new("m2.mesh.bone_palette", "palette start exceeds u16"))?,
+            bone_count: u16::try_from(bone_combos.len() - palette_start).map_err(|_| {
+                Error::requirement(
+                    Location::new()
+                        .field("m2")
+                        .field("mesh")
+                        .field("bone_palette"),
+                    "palette count exceeds u16",
+                )
+            })?,
+            bone_combo_index: u16::try_from(palette_start).map_err(|_| {
+                Error::requirement(
+                    Location::new()
+                        .field("m2")
+                        .field("mesh")
+                        .field("bone_palette"),
+                    "palette start exceeds u16",
+                )
+            })?,
             bone_influences: mesh
                 .influences()
                 .iter()
@@ -674,17 +764,29 @@ where
                 .and_then(|g| g.center_bone)
                 .map(|id| {
                     if model.node(id).is_none_or(|node| node.properties.is_none()) {
-                        return Err(Error::new(
-                            "m2.mesh.center_bone",
+                        return Err(Error::requirement(
+                            Location::new()
+                                .field("m2")
+                                .field("mesh")
+                                .field("center_bone"),
                             "sorting center requires a declared bone",
                         ));
                     }
                     let index = nodes.iter().position(|node| *node == id).ok_or_else(|| {
-                        Error::new("m2.mesh.center_bone", "sorting-center bone is not exported")
+                        Error::requirement(
+                            Location::new()
+                                .field("m2")
+                                .field("mesh")
+                                .field("center_bone"),
+                            "sorting-center bone is not exported",
+                        )
                     })?;
                     u16::try_from(index).map_err(|_| {
-                        Error::new(
-                            "m2.mesh.center_bone",
+                        Error::requirement(
+                            Location::new()
+                                .field("m2")
+                                .field("mesh")
+                                .field("center_bone"),
                             "sorting-center index exceeds native width",
                         )
                     })
@@ -702,13 +804,16 @@ where
             let material_id = model.material_for_draw(instance_id, draw.id, look)?;
             if draw.first != 0 || draw.count as usize != triangles.len() {
                 context.unsupported(
-                    "m2.mesh.draw",
+                    Location::new().field("m2").field("mesh").field("draw"),
                     "partial draw ranges require splitting the native section",
                 )?
             }
-            let material = model
-                .material(material_id)
-                .ok_or_else(|| Error::new("m2.material", "missing surface"))?;
+            let material = model.material(material_id).ok_or_else(|| {
+                Error::requirement(
+                    Location::new().field("m2").field("material"),
+                    "missing surface",
+                )
+            })?;
             for (step_index, surface) in material.surface.steps.iter().enumerate() {
                 let declaration = surface.declaration();
                 let inputs = surface.inputs();
@@ -718,7 +823,10 @@ where
                     for (slot, route) in routes.iter().enumerate() {
                         if inputs[slot].coordinates.source != route.source {
                             context.unsupported(
-                                "m2.material.coordinates",
+                                Location::new()
+                                    .field("m2")
+                                    .field("material")
+                                    .field("coordinates"),
                                 "shader coordinate route differs from the native programme",
                             )?;
                         }
@@ -731,7 +839,7 @@ where
                                         != inputs[*owner].coordinates.transform
                             });
                         if conflicting_owner.is_some() {
-                            context.unsupported("m2.material.transform", "native shader repeats one transform; independent input transforms require changing the shader")?;
+                            context.unsupported(Location::new().field("m2").field("material").field("transform"), "native shader repeats one transform; independent input transforms require changing the shader")?;
                         }
                     }
                 }
@@ -745,13 +853,33 @@ where
                 let combo = texture_combos.len();
                 for (slot, unit) in inputs.iter().enumerate() {
                     let id = unit.image.texture.ok_or_else(|| {
-                        Error::new("m2.material.texture", "shader unit has no texture resource")
+                        Error::requirement(
+                            Location::new()
+                                .field("m2")
+                                .field("material")
+                                .field("texture"),
+                            "shader unit has no texture resource",
+                        )
                     })?;
                     texture_combos.push(
                         u16::try_from(texture_index(model, textures, id).ok_or_else(|| {
-                            Error::new("m2.material.texture", "missing resource")
+                            Error::requirement(
+                                Location::new()
+                                    .field("m2")
+                                    .field("material")
+                                    .field("texture"),
+                                "missing resource",
+                            )
                         })?)
-                        .map_err(|_| Error::new("m2.material.texture", "index exceeds u16"))?,
+                        .map_err(|_| {
+                            Error::requirement(
+                                Location::new()
+                                    .field("m2")
+                                    .field("material")
+                                    .field("texture"),
+                                "index exceeds u16",
+                            )
+                        })?,
                     );
                     uv_sets.push(unit.coordinates.source as u16);
                     let indices = controls
@@ -782,8 +910,12 @@ where
                         .get(&(material_id, step_index))
                         .map_or(-1, |c| c.color),
                     material_index: material_index as u16,
-                    material_layer: u16::try_from(section_layer)
-                        .map_err(|_| Error::new("m2.material.steps", "too many material steps"))?,
+                    material_layer: u16::try_from(section_layer).map_err(|_| {
+                        Error::requirement(
+                            Location::new().field("m2").field("material").field("steps"),
+                            "too many material steps",
+                        )
+                    })?,
                     geoset_index: draw.properties.as_ref().map_or(0, |v| v.auxiliary_section),
                     texture_count: inputs.len() as u16,
                     texture_combo_index: combo as u16,

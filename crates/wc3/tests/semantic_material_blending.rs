@@ -70,7 +70,9 @@ fn unweighted_semantic_addition_has_no_exact_warcraft_layer_encoding() {
         Err(error) => error,
         Ok(_) => panic!("unweighted additive exported without loss"),
     };
-    assert!(error.description.contains("unweighted"));
+    assert!(
+        matches!(error, wc3::model::conversion::Error::Requirement { requirement, .. } if requirement.contains("unweighted"))
+    );
 }
 #[test]
 fn atlas_additive_preserves_its_encoding_and_rejects_material_only_selector() {

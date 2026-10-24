@@ -2,6 +2,7 @@
 
 use super::rgba;
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::wmo::group::GroupChunk;
 use crate::model::formats::wmo::records;
 use crate::model::formats::wmo::{Dialect, Group};
@@ -48,8 +49,12 @@ pub(super) fn read<'a, D: Dialect>(
                     .point_lights
                     .get(row.light_index as usize)
                     .ok_or_else(|| {
-                        Error::new(
-                            "world.region.program.light",
+                        Error::requirement(
+                            Location::new()
+                                .field("world")
+                                .field("region")
+                                .field("program")
+                                .field("light"),
                             "program references an absent point light",
                         )
                     })?;
@@ -100,14 +105,23 @@ pub(super) fn read<'a, D: Dialect>(
         for row in rows.iter() {
             let row = row.map_err(error)?;
             let start = row.offset as usize;
-            let end = start
-                .checked_add(row.count as usize)
-                .ok_or_else(|| Error::new("world.region.light_set", "activation range overflow"))?;
+            let end = start.checked_add(row.count as usize).ok_or_else(|| {
+                Error::requirement(
+                    Location::new()
+                        .field("world")
+                        .field("region")
+                        .field("light_set"),
+                    "activation range overflow",
+                )
+            })?;
             sets.push(
                 ids.get(start..end)
                     .ok_or_else(|| {
-                        Error::new(
-                            "world.region.light_set",
+                        Error::requirement(
+                            Location::new()
+                                .field("world")
+                                .field("region")
+                                .field("light_set"),
                             "activation range exceeds light table",
                         )
                     })?
@@ -118,7 +132,13 @@ pub(super) fn read<'a, D: Dialect>(
     Ok(())
 }
 fn error(error: crate::model::formats::wmo::ReadError) -> Error {
-    Error::new("world.region.light", error.to_string())
+    Error::from_source(
+        Location::new()
+            .field("world")
+            .field("region")
+            .field("light"),
+        error,
+    )
 }
 
 pub(super) fn write<'a, D: Dialect>(
@@ -132,8 +152,11 @@ pub(super) fn write<'a, D: Dialect>(
     for id in &region.point_lights {
         let feature = model.feature(*id).expect("validated region light");
         let wmo::Node::PointLight(source) = &feature.payload else {
-            return Err(Error::new(
-                "world.region.light",
+            return Err(Error::requirement(
+                Location::new()
+                    .field("world")
+                    .field("region")
+                    .field("light"),
                 "region point-light membership has another feature kind",
             ));
         };
@@ -154,8 +177,11 @@ pub(super) fn write<'a, D: Dialect>(
     for id in &region.point_programs {
         let feature = model.feature(*id).expect("validated region program");
         let wmo::Node::LightProgram(source) = &feature.payload else {
-            return Err(Error::new(
-                "world.region.program",
+            return Err(Error::requirement(
+                Location::new()
+                    .field("world")
+                    .field("region")
+                    .field("program"),
                 "program membership has another feature kind",
             ));
         };
@@ -164,16 +190,24 @@ pub(super) fn write<'a, D: Dialect>(
         let cookie = source.cookie.map_or(Ok(0), |id| {
             match model.image_resource(id.resource).expect("validated image") {
                 WorldImageResource::FileDataId(id) => Ok(*id),
-                _ => Err(Error::new(
-                    "world.region.program.cookie",
+                _ => Err(Error::requirement(
+                    Location::new()
+                        .field("world")
+                        .field("region")
+                        .field("program")
+                        .field("cookie"),
                     "native cookie requires a database identity",
                 )),
             }
         })?;
         programs.push(records::PointLightAnimation {
             light_index: *indices.get(&source.light).ok_or_else(|| {
-                Error::new(
-                    "world.region.program.light",
+                Error::requirement(
+                    Location::new()
+                        .field("world")
+                        .field("region")
+                        .field("program")
+                        .field("light"),
                     "program light is not a member of this region",
                 )
             })?,
@@ -222,14 +256,23 @@ fn sets(
         .map(|members| {
             let offset = if let Some(first) = members.first() {
                 ids.iter().position(|id| id == first).ok_or_else(|| {
-                    Error::new("world.region.light_set", "set contains an absent light")
+                    Error::requirement(
+                        Location::new()
+                            .field("world")
+                            .field("region")
+                            .field("light_set"),
+                        "set contains an absent light",
+                    )
                 })?
             } else {
                 0
             };
             if ids.get(offset..offset + members.len()) != Some(members.as_slice()) {
-                return Err(Error::new(
-                    "world.region.light_set",
+                return Err(Error::requirement(
+                    Location::new()
+                        .field("world")
+                        .field("region")
+                        .field("light_set"),
                     "native activation sets require consecutive table membership",
                 ));
             }
@@ -245,8 +288,12 @@ fn absolute(node: &Node<'_, Wmo>, values: &PropertyValues) -> Result<(), Error> 
         || node.transform.defaults(values).rotation != Default::default()
         || node.transform.defaults(values).scale != Vec3::from_array([1.; 3])
     {
-        return Err(Error::new(
-            "world.region.light.transform",
+        return Err(Error::requirement(
+            Location::new()
+                .field("world")
+                .field("region")
+                .field("light")
+                .field("transform"),
             "native region light has only absolute translation",
         ));
     }

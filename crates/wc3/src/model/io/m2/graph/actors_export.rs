@@ -1,6 +1,7 @@
 //! Feature-local fields and curves become typed native effect records.
 use super::animation::{animated, animated_spline, fixed_alpha, time_ms};
 use super::*;
+use crate::model::error::Location;
 use crate::model::materials::m2::material_flags;
 use crate::model::Axis;
 use crate::model::TimeSource;
@@ -10,9 +11,9 @@ fn anchor(
     node: semantic::NodeId,
     bones: &[semantic::NodeId],
 ) -> Result<(u32, [f32; 3]), Error> {
-    let value = model
-        .node(node)
-        .ok_or_else(|| Error::new("m2.actor", "missing node"))?;
+    let value = model.node(node).ok_or_else(|| {
+        Error::requirement(Location::new().field("m2").field("actor"), "missing node")
+    })?;
     if let Some(index) = bones.iter().position(|n| *n == node) {
         return Ok((index as u32, [0.; 3]));
     }
@@ -20,8 +21,8 @@ fn anchor(
         .parent
         .and_then(|id| bones.iter().position(|n| *n == id))
         .ok_or_else(|| {
-            Error::new(
-                "m2.actor.anchor",
+            Error::requirement(
+                Location::new().field("m2").field("actor").field("anchor"),
                 "feature requires an exported anchor bone",
             )
         })?;
@@ -59,8 +60,12 @@ where
                 let (bone, position) = anchor(model, attached.node, nodes)?;
                 core.attachments.push(native::records::Attachment {
                     id: value.identity,
-                    bone_id: u16::try_from(bone)
-                        .map_err(|_| Error::new("m2.attachment", "bone index exceeds u16"))?,
+                    bone_id: u16::try_from(bone).map_err(|_| {
+                        Error::requirement(
+                            Location::new().field("m2").field("attachment"),
+                            "bone index exceeds u16",
+                        )
+                    })?,
                     position,
                     animate: animated(
                         model,
@@ -87,8 +92,12 @@ where
                 } else {
                     let (b, p) = anchor(model, attached.node, nodes)?;
                     (
-                        i16::try_from(b)
-                            .map_err(|_| Error::new("m2.light", "bone index exceeds i16"))?,
+                        i16::try_from(b).map_err(|_| {
+                            Error::requirement(
+                                Location::new().field("m2").field("light"),
+                                "bone index exceeds i16",
+                            )
+                        })?,
                         p,
                     )
                 };
@@ -157,7 +166,11 @@ where
             profile::ActorKind::Ribbon(value) => {
                 if value.geometry.axis != Axis::PositiveZ {
                     context.unsupported(
-                        "m2.ribbon.geometry.axis",
+                        Location::new()
+                            .field("m2")
+                            .field("ribbon")
+                            .field("geometry")
+                            .field("axis"),
                         "M2 ribbon cross-sections require the native local positive Z axis",
                     )?;
                 }
@@ -168,26 +181,49 @@ where
                     .iter()
                     .map(|id| {
                         texture_index(model, textures, *id)
-                            .ok_or_else(|| Error::new("m2.ribbon.texture", "missing resource"))
+                            .ok_or_else(|| {
+                                Error::requirement(
+                                    Location::new().field("m2").field("ribbon").field("texture"),
+                                    "missing resource",
+                                )
+                            })
                             .and_then(|i| {
                                 u16::try_from(i).map_err(|_| {
-                                    Error::new("m2.ribbon.texture", "index exceeds u16")
+                                    Error::requirement(
+                                        Location::new()
+                                            .field("m2")
+                                            .field("ribbon")
+                                            .field("texture"),
+                                        "index exceeds u16",
+                                    )
                                 })
                             })
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 let mut material_indices = Vec::new();
                 for id in &value.rendering.materials {
-                    let material = model
-                        .material(*id)
-                        .ok_or_else(|| Error::new("m2.ribbon.material", "missing surface"))?;
+                    let material = model.material(*id).ok_or_else(|| {
+                        Error::requirement(
+                            Location::new()
+                                .field("m2")
+                                .field("ribbon")
+                                .field("material"),
+                            "missing surface",
+                        )
+                    })?;
                     for step in &material.surface.steps {
                         let surface = step.declaration();
-                        material_indices.push(
-                            u16::try_from(core.materials.len()).map_err(|_| {
-                                Error::new("m2.ribbon.material", "too many materials")
-                            })?,
-                        );
+                        material_indices.push(u16::try_from(core.materials.len()).map_err(
+                            |_| {
+                                Error::requirement(
+                                    Location::new()
+                                        .field("m2")
+                                        .field("ribbon")
+                                        .field("material"),
+                                    "too many materials",
+                                )
+                            },
+                        )?);
                         let mut materials: Vec<_> = core.materials.iter().collect();
                         materials.push(native::records::Material {
                             flags: MaterialFlags::from_bits_retain(
@@ -234,7 +270,13 @@ where
                             core.texture_transforms.len() - 1
                         });
                     let index = u16::try_from(index).map_err(|_| {
-                        Error::new("m2.ribbon.transform", "too many texture transforms")
+                        Error::requirement(
+                            Location::new()
+                                .field("m2")
+                                .field("ribbon")
+                                .field("transform"),
+                            "too many texture transforms",
+                        )
                     })?;
                     let mut combos: Vec<_> = core.texture_transform_combos.iter().collect();
                     let slot = combos
@@ -245,8 +287,11 @@ where
                             combos.len() - 1
                         });
                     let slot = i8::try_from(slot).map_err(|_| {
-                        Error::new(
-                            "m2.ribbon.transform",
+                        Error::requirement(
+                            Location::new()
+                                .field("m2")
+                                .field("ribbon")
+                                .field("transform"),
                             "lookup index exceeds signed ribbon field",
                         )
                     })?;
@@ -369,8 +414,12 @@ where
                 let mut record = value.as_ref().clone();
                 record.details.rendering.texture_program = None;
                 let mut particle = V::write_logical_particle(&record, textures, context, model)?;
-                particle.bone_id = u16::try_from(bone)
-                    .map_err(|_| Error::new("m2.particle", "bone exceeds u16"))?;
+                particle.bone_id = u16::try_from(bone).map_err(|_| {
+                    Error::requirement(
+                        Location::new().field("m2").field("particle"),
+                        "bone exceeds u16",
+                    )
+                })?;
                 particle.position = position;
                 particle.emission_speed = animated(
                     model,
@@ -459,7 +508,17 @@ where
                     starts,
                     globals,
                     context,
-                    |v, c| gravity_word((v).to_array(), packed, c, "m2.particle.gravity"),
+                    |v, c| {
+                        gravity_word(
+                            (v).to_array(),
+                            packed,
+                            c,
+                            &Location::new()
+                                .field("m2")
+                                .field("particle")
+                                .field("gravity"),
+                        )
+                    },
                 )?;
                 let required = V::required_flags(&particle);
                 core.flags = ModelFlags::from_bits_retain(core.flags.bits() | required.bits());
@@ -488,8 +547,12 @@ where
                     globals.push(duration);
                     globals.len() - 1
                 });
-            global =
-                u16::try_from(i).map_err(|_| Error::new("m2.event.clock", "too many clocks"))?;
+            global = u16::try_from(i).map_err(|_| {
+                Error::requirement(
+                    Location::new().field("m2").field("event").field("clock"),
+                    "too many clocks",
+                )
+            })?;
             leaves.push(
                 model
                     .global_events()
@@ -518,7 +581,10 @@ where
                             .and_then(|t| {
                                 if V::VERSION < 264 {
                                     t.checked_add(starts[index]).ok_or_else(|| {
-                                        Error::new("m2.event", "legacy time overflow")
+                                        Error::requirement(
+                                            Location::new().field("m2").field("event"),
+                                            "legacy time overflow",
+                                        )
                                     })
                                 } else {
                                     Ok(t)

@@ -1,6 +1,7 @@
 //! Static and animated field-of-view placement in native camera families.
 use super::graph::{Graph, GraphBuilder};
 use super::*;
+use crate::model::error::Location;
 use crate::model::{ClipId, ClockId, DynamicTrack, FeatureId, Property};
 
 /// Selects field-of-view representation through the native dialect's field types.
@@ -33,7 +34,7 @@ pub trait CameraConversion: ModelLayout {
 }
 macro_rules! static_cameras {($($v:ty),*)=>{$(impl CameraConversion for $v {
     fn logical_fov<'a,'data:'a,D:Dialect<Layout=Self>>(_: &'a Bundle<'data,D>,camera:&'a native::records::Camera<'data,Self>,_:FeatureId,_:&AnimationResolver<'a,'data,D>,_:&[ClipId],_:&[ClockId],builder:&mut GraphBuilder<'a>)->Result<Property<f32>,Error>{Ok(builder.add_value(camera.field_of_view))}
-    fn write_logical_fov(model:&Graph<'_>,value:&Property<f32>,camera:&mut native::records::Camera<'static,Self>,_:&[u32],_:&mut Vec<u32>,context:&mut Context)->Result<(),Error>{if model.is_animated(*value){context.unsupported("m2.camera.fov","target dialect has only static field of view")?}camera.field_of_view=*model.values().get(*value).expect("validated slot");Ok(())}
+    fn write_logical_fov(model:&Graph<'_>,value:&Property<f32>,camera:&mut native::records::Camera<'static,Self>,_:&[u32],_:&mut Vec<u32>,context:&mut Context)->Result<(),Error>{if model.is_animated(*value){context.unsupported(Location::new().field("m2").field("camera").field("fov"),"target dialect has only static field of view")?}camera.field_of_view=*model.values().get(*value).expect("validated slot");Ok(())}
 })*};}
 static_cameras!(V256, V257, V260, V263, V264);
 macro_rules! animated_cameras {($($v:ty),*)=>{$(impl CameraConversion for $v {

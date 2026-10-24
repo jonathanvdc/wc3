@@ -1,5 +1,6 @@
 //! Warcraft III animation records are projected into canonical logical curves.
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::mdlx::animation::{
     Interpolation as NativeInterpolation, Track, TrackValue,
 };
@@ -37,7 +38,9 @@ where
         NativeInterpolation::Hermite => Interpolation::Hermite,
         NativeInterpolation::Bezier => Interpolation::Bezier,
     };
-    let failure = |error: SemanticError| Error::new("animation.curve", error.to_string());
+    let failure = |error: SemanticError| {
+        Error::from(error).with_context(Location::new().field("animation").field("curve"))
+    };
     if let Some(keys) = source.step_keys().or_else(|| source.linear_keys()) {
         let mut indices: Vec<_> = (0..keys.len()).collect();
         indices.sort_by_key(|&index| keys.get(index).expect("source key").frame);

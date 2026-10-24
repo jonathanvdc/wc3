@@ -1,5 +1,6 @@
 //! Direct conversion between native M2 bundles and checked logical model graphs.
 use super::{Context, Conversion, Error, ExportOptions, ImportOptions, Plan};
+use crate::model::error::Location;
 use crate::model::formats::m2::{
     self as native,
     companions::{Skin, SkinProfile},
@@ -21,6 +22,7 @@ use native::{
 use native::{ProfileRef, ResolvedValues};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::error::Error as StdError;
 
 mod animation;
 use animation::{ensure_constant, initial, sequence_tables};
@@ -40,8 +42,8 @@ mod graph;
 pub use graph::plan;
 mod import;
 pub use import::{import, ImportDialect};
-fn failure(error: impl ToString) -> Error {
-    Error::new("m2", error.to_string())
+fn failure(error: impl StdError + Send + Sync + 'static) -> Error {
+    Error::from_source(Location::new().field("m2"), error)
 }
 fn section_start<V: ModelLayout>(section: &SkinSection<V>) -> usize {
     (usize::from(section.level) << 16) | usize::from(section.index_start)

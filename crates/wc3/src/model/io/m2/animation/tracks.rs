@@ -1,5 +1,6 @@
 //! Tracks components for native animation conversion.
 use super::*;
+use crate::model::error::Location;
 
 pub(in super::super) fn interpolation(
     value: NativeInterpolation,
@@ -9,8 +10,11 @@ pub(in super::super) fn interpolation(
         NativeInterpolation::Linear => Ok(sm::Interpolation::Linear),
         NativeInterpolation::Bezier => Ok(sm::Interpolation::Bezier),
         NativeInterpolation::Hermite => Ok(sm::Interpolation::Hermite),
-        _ => Err(Error::new(
-            "m2.track.interpolation",
+        _ => Err(Error::requirement(
+            Location::new()
+                .field("m2")
+                .field("track")
+                .field("interpolation"),
             "unknown interpolation code",
         )),
     }
@@ -82,8 +86,15 @@ where
             sequence_tables(source, owner)?
                 .globals
                 .get(usize::from(resolved.global_sequence))
-                .ok_or_else(|| Error::new("m2.track.global_sequence", "missing global clock"))?
-                as f32
+                .ok_or_else(|| {
+                    Error::requirement(
+                        Location::new()
+                            .field("m2")
+                            .field("track")
+                            .field("global_sequence"),
+                        "missing global clock",
+                    )
+                })? as f32
                 / 1000.,
         )
     } else {
@@ -119,8 +130,12 @@ where
             time: if global {
                 time
             } else {
-                time.checked_sub(start)
-                    .ok_or_else(|| Error::new("m2.track.time", "key precedes the sequence start"))?
+                time.checked_sub(start).ok_or_else(|| {
+                    Error::requirement(
+                        Location::new().field("m2").field("track").field("time"),
+                        "key precedes the sequence start",
+                    )
+                })?
             } as f32
                 / 1000.,
             value,
@@ -161,8 +176,8 @@ where
     if tracks.iter().flatten().any(|t| {
         t.interpolation != first.interpolation || t.global_duration != first.global_duration
     }) {
-        return Err(Error::new(
-            "animation.track",
+        return Err(Error::requirement(
+            Location::new().field("animation").field("track"),
             "M2 interpolation and global clock must be identical across sequences",
         ));
     }
@@ -175,8 +190,12 @@ where
                 globals.push(duration);
                 globals.len() - 1
             });
-        u16::try_from(index)
-            .map_err(|_| Error::new("animation.global_duration", "too many global clocks"))?
+        u16::try_from(index).map_err(|_| {
+            Error::requirement(
+                Location::new().field("animation").field("global_duration"),
+                "too many global clocks",
+            )
+        })?
     } else {
         u16::MAX
     };
@@ -193,8 +212,8 @@ where
             .flatten()
             .any(|track| track.keys != first.keys)
     {
-        return Err(Error::new(
-            "animation.global_track",
+        return Err(Error::requirement(
+            Location::new().field("animation").field("global_track"),
             "shared-clock values differ between clips",
         ));
     }
@@ -207,11 +226,16 @@ where
         let mut leaf_splines = Vec::new();
         if let Some(track) = track {
             for (key_index, key) in track.keys.iter().enumerate() {
-                let path = format!("clips[{index}].keys[{key_index}]");
+                let path = Location::new()
+                    .field("clips")
+                    .index(index)
+                    .field("keys")
+                    .index(key_index);
                 let time = milliseconds(key.time, context, &path)?;
                 let time = if V::VERSION < 264 && global == u16::MAX {
-                    time.checked_add(starts[index])
-                        .ok_or_else(|| Error::new(&path, "legacy animation clock overflow"))?
+                    time.checked_add(starts[index]).ok_or_else(|| {
+                        Error::requirement(path.clone(), "legacy animation clock overflow")
+                    })?
                 } else {
                     time
                 };
@@ -219,16 +243,16 @@ where
                 let value = convert(&key.value, context, &path)?;
                 if is_spline {
                     let incoming = convert(
-                        key.incoming
-                            .as_deref()
-                            .ok_or_else(|| Error::new(&path, "missing spline incoming tangent"))?,
+                        key.incoming.as_deref().ok_or_else(|| {
+                            Error::requirement(path.clone(), "missing spline incoming tangent")
+                        })?,
                         context,
                         &path,
                     )?;
                     let outgoing = convert(
-                        key.outgoing
-                            .as_deref()
-                            .ok_or_else(|| Error::new(&path, "missing spline outgoing tangent"))?,
+                        key.outgoing.as_deref().ok_or_else(|| {
+                            Error::requirement(path.clone(), "missing spline outgoing tangent")
+                        })?,
                         context,
                         &path,
                     )?;

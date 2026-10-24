@@ -1,5 +1,6 @@
 //! Curve restrictions shared by native clocks with bounded unsigned timestamps.
 use super::Error;
+use crate::model::error::Location;
 use crate::model::PropertyValue;
 use crate::model::{Curve, CurveValue, Interpolation, Quat, Time, Track};
 use glam::{Vec2, Vec3, Vec4};
@@ -36,7 +37,10 @@ impl FloatValue for f32 {
         if v.len() == 1 {
             Ok(v[0])
         } else {
-            Err(Error::new("curve", "scalar cardinality differs"))
+            Err(Error::requirement(
+                Location::new().field("curve"),
+                "scalar cardinality differs",
+            ))
         }
     }
 }
@@ -45,7 +49,7 @@ macro_rules! float_vectors {
         impl FloatValue for $ty {
             fn components(&self) -> Vec<f32> { self.to_array().to_vec() }
             fn from_components(v: Vec<f32>) -> Result<Self, Error> {
-                Ok(Self::from_array(v.try_into().map_err(|_| Error::new("curve", "vector cardinality differs"))?))
+                Ok(Self::from_array(v.try_into().map_err(|_| Error::requirement(Location::new().field("curve"), "vector cardinality differs"))?))
             }
         }
     )*};
@@ -60,7 +64,10 @@ impl FloatValue for Quat {
     }
     fn from_components(values: Vec<f32>) -> Result<Self, Error> {
         Ok(Self::from_array(values.try_into().map_err(|_| {
-            Error::new("quaternion", "four components required")
+            Error::requirement(
+                Location::new().field("quaternion"),
+                "four components required",
+            )
         })?))
     }
 }
@@ -73,15 +80,18 @@ pub fn crop<'a, T: FloatValue + 'a>(
     if track.curve.uses_spherical_controls() {
         let times = track.curve.times();
         if start > end {
-            return Err(Error::new("curve.window", "invalid crop interval"));
+            return Err(Error::requirement(
+                Location::new().field("curve").field("window"),
+                "invalid crop interval",
+            ));
         }
         for boundary in [start, end] {
             if times.first().is_some_and(|first| boundary > first)
                 && times.last().is_some_and(|last| boundary < last)
                 && !times.iter().any(|key| key == boundary)
             {
-                return Err(Error::new(
-                    "curve.spherical",
+                return Err(Error::requirement(
+                    Location::new().field("curve").field("spherical"),
                     "exact restriction inside a spherical spline segment is not implemented",
                 ));
             }
@@ -118,14 +128,14 @@ pub fn crop<'a, T: FloatValue + 'a>(
         });
     }
     if track.curve.interpolation() == Interpolation::Nlerp {
-        return Err(Error::new(
-            "curve.nlerp",
+        return Err(Error::requirement(
+            Location::new().field("curve").field("nlerp"),
             "exact normalized-linear quaternion curve restriction is not implemented",
         ));
     }
     if track.curve.interpolation() == Interpolation::Tcb {
-        return Err(Error::new(
-            "curve.tcb",
+        return Err(Error::requirement(
+            Location::new().field("curve").field("tcb"),
             "exact restriction requires an established TCB tangent convention",
         ));
     }
@@ -191,7 +201,10 @@ pub fn crop<'a, T: FloatValue + 'a>(
 /// segment. Linear rotation tracks retain spherical interpolation.
 fn crop_raw(track: &RawTrack, start: f64, end: f64) -> Result<RawTrack, Error> {
     if !start.is_finite() || !end.is_finite() || start > end {
-        return Err(Error::new("animation.window", "invalid crop interval"));
+        return Err(Error::requirement(
+            Location::new().field("animation").field("window"),
+            "invalid crop interval",
+        ));
     }
     if track.keys.is_empty() {
         return Ok(track.clone());
@@ -203,8 +216,8 @@ fn crop_raw(track: &RawTrack, start: f64, end: f64) -> Result<RawTrack, Error> {
         })
         || track.keys.windows(2).any(|k| k[0].time > k[1].time)
     {
-        return Err(Error::new(
-            "animation.keys",
+        return Err(Error::requirement(
+            Location::new().field("animation").field("keys"),
             "invalid floating-point key layout",
         ));
     }
@@ -217,7 +230,10 @@ fn crop_raw(track: &RawTrack, start: f64, end: f64) -> Result<RawTrack, Error> {
                 .is_none_or(|v| v.len() != width || v.iter().any(|v| !v.is_finite()))
         })
     }) {
-        return Err(Error::new("animation.tangents", "invalid spline controls"));
+        return Err(Error::requirement(
+            Location::new().field("animation").field("tangents"),
+            "invalid spline controls",
+        ));
     }
     let mut output = track.clone();
     let boundary = |time| -> Result<Key, Error> {
@@ -353,15 +369,18 @@ fn derivative(c: [f64; 4], u: f64) -> f64 {
 }
 fn rotation(a: &[f32], b: &[f32], u: f64) -> Result<Vec<f32>, Error> {
     if a.len() != 4 || b.len() != 4 {
-        return Err(Error::new(
-            "animation.rotation",
+        return Err(Error::requirement(
+            Location::new().field("animation").field("rotation"),
             "quaternion needs four components",
         ));
     }
     let normalize = |v: &[f32]| -> Result<[f64; 4], Error> {
         let length = v.iter().map(|&v| f64::from(v).powi(2)).sum::<f64>().sqrt();
         if length == 0. {
-            return Err(Error::new("animation.rotation", "zero quaternion"));
+            return Err(Error::requirement(
+                Location::new().field("animation").field("rotation"),
+                "zero quaternion",
+            ));
         }
         Ok([0, 1, 2, 3].map(|i| f64::from(v[i]) / length))
     };

@@ -3,6 +3,8 @@
 //! Native document adapters live in [`model::io`](crate::model::io). Profiles describe the
 //! semantic vocabulary independently of the dialect selected for export.
 mod context;
+mod error;
+pub use error::Error;
 mod plan;
 mod policy;
 mod report;

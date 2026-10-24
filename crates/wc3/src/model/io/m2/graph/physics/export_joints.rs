@@ -1,5 +1,6 @@
 //! Emits contemporary native joint tables from actual logical constraints.
 use super::*;
+use crate::model::error::Location;
 use native::companions::*;
 use native::records::{PhysicsJointKind, PhysicsMotorMode};
 use profile::{Constraint, Joint};
@@ -71,7 +72,10 @@ impl Constraints {
             } => {
                 if friction_torque != 0. {
                     context.unsupported(
-                        "physics.joint.friction",
+                        Location::new()
+                            .field("physics")
+                            .field("joint")
+                            .field("friction"),
                         "M2 hinge joints cannot express independent friction torque",
                     )?;
                 }
@@ -99,7 +103,10 @@ impl Constraints {
             } => {
                 if friction_force != 0. {
                     context.unsupported(
-                        "physics.joint.friction",
+                        Location::new()
+                            .field("physics")
+                            .field("joint")
+                            .field("friction"),
                         "M2 sliding joints cannot express independent friction force",
                     )?;
                 }
@@ -123,7 +130,10 @@ impl Constraints {
             Constraint::Distance { distance, spring } => {
                 if spring.frequency_hz != 0. || spring.damping_ratio != 0. {
                     context.unsupported(
-                        "physics.joint.spring",
+                        Location::new()
+                            .field("physics")
+                            .field("joint")
+                            .field("spring"),
                         "M2 distance joints cannot express a compliant spring",
                     )?;
                 }
@@ -137,17 +147,25 @@ impl Constraints {
             }
         };
         let body_index = |node| {
-            bodies
-                .iter()
-                .position(|id| *id == node)
-                .ok_or_else(|| Error::new("physics.joint.body", "body is absent"))
+            bodies.iter().position(|id| *id == node).ok_or_else(|| {
+                Error::requirement(
+                    Location::new()
+                        .field("physics")
+                        .field("joint")
+                        .field("body"),
+                    "body is absent",
+                )
+            })
         };
         self.joints.push(PhysicsJoint {
             body_a: body_index(joint.body_a)? as u32,
             body_b: body_index(joint.body_b)? as u32,
             joint_type: kind,
             joint_id: i16::try_from(index).map_err(|_| {
-                Error::new("physics.joint", "constraint index exceeds native range")
+                Error::requirement(
+                    Location::new().field("physics").field("joint"),
+                    "constraint index exceeds native range",
+                )
             })?,
             reserved: 0,
         });

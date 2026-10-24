@@ -1,6 +1,7 @@
 //! Group names and scoped scene/portal relationships.
 use super::scene::Identities;
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::wmo::group::GroupChunk;
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::formats::wmo::{Dialect, Group, Root};
@@ -50,25 +51,33 @@ pub(super) fn read_fields<'a, 'data: 'a, D: Dialect>(
                 for _ in 0..rows.len() {
                     radial_ambients.push(ambient_index);
                     ambient_index = ambient_index.checked_add(1).ok_or_else(|| {
-                        Error::new("world.ambient", "ambient identity capacity exceeded")
+                        Error::requirement(
+                            Location::new().field("world").field("ambient"),
+                            "ambient identity capacity exceeded",
+                        )
                     })?;
                 }
             }
             RootChunk::GlobalAmbients(rows) => {
                 ambient_index = ambient_index
-                    .checked_add(
-                        u32::try_from(rows.len())
-                            .map_err(|error| Error::new("world.ambient", error.to_string()))?,
-                    )
+                    .checked_add(u32::try_from(rows.len()).map_err(|error| {
+                        Error::from_source(Location::new().field("world").field("ambient"), error)
+                    })?)
                     .ok_or_else(|| {
-                        Error::new("world.ambient", "ambient identity capacity exceeded")
+                        Error::requirement(
+                            Location::new().field("world").field("ambient"),
+                            "ambient identity capacity exceeded",
+                        )
                     })?
             }
             RootChunk::AmbientBoxes(rows) => {
                 for _ in 0..rows.len() {
                     box_ambients.push(ambient_index);
                     ambient_index = ambient_index.checked_add(1).ok_or_else(|| {
-                        Error::new("world.ambient", "ambient identity capacity exceeded")
+                        Error::requirement(
+                            Location::new().field("world").field("ambient"),
+                            "ambient identity capacity exceeded",
+                        )
                     })?;
                 }
             }
@@ -79,35 +88,59 @@ pub(super) fn read_fields<'a, 'data: 'a, D: Dialect>(
         match chunk {
             GroupChunk::DoodadReferences(values) => {
                 for row in values.iter() {
-                    let index =
-                        row.map_err(|error| Error::new("world.group.doodad", error.to_string()))?;
+                    let index = row.map_err(|error| {
+                        Error::from_source(
+                            Location::new()
+                                .field("world")
+                                .field("group")
+                                .field("doodad"),
+                            error,
+                        )
+                    })?;
                     group
                         .doodads
                         .push(*ids.doodads.get(usize::from(index)).ok_or_else(|| {
-                            Error::new("world.group.doodad", "reference points to absent placement")
+                            Error::requirement(
+                                Location::new()
+                                    .field("world")
+                                    .field("group")
+                                    .field("doodad"),
+                                "reference points to absent placement",
+                            )
                         })?);
                 }
             }
             GroupChunk::LightReferences(values) => {
                 for row in values.iter() {
-                    let index =
-                        row.map_err(|error| Error::new("world.group.light", error.to_string()))?;
+                    let index = row.map_err(|error| {
+                        Error::from_source(
+                            Location::new().field("world").field("group").field("light"),
+                            error,
+                        )
+                    })?;
                     group
                         .lights
                         .push(*ids.lights.get(usize::from(index)).ok_or_else(|| {
-                            Error::new("world.group.light", "reference points to absent light")
+                            Error::requirement(
+                                Location::new().field("world").field("group").field("light"),
+                                "reference points to absent light",
+                            )
                         })?);
                 }
             }
             GroupChunk::NewLightReferences(values) => {
                 for row in values.iter() {
-                    let index =
-                        row.map_err(|error| Error::new("world.group.light", error.to_string()))?;
+                    let index = row.map_err(|error| {
+                        Error::from_source(
+                            Location::new().field("world").field("group").field("light"),
+                            error,
+                        )
+                    })?;
                     group
                         .lights
                         .push(*ids.new_lights.get(usize::from(index)).ok_or_else(|| {
-                            Error::new(
-                                "world.group.light",
+                            Error::requirement(
+                                Location::new().field("world").field("group").field("light"),
                                 "reference points to absent modern light",
                             )
                         })?);
@@ -121,13 +154,21 @@ pub(super) fn read_fields<'a, 'data: 'a, D: Dialect>(
                     &box_ambients
                 };
                 for row in values.iter() {
-                    let index =
-                        usize::from(row.map_err(|error| {
-                            Error::new("world.group.ambient", error.to_string())
-                        })?);
+                    let index = usize::from(row.map_err(|error| {
+                        Error::from_source(
+                            Location::new()
+                                .field("world")
+                                .field("group")
+                                .field("ambient"),
+                            error,
+                        )
+                    })?);
                     let index = *mapping.get(index).ok_or_else(|| {
-                        Error::new(
-                            "world.group.ambient",
+                        Error::requirement(
+                            Location::new()
+                                .field("world")
+                                .field("group")
+                                .field("ambient"),
                             "ambient reference points to absent volume",
                         )
                     })?;
@@ -145,7 +186,12 @@ pub(super) fn read_fields<'a, 'data: 'a, D: Dialect>(
                             system: owner,
                             index: u32::from(index),
                         })
-                        .map_err(|error| Error::new("world.group.fog", error.to_string()))
+                        .map_err(|error| {
+                            Error::from_source(
+                                Location::new().field("world").field("group").field("fog"),
+                                error,
+                            )
+                        })
                     })
                     .collect::<Result<_, _>>()?
             }
@@ -173,13 +219,19 @@ pub(super) fn read_fields<'a, 'data: 'a, D: Dialect>(
     for chunk in chunks.clone() {
         if let GroupChunk::FogBoxReferences(rows) = chunk {
             for row in rows.iter() {
-                let index = usize::from(
-                    row.map_err(|error| Error::new("world.group.fog", error.to_string()))?,
-                );
+                let index = usize::from(row.map_err(|error| {
+                    Error::from_source(
+                        Location::new().field("world").field("group").field("fog"),
+                        error,
+                    )
+                })?);
                 group.fogs.push(profile::FogId {
                     system: owner,
                     index: u32::try_from(sphere_count + index).map_err(|_| {
-                        Error::new("world.group.fog", "fog identity exceeds graph capacity")
+                        Error::requirement(
+                            Location::new().field("world").field("group").field("fog"),
+                            "fog identity exceeds graph capacity",
+                        )
                     })?,
                 });
             }
@@ -193,14 +245,37 @@ pub(super) fn read_fields<'a, 'data: 'a, D: Dialect>(
         }
     });
     if references.portal_count != 0 {
-        let source_refs =
-            portals.ok_or_else(|| Error::new("world.group.portal", "references are missing"))?;
+        let source_refs = portals.ok_or_else(|| {
+            Error::requirement(
+                Location::new()
+                    .field("world")
+                    .field("group")
+                    .field("portal"),
+                "references are missing",
+            )
+        })?;
         let start = references.portal_start;
         for index in start..start + references.portal_count {
             let row = source_refs
                 .get(index)
-                .ok_or_else(|| Error::new("world.group.portal", "portal range exceeds table"))?
-                .map_err(|error| Error::new("world.group.portal", error.to_string()))?;
+                .ok_or_else(|| {
+                    Error::requirement(
+                        Location::new()
+                            .field("world")
+                            .field("group")
+                            .field("portal"),
+                        "portal range exceeds table",
+                    )
+                })?
+                .map_err(|error| {
+                    Error::from_source(
+                        Location::new()
+                            .field("world")
+                            .field("group")
+                            .field("portal"),
+                        error,
+                    )
+                })?;
             group.portals.push(profile::PortalConnection {
                 portal: profile::PortalId {
                     system: owner,
@@ -236,10 +311,20 @@ pub(super) fn name<'a, 'data: 'a>(
     if names.is_empty() {
         return Ok(Cow::Borrowed(""));
     }
-    let bytes = crate::model::formats::wmo::resources::string_at(names, offset)
-        .map_err(|error| Error::new("world.region.name", error.to_string()))?;
+    let bytes =
+        crate::model::formats::wmo::resources::string_at(names, offset).map_err(|error| {
+            Error::from_source(
+                Location::new().field("world").field("region").field("name"),
+                error,
+            )
+        })?;
     Ok(Cow::Borrowed(std::str::from_utf8(bytes).map_err(
-        |error| Error::new("world.region.name", error.to_string()),
+        |error| {
+            Error::from_source(
+                Location::new().field("world").field("region").field("name"),
+                error,
+            )
+        },
     )?))
 }
 
@@ -259,8 +344,8 @@ pub(super) fn write<'a, D: Dialect>(
         } else if let Some(index) = actors.modern.get(id) {
             modern.push(*index);
         } else {
-            return Err(Error::new(
-                "world.group.light",
+            return Err(Error::requirement(
+                Location::new().field("world").field("group").field("light"),
                 "region references an unavailable light",
             ));
         }
@@ -270,8 +355,11 @@ pub(super) fn write<'a, D: Dialect>(
         .iter()
         .map(|id| {
             actors.doodads.get(id).copied().ok_or_else(|| {
-                Error::new(
-                    "world.group.doodad",
+                Error::requirement(
+                    Location::new()
+                        .field("world")
+                        .field("group")
+                        .field("doodad"),
                     "region references an unavailable placement",
                 )
             })
@@ -301,14 +389,20 @@ pub(super) fn write<'a, D: Dialect>(
             .ambient_volumes
             .get(ambient.index as usize)
             .ok_or_else(|| {
-                Error::new(
-                    "world.group.ambient",
+                Error::requirement(
+                    Location::new()
+                        .field("world")
+                        .field("group")
+                        .field("ambient"),
                     "ambient reference points to absent volume",
                 )
             })?;
         if selected.global {
-            return Err(Error::new(
-                "world.group.ambient",
+            return Err(Error::requirement(
+                Location::new()
+                    .field("world")
+                    .field("group")
+                    .field("ambient"),
                 "globally active ambient volumes cannot be selected by individual regions",
             ));
         }
@@ -328,8 +422,15 @@ pub(super) fn write<'a, D: Dialect>(
                     )
             })
             .count();
-        let index = u16::try_from(index)
-            .map_err(|error| Error::new("world.group.ambient", error.to_string()))?;
+        let index = u16::try_from(index).map_err(|error| {
+            Error::from_source(
+                Location::new()
+                    .field("world")
+                    .field("group")
+                    .field("ambient"),
+                error,
+            )
+        })?;
         match selected.volume {
             profile::Volume::Sphere { .. } => radial.push(index),
             profile::Volume::Planes { .. } => boxes.push(index),
@@ -352,10 +453,16 @@ pub(super) fn write<'a, D: Dialect>(
         flags.set_plane_adjustment(source.adjusted_plane);
         portals.push(PortalRef {
             portal_index: u16::try_from(source.portal.index).map_err(|_| {
-                Error::new("world.portal", "portal identity exceeds native capacity")
+                Error::requirement(
+                    Location::new().field("world").field("portal"),
+                    "portal identity exceeds native capacity",
+                )
             })?,
             group_index: u16::try_from(source.neighbor.index).map_err(|_| {
-                Error::new("world.portal", "group identity exceeds native capacity")
+                Error::requirement(
+                    Location::new().field("world").field("portal"),
+                    "group identity exceeds native capacity",
+                )
             })?,
             side: source.side,
             flags,

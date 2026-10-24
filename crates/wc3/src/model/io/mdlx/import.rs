@@ -3,6 +3,7 @@ use super::billboard;
 use super::storage::Storage;
 use super::{curves, materials, state::ImportState};
 use crate::model::conversion::{Context, Conversion, Error, ImportOptions, IssueKind};
+use crate::model::error::Location;
 use crate::model::formats::mdlx::{self as native, Chunk, Dialect, ModelChunk};
 use crate::model::profiles::mdlx as profile;
 use crate::model::profiles::Mdlx;
@@ -31,7 +32,7 @@ where
             continue;
         }
         context.unknown_data(
-            "chunks",
+            Location::new().field("chunks"),
             "unknown source chunk has no semantic representation",
         )?;
     }
@@ -53,7 +54,10 @@ where
     let mut identity = BTreeMap::new();
     for (node, id) in source_nodes.iter().zip(&ids) {
         if identity.insert(node.object_id, *id).is_some() {
-            return Err(Error::new("nodes", "duplicate source node identity"));
+            return Err(Error::requirement(
+                Location::new().field("nodes"),
+                "duplicate source node identity",
+            ));
         }
     }
     let pivots = source.pivot_points();
@@ -62,11 +66,12 @@ where
         value.parent = if node.parent_id == u32::MAX {
             None
         } else {
-            Some(
-                *identity
-                    .get(&node.parent_id)
-                    .ok_or_else(|| Error::new("node.parent", "parent identity does not exist"))?,
-            )
+            Some(*identity.get(&node.parent_id).ok_or_else(|| {
+                Error::requirement(
+                    Location::new().field("node").field("parent"),
+                    "parent identity does not exist",
+                )
+            })?)
         };
         value.transform.pivot = Vec3::from_array(
             pivots
@@ -192,7 +197,10 @@ where
                         .global_sequence_id()
                         .map(|index| {
                             globals.get(index as usize).copied().ok_or_else(|| {
-                                Error::new("animation.clock", "shared clock does not exist")
+                                Error::requirement(
+                                    Location::new().field("animation").field("clock"),
+                                    "shared clock does not exist",
+                                )
                             })
                         })
                         .transpose()?

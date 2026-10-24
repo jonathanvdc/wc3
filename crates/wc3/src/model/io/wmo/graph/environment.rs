@@ -1,6 +1,7 @@
 //! World illumination and environmental volume definitions.
 use super::rgba;
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::wmo::records::FogParams;
 use crate::model::formats::wmo::root::RootChunk;
 use crate::model::formats::wmo::Dialect;
@@ -42,11 +43,18 @@ pub(super) fn read<'a, 'data: 'a>(
         match chunk {
             RootChunk::Fogs(values) => {
                 for (index, row) in values.iter().enumerate() {
-                    let row = row.map_err(|error| Error::new("world.fog", error.to_string()))?;
+                    let row = row.map_err(|error| {
+                        Error::from_source(Location::new().field("world").field("fog"), error)
+                    })?;
                     let doodad_set = extras
                         .and_then(|values| values.get(index))
                         .transpose()
-                        .map_err(|error| Error::new("world.fog.set", error.to_string()))?
+                        .map_err(|error| {
+                            Error::from_source(
+                                Location::new().field("world").field("fog").field("set"),
+                                error,
+                            )
+                        })?
                         .and_then(|value| set(owner, value.doodad_set_id));
                     let mut flags = row.flags;
                     flags.set_infinite_radius(false);
@@ -65,7 +73,9 @@ pub(super) fn read<'a, 'data: 'a>(
             }
             RootChunk::FogBoxes(values) => {
                 for row in values.iter() {
-                    let row = row.map_err(|error| Error::new("world.fog", error.to_string()))?;
+                    let row = row.map_err(|error| {
+                        Error::from_source(Location::new().field("world").field("fog"), error)
+                    })?;
                     world.fogs.push(profile::Fog {
                         volume: profile::Volume::Planes {
                             planes: (row.planes).map(Vec4::from_array),
@@ -81,8 +91,9 @@ pub(super) fn read<'a, 'data: 'a>(
             }
             RootChunk::AmbientVolumes(values) | RootChunk::GlobalAmbients(values) => {
                 for row in values.iter() {
-                    let row =
-                        row.map_err(|error| Error::new("world.ambient", error.to_string()))?;
+                    let row = row.map_err(|error| {
+                        Error::from_source(Location::new().field("world").field("ambient"), error)
+                    })?;
                     let mut flags = row.flags;
                     flags.set_distinct_colors(false);
                     world.ambient_volumes.push(profile::Ambient {
@@ -100,8 +111,9 @@ pub(super) fn read<'a, 'data: 'a>(
             }
             RootChunk::AmbientBoxes(values) => {
                 for row in values.iter() {
-                    let row =
-                        row.map_err(|error| Error::new("world.ambient", error.to_string()))?;
+                    let row = row.map_err(|error| {
+                        Error::from_source(Location::new().field("world").field("ambient"), error)
+                    })?;
                     world.ambient_volumes.push(profile::Ambient {
                         global: false,
                         volume: profile::Volume::Planes {
@@ -137,14 +149,20 @@ pub(super) fn write<'a, D: Dialect>(
     let set = |value: Option<profile::DoodadSetId>| -> Result<u16, Error> {
         value.map_or(Ok(0), |value| {
             if value.index == 0 {
-                return Err(Error::new(
-                    "world.environment.set",
+                return Err(Error::requirement(
+                    Location::new()
+                        .field("world")
+                        .field("environment")
+                        .field("set"),
                     "native zero denotes unrestricted activation and cannot restrict to set zero",
                 ));
             }
             u16::try_from(value.index).map_err(|_| {
-                Error::new(
-                    "world.environment.set",
+                Error::requirement(
+                    Location::new()
+                        .field("world")
+                        .field("environment")
+                        .field("set"),
                     "set identity exceeds native capacity",
                 )
             })
@@ -173,8 +191,11 @@ pub(super) fn write<'a, D: Dialect>(
             }
             profile::Volume::Planes { planes, fade } => {
                 if source.infinite {
-                    return Err(Error::new(
-                        "world.fog.infinite",
+                    return Err(Error::requirement(
+                        Location::new()
+                            .field("world")
+                            .field("fog")
+                            .field("infinite"),
                         "plane-bounded native fog has no infinite-radius control",
                     ));
                 }
@@ -222,8 +243,7 @@ pub(super) fn write<'a, D: Dialect>(
             }
             profile::Volume::Planes { planes, fade } => {
                 if source.global || source.distinct_colors {
-                    return Err(Error::new(
-                        "world.ambient.controls",
+                    return Err(Error::requirement(Location::new().field("world").field("ambient").field("controls"),
                         "plane-bounded native ambient volume has no global or distinct-color switch",
                     ));
                 }

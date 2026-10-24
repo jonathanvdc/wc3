@@ -1,6 +1,7 @@
 //! Visibility, event occurrences, and model-wide native authoring controls.
 use super::encode_animation::{frame_at, Encoder};
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::mdlx::{self as native, Dialect};
 use crate::model::profiles::mdlx as profile;
 use crate::model::{
@@ -13,7 +14,7 @@ use std::collections::{BTreeMap, HashSet};
 pub(super) fn visibility(
     source: &Property<f32>,
     encoder: &mut Encoder<'_, '_, '_>,
-    path: &str,
+    path: &Location,
 ) -> Result<Option<Track<'static, f32>>, Error> {
     encoder.optional(*source, Ok, 1., path)
 }
@@ -44,7 +45,7 @@ pub(super) fn events(
                     event.time.as_seconds(),
                     0.,
                     encoder.context,
-                    "event.time",
+                    &Location::new().field("event").field("time"),
                 )?);
             }
         }
@@ -53,7 +54,7 @@ pub(super) fn events(
     let mut node = node;
     node.name
         .set_text(&source.name)
-        .map_err(|error| Error::new("event.name", error.to_string()))?;
+        .map_err(|error| Error::from_source(Location::new().field("event").field("name"), error))?;
     let global = match source.clock {
         TimeSource::Animation => u32::MAX,
         TimeSource::Shared(id) => encoder.globals[&id],
@@ -83,13 +84,20 @@ pub(super) fn controls<T: Dialect>(
                     .face_effects
                     .iter()
                     .map(|effect| {
-                        let mut face = native::FaceFx::new(&effect.name, "")
-                            .map_err(|error| Error::new("face_effect.name", error.to_string()))?;
+                        let mut face = native::FaceFx::new(&effect.name, "").map_err(|error| {
+                            Error::from_source(
+                                Location::new().field("face_effect").field("name"),
+                                error,
+                            )
+                        })?;
                         let PathResource::Path(path) = model
                             .effect_resource(effect.resource)
                             .expect("validated facial-animation resource");
                         face.path.set_bytes(path).map_err(|error| {
-                            Error::new("face_effect.resource", error.to_string())
+                            Error::from_source(
+                                Location::new().field("face_effect").field("resource"),
+                                error,
+                            )
                         })?;
                         Ok(face)
                     })
@@ -97,7 +105,7 @@ pub(super) fn controls<T: Dialect>(
                 if let Err(error) = target.try_set_face_fx(faces) {
                     encoder
                         .context
-                        .unsupported("face_effect", error.to_string())?;
+                        .unsupported_source(Location::new().field("face_effect"), error)?;
                 }
             }
         }
@@ -133,7 +141,7 @@ pub(super) fn controls<T: Dialect>(
             if let Err(error) = target.try_set_bind_poses(poses) {
                 encoder
                     .context
-                    .unsupported("bind_poses", error.to_string())?;
+                    .unsupported_source(Location::new().field("bind_poses"), error)?;
             }
         }
     }
@@ -158,19 +166,21 @@ pub(super) fn texture_transform<'a>(
             source.translation,
             |v| Ok(v.to_array()),
             [0.; 3],
-            "texture_transform.translation",
+            &Location::new()
+                .field("texture_transform")
+                .field("translation"),
         )?,
         rotation: encoder.optional(
             source.rotation,
             |value: Quat| Ok(value.to_array()),
             Quat::default().to_array(),
-            "texture_transform.rotation",
+            &Location::new().field("texture_transform").field("rotation"),
         )?,
         scaling: encoder.optional(
             source.scale,
             |v| Ok(v.to_array()),
             [1.; 3],
-            "texture_transform.scale",
+            &Location::new().field("texture_transform").field("scale"),
         )?,
     })
 }

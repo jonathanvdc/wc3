@@ -1,5 +1,6 @@
 //! Native declarations and their effective camera-facing operations.
 use crate::model::conversion::{Context, Error};
+use crate::model::error::Location;
 use crate::model::properties::BillboardFlags;
 use crate::model::{Billboard, BillboardAxis, BillboardFrame, BillboardScale};
 pub(super) fn decode(flags: BillboardFlags) -> Billboard {
@@ -33,7 +34,7 @@ pub(super) fn encode(
         Billboard::Axial(BillboardAxis::X) => flags.x = true,
         Billboard::Axial(BillboardAxis::Y) => flags.y = true,
         Billboard::Axial(BillboardAxis::Z) => flags.z = true,
-        _ => context.unsupported("node.billboard", "Warcraft III requires YZ spherical facing with signed scale factors or a single axial constraint")?,
+        _ => context.unsupported(Location::new().field("node").field("billboard"), "Warcraft III requires YZ spherical facing with signed scale factors or a single axial constraint")?,
     }
     Ok(flags)
 }

@@ -1,5 +1,6 @@
 //! Named triangle behavior mapped independently of native flag storage.
 use crate::model::conversion::Error;
+use crate::model::error::Location;
 use crate::model::formats::wmo::records::TriangleFlags2;
 use crate::model::{MaterialId, TriangleProperties};
 pub(in crate::model::io::wmo::graph) fn face(
@@ -11,11 +12,15 @@ pub(in crate::model::io::wmo::graph) fn face(
     let material = if collision_only || flags.ground_type_entry() {
         None
     } else {
-        Some(
-            *materials
-                .get(usize::from(selector))
-                .ok_or_else(|| Error::new("world.face.material", "face material does not exist"))?,
-        )
+        Some(*materials.get(usize::from(selector)).ok_or_else(|| {
+            Error::requirement(
+                Location::new()
+                    .field("world")
+                    .field("face")
+                    .field("material"),
+                "face material does not exist",
+            )
+        })?)
     };
     Ok(TriangleProperties {
         spatial_queries: false,

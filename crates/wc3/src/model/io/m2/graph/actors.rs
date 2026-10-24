@@ -1,5 +1,6 @@
 //! Native feature nodes imported directly into independent scene state.
 use super::*;
+use crate::model::error::Location;
 use crate::model::materials::m2::rasterization;
 use crate::model::materials::state::PassState;
 use crate::model::LightEmission;
@@ -19,11 +20,12 @@ fn placement<'a>(
         .values_mut()
         .set(node.transform.translation, Vec3::from_array(position))?;
     if let Some(bone) = bone {
-        node.parent = Some(
-            *nodes
-                .get(bone)
-                .ok_or_else(|| Error::new("m2.actor.bone", "missing anchor bone"))?,
-        )
+        node.parent = Some(*nodes.get(bone).ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("m2").field("actor").field("bone"),
+                "missing anchor bone",
+            )
+        })?)
     }
     Ok(builder.add_node(node)?)
 }
@@ -220,10 +222,15 @@ where
         )?;
         let mut materials = Vec::new();
         for index in value.material_indices.iter() {
-            let native = core
-                .materials
-                .get(index as usize)
-                .ok_or_else(|| Error::new("m2.ribbon.material", "missing material"))?;
+            let native = core.materials.get(index as usize).ok_or_else(|| {
+                Error::requirement(
+                    Location::new()
+                        .field("m2")
+                        .field("ribbon")
+                        .field("material"),
+                    "missing material",
+                )
+            })?;
             materials.push({
                 let definition = semantic::Material {
                     name: Cow::Borrowed(""),
@@ -261,8 +268,11 @@ where
                 None | Some(u16::MAX) => None,
                 Some(index) => {
                     let native = core.texture_transforms.get(index as usize).ok_or_else(|| {
-                        Error::new(
-                            "m2.ribbon.transform",
+                        Error::requirement(
+                            Location::new()
+                                .field("m2")
+                                .field("ribbon")
+                                .field("transform"),
                             "lookup selects an absent texture transform",
                         )
                     })?;
@@ -323,10 +333,12 @@ where
                     .texture_indices
                     .iter()
                     .map(|i| {
-                        textures
-                            .get(i as usize)
-                            .copied()
-                            .ok_or_else(|| Error::new("m2.ribbon.texture", "missing texture"))
+                        textures.get(i as usize).copied().ok_or_else(|| {
+                            Error::requirement(
+                                Location::new().field("m2").field("ribbon").field("texture"),
+                                "missing texture",
+                            )
+                        })
                     })
                     .collect::<Result<_, _>>()?,
                 materials,
@@ -619,11 +631,12 @@ where
         let clock = if global == u16::MAX {
             semantic::TimeSource::Animation
         } else {
-            semantic::TimeSource::Shared(
-                *clocks
-                    .get(global as usize)
-                    .ok_or_else(|| Error::new("m2.event.clock", "missing clock"))?,
-            )
+            semantic::TimeSource::Shared(*clocks.get(global as usize).ok_or_else(|| {
+                Error::requirement(
+                    Location::new().field("m2").field("event").field("clock"),
+                    "missing clock",
+                )
+            })?)
         };
         let event_source = builder.add_event_source(profile::EventSource {
             node,
@@ -666,7 +679,12 @@ where
             if global == u16::MAX
                 && builder
                     .model()
-                    .clip(clip.ok_or_else(|| Error::new("m2.event.clip", "sequence has no clip"))?)
+                    .clip(clip.ok_or_else(|| {
+                        Error::requirement(
+                            Location::new().field("m2").field("event").field("clip"),
+                            "sequence has no clip",
+                        )
+                    })?)
                     .is_some_and(|c| c.properties.alias.is_some())
             {
                 continue;
@@ -681,7 +699,12 @@ where
                 };
                 if global == u16::MAX {
                     builder.add_event(
-                        clip.ok_or_else(|| Error::new("m2.event.clip", "sequence has no clip"))?,
+                        clip.ok_or_else(|| {
+                            Error::requirement(
+                                Location::new().field("m2").field("event").field("clip"),
+                                "sequence has no clip",
+                            )
+                        })?,
                         event,
                     )?
                 } else {

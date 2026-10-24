@@ -2,6 +2,7 @@
 use super::encode::array;
 use crate::model::common::PackedArray;
 use crate::model::conversion::{Context, Error};
+use crate::model::error::Location;
 use crate::model::formats::wmo::group::{GroupChunk, LiquidHeader, LiquidVertex};
 use crate::model::formats::wmo::legacy::{
     Batch14, Batch16, BatchRange, LegacyGroupChunk, LegacyLiquid, LegacyTriangle, LightMap,
@@ -16,6 +17,7 @@ use crate::model::profiles::Wmo;
 use crate::model::WorldImageResource;
 use crate::model::{InstanceId, LookId, MaterialId, Model, Topology};
 use std::collections::BTreeMap;
+use std::error::Error as StdError;
 
 pub(super) struct DrawFields {
     pub bounds: CullingBox,
@@ -38,7 +40,7 @@ impl Batch for Batch14 {
     fn create(fields: DrawFields, context: &mut Context) -> Result<Self, Error> {
         if fields.supplemental.iter().any(|value| *value != 0) {
             context.unsupported(
-                "world.draw",
+                Location::new().field("world").field("draw"),
                 "historical lightmapped draw has no supplemental control words",
             )?;
         }
@@ -46,7 +48,10 @@ impl Batch for Batch14 {
             value
         } else {
             context.unsupported(
-                "world.draw.lightmap",
+                Location::new()
+                    .field("world")
+                    .field("draw")
+                    .field("lightmap"),
                 "historical lightmapped draw requires an explicit baked-light selector",
             )?;
             0
@@ -67,7 +72,7 @@ impl Batch for Batch14 {
 impl Batch for Batch16 {
     fn create(fields: DrawFields, context: &mut Context) -> Result<Self, Error> {
         if fields.lightmap.is_some() || fields.alignment != 0 || fields.supplemental[4] != 0 {
-            context.unsupported("world.draw", "historical split draw cannot encode baked-light selector, alignment, or fifth supplemental control")?;
+            context.unsupported(Location::new().field("world").field("draw"), "historical split draw cannot encode baked-light selector, alignment, or fifth supplemental control")?;
         }
         let mut extension = [0; 8];
         for (bytes, value) in extension
@@ -107,7 +112,10 @@ pub(super) fn write<'a, B: Batch>(
     let region = &instance.properties;
     if !mesh.geometry.strip_indices().is_empty() || !mesh.geometry.tangent_vectors().is_empty() {
         context.unsupported(
-            "world.geometry.streams",
+            Location::new()
+                .field("world")
+                .field("geometry")
+                .field("streams"),
             "historical geometry cannot encode strip or tangent pools",
         )?;
     }
@@ -121,7 +129,7 @@ pub(super) fn write<'a, B: Batch>(
         || region.ambient_override.is_some()
         || region.detail_doodad_key.is_some()
     {
-        context.unsupported("world.group", "historical group has no database-addressed detail levels, split links, modern light programs, or terrain/ambient extensions")?;
+        context.unsupported(Location::new().field("world").field("group"), "historical group has no database-addressed detail levels, split links, modern light programs, or terrain/ambient extensions")?;
     }
     let mut flags = super::group_flags::write(region.options);
     flags.set_has_vertex_colors(!mesh.geometry.color_sets().is_empty());
@@ -162,7 +170,7 @@ pub(super) fn write<'a, B: Batch>(
                 for (byte, value) in encoded.iter_mut().zip(rgba.to_array()) {
                     let rounded = (value.clamp(0., 1.) * 255.).round() as u8;
                     context.approximate(
-                        "world.colors",
+                        Location::new().field("world").field("colors"),
                         (value - f32::from(rounded) / 255.).abs(),
                         "vertex colors quantized to eight-bit components",
                     )?;
@@ -178,8 +186,8 @@ pub(super) fn write<'a, B: Batch>(
             )?)));
     }
     let Topology::Triangles(triangles) = mesh.topology() else {
-        return Err(Error::new(
-            "world.topology",
+        return Err(Error::requirement(
+            Location::new().field("world").field("topology"),
             "historical group requires triangle connectivity",
         ));
     };
@@ -200,7 +208,7 @@ pub(super) fn write<'a, B: Batch>(
         .map(|face| {
             if face.ground_type_selector.is_some() || face.ground_type.is_some() {
                 context.unsupported(
-                    "world.face",
+                    Location::new().field("world").field("face"),
                     "historical face has no extended query selectors",
                 )?;
             }
@@ -262,13 +270,16 @@ pub(super) fn write<'a, B: Batch>(
         let control = draw.properties.clone().unwrap_or_default();
         if draw.subset.strip.is_some() || draw.subset.tangents.is_some() {
             context.unsupported(
-                "world.draw.streams",
+                Location::new()
+                    .field("world")
+                    .field("draw")
+                    .field("streams"),
                 "historical draws cannot encode strip overrides or tangent associations",
             )?;
         }
         if control.pass != Pass::Surface {
             context.unsupported(
-                "world.draw.pass",
+                Location::new().field("world").field("draw").field("pass"),
                 "historical draw has no independent shadow-pass record",
             )?;
             continue;
@@ -287,8 +298,8 @@ pub(super) fn write<'a, B: Batch>(
             .flat_map(|v| v.to_array())
             .any(|value| value < f32::from(i16::MIN) || value > f32::from(i16::MAX))
         {
-            return Err(Error::new(
-                "world.draw.bounds",
+            return Err(Error::requirement(
+                Location::new().field("world").field("draw").field("bounds"),
                 "culling bounds exceed signed sixteen-bit coordinates",
             ));
         }
@@ -300,7 +311,7 @@ pub(super) fn write<'a, B: Batch>(
             .map(|(a, b)| (a - b).abs())
             .fold(0., f32::max);
         context.approximate(
-            "world.draw.bounds",
+            Location::new().field("world").field("draw").field("bounds"),
             quantization,
             "historical draw bounds quantized to integer coordinates",
         )?;
@@ -323,15 +334,18 @@ pub(super) fn write<'a, B: Batch>(
         let batch = B::create(
             DrawFields {
                 bounds,
-                first: draw
-                    .first
-                    .checked_mul(3)
-                    .ok_or_else(|| Error::new("world.draw", "draw index overflows"))?,
-                count: u16::try_from(
-                    draw.count
-                        .checked_mul(3)
-                        .ok_or_else(|| Error::new("world.draw", "draw count overflows"))?,
-                )
+                first: draw.first.checked_mul(3).ok_or_else(|| {
+                    Error::requirement(
+                        Location::new().field("world").field("draw"),
+                        "draw index overflows",
+                    )
+                })?,
+                count: u16::try_from(draw.count.checked_mul(3).ok_or_else(|| {
+                    Error::requirement(
+                        Location::new().field("world").field("draw"),
+                        "draw count overflows",
+                    )
+                })?)
                 .map_err(error)?,
                 minimum,
                 maximum,
@@ -349,15 +363,21 @@ pub(super) fn write<'a, B: Batch>(
             Lighting::Exterior => 2,
             Lighting::Unknown(_) => {
                 context.unsupported(
-                    "world.draw.lighting",
+                    Location::new()
+                        .field("world")
+                        .field("draw")
+                        .field("lighting"),
                     "historical draw requires an established illumination class",
                 )?;
                 2
             }
         };
-        result.counts[index] = result.counts[index]
-            .checked_add(1)
-            .ok_or_else(|| Error::new("world.draw", "draw count exceeds header capacity"))?;
+        result.counts[index] = result.counts[index].checked_add(1).ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("world").field("draw"),
+                "draw count exceeds header capacity",
+            )
+        })?;
         batches.push(batch);
     }
     result
@@ -460,14 +480,14 @@ fn write_lighting<'a, B: RecordLayout>(
                     .image_resource(texture.resource)
                     .expect("validated image")
                 else {
-                    return Err(Error::new(
-                        "world.lightmap",
+                    return Err(Error::requirement(
+                        Location::new().field("world").field("lightmap"),
                         "historical lightmap requires embedded encoded image bytes",
                     ));
                 };
                 let texels = bytes.as_ref().try_into().map_err(|_| {
-                    Error::new(
-                        "world.lightmap",
+                    Error::requirement(
+                        Location::new().field("world").field("lightmap"),
                         "historical lightmap requires exactly 32768 encoded texel bytes",
                     )
                 })?;
@@ -513,6 +533,6 @@ fn write_lighting<'a, B: RecordLayout>(
     }
     Ok(())
 }
-fn error(error: impl std::fmt::Display) -> Error {
-    Error::new("world.group", error.to_string())
+fn error(error: impl StdError + Send + Sync + 'static) -> Error {
+    Error::from_source(Location::new().field("world").field("group"), error)
 }

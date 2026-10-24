@@ -1,6 +1,7 @@
 //! Builds a native companion from independently editable simulation data.
 use super::super::overrides::file_key;
 use super::*;
+use crate::model::error::Location;
 use export_joints::Constraints;
 use export_shapes::Geometry;
 use glam::Vec3;
@@ -29,13 +30,13 @@ fn export_one<D: ExportDialect>(
 ) -> Result<(), Error> {
     if !physics.collision_pairs.is_empty() {
         context.unsupported(
-            "physics.collision_pairs",
+            Location::new().field("physics").field("collision_pairs"),
             "M2 has no explicit collision-pair table",
         )?;
     }
     if physics.wind_coefficients.is_some() {
         context.unsupported(
-            "physics.wind",
+            Location::new().field("physics").field("wind"),
             "M2 has no model-wide wind-coefficient record",
         )?;
     }
@@ -43,23 +44,31 @@ fn export_one<D: ExportDialect>(
     let mut geometry = Geometry::default();
     let mut bodies = Vec::new();
     for body in &physics.bodies {
-        let node = model
-            .node(body.node)
-            .ok_or_else(|| Error::new("physics.body.node", "placement is absent"))?;
+        let node = model.node(body.node).ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("physics").field("body").field("node"),
+                "placement is absent",
+            )
+        })?;
         if node.transform.defaults(model.values()).rotation != semantic::Quat::IDENTITY
             || node.transform.defaults(model.values()).scale != Vec3::from_array([1.; 3])
             || node.transform.defaults(model.values()).pivot != Vec3::from_array([0.; 3])
         {
-            return Err(Error::new(
-                "physics.body.transform",
+            return Err(Error::requirement(
+                Location::new()
+                    .field("physics")
+                    .field("body")
+                    .field("transform"),
                 "native body offsets support translation only",
             ));
         }
         let anchor = node.parent.unwrap_or(body.node);
-        let bone = nodes
-            .iter()
-            .position(|id| *id == anchor)
-            .ok_or_else(|| Error::new("physics.body.bone", "bone anchor is absent"))?;
+        let bone = nodes.iter().position(|id| *id == anchor).ok_or_else(|| {
+            Error::requirement(
+                Location::new().field("physics").field("body").field("bone"),
+                "bone anchor is absent",
+            )
+        })?;
         let first = geometry.shapes.len();
         for shape in &body.shapes {
             geometry.add(shape, context)?;
@@ -71,10 +80,21 @@ fn export_one<D: ExportDialect>(
             let index = placements
                 .iter()
                 .position(|id| *id == parent)
-                .ok_or_else(|| Error::new("physics.body.parent", "parent body is absent"))?;
+                .ok_or_else(|| {
+                    Error::requirement(
+                        Location::new()
+                            .field("physics")
+                            .field("body")
+                            .field("parent"),
+                        "parent body is absent",
+                    )
+                })?;
             if index == 0 || index > 0x3fff {
-                return Err(Error::new(
-                    "physics.body.parent",
+                return Err(Error::requirement(
+                    Location::new()
+                        .field("physics")
+                        .field("body")
+                        .field("parent"),
                     "native parent index cannot express this body",
                 ));
             }
@@ -82,14 +102,30 @@ fn export_one<D: ExportDialect>(
         }
         bodies.push(PhysicsBody4 {
             body_type: PhysicsBodyKind::from_raw(body.kind.raw()),
-            bone_index: u16::try_from(bone)
-                .map_err(|_| Error::new("physics.body.bone", "bone index exceeds native range"))?,
+            bone_index: u16::try_from(bone).map_err(|_| {
+                Error::requirement(
+                    Location::new().field("physics").field("body").field("bone"),
+                    "bone index exceeds native range",
+                )
+            })?,
             position: (node.transform.defaults(model.values()).translation).to_array(),
             shape_index: i32::try_from(first).map_err(|_| {
-                Error::new("physics.body.shapes", "shape start exceeds native range")
+                Error::requirement(
+                    Location::new()
+                        .field("physics")
+                        .field("body")
+                        .field("shapes"),
+                    "shape start exceeds native range",
+                )
             })?,
             shape_count: i32::try_from(geometry.shapes.len() - first).map_err(|_| {
-                Error::new("physics.body.shapes", "shape count exceeds native range")
+                Error::requirement(
+                    Location::new()
+                        .field("physics")
+                        .field("body")
+                        .field("shapes"),
+                    "shape count exceeds native range",
+                )
             })?,
             gravity_scale: body.gravity_scale,
             inertia_scale: body.inertia_scale,
