@@ -13,7 +13,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::math::Affine3A;
 use bevy::prelude::*;
 use std::collections::HashMap;
-use wc3::model::{ClipId, Transform as ModelTransform};
+use wc3::model::{ClipId, Error as ModelError, Transform as ModelTransform};
 
 #[derive(Default)]
 pub(super) struct EvaluationState {
@@ -362,16 +362,11 @@ fn evaluate_instance(
     let animation = instance.model.animation.clone();
     let sample = match selection.and_then(|selection| animation.sample(selection)) {
         Ok(sample) => {
-            if error.0.is_some() {
-                error.0 = None;
-            }
+            record_playback_failure(&mut error, None);
             sample
         }
         Err(failure) => {
-            let message = failure.to_string();
-            if error.0.as_ref() != Some(&message) {
-                error.0 = Some(message);
-            }
+            record_playback_failure(&mut error, Some(failure));
             return;
         }
     };
@@ -552,3 +547,18 @@ fn evaluate_instance(
         .features
         .animate(&sample, feature_instances, &settings, lights, attachments);
 }
+
+// Read before mutating so repeated invalid selections do not mark the component changed.
+fn record_playback_failure(error: &mut Mut<PlaybackError>, failure: Option<ModelError>) {
+    let unchanged = match &failure {
+        Some(failure) => error.matches(failure),
+        None => error.0.is_none(),
+    };
+    if !unchanged {
+        error.0 = failure;
+    }
+}
+
+#[cfg(test)]
+#[path = "playback_error_tests.rs"]
+mod playback_error_tests;

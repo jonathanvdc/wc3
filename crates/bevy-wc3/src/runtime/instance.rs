@@ -13,8 +13,9 @@ use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
+use wc3::model::error::{AnimationError, ErrorKind};
 use wc3::model::{
-    Error as AnimationError, FeatureId, InstanceId, MaterialId, MeshId, NodeId,
+    Error as ModelError, FeatureId, InstanceId, MaterialId, MeshId, NodeId,
     Transform as ModelTransform,
 };
 
@@ -53,7 +54,31 @@ pub struct PoseOverrides(pub HashMap<NodeId, ModelTransform>);
 
 /// Most recent invalid playback selection; cleared after a successful evaluation.
 #[derive(Component, Default)]
-pub struct PlaybackError(pub Option<String>);
+pub struct PlaybackError(pub Option<ModelError>);
+
+impl PlaybackError {
+    /// Compare only the typed failures emitted by playback input validation.
+    /// Other causes remain observable rather than being equated by their display.
+    pub(super) fn matches(&self, failure: &ModelError) -> bool {
+        let Some(previous) = &self.0 else {
+            return false;
+        };
+        if previous.location() != failure.location() {
+            return false;
+        }
+        match (previous.kind(), failure.kind()) {
+            (
+                ErrorKind::Animation(AnimationError::NonFiniteTime { value: a }),
+                ErrorKind::Animation(AnimationError::NonFiniteTime { value: b }),
+            ) => a.to_bits() == b.to_bits(),
+            (
+                ErrorKind::Animation(AnimationError::UnknownClip { clip: a }),
+                ErrorKind::Animation(AnimationError::UnknownClip { clip: b }),
+            ) => a == b,
+            _ => false,
+        }
+    }
+}
 
 /// Live instance with its own rig and evaluation storage, sharing prepared assets.
 #[derive(Component)]
@@ -120,7 +145,7 @@ impl ModelRig {
         aspect: f32,
         overrides: &PoseOverrides,
         scratch: &mut Vec<usize>,
-    ) -> Result<Option<SampledCamera>, AnimationError> {
+    ) -> Result<Option<SampledCamera>, ModelError> {
         let selection = playback.selection()?;
         let sample = self.model.animation.sample(selection)?;
         let Some(camera) = self
@@ -193,7 +218,7 @@ impl ModelRig {
         feature: FeatureId,
         playback: &Playback,
         aspect: f32,
-    ) -> Result<Option<SampledCamera>, AnimationError> {
+    ) -> Result<Option<SampledCamera>, ModelError> {
         let sample = self.model.animation.sample(playback.selection()?)?;
         let Some(camera) = self
             .model

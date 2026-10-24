@@ -3,7 +3,8 @@ use super::super::transition::TransitionRequest;
 use super::super::PreparedModel;
 use bevy::prelude::*;
 use std::time::Duration;
-use wc3::model::{AnimationSample, ClipId, Error as AnimationError, Time as ModelTime};
+use wc3::model::error::Location;
+use wc3::model::{AnimationSample, ClipId, Error as ModelError, Time as ModelTime};
 
 /// Playback clocks and clip selection, in seconds.
 #[derive(Component, Clone, Debug)]
@@ -74,8 +75,9 @@ impl Playback {
 
     /// Move all clocks without dispatching skipped events or destination keys.
     /// Direct clock-field edits instead retain ordinary forward traversal.
-    pub fn seek(&mut self, seconds: f64) -> Result<(), AnimationError> {
-        ModelTime::seconds(seconds)?;
+    pub fn seek(&mut self, seconds: f64) -> Result<(), ModelError> {
+        ModelTime::seconds(seconds)
+            .map_err(|error| error.with_context(Location::new().field("playback").field("seek")))?;
         self.transition_request.revision = self.transition_request.revision.wrapping_add(1);
         self.transition_request.duration = Some(0.);
         self.transition_clock = 0.;
@@ -95,11 +97,15 @@ impl Playback {
             .and_then(|timing| timing.blend_duration)
             .unwrap_or(model.blend_time)
     }
-    pub(crate) fn selection(&self) -> Result<AnimationSample, AnimationError> {
+    pub(crate) fn selection(&self) -> Result<AnimationSample, ModelError> {
         Ok(AnimationSample {
             clip: self.clip,
-            clip_time: ModelTime::seconds(self.clip_time)?,
-            shared_time: ModelTime::seconds(self.shared_time)?,
+            clip_time: ModelTime::seconds(self.clip_time).map_err(|error| {
+                error.with_context(Location::new().field("playback").field("clip_time"))
+            })?,
+            shared_time: ModelTime::seconds(self.shared_time).map_err(|error| {
+                error.with_context(Location::new().field("playback").field("shared_time"))
+            })?,
         })
     }
 }
