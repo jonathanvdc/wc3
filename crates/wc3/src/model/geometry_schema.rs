@@ -2,6 +2,9 @@
 use crate::model::common::IntoOwned;
 use crate::model::common::IntoPackedArray;
 use crate::model::common::PackedValue;
+use crate::model::error::{
+    GeometryError, GeometryOperation, Location, PolygonBoundaryRule, TopologyKind,
+};
 use crate::model::geometry_edit::{check_edit, remap_values};
 use crate::model::profiles::Either;
 use crate::model::ValueGroups;
@@ -36,9 +39,11 @@ pub trait GeometrySchema<'data>: Clone + Debug + Send + Sync + ValidateLinks {
     /// Applies an atomic edit, returning a checked replacement and preserving this value.
     /// Custom schemas may opt in by overriding this method and the capabilities query.
     fn edited(&self, _edit: GeometryEdit<'data>) -> Result<Self, Error> {
-        Err(Error::new(
-            "geometry.edit",
-            "this geometry schema does not support common edits",
+        Err(Error::at(
+            Location::new().field("edit"),
+            GeometryError::UnsupportedOperation {
+                operation: GeometryOperation::Edit,
+            },
         ))
     }
     /// Returns the authored geometry category without inspecting its packed representation.
@@ -65,9 +70,11 @@ pub trait GeometrySchema<'data>: Clone + Debug + Send + Sync + ValidateLinks {
     }
     /// Adds independently selectable topology when the schema permits it.
     fn add_connectivity(&mut self, _topology: Topology<'data>) -> Result<usize, Error> {
-        Err(Error::new(
-            "geometry.connectivity",
-            "schema cannot add connectivity sets",
+        Err(Error::at(
+            Location::new().field("connectivity"),
+            GeometryError::UnsupportedOperation {
+                operation: GeometryOperation::AddConnectivity,
+            },
         ))
     }
     /// Typed surface behavior in primary triangle order, when supported.
@@ -268,9 +275,11 @@ impl<'data> GeometryData<'data> {
     pub(crate) fn validate_vertex_streams(&self) -> Result<(), Error> {
         self.validate()?;
         if self.kind != GeometryKind::Display {
-            return Err(Error::new(
-                "geometry.kind",
-                "target requires display geometry",
+            return Err(Error::at(
+                Location::new().field("kind"),
+                GeometryError::UnsupportedOperation {
+                    operation: GeometryOperation::AdditionalAttributes,
+                },
             ));
         }
         self.validate_no_additional_domains()?;
@@ -284,9 +293,11 @@ impl<'data> GeometryData<'data> {
                         | AttributeSemantic::TexCoord(_)
                 )
         }) {
-            return Err(Error::new(
-                "geometry.attributes",
-                "target has no additional attribute domain",
+            return Err(Error::at(
+                Location::new().field("attributes"),
+                GeometryError::UnsupportedOperation {
+                    operation: GeometryOperation::AdditionalAttributes,
+                },
             ));
         }
         Ok(())
@@ -298,9 +309,11 @@ impl<'data> GeometryData<'data> {
                     || attribute.semantic == AttributeSemantic::TriangleProperties
             })
         {
-            return Err(Error::new(
-                "geometry.domains",
-                "target cannot retain triangle properties, additional connectivity, or indexed pools",
+            return Err(Error::at(
+                Location::new().field("connectivity"),
+                GeometryError::UnsupportedOperation {
+                    operation: GeometryOperation::AdditionalConnectivity,
+                },
             ));
         }
         Ok(())
@@ -446,14 +459,25 @@ impl<'data> GeometrySchema<'data> for GeometryData<'data> {
         for topology in self.connectivity.additional() {
             validate_topology(topology, self.positions.len())?;
         }
-        if self.triangle_properties().is_some_and(|values| {
-            !matches!(self.connectivity.primary, Topology::Triangles(_))
-                || values.len() != self.connectivity.primary.primitive_count()
-        }) {
-            return Err(Error::new(
-                "geometry.connectivity",
-                "triangle properties must cover primary triangles",
-            ));
+        if let Some(values) = self.triangle_properties() {
+            if !matches!(self.connectivity.primary, Topology::Triangles(_)) {
+                return Err(Error::at(
+                    Location::new().field("triangle_properties"),
+                    GeometryError::TrianglePropertiesTopology {
+                        actual: TopologyKind::from(&self.connectivity.primary),
+                    },
+                ));
+            }
+            let expected = self.connectivity.primary.primitive_count();
+            if values.len() != expected {
+                return Err(Error::at(
+                    Location::new().field("triangle_properties"),
+                    GeometryError::CountMismatch {
+                        expected,
+                        actual: values.len(),
+                    },
+                ));
+            }
         }
         Ok(())
     }
@@ -587,47 +611,74 @@ pub(crate) fn present<'view, 'data, T: PackedValue>(
 
 pub(crate) fn validate_geometry<'data>(geometry: &impl GeometrySchema<'data>) -> Result<(), Error> {
     let count = geometry.positions().len();
-    for stream in geometry
+    for (semantic, actual) in geometry
         .normals()
-        .map(|values| values.len())
+        .map(|v| (AttributeSemantic::Normal, v.len()))
         .into_iter()
-        .chain(geometry.tangents().map(|values| values.len()))
-        .chain(geometry.colors().map(|values| values.len()))
+        .chain(
+            geometry
+                .tangents()
+                .map(|v| (AttributeSemantic::Tangent, v.len())),
+        )
+        .chain(
+            geometry
+                .colors()
+                .map(|v| (AttributeSemantic::Color(0), v.len())),
+        )
         .chain(
             geometry
                 .texture_coordinates()
                 .iter()
-                .map(|values| values.len())
-                .filter(|len| *len != 0),
+                .enumerate()
+                .filter(|(_, v)| !v.is_empty())
+                .map(|(slot, v)| (AttributeSemantic::TexCoord(slot as u32), v.len())),
         )
-        .chain(Some(geometry.influences().len()).filter(|len| *len != 0))
     {
-        if stream != count {
-            return Err(Error::new(
-                "geometry.streams",
-                "stream cardinality differs from vertex count",
+        if actual != count {
+            return Err(Error::at(
+                Location::new().attribute(semantic, AttributeDomain::Vertex),
+                GeometryError::CountMismatch {
+                    expected: count,
+                    actual,
+                },
             ));
         }
     }
-    if !geometry.positions().iter().all(|v| v.is_finite())
-        || geometry
-            .normals()
-            .is_some_and(|values| values.iter().any(|v| !v.is_finite()))
-        || geometry
-            .tangents()
-            .is_some_and(|values| values.iter().any(|v| !v.is_finite()))
-        || geometry
-            .colors()
-            .is_some_and(|values| values.iter().any(|v| !v.is_finite()))
-        || geometry
-            .texture_coordinates()
-            .iter()
-            .any(|values| values.iter().any(|v| !v.is_finite()))
-    {
-        return Err(Error::new(
-            "geometry.streams",
-            "vertex values must be finite",
+    let influences = geometry.influences().len();
+    if influences != 0 && influences != count {
+        return Err(Error::at(
+            Location::new().field("influences"),
+            GeometryError::CountMismatch {
+                expected: count,
+                actual: influences,
+            },
         ));
+    }
+    check_finite(geometry.positions().iter().map(|v| v.to_array()), || {
+        Location::new().field("positions")
+    })?;
+    if let Some(values) = geometry.normals() {
+        check_finite(values.iter().map(|v| v.to_array()), || {
+            Location::new().attribute(AttributeSemantic::Normal, AttributeDomain::Vertex)
+        })?;
+    }
+    if let Some(values) = geometry.tangents() {
+        check_finite(values.iter().map(|v| v.to_array()), || {
+            Location::new().attribute(AttributeSemantic::Tangent, AttributeDomain::Vertex)
+        })?;
+    }
+    if let Some(values) = geometry.colors() {
+        check_finite(values.iter().map(|v| v.to_array()), || {
+            Location::new().attribute(AttributeSemantic::Color(0), AttributeDomain::Vertex)
+        })?;
+    }
+    for (slot, values) in geometry.texture_coordinates().iter().enumerate() {
+        check_finite(values.iter().map(|v| v.to_array()), || {
+            Location::new().attribute(
+                AttributeSemantic::TexCoord(slot as u32),
+                AttributeDomain::Vertex,
+            )
+        })?;
     }
     validate_topology(geometry.topology(), count)?;
     let faces = geometry.topology().primitive_count();
@@ -637,42 +688,83 @@ pub(crate) fn validate_geometry<'data>(geometry: &impl GeometrySchema<'data>) ->
             AttributeDomain::Vertex => count,
             AttributeDomain::Corner => corners,
             AttributeDomain::Face => faces,
-            AttributeDomain::ConnectivityFace(_) | AttributeDomain::ConnectivityCorner(_) => {
-                attribute.values.len()
-            }
+            AttributeDomain::ConnectivityFace(_)
+            | AttributeDomain::ConnectivityCorner(_)
+            | AttributeDomain::Pool => attribute.values.len(),
             AttributeDomain::Mesh => 1,
-            AttributeDomain::Pool => attribute.values.len(),
-        };
-        let finite = match &attribute.values {
-            AttributeValues::Scalar(v) => v.iter().all(f32::is_finite),
-            AttributeValues::Vector2(v) => v.iter().all(|v| v.is_finite()),
-            AttributeValues::Vector3(v) => v.iter().all(|v| v.is_finite()),
-            AttributeValues::Vector4(v) => v.iter().all(|v| v.is_finite()),
-            AttributeValues::Quaternion(v) => v.iter().all(|v| v.is_finite()),
-            _ => true,
         };
         let empty_uv_slot = attribute.domain == AttributeDomain::Vertex
             && matches!(attribute.semantic, AttributeSemantic::TexCoord(_))
             && attribute.values.is_empty();
-        if (attribute.values.len() != expected && !empty_uv_slot) || !finite {
-            return Err(Error::new(
-                "geometry.attributes",
-                "attribute cardinality or values are invalid for its domain",
+        if attribute.values.len() != expected && !empty_uv_slot {
+            return Err(Error::at(
+                Location::new().attribute(attribute.semantic.clone(), attribute.domain),
+                GeometryError::CountMismatch {
+                    expected,
+                    actual: attribute.values.len(),
+                },
             ));
+        }
+        macro_rules! finite {
+            ($values:expr) => {
+                check_finite($values.iter().map(|v| v.to_array()), || {
+                    Location::new().attribute(attribute.semantic.clone(), attribute.domain)
+                })?
+            };
+        }
+        match &attribute.values {
+            AttributeValues::Scalar(v) => check_finite(v.iter().map(|v| [v]), || {
+                Location::new().attribute(attribute.semantic.clone(), attribute.domain)
+            })?,
+            AttributeValues::Vector2(v) => finite!(v),
+            AttributeValues::Vector3(v) => finite!(v),
+            AttributeValues::Vector4(v) => finite!(v),
+            AttributeValues::Quaternion(v) => finite!(v),
+            _ => {}
         }
     }
     let rows = geometry.influences();
     for index in 0..rows.len() {
         let row = rows.get(index).expect("checked row index");
         let sum = row.weights().sum::<f32>();
-        if row
-            .weights()
-            .any(|weight| !weight.is_finite() || weight < 0.)
-            || (sum != 0. && (sum - 1.).abs() > 0.0001)
+        for (influence, weight) in row.weights().enumerate() {
+            if !weight.is_finite() || weight < 0. {
+                return Err(Error::at(
+                    Location::new()
+                        .field("influences")
+                        .index(index)
+                        .index(influence)
+                        .field("weight"),
+                    GeometryError::InvalidWeight { weight },
+                ));
+            }
+        }
+        if sum != 0. && (sum - 1.).abs() > 0.0001 {
+            return Err(Error::at(
+                Location::new().field("influences").index(index),
+                GeometryError::UnnormalizedWeights {
+                    sum,
+                    tolerance: 0.0001,
+                },
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn check_finite<const N: usize>(
+    values: impl IntoIterator<Item = [f32; N]>,
+    location: impl Fn() -> Location,
+) -> Result<(), Error> {
+    for (index, value) in values.into_iter().enumerate() {
+        if let Some((component, value)) = value
+            .into_iter()
+            .enumerate()
+            .find(|(_, value)| !value.is_finite())
         {
-            return Err(Error::new(
-                "geometry.influences",
-                "weights must be finite, nonnegative, and normalized when nonzero",
+            return Err(Error::at(
+                location().index(index).index(component),
+                GeometryError::NonFinite { value },
             ));
         }
     }
@@ -680,35 +772,77 @@ pub(crate) fn validate_geometry<'data>(geometry: &impl GeometrySchema<'data>) ->
 }
 
 fn validate_topology(topology: &Topology<'_>, vertices: usize) -> Result<(), Error> {
-    let valid = |index: u32| (index as usize) < vertices;
-    let indices_valid = match topology {
-        Topology::Points(values) | Topology::TriangleStrip(values) => values.iter().all(valid),
-        Topology::Lines(values) => values.iter().flatten().all(valid),
-        Topology::Triangles(values) => values.iter().flatten().all(valid),
-        Topology::Mixed(groups) => {
-            for group in groups {
-                validate_topology(group, vertices)?;
+    fn indices(values: impl IntoIterator<Item = u32>, vertices: usize) -> Result<(), Error> {
+        for (corner, index) in values.into_iter().enumerate() {
+            if index as usize >= vertices {
+                return Err(Error::at(
+                    Location::new().field("indices").index(corner),
+                    GeometryError::IndexOutOfBounds {
+                        index: index as usize,
+                        len: vertices,
+                    },
+                ));
             }
-            true
+        }
+        Ok(())
+    }
+    match topology {
+        Topology::Points(values) | Topology::TriangleStrip(values) => {
+            indices(values.iter(), vertices)
+        }
+        Topology::Lines(values) => indices(values.iter().flatten(), vertices),
+        Topology::Triangles(values) => indices(values.iter().flatten(), vertices),
+        Topology::Mixed(groups) => {
+            for (index, group) in groups.iter().enumerate() {
+                validate_topology(group, vertices).map_err(|error| {
+                    error.with_context(Location::new().field("groups").index(index))
+                })?;
+            }
+            Ok(())
         }
         Topology::Polygons { corners, offsets } => {
-            let offsets = offsets.to_vec();
-            offsets.first() == Some(&0)
-                && offsets.last().map(|value| *value as usize) == Some(corners.len())
-                && offsets
-                    .windows(2)
-                    .all(|pair| pair[1] >= pair[0] && pair[1] - pair[0] >= 3)
-                && corners.iter().all(valid)
+            if offsets.get(0) != Some(0) {
+                return Err(Error::at(
+                    Location::new().field("offsets").index(0),
+                    GeometryError::PolygonBoundary {
+                        rule: PolygonBoundaryRule::StartsAtZero,
+                        previous: None,
+                        actual: offsets.get(0),
+                        corners: corners.len(),
+                    },
+                ));
+            }
+            let last = offsets.len() - 1;
+            if offsets.get(last).map(|value| value as usize) != Some(corners.len()) {
+                return Err(Error::at(
+                    Location::new().field("offsets").index(last),
+                    GeometryError::PolygonBoundary {
+                        rule: PolygonBoundaryRule::EndsAtCornerCount,
+                        previous: None,
+                        actual: offsets.get(last),
+                        corners: corners.len(),
+                    },
+                ));
+            }
+            let mut previous = 0;
+            for (index, actual) in offsets.iter().enumerate().skip(1) {
+                if actual < previous || actual - previous < 3 {
+                    return Err(Error::at(
+                        Location::new().field("offsets").index(index),
+                        GeometryError::PolygonBoundary {
+                            rule: PolygonBoundaryRule::OrderedWithThreeCorners,
+                            previous: Some(previous),
+                            actual: Some(actual),
+                            corners: corners.len(),
+                        },
+                    ));
+                }
+                previous = actual;
+            }
+            indices(corners.iter(), vertices)
         }
-    };
-    if indices_valid {
-        Ok(())
-    } else {
-        Err(Error::new(
-            "geometry.topology",
-            "primitive indices or polygon boundaries are invalid",
-        ))
     }
+    .map_err(|error| error.with_context(Location::new().field("topology")))
 }
 
 impl Default for GeometryData<'_> {

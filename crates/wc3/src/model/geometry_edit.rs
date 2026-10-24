@@ -3,6 +3,7 @@ use super::{
     Attribute, AttributeDomain, AttributeValues, Error, GeometrySchema, PackedArray, Topology,
 };
 use crate::model::common::PackedValue;
+use crate::model::error::{GeometryError, GeometryOperation, Location, TopologyKind};
 use glam::{Vec2, Vec3, Vec4};
 
 /// Availability of a stream in a geometry vocabulary.
@@ -80,43 +81,77 @@ pub struct VertexRemap<'a> {
 }
 impl VertexRemap<'_> {
     pub(crate) fn check<'a>(&self, geometry: &impl GeometrySchema<'a>) -> Result<(), Error> {
-        if self.new_to_old.len() > u32::MAX as usize
-            || self
-                .new_to_old
-                .iter()
-                .any(|i| *i as usize >= geometry.positions().len())
-            || !equivalent(geometry.topology(), &self.topology, &self.new_to_old)
-        {
-            return Err(Error::new(
-                "geometry.edit.remap",
-                "invalid vertex correspondence or changed primitive/corner ordering",
+        if self.new_to_old.len() > u32::MAX as usize {
+            return Err(Error::at(
+                Location::new().field("new_to_old"),
+                GeometryError::VertexCountOverflow {
+                    actual: self.new_to_old.len(),
+                    maximum: u32::MAX as usize,
+                },
             ));
+        }
+        if let Some((index, value)) = self
+            .new_to_old
+            .iter()
+            .enumerate()
+            .find(|(_, value)| **value as usize >= geometry.positions().len())
+        {
+            return Err(Error::at(
+                Location::new().field("new_to_old").index(index),
+                GeometryError::IndexOutOfBounds {
+                    index: *value as usize,
+                    len: geometry.positions().len(),
+                },
+            ));
+        }
+        equivalent(geometry.topology(), &self.topology, &self.new_to_old)
+            .map_err(|error| error.with_context(Location::new().field("topology")))
+    }
+}
+fn equivalent(old: &Topology<'_>, new: &Topology<'_>, map: &[u32]) -> Result<(), Error> {
+    fn count(expected: usize, actual: usize) -> Result<(), Error> {
+        if expected != actual {
+            return Err(GeometryError::CountMismatch { expected, actual }.into());
         }
         Ok(())
     }
-}
-fn equivalent(old: &Topology<'_>, new: &Topology<'_>, map: &[u32]) -> bool {
-    let same = |a: u32, b: u32| map.get(b as usize) == Some(&a);
+    fn corners(
+        a: impl Iterator<Item = u32>,
+        b: impl Iterator<Item = u32>,
+        map: &[u32],
+    ) -> Result<(), Error> {
+        for (index, (expected, new)) in a.zip(b).enumerate() {
+            let actual = map.get(new as usize).copied();
+            if actual != Some(expected) {
+                return Err(Error::at(
+                    Location::new().field("corners").index(index),
+                    GeometryError::RemapCorrespondence { expected, actual },
+                ));
+            }
+        }
+        Ok(())
+    }
     match (old, new) {
         (Topology::Mixed(a), Topology::Mixed(b)) => {
-            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| equivalent(a, b, map))
+            count(a.len(), b.len())?;
+            for (index, (a, b)) in a.iter().zip(b).enumerate() {
+                equivalent(a, b, map).map_err(|error| {
+                    error.with_context(Location::new().field("groups").index(index))
+                })?;
+            }
+            Ok(())
         }
         (Topology::Triangles(a), Topology::Triangles(b)) => {
-            a.len() == b.len()
-                && a.iter()
-                    .flatten()
-                    .zip(b.iter().flatten())
-                    .all(|(a, b)| same(a, b))
+            count(a.len(), b.len())?;
+            corners(a.iter().flatten(), b.iter().flatten(), map)
         }
         (Topology::Lines(a), Topology::Lines(b)) => {
-            a.len() == b.len()
-                && a.iter()
-                    .flatten()
-                    .zip(b.iter().flatten())
-                    .all(|(a, b)| same(a, b))
+            count(a.len(), b.len())?;
+            corners(a.iter().flatten(), b.iter().flatten(), map)
         }
         (Topology::Points(a), Topology::Points(b)) => {
-            a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| same(a, b))
+            count(a.len(), b.len())?;
+            corners(a.iter(), b.iter(), map)
         }
         (
             Topology::Polygons {
@@ -128,11 +163,27 @@ fn equivalent(old: &Topology<'_>, new: &Topology<'_>, map: &[u32]) -> bool {
                 offsets: bo,
             },
         ) => {
-            ao.iter().eq(bo.iter())
-                && a.len() == b.len()
-                && a.iter().zip(b.iter()).all(|(a, b)| same(a, b))
+            count(ao.len(), bo.len())
+                .map_err(|error| error.with_context(Location::new().field("offsets")))?;
+            for (index, (expected, actual)) in ao.iter().zip(bo.iter()).enumerate() {
+                if expected != actual {
+                    return Err(Error::at(
+                        Location::new().field("offsets").index(index),
+                        GeometryError::RemapCorrespondence {
+                            expected,
+                            actual: Some(actual),
+                        },
+                    ));
+                }
+            }
+            count(a.len(), b.len())?;
+            corners(a.iter(), b.iter(), map)
         }
-        _ => false,
+        _ => Err(GeometryError::RemapTopology {
+            expected: TopologyKind::from(old),
+            actual: TopologyKind::from(new),
+        }
+        .into()),
     }
 }
 pub(crate) fn remap_values<'a, T: PackedValue + 'a>(values: &mut PackedArray<'a, T>, map: &[u32]) {
@@ -169,19 +220,50 @@ pub(crate) fn check_edit(
     edit: &GeometryEdit<'_>,
     caps: GeometryEditCapabilities,
 ) -> Result<(), Error> {
-    if (edit.positions.is_some() && !caps.positions)
-        || (edit.normals.is_some() && caps.normals == StreamSupport::Unsupported)
-        || (edit.tangents.is_some() && caps.tangents == StreamSupport::Unsupported)
-        || (edit.colors.is_some() && caps.colors == StreamSupport::Unsupported)
-        || (edit.remap.is_some() && !caps.vertex_remap)
-        || edit.texture_coordinates.as_ref().is_some_and(|v| {
-            v.len() < caps.minimum_uv_sets || caps.maximum_uv_sets.is_some_and(|n| v.len() > n)
-        })
-    {
-        return Err(Error::new(
-            "geometry.edit",
-            "operation is unsupported by this geometry representation",
-        ));
+    for (requested, operation) in [
+        (
+            edit.positions.is_some() && !caps.positions,
+            GeometryOperation::ReplacePositions,
+        ),
+        (
+            edit.normals.is_some() && caps.normals == StreamSupport::Unsupported,
+            GeometryOperation::ReplaceNormals,
+        ),
+        (
+            edit.tangents.is_some() && caps.tangents == StreamSupport::Unsupported,
+            GeometryOperation::ReplaceTangents,
+        ),
+        (
+            edit.colors.is_some() && caps.colors == StreamSupport::Unsupported,
+            GeometryOperation::ReplaceColors,
+        ),
+        (
+            edit.remap.is_some() && !caps.vertex_remap,
+            GeometryOperation::VertexRemap,
+        ),
+    ] {
+        if requested {
+            return Err(Error::at(
+                Location::new().field("edit"),
+                GeometryError::UnsupportedOperation { operation },
+            ));
+        }
+    }
+    if let Some(values) = &edit.texture_coordinates {
+        if values.len() < caps.minimum_uv_sets
+            || caps
+                .maximum_uv_sets
+                .is_some_and(|maximum| values.len() > maximum)
+        {
+            return Err(Error::at(
+                Location::new().field("texture_coordinates"),
+                GeometryError::TextureCoordinateCount {
+                    minimum: caps.minimum_uv_sets,
+                    maximum: caps.maximum_uv_sets,
+                    actual: values.len(),
+                },
+            ));
+        }
     }
     Ok(())
 }

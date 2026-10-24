@@ -4,6 +4,7 @@ use crate::model::common::packed_identity;
 use crate::model::common::AsULE;
 use crate::model::common::IntoOwned;
 use crate::model::common::IntoPackedArray;
+use crate::model::error::{GeometryError, GeometryOperation, Location};
 use crate::model::profiles::{Profile, Universal};
 use crate::model::BindingSchema as _;
 use crate::model::TextureCoordinates;
@@ -29,28 +30,50 @@ pub struct Bounds {
 }
 impl Bounds {
     pub(crate) fn validate(&self) -> Result<(), Error> {
-        if self
+        for (field, vector) in [("minimum", self.minimum), ("maximum", self.maximum)] {
+            if let Some((component, value)) = vector
+                .to_array()
+                .into_iter()
+                .enumerate()
+                .find(|(_, value)| !value.is_finite())
+            {
+                return Err(Error::at(
+                    Location::new().field(field).index(component),
+                    GeometryError::NonFinite { value },
+                ));
+            }
+        }
+        for (component, (minimum, maximum)) in self
             .minimum
             .to_array()
-            .iter()
-            .chain(&self.maximum.to_array())
-            .any(|x| !x.is_finite())
-            || self
-                .minimum
-                .to_array()
-                .iter()
-                .zip(self.maximum.to_array())
-                .any(|(a, b)| *a > b)
-            || !self.sphere_radius.is_finite()
-            || self.sphere_radius < 0.
+            .into_iter()
+            .zip(self.maximum.to_array())
+            .enumerate()
         {
-            Err(Error::new(
-                "bounds",
-                "bounds must be finite, ordered, and nonnegative",
-            ))
-        } else {
-            Ok(())
+            if minimum > maximum {
+                return Err(Error::at(
+                    Location::new().field("minimum").index(component),
+                    GeometryError::InvertedBounds { minimum, maximum },
+                ));
+            }
         }
+        if !self.sphere_radius.is_finite() {
+            return Err(Error::at(
+                Location::new().field("sphere_radius"),
+                GeometryError::NonFinite {
+                    value: self.sphere_radius,
+                },
+            ));
+        }
+        if self.sphere_radius < 0. {
+            return Err(Error::at(
+                Location::new().field("sphere_radius"),
+                GeometryError::NegativeRadius {
+                    radius: self.sphere_radius,
+                },
+            ));
+        }
+        Ok(())
     }
 }
 /// A joint index within a skin and its normalized weight.
@@ -256,21 +279,30 @@ impl<'a, P: Profile> Mesh<'a, P> {
         draw: &'view Draw<P>,
     ) -> Result<ResolvedDraw<'view, P>, Error> {
         let subset = self.subset(draw.subset).ok_or_else(|| {
-            Error::new(
-                "instance.draw.subset",
-                "draw subset belongs to another mesh or is absent",
+            Error::at(
+                Location::new().field("subset"),
+                GeometryError::MissingSubset {
+                    subset: draw.subset,
+                },
             )
         })?;
         let PrimitiveRange::Primitives { first, count } = subset.selection.range else {
-            return Err(Error::new(
-                "instance.draw.selection",
-                "native adapter requires a primitive selection",
+            return Err(Error::at(
+                Location::new().field("selection").field("range"),
+                GeometryError::UnsupportedOperation {
+                    operation: GeometryOperation::PrimitiveSelection,
+                },
             ));
         };
         if subset.selection.connectivity != self.subsets.primary() {
-            return Err(Error::new(
-                "instance.draw.connectivity",
-                "native adapter requires primary connectivity",
+            return Err(Error::at(
+                Location::new()
+                    .field("selection")
+                    .field("connectivity")
+                    .with_owner(subset.selection.connectivity),
+                GeometryError::UnsupportedOperation {
+                    operation: GeometryOperation::PrimaryConnectivity,
+                },
             ));
         }
         Ok(ResolvedDraw {
@@ -295,9 +327,11 @@ impl<'a, P: Profile> Mesh<'a, P> {
                     || subset.vertex_window.is_some()
             })
         {
-            return Err(Error::new(
-                "mesh.subsets.remap",
-                "authored windows and pool associations require explicit correspondence updates",
+            return Err(Error::at(
+                Location::new().field("subsets"),
+                GeometryError::UnsupportedOperation {
+                    operation: GeometryOperation::RemapSelectionBindings,
+                },
             ));
         }
         let mut value = self.clone();
@@ -326,9 +360,12 @@ impl<'a, P: Profile> Mesh<'a, P> {
     }
     /// Identifies a connectivity set in the geometry's schema.
     pub fn connectivity_id(&mut self, index: usize) -> Result<ConnectivityId, Error> {
-        self.geometry
-            .connectivity(index)
-            .ok_or_else(|| Error::new("mesh.connectivity", "connectivity set is absent"))?;
+        self.geometry.connectivity(index).ok_or_else(|| {
+            Error::at(
+                Location::new().field("connectivity").index(index),
+                GeometryError::MissingConnectivityIndex { index },
+            )
+        })?;
         Ok(self.subsets.connectivity_id(index))
     }
     /// Returns the binding shared by all placements of this geometry.
@@ -378,7 +415,9 @@ impl<'a, P: Profile> Mesh<'a, P> {
         self
     }
     pub(crate) fn validate(&self) -> Result<(), Error> {
-        self.bounds.validate()?;
+        self.bounds
+            .validate()
+            .map_err(|error| error.with_context(Location::new().field("bounds")))?;
         self.geometry.validate()?;
         let mut domains = BTreeMap::new();
         for attribute in self.attributes() {
@@ -395,9 +434,9 @@ impl<'a, P: Profile> Mesh<'a, P> {
                 .insert((&attribute.semantic, domain), attribute.domain)
                 .is_some_and(|previous| previous != attribute.domain)
             {
-                return Err(Error::new(
-                    "mesh.attributes",
-                    "duplicate semantic and connectivity domain",
+                return Err(Error::at(
+                    Location::new().attribute(attribute.semantic.clone(), attribute.domain),
+                    GeometryError::DuplicateAttribute,
                 ));
             }
 
@@ -405,9 +444,10 @@ impl<'a, P: Profile> Mesh<'a, P> {
                 AttributeDomain::ConnectivityFace(id) => Some(
                     self.connectivity(id)
                         .ok_or_else(|| {
-                            Error::new(
-                                "mesh.attributes.connectivity",
-                                "face connectivity belongs to another mesh or is absent",
+                            Error::at(
+                                Location::new()
+                                    .attribute(attribute.semantic.clone(), attribute.domain),
+                                GeometryError::MissingConnectivity { connectivity: id },
                             )
                         })?
                         .primitive_count(),
@@ -415,9 +455,10 @@ impl<'a, P: Profile> Mesh<'a, P> {
                 AttributeDomain::ConnectivityCorner(id) => Some(
                     self.connectivity(id)
                         .ok_or_else(|| {
-                            Error::new(
-                                "mesh.attributes.connectivity",
-                                "corner connectivity belongs to another mesh or is absent",
+                            Error::at(
+                                Location::new()
+                                    .attribute(attribute.semantic.clone(), attribute.domain),
+                                GeometryError::MissingConnectivity { connectivity: id },
                             )
                         })?
                         .corner_count(),
@@ -425,9 +466,12 @@ impl<'a, P: Profile> Mesh<'a, P> {
                 _ => None,
             };
             if expected.is_some_and(|count| attribute.values.len() != count) {
-                return Err(Error::new(
-                    "mesh.attributes",
-                    "attribute cardinality differs from its connectivity domain",
+                return Err(Error::at(
+                    Location::new().attribute(attribute.semantic.clone(), attribute.domain),
+                    GeometryError::CountMismatch {
+                        expected: expected.expect("checked expected count"),
+                        actual: attribute.values.len(),
+                    },
                 ));
             }
         }

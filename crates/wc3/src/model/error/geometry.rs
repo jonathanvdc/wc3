@@ -234,6 +234,11 @@ pub enum GeometryError {
         /// Explicit mesh-owned connectivity identity.
         connectivity: ConnectivityId,
     },
+    /// A topology set cannot be resolved by its schema index.
+    MissingConnectivityIndex {
+        /// Rejected topology-set index.
+        index: usize,
+    },
     /// A subset cannot be resolved in the owning mesh.
     MissingSubset {
         /// Explicit mesh-owned subset identity.
@@ -384,6 +389,7 @@ impl Display for GeometryError {
             Self::DuplicateAttribute => f.write_str("attribute semantic and domain are already present"),
             Self::AttributeType { actual } => write!(f, "{actual:?} values do not match the attribute semantic and domain"),
             Self::MissingConnectivity { connectivity } => write!(f, "connectivity {connectivity:?} is absent or belongs to another mesh"),
+            Self::MissingConnectivityIndex { index } => write!(f, "connectivity set {index} is absent"),
             Self::MissingSubset { subset } => write!(f, "subset {subset:?} is absent or belongs to another mesh"),
             Self::UnsupportedOperation { operation } => write!(f, "geometry representation does not support {operation:?}"),
             Self::TextureCoordinateCount { minimum, maximum, actual } => write!(f, "expected {minimum}..={maximum:?} UV streams, found {actual}"),

@@ -1,6 +1,7 @@
 //! Mesh-owned connectivity selections retain identities across instances and profile changes.
 use super::ids::Scope;
 use super::{Error, GeometrySchema, Id, Topology};
+use crate::model::error::{GeometryError, GeometryOperation, Location, TopologyKind};
 use std::collections::BTreeMap;
 
 /// ConnectivitySets identity marker, scoped to its owning mesh.
@@ -142,9 +143,9 @@ impl DrawSubsets {
     /// Updates a subset while retaining its identity; mesh publication validates its selections.
     pub fn set(&mut self, id: DrawSubsetId, value: DrawSubset) -> Result<(), Error> {
         let slot = self.subsets.get_mut(&id).ok_or_else(|| {
-            Error::new(
-                "mesh.subsets",
-                "subset belongs to another mesh or is absent",
+            Error::at(
+                Location::for_owner(id),
+                GeometryError::MissingSubset { subset: id },
             )
         })?;
         *slot = value;
@@ -161,28 +162,52 @@ impl DrawSubsets {
         &self,
         geometry: &impl GeometrySchema<'data>,
     ) -> Result<(), Error> {
-        for (_, subset) in self.iter() {
+        for (id, subset) in self.iter() {
             let capabilities = geometry.subset_capabilities();
-            if (!capabilities.alternate_selection && subset.selection.connectivity != self.primary)
-                || (!capabilities.supplemental_strips && subset.strip.is_some())
-                || (!capabilities.vertex_windows && subset.vertex_window.is_some())
-                || (!capabilities.tangent_bindings && subset.tangents.is_some())
-            {
-                return Err(Error::new(
-                    "mesh.subsets",
-                    "selection bindings are unsupported by this schema",
-                ));
-            }
-
-            self.check_selection(subset.selection, geometry)?;
-            if let Some(strip) = subset.strip {
-                if !matches!(strip.selection.range, PrimitiveRange::StripIndices { .. }) {
-                    return Err(Error::new(
-                        "mesh.subsets.strip",
-                        "expected a strip-index selection",
+            for (requested, operation) in [
+                (
+                    !capabilities.alternate_selection
+                        && subset.selection.connectivity != self.primary,
+                    GeometryOperation::AlternateSelection,
+                ),
+                (
+                    !capabilities.supplemental_strips && subset.strip.is_some(),
+                    GeometryOperation::SupplementalStrips,
+                ),
+                (
+                    !capabilities.vertex_windows && subset.vertex_window.is_some(),
+                    GeometryOperation::VertexWindows,
+                ),
+                (
+                    !capabilities.tangent_bindings && subset.tangents.is_some(),
+                    GeometryOperation::TangentBindings,
+                ),
+            ] {
+                if requested {
+                    return Err(Error::at(
+                        Location::for_owner(id),
+                        GeometryError::UnsupportedOperation { operation },
                     ));
                 }
-                self.check_selection(strip.selection, geometry)?;
+            }
+
+            self.check_selection(subset.selection, geometry)
+                .map_err(|error| error.with_context(Location::for_owner(id).field("selection")))?;
+            if let Some(strip) = subset.strip {
+                if !matches!(strip.selection.range, PrimitiveRange::StripIndices { .. }) {
+                    return Err(Error::at(
+                        Location::for_owner(id).field("strip").field("range"),
+                        GeometryError::SelectionDomain {
+                            topology: TopologyKind::TriangleStrip,
+                            range: strip.selection.range,
+                        },
+                    ));
+                }
+                self.check_selection(strip.selection, geometry)
+                    .map_err(|error| {
+                        error
+                            .with_context(Location::for_owner(id).field("strip").field("selection"))
+                    })?;
             }
             let count = subset.selection.range.count();
             if count != 0
@@ -190,9 +215,13 @@ impl DrawSubsets {
                     first > last || last as usize >= geometry.positions().len()
                 })
             {
-                return Err(Error::new(
-                    "mesh.subsets.vertices",
-                    "vertex window exceeds geometry",
+                return Err(Error::at(
+                    Location::for_owner(id).field("vertex_window"),
+                    GeometryError::VertexWindow {
+                        first: subset.vertex_window.expect("checked window")[0],
+                        last: subset.vertex_window.expect("checked window")[1],
+                        vertices: geometry.positions().len(),
+                    },
                 ));
             }
             if let Some(binding) = subset.tangents {
@@ -204,9 +233,13 @@ impl DrawSubsets {
                         .tangent_pool()
                         .is_none_or(|values| binding.first_tangent as usize >= values.len())
                 {
-                    return Err(Error::new(
-                        "mesh.subsets.tangents",
-                        "tangent binding exceeds vertices or pool",
+                    return Err(Error::at(
+                        Location::for_owner(id).field("tangents"),
+                        GeometryError::TangentBinding {
+                            binding,
+                            vertices: geometry.positions().len(),
+                            pool: geometry.tangent_pool().map(|values| values.len()),
+                        },
                     ));
                 }
             }
@@ -221,9 +254,11 @@ impl DrawSubsets {
         let topology = self
             .resolve(selection.connectivity, geometry)
             .ok_or_else(|| {
-                Error::new(
-                    "mesh.subsets.connectivity",
-                    "connectivity belongs to another mesh or is absent",
+                Error::at(
+                    Location::new().field("connectivity"),
+                    GeometryError::MissingConnectivity {
+                        connectivity: selection.connectivity,
+                    },
                 )
             })?;
         let capacity = match (&topology, selection.range) {
@@ -232,18 +267,25 @@ impl DrawSubsets {
             }
             (Topology::TriangleStrip(_), PrimitiveRange::Primitives { .. })
             | (_, PrimitiveRange::StripIndices { .. }) => {
-                return Err(Error::new(
-                    "mesh.subsets.range",
-                    "selection counting domain does not match connectivity",
+                return Err(Error::at(
+                    Location::new().field("range"),
+                    GeometryError::SelectionDomain {
+                        topology: TopologyKind::from(&topology),
+                        range: selection.range,
+                    },
                 ))
             }
             (_, PrimitiveRange::Primitives { .. }) => topology.primitive_count(),
         };
         if u64::from(selection.range.first()) + u64::from(selection.range.count()) > capacity as u64
         {
-            return Err(Error::new(
-                "mesh.subsets.range",
-                "selection exceeds connectivity",
+            return Err(Error::at(
+                Location::new().field("range"),
+                GeometryError::SelectionRange {
+                    connectivity: selection.connectivity,
+                    range: selection.range,
+                    capacity,
+                },
             ));
         }
         Ok(())

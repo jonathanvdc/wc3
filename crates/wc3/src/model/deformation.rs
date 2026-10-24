@@ -1,4 +1,5 @@
 //! CPU deformation shared with renderer snapshot adapters.
+use crate::model::error::{GeometryError, Location};
 use crate::model::{Bounds, Error, ProjectedGeometry, SkinWeights};
 use glam::Vec4;
 use glam::{Mat4, Vec3};
@@ -18,22 +19,37 @@ impl DeformableGeometry<'_> {
     /// Validation precedes mutation. Other streams and vertex ordering are unchanged.
     pub fn deform(&mut self, transforms: &[Mat4]) -> Result<(), Error> {
         let count = self.positions.len();
-        if transforms.len() != count
-            || (!self.normals.is_empty() && self.normals.len() != count)
-            || (!self.tangents.is_empty() && self.tangents.len() != count)
-        {
-            return Err(Error::new(
-                "geometry.deform",
-                "inconsistent vertex stream count",
-            ));
+        for (field, actual, optional) in [
+            ("transforms", transforms.len(), false),
+            ("normals", self.normals.len(), true),
+            ("tangents", self.tangents.len(), true),
+        ] {
+            if actual != count && (!optional || actual != 0) {
+                return Err(Error::at(
+                    Location::new().field(field),
+                    GeometryError::CountMismatch {
+                        expected: count,
+                        actual,
+                    },
+                ));
+            }
         }
-        if self
-            .positions
-            .iter()
-            .zip(transforms)
-            .any(|(p, m)| !m.transform_point3(*p).is_finite())
-        {
-            return Err(Error::new("geometry.deform", "nonfinite posed positions"));
+        for (index, (position, matrix)) in self.positions.iter().zip(transforms).enumerate() {
+            let point = matrix.transform_point3(*position);
+            if let Some((component, value)) = point
+                .to_array()
+                .into_iter()
+                .enumerate()
+                .find(|(_, value)| !value.is_finite())
+            {
+                return Err(Error::at(
+                    Location::new()
+                        .field("positions")
+                        .index(index)
+                        .index(component),
+                    GeometryError::NonFinite { value },
+                ));
+            }
         }
         for (position, matrix) in self.positions.iter_mut().zip(transforms) {
             *position = matrix.transform_point3(*position);
@@ -72,25 +88,43 @@ where
     R: IntoIterator<Item = (usize, f32)>,
 {
     output.clear();
-    for row in influences {
+    for (vertex, row) in influences.into_iter().enumerate() {
         let mut matrix = Mat4::ZERO;
         let mut positive = false;
-        for (index, weight) in row {
+        let mut sum = 0.;
+        for (influence, (index, weight)) in row.into_iter().enumerate() {
             if !weight.is_finite() || weight < 0. {
-                return Err(Error::new("geometry.skin", "invalid skin weight"));
+                return Err(Error::at(
+                    Location::new()
+                        .field("influences")
+                        .index(vertex)
+                        .index(influence)
+                        .field("weight"),
+                    GeometryError::InvalidWeight { weight },
+                ));
             }
             if weight > 0. {
-                matrix += *joints
-                    .get(index)
-                    .ok_or_else(|| Error::new("geometry.skin", "invalid pose joint index"))?
-                    * weight;
+                matrix += *joints.get(index).ok_or_else(|| {
+                    Error::at(
+                        Location::new()
+                            .field("influences")
+                            .index(vertex)
+                            .index(influence)
+                            .field("joint"),
+                        GeometryError::IndexOutOfBounds {
+                            index,
+                            len: joints.len(),
+                        },
+                    )
+                })? * weight;
                 positive = true;
+                sum += weight;
             }
         }
         if !positive {
-            return Err(Error::new(
-                "geometry.skin",
-                "vertex has no positive joint contribution",
+            return Err(Error::at(
+                Location::new().field("influences").index(vertex),
+                GeometryError::NoPositiveWeights { sum },
             ));
         }
         output.push(matrix);
@@ -101,9 +135,12 @@ impl SkinWeights {
     /// Fills reusable deformation matrices. Joint transforms use compact palette order.
     pub fn matrices_into(&self, joints: &[Mat4], output: &mut Vec<Mat4>) -> Result<(), Error> {
         if joints.len() != self.palette.len() {
-            return Err(Error::new(
-                "geometry.skin",
-                "inconsistent compact joint palette",
+            return Err(Error::at(
+                Location::new().field("palette"),
+                GeometryError::CountMismatch {
+                    expected: self.palette.len(),
+                    actual: joints.len(),
+                },
             ));
         }
         skin_matrices(
@@ -136,17 +173,35 @@ impl Bounds {
         }
         let mut min = Vec3::splat(f32::INFINITY);
         let mut max = Vec3::splat(f32::NEG_INFINITY);
-        for position in positions {
+        for (index, position) in positions.iter().enumerate() {
             let point = *position;
             if !point.is_finite() {
-                return Err(Error::new("geometry.bounds", "nonfinite position"));
+                let (component, value) = point
+                    .to_array()
+                    .into_iter()
+                    .enumerate()
+                    .find(|(_, value)| !value.is_finite())
+                    .expect("nonfinite point");
+                return Err(Error::at(
+                    Location::new()
+                        .field("positions")
+                        .index(index)
+                        .index(component),
+                    GeometryError::NonFinite { value },
+                ));
             }
             min = min.min(point);
             max = max.max(point);
         }
-        let radius = ((max.as_dvec3() - min.as_dvec3()) * 0.5).length() as f32;
+        let wide_radius = ((max.as_dvec3() - min.as_dvec3()) * 0.5).length();
+        let radius = wide_radius as f32;
         if !radius.is_finite() {
-            return Err(Error::new("geometry.bounds", "bounding radius exceeds f32"));
+            return Err(Error::at(
+                Location::new().field("sphere_radius"),
+                GeometryError::RadiusOverflow {
+                    radius: wide_radius,
+                },
+            ));
         }
         Ok(Some(Self {
             minimum: min,

@@ -2,6 +2,7 @@
 use super::geometry_edit::remap_attribute;
 use super::{Attribute, AttributeDomain, AttributeSemantic, AttributeValues, Error, PackedArray};
 use crate::model::common::IntoOwned;
+use crate::model::error::{AttributeValueKind, GeometryError, Location};
 use glam::{Vec2, Vec3, Vec4};
 use std::ops::Index;
 use std::slice::Iter;
@@ -17,9 +18,9 @@ impl<'data> GeometryAttributes<'data> {
     /// Inserts a definition without replacing an already authored key.
     pub fn insert(&mut self, attribute: Attribute<'data>) -> Result<(), Error> {
         if self.get(&attribute.semantic, attribute.domain).is_some() {
-            return Err(Error::new(
-                "geometry.attributes",
-                "duplicate semantic and domain",
+            return Err(Error::at(
+                Location::new().attribute(attribute.semantic.clone(), attribute.domain),
+                GeometryError::DuplicateAttribute,
             ));
         }
         self.check_type(&attribute)?;
@@ -56,9 +57,11 @@ impl<'data> GeometryAttributes<'data> {
         if valid {
             Ok(())
         } else {
-            Err(Error::new(
-                "geometry.attributes",
-                "attribute value type does not match its semantic",
+            Err(Error::at(
+                Location::new().attribute(attribute.semantic.clone(), attribute.domain),
+                GeometryError::AttributeType {
+                    actual: AttributeValueKind::from(&attribute.values),
+                },
             ))
         }
     }
@@ -81,7 +84,15 @@ impl<'data> GeometryAttributes<'data> {
         let mut attribute = self
             .entries
             .get(index)
-            .ok_or_else(|| Error::new("geometry.attributes", "attribute is absent"))?
+            .ok_or_else(|| {
+                Error::at(
+                    Location::new().field("entries").index(index),
+                    GeometryError::IndexOutOfBounds {
+                        index,
+                        len: self.entries.len(),
+                    },
+                )
+            })?
             .clone();
         edit(&mut attribute);
         self.check_type(&attribute)?;
@@ -90,9 +101,9 @@ impl<'data> GeometryAttributes<'data> {
                 && value.semantic == attribute.semantic
                 && value.domain == attribute.domain
         }) {
-            return Err(Error::new(
-                "geometry.attributes",
-                "duplicate semantic and domain",
+            return Err(Error::at(
+                Location::new().attribute(attribute.semantic.clone(), attribute.domain),
+                GeometryError::DuplicateAttribute,
             ));
         }
         self.entries[index] = attribute;
