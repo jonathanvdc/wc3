@@ -3,7 +3,7 @@ use std::error::Error as StdError;
 use std::fmt::{self, Display, Formatter};
 use std::io;
 use wc3::model::error::{EditError, ErrorKind, Location, Owner, ReferenceError, Segment};
-use wc3::model::profiles::Mdlx;
+use wc3::model::profiles::{Mdlx, Profile};
 use wc3::model::{AttributeDomain, AttributeSemantic, Error, Model};
 
 #[derive(Debug)]
@@ -21,6 +21,95 @@ impl StdError for ApplicationConstraint {
         Some(&self.source)
     }
 }
+#[derive(Clone, Debug)]
+struct ApplicationProfile;
+
+macro_rules! mdlx_payloads {
+    ($($payload:ident),* $(,)?) => {$(
+        type $payload<'a> = <Mdlx as Profile>::$payload<'a>;
+    )*};
+}
+impl Profile for ApplicationProfile {
+    mdlx_payloads!(
+        ImageResource,
+        ModelResource,
+        EffectResource,
+        PhysicsResource,
+        BoneOverrideResource,
+        Appearance,
+        Binding,
+        Geometry,
+        ModelMetadata,
+        EventSource,
+        System,
+        Surface,
+        Feature,
+        NodeProperties,
+        MeshProperties,
+        InstanceProperties,
+        ClipProperties,
+    );
+    type DrawProperties = <Mdlx as Profile>::DrawProperties;
+
+    fn validate_model(model: &Model<'_, Self>) -> Result<(), Error> {
+        if let Some((id, _)) = model
+            .nodes()
+            .iter()
+            .find(|(_, node)| node.name == "Rejected")
+        {
+            return Err(Error::extension(
+                Location::for_owner(id).field("name"),
+                ApplicationConstraint {
+                    code: 81,
+                    source: io::Error::new(io::ErrorKind::InvalidData, "reserved application name"),
+                },
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn custom_profile_publication_failure_retains_its_typed_source_location_and_rollback() {
+    let mut builder = Model::<ApplicationProfile>::builder("Example");
+    let node = builder.add_named_node("Original").unwrap();
+    let mut model = builder.finish().unwrap();
+    let result = model.try_edit(|draft| {
+        let mut definition = draft.model().node(node).unwrap().clone();
+        definition.name = "Rejected".into();
+        draft.set_node(node, definition)
+    });
+
+    assert_eq!(model.node(node).unwrap().name, "Original");
+    let error = result.unwrap_err();
+    let EditError::Validation(semantic) = &error else {
+        panic!("the application operation completed before its profile rejected publication")
+    };
+    assert!(matches!(semantic.kind(), ErrorKind::Extension(_)));
+    assert!(matches!(semantic.location().segments(),
+        [Segment::Owner(Owner::Node(id)), Segment::Field(field)]
+        if *id == node && field == "name"));
+    assert!(std::ptr::eq(
+        error.source().unwrap().downcast_ref::<Error>().unwrap(),
+        semantic,
+    ));
+    let cause = semantic
+        .source()
+        .unwrap()
+        .downcast_ref::<ApplicationConstraint>()
+        .unwrap();
+    assert_eq!(cause.code, 81);
+    assert_eq!(
+        cause
+            .source()
+            .unwrap()
+            .downcast_ref::<io::Error>()
+            .unwrap()
+            .kind(),
+        io::ErrorKind::InvalidData
+    );
+}
+
 #[test]
 fn structured_locations_retain_owner_fields_indices_and_attribute_identity() {
     let mut builder = Model::<Mdlx>::builder("Example");
