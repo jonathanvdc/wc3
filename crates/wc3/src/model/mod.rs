@@ -40,7 +40,8 @@
 //! layouts. Their fixed-width [`PackedArray`](crate::model::PackedArray) arrays can borrow compatible native
 //! storage; [`ValueGroups`](crate::model::ValueGroups) stores variable-length rows as elements and offsets.
 
-mod error;
+/// Typed semantic failures and structured diagnostic locations.
+pub mod error;
 /// Format-independent scene features and simulation systems.
 pub mod scene;
 /// Shared logical selector and flag domains.
