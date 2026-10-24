@@ -12,5 +12,6 @@ pub use catalog::{BoneIdentity, CharacterCatalog, GeosetDraw, JointMatchError};
 pub use database::{AppearancePatch, CharacterTables, GeosetRule};
 pub use recipe::{
     CharacterDatabase, CharacterDefinition, CharacterRecipe, Customization, Equipment,
-    EquipmentBinding, EquipmentSlot, GeosetSelection, ModelPart, RecipeError, Sex,
+    EquipmentBinding, EquipmentSlot, GeosetSelection, ModelPart, RecipeError, RecipeResolveError,
+    Sex,
 };

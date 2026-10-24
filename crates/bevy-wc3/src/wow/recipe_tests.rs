@@ -1,5 +1,5 @@
 use super::*;
-use crate::assembly::{Atlas, PixelRect, TextureLayer};
+use crate::assembly::{Atlas, AtlasError, PixelRect, TextureLayer};
 use wc3::model::{ImageResource, ResourceLocator};
 #[test]
 fn conflicting_customization_and_equipment_are_rejected_before_resolution() {
@@ -18,10 +18,10 @@ fn conflicting_customization_and_equipment_are_rejected_before_resolution() {
         ],
         equipment: vec![],
     };
-    assert_eq!(
+    assert!(matches!(
         recipe.validate(),
         Err(RecipeError::DuplicateCustomization(3))
-    );
+    ));
     recipe.customization.pop();
     recipe.equipment = vec![
         Equipment {
@@ -33,10 +33,10 @@ fn conflicting_customization_and_equipment_are_rejected_before_resolution() {
             display: 8,
         },
     ];
-    assert_eq!(
+    assert!(matches!(
         recipe.validate(),
         Err(RecipeError::DuplicateEquipment(EquipmentSlot::Chest))
-    );
+    ));
 }
 #[test]
 fn checked_rectangles_reject_overflow_before_asset_work() {
@@ -68,5 +68,56 @@ fn checked_rectangles_reject_overflow_before_asset_work() {
             },
         )]),
     };
-    assert_eq!(definition.validate(), Err(RecipeError::InvalidAtlas));
+    let error = definition.validate().unwrap_err();
+    assert!(matches!(
+        &error,
+        RecipeError::InvalidAtlas {
+            part: None,
+            category: 1,
+            ..
+        }
+    ));
+    let source = error.source().unwrap().source().unwrap();
+    assert_eq!(
+        source.downcast_ref::<AtlasError>(),
+        Some(&AtlasError::Rectangle)
+    );
+}
+
+#[test]
+fn database_errors_remain_typed_without_thread_safety_bounds() {
+    use std::io::{Error as IoError, ErrorKind};
+    use std::rc::Rc;
+    #[derive(Debug)]
+    struct ProviderError(Rc<IoError>);
+    impl Display for ProviderError {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+            Display::fmt(&self.0, f)
+        }
+    }
+    impl Error for ProviderError {}
+    struct Database(Rc<IoError>);
+    impl CharacterDatabase for Database {
+        type Error = ProviderError;
+        fn resolve(&self, _: &CharacterRecipe) -> Result<CharacterDefinition, Self::Error> {
+            Err(ProviderError(self.0.clone()))
+        }
+    }
+    let original = Rc::new(IoError::new(
+        ErrorKind::PermissionDenied,
+        "catalog unavailable",
+    ));
+    let recipe = CharacterRecipe {
+        race: 1,
+        sex: Sex::Female,
+        customization: vec![],
+        equipment: vec![],
+    };
+    let error = recipe.resolve(&Database(original.clone())).unwrap_err();
+    let provider = error
+        .source()
+        .unwrap()
+        .downcast_ref::<ProviderError>()
+        .unwrap();
+    assert!(Rc::ptr_eq(&original, &provider.0));
 }
